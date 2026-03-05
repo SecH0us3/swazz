@@ -1,0 +1,15 @@
+{
+    "name": "@swazz/worker",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "wrangler dev",
+        "deploy": "wrangler deploy"
+    },
+    "devDependencies": {
+        "wrangler": "^3.100.0",
+        "hono": "^4.7.0",
+        "typescript": "^5.7.0"
+    }
+}

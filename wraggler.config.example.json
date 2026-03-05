@@ -1,0 +1,73 @@
+{
+    "base_url": "https://jsonplaceholder.typicode.com",
+    "global_headers": {
+        "Content-Type": "application/json"
+    },
+    "cookies": {},
+    "dictionaries": {
+        "email": [
+            "user@test.com",
+            "admin@evil.com",
+            "test@example.org"
+        ],
+        "title": [
+            "Test Post",
+            "Hello World",
+            "My Article"
+        ]
+    },
+    "settings": {
+        "iterations_per_profile": 10,
+        "concurrency": 3,
+        "timeout_ms": 10000,
+        "max_payload_size_bytes": 1048576,
+        "delay_between_requests_ms": 100,
+        "profiles": [
+            "RANDOM",
+            "BOUNDARY",
+            "MALICIOUS"
+        ]
+    },
+    "endpoints": [
+        {
+            "path": "/posts",
+            "method": "POST",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "body": {
+                        "type": "string"
+                    },
+                    "userId": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        {
+            "path": "/comments",
+            "method": "POST",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "postId": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "body": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    ]
+}
