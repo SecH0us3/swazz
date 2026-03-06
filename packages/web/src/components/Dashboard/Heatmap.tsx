@@ -145,13 +145,15 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
                 </div>
             ) : (
                 <>
-                    {/* ── Column headers (right-aligned) ── */}
                     <div className="heatmap-codes">
                         {/* Spacer matches the label column */}
                         <div className="heatmap-label-spacer" />
-                        {statusCodes.map((code) => (
-                            <div key={code} className="heatmap-code-label">{code}</div>
-                        ))}
+                        {statusCodes.map((code) => {
+                            const bucketClass = code >= 500 ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
+                            return (
+                                <div key={code} className={`heatmap-code-label ${bucketClass}`}>{code}</div>
+                            );
+                        })}
                     </div>
 
                     {/* ── Scrollable rows ─────────────── */}
