@@ -404,7 +404,10 @@ export default function App() {
                                         stats={activeStats}
                                         endpointKeys={endpointKeys}
                                         heatmapFilter={heatmapFilter}
-                                        onHeatmapFilter={setHeatmapFilter}
+                                        onHeatmapFilter={(filter) => {
+                                            setHeatmapFilter(filter);
+                                            if (filter) setActiveTab('logs');
+                                        }}
                                         isRunning={isRunning}
                                     />
                                 ) : (
