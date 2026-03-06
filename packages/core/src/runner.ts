@@ -67,18 +67,44 @@ export class FuzzRunner {
                     if (this._shouldStop) break;
 
                     // Smart iteration count:
-                    // - No schema fields → 1 request (payload is always {} or empty)
-                    // - Has fields → full iterations (each generates different payload)
-                    const effectiveIterations = hasFields ? iterations : 1;
+                    // - No schema fields or method doesn't accept body → 1 request (payload is always empty)
+                    // - Has fields + Body method → full iterations (each tries to generate a different payload)
+                    const effectiveIterations = (hasFields && isBodyMethod) ? iterations : 1;
 
                     const generator = new SmartPayloadGenerator(dictionaries, profile);
 
                     // Process iterations with concurrency control
                     const tasks: Promise<void>[] = [];
                     let activeCount = 0;
+                    const seenPayloads = new Set<string>();
 
                     for (let i = 0; i < effectiveIterations; i++) {
                         if (this._shouldStop) break;
+
+                        let payload: any = undefined;
+                        let payloadStr = 'empty';
+                        let isDuplicate = false;
+
+                        if (hasFields && isBodyMethod) {
+                            // Try up to 10 times to generate a unique payload for this iteration
+                            for (let retries = 0; retries < 10; retries++) {
+                                payload = generator.buildObject(endpoint.schema);
+                                payloadStr = JSON.stringify(payload);
+                                if (!seenPayloads.has(payloadStr)) {
+                                    isDuplicate = false;
+                                    break;
+                                }
+                                isDuplicate = true;
+                            }
+                        } else {
+                            isDuplicate = seenPayloads.has(payloadStr);
+                        }
+
+                        if (isDuplicate) {
+                            // Exhausted retries or it's a static request we already sent — skip it to avoid identical spam
+                            continue;
+                        }
+                        seenPayloads.add(payloadStr);
 
                         // Wait while paused
                         while (this._isPaused && !this._shouldStop) {
@@ -94,10 +120,6 @@ export class FuzzRunner {
                         activeCount++;
                         const taskPromise = (async () => {
                             try {
-                                // Only generate body for methods that accept it
-                                const payload = (hasFields && isBodyMethod)
-                                    ? generator.buildObject(endpoint.schema)
-                                    : undefined;
 
                                 const result = await this.executeRequest(
                                     base_url,
@@ -245,12 +267,13 @@ export class FuzzRunner {
         this._stats.profileCounts[result.profile] =
             (this._stats.profileCounts[result.profile] || 0) + 1;
 
-        // Endpoint × status heatmap
-        if (!this._stats.endpointCounts[result.endpoint]) {
-            this._stats.endpointCounts[result.endpoint] = {};
+        // Endpoint × status heatmap (Method + Path)
+        const epKey = `${result.method.toUpperCase()} ${result.endpoint}`;
+        if (!this._stats.endpointCounts[epKey]) {
+            this._stats.endpointCounts[epKey] = {};
         }
-        this._stats.endpointCounts[result.endpoint][status] =
-            (this._stats.endpointCounts[result.endpoint][status] || 0) + 1;
+        this._stats.endpointCounts[epKey][status] =
+            (this._stats.endpointCounts[epKey][status] || 0) + 1;
 
         // RPS calculation
         const elapsed = (Date.now() - this._stats.startTime) / 1000;

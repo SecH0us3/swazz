@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import type { RunStats } from '@swazz/core';
 
 export interface HeatmapFilter {
-    endpoint: string;
+    method: string;
+    path: string;
     status: number;
 }
 
@@ -10,7 +11,7 @@ type StatusBucket = 'all' | '2xx' | '4xx' | '5xx';
 
 interface Props {
     stats: RunStats;
-    endpointPaths: string[];
+    endpointKeys: string[];
     activeFilter: HeatmapFilter | null;
     onCellClick: (filter: HeatmapFilter | null) => void;
 }
@@ -32,7 +33,7 @@ function matchesBucket(code: number, bucket: StatusBucket): boolean {
     return true;
 }
 
-export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Props) {
+export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Props) {
     const [hoveredCell, setHoveredCell] = useState<{ ep: string; code: number } | null>(null);
     const [search, setSearch] = useState('');
     const [statusBucket, setStatusBucket] = useState<StatusBucket>('all');
@@ -54,12 +55,12 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
 
     // Endpoint rows filtered by search AND by whether they have hits in the selected bucket
     const visibleEndpoints = useMemo(() => {
-        let list = endpointPaths;
+        let list = endpointKeys;
 
         // Hide endpoints with no hits for the selected status bucket
         if (statusBucket !== 'all') {
-            list = list.filter((ep) => {
-                const counts = stats.endpointCounts[ep] ?? {};
+            list = list.filter((epKey) => {
+                const counts = stats.endpointCounts[epKey] ?? {};
                 return Object.entries(counts).some(
                     ([code, count]) => count > 0 && matchesBucket(Number(code), statusBucket),
                 );
@@ -68,7 +69,7 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
 
         // Text search on top
         const q = search.trim().toLowerCase();
-        if (q) list = list.filter((ep) => ep.toLowerCase().includes(q));
+        if (q) list = list.filter((epKey) => epKey.toLowerCase().includes(q));
 
         // Sort: 5xx first, then 4xx, then alphabetical
         return list.sort((a, b) => {
@@ -87,19 +88,22 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
 
             return a.localeCompare(b);
         });
-    }, [endpointPaths, search, statusBucket, stats]);
+    }, [endpointKeys, search, statusBucket, stats]);
 
     const maxCount = Math.max(
         1,
         ...Object.values(stats.endpointCounts).flatMap((codes) => Object.values(codes)),
     );
 
-    const handleCellClick = (ep: string, code: number, count: number) => {
+    const handleCellClick = (epKey: string, code: number, count: number) => {
         if (count === 0) return;
-        if (activeFilter?.endpoint === ep && activeFilter?.status === code) {
+        const [method, ...rest] = epKey.split(' ');
+        const path = rest.join(' ');
+
+        if (activeFilter?.method === method && activeFilter?.path === path && activeFilter?.status === code) {
             onCellClick(null);
         } else {
-            onCellClick({ endpoint: ep, status: code });
+            onCellClick({ method, path, status: code });
         }
     };
 
@@ -126,7 +130,8 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
                             <span>{activeFilter.status}</span>
                             <span style={{ opacity: 0.6 }}>·</span>
                             <span style={{ fontFamily: 'var(--font-mono)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {activeFilter.endpoint}
+                                <span style={{ color: 'var(--text-disabled)', marginRight: 4 }}>{activeFilter.method}</span>
+                                {activeFilter.path}
                             </span>
                             <span style={{ opacity: 0.55, marginLeft: 2 }}>✕</span>
                         </button>
@@ -180,48 +185,55 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
                             </div>
                         ) : (
                             <div className="heatmap-grid">
-                                {visibleEndpoints.map((ep) => (
-                                    <div key={ep} className="heatmap-row">
-                                        {/* Label — takes all remaining space */}
-                                        <div className="heatmap-label" title={ep}>{ep}</div>
-                                        {/* Cells — right side, fixed width */}
-                                        {statusCodes.map((code, ci) => {
-                                            const count = stats.endpointCounts[ep]?.[code] || 0;
-                                            const isHovered = hoveredCell?.ep === ep && hoveredCell?.code === code;
-                                            const isActive = activeFilter?.endpoint === ep && activeFilter?.status === code;
-                                            const isClickable = count > 0;
+                                {visibleEndpoints.map((epKey) => {
+                                    const [method, ...rest] = epKey.split(' ');
+                                    const path = rest.join(' ');
+                                    return (
+                                        <div key={epKey} className="heatmap-row">
+                                            {/* Label — takes all remaining space */}
+                                            <div className="heatmap-label" title={epKey}>
+                                                <span className={`method method-${method.toLowerCase()}`}>{method}</span>
+                                                <span className="path">{path}</span>
+                                            </div>
+                                            {/* Cells — right side, fixed width */}
+                                            {statusCodes.map((code, ci) => {
+                                                const count = stats.endpointCounts[epKey]?.[code] || 0;
+                                                const isHovered = hoveredCell?.ep === epKey && hoveredCell?.code === code;
+                                                const isActive = activeFilter?.method === method && activeFilter?.path === path && activeFilter?.status === code;
+                                                const isClickable = count > 0;
 
-                                            return (
-                                                <div
-                                                    key={code}
-                                                    className={`heatmap-cell${isActive ? ' heatmap-cell-active' : ''}`}
-                                                    style={{
-                                                        background: getCellColor(code, count, maxCount),
-                                                        animationDelay: `${ci * 20}ms`,
-                                                        cursor: isClickable ? 'pointer' : 'default',
-                                                    }}
-                                                    onMouseEnter={() => setHoveredCell({ ep, code })}
-                                                    onMouseLeave={() => setHoveredCell(null)}
-                                                    onClick={() => handleCellClick(ep, code, count)}
-                                                >
-                                                    {isHovered && count > 0 && (
-                                                        <div className="tooltip">
-                                                            {code}: {count} req{count > 1 ? 's' : ''}<br />
-                                                            <span style={{ opacity: 0.6, fontSize: 10 }}>click to filter</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ))}
+                                                return (
+                                                    <div
+                                                        key={code}
+                                                        className={`heatmap-cell${isActive ? ' heatmap-cell-active' : ''}`}
+                                                        style={{
+                                                            background: getCellColor(code, count, maxCount),
+                                                            animationDelay: `${ci * 20}ms`,
+                                                            cursor: isClickable ? 'pointer' : 'default',
+                                                        }}
+                                                        onMouseEnter={() => setHoveredCell({ ep: epKey, code })}
+                                                        onMouseLeave={() => setHoveredCell(null)}
+                                                        onClick={() => handleCellClick(epKey, code, count)}
+                                                    >
+                                                        {isHovered && count > 0 && (
+                                                            <div className="tooltip">
+                                                                {code}: {count} req{count > 1 ? 's' : ''}<br />
+                                                                <span style={{ opacity: 0.6, fontSize: 10 }}>click to filter</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
 
                     {/* ── Footer info ──────────────────── */}
                     <div className="heatmap-footer">
-                        <span>{visibleEndpoints.length} / {endpointPaths.length} endpoints</span>
+                        <span>{visibleEndpoints.length} / {endpointKeys.length} endpoints</span>
                         <span>{statusCodes.length} / {allStatusCodes.length} codes shown</span>
                     </div>
                 </>

@@ -7,12 +7,12 @@ import type { HeatmapFilter } from './Heatmap.js';
 interface Props {
     stats: RunStats | null;
     results: FuzzResult[];
-    endpointPaths: string[];
+    endpointKeys: string[];
     heatmapFilter: HeatmapFilter | null;
     onHeatmapFilter: (f: HeatmapFilter | null) => void;
 }
 
-export function Dashboard({ stats, results, endpointPaths, heatmapFilter, onHeatmapFilter }: Props) {
+export function Dashboard({ stats, results, endpointKeys, heatmapFilter, onHeatmapFilter }: Props) {
     if (!stats) {
         return (
             <div className="dashboard">
@@ -31,7 +31,7 @@ export function Dashboard({ stats, results, endpointPaths, heatmapFilter, onHeat
             <StatsBar stats={stats} />
             <Heatmap
                 stats={stats}
-                endpointPaths={endpointPaths}
+                endpointKeys={endpointKeys}
                 activeFilter={heatmapFilter}
                 onCellClick={onHeatmapFilter}
             />

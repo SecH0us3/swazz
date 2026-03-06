@@ -44,7 +44,10 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
         // Heatmap cell filter takes priority (exact endpoint + exact status code)
         if (heatmapFilter) {
             list = list.filter(
-                (r) => r.endpoint === heatmapFilter.endpoint && r.status === heatmapFilter.status,
+                (r) =>
+                    r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                    r.endpoint === heatmapFilter.path &&
+                    r.status === heatmapFilter.status,
             );
         } else {
             // Tab filter
@@ -87,7 +90,7 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                                 color: 'var(--text-secondary)',
                             }}
                         >
-                            {heatmapFilter.endpoint}
+                            {heatmapFilter.method.toUpperCase()} {heatmapFilter.path}
                         </span>
                         <span
                             style={{

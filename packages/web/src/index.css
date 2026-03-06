@@ -812,6 +812,32 @@ body::before {
   padding-right: var(--space-2);
 }
 
+.heatmap-label .method {
+  display: inline-block;
+  min-width: 44px;
+  /* Align paths if methods have different lengths */
+  font-weight: 600;
+  margin-right: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.heatmap-label .method-get {
+  color: var(--color-success);
+}
+
+.heatmap-label .method-post {
+  color: var(--color-info);
+}
+
+.heatmap-label .method-put,
+.heatmap-label .method-patch {
+  color: var(--color-warning);
+}
+
+.heatmap-label .method-delete {
+  color: var(--color-error);
+}
+
 /* Spacer in the codes header — same flex behaviour as label */
 .heatmap-label-spacer {
   flex: 1;

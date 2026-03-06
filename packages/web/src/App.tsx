@@ -105,9 +105,9 @@ export default function App() {
         setToasts((prev) => prev.filter((t) => t.id !== id));
     }, []);
 
-    const endpointPaths = useMemo(() => {
-        const uniquePaths = Array.from(new Set(config.endpoints.map((ep) => ep.path)));
-        return uniquePaths.sort((a, b) => a.localeCompare(b));
+    const endpointKeys = useMemo(() => {
+        const uniqueKeys = Array.from(new Set(config.endpoints.map((ep) => `${ep.method.toUpperCase()} ${ep.path}`)));
+        return uniqueKeys.sort((a, b) => a.localeCompare(b));
     }, [config.endpoints]);
 
     // Resolved base URL — from config or taken from the first loaded spec
@@ -214,7 +214,7 @@ export default function App() {
                 <Dashboard
                     stats={stats}
                     results={results}
-                    endpointPaths={endpointPaths}
+                    endpointKeys={endpointKeys}
                     heatmapFilter={heatmapFilter}
                     onHeatmapFilter={setHeatmapFilter}
                 />
