@@ -105,10 +105,10 @@ export default function App() {
         setToasts((prev) => prev.filter((t) => t.id !== id));
     }, []);
 
-    const endpointPaths = useMemo(
-        () => config.endpoints.map((ep) => ep.path),
-        [config.endpoints],
-    );
+    const endpointPaths = useMemo(() => {
+        const uniquePaths = Array.from(new Set(config.endpoints.map((ep) => ep.path)));
+        return uniquePaths.sort((a, b) => a.localeCompare(b));
+    }, [config.endpoints]);
 
     // Resolved base URL — from config or taken from the first loaded spec
     const displayUrl = config.base_url || ((config as any)._swagger_urls?.[0] ?? '');
