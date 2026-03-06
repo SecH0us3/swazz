@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { FuzzResult } from '@swazz/core';
 import { parseSwaggerSpec } from '@swazz/core';
+import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
 import { Header } from './components/Header.js';
@@ -93,6 +94,7 @@ export default function App() {
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
     const [toasts, setToasts] = useState<ToastData[]>([]);
     const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
+    const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
 
     const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
         const id = Date.now();
@@ -118,6 +120,9 @@ export default function App() {
             showToast('Add at least one Swagger URL to begin', 'error');
             return;
         }
+
+        // Clear heatmap filter on new run
+        setHeatmapFilter(null);
 
         // If we have Swagger URLs, load them first
         if (swaggerUrls.length > 0) {
@@ -206,8 +211,19 @@ export default function App() {
             />
 
             <div className="main-area">
-                <Dashboard stats={stats} results={results} endpointPaths={endpointPaths} />
-                <Inspector results={results} onSelectResult={setSelectedResult} />
+                <Dashboard
+                    stats={stats}
+                    results={results}
+                    endpointPaths={endpointPaths}
+                    heatmapFilter={heatmapFilter}
+                    onHeatmapFilter={setHeatmapFilter}
+                />
+                <Inspector
+                    results={results}
+                    onSelectResult={setSelectedResult}
+                    heatmapFilter={heatmapFilter}
+                    onClearHeatmapFilter={() => setHeatmapFilter(null)}
+                />
             </div>
 
             {selectedResult && (

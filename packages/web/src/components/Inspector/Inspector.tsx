@@ -1,9 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import type { FuzzResult } from '@swazz/core';
+import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 
 interface Props {
     results: FuzzResult[];
     onSelectResult: (result: FuzzResult) => void;
+    heatmapFilter: HeatmapFilter | null;
+    onClearHeatmapFilter: () => void;
 }
 
 type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
@@ -26,7 +29,7 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
-export function Inspector({ results, onSelectResult }: Props) {
+export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatmapFilter }: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
 
@@ -38,17 +41,28 @@ export function Inspector({ results, onSelectResult }: Props) {
     const filtered = useMemo(() => {
         let list = results;
 
-        if (filter === '5xx') list = list.filter((r) => r.status >= 500);
-        else if (filter === '4xx') list = list.filter((r) => r.status >= 400 && r.status < 500);
-        else if (filter === '2xx') list = list.filter((r) => r.status >= 200 && r.status < 300);
-
-        if (search) {
-            const q = search.toLowerCase();
-            list = list.filter((r) => r.endpoint.toLowerCase().includes(q) || r.profile.toLowerCase().includes(q));
+        // Heatmap cell filter takes priority (exact endpoint + exact status code)
+        if (heatmapFilter) {
+            list = list.filter(
+                (r) => r.endpoint === heatmapFilter.endpoint && r.status === heatmapFilter.status,
+            );
+        } else {
+            // Tab filter
+            if (filter === '5xx') list = list.filter((r) => r.status >= 500);
+            else if (filter === '4xx') list = list.filter((r) => r.status >= 400 && r.status < 500);
+            else if (filter === '2xx') list = list.filter((r) => r.status >= 200 && r.status < 300);
         }
 
-        return list.slice(-200).reverse(); // Show latest 200, newest first
-    }, [results, filter, search]);
+        // Text search always applies on top
+        if (search) {
+            const q = search.toLowerCase();
+            list = list.filter(
+                (r) => r.endpoint.toLowerCase().includes(q) || r.profile.toLowerCase().includes(q),
+            );
+        }
+
+        return list.slice(-500).reverse(); // newest first
+    }, [results, filter, search, heatmapFilter]);
 
     const tabs: { key: StatusFilter; label: string; count?: number }[] = [
         { key: 'all', label: 'All' },
@@ -60,22 +74,85 @@ export function Inspector({ results, onSelectResult }: Props) {
     return (
         <div className="inspector">
             <div className="inspector-header">
-                <div className="inspector-tabs">
-                    {tabs.map((tab) => (
-                        <button
-                            key={tab.key}
-                            className={`inspector-tab ${filter === tab.key ? 'active' : ''}`}
-                            onClick={() => setFilter(tab.key)}
+                {heatmapFilter ? (
+                    // When a heatmap cell is active, show a clear filter indicator instead of tabs
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                            Filtered:
+                        </span>
+                        <span
+                            style={{
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 'var(--font-size-xs)',
+                                color: 'var(--text-secondary)',
+                            }}
                         >
-                            {tab.label}
-                            {tab.count !== undefined && tab.count > 0 && (
-                                <span className="badge badge-error" style={{ marginLeft: 4, fontSize: 10, padding: '0 5px' }}>
-                                    {tab.count}
-                                </span>
-                            )}
+                            {heatmapFilter.endpoint}
+                        </span>
+                        <span
+                            style={{
+                                background:
+                                    heatmapFilter.status >= 500
+                                        ? 'var(--color-error-dim)'
+                                        : heatmapFilter.status >= 400
+                                            ? 'var(--color-warning-dim)'
+                                            : 'var(--color-success-dim)',
+                                color:
+                                    heatmapFilter.status >= 500
+                                        ? 'var(--color-error)'
+                                        : heatmapFilter.status >= 400
+                                            ? 'var(--color-warning)'
+                                            : 'var(--color-success)',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 10,
+                                padding: '1px 6px',
+                                borderRadius: 'var(--radius-full)',
+                                fontWeight: 600,
+                            }}
+                        >
+                            {heatmapFilter.status}
+                        </span>
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
+                            {filtered.length} results
+                        </span>
+                        <button
+                            onClick={onClearHeatmapFilter}
+                            style={{
+                                marginLeft: 4,
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text-disabled)',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                padding: '2px 4px',
+                                borderRadius: 'var(--radius-sm)',
+                                transition: 'color var(--duration-fast)',
+                            }}
+                            title="Clear filter"
+                            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-error)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-disabled)')}
+                        >
+                            ✕ clear
                         </button>
-                    ))}
-                </div>
+                    </div>
+                ) : (
+                    <div className="inspector-tabs">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab.key}
+                                className={`inspector-tab ${filter === tab.key ? 'active' : ''}`}
+                                onClick={() => setFilter(tab.key)}
+                            >
+                                {tab.label}
+                                {tab.count !== undefined && tab.count > 0 && (
+                                    <span className="badge badge-error" style={{ marginLeft: 4, fontSize: 10, padding: '0 5px' }}>
+                                        {tab.count}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 <input
                     className="input inspector-search"

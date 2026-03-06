@@ -682,7 +682,11 @@ body::before {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
-  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  /* Fixed max-height so it scrolls independently */
+  max-height: 320px;
+  overflow: hidden;
 }
 
 .heatmap-header {
@@ -690,12 +694,21 @@ body::before {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-3);
+  flex-shrink: 0;
 }
 
 .heatmap-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+/* Scrollable grid wrapper — scrolls independently */
+.heatmap-scroll {
+  overflow-y: auto;
+  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .heatmap-grid {
@@ -712,7 +725,8 @@ body::before {
 
 .heatmap-label {
   flex: 1;
-  min-width: 0;
+  min-width: 120px;
+  max-width: 220px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
@@ -728,7 +742,8 @@ body::before {
   border-radius: 4px;
   background: var(--bg-elevated);
   transition: transform var(--duration-fast) var(--ease-spring),
-    background var(--duration-base) var(--ease-in-out);
+    background var(--duration-base) var(--ease-in-out),
+    outline-color var(--duration-fast) var(--ease-in-out);
   cursor: default;
   position: relative;
   flex-shrink: 0;
@@ -736,15 +751,25 @@ body::before {
 }
 
 .heatmap-cell:hover {
-  transform: scale(1.2);
+  transform: scale(1.25);
   z-index: 10;
 }
 
+.heatmap-cell-active {
+  outline: 2px solid var(--color-action) !important;
+  outline-offset: 2px;
+  z-index: 5;
+}
+
+/* Column-header row: left-pad to align with label column */
 .heatmap-codes {
   display: flex;
   gap: 3px;
-  justify-content: flex-end;
+  align-items: center;
   margin-bottom: var(--space-2);
+  flex-shrink: 0;
+  padding-left: 0;
+  /* label width handled inline */
 }
 
 .heatmap-code-label {
@@ -755,6 +780,7 @@ body::before {
   color: var(--text-disabled);
   flex-shrink: 0;
 }
+
 
 /* ─── Inspector ──────────────────────────────────────────── */
 
