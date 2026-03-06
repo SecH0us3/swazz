@@ -52,13 +52,26 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
         [allStatusCodes, statusBucket],
     );
 
-    // Endpoint rows filtered by search
+    // Endpoint rows filtered by search AND by whether they have hits in the selected bucket
     const visibleEndpoints = useMemo(() => {
+        let list = endpointPaths;
+
+        // Hide endpoints with no hits for the selected status bucket
+        if (statusBucket !== 'all') {
+            list = list.filter((ep) => {
+                const counts = stats.endpointCounts[ep] ?? {};
+                return Object.entries(counts).some(
+                    ([code, count]) => count > 0 && matchesBucket(Number(code), statusBucket),
+                );
+            });
+        }
+
+        // Text search on top
         const q = search.trim().toLowerCase();
-        return q
-            ? endpointPaths.filter((ep) => ep.toLowerCase().includes(q))
-            : endpointPaths;
-    }, [endpointPaths, search]);
+        if (q) list = list.filter((ep) => ep.toLowerCase().includes(q));
+
+        return list;
+    }, [endpointPaths, search, statusBucket, stats]);
 
     const maxCount = Math.max(
         1,
