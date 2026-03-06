@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { FuzzResult } from '@swazz/core';
 
 interface Props {
     result: FuzzResult;
     baseUrl: string;
     onClose: () => void;
+    onReplay?: (req: any) => Promise<any>;
+    globalHeaders: Record<string, string>;
+    globalCookies: Record<string, string>;
 }
 
 /**
@@ -47,18 +50,20 @@ function joinUrl(base?: string, path?: string): string {
     return b && p ? `${b}/${p}` : `${b}${p}`;
 }
 
-function generateCurl(result: FuzzResult, baseUrl?: string): string {
-    const url = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
-    let cmd = `curl -X ${result.method} '${url}'`;
-    cmd += ` \\\n  -H 'Content-Type: application/json'`;
-    if (result.payload !== undefined) {
-        cmd += ` \\\n  -d '${JSON.stringify(result.payload)}'`;
-    }
-    return cmd;
-}
-
-export function RequestDetail({ result, baseUrl, onClose }: Props) {
+export function RequestDetail({ result, baseUrl, onClose, onReplay, globalHeaders, globalCookies }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
+
+    // Initial editable states
+    const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
+    const initialBody = result.payload !== undefined ? JSON.stringify(result.payload, null, 2) : '';
+
+    const [editedUrl, setEditedUrl] = useState(initialUrl);
+    const [editedBody, setEditedBody] = useState(initialBody);
+
+    // State to hold the latest response after clicking "Replay"
+    const [liveStatus, setLiveStatus] = useState<number>(result.status);
+    const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
+    const [isReplaying, setIsReplaying] = useState(false);
 
     const copy = (text: string, label: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -67,146 +72,164 @@ export function RequestDetail({ result, baseUrl, onClose }: Props) {
         });
     };
 
-    const payloadJson = JSON.stringify(result.payload, null, 2) || '';
-    const isLargePayload = payloadJson.length > 10000;
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
+
+    const handleReplay = async () => {
+        if (!onReplay) return;
+        setIsReplaying(true);
+        try {
+            let parsedBody = undefined;
+            if (editedBody.trim()) {
+                parsedBody = JSON.parse(editedBody);
+            }
+
+            const response = await onReplay({
+                url: editedUrl,
+                method: result.method,
+                headers: { ...globalHeaders },
+                cookies: { ...globalCookies },
+                body: parsedBody,
+            });
+
+            setLiveStatus(response.status);
+            setLiveResponse(response.body);
+        } catch (err) {
+            setLiveStatus(0);
+            setLiveResponse(err instanceof Error ? err.message : String(err));
+        } finally {
+            setIsReplaying(false);
+        }
+    };
 
     let responseBodyJson = '';
-    if (result.responseBody !== undefined) {
-        responseBodyJson = typeof result.responseBody === 'string'
-            ? result.responseBody
-            : JSON.stringify(result.responseBody, null, 2);
+    if (liveResponse !== undefined) {
+        responseBodyJson = typeof liveResponse === 'string'
+            ? liveResponse
+            : JSON.stringify(liveResponse, null, 2);
     }
-    const isLargeResponse = responseBodyJson.length > 10000;
-    const statusColor =
-        result.status >= 500 ? 'var(--color-error)' :
-            result.status >= 400 ? 'var(--color-warning)' :
-                'var(--color-success)';
 
-    const resolvedUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
-    const templateUrl = joinUrl(baseUrl, result.endpoint);
-    const hasResolvedPath = result.resolvedPath && result.resolvedPath !== result.endpoint;
+    // Safety truncate for rendering
+    const isLargeResponse = responseBodyJson.length > 50000;
+
+    const statusColor =
+        liveStatus >= 500 ? 'var(--color-error)' :
+            liveStatus >= 400 ? 'var(--color-warning)' :
+                liveStatus > 0 ? 'var(--color-success)' :
+                    'var(--color-error)';
 
     return (
-        <>
-            <div className="detail-overlay" onClick={onClose} />
-            <div className="detail-panel">
+        <div className="modal-backdrop">
+            <div className="modal-overlay" onClick={onClose} />
+            <div className="modal-content">
+
                 {/* Header */}
-                <div className="detail-header">
+                <div className="modal-header">
                     <div>
-                        <div className="detail-status" style={{ color: statusColor }}>
-                            {result.status || 'Network Error'}
-                            {(result.retries ?? 0) > 0 && (
-                                <span style={{
-                                    marginLeft: 8,
-                                    fontSize: 10,
-                                    background: 'var(--color-warning-bg)',
-                                    color: 'var(--color-warning)',
-                                    padding: '1px 6px',
-                                    borderRadius: 'var(--radius-full)',
-                                    fontWeight: 600,
-                                    verticalAlign: 'middle',
-                                }}>{result.retries} retries (429)</span>
-                            )}
+                        <div className="detail-status" style={{ color: statusColor, fontSize: 'var(--font-size-2xl)' }}>
+                            {liveStatus || 'Error'}
                         </div>
-                        <div className="detail-meta">
-                            <span
-                                style={{ wordBreak: 'break-all', userSelect: 'all' }}
-                                title={resolvedUrl}
-                            >
-                                {result.method} {hasResolvedPath ? resolvedUrl : templateUrl}
-                            </span>
-                            {hasResolvedPath && (
-                                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                                    template: {result.endpoint}
-                                </span>
-                            )}
-                            <span>{result.profile} • {result.duration}ms</span>
+                        <div className="detail-meta" style={{ marginTop: 'var(--space-2)' }}>
+                            <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 600 }}>{result.method}</span>
+                            <span style={{ color: 'var(--text-muted)' }}> • {result.profile}</span>
                         </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                         <button
-                            className="btn btn-ghost"
-                            title="Replay this request"
-                            onClick={() => window.open(resolvedUrl, '_blank', 'noopener,noreferrer')}
-                            style={{ fontSize: 12 }}
+                            className="btn btn-primary"
+                            onClick={handleReplay}
+                            disabled={isReplaying}
                         >
-                            ↺ Replay
+                            {isReplaying ? '↺ Replaying...' : '↺ Replay Request'}
                         </button>
-                        <button className="btn btn-ghost" onClick={onClose}>✕</button>
+                        <button className="btn btn-ghost" onClick={onClose} style={{ fontSize: 20 }}>✕</button>
                     </div>
                 </div>
 
-                {/* Error message */}
-                {result.error && (
-                    <div style={{
-                        padding: 'var(--space-3)',
-                        background: 'var(--color-error-bg)',
-                        borderRadius: 'var(--radius-md)',
-                        color: 'var(--color-error)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 'var(--font-size-xs)',
-                    }}>
-                        {/* result.error is a plain string — safe to render as text */}
-                        {result.error}
-                    </div>
-                )}
-
-                {/* Request Body */}
-                <div className="detail-section">
-                    <div className="detail-section-title">Request Body</div>
-                    {isLargePayload ? (
-                        <div className="detail-json" style={{ color: 'var(--text-muted)' }}>
-                            [Large Payload Truncated]
-                            <br />
-                            <br />
-                            <strong>Size:</strong> {(payloadJson.length / 1024).toFixed(1)} KB
-                            <br />
-                            <strong>Type:</strong> {typeof result.payload === 'object' ? (Array.isArray(result.payload) ? 'Array' : 'Object') : typeof result.payload}
-                        </div>
-                    ) : (
-                        <div
-                            className="detail-json"
-                            dangerouslySetInnerHTML={{ __html: syntaxHighlight(payloadJson) }}
+                <div className="modal-split">
+                    {/* Left Panel: Request */}
+                    <div className="modal-pane">
+                        <div className="detail-section-title">Request URL</div>
+                        <input
+                            type="text"
+                            value={editedUrl}
+                            onChange={(e) => setEditedUrl(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: 'var(--space-3)',
+                                background: 'rgba(0,0,0,0.3)',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--color-action-hover)',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 'var(--font-size-sm)',
+                                marginBottom: 'var(--space-4)'
+                            }}
                         />
-                    )}
-                    <button
-                        className="btn btn-ghost detail-copy-btn"
-                        onClick={() => copy(payloadJson, 'payload')}
-                    >
-                        {copied === 'payload' ? '✓ Copied!' : (isLargePayload ? '📋 Copy Full Payload' : '📋 Copy Payload')}
-                    </button>
-                </div>
 
-                {/* Response Body (for errors) */}
-                {result.responseBody !== undefined && (
-                    <div className="detail-section">
+                        <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Request Payload (JSON)</span>
+                            <button
+                                className="btn btn-ghost"
+                                onClick={() => copy(editedBody, 'payload')}
+                                style={{ padding: '0 8px', height: 24, fontSize: 10 }}
+                            >
+                                {copied === 'payload' ? '✓ Copied!' : '📋 Copy'}
+                            </button>
+                        </div>
+                        <textarea
+                            value={editedBody}
+                            onChange={(e) => setEditedBody(e.target.value)}
+                            spellCheck={false}
+                            style={{
+                                width: '100%',
+                                flex: 1,
+                                padding: 'var(--space-4)',
+                                background: 'rgba(0,0,0,0.3)',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 'var(--font-size-sm)',
+                                resize: 'none',
+                            }}
+                        />
+                    </div>
+
+                    {/* Right Panel: Response */}
+                    <div className="modal-pane">
                         <div className="detail-section-title">Response Body</div>
                         {isLargeResponse ? (
-                            <div className="detail-json" style={{ color: 'var(--text-muted)' }}>
+                            <div className="detail-json" style={{ color: 'var(--text-muted)', flex: 1 }}>
                                 [Large Response Truncated]
-                                <br />
-                                <br />
+                                <br /><br />
                                 <strong>Size:</strong> {(responseBodyJson.length / 1024).toFixed(1)} KB
                             </div>
                         ) : (
-                            <pre className="detail-json" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                                {responseBodyJson}
+                            <pre
+                                className="detail-json"
+                                style={{
+                                    flex: 1,
+                                    margin: 0,
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-all',
+                                    border: '1px solid var(--border-default)'
+                                }}
+                            >
+                                {responseBodyJson || 'No response body.'}
                             </pre>
                         )}
                     </div>
-                )}
-
-                {/* Copy as cURL */}
-                <div className="detail-section">
-                    <button
-                        className="btn btn-ghost"
-                        style={{ width: '100%' }}
-                        onClick={() => copy(generateCurl(result, baseUrl), 'curl')}
-                    >
-                        {copied === 'curl' ? '✓ Copied!' : '🔗 Copy as cURL'}
-                    </button>
                 </div>
+
             </div>
-        </>
+        </div>
     );
 }

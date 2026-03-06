@@ -98,5 +98,6 @@ export function useRunner(proxyUrl: string) {
         stop,
         pause,
         resume,
+        sendRequest,
     };
 }

@@ -92,6 +92,7 @@ export default function App() {
         stop,
         pause,
         resume,
+        sendRequest,
     } = useRunner(PROXY_URL);
 
     const { runs, saveRun, getRunResults, deleteRun } = useDb();
@@ -323,122 +324,127 @@ export default function App() {
                 onToast={showToast}
             />
 
-            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', flex: 1, minHeight: 0 }}>
-                    {/* Left: Dashboard + Results List */}
-                    <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
-                        {loadedRunId && (
-                            <div className="card" style={{ padding: 'var(--space-4)', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--text-primary)' }}>Viewing History</h3>
-                                        <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                            {activeResults.length} requests · {new Date(historyStats?.startedAt || Date.now()).toLocaleString()}
-                                        </div>
+            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px' }}>
+                {/* Left: Dashboard + Results List */}
+                <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
+                    {loadedRunId && (
+                        <div className="card" style={{ padding: 'var(--space-4)', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--text-primary)' }}>Viewing History</h3>
+                                    <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                        {activeResults.length} requests · {new Date(historyStats?.startedAt || Date.now()).toLocaleString()}
                                     </div>
-                                    <button className="btn btn-primary" onClick={() => setLoadedRunId(null)}>
-                                        Back to Live Stream
-                                    </button>
                                 </div>
+                                <button className="btn btn-primary" onClick={() => setLoadedRunId(null)}>
+                                    Back to Live Stream
+                                </button>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {!loadedRunId && config.endpoints.length === 0 && (
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                                <div style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '32px', marginBottom: 12, opacity: 0.5 }}>⚡️</div>
-                                    <h2 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: 'var(--text-primary)' }}>Start Fuzzing</h2>
-                                    <p style={{ maxWidth: 320, fontSize: 'var(--font-size-sm)', lineHeight: 1.5 }}>
-                                        Add endpoints manually or provide a Swagger URL in the sidebar to begin.
-                                    </p>
-                                </div>
+                    {!loadedRunId && config.endpoints.length === 0 && (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '32px', marginBottom: 12, opacity: 0.5 }}>⚡️</div>
+                                <h2 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: 'var(--text-primary)' }}>Start Fuzzing</h2>
+                                <p style={{ maxWidth: 320, fontSize: 'var(--font-size-sm)', lineHeight: 1.5 }}>
+                                    Add endpoints manually or provide a Swagger URL in the sidebar to begin.
+                                </p>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {(activeResults.length > 0 || config.endpoints.length > 0) && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
-                                <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-                                    <button
-                                        style={{
-                                            padding: '8px 16px',
-                                            background: 'none',
-                                            border: 'none',
-                                            borderBottom: activeTab === 'heatmap' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                            color: activeTab === 'heatmap' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                            cursor: 'pointer',
-                                            fontSize: 'var(--font-size-sm)',
-                                            fontWeight: activeTab === 'heatmap' ? 600 : 400,
-                                        }}
-                                        onClick={() => setActiveTab('heatmap')}
-                                    >
-                                        Endpoint Heatmap
-                                    </button>
-                                    <button
-                                        style={{
-                                            padding: '8px 16px',
-                                            background: 'none',
-                                            border: 'none',
-                                            borderBottom: activeTab === 'logs' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                            color: activeTab === 'logs' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                            cursor: 'pointer',
-                                            fontSize: 'var(--font-size-sm)',
-                                            fontWeight: activeTab === 'logs' ? 600 : 400,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                        }}
-                                        onClick={() => setActiveTab('logs')}
-                                    >
-                                        <span>Request Logs</span>
-                                        {activeResults.length > 0 && (
-                                            <span style={{ fontSize: '11px', color: 'var(--text-disabled)', fontWeight: 400 }}>
-                                                (<span style={{ color: 'var(--color-primary)' }}>{activeFilteredLogsCount}</span> from {activeResults.length})
-                                            </span>
-                                        )}
-                                    </button>
-                                </div>
-
-                                {activeTab === 'heatmap' ? (
-                                    <Dashboard
-                                        results={activeResults}
-                                        stats={activeStats}
-                                        endpointKeys={endpointKeys}
-                                        heatmapFilter={heatmapFilter}
-                                        onHeatmapFilter={(filter) => {
-                                            setHeatmapFilter(filter);
-                                            if (filter) setActiveTab('logs');
-                                        }}
-                                        isRunning={isRunning}
-                                    />
-                                ) : (
-                                    <Inspector
-                                        results={activeResults}
-                                        heatmapFilter={heatmapFilter}
-                                        onClearHeatmapFilter={() => setHeatmapFilter(null)}
-                                        onSelectResult={setSelectedResult}
-                                        onExport={handleExport}
-                                    />
-                                )}
+                    {(activeResults.length > 0 || config.endpoints.length > 0) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
+                            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+                                <button
+                                    style={{
+                                        padding: '8px 16px',
+                                        background: 'none',
+                                        border: 'none',
+                                        borderBottom: activeTab === 'heatmap' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                        color: activeTab === 'heatmap' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                        cursor: 'pointer',
+                                        fontSize: 'var(--font-size-sm)',
+                                        fontWeight: activeTab === 'heatmap' ? 600 : 400,
+                                    }}
+                                    onClick={() => setActiveTab('heatmap')}
+                                >
+                                    Endpoint Heatmap
+                                </button>
+                                <button
+                                    style={{
+                                        padding: '8px 16px',
+                                        background: 'none',
+                                        border: 'none',
+                                        borderBottom: activeTab === 'logs' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                        color: activeTab === 'logs' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                        cursor: 'pointer',
+                                        fontSize: 'var(--font-size-sm)',
+                                        fontWeight: activeTab === 'logs' ? 600 : 400,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                    }}
+                                    onClick={() => setActiveTab('logs')}
+                                >
+                                    <span>Request Logs</span>
+                                    {activeResults.length > 0 && (
+                                        <span style={{ fontSize: '11px', color: 'var(--text-disabled)', fontWeight: 400 }}>
+                                            (<span style={{ color: 'var(--color-primary)' }}>{activeFilteredLogsCount}</span> from {activeResults.length})
+                                        </span>
+                                    )}
+                                </button>
                             </div>
-                        )}
-                    </div>
-                    {selectedResult ? (
-                        <RequestDetail result={selectedResult} baseUrl={displayUrl} onClose={() => setSelectedResult(null)} />
-                    ) : (
-                        <ConfigSidebar
-                            config={config}
-                            onUpdateHeaders={updateHeaders}
-                            onUpdateCookies={updateCookies}
-                            onUpdateDictionaries={updateDictionaries}
-                            onUpdateProfiles={updateProfiles}
-                            onUpdateConfig={updateConfig}
-                            onImportConfig={importConfig}
-                            onExportConfig={exportConfig}
-                            onToast={showToast}
-                        />
+
+                            {activeTab === 'heatmap' ? (
+                                <Dashboard
+                                    results={activeResults}
+                                    stats={activeStats}
+                                    endpointKeys={endpointKeys}
+                                    heatmapFilter={heatmapFilter}
+                                    onHeatmapFilter={(filter) => {
+                                        setHeatmapFilter(filter);
+                                        if (filter) setActiveTab('logs');
+                                    }}
+                                    isRunning={isRunning}
+                                />
+                            ) : (
+                                <Inspector
+                                    results={activeResults}
+                                    heatmapFilter={heatmapFilter}
+                                    onClearHeatmapFilter={() => setHeatmapFilter(null)}
+                                    onSelectResult={setSelectedResult}
+                                    onExport={handleExport}
+                                />
+                            )}
+                        </div>
                     )}
                 </div>
+                <ConfigSidebar
+                    config={config}
+                    onUpdateHeaders={updateHeaders}
+                    onUpdateCookies={updateCookies}
+                    onUpdateDictionaries={updateDictionaries}
+                    onUpdateProfiles={updateProfiles}
+                    onUpdateConfig={updateConfig}
+                    onImportConfig={importConfig}
+                    onExportConfig={exportConfig}
+                    onToast={showToast}
+                />
             </main>
+
+            {selectedResult && (
+                <RequestDetail
+                    result={selectedResult}
+                    baseUrl={displayUrl}
+                    onClose={() => setSelectedResult(null)}
+                    onReplay={sendRequest}
+                    globalHeaders={config.global_headers}
+                    globalCookies={config.cookies}
+                />
+            )}
 
             {/* Toast stack */}
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
