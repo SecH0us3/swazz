@@ -11,7 +11,46 @@ import type {
     FuzzingProfile,
 } from './types.js';
 import { SmartPayloadGenerator } from './generator.js';
-import { uuid } from './random.js';
+import type { SchemaProperty } from './types.js';
+import { uuid, int, word } from './random.js';
+
+/**
+ * Substitute {param} placeholders in a URL path with sensible fuzz values.
+ * Uses the endpoint's pathParams schema when available, otherwise falls back
+ * to a short random string (safe for UUIDs, IDs, slugs).
+ */
+function fillPathParams(
+    path: string,
+    pathParams: Record<string, SchemaProperty> = {},
+    generator: SmartPayloadGenerator,
+): string {
+    return path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
+        const schema = pathParams[name] ?? pathParams[name.toLowerCase()];
+
+        if (schema) {
+            const val = generator.generate(name, schema);
+            return encodeURIComponent(String(val));
+        }
+
+        // No schema — make a reasonable guess by name
+        const lower = name.toLowerCase();
+        if (lower.includes('id') || lower.includes('uuid')) {
+            return uuid();
+        }
+        if (lower.includes('slug') || lower.includes('name')) {
+            return word();
+        }
+        if (lower.includes('num') || lower.includes('count') || lower.includes('page')) {
+            return String(int(1, 100));
+        }
+        return String(int(1, 9999));
+    });
+}
+
+// ─── Backoff constants ──────────────────────────────────────
+
+const MAX_RETRIES_ON_429 = 3;
+const DEFAULT_BACKOFF_MS = 2000;
 
 export class FuzzRunner {
     private config: SwazzConfig;
@@ -52,9 +91,28 @@ export class FuzzRunner {
         const concurrency = settings.concurrency;
         const delay = settings.delay_between_requests_ms;
 
+        // Pre-calculate total planned requests for progress
+        let totalPlanned = 0;
+        for (const endpoint of endpoints) {
+            const hasFields = endpoint.schema?.properties &&
+                Object.keys(endpoint.schema.properties).length > 0;
+            const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(
+                endpoint.method.toUpperCase(),
+            );
+            const effectiveIter = (hasFields && isBodyMethod) ? iterations : 1;
+            totalPlanned += profiles.length * effectiveIter;
+        }
+        this._stats.totalPlanned = totalPlanned;
+        this._stats.progress.totalEndpoints = endpoints.length;
+
         try {
-            for (const endpoint of endpoints) {
+            for (let epIdx = 0; epIdx < endpoints.length; epIdx++) {
+                const endpoint = endpoints[epIdx];
                 if (this._shouldStop) break;
+
+                const epKey = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
+                this._stats.progress.currentEndpoint = epKey;
+                this._stats.progress.completedEndpoints = epIdx;
 
                 // Determine if endpoint has fields to fuzz
                 const hasFields = endpoint.schema?.properties &&
@@ -65,6 +123,8 @@ export class FuzzRunner {
 
                 for (const profile of profiles) {
                     if (this._shouldStop) break;
+
+                    this._stats.progress.currentProfile = profile;
 
                     // Smart iteration count:
                     // - No schema fields or method doesn't accept body → 1 request (payload is always empty)
@@ -117,13 +177,20 @@ export class FuzzRunner {
                             await this.sleep(10);
                         }
 
+                        // Substitute path parameters for this iteration
+                        const resolvedPath = fillPathParams(
+                            endpoint.path,
+                            endpoint.pathParams ?? {},
+                            generator,
+                        );
+
                         activeCount++;
                         const taskPromise = (async () => {
                             try {
-
                                 const result = await this.executeRequest(
                                     base_url,
-                                    endpoint.path,
+                                    resolvedPath,
+                                    endpoint.path, // original path for heatmap keys
                                     endpoint.method,
                                     global_headers,
                                     cookies,
@@ -154,10 +221,16 @@ export class FuzzRunner {
                     // Wait for remaining tasks in this profile batch
                     await Promise.all(tasks);
                 }
+
+                // Mark endpoint as done
+                this._stats.progress.completedEndpoints = epIdx + 1;
+                this.onProgress(this._stats);
             }
         } finally {
             this._isRunning = false;
             this._stats.isRunning = false;
+            this._stats.progress.currentEndpoint = '';
+            this._stats.progress.currentProfile = '';
             this.onComplete(this._stats);
         }
     }
@@ -195,16 +268,22 @@ export class FuzzRunner {
 
     // ─── Private ────────────────────────────────────────────
 
+    /**
+     * Execute a single fuzz request with automatic 429 backoff.
+     * `resolvedPath` is the URL path with substituted params.
+     * `originalPath` is used as the heatmap key (keeps {id} template).
+     */
     private async executeRequest(
         baseUrl: string,
-        path: string,
+        resolvedPath: string,
+        originalPath: string,
         method: string,
         headers: Record<string, string>,
         cookies: Record<string, string>,
         payload: any,
         profile: FuzzingProfile,
     ): Promise<FuzzResult> {
-        const url = baseUrl.replace(/\/$/, '') + path;
+        const url = baseUrl.replace(/\/$/, '') + resolvedPath;
 
         // Build final headers: user headers take precedence.
         // Auto-inject Content-Type: application/json for body requests unless user already set one.
@@ -219,39 +298,57 @@ export class FuzzRunner {
             ...headers,
         };
 
-        try {
-            const response = await this.sendRequest({
-                url,
-                method,
-                headers: finalHeaders,
-                cookies,
-                body: payload,
-            });
+        // 429 backoff loop
+        let attempt = 0;
+        while (true) {
+            try {
+                const response = await this.sendRequest({
+                    url,
+                    method,
+                    headers: finalHeaders,
+                    cookies,
+                    body: payload,
+                });
 
-            return {
-                id: uuid(),
-                endpoint: path,
-                method,
-                profile,
-                status: response.status,
-                duration: response.duration,
-                payload,
-                responseBody: response.status >= 400 ? response.body : undefined,
-                timestamp: Date.now(),
-            };
-        } catch (err) {
-            const error = err instanceof Error ? err : new Error(String(err));
-            return {
-                id: uuid(),
-                endpoint: path,
-                method,
-                profile,
-                status: 0,
-                duration: 0,
-                payload,
-                error: error.message,
-                timestamp: Date.now(),
-            };
+                // Handle rate limiting with automatic backoff
+                if (response.status === 429 && attempt < MAX_RETRIES_ON_429) {
+                    attempt++;
+                    // Try to honor Retry-After header (sent back through body or via response headers)
+                    // Since SendRequestFn doesn't expose headers, we use a fixed backoff with jitter
+                    const backoffMs = DEFAULT_BACKOFF_MS * attempt + Math.random() * 500;
+                    await this.sleep(backoffMs);
+                    continue; // retry
+                }
+
+                return {
+                    id: uuid(),
+                    endpoint: originalPath,
+                    resolvedPath,
+                    method,
+                    profile,
+                    status: response.status,
+                    duration: response.duration,
+                    payload,
+                    responseBody: response.status >= 400 ? response.body : undefined,
+                    timestamp: Date.now(),
+                    retries: attempt,
+                };
+            } catch (err) {
+                const error = err instanceof Error ? err : new Error(String(err));
+                return {
+                    id: uuid(),
+                    endpoint: originalPath,
+                    resolvedPath,
+                    method,
+                    profile,
+                    status: 0,
+                    duration: 0,
+                    payload,
+                    error: error.message,
+                    timestamp: Date.now(),
+                    retries: attempt,
+                };
+            }
         }
     }
 
@@ -267,7 +364,7 @@ export class FuzzRunner {
         this._stats.profileCounts[result.profile] =
             (this._stats.profileCounts[result.profile] || 0) + 1;
 
-        // Endpoint × status heatmap (Method + Path)
+        // Endpoint × status heatmap (Method + original template path)
         const epKey = `${result.method.toUpperCase()} ${result.endpoint}`;
         if (!this._stats.endpointCounts[epKey]) {
             this._stats.endpointCounts[epKey] = {};
@@ -284,16 +381,24 @@ export class FuzzRunner {
     private createEmptyStats(): RunStats {
         return {
             totalRequests: 0,
+            totalPlanned: 0,
             requestsPerSecond: 0,
             statusCounts: {},
             profileCounts: {} as Record<FuzzingProfile, number>,
             endpointCounts: {},
             startTime: Date.now(),
             isRunning: false,
+            progress: {
+                completedEndpoints: 0,
+                totalEndpoints: 0,
+                currentEndpoint: '',
+                currentProfile: '',
+            },
         };
     }
 
     private sleep(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        // Works in browser, Node.js and Cloudflare Workers without needing DOM lib
+        return new Promise((resolve) => (globalThis as any).setTimeout(resolve, ms));
     }
 }

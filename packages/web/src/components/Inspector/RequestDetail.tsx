@@ -48,10 +48,12 @@ function joinUrl(base?: string, path?: string): string {
 }
 
 function generateCurl(result: FuzzResult, baseUrl?: string): string {
-    const url = joinUrl(baseUrl, result.endpoint);
+    const url = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     let cmd = `curl -X ${result.method} '${url}'`;
     cmd += ` \\\n  -H 'Content-Type: application/json'`;
-    cmd += ` \\\n  -d '${JSON.stringify(result.payload)}'`;
+    if (result.payload !== undefined) {
+        cmd += ` \\\n  -d '${JSON.stringify(result.payload)}'`;
+    }
     return cmd;
 }
 
@@ -80,6 +82,10 @@ export function RequestDetail({ result, baseUrl, onClose }: Props) {
             result.status >= 400 ? 'var(--color-warning)' :
                 'var(--color-success)';
 
+    const resolvedUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
+    const templateUrl = joinUrl(baseUrl, result.endpoint);
+    const hasResolvedPath = result.resolvedPath && result.resolvedPath !== result.endpoint;
+
     return (
         <>
             <div className="detail-overlay" onClick={onClose} />
@@ -89,18 +95,45 @@ export function RequestDetail({ result, baseUrl, onClose }: Props) {
                     <div>
                         <div className="detail-status" style={{ color: statusColor }}>
                             {result.status || 'Network Error'}
+                            {(result.retries ?? 0) > 0 && (
+                                <span style={{
+                                    marginLeft: 8,
+                                    fontSize: 10,
+                                    background: 'var(--color-warning-bg)',
+                                    color: 'var(--color-warning)',
+                                    padding: '1px 6px',
+                                    borderRadius: 'var(--radius-full)',
+                                    fontWeight: 600,
+                                    verticalAlign: 'middle',
+                                }}>{result.retries} retries (429)</span>
+                            )}
                         </div>
                         <div className="detail-meta">
                             <span
                                 style={{ wordBreak: 'break-all', userSelect: 'all' }}
-                                title={joinUrl(baseUrl, result.endpoint)}
+                                title={resolvedUrl}
                             >
-                                {result.method} {joinUrl(baseUrl, result.endpoint)}
+                                {result.method} {hasResolvedPath ? resolvedUrl : templateUrl}
                             </span>
+                            {hasResolvedPath && (
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                    template: {result.endpoint}
+                                </span>
+                            )}
                             <span>{result.profile} • {result.duration}ms</span>
                         </div>
                     </div>
-                    <button className="btn btn-ghost" onClick={onClose}>✕</button>
+                    <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                        <button
+                            className="btn btn-ghost"
+                            title="Replay this request"
+                            onClick={() => window.open(resolvedUrl, '_blank', 'noopener,noreferrer')}
+                            style={{ fontSize: 12 }}
+                        >
+                            ↺ Replay
+                        </button>
+                        <button className="btn btn-ghost" onClick={onClose}>✕</button>
+                    </div>
                 </div>
 
                 {/* Error message */}

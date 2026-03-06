@@ -22,6 +22,8 @@ export interface EndpointConfig {
     path: string;
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     schema: SchemaProperty;
+    /** Schemas for {param} placeholders in the path (e.g. /users/{id}) */
+    pathParams?: Record<string, SchemaProperty>;
 }
 
 // ─── Settings ───────────────────────────────────────────
@@ -59,7 +61,8 @@ export interface SwazzConfig {
 
 export interface FuzzResult {
     id: string;
-    endpoint: string;
+    endpoint: string;         // original template path e.g. /users/{id}
+    resolvedPath: string;     // actual path used e.g. /users/abc123
     method: string;
     profile: FuzzingProfile;
     status: number;
@@ -68,18 +71,27 @@ export interface FuzzResult {
     responseBody?: any;
     error?: string;
     timestamp: number;
+    retries: number;          // how many 429 retries were needed
 }
 
 // ─── Live Stats ─────────────────────────────────────────
 
 export interface RunStats {
     totalRequests: number;
+    totalPlanned: number;
     requestsPerSecond: number;
     statusCounts: Record<number, number>;
     profileCounts: Record<FuzzingProfile, number>;
     endpointCounts: Record<string, Record<number, number>>;
     startTime: number;
     isRunning: boolean;
+    /** Progress tracking */
+    progress: {
+        completedEndpoints: number;
+        totalEndpoints: number;
+        currentEndpoint: string;
+        currentProfile: FuzzingProfile | '';
+    };
 }
 
 // ─── Request abstraction ────────────────────────────────
@@ -96,4 +108,5 @@ export type SendRequestFn = (req: SendRequestPayload) => Promise<{
     status: number;
     body: any;
     duration: number;
+    headers?: Record<string, string>;
 }>;

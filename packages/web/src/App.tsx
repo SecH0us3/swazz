@@ -181,6 +181,35 @@ export default function App() {
         }
     };
 
+    const handleExport = () => {
+        if (results.length === 0) {
+            showToast('No results to export yet', 'error');
+            return;
+        }
+        const data = {
+            exportedAt: new Date().toISOString(),
+            baseUrl: config.base_url,
+            totalRequests: results.length,
+            summary: {
+                crashes5xx: results.filter((r) => r.status >= 500).length,
+                errors4xx: results.filter((r) => r.status >= 400 && r.status < 500).length,
+                success2xx: results.filter((r) => r.status >= 200 && r.status < 300).length,
+                networkErrors: results.filter((r) => r.status === 0).length,
+                totalRetries: results.reduce((sum, r) => sum + (r.retries ?? 0), 0),
+            },
+            results,
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `swazz-results-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`Exported ${results.length} results`, 'success');
+    };
+
+
     const [sidebarWidth, setSidebarWidth] = useState(280);
     const isResizingRef = useRef(false);
 
@@ -243,12 +272,14 @@ export default function App() {
                     endpointKeys={endpointKeys}
                     heatmapFilter={heatmapFilter}
                     onHeatmapFilter={setHeatmapFilter}
+                    isRunning={isBusy}
                 />
                 <Inspector
                     results={results}
                     onSelectResult={setSelectedResult}
                     heatmapFilter={heatmapFilter}
                     onClearHeatmapFilter={() => setHeatmapFilter(null)}
+                    onExport={handleExport}
                 />
             </div>
 

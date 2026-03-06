@@ -7,6 +7,7 @@ interface Props {
     onSelectResult: (result: FuzzResult) => void;
     heatmapFilter: HeatmapFilter | null;
     onClearHeatmapFilter: () => void;
+    onExport: () => void;
 }
 
 type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
@@ -29,7 +30,7 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
-export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatmapFilter }: Props) {
+export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatmapFilter, onExport }: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
 
@@ -157,12 +158,23 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                     </div>
                 )}
 
-                <input
-                    className="input inspector-search"
-                    placeholder="Filter by path..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
+                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flex: 1 }}>
+                    <input
+                        className="input inspector-search"
+                        placeholder="Filter by path..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{ flex: 1 }}
+                    />
+                    <button
+                        className="btn btn-ghost"
+                        title="Export results as JSON"
+                        onClick={onExport}
+                        style={{ whiteSpace: 'nowrap', fontSize: 'var(--font-size-xs)' }}
+                    >
+                        📥 Export
+                    </button>
+                </div>
             </div>
 
             <div className="request-log">

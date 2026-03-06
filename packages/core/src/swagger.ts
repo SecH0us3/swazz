@@ -52,13 +52,22 @@ export function parseSwaggerSpec(spec: any): ParseResult {
             const operation = pathItem[method.toLowerCase()];
             if (!operation) continue;
 
+            // Merge path-level parameters with operation-level parameters
+            const allParams = [
+                ...(pathItem.parameters ?? []),
+                ...(operation.parameters ?? []),
+            ];
+
             // Extract request body schema
             let schema = extractRequestSchema(operation, spec);
 
             // If no body schema (e.g. GET), create from query/path params
             if (!schema || !schema.properties || Object.keys(schema.properties).length === 0) {
-                schema = extractParamsSchema(operation);
+                schema = extractParamsSchema(allParams);
             }
+
+            // Extract path parameters separately for URL substitution
+            const pathParams = extractPathParams(allParams);
 
             // Only add if we have some schema to work with
             // (for GET requests without params, we still add them with empty schema)
@@ -66,12 +75,14 @@ export function parseSwaggerSpec(spec: any): ParseResult {
                 path,
                 method,
                 schema: schema || { type: 'object', properties: {} },
+                ...(Object.keys(pathParams).length > 0 ? { pathParams } : {}),
             });
         }
     }
 
     return { basePath, endpoints };
 }
+
 
 /**
  * Extract the request body schema from an operation.
@@ -100,18 +111,20 @@ function extractRequestSchema(operation: any, spec: any): SchemaProperty | null 
 }
 
 /**
- * Extract schemas from query/path parameters.
+ * Extract schemas from query parameters (for use as fuzz body/query params).
+ * Accepts a flat params array (already merged path-level + operation-level).
  */
-function extractParamsSchema(operation: any): SchemaProperty | null {
-    if (!operation.parameters || operation.parameters.length === 0) {
+function extractParamsSchema(params: any[]): SchemaProperty | null {
+    if (!params || params.length === 0) {
         return null;
     }
 
     const properties: Record<string, SchemaProperty> = {};
 
-    for (const param of operation.parameters) {
-        if (param.in === 'body') continue; // Already handled
-        if (param.in === 'header') continue; // Not relevant for fuzzing payload
+    for (const param of params) {
+        if (param.in === 'body') continue;    // Already handled
+        if (param.in === 'header') continue;  // Not relevant for fuzzing payload
+        if (param.in === 'path') continue;    // Handled by extractPathParams
 
         const name = param.name;
         if (!name) continue;
@@ -126,6 +139,27 @@ function extractParamsSchema(operation: any): SchemaProperty | null {
     if (Object.keys(properties).length === 0) return null;
 
     return { type: 'object', properties };
+}
+
+/**
+ * Extract path parameters (in: 'path') as a SchemaProperty map for URL substitution.
+ */
+function extractPathParams(params: any[]): Record<string, SchemaProperty> {
+    const result: Record<string, SchemaProperty> = {};
+
+    for (const param of params) {
+        if (param.in !== 'path') continue;
+        const name = param.name;
+        if (!name) continue;
+
+        result[name] = {
+            type: (param.schema?.type ?? param.type ?? 'string') as SchemaProperty['type'],
+            format: param.schema?.format ?? param.format,
+            enum: param.schema?.enum ?? param.enum,
+        };
+    }
+
+    return result;
 }
 
 /**
