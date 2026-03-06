@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { RunStats, FuzzResult } from '@swazz/core';
 import { StatsBar } from './StatsBar.js';
 import { Heatmap } from './Heatmap.js';
 import type { HeatmapFilter } from './Heatmap.js';
-import { StatusChart } from './StatusChart.js';
 
 interface Props {
     stats: RunStats | null;
@@ -30,15 +29,12 @@ export function Dashboard({ stats, results, endpointPaths, heatmapFilter, onHeat
     return (
         <div className="dashboard">
             <StatsBar stats={stats} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 'var(--space-4)', alignItems: 'start' }}>
-                <Heatmap
-                    stats={stats}
-                    endpointPaths={endpointPaths}
-                    activeFilter={heatmapFilter}
-                    onCellClick={onHeatmapFilter}
-                />
-                <StatusChart stats={stats} />
-            </div>
+            <Heatmap
+                stats={stats}
+                endpointPaths={endpointPaths}
+                activeFilter={heatmapFilter}
+                onCellClick={onHeatmapFilter}
+            />
         </div>
     );
 }

@@ -327,7 +327,7 @@ body::before {
 .main-area {
   grid-area: main;
   display: grid;
-  grid-template-rows: 1fr 280px;
+  grid-template-rows: 3fr 2fr;
   overflow: hidden;
 }
 
@@ -675,32 +675,114 @@ body::before {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
-  /* Fixed max-height so it scrolls independently */
-  max-height: 320px;
+  /* Fill the dashboard card — grows with available height */
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
 .heatmap-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-2);
   margin-bottom: var(--space-3);
   flex-shrink: 0;
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
 }
 
 .heatmap-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-/* Scrollable grid wrapper — scrolls independently */
+/* Search input inside heatmap header */
+.heatmap-search {
+  width: 160px !important;
+  padding: 4px 8px !important;
+  font-size: var(--font-size-xs) !important;
+  flex-shrink: 0;
+}
+
+/* Bucket filter buttons row */
+.heatmap-buckets {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.heatmap-bucket-btn {
+  padding: 3px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  font-family: var(--font-ui);
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-in-out);
+  white-space: nowrap;
+}
+
+.heatmap-bucket-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.heatmap-bucket-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border-color: var(--border-hover);
+}
+
+.heatmap-bucket-btn.active.\32xx {
+  color: var(--color-success);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.heatmap-bucket-btn.active.\34xx {
+  color: var(--color-warning);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.heatmap-bucket-btn.active.\35xx {
+  color: var(--color-error);
+  border-color: rgba(244, 63, 94, 0.35);
+}
+
+/* Active cell chip in the header */
+.heatmap-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--color-action-hover);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.heatmap-active-chip:hover {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+/* Scrollable grid wrapper */
 .heatmap-scroll {
   overflow-y: auto;
-  overflow-x: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
 }
@@ -717,10 +799,10 @@ body::before {
   gap: 3px;
 }
 
+/* Label: grows and truncates — codes stay on the right */
 .heatmap-label {
   flex: 1;
-  min-width: 120px;
-  max-width: 220px;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
@@ -728,6 +810,24 @@ body::before {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-right: var(--space-2);
+}
+
+/* Spacer in the codes header — same flex behaviour as label */
+.heatmap-label-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Footer stats */
+.heatmap-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+  font-size: 10px;
+  color: var(--text-disabled);
+  flex-shrink: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .heatmap-cell {
