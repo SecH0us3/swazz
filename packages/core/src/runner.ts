@@ -236,7 +236,7 @@ export class FuzzRunner {
                 status: response.status,
                 duration: response.duration,
                 payload,
-                responseBody: response.status >= 500 ? response.body : undefined,
+                responseBody: response.status >= 400 ? response.body : undefined,
                 timestamp: Date.now(),
             };
         } catch (err) {

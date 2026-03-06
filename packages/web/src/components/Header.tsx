@@ -2,6 +2,7 @@ import React from 'react';
 
 interface Props {
     baseUrl: string;
+    onChangeBaseUrl?: (url: string) => void;
     isRunning: boolean;
     isPaused: boolean;
     isLoadingSpecs?: boolean;
@@ -11,7 +12,7 @@ interface Props {
     onResume: () => void;
 }
 
-export function Header({ baseUrl, isRunning, isPaused, isLoadingSpecs, onStart, onStop, onPause, onResume }: Props) {
+export function Header({ baseUrl, onChangeBaseUrl, isRunning, isPaused, isLoadingSpecs, onStart, onStop, onPause, onResume }: Props) {
     return (
         <header className="header">
             <div className="header-logo">
@@ -19,7 +20,18 @@ export function Header({ baseUrl, isRunning, isPaused, isLoadingSpecs, onStart, 
                 <span>swazz</span>
             </div>
 
-            {baseUrl && <div className="header-target">{baseUrl}</div>}
+            {baseUrl !== undefined && (
+                <div className="header-target-wrapper">
+                    <span className="header-target-dot" />
+                    <input
+                        className="header-target-input"
+                        value={baseUrl}
+                        onChange={(e) => onChangeBaseUrl?.(e.target.value)}
+                        placeholder="https://api.example.com"
+                        readOnly={!onChangeBaseUrl}
+                    />
+                </div>
+            )}
 
             {isRunning && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

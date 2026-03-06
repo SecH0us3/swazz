@@ -3,6 +3,7 @@ import type { FuzzResult } from '@swazz/core';
 
 interface Props {
     result: FuzzResult;
+    baseUrl: string;
     onClose: () => void;
 }
 
@@ -40,15 +41,21 @@ function syntaxHighlight(json: string): string {
         .replace(/:\s*(true|false)/g, ': <span style="color:var(--color-action)">$1</span>');
 }
 
+function joinUrl(base?: string, path?: string): string {
+    const b = (base || '').replace(/\/+$/, '');
+    const p = (path || '').replace(/^\/+/, '');
+    return b && p ? `${b}/${p}` : `${b}${p}`;
+}
+
 function generateCurl(result: FuzzResult, baseUrl?: string): string {
-    const url = baseUrl ? `${baseUrl}${result.endpoint}` : result.endpoint;
+    const url = joinUrl(baseUrl, result.endpoint);
     let cmd = `curl -X ${result.method} '${url}'`;
     cmd += ` \\\n  -H 'Content-Type: application/json'`;
     cmd += ` \\\n  -d '${JSON.stringify(result.payload)}'`;
     return cmd;
 }
 
-export function RequestDetail({ result, onClose }: Props) {
+export function RequestDetail({ result, baseUrl, onClose }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
 
     const copy = (text: string, label: string) => {
@@ -58,7 +65,16 @@ export function RequestDetail({ result, onClose }: Props) {
         });
     };
 
-    const payloadJson = JSON.stringify(result.payload, null, 2);
+    const payloadJson = JSON.stringify(result.payload, null, 2) || '';
+    const isLargePayload = payloadJson.length > 10000;
+
+    let responseBodyJson = '';
+    if (result.responseBody !== undefined) {
+        responseBodyJson = typeof result.responseBody === 'string'
+            ? result.responseBody
+            : JSON.stringify(result.responseBody, null, 2);
+    }
+    const isLargeResponse = responseBodyJson.length > 10000;
     const statusColor =
         result.status >= 500 ? 'var(--color-error)' :
             result.status >= 400 ? 'var(--color-warning)' :
@@ -75,7 +91,12 @@ export function RequestDetail({ result, onClose }: Props) {
                             {result.status || 'Network Error'}
                         </div>
                         <div className="detail-meta">
-                            <span>{result.method} {result.endpoint}</span>
+                            <span
+                                style={{ wordBreak: 'break-all', userSelect: 'all' }}
+                                title={joinUrl(baseUrl, result.endpoint)}
+                            >
+                                {result.method} {joinUrl(baseUrl, result.endpoint)}
+                            </span>
                             <span>{result.profile} • {result.duration}ms</span>
                         </div>
                     </div>
@@ -86,7 +107,7 @@ export function RequestDetail({ result, onClose }: Props) {
                 {result.error && (
                     <div style={{
                         padding: 'var(--space-3)',
-                        background: 'var(--color-error-dim)',
+                        background: 'var(--color-error-bg)',
                         borderRadius: 'var(--radius-md)',
                         color: 'var(--color-error)',
                         fontFamily: 'var(--font-mono)',
@@ -100,28 +121,45 @@ export function RequestDetail({ result, onClose }: Props) {
                 {/* Request Body */}
                 <div className="detail-section">
                     <div className="detail-section-title">Request Body</div>
-                    <div
-                        className="detail-json"
-                        dangerouslySetInnerHTML={{ __html: syntaxHighlight(payloadJson) }}
-                    />
+                    {isLargePayload ? (
+                        <div className="detail-json" style={{ color: 'var(--text-muted)' }}>
+                            [Large Payload Truncated]
+                            <br />
+                            <br />
+                            <strong>Size:</strong> {(payloadJson.length / 1024).toFixed(1)} KB
+                            <br />
+                            <strong>Type:</strong> {typeof result.payload === 'object' ? (Array.isArray(result.payload) ? 'Array' : 'Object') : typeof result.payload}
+                        </div>
+                    ) : (
+                        <div
+                            className="detail-json"
+                            dangerouslySetInnerHTML={{ __html: syntaxHighlight(payloadJson) }}
+                        />
+                    )}
                     <button
                         className="btn btn-ghost detail-copy-btn"
                         onClick={() => copy(payloadJson, 'payload')}
                     >
-                        {copied === 'payload' ? '✓ Copied!' : '📋 Copy Payload'}
+                        {copied === 'payload' ? '✓ Copied!' : (isLargePayload ? '📋 Copy Full Payload' : '📋 Copy Payload')}
                     </button>
                 </div>
 
-                {/* Response Body (for 5xx) */}
-                {result.responseBody && (
+                {/* Response Body (for errors) */}
+                {result.responseBody !== undefined && (
                     <div className="detail-section">
                         <div className="detail-section-title">Response Body</div>
-                        {/* Render as plain text — never dangerouslySetInnerHTML on server responses */}
-                        <pre className="detail-json" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                            {typeof result.responseBody === 'string'
-                                ? result.responseBody
-                                : JSON.stringify(result.responseBody, null, 2)}
-                        </pre>
+                        {isLargeResponse ? (
+                            <div className="detail-json" style={{ color: 'var(--text-muted)' }}>
+                                [Large Response Truncated]
+                                <br />
+                                <br />
+                                <strong>Size:</strong> {(responseBodyJson.length / 1024).toFixed(1)} KB
+                            </div>
+                        ) : (
+                            <pre className="detail-json" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                {responseBodyJson}
+                            </pre>
+                        )}
                     </div>
                 )}
 
@@ -130,7 +168,7 @@ export function RequestDetail({ result, onClose }: Props) {
                     <button
                         className="btn btn-ghost"
                         style={{ width: '100%' }}
-                        onClick={() => copy(generateCurl(result), 'curl')}
+                        onClick={() => copy(generateCurl(result, baseUrl), 'curl')}
                     >
                         {copied === 'curl' ? '✓ Copied!' : '🔗 Copy as cURL'}
                     </button>

@@ -96,10 +96,10 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                             style={{
                                 background:
                                     heatmapFilter.status >= 500
-                                        ? 'var(--color-error-dim)'
+                                        ? 'var(--color-error-bg)'
                                         : heatmapFilter.status >= 400
-                                            ? 'var(--color-warning-dim)'
-                                            : 'var(--color-success-dim)',
+                                            ? 'var(--color-warning-bg)'
+                                            : 'var(--color-success-bg)',
                                 color:
                                     heatmapFilter.status >= 500
                                         ? 'var(--color-error)'
@@ -180,7 +180,7 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                             onClick={() => onSelectResult(r)}
                         >
                             <span className="log-timestamp">{formatTime(r.timestamp)}</span>
-                            <span className="log-method">{r.method}</span>
+                            <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
                             <span className="log-path">{r.endpoint}</span>
                             <span className={getBadgeClass(r.status)}>{r.status || 'ERR'}</span>
                             <span className="badge-profile">{r.profile}</span>

@@ -62,24 +62,28 @@ export function StatsBar({ stats }: Props) {
     const count5xx = get5xx(stats);
 
     return (
-        <div className="stats-bar">
-            <div className="stat-card stat-rps card">
+        <div className="stats-bar card">
+            <div className="stat-card stat-rps">
                 <span className="stat-label">RPS</span>
                 <AnimatedNumber value={stats.requestsPerSecond} decimals={1} />
             </div>
-            <div className="stat-card stat-total card">
+            <div className="stat-divider" />
+            <div className="stat-card stat-total">
                 <span className="stat-label">Total</span>
                 <AnimatedNumber value={stats.totalRequests} />
             </div>
-            <div className="stat-card stat-2xx card">
+            <div className="stat-divider" />
+            <div className="stat-card stat-2xx">
                 <span className="stat-label">2xx Success</span>
                 <AnimatedNumber value={count2xx} />
             </div>
-            <div className="stat-card stat-4xx card">
+            <div className="stat-divider" />
+            <div className="stat-card stat-4xx">
                 <span className="stat-label">4xx Client</span>
                 <AnimatedNumber value={count4xx} />
             </div>
-            <div className={`stat-card stat-5xx card ${count5xx > 0 ? 'has-errors' : ''}`}>
+            <div className="stat-divider" />
+            <div className={`stat-card stat-5xx ${count5xx > 0 ? 'has-errors' : ''}`}>
                 <span className="stat-label">{count5xx > 0 ? '5xx CRASHES!' : '5xx Errors'}</span>
                 <AnimatedNumber value={count5xx} />
             </div>

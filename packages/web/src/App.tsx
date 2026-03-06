@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { FuzzResult } from '@swazz/core';
 import { parseSwaggerSpec } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
@@ -181,12 +181,38 @@ export default function App() {
         }
     };
 
+    const [sidebarWidth, setSidebarWidth] = useState(280);
+    const isResizingRef = useRef(false);
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isResizingRef.current) return;
+            const newWidth = Math.max(200, Math.min(600, e.clientX));
+            setSidebarWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+            if (isResizingRef.current) {
+                isResizingRef.current = false;
+                document.body.classList.remove('resizing');
+            }
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, []);
+
     const isBusy = isRunning || isLoadingSpecs;
 
     return (
-        <div className="app-layout">
+        <div className="app-layout" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
             <Header
                 baseUrl={displayUrl}
+                onChangeBaseUrl={(url) => updateConfig({ base_url: url })}
                 isRunning={isBusy}
                 isPaused={isPaused}
                 isLoadingSpecs={isLoadingSpecs}
@@ -227,7 +253,7 @@ export default function App() {
             </div>
 
             {selectedResult && (
-                <RequestDetail result={selectedResult} onClose={() => setSelectedResult(null)} />
+                <RequestDetail result={selectedResult} baseUrl={displayUrl} onClose={() => setSelectedResult(null)} />
             )}
 
             {/* Toast stack */}
@@ -236,6 +262,16 @@ export default function App() {
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
             </div>
+
+            <div
+                className="sidebar-resizer"
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    isResizingRef.current = true;
+                    document.body.classList.add('resizing');
+                }}
+                title="Drag to resize"
+            />
         </div>
     );
 }
