@@ -77,8 +77,6 @@ export function useRunner(proxyUrl: string) {
 
     const stop = useCallback(() => {
         runnerRef.current?.stop();
-        setIsRunning(false);
-        setIsPaused(false);
     }, []);
 
     const pause = useCallback(() => {

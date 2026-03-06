@@ -188,7 +188,7 @@ export default function App() {
             // Persist endpoints + resolved base url for session
             updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints });
 
-            start(finalConfig);
+            start(finalConfig, handleRunComplete);
             showToast(
                 `Fuzzing ${allEndpoints.length} endpoint${allEndpoints.length > 1 ? 's' : ''} across ${swaggerUrls.length} spec${swaggerUrls.length > 1 ? 's' : ''}...`,
                 'info',
@@ -198,12 +198,9 @@ export default function App() {
             if (!config.base_url) {
                 showToast('Please set a base URL', 'error');
                 return;
-                // Use already-loaded endpoints
-                if (!config.base_url) {
-                }
-                start(config, handleRunComplete);
-                showToast(`Fuzzing ${config.endpoints.length} endpoints...`, 'info');
             }
+            start(config, handleRunComplete);
+            showToast(`Fuzzing ${config.endpoints.length} endpoints...`, 'info');
         }
     };
 
