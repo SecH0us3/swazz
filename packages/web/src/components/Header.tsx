@@ -4,13 +4,14 @@ interface Props {
     baseUrl: string;
     isRunning: boolean;
     isPaused: boolean;
+    isLoadingSpecs?: boolean;
     onStart: () => void;
     onStop: () => void;
     onPause: () => void;
     onResume: () => void;
 }
 
-export function Header({ baseUrl, isRunning, isPaused, onStart, onStop, onPause, onResume }: Props) {
+export function Header({ baseUrl, isRunning, isPaused, isLoadingSpecs, onStart, onStop, onPause, onResume }: Props) {
     return (
         <header className="header">
             <div className="header-logo">
@@ -22,22 +23,32 @@ export function Header({ baseUrl, isRunning, isPaused, onStart, onStop, onPause,
 
             {isRunning && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div className="running-dot" />
-                    <span className="running-text">{isPaused ? 'Paused' : 'Running...'}</span>
+                    {isLoadingSpecs ? (
+                        <span className="running-text" style={{ color: 'var(--color-warning)' }}>Loading specs...</span>
+                    ) : (
+                        <>
+                            <div className="running-dot" />
+                            <span className="running-text">{isPaused ? 'Paused' : 'Running...'}</span>
+                        </>
+                    )}
                 </div>
             )}
 
             <div className="header-actions">
                 {!isRunning ? (
-                    <button className="btn btn-primary" onClick={onStart} disabled={!baseUrl}>
-                        ▶ Start
+                    <button className="btn btn-primary" id="btn-start" onClick={onStart}>
+                        ▶ Run Fuzz Test
                     </button>
                 ) : (
                     <>
-                        {isPaused ? (
-                            <button className="btn btn-primary" onClick={onResume}>▶ Resume</button>
-                        ) : (
-                            <button className="btn btn-ghost" onClick={onPause}>⏸ Pause</button>
+                        {!isLoadingSpecs && (
+                            <>
+                                {isPaused ? (
+                                    <button className="btn btn-primary" onClick={onResume}>▶ Resume</button>
+                                ) : (
+                                    <button className="btn btn-ghost" onClick={onPause}>⏸ Pause</button>
+                                )}
+                            </>
                         )}
                         <button className="btn btn-danger" onClick={onStop}>■ Stop</button>
                     </>

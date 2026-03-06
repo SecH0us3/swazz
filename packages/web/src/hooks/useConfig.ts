@@ -8,13 +8,14 @@ import { DEFAULT_SETTINGS } from '@swazz/core';
 
 const STORAGE_KEY = 'swazz:config';
 
-const DEFAULT_CONFIG: SwazzConfig = {
+const DEFAULT_CONFIG: SwazzConfig & { _swagger_urls?: string[] } = {
     base_url: '',
     global_headers: {},
     cookies: {},
     dictionaries: {},
     settings: { ...DEFAULT_SETTINGS },
     endpoints: [],
+    _swagger_urls: [],
 };
 
 function loadConfig(): SwazzConfig {
