@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { FuzzResult } from '@swazz/core';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 
@@ -8,6 +8,7 @@ interface Props {
     heatmapFilter: HeatmapFilter | null;
     onClearHeatmapFilter: () => void;
     onExport: () => void;
+    onFilteredCountChange?: (count: number) => void;
 }
 
 type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
@@ -30,7 +31,7 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
-export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatmapFilter, onExport }: Props) {
+export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatmapFilter, onExport, onFilteredCountChange }: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
 
@@ -39,7 +40,7 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
         [results],
     );
 
-    const filtered = useMemo(() => {
+    const { filtered, totalFiltered } = useMemo(() => {
         let list = results;
 
         // Heatmap cell filter takes priority (exact endpoint + exact status code)
@@ -65,8 +66,15 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
             );
         }
 
-        return list.slice(-500).reverse(); // newest first
+        return {
+            filtered: list.slice(-500).reverse(), // newest first
+            totalFiltered: list.length,
+        };
     }, [results, filter, search, heatmapFilter]);
+
+    useEffect(() => {
+        onFilteredCountChange?.(totalFiltered);
+    }, [totalFiltered, onFilteredCountChange]);
 
     const tabs: { key: StatusFilter; label: string; count?: number }[] = [
         { key: 'all', label: 'All' },
@@ -117,7 +125,7 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                             {heatmapFilter.status}
                         </span>
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
-                            {filtered.length} results
+                            {totalFiltered} results
                         </span>
                         <button
                             onClick={onClearHeatmapFilter}

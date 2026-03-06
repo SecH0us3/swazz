@@ -4,11 +4,13 @@ import { parseSwaggerSpec } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
+import { useDb } from './hooks/useDb.js';
 import { Header } from './components/Header.js';
-import { SetupPanel } from './components/SetupPanel.js';
+import { Sidebar } from './components/Sidebar/Sidebar.js';
 import { Dashboard } from './components/Dashboard/Dashboard.js';
 import { Inspector } from './components/Inspector/Inspector.js';
 import { RequestDetail } from './components/Inspector/RequestDetail.js';
+import { ConfigSidebar } from './components/Sidebar/ConfigSidebar.js';
 
 // In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
@@ -69,6 +71,7 @@ async function loadSwaggerUrl(
 // ─── App ─────────────────────────────────────────────────────
 
 export default function App() {
+    const [activeTab, setActiveTab] = useState<'heatmap' | 'logs'>('heatmap');
     const {
         config,
         updateConfig,
@@ -81,8 +84,8 @@ export default function App() {
     } = useConfig();
 
     const {
-        results,
-        stats,
+        results: liveResults,
+        stats: liveStats,
         isRunning,
         isPaused,
         start,
@@ -91,10 +94,30 @@ export default function App() {
         resume,
     } = useRunner(PROXY_URL);
 
+    const { runs, saveRun, getRunResults, deleteRun } = useDb();
+
+    const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
+    const [historyResults, setHistoryResults] = useState<FuzzResult[]>([]);
+    const [historyStats, setHistoryStats] = useState<any>(null);
+
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
     const [toasts, setToasts] = useState<ToastData[]>([]);
     const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
     const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
+
+    // Active dataset (live or history)
+    const activeResults = loadedRunId ? historyResults : liveResults;
+    const activeStats = loadedRunId ? historyStats : liveStats;
+
+    const activeFilteredLogsCount = useMemo(() => {
+        if (!heatmapFilter) return activeResults.length;
+        return activeResults.filter(
+            (r) =>
+                r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                r.endpoint === heatmapFilter.path &&
+                r.status === heatmapFilter.status
+        ).length;
+    }, [activeResults, heatmapFilter]);
 
     const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
         const id = Date.now();
@@ -175,29 +198,71 @@ export default function App() {
             if (!config.base_url) {
                 showToast('Please set a base URL', 'error');
                 return;
+                // Use already-loaded endpoints
+                if (!config.base_url) {
+                }
+                start(config, handleRunComplete);
+                showToast(`Fuzzing ${config.endpoints.length} endpoints...`, 'info');
             }
-            start(config);
-            showToast(`Fuzzing ${config.endpoints.length} endpoints...`, 'info');
         }
     };
 
+    const handleRunComplete = useCallback(async (finalResults: FuzzResult[], finalStats: any) => {
+        if (finalResults.length === 0) return;
+        const startedAt = finalResults[0].timestamp || Date.now() - finalStats.elapsedTimeMs;
+        const totalRequests = finalResults.length;
+
+        const runRec = {
+            id: `run_${Date.now()}`,
+            startedAt,
+            completedAt: Date.now(),
+            baseUrl: config.base_url,
+            stats: finalStats,
+        };
+        await saveRun(runRec, finalResults);
+        showToast(`Scan saved to history`, 'success');
+    }, [config.base_url, saveRun, showToast]);
+
+    const handleLoadRun = async (runId: string) => {
+        const runData = runs.find(r => r.id === runId);
+        if (!runData) return;
+        showToast(`Loading scan...`, 'info');
+        const loaded = await getRunResults(runId);
+        setHistoryResults(loaded);
+        setHistoryStats(runData.stats);
+        setLoadedRunId(runId);
+        setSelectedResult(null);
+        setHeatmapFilter(null);
+        showToast(`Loaded ${loaded.length} results from history`, 'success');
+    };
+
+    const handleDeleteRun = async (runId: string) => {
+        await deleteRun(runId);
+        if (loadedRunId === runId) {
+            setLoadedRunId(null);
+            setHistoryResults([]);
+            setHistoryStats(null);
+        }
+        showToast('Run deleted', 'success');
+    };
+
     const handleExport = () => {
-        if (results.length === 0) {
+        if (activeResults.length === 0) {
             showToast('No results to export yet', 'error');
             return;
         }
         const data = {
             exportedAt: new Date().toISOString(),
             baseUrl: config.base_url,
-            totalRequests: results.length,
+            totalRequests: activeResults.length,
             summary: {
-                crashes5xx: results.filter((r) => r.status >= 500).length,
-                errors4xx: results.filter((r) => r.status >= 400 && r.status < 500).length,
-                success2xx: results.filter((r) => r.status >= 200 && r.status < 300).length,
-                networkErrors: results.filter((r) => r.status === 0).length,
-                totalRetries: results.reduce((sum, r) => sum + (r.retries ?? 0), 0),
+                crashes5xx: activeResults.filter((r) => r.status >= 500).length,
+                errors4xx: activeResults.filter((r) => r.status >= 400 && r.status < 500).length,
+                success2xx: activeResults.filter((r) => r.status >= 200 && r.status < 300).length,
+                networkErrors: activeResults.filter((r) => r.status === 0).length,
+                totalRetries: activeResults.reduce((sum, r) => sum + (r.retries ?? 0), 0),
             },
-            results,
+            results: activeResults,
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -206,7 +271,7 @@ export default function App() {
         a.download = `swazz-results-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast(`Exported ${results.length} results`, 'success');
+        showToast(`Exported ${activeResults.length} results`, 'success');
     };
 
 
@@ -251,41 +316,129 @@ export default function App() {
                 onResume={resume}
             />
 
-            <SetupPanel
+            <Sidebar
                 config={config}
-                isRunning={isBusy}
-                isPaused={isPaused}
-                onUpdateHeaders={updateHeaders}
-                onUpdateCookies={updateCookies}
-                onUpdateDictionaries={updateDictionaries}
-                onUpdateProfiles={updateProfiles}
+                runs={runs}
+                loadedRunId={loadedRunId}
+                onLoadRun={handleLoadRun}
+                onDeleteRun={handleDeleteRun}
                 onUpdateConfig={updateConfig}
-                onImportConfig={importConfig}
-                onExportConfig={exportConfig}
                 onToast={showToast}
             />
 
-            <div className="main-area">
-                <Dashboard
-                    stats={stats}
-                    results={results}
-                    endpointKeys={endpointKeys}
-                    heatmapFilter={heatmapFilter}
-                    onHeatmapFilter={setHeatmapFilter}
-                    isRunning={isBusy}
-                />
-                <Inspector
-                    results={results}
-                    onSelectResult={setSelectedResult}
-                    heatmapFilter={heatmapFilter}
-                    onClearHeatmapFilter={() => setHeatmapFilter(null)}
-                    onExport={handleExport}
-                />
-            </div>
+            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', flex: 1, minHeight: 0 }}>
+                    {/* Left: Dashboard + Results List */}
+                    <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
+                        {loadedRunId && (
+                            <div className="card" style={{ padding: 'var(--space-4)', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--text-primary)' }}>Viewing History</h3>
+                                        <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                            {activeResults.length} requests · {new Date(historyStats?.startedAt || Date.now()).toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <button className="btn btn-primary" onClick={() => setLoadedRunId(null)}>
+                                        Back to Live Stream
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
-            {selectedResult && (
-                <RequestDetail result={selectedResult} baseUrl={displayUrl} onClose={() => setSelectedResult(null)} />
-            )}
+                        {!loadedRunId && config.endpoints.length === 0 && (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '32px', marginBottom: 12, opacity: 0.5 }}>⚡️</div>
+                                    <h2 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: 'var(--text-primary)' }}>Start Fuzzing</h2>
+                                    <p style={{ maxWidth: 320, fontSize: 'var(--font-size-sm)', lineHeight: 1.5 }}>
+                                        Add endpoints manually or provide a Swagger URL in the sidebar to begin.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {(activeResults.length > 0 || config.endpoints.length > 0) && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
+                                <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+                                    <button
+                                        style={{
+                                            padding: '8px 16px',
+                                            background: 'none',
+                                            border: 'none',
+                                            borderBottom: activeTab === 'heatmap' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                            color: activeTab === 'heatmap' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            cursor: 'pointer',
+                                            fontSize: 'var(--font-size-sm)',
+                                            fontWeight: activeTab === 'heatmap' ? 600 : 400,
+                                        }}
+                                        onClick={() => setActiveTab('heatmap')}
+                                    >
+                                        Endpoint Heatmap
+                                    </button>
+                                    <button
+                                        style={{
+                                            padding: '8px 16px',
+                                            background: 'none',
+                                            border: 'none',
+                                            borderBottom: activeTab === 'logs' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                            color: activeTab === 'logs' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            cursor: 'pointer',
+                                            fontSize: 'var(--font-size-sm)',
+                                            fontWeight: activeTab === 'logs' ? 600 : 400,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                        }}
+                                        onClick={() => setActiveTab('logs')}
+                                    >
+                                        <span>Request Logs</span>
+                                        {activeResults.length > 0 && (
+                                            <span style={{ fontSize: '11px', color: 'var(--text-disabled)', fontWeight: 400 }}>
+                                                (<span style={{ color: 'var(--color-primary)' }}>{activeFilteredLogsCount}</span> from {activeResults.length})
+                                            </span>
+                                        )}
+                                    </button>
+                                </div>
+
+                                {activeTab === 'heatmap' ? (
+                                    <Dashboard
+                                        results={activeResults}
+                                        stats={activeStats}
+                                        endpointKeys={endpointKeys}
+                                        heatmapFilter={heatmapFilter}
+                                        onHeatmapFilter={setHeatmapFilter}
+                                        isRunning={isRunning}
+                                    />
+                                ) : (
+                                    <Inspector
+                                        results={activeResults}
+                                        heatmapFilter={heatmapFilter}
+                                        onClearHeatmapFilter={() => setHeatmapFilter(null)}
+                                        onSelectResult={setSelectedResult}
+                                        onExport={handleExport}
+                                    />
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    {selectedResult ? (
+                        <RequestDetail result={selectedResult} baseUrl={displayUrl} onClose={() => setSelectedResult(null)} />
+                    ) : (
+                        <ConfigSidebar
+                            config={config}
+                            onUpdateHeaders={updateHeaders}
+                            onUpdateCookies={updateCookies}
+                            onUpdateDictionaries={updateDictionaries}
+                            onUpdateProfiles={updateProfiles}
+                            onUpdateConfig={updateConfig}
+                            onImportConfig={importConfig}
+                            onExportConfig={exportConfig}
+                            onToast={showToast}
+                        />
+                    )}
+                </div>
+            </main>
 
             {/* Toast stack */}
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>

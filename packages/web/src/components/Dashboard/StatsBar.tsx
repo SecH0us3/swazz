@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import type { RunStats } from '@swazz/core';
 
 interface Props {
@@ -7,34 +7,9 @@ interface Props {
 }
 
 function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
-    const [display, setDisplay] = useState(value);
-    const [pop, setPop] = useState(false);
-    const prev = useRef(value);
-
-    useEffect(() => {
-        if (value === prev.current) return;
-        const from = prev.current;
-        const to = value;
-        prev.current = value;
-        setPop(true);
-        const start = performance.now();
-        const duration = 400;
-
-        const animate = (now: number) => {
-            const elapsed = now - start;
-            const progress = Math.min(elapsed / duration, 1);
-            // ease-out
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setDisplay(from + (to - from) * eased);
-            if (progress < 1) requestAnimationFrame(animate);
-            else setPop(false);
-        };
-        requestAnimationFrame(animate);
-    }, [value]);
-
     return (
-        <span className={`stat-value ${pop ? 'pop' : ''}`}>
-            {decimals > 0 ? display.toFixed(decimals) : Math.round(display).toLocaleString()}
+        <span className="stat-value">
+            {decimals > 0 ? value.toFixed(decimals) : Math.round(value).toLocaleString()}
         </span>
     );
 }
