@@ -184,11 +184,24 @@ export class FuzzRunner {
     ): Promise<FuzzResult> {
         const url = baseUrl.replace(/\/$/, '') + path;
 
+        // Build final headers: user headers take precedence.
+        // Auto-inject Content-Type: application/json for body requests unless user already set one.
+        const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(method.toUpperCase());
+        const hasContentType = Object.keys(headers).some(
+            (k) => k.toLowerCase() === 'content-type',
+        );
+        const finalHeaders: Record<string, string> = {
+            ...(isBodyMethod && payload !== undefined && !hasContentType
+                ? { 'Content-Type': 'application/json' }
+                : {}),
+            ...headers,
+        };
+
         try {
             const response = await this.sendRequest({
                 url,
                 method,
-                headers,
+                headers: finalHeaders,
                 cookies,
                 body: payload,
             });

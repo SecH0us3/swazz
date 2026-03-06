@@ -52,6 +52,13 @@ function devProxyPlugin(): Plugin {
                     ...(payload.headers || {}),
                 };
 
+                // Auto-add Content-Type for requests with a body (unless explicitly set by caller)
+                const hasBody = payload.method !== 'GET' && payload.method !== 'HEAD' && payload.body != null;
+                if (hasBody && !headers['Content-Type'] && !headers['content-type']) {
+                    headers['Content-Type'] = 'application/json';
+                }
+
+
                 // Merge cookies into Cookie header
                 if (payload.cookies && Object.keys(payload.cookies).length > 0) {
                     const cookieStr = Object.entries(payload.cookies)
