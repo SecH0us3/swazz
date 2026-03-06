@@ -70,7 +70,23 @@ export function Heatmap({ stats, endpointPaths, activeFilter, onCellClick }: Pro
         const q = search.trim().toLowerCase();
         if (q) list = list.filter((ep) => ep.toLowerCase().includes(q));
 
-        return list;
+        // Sort: 5xx first, then 4xx, then alphabetical
+        return list.sort((a, b) => {
+            const countsA = stats.endpointCounts[a] ?? {};
+            const countsB = stats.endpointCounts[b] ?? {};
+
+            const has5xxA = Object.entries(countsA).some(([code, count]) => count > 0 && Number(code) >= 500);
+            const has5xxB = Object.entries(countsB).some(([code, count]) => count > 0 && Number(code) >= 500);
+            if (has5xxA && !has5xxB) return -1;
+            if (!has5xxA && has5xxB) return 1;
+
+            const has4xxA = Object.entries(countsA).some(([code, count]) => count > 0 && Number(code) >= 400 && Number(code) < 500);
+            const has4xxB = Object.entries(countsB).some(([code, count]) => count > 0 && Number(code) >= 400 && Number(code) < 500);
+            if (has4xxA && !has4xxB) return -1;
+            if (!has4xxA && has4xxB) return 1;
+
+            return a.localeCompare(b);
+        });
     }, [endpointPaths, search, statusBucket, stats]);
 
     const maxCount = Math.max(
