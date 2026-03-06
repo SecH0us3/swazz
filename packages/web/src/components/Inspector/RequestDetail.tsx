@@ -6,13 +6,38 @@ interface Props {
     onClose: () => void;
 }
 
+/**
+ * Escape characters that the browser interprets as HTML.
+ * Applied BEFORE any <span> injection so user-controlled payload values
+ * (e.g. <script>alert(1)</script> or <img onerror=alert(1)>)
+ * are rendered as plain text and never executed.
+ */
+function escapeHtml(s: string): string {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Syntax-highlight a pretty-printed JSON string.
+ * The string is HTML-escaped first, so payload values cannot inject HTML.
+ * After escaping, quote characters are still literal " (JSON.stringify output
+ * doesn't produce &, < or > in key names, only in values).
+ */
 function syntaxHighlight(json: string): string {
-    return json
-        .replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span style="color: var(--color-info)">$1</span>:')
-        .replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span style="color: var(--color-success)">$1</span>')
-        .replace(/:\s*(\d+\.?\d*)/g, ': <span style="color: var(--color-warning)">$1</span>')
-        .replace(/:\s*(null|undefined|NaN)/g, ': <span style="color: var(--color-error)">$1</span>')
-        .replace(/:\s*(true|false)/g, ': <span style="color: var(--color-action)">$1</span>');
+    const safe = escapeHtml(json);
+    return safe
+        // Keys:  "key":
+        .replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span style="color:var(--color-info)">$1</span>:')
+        // String values:  : "value"
+        .replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span style="color:var(--color-success)">$1</span>')
+        // Numbers
+        .replace(/:\s*(-?\d+\.?\d*)/g, ': <span style="color:var(--color-warning)">$1</span>')
+        // null / undefined / NaN
+        .replace(/:\s*(null|undefined|NaN)/g, ': <span style="color:var(--color-error)">$1</span>')
+        // booleans
+        .replace(/:\s*(true|false)/g, ': <span style="color:var(--color-action)">$1</span>');
 }
 
 function generateCurl(result: FuzzResult, baseUrl?: string): string {
@@ -67,6 +92,7 @@ export function RequestDetail({ result, onClose }: Props) {
                         fontFamily: 'var(--font-mono)',
                         fontSize: 'var(--font-size-xs)',
                     }}>
+                        {/* result.error is a plain string — safe to render as text */}
                         {result.error}
                     </div>
                 )}
@@ -90,11 +116,12 @@ export function RequestDetail({ result, onClose }: Props) {
                 {result.responseBody && (
                     <div className="detail-section">
                         <div className="detail-section-title">Response Body</div>
-                        <div className="detail-json">
+                        {/* Render as plain text — never dangerouslySetInnerHTML on server responses */}
+                        <pre className="detail-json" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                             {typeof result.responseBody === 'string'
                                 ? result.responseBody
                                 : JSON.stringify(result.responseBody, null, 2)}
-                        </div>
+                        </pre>
                     </div>
                 )}
 
