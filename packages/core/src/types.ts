@@ -55,6 +55,7 @@ export interface SwazzConfig {
     dictionaries: Dictionary;
     settings: SwazzSettings;
     endpoints: EndpointConfig[];
+    disabled_endpoints?: string[];
 }
 
 // ─── Results ────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { parseSwaggerSpec } from '@swazz/core';
 import type { ScanRun } from '../../hooks/useDb.js';
 
 import { Section } from './Shared.js';
+import { EndpointTree } from './EndpointTree.js';
 
 interface Props {
     config: SwazzConfig;
@@ -16,102 +17,6 @@ interface Props {
 }
 
 
-// ─── Endpoint Editor Row ────────────────────────────────
-
-const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
-
-function EndpointRow({
-    endpoint,
-    onUpdate,
-    onDelete,
-}: {
-    endpoint: EndpointConfig;
-    onUpdate: (ep: EndpointConfig) => void;
-    onDelete: () => void;
-}) {
-    const fieldCount = endpoint.schema?.properties ? Object.keys(endpoint.schema.properties).length : 0;
-
-    return (
-        <div style={{
-            display: 'flex',
-            gap: 4,
-            alignItems: 'center',
-            padding: '4px 0',
-        }}>
-            <select
-                className="input"
-                style={{ width: 72, flex: 'none', cursor: 'pointer' }}
-                value={endpoint.method}
-                onChange={(e) => onUpdate({ ...endpoint, method: e.target.value as any })}
-            >
-                {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <input
-                className="input"
-                style={{ flex: 1 }}
-                value={endpoint.path}
-                placeholder="/api/resource"
-                onChange={(e) => onUpdate({ ...endpoint, path: e.target.value })}
-            />
-            <span style={{ fontSize: 10, color: 'var(--text-disabled)', width: 24, textAlign: 'center', flexShrink: 0 }}>
-                {fieldCount > 0 ? `${fieldCount}f` : ''}
-            </span>
-            <button className="kv-delete" onClick={onDelete} title="Delete endpoint">✕</button>
-        </div>
-    );
-}
-
-// ─── Schema Editor (simple) ─────────────────────────────
-
-function SchemaFieldRow({
-    name,
-    schema,
-    onUpdate,
-    onDelete,
-}: {
-    name: string;
-    schema: SchemaProperty;
-    onUpdate: (name: string, schema: SchemaProperty) => void;
-    onDelete: () => void;
-}) {
-    return (
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center', paddingLeft: 8 }}>
-            <input
-                className="input"
-                style={{ flex: 1 }}
-                value={name}
-                placeholder="field_name"
-                onChange={(e) => onUpdate(e.target.value, schema)}
-            />
-            <select
-                className="input"
-                style={{ width: 80, cursor: 'pointer' }}
-                value={schema.type || 'string'}
-                onChange={(e) => onUpdate(name, { ...schema, type: e.target.value as any })}
-            >
-                <option value="string">string</option>
-                <option value="integer">integer</option>
-                <option value="number">number</option>
-                <option value="boolean">boolean</option>
-            </select>
-            <select
-                className="input"
-                style={{ width: 76, cursor: 'pointer' }}
-                value={schema.format || ''}
-                onChange={(e) => onUpdate(name, { ...schema, format: e.target.value || undefined })}
-            >
-                <option value="">—</option>
-                <option value="email">email</option>
-                <option value="uuid">uuid</option>
-                <option value="date-time">datetime</option>
-                <option value="uri">uri</option>
-                <option value="ipv4">ipv4</option>
-            </select>
-            <button className="kv-delete" onClick={onDelete}>✕</button>
-        </div>
-    );
-}
-
 // ─── Main Sidebar ───────────────────────────────────────
 
 export function Sidebar({
@@ -123,8 +28,6 @@ export function Sidebar({
     onUpdateConfig,
     onToast,
 }: Props) {
-    const [editingEndpoint, setEditingEndpoint] = useState<number | null>(null);
-
     const swaggerUrls: string[] = (config as any)._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
 
@@ -148,62 +51,6 @@ export function Sidebar({
     };
 
     // ─── Endpoint management ──────────────────────────────
-
-    const addEndpoint = () => {
-        const newEp: EndpointConfig = {
-            path: '/api/',
-            method: 'POST',
-            schema: { type: 'object', properties: {} },
-        };
-        onUpdateConfig({ endpoints: [...config.endpoints, newEp] });
-        setEditingEndpoint(config.endpoints.length); // open editing for the new one
-    };
-
-    const updateEndpoint = (index: number, ep: EndpointConfig) => {
-        const next = [...config.endpoints];
-        next[index] = ep;
-        onUpdateConfig({ endpoints: next });
-    };
-
-    const deleteEndpoint = (index: number) => {
-        const next = config.endpoints.filter((_, i) => i !== index);
-        onUpdateConfig({ endpoints: next });
-        if (editingEndpoint === index) setEditingEndpoint(null);
-    };
-
-    const addField = (epIndex: number) => {
-        const ep = config.endpoints[epIndex];
-        const fields = ep.schema.properties || {};
-        const newName = `field_${Object.keys(fields).length + 1}`;
-        updateEndpoint(epIndex, {
-            ...ep,
-            schema: {
-                ...ep.schema,
-                properties: { ...fields, [newName]: { type: 'string' } },
-            },
-        });
-    };
-
-    const updateField = (epIndex: number, oldName: string, newName: string, schema: SchemaProperty) => {
-        const ep = config.endpoints[epIndex];
-        const fields = { ...(ep.schema.properties || {}) };
-        if (oldName !== newName) delete fields[oldName];
-        fields[newName] = schema;
-        updateEndpoint(epIndex, {
-            ...ep,
-            schema: { ...ep.schema, properties: fields },
-        });
-    };
-
-    const deleteField = (epIndex: number, fieldName: string) => {
-        const ep = config.endpoints[epIndex];
-        const fields = { ...(ep.schema.properties || {}) };
-        delete fields[fieldName];
-        updateEndpoint(epIndex, {
-            ...ep,
-            schema: { ...ep.schema, properties: fields },
-        });
-    };
 
     return (
         <aside className="sidebar">
@@ -311,66 +158,11 @@ export function Sidebar({
 
             {/* Endpoints */}
             <Section title="Endpoints" count={config.endpoints.length}>
-                {config.endpoints.length === 0 ? (
-                    <div style={{ color: 'var(--text-disabled)', fontSize: 'var(--font-size-xs)' }}>
-                        Add endpoints manually or load from Swagger
-                    </div>
-                ) : (
-                    config.endpoints.map((ep, i) => (
-                        <div key={i}>
-                            <EndpointRow
-                                endpoint={ep}
-                                onUpdate={(updated) => updateEndpoint(i, updated)}
-                                onDelete={() => deleteEndpoint(i)}
-                            />
-                            {/* Toggle schema editor */}
-                            <div style={{ paddingLeft: 4, marginBottom: 4 }}>
-                                <button
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: editingEndpoint === i ? 'var(--color-action)' : 'var(--text-disabled)',
-                                        fontSize: 10,
-                                        cursor: 'pointer',
-                                        padding: '2px 4px',
-                                    }}
-                                    onClick={() => setEditingEndpoint(editingEndpoint === i ? null : i)}
-                                >
-                                    {editingEndpoint === i ? '▼' : '▶'} schema ({Object.keys(ep.schema?.properties || {}).length} fields)
-                                </button>
-                            </div>
-
-                            {/* Inline schema editor */}
-                            {editingEndpoint === i && (
-                                <div style={{
-                                    paddingLeft: 4,
-                                    marginBottom: 8,
-                                    borderLeft: '2px solid var(--border-default)',
-                                }}>
-                                    {Object.entries(ep.schema?.properties || {}).map(([fieldName, fieldSchema]) => (
-                                        <SchemaFieldRow
-                                            key={fieldName}
-                                            name={fieldName}
-                                            schema={fieldSchema}
-                                            onUpdate={(newName, newSchema) => updateField(i, fieldName, newName, newSchema)}
-                                            onDelete={() => deleteField(i, fieldName)}
-                                        />
-                                    ))}
-                                    <button
-                                        className="kv-add"
-                                        style={{ marginLeft: 8, marginTop: 4, fontSize: 10 }}
-                                        onClick={() => addField(i)}
-                                    >
-                                        + Add Field
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    ))
-                )}
-                <button className="kv-add" onClick={addEndpoint} style={{ marginTop: 4 }}>
-                    + Add Endpoint
-                </button>
+                <EndpointTree
+                    endpoints={config.endpoints}
+                    disabledEndpoints={config.disabled_endpoints || []}
+                    onUpdateDisabled={(disabled_endpoints) => onUpdateConfig({ disabled_endpoints })}
+                />
             </Section>
         </aside>
     );

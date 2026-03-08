@@ -180,28 +180,37 @@ export default function App() {
                 return;
             }
 
+            const activeEndpoints = allEndpoints.filter(
+                ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
+            );
+
             const finalConfig = {
                 ...config,
                 base_url: detectedBaseUrl,
-                endpoints: allEndpoints,
+                endpoints: activeEndpoints,
             };
 
-            // Persist endpoints + resolved base url for session
+            // Persist all endpoints (including disabled ones) + resolved base url for session
             updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints });
 
             start(finalConfig, handleRunComplete);
             showToast(
-                `Fuzzing ${allEndpoints.length} endpoint${allEndpoints.length > 1 ? 's' : ''} across ${swaggerUrls.length} spec${swaggerUrls.length > 1 ? 's' : ''}...`,
+                `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''} across ${swaggerUrls.length} spec${swaggerUrls.length > 1 ? 's' : ''}...`,
                 'info',
             );
         } else {
-            // Use already-loaded endpoints
-            if (!config.base_url) {
-                showToast('Please set a base URL', 'error');
+            const activeEndpoints = config.endpoints.filter(
+                ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
+            );
+
+            if (activeEndpoints.length === 0) {
+                showToast('No active endpoints to fuzz', 'error');
                 return;
             }
-            start(config, handleRunComplete);
-            showToast(`Fuzzing ${config.endpoints.length} endpoints...`, 'info');
+
+            const finalConfig = { ...config, endpoints: activeEndpoints };
+            start(finalConfig, handleRunComplete);
+            showToast(`Fuzzing ${activeEndpoints.length} endpoints...`, 'info');
         }
     };
 

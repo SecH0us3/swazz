@@ -15,6 +15,7 @@ const DEFAULT_CONFIG: SwazzConfig & { _swagger_urls?: string[] } = {
     dictionaries: {},
     settings: { ...DEFAULT_SETTINGS },
     endpoints: [],
+    disabled_endpoints: [],
     _swagger_urls: [],
 };
 
