@@ -27,6 +27,28 @@
    - Select your desired **Fuzz Profiles** (Random, Boundary, Malicious).
    - Press **Start** and watch the heatmap light up!
 
+## 🚀 Cloudflare Deployment
+
+You can deploy the application to Cloudflare (Pages + Workers) using `wrangler`. The application consists of a React frontend and a Cloudflare Worker proxy.
+
+1. **Login to Cloudflare**:
+   ```bash
+   npx wrangler login
+   ```
+
+2. **Deploy the Frontend (Cloudflare Pages)**:
+   ```bash
+   npm run deploy:web
+   ```
+
+3. **Deploy the Proxy (Cloudflare Worker)**:
+   ```bash
+   npm run deploy:worker
+   ```
+
+4. **Link Custom Domain**:
+   In the Cloudflare Dashboard, go to **Workers & Pages** -> **`swazz-web`** -> **Custom Domains**, and add your domain (e.g., `swazz.secmy.app`). The worker will automatically intercept `/proxy*` requests on this domain.
+
 ---
 
 ## 🧠 How it Works (General Architecture)
@@ -41,10 +63,10 @@ flowchart TD
     classDef target fill:#1e1e28,stroke:#f43f5e,stroke-width:2px,color:#f0f0f4
 
     subgraph Dashboard ["@swazz/web (React + Vite)"]
-        UI[User Interface]
-        Setup[Setup Panel\nURLs, Headers, Profiles]
-        Heatmap[Endpoint × Status Heatmap]
-        Inspector[Request Inspector\nwith XSS-safe view]
+        UI["User Interface"]
+        Setup["Setup Panel\nURLs, Headers, Profiles"]
+        Heatmap["Endpoint × Status Heatmap"]
+        Inspector["Request Inspector\nwith XSS-safe view"]
         
         UI --> Setup
         UI --> Heatmap
@@ -53,9 +75,9 @@ flowchart TD
 
     subgraph Core ["@swazz/core (Engine)"]
         direction TB
-        Parser[Swagger / OpenAPI Parser]
-        Profiles[Fuzz Profiles\nRANDOM, BOUNDARY, MALICIOUS]
-        Runner[Parallel Fuzz Runner]
+        Parser["Swagger / OpenAPI Parser"]
+        Profiles["Fuzz Profiles\nRANDOM, BOUNDARY, MALICIOUS"]
+        Runner["Parallel Fuzz Runner"]
         
         Parser --> Runner
         Profiles --> Runner
