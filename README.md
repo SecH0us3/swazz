@@ -89,12 +89,12 @@ flowchart TD
     end
 
     %% Flow
-    Setup -->|1. Provide Swagger URLs| Parser
-    Setup -->|2. Select Attack Vectors| Profiles
-    Runner -->|3. Execute Fuzzed HTTP Requests| Target
-    Target -->|4. Responses (2xx, 4xx, 5xx)| Runner
-    Runner -->|5. Real-time Stats & Payload Data| Heatmap
-    Runner -.->|Raw Results| Inspector
+    Setup -->|"1. Provide Swagger URLs"| Parser
+    Setup -->|"2. Select Attack Vectors"| Profiles
+    Runner -->|"3. Execute Fuzzed HTTP Requests"| Target
+    Target -->|"4. Responses (2xx, 4xx, 5xx)"| Runner
+    Runner -->|"5. Real-time Stats & Payload Data"| Heatmap
+    Runner -.->|"Raw Results"| Inspector
 
     %% Apply specific styles
     class Parser,Profiles,Runner core;
