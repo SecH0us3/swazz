@@ -34,7 +34,7 @@ export function useRunner(proxyUrl: string) {
     );
 
     const start = useCallback(
-        (config: SwazzConfig, onRunComplete?: (results: FuzzResult[], stats: RunStats) => void) => {
+        (config: SwazzConfig, onResult?: (result: FuzzResult) => void, onComplete?: (stats: RunStats) => void, stripper?: (result: FuzzResult) => FuzzResult) => {
             if (runnerRef.current?.isRunning) return;
 
             setResults([]);
@@ -42,13 +42,12 @@ export function useRunner(proxyUrl: string) {
             setIsPaused(false);
 
             const runner = new FuzzRunner(config, sendRequest);
-            // Accumulate ALL results uncapped for DB persistence
-            const allResults: FuzzResult[] = [];
 
             runner.onResult = (result: FuzzResult) => {
-                allResults.push(result);
+                onResult?.(result); // original full result for incremental saving
+                const displayResult = stripper ? stripper(result) : result;
                 setResults((prev) => {
-                    const next = [...prev, result];
+                    const next = [...prev, displayResult];
                     return next.length > MAX_RESULTS ? next.slice(-MAX_RESULTS) : next;
                 });
             };
@@ -62,7 +61,7 @@ export function useRunner(proxyUrl: string) {
                 setIsRunning(false);
                 setIsPaused(false);
                 runnerRef.current = null;
-                onRunComplete?.(allResults, s);
+                onComplete?.(s);
             };
 
             runner.onError = (error: Error) => {

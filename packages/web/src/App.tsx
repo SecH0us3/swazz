@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { FuzzResult } from '@swazz/core';
+import type { FuzzResult, RunStats } from '@swazz/core';
 import { parseSwaggerSpec } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
@@ -95,13 +95,14 @@ export default function App() {
         sendRequest,
     } = useRunner(PROXY_URL);
 
-    const { runs, saveRun, getRunResults, deleteRun } = useDb();
+    const { runs, saveRun, getRunResults, getResultById, deleteRun } = useDb();
 
     const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
     const [historyResults, setHistoryResults] = useState<FuzzResult[]>([]);
     const [historyStats, setHistoryStats] = useState<any>(null);
 
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
+    const [isLoadingResult, setIsLoadingResult] = useState(false);
     const [toasts, setToasts] = useState<ToastData[]>([]);
     const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
     const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
@@ -110,24 +111,51 @@ export default function App() {
     const activeResults = loadedRunId ? historyResults : liveResults;
     const activeStats = loadedRunId ? historyStats : liveStats;
 
+    const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
+        const id = Date.now();
+        setToasts((prev: ToastData[]) => [...prev.slice(-4), { id, message, type }]);
+    }, []);
+
+    const stripResult = useCallback((result: FuzzResult): FuzzResult => {
+        const { payload, responseBody, ...rest } = result;
+
+        const deepStrip = (val: any): any => {
+            if (typeof val === 'string' && val.length > 1024) {
+                return val.substring(0, 20) + `... // +${(val.length / 1024).toFixed(1)}KB total`;
+            }
+            if (val && typeof val === 'object') {
+                if (Array.isArray(val)) {
+                    return val.map(deepStrip);
+                }
+                const obj: any = {};
+                for (const key in val) {
+                    obj[key] = deepStrip(val[key]);
+                }
+                return obj;
+            }
+            return val;
+        };
+
+        return {
+            ...rest,
+            payload: deepStrip(payload),
+            responseBody: deepStrip(responseBody)
+        } as FuzzResult;
+    }, []);
+
+    const dismissToast = useCallback((id: number) => {
+        setToasts((prev: ToastData[]) => prev.filter((t: ToastData) => t.id !== id));
+    }, []);
+
     const activeFilteredLogsCount = useMemo(() => {
         if (!heatmapFilter) return activeResults.length;
         return activeResults.filter(
-            (r) =>
+            (r: FuzzResult) =>
                 r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
                 r.endpoint === heatmapFilter.path &&
                 r.status === heatmapFilter.status
         ).length;
     }, [activeResults, heatmapFilter]);
-
-    const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
-        const id = Date.now();
-        setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
-    }, []);
-
-    const dismissToast = useCallback((id: number) => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, []);
 
     const endpointKeys = useMemo(() => {
         const uniqueKeys = Array.from(new Set(config.endpoints.map((ep) => `${ep.method.toUpperCase()} ${ep.path}`)));
@@ -213,40 +241,54 @@ export default function App() {
             endpoints: activeEndpoints,
         };
 
-        start(finalConfig, handleRunComplete);
+        const runId = `run_${Date.now()}`;
+        const runRec = {
+            id: runId,
+            startedAt: Date.now(),
+            completedAt: 0,
+            baseUrl: finalBaseUrl,
+            stats: null as any,
+        };
+
+        let pendingResults: FuzzResult[] = [];
+
+        const onResult = (result: FuzzResult) => {
+            pendingResults.push(result);
+            if (pendingResults.length >= 50) {
+                saveRun(runRec, [...pendingResults]);
+                pendingResults = [];
+            }
+        };
+
+        const onComplete = (stats: RunStats) => {
+            const completedRun = { ...runRec, completedAt: Date.now(), stats };
+            saveRun(completedRun, pendingResults);
+            showToast(`Scan saved to history`, 'success');
+        };
+
+        start(finalConfig, onResult, onComplete, stripResult);
+
         showToast(
             `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
             'info',
         );
     };
 
-    const handleRunComplete = useCallback(async (finalResults: FuzzResult[], finalStats: any) => {
-        if (finalResults.length === 0) return;
-        const startedAt = finalResults[0].timestamp || Date.now() - finalStats.elapsedTimeMs;
-        const totalRequests = finalResults.length;
-
-        const runRec = {
-            id: `run_${Date.now()}`,
-            startedAt,
-            completedAt: Date.now(),
-            baseUrl: config.base_url,
-            stats: finalStats,
-        };
-        await saveRun(runRec, finalResults);
-        showToast(`Scan saved to history`, 'success');
-    }, [config.base_url, saveRun, showToast]);
-
     const handleLoadRun = async (runId: string) => {
         const runData = runs.find(r => r.id === runId);
         if (!runData) return;
         showToast(`Loading scan...`, 'info');
-        const loaded = await getRunResults(runId);
+        const loaded = await getRunResults(runId, true);
         setHistoryResults(loaded);
         setHistoryStats(runData.stats);
         setLoadedRunId(runId);
         setSelectedResult(null);
         setHeatmapFilter(null);
         showToast(`Loaded ${loaded.length} results from history`, 'success');
+    };
+
+    const handleSelectResult = (result: FuzzResult) => {
+        setSelectedResult(result);
     };
 
     const handleDeleteRun = async (runId: string) => {
@@ -269,11 +311,11 @@ export default function App() {
             baseUrl: config.base_url,
             totalRequests: activeResults.length,
             summary: {
-                crashes5xx: activeResults.filter((r) => r.status >= 500).length,
-                errors4xx: activeResults.filter((r) => r.status >= 400 && r.status < 500).length,
-                success2xx: activeResults.filter((r) => r.status >= 200 && r.status < 300).length,
-                networkErrors: activeResults.filter((r) => r.status === 0).length,
-                totalRetries: activeResults.reduce((sum, r) => sum + (r.retries ?? 0), 0),
+                crashes5xx: activeResults.filter((r: FuzzResult) => r.status >= 500).length,
+                errors4xx: activeResults.filter((r: FuzzResult) => r.status >= 400 && r.status < 500).length,
+                success2xx: activeResults.filter((r: FuzzResult) => r.status >= 200 && r.status < 300).length,
+                networkErrors: activeResults.filter((r: FuzzResult) => r.status === 0).length,
+                totalRetries: activeResults.reduce((sum: number, r: FuzzResult) => sum + (r.retries ?? 0), 0),
             },
             results: activeResults,
         };
@@ -467,7 +509,7 @@ export default function App() {
                                     results={activeResults}
                                     heatmapFilter={heatmapFilter}
                                     onClearHeatmapFilter={() => setHeatmapFilter(null)}
-                                    onSelectResult={setSelectedResult}
+                                    onSelectResult={handleSelectResult}
                                     onExport={handleExport}
                                 />
                             )}
@@ -493,6 +535,8 @@ export default function App() {
                     baseUrl={displayUrl}
                     onClose={() => setSelectedResult(null)}
                     onReplay={sendRequest}
+                    onFetchFull={() => getResultById(selectedResult.id)}
+                    onUpdateResult={setSelectedResult}
                     globalHeaders={config.global_headers}
                     globalCookies={config.cookies}
                 />
@@ -500,7 +544,7 @@ export default function App() {
 
             {/* Toast stack */}
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
-                {toasts.map((t) => (
+                {toasts.map((t: ToastData) => (
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
             </div>

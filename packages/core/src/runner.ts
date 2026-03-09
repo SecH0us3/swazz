@@ -44,7 +44,6 @@ export class FuzzRunner {
     private _isPaused = false;
     private _shouldStop = false;
     private _stats: RunStats;
-    private _results: FuzzResult[] = [];
 
     // ─── Callbacks ──────────────────────────────────────────
 
@@ -68,7 +67,6 @@ export class FuzzRunner {
         this._isPaused = false;
         this._shouldStop = false;
         this._stats = this.createEmptyStats();
-        this._results = [];
 
         const { endpoints, settings, dictionaries, global_headers, cookies, base_url } = this.config;
         const profiles = settings.profiles;
@@ -183,7 +181,6 @@ export class FuzzRunner {
                                     profile,
                                 );
 
-                                this._results.push(result);
                                 this.updateStats(result);
                                 this.onResult(result);
                                 this.onProgress(this._stats);
@@ -248,7 +245,7 @@ export class FuzzRunner {
     }
 
     public getResults(): FuzzResult[] {
-        return [...this._results];
+        return [];
     }
 
     // ─── Private ────────────────────────────────────────────

@@ -79,13 +79,45 @@ async function dbAppendResults(db: IDBDatabase, runId: string, results: FuzzResu
     });
 }
 
-async function dbGetRunResults(db: IDBDatabase, runId: string): Promise<FuzzResult[]> {
+function deepStrip(val: any): any {
+    if (typeof val === 'string' && val.length > 1024) {
+        return val.substring(0, 20) + `... // +${(val.length / 1024).toFixed(1)}KB total`;
+    }
+    if (val && typeof val === 'object') {
+        if (Array.isArray(val)) {
+            return val.map(deepStrip);
+        }
+        const obj: any = {};
+        for (const key in val) {
+            obj[key] = deepStrip(val[key]);
+        }
+        return obj;
+    }
+    return val;
+}
+
+export async function dbGetRunResults(db: IDBDatabase, runId: string, lightweight: boolean = false): Promise<FuzzResult[]> {
     const tx = db.transaction('results', 'readonly');
     const index = tx.objectStore('results').index('runId');
     const results = await promisify<(FuzzResult & { runId: string })[]>(
         index.getAll(runId) as IDBRequest<(FuzzResult & { runId: string })[]>,
     );
-    return results.map(({ runId: _rid, ...r }) => r as FuzzResult);
+    return results.map(({ runId: _rid, ...r }) => {
+        if (lightweight) {
+            return {
+                ...r,
+                payload: deepStrip(r.payload),
+                responseBody: deepStrip(r.responseBody),
+            } as FuzzResult;
+        }
+        return r as FuzzResult;
+    });
+}
+
+export async function dbGetResultById(db: IDBDatabase, id: string): Promise<FuzzResult | null> {
+    const tx = db.transaction('results', 'readonly');
+    const result = await promisify<FuzzResult>(tx.objectStore('results').get(id) as IDBRequest<FuzzResult>);
+    return result || null;
 }
 
 async function dbDeleteRun(db: IDBDatabase, runId: string): Promise<void> {
@@ -133,9 +165,14 @@ export function useDb() {
         setRuns((prev) => [run, ...prev.filter((r) => r.id !== run.id)]);
     }, [db]);
 
-    const getRunResults = useCallback(async (runId: string): Promise<FuzzResult[]> => {
+    const getRunResults = useCallback(async (runId: string, lightweight: boolean = false): Promise<FuzzResult[]> => {
         if (!db) return [];
-        return dbGetRunResults(db, runId);
+        return dbGetRunResults(db, runId, lightweight);
+    }, [db]);
+
+    const getResultById = useCallback(async (id: string): Promise<FuzzResult | null> => {
+        if (!db) return null;
+        return dbGetResultById(db, id);
     }, [db]);
 
     const deleteRun = useCallback(async (runId: string) => {
@@ -144,5 +181,5 @@ export function useDb() {
         setRuns((prev) => prev.filter((r) => r.id !== runId));
     }, [db]);
 
-    return { runs, saveRun, getRunResults, deleteRun };
+    return { runs, saveRun, getRunResults, getResultById, deleteRun };
 }
