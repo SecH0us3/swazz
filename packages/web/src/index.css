@@ -855,6 +855,11 @@ body.resizing .sidebar-resizer {
   border-color: var(--border-hover);
 }
 
+.heatmap-bucket-btn.active.any {
+  color: var(--color-info);
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
 .heatmap-bucket-btn.active.\32xx {
   color: var(--color-success);
   border-color: rgba(16, 185, 129, 0.35);

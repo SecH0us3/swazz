@@ -7,7 +7,7 @@ export interface HeatmapFilter {
     status: number;
 }
 
-type StatusBucket = 'all' | '2xx' | '4xx' | '5xx';
+type StatusBucket = 'any' | 'all' | '2xx' | '4xx' | '5xx';
 
 interface Props {
     stats: RunStats;
@@ -36,7 +36,7 @@ function matchesBucket(code: number, bucket: StatusBucket): boolean {
 export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Props) {
     const [hoveredCell, setHoveredCell] = useState<{ ep: string; code: number } | null>(null);
     const [search, setSearch] = useState('');
-    const [statusBucket, setStatusBucket] = useState<StatusBucket>('all');
+    const [statusBucket, setStatusBucket] = useState<StatusBucket>('any');
 
     // All status codes that appeared
     const allStatusCodes = useMemo(() => {
@@ -108,6 +108,7 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
     };
 
     const buckets: { key: StatusBucket; label: string }[] = [
+        { key: 'any', label: 'Any' },
         { key: 'all', label: 'All' },
         { key: '2xx', label: '2xx' },
         { key: '4xx', label: '4xx' },

@@ -309,6 +309,17 @@ export default function App() {
         };
     }, []);
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && activeTab === 'logs' && !selectedResult) {
+                setActiveTab('heatmap');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTab, selectedResult]);
+
     const isBusy = isRunning || isLoadingSpecs;
 
     return (
@@ -323,9 +334,9 @@ export default function App() {
                             const origin = parsed.origin;
                             const currentUrls = (config as any)._swagger_urls || [];
                             if (!currentUrls.includes(trimmed)) {
-                                updateConfig({ 
-                                    base_url: origin, 
-                                    _swagger_urls: [...currentUrls, trimmed] 
+                                updateConfig({
+                                    base_url: origin,
+                                    _swagger_urls: [...currentUrls, trimmed]
                                 } as any);
                             } else {
                                 updateConfig({ base_url: origin });
