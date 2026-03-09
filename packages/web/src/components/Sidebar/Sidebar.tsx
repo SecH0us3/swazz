@@ -14,6 +14,7 @@ interface Props {
     onDeleteRun: (runId: string) => void;
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
+    onLoadEndpoints: (urls: string[]) => Promise<any>;
 }
 
 
@@ -27,6 +28,7 @@ export function Sidebar({
     onDeleteRun,
     onUpdateConfig,
     onToast,
+    onLoadEndpoints,
 }: Props) {
     const swaggerUrls: string[] = (config as any)._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
@@ -42,8 +44,10 @@ export function Sidebar({
             onToast('This URL is already in the list', 'error');
             return;
         }
-        setSwaggerUrls([...swaggerUrls, trimmed]);
+        const newUrls = [...swaggerUrls, trimmed];
+        setSwaggerUrls(newUrls);
         setUrlInput('');
+        onLoadEndpoints(newUrls);
     };
 
     const removeUrl = (url: string) => {

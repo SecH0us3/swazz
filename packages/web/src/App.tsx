@@ -137,6 +137,42 @@ export default function App() {
     // Resolved base URL — from config or taken from the first loaded spec
     const displayUrl = config.base_url || ((config as any)._swagger_urls?.[0] ?? '');
 
+    const loadEndpoints = useCallback(async (urls: string[]) => {
+        if (urls.length === 0) return;
+
+        setIsLoadingSpecs(true);
+        showToast(`Loading ${urls.length} spec${urls.length > 1 ? 's' : ''}...`, 'info');
+
+        let allEndpoints: any[] = [];
+        let detectedBaseUrl = config.base_url;
+
+        for (const url of urls) {
+            try {
+                const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
+                const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
+                    urlToLoad,
+                    config.global_headers,
+                    config.cookies,
+                );
+                allEndpoints = [...allEndpoints, ...endpoints];
+                if (!detectedBaseUrl && basePath) {
+                    detectedBaseUrl = basePath;
+                }
+                showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}`, 'success');
+            } catch (err) {
+                showToast(`✗ Failed: ${url} — ${err instanceof Error ? err.message : String(err)}`, 'error');
+            }
+        }
+
+        setIsLoadingSpecs(false);
+
+        if (allEndpoints.length > 0) {
+            updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints });
+            return { detectedBaseUrl, allEndpoints };
+        }
+        return null;
+    }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
+
     const handleStart = async () => {
         const swaggerUrls: string[] = (config as any)._swagger_urls || [];
 
@@ -148,72 +184,40 @@ export default function App() {
         // Clear heatmap filter on new run
         setHeatmapFilter(null);
 
-        // If we have Swagger URLs, load them first
-        if (swaggerUrls.length > 0) {
-            setIsLoadingSpecs(true);
-            showToast(`Loading ${swaggerUrls.length} spec${swaggerUrls.length > 1 ? 's' : ''}...`, 'info');
+        let finalEndpoints = config.endpoints;
+        let finalBaseUrl = config.base_url;
 
-            let allEndpoints: any[] = [];
-            let detectedBaseUrl = config.base_url;
-
-            for (const url of swaggerUrls) {
-                try {
-                    // Pre-check URL and add protocol if missing for loadSwaggerUrl
-                    const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
-                    const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
-                        urlToLoad,
-                        config.global_headers,
-                        config.cookies,
-                    );
-                    allEndpoints = [...allEndpoints, ...endpoints];
-                    if (!detectedBaseUrl && basePath) {
-                        detectedBaseUrl = basePath;
-                    }
-                    showToast(`✓ ${endpointCount} endpoints from ${new URL(url).hostname}`, 'success');
-                } catch (err) {
-                    showToast(`✗ Failed: ${url} — ${err instanceof Error ? err.message : String(err)}`, 'error');
-                }
+        // If we have Swagger URLs and no endpoints loaded yet (or just refreshing), load them
+        if (swaggerUrls.length > 0 && config.endpoints.length === 0) {
+            const loaded = await loadEndpoints(swaggerUrls);
+            if (loaded) {
+                finalEndpoints = loaded.allEndpoints;
+                finalBaseUrl = loaded.detectedBaseUrl;
+            } else {
+                return; // Error toast already shown in loadEndpoints
             }
-
-            setIsLoadingSpecs(false);
-
-            if (allEndpoints.length === 0) {
-                showToast('No endpoints found in the provided specs', 'error');
-                return;
-            }
-
-            const activeEndpoints = allEndpoints.filter(
-                ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
-            );
-
-            const finalConfig = {
-                ...config,
-                base_url: detectedBaseUrl,
-                endpoints: activeEndpoints,
-            };
-
-            // Persist all endpoints (including disabled ones) + resolved base url for session
-            updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints });
-
-            start(finalConfig, handleRunComplete);
-            showToast(
-                `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''} across ${swaggerUrls.length} spec${swaggerUrls.length > 1 ? 's' : ''}...`,
-                'info',
-            );
-        } else {
-            const activeEndpoints = config.endpoints.filter(
-                ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
-            );
-
-            if (activeEndpoints.length === 0) {
-                showToast('No active endpoints to fuzz', 'error');
-                return;
-            }
-
-            const finalConfig = { ...config, endpoints: activeEndpoints };
-            start(finalConfig, handleRunComplete);
-            showToast(`Fuzzing ${activeEndpoints.length} endpoints...`, 'info');
         }
+
+        const activeEndpoints = finalEndpoints.filter(
+            ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
+        );
+
+        if (activeEndpoints.length === 0) {
+            showToast('No active endpoints to fuzz', 'error');
+            return;
+        }
+
+        const finalConfig = {
+            ...config,
+            base_url: finalBaseUrl,
+            endpoints: activeEndpoints,
+        };
+
+        start(finalConfig, handleRunComplete);
+        showToast(
+            `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
+            'info',
+        );
     };
 
     const handleRunComplete = useCallback(async (finalResults: FuzzResult[], finalStats: any) => {
@@ -334,12 +338,15 @@ export default function App() {
                             const origin = parsed.origin;
                             const currentUrls = (config as any)._swagger_urls || [];
                             if (!currentUrls.includes(trimmed)) {
+                                const newUrls = [...currentUrls, trimmed];
                                 updateConfig({
                                     base_url: origin,
-                                    _swagger_urls: [...currentUrls, trimmed]
+                                    _swagger_urls: newUrls
                                 } as any);
+                                loadEndpoints(newUrls);
                             } else {
                                 updateConfig({ base_url: origin });
+                                loadEndpoints(currentUrls);
                             }
                         } catch (e) {
                             // If invalid URL, just set it as is
@@ -366,6 +373,7 @@ export default function App() {
                 onDeleteRun={handleDeleteRun}
                 onUpdateConfig={updateConfig}
                 onToast={showToast}
+                onLoadEndpoints={loadEndpoints}
             />
 
             <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px' }}>
