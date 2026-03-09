@@ -88,7 +88,7 @@ export class SmartPayloadGenerator {
         return rand.int(1, 5);
     }
 
-    private generateByProfile(type?: string, format?: string, _propName?: string): any {
+    private generateByProfile(type?: string, format?: string, propName?: string): any {
         // MALICIOUS: 5% chance to completely break the expected type
         if (this.profile === 'MALICIOUS' && Math.random() < 0.05) {
             return this.breakType();
@@ -101,18 +101,33 @@ export class SmartPayloadGenerator {
 
         switch (type) {
             case 'string':
-                return this.generateString(format);
+                return this.generateString(format, propName);
             case 'integer':
             case 'number':
                 return this.generateNumber(type);
             case 'boolean':
                 return this.generateBoolean();
             default:
+                // Fallback for unknown type — try to guess by name
+                if (propName) {
+                    const lower = propName.toLowerCase();
+                    if (lower.includes('id') || lower.includes('uuid')) return rand.uuid();
+                    if (lower.includes('slug') || lower.includes('name')) return rand.word();
+                    if (lower.includes('num') || lower.includes('count') || lower.includes('page')) return rand.int(1, 100);
+                }
                 return rand.randomString(rand.int(3, 10));
         }
     }
 
-    private generateString(format?: string): any {
+    private generateString(format?: string, propName?: string): any {
+        // If it's a generic string without format, check name-based heuristics first
+        if (!format && propName) {
+            const lower = propName.toLowerCase();
+            if (lower.includes('id') || lower.includes('uuid')) return rand.uuid();
+            if (lower.includes('slug') || lower.includes('name')) return rand.word();
+            if (lower.includes('num') || lower.includes('count') || lower.includes('page')) return String(rand.int(1, 100));
+        }
+
         switch (this.profile) {
             case 'BOUNDARY':
                 return rand.pick(BOUNDARY_STRINGS);

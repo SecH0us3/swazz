@@ -25,25 +25,10 @@ function fillPathParams(
     generator: SmartPayloadGenerator,
 ): string {
     return path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
-        const schema = pathParams[name] ?? pathParams[name.toLowerCase()];
+        const schema = pathParams[name] ?? pathParams[name.toLowerCase()] ?? { type: 'string' };
 
-        if (schema) {
-            const val = generator.generate(name, schema);
-            return encodeURIComponent(String(val));
-        }
-
-        // No schema — make a reasonable guess by name
-        const lower = name.toLowerCase();
-        if (lower.includes('id') || lower.includes('uuid')) {
-            return uuid();
-        }
-        if (lower.includes('slug') || lower.includes('name')) {
-            return word();
-        }
-        if (lower.includes('num') || lower.includes('count') || lower.includes('page')) {
-            return String(int(1, 100));
-        }
-        return String(int(1, 9999));
+        const val = generator.generate(name, schema);
+        return encodeURIComponent(String(val));
     });
 }
 
