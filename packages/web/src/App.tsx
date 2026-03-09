@@ -158,8 +158,10 @@ export default function App() {
 
             for (const url of swaggerUrls) {
                 try {
+                    // Pre-check URL and add protocol if missing for loadSwaggerUrl
+                    const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
                     const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
-                        url,
+                        urlToLoad,
                         config.global_headers,
                         config.cookies,
                     );
@@ -282,7 +284,7 @@ export default function App() {
     };
 
 
-    const [sidebarWidth, setSidebarWidth] = useState(280);
+    const [sidebarWidth, setSidebarWidth] = useState(600);
     const isResizingRef = useRef(false);
 
     useEffect(() => {
@@ -313,7 +315,29 @@ export default function App() {
         <div className="app-layout" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
             <Header
                 baseUrl={displayUrl}
-                onChangeBaseUrl={(url) => updateConfig({ base_url: url })}
+                onChangeBaseUrl={(url) => {
+                    const trimmed = url.trim();
+                    if (trimmed.endsWith('swagger.json')) {
+                        try {
+                            const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+                            const origin = parsed.origin;
+                            const currentUrls = (config as any)._swagger_urls || [];
+                            if (!currentUrls.includes(trimmed)) {
+                                updateConfig({ 
+                                    base_url: origin, 
+                                    _swagger_urls: [...currentUrls, trimmed] 
+                                } as any);
+                            } else {
+                                updateConfig({ base_url: origin });
+                            }
+                        } catch (e) {
+                            // If invalid URL, just set it as is
+                            updateConfig({ base_url: trimmed });
+                        }
+                    } else {
+                        updateConfig({ base_url: trimmed });
+                    }
+                }}
                 isRunning={isBusy}
                 isPaused={isPaused}
                 isLoadingSpecs={isLoadingSpecs}

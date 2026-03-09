@@ -131,7 +131,7 @@ export function Sidebar({
                     )}
                     {swaggerUrls.map((url) => (
                         <div key={url} className="swagger-url-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                            <span className="swagger-url-text" title={url} style={{ fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{url}</span>
+                            <span className="swagger-url-text" title={url} style={{ fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{url}</span>
                             <button className="kv-delete" onClick={() => removeUrl(url)} title="Remove" style={{ background: 'none', border: 'none', color: 'var(--color-error)', cursor: 'pointer' }}>✕</button>
                         </div>
                     ))}
