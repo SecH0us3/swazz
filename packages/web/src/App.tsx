@@ -95,7 +95,7 @@ export default function App() {
         sendRequest,
     } = useRunner(PROXY_URL);
 
-    const { runs, saveRun, getRunResults, getResultById, deleteRun } = useDb();
+    const { runs, saveRun, getRunResults, deleteRun } = useDb();
 
     const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
     const [historyResults, setHistoryResults] = useState<FuzzResult[]>([]);
@@ -119,17 +119,17 @@ export default function App() {
     const stripResult = useCallback((result: FuzzResult): FuzzResult => {
         const { payload, responseBody, ...rest } = result;
 
-        const deepStrip = (val: any): any => {
-            if (typeof val === 'string' && val.length > 1024) {
-                return val.substring(0, 20) + `... // +${(val.length / 1024).toFixed(1)}KB total`;
+        const deepStrip = (val: any, maxLen: number = 1024): any => {
+            if (typeof val === 'string' && val.length > maxLen) {
+                return val.substring(0, maxLen) + `\n\n… truncated (${(val.length / 1024).toFixed(1)}KB total)`;
             }
             if (val && typeof val === 'object') {
                 if (Array.isArray(val)) {
-                    return val.map(deepStrip);
+                    return val.map(v => deepStrip(v, maxLen));
                 }
                 const obj: any = {};
                 for (const key in val) {
-                    obj[key] = deepStrip(val[key]);
+                    obj[key] = deepStrip(val[key], maxLen);
                 }
                 return obj;
             }
@@ -139,7 +139,7 @@ export default function App() {
         return {
             ...rest,
             payload: deepStrip(payload),
-            responseBody: deepStrip(responseBody)
+            responseBody: deepStrip(responseBody, 10_000)
         } as FuzzResult;
     }, []);
 
@@ -278,7 +278,7 @@ export default function App() {
         const runData = runs.find(r => r.id === runId);
         if (!runData) return;
         showToast(`Loading scan...`, 'info');
-        const loaded = await getRunResults(runId, true);
+        const loaded = await getRunResults(runId);
         setHistoryResults(loaded);
         setHistoryStats(runData.stats);
         setLoadedRunId(runId);
@@ -535,8 +535,6 @@ export default function App() {
                     baseUrl={displayUrl}
                     onClose={() => setSelectedResult(null)}
                     onReplay={sendRequest}
-                    onFetchFull={() => getResultById(selectedResult.id)}
-                    onUpdateResult={setSelectedResult}
                     globalHeaders={config.global_headers}
                     globalCookies={config.cookies}
                 />

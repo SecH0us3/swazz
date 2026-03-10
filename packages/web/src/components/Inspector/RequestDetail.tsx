@@ -6,15 +6,8 @@ interface Props {
     baseUrl: string;
     onClose: () => void;
     onReplay?: (req: any) => Promise<any>;
-    onFetchFull?: () => Promise<FuzzResult | null>;
-    onUpdateResult?: (result: FuzzResult) => void;
     globalHeaders: Record<string, string>;
     globalCookies: Record<string, string>;
-}
-
-function isTruncated(val: any): boolean {
-    if (typeof val !== 'string') return false;
-    return val.includes('... // +') && val.includes('KB total');
 }
 
 /**
@@ -62,22 +55,20 @@ export function RequestDetail({
     baseUrl,
     onClose,
     onReplay,
-    onFetchFull,
-    onUpdateResult,
     globalHeaders,
     globalCookies
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
-    const [isLoadingFull, setIsLoadingFull] = useState(false);
 
     // Initial editable states
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
-    const initialBody = result.payload !== undefined ? JSON.stringify(result.payload, null, 2) : '';
+    const initialBody = result.payload !== undefined
+        ? (typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload, null, 2))
+        : '';
 
     const [editedUrl, setEditedUrl] = useState(initialUrl);
     const [editedBody, setEditedBody] = useState(initialBody);
 
-    // Sync editedBody if result changes (e.g. after Load Full)
     useEffect(() => {
         setEditedBody(result.payload !== undefined
             ? (typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload, null, 2))
@@ -87,20 +78,6 @@ export function RequestDetail({
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
     const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
     const [isReplaying, setIsReplaying] = useState(false);
-
-    const handleFetchFull = async () => {
-        if (!onFetchFull || !onUpdateResult) return;
-        setIsLoadingFull(true);
-        try {
-            const full = await onFetchFull();
-            if (full) {
-                onUpdateResult(full);
-                setLiveResponse(full.responseBody);
-            }
-        } finally {
-            setIsLoadingFull(false);
-        }
-    };
 
     const copy = (text: string, label: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -125,18 +102,9 @@ export function RequestDetail({
         setIsReplaying(true);
         try {
             let parsedBody = undefined;
-            let bodyToUse = editedBody;
 
-            // If body is truncated, we MUST load full first
-            if (isTruncated(editedBody) && onFetchFull) {
-                const full = await onFetchFull();
-                if (full) {
-                    bodyToUse = typeof full.payload === 'string' ? full.payload : JSON.stringify(full.payload, null, 2);
-                }
-            }
-
-            if (bodyToUse && bodyToUse.trim()) {
-                parsedBody = JSON.parse(bodyToUse);
+            if (editedBody && editedBody.trim()) {
+                parsedBody = JSON.parse(editedBody);
             }
 
             const response = await onReplay({
@@ -163,9 +131,6 @@ export function RequestDetail({
             ? liveResponse
             : JSON.stringify(liveResponse, null, 2);
     }
-
-    // Safety truncate for rendering
-    const isLargeResponse = responseBodyJson.length > 50000;
 
     const statusColor =
         liveStatus >= 500 ? 'var(--color-error)' :
@@ -208,13 +173,8 @@ export function RequestDetail({
                 <div className="modal-split">
                     {/* Left Panel: Request */}
                     <div className="modal-pane">
-                        <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <div className="detail-section-title">
                             <span>Request URL</span>
-                            {isTruncated(result.resolvedPath) && (
-                                <button className="btn btn-ghost" onClick={handleFetchFull} style={{ fontSize: 10, color: 'var(--color-primary)' }}>
-                                    Load Full URL
-                                </button>
-                            )}
                         </div>
                         <input
                             type="text"
@@ -235,25 +195,13 @@ export function RequestDetail({
 
                         <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span>Request Payload (JSON)</span>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                {isTruncated(editedBody) && (
-                                    <button
-                                        className="btn btn-ghost"
-                                        onClick={handleFetchFull}
-                                        disabled={isLoadingFull}
-                                        style={{ color: 'var(--color-primary)', height: 24, fontSize: 10 }}
-                                    >
-                                        {isLoadingFull ? 'Loading...' : '📂 Load Full Payload'}
-                                    </button>
-                                )}
-                                <button
-                                    className="btn btn-ghost"
-                                    onClick={() => copy(editedBody, 'payload')}
-                                    style={{ padding: '0 8px', height: 24, fontSize: 10 }}
-                                >
-                                    {copied === 'payload' ? '✓ Copied!' : '📋 Copy'}
-                                </button>
-                            </div>
+                            <button
+                                className="btn btn-ghost"
+                                onClick={() => copy(editedBody, 'payload')}
+                                style={{ padding: '0 8px', height: 24, fontSize: 10 }}
+                            >
+                                {copied === 'payload' ? '✓ Copied!' : '📋 Copy'}
+                            </button>
                         </div>
                         <textarea
                             value={editedBody}
@@ -266,52 +214,31 @@ export function RequestDetail({
                                 background: 'rgba(0,0,0,0.3)',
                                 border: '1px solid var(--border-default)',
                                 borderRadius: 'var(--radius-md)',
-                                color: isTruncated(editedBody) ? 'var(--text-muted)' : 'var(--text-primary)',
+                                color: 'var(--text-primary)',
                                 fontFamily: 'var(--font-mono)',
                                 fontSize: 'var(--font-size-sm)',
                                 resize: 'none',
-                                fontStyle: isTruncated(editedBody) ? 'italic' : 'normal'
                             }}
                         />
                     </div>
 
                     {/* Right Panel: Response */}
                     <div className="modal-pane">
-                        <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <div className="detail-section-title">
                             <span>Response Body</span>
-                            {isTruncated(responseBodyJson) && (
-                                <button
-                                    className="btn btn-ghost"
-                                    onClick={handleFetchFull}
-                                    disabled={isLoadingFull}
-                                    style={{ color: 'var(--color-primary)', height: 24, fontSize: 10 }}
-                                >
-                                    {isLoadingFull ? 'Loading...' : '📂 Load Full Response'}
-                                </button>
-                            )}
                         </div>
-                        {isLargeResponse && !isTruncated(responseBodyJson) ? (
-                            <div className="detail-json" style={{ color: 'var(--text-muted)', flex: 1 }}>
-                                [Large Response Truncated for display]
-                                <br /><br />
-                                <strong>Size:</strong> {(responseBodyJson.length / 1024).toFixed(1)} KB
-                            </div>
-                        ) : (
-                            <pre
-                                className="detail-json"
-                                style={{
-                                    flex: 1,
-                                    margin: 0,
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-all',
-                                    border: '1px solid var(--border-default)',
-                                    color: isTruncated(responseBodyJson) ? 'var(--text-muted)' : 'inherit',
-                                    fontStyle: isTruncated(responseBodyJson) ? 'italic' : 'normal'
-                                }}
-                            >
-                                {responseBodyJson || 'No response body.'}
-                            </pre>
-                        )}
+                        <pre
+                            className="detail-json"
+                            style={{
+                                flex: 1,
+                                margin: 0,
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-all',
+                                border: '1px solid var(--border-default)',
+                            }}
+                        >
+                            {responseBodyJson || 'No response body.'}
+                        </pre>
                     </div>
                 </div>
 
