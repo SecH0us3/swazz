@@ -14,6 +14,15 @@ import { SmartPayloadGenerator } from './generator.js';
 import type { SchemaProperty } from './types.js';
 import { uuid, int, word } from './random.js';
 
+/** Fast string hash (djb2) — good enough for dedup within a single profile run. */
+function hashStr(s: string): number {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) {
+        h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    }
+    return h;
+}
+
 /**
  * Substitute {param} placeholders in a URL path with sensible fuzz values.
  * Uses the endpoint's pathParams schema when available, otherwise falls back
@@ -44,7 +53,6 @@ export class FuzzRunner {
     private _isPaused = false;
     private _shouldStop = false;
     private _stats: RunStats;
-    private _results: FuzzResult[] = [];
 
     // ─── Callbacks ──────────────────────────────────────────
 
@@ -68,7 +76,6 @@ export class FuzzRunner {
         this._isPaused = false;
         this._shouldStop = false;
         this._stats = this.createEmptyStats();
-        this._results = [];
 
         const { endpoints, settings, dictionaries, global_headers, cookies, base_url } = this.config;
         const profiles = settings.profiles;
@@ -121,14 +128,14 @@ export class FuzzRunner {
                     // Process iterations with concurrency control
                     const tasks: Promise<void>[] = [];
                     let activeCount = 0;
-                    const seenPayloads = new Set<string>();
+                    const seenHashes = new Set<number>();
 
                     for (let i = 0; i < effectiveIterations; i++) {
                         if (this._shouldStop) break;
 
                         let payload: any = undefined;
                         let queryParams: Record<string, any> | undefined = undefined;
-                        let payloadStr = 'empty';
+                        let payloadHash = hashStr('empty');
                         let isDuplicate = false;
 
                         if (hasFields) {
@@ -140,22 +147,22 @@ export class FuzzRunner {
                                 } else {
                                     queryParams = generated;
                                 }
-                                payloadStr = JSON.stringify(generated);
-                                if (!seenPayloads.has(payloadStr)) {
+                                payloadHash = hashStr(JSON.stringify(generated));
+                                if (!seenHashes.has(payloadHash)) {
                                     isDuplicate = false;
                                     break;
                                 }
                                 isDuplicate = true;
                             }
                         } else {
-                            isDuplicate = seenPayloads.has(payloadStr);
+                            isDuplicate = seenHashes.has(payloadHash);
                         }
 
                         if (isDuplicate) {
                             // Exhausted retries or it's a static request we already sent — skip it to avoid identical spam
                             continue;
                         }
-                        seenPayloads.add(payloadStr);
+                        seenHashes.add(payloadHash);
 
                         // Wait while paused
                         while (this._isPaused && !this._shouldStop) {
@@ -190,7 +197,6 @@ export class FuzzRunner {
                                     queryParams,
                                 );
 
-                                this._results.push(result);
                                 this.updateStats(result);
                                 this.onResult(result);
                                 this.onProgress(this._stats);
@@ -210,8 +216,9 @@ export class FuzzRunner {
                         }
                     }
 
-                    // Wait for remaining tasks in this profile batch
+                    // Wait for remaining tasks in this profile batch, then release references
                     await Promise.all(tasks);
+                    tasks.length = 0;
                 }
 
                 // Mark endpoint as done
@@ -252,10 +259,6 @@ export class FuzzRunner {
 
     public getStats(): RunStats {
         return { ...this._stats };
-    }
-
-    public getResults(): FuzzResult[] {
-        return [...this._results];
     }
 
     // ─── Private ────────────────────────────────────────────

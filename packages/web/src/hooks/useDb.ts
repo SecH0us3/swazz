@@ -8,8 +8,8 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import type { FuzzResult, RunStats } from '@swazz/core';
-import { deepStrip } from '@swazz/core';
+import type { RunStats } from '@swazz/core';
+import type { ResultSummary } from './useRunner.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -68,16 +68,11 @@ async function dbGetRuns(db: IDBDatabase): Promise<ScanRun[]> {
     return runs.sort((a, b) => b.startedAt - a.startedAt);
 }
 
-async function dbAppendResults(db: IDBDatabase, runId: string, results: FuzzResult[]): Promise<void> {
+async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSummary[]): Promise<void> {
     const tx = db.transaction('results', 'readwrite');
     const store = tx.objectStore('results');
-    for (const r of results) {
-        store.put({
-            ...r,
-            runId,
-            payload: deepStrip(r.payload),
-            responseBody: deepStrip(r.responseBody, 10_000),
-        });
+    for (const r of rows) {
+        store.put({ ...r, runId });
     }
     await new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();
@@ -85,19 +80,13 @@ async function dbAppendResults(db: IDBDatabase, runId: string, results: FuzzResu
     });
 }
 
-export async function dbGetRunResults(db: IDBDatabase, runId: string): Promise<FuzzResult[]> {
+export async function dbGetRunResults(db: IDBDatabase, runId: string): Promise<ResultSummary[]> {
     const tx = db.transaction('results', 'readonly');
     const index = tx.objectStore('results').index('runId');
-    const results = await promisify<(FuzzResult & { runId: string })[]>(
-        index.getAll(runId) as IDBRequest<(FuzzResult & { runId: string })[]>,
+    const results = await promisify<(ResultSummary & { runId: string })[]>(
+        index.getAll(runId) as IDBRequest<(ResultSummary & { runId: string })[]>,
     );
-    return results.map(({ runId: _rid, ...r }) => r as FuzzResult);
-}
-
-export async function dbGetResultById(db: IDBDatabase, id: string): Promise<FuzzResult | null> {
-    const tx = db.transaction('results', 'readonly');
-    const result = await promisify<FuzzResult>(tx.objectStore('results').get(id) as IDBRequest<FuzzResult>);
-    return result || null;
+    return results.map(({ runId: _rid, ...r }) => r as ResultSummary);
 }
 
 async function dbDeleteRun(db: IDBDatabase, runId: string): Promise<void> {
@@ -138,21 +127,16 @@ export function useDb() {
         return () => { mounted = false; };
     }, []);
 
-    const saveRun = useCallback(async (run: ScanRun, results: FuzzResult[]) => {
+    const saveRun = useCallback(async (run: ScanRun, rows: ResultSummary[]) => {
         if (!db) return;
         await dbSaveRun(db, run);
-        await dbAppendResults(db, run.id, results);
+        await dbAppendResults(db, run.id, rows);
         setRuns((prev) => [run, ...prev.filter((r) => r.id !== run.id)]);
     }, [db]);
 
-    const getRunResults = useCallback(async (runId: string): Promise<FuzzResult[]> => {
+    const getRunResults = useCallback(async (runId: string): Promise<ResultSummary[]> => {
         if (!db) return [];
         return dbGetRunResults(db, runId);
-    }, [db]);
-
-    const getResultById = useCallback(async (id: string): Promise<FuzzResult | null> => {
-        if (!db) return null;
-        return dbGetResultById(db, id);
     }, [db]);
 
     const deleteRun = useCallback(async (runId: string) => {
@@ -161,5 +145,5 @@ export function useDb() {
         setRuns((prev) => prev.filter((r) => r.id !== runId));
     }, [db]);
 
-    return { runs, saveRun, getRunResults, getResultById, deleteRun };
+    return { runs, saveRun, getRunResults, deleteRun };
 }

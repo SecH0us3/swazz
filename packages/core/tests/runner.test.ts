@@ -427,18 +427,3 @@ describe('FuzzRunner — progress tracking', () => {
     });
 });
 
-// ─── getResults ──────────────────────────────────────────────
-
-describe('FuzzRunner.getResults', () => {
-    it('returns a copy of stored results', async () => {
-        const config = makeConfig();
-        const runner = new FuzzRunner(config, makeMockSendRequest());
-        await runner.start();
-
-        const results = runner.getResults();
-        expect(results.length).toBeGreaterThan(0);
-        // Mutation should not affect internal state
-        results.length = 0;
-        expect(runner.getResults().length).toBeGreaterThan(0);
-    });
-});

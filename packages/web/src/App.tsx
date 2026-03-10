@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { FuzzResult, RunStats } from '@swazz/core';
-import { parseSwaggerSpec, deepStrip } from '@swazz/core';
+import { parseSwaggerSpec } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
-import { useRunner } from './hooks/useRunner.js';
+import { useRunner, previewPayload } from './hooks/useRunner.js';
+import type { ResultSummary } from './hooks/useRunner.js';
 import { useDb } from './hooks/useDb.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar/Sidebar.js';
@@ -84,7 +85,7 @@ export default function App() {
     } = useConfig();
 
     const {
-        results: liveResults,
+        rows: liveRows,
         stats: liveStats,
         isRunning,
         isPaused,
@@ -98,17 +99,16 @@ export default function App() {
     const { runs, saveRun, getRunResults, deleteRun } = useDb();
 
     const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
-    const [historyResults, setHistoryResults] = useState<FuzzResult[]>([]);
+    const [historyRows, setHistoryRows] = useState<ResultSummary[]>([]);
     const [historyStats, setHistoryStats] = useState<RunStats | null>(null);
 
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
-    const [isLoadingResult, setIsLoadingResult] = useState(false);
     const [toasts, setToasts] = useState<ToastData[]>([]);
     const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
     const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
 
-    // Active dataset (live or history)
-    const activeResults = loadedRunId ? historyResults : liveResults;
+    // Active dataset (live or history) — only lightweight summaries
+    const activeRows = loadedRunId ? historyRows : liveRows;
     const activeStats = loadedRunId ? historyStats : liveStats;
 
     const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -116,27 +116,19 @@ export default function App() {
         setToasts((prev: ToastData[]) => [...prev.slice(-4), { id, message, type }]);
     }, []);
 
-    const stripResult = useCallback((result: FuzzResult): FuzzResult => {
-        return {
-            ...result,
-            payload: deepStrip(result.payload),
-            responseBody: deepStrip(result.responseBody, 10_000),
-        } as FuzzResult;
-    }, []);
-
     const dismissToast = useCallback((id: number) => {
         setToasts((prev: ToastData[]) => prev.filter((t: ToastData) => t.id !== id));
     }, []);
 
     const activeFilteredLogsCount = useMemo(() => {
-        if (!heatmapFilter) return activeResults.length;
-        return activeResults.filter(
-            (r: FuzzResult) =>
+        if (!heatmapFilter) return activeRows.length;
+        return activeRows.filter(
+            (r) =>
                 r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
                 r.endpoint === heatmapFilter.path &&
                 r.status === heatmapFilter.status
         ).length;
-    }, [activeResults, heatmapFilter]);
+    }, [activeRows, heatmapFilter]);
 
     const endpointKeys = useMemo(() => {
         const uniqueKeys = Array.from(new Set(config.endpoints.map((ep) => `${ep.method.toUpperCase()} ${ep.path}`)));
@@ -233,23 +225,36 @@ export default function App() {
             stats: null as any,
         };
 
-        let pendingResults: FuzzResult[] = [];
+        let pendingRows: ResultSummary[] = [];
 
         const onResult = (result: FuzzResult) => {
-            pendingResults.push(result);
-            if (pendingResults.length >= 50) {
-                saveRun(runRec, [...pendingResults]);
-                pendingResults = [];
+            pendingRows.push({
+                id: result.id,
+                timestamp: result.timestamp,
+                method: result.method,
+                endpoint: result.endpoint,
+                resolvedPath: result.resolvedPath,
+                status: result.status,
+                profile: result.profile,
+                duration: result.duration,
+                retries: result.retries,
+                payloadPreview: previewPayload(result.payload),
+                responsePreview: previewPayload(result.responseBody),
+                error: result.error,
+            });
+            if (pendingRows.length >= 50) {
+                saveRun(runRec, [...pendingRows]);
+                pendingRows = [];
             }
         };
 
         const onComplete = (stats: RunStats) => {
             const completedRun = { ...runRec, completedAt: Date.now(), stats };
-            saveRun(completedRun, pendingResults);
+            saveRun(completedRun, pendingRows);
             showToast(`Scan saved to history`, 'success');
         };
 
-        start(finalConfig, onResult, onComplete, stripResult);
+        start(finalConfig, onResult, onComplete);
 
         showToast(
             `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
@@ -261,46 +266,50 @@ export default function App() {
         const runData = runs.find(r => r.id === runId);
         if (!runData) return;
         showToast(`Loading scan...`, 'info');
-        const loaded = await getRunResults(runId);
-        setHistoryResults(loaded);
+        const rows = await getRunResults(runId);
+        setHistoryRows(rows);
         setHistoryStats(runData.stats);
         setLoadedRunId(runId);
         setSelectedResult(null);
         setHeatmapFilter(null);
-        showToast(`Loaded ${loaded.length} results from history`, 'success');
+        showToast(`Loaded ${rows.length} results from history`, 'success');
     };
 
-    const handleSelectResult = (result: FuzzResult) => {
-        setSelectedResult(result);
+    const handleSelectResult = (row: ResultSummary) => {
+        setSelectedResult({
+            ...row,
+            payload: row.payloadPreview || undefined,
+            responseBody: row.responsePreview || undefined,
+        } as FuzzResult);
     };
 
     const handleDeleteRun = async (runId: string) => {
         await deleteRun(runId);
         if (loadedRunId === runId) {
             setLoadedRunId(null);
-            setHistoryResults([]);
+            setHistoryRows([]);
             setHistoryStats(null);
         }
         showToast('Run deleted', 'success');
     };
 
     const handleExport = () => {
-        if (activeResults.length === 0) {
+        if (activeRows.length === 0) {
             showToast('No results to export yet', 'error');
             return;
         }
         const data = {
             exportedAt: new Date().toISOString(),
             baseUrl: config.base_url,
-            totalRequests: activeResults.length,
+            totalRequests: activeRows.length,
             summary: {
-                crashes5xx: activeResults.filter((r: FuzzResult) => r.status >= 500).length,
-                errors4xx: activeResults.filter((r: FuzzResult) => r.status >= 400 && r.status < 500).length,
-                success2xx: activeResults.filter((r: FuzzResult) => r.status >= 200 && r.status < 300).length,
-                networkErrors: activeResults.filter((r: FuzzResult) => r.status === 0).length,
-                totalRetries: activeResults.reduce((sum: number, r: FuzzResult) => sum + (r.retries ?? 0), 0),
+                crashes5xx: activeRows.filter((r) => r.status >= 500).length,
+                errors4xx: activeRows.filter((r) => r.status >= 400 && r.status < 500).length,
+                success2xx: activeRows.filter((r) => r.status >= 200 && r.status < 300).length,
+                networkErrors: activeRows.filter((r) => r.status === 0).length,
+                totalRetries: activeRows.reduce((sum: number, r) => sum + (r.retries ?? 0), 0),
             },
-            results: activeResults,
+            results: activeRows,
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -309,7 +318,7 @@ export default function App() {
         a.download = `swazz-results-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast(`Exported ${activeResults.length} results`, 'success');
+        showToast(`Exported ${activeRows.length} results`, 'success');
     };
 
 
@@ -409,7 +418,7 @@ export default function App() {
                                 <div>
                                     <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--text-primary)' }}>Viewing History</h3>
                                     <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                        {activeResults.length} requests · {new Date(historyStats?.startTime || Date.now()).toLocaleString()}
+                                        {activeRows.length} requests · {new Date(historyStats?.startTime || Date.now()).toLocaleString()}
                                     </div>
                                 </div>
                                 <button className="btn btn-primary" onClick={() => setLoadedRunId(null)}>
@@ -431,7 +440,7 @@ export default function App() {
                         </div>
                     )}
 
-                    {(activeResults.length > 0 || config.endpoints.length > 0) && (
+                    {(activeRows.length > 0 || config.endpoints.length > 0) && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
                                 <button
@@ -466,9 +475,9 @@ export default function App() {
                                     onClick={() => setActiveTab('logs')}
                                 >
                                     <span>Request Logs</span>
-                                    {activeResults.length > 0 && (
+                                    {activeRows.length > 0 && (
                                         <span style={{ fontSize: '11px', color: 'var(--text-disabled)', fontWeight: 400 }}>
-                                            (<span style={{ color: 'var(--color-primary)' }}>{activeFilteredLogsCount}</span> from {activeResults.length})
+                                            (<span style={{ color: 'var(--color-primary)' }}>{activeFilteredLogsCount}</span> from {activeRows.length})
                                         </span>
                                     )}
                                 </button>
@@ -476,7 +485,6 @@ export default function App() {
 
                             {activeTab === 'heatmap' ? (
                                 <Dashboard
-                                    results={activeResults}
                                     stats={activeStats}
                                     endpointKeys={endpointKeys}
                                     heatmapFilter={heatmapFilter}
@@ -488,7 +496,7 @@ export default function App() {
                                 />
                             ) : (
                                 <Inspector
-                                    results={activeResults}
+                                    results={activeRows}
                                     heatmapFilter={heatmapFilter}
                                     onClearHeatmapFilter={() => setHeatmapFilter(null)}
                                     onSelectResult={handleSelectResult}

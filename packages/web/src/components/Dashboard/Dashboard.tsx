@@ -1,19 +1,18 @@
 import React from 'react';
-import type { RunStats, FuzzResult } from '@swazz/core';
+import type { RunStats } from '@swazz/core';
 import { StatsBar } from './StatsBar.js';
 import { Heatmap } from './Heatmap.js';
 import type { HeatmapFilter } from './Heatmap.js';
 
 interface Props {
     stats: RunStats | null;
-    results: FuzzResult[];
     endpointKeys: string[];
     heatmapFilter: HeatmapFilter | null;
     onHeatmapFilter: (f: HeatmapFilter | null) => void;
     isRunning: boolean;
 }
 
-export function Dashboard({ stats, results, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
+export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
     if (!stats) {
         return (
             <div className="dashboard">

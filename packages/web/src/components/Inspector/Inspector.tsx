@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { FuzzResult } from '@swazz/core';
+import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 
 interface Props {
-    results: FuzzResult[];
-    onSelectResult: (result: FuzzResult) => void;
+    results: ResultSummary[];
+    onSelectResult: (row: ResultSummary) => void;
     heatmapFilter: HeatmapFilter | null;
     onClearHeatmapFilter: () => void;
     onExport: () => void;
