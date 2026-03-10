@@ -371,7 +371,6 @@ export default function App() {
                                 loadEndpoints(newUrls);
                             } else {
                                 updateConfig({ base_url: origin });
-                                loadEndpoints(currentUrls);
                             }
                         } catch (e) {
                             // If invalid URL, just set it as is
