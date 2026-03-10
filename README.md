@@ -101,7 +101,17 @@ flowchart TD
     class API1,API2 target;
 ```
 
+## 🤖 Claude Code Skills
+
+If you use [Claude Code](https://claude.com/claude-code), the project includes slash commands for quick deployment:
+
+- `/deploy` — build and deploy both worker and web
+- `/deploy-worker` — deploy the CORS proxy worker only
+- `/deploy-web` — build and deploy the frontend only
+
 ## 🛠️ Tech Stack
 - **Frontend:** React, TypeScript, Vite, Vanilla CSS (CSS Variables for theming)
 - **Engine:** TypeScript, native `fetch`
+- **Proxy:** Cloudflare Worker (Hono)
+- **Hosting:** Cloudflare Pages + Workers
 - **Monorepo Management:** npm workspaces
