@@ -84,7 +84,7 @@ export class FuzzRunner {
             const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(
                 endpoint.method.toUpperCase(),
             );
-            const effectiveIter = (hasFields && isBodyMethod) ? iterations : 1;
+            const effectiveIter = hasFields ? iterations : 1;
             totalPlanned += profiles.length * effectiveIter;
         }
         this._stats.totalPlanned = totalPlanned;
@@ -112,9 +112,9 @@ export class FuzzRunner {
                     this._stats.progress.currentProfile = profile;
 
                     // Smart iteration count:
-                    // - No schema fields or method doesn't accept body → 1 request (payload is always empty)
-                    // - Has fields + Body method → full iterations (each tries to generate a different payload)
-                    const effectiveIterations = (hasFields && isBodyMethod) ? iterations : 1;
+                    // - Has fuzzable fields (body or query params) → full iterations
+                    // - No fields → 1 request
+                    const effectiveIterations = hasFields ? iterations : 1;
 
                     const generator = new SmartPayloadGenerator(dictionaries, profile);
 
@@ -127,14 +127,20 @@ export class FuzzRunner {
                         if (this._shouldStop) break;
 
                         let payload: any = undefined;
+                        let queryParams: Record<string, any> | undefined = undefined;
                         let payloadStr = 'empty';
                         let isDuplicate = false;
 
-                        if (hasFields && isBodyMethod) {
+                        if (hasFields) {
                             // Try up to 10 times to generate a unique payload for this iteration
                             for (let retries = 0; retries < 10; retries++) {
-                                payload = generator.buildObject(endpoint.schema);
-                                payloadStr = JSON.stringify(payload);
+                                const generated = generator.buildObject(endpoint.schema);
+                                if (isBodyMethod) {
+                                    payload = generated;
+                                } else {
+                                    queryParams = generated;
+                                }
+                                payloadStr = JSON.stringify(generated);
                                 if (!seenPayloads.has(payloadStr)) {
                                     isDuplicate = false;
                                     break;
@@ -181,6 +187,7 @@ export class FuzzRunner {
                                     cookies,
                                     payload,
                                     profile,
+                                    queryParams,
                                 );
 
                                 this._results.push(result);
@@ -267,8 +274,17 @@ export class FuzzRunner {
         cookies: Record<string, string>,
         payload: any,
         profile: FuzzingProfile,
+        queryParams?: Record<string, any>,
     ): Promise<FuzzResult> {
-        const url = baseUrl.replace(/\/$/, '') + resolvedPath;
+        let url = baseUrl.replace(/\/$/, '') + resolvedPath;
+
+        // Append query parameters for non-body methods (GET, DELETE, etc.)
+        if (queryParams && Object.keys(queryParams).length > 0) {
+            const qs = Object.entries(queryParams)
+                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+                .join('&');
+            url += (url.includes('?') ? '&' : '?') + qs;
+        }
 
         // Build final headers: user headers take precedence.
         // Auto-inject Content-Type: application/json for body requests unless user already set one.
@@ -313,7 +329,7 @@ export class FuzzRunner {
                     profile,
                     status: response.status,
                     duration: response.duration,
-                    payload,
+                    payload: payload ?? queryParams,
                     responseBody: response.status >= 400 ? response.body : undefined,
                     timestamp: Date.now(),
                     retries: attempt,

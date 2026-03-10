@@ -158,6 +158,90 @@ describe('FuzzRunner — path parameter substitution', () => {
     });
 });
 
+// ─── GET query parameters ────────────────────────────────────
+
+describe('FuzzRunner — GET query parameters', () => {
+    it('appends query parameters to URL for GET endpoints', async () => {
+        const urlsSeen: string[] = [];
+        const sendRequest: SendRequestFn = async (req) => {
+            urlsSeen.push(req.url);
+            return { status: 200, body: { ok: true }, duration: 5 };
+        };
+
+        const config = makeConfig({
+            settings: {
+                iterations_per_profile: 1,
+                concurrency: 1,
+                timeout_ms: 5000,
+                max_payload_size_bytes: 1048576,
+                delay_between_requests_ms: 0,
+                profiles: ['RANDOM'],
+            },
+            endpoints: [
+                {
+                    path: '/search',
+                    method: 'GET',
+                    schema: {
+                        type: 'object',
+                        properties: {
+                            q: { type: 'string' },
+                            page: { type: 'integer' },
+                        },
+                    },
+                },
+            ],
+        });
+
+        const results: FuzzResult[] = [];
+        const runner = new FuzzRunner(config, sendRequest);
+        runner.onResult = (r) => results.push(r);
+        await runner.start();
+
+        expect(urlsSeen.length).toBe(1);
+        // URL should contain query parameters
+        expect(urlsSeen[0]).toContain('?');
+        expect(urlsSeen[0]).toContain('q=');
+        expect(urlsSeen[0]).toContain('page=');
+
+        // Result payload should contain the query params
+        expect(results[0].payload).toHaveProperty('q');
+        expect(results[0].payload).toHaveProperty('page');
+    });
+
+    it('runs full iterations for GET endpoints with query params', async () => {
+        const results: FuzzResult[] = [];
+        const config = makeConfig({
+            settings: {
+                iterations_per_profile: 5,
+                concurrency: 1,
+                timeout_ms: 5000,
+                max_payload_size_bytes: 1048576,
+                delay_between_requests_ms: 0,
+                profiles: ['RANDOM'],
+            },
+            endpoints: [
+                {
+                    path: '/search',
+                    method: 'GET',
+                    schema: {
+                        type: 'object',
+                        properties: {
+                            q: { type: 'string' },
+                        },
+                    },
+                },
+            ],
+        });
+
+        const runner = new FuzzRunner(config, makeMockSendRequest());
+        runner.onResult = (r) => results.push(r);
+        await runner.start();
+
+        // Should have multiple results, not just 1
+        expect(results.length).toBeGreaterThan(1);
+    });
+});
+
 // ─── 429 retry logic ─────────────────────────────────────────
 
 describe('FuzzRunner — 429 backoff', () => {
