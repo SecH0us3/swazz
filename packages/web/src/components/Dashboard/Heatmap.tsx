@@ -7,7 +7,7 @@ export interface HeatmapFilter {
     status: number;
 }
 
-type StatusBucket = 'any' | 'all' | '2xx' | '4xx' | '5xx';
+type StatusBucket = 'any' | '2xx' | '4xx' | '5xx';
 
 interface Props {
     stats: RunStats;
@@ -26,7 +26,7 @@ function getCellColor(status: number, count: number, maxCount: number): string {
 }
 
 function matchesBucket(code: number, bucket: StatusBucket): boolean {
-    if (bucket === 'all') return true;
+    if (bucket === 'any') return true;
     if (bucket === '2xx') return code >= 200 && code < 300;
     if (bucket === '4xx') return code >= 400 && code < 500;
     if (bucket === '5xx') return code >= 500;
@@ -58,7 +58,7 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
         let list = endpointKeys;
 
         // Hide endpoints with no hits for the selected status bucket
-        if (statusBucket !== 'all') {
+        if (statusBucket !== 'any') {
             list = list.filter((epKey) => {
                 const counts = stats.endpointCounts[epKey] ?? {};
                 return Object.entries(counts).some(
@@ -108,8 +108,7 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
     };
 
     const buckets: { key: StatusBucket; label: string }[] = [
-        { key: 'any', label: 'Any' },
-        { key: 'all', label: 'All' },
+        { key: 'any', label: 'All' },
         { key: '2xx', label: '2xx' },
         { key: '4xx', label: '4xx' },
         { key: '5xx', label: '5xx' },
