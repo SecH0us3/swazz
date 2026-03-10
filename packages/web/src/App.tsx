@@ -99,7 +99,7 @@ export default function App() {
 
     const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
     const [historyResults, setHistoryResults] = useState<FuzzResult[]>([]);
-    const [historyStats, setHistoryStats] = useState<any>(null);
+    const [historyStats, setHistoryStats] = useState<RunStats | null>(null);
 
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
     const [isLoadingResult, setIsLoadingResult] = useState(false);
@@ -190,8 +190,10 @@ export default function App() {
             return;
         }
 
-        // Clear heatmap filter on new run
+        // Clear UI state for new run
         setHeatmapFilter(null);
+        setSelectedResult(null);
+        setLoadedRunId(null);
 
         let finalEndpoints = config.endpoints;
         let finalBaseUrl = config.base_url;
@@ -408,7 +410,7 @@ export default function App() {
                                 <div>
                                     <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--text-primary)' }}>Viewing History</h3>
                                     <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                        {activeResults.length} requests · {new Date(historyStats?.startedAt || Date.now()).toLocaleString()}
+                                        {activeResults.length} requests · {new Date(historyStats?.startTime || Date.now()).toLocaleString()}
                                     </div>
                                 </div>
                                 <button className="btn btn-primary" onClick={() => setLoadedRunId(null)}>
