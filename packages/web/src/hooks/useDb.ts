@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import type { FuzzResult, RunStats } from '@swazz/core';
+import { deepStrip } from '@swazz/core';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -65,23 +66,6 @@ async function dbGetRuns(db: IDBDatabase): Promise<ScanRun[]> {
     const tx = db.transaction('runs', 'readonly');
     const runs = await promisify<ScanRun[]>(tx.objectStore('runs').getAll() as IDBRequest<ScanRun[]>);
     return runs.sort((a, b) => b.startedAt - a.startedAt);
-}
-
-function deepStrip(val: any, maxLen: number = 1024): any {
-    if (typeof val === 'string' && val.length > maxLen) {
-        return val.substring(0, maxLen) + `\n\n… truncated (${(val.length / 1024).toFixed(1)}KB total)`;
-    }
-    if (val && typeof val === 'object') {
-        if (Array.isArray(val)) {
-            return val.map(v => deepStrip(v, maxLen));
-        }
-        const obj: any = {};
-        for (const key in val) {
-            obj[key] = deepStrip(val[key], maxLen);
-        }
-        return obj;
-    }
-    return val;
 }
 
 async function dbAppendResults(db: IDBDatabase, runId: string, results: FuzzResult[]): Promise<void> {

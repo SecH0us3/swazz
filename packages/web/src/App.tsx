@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { FuzzResult, RunStats } from '@swazz/core';
-import { parseSwaggerSpec } from '@swazz/core';
+import { parseSwaggerSpec, deepStrip } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
@@ -117,29 +117,10 @@ export default function App() {
     }, []);
 
     const stripResult = useCallback((result: FuzzResult): FuzzResult => {
-        const { payload, responseBody, ...rest } = result;
-
-        const deepStrip = (val: any, maxLen: number = 1024): any => {
-            if (typeof val === 'string' && val.length > maxLen) {
-                return val.substring(0, maxLen) + `\n\n… truncated (${(val.length / 1024).toFixed(1)}KB total)`;
-            }
-            if (val && typeof val === 'object') {
-                if (Array.isArray(val)) {
-                    return val.map(v => deepStrip(v, maxLen));
-                }
-                const obj: any = {};
-                for (const key in val) {
-                    obj[key] = deepStrip(val[key], maxLen);
-                }
-                return obj;
-            }
-            return val;
-        };
-
         return {
-            ...rest,
-            payload: deepStrip(payload),
-            responseBody: deepStrip(responseBody, 10_000)
+            ...result,
+            payload: deepStrip(result.payload),
+            responseBody: deepStrip(result.responseBody, 10_000),
         } as FuzzResult;
     }, []);
 
