@@ -300,16 +300,27 @@ export class FuzzRunner {
         };
 
         // 429 backoff loop
+        const timeoutMs = this.config.settings.timeout_ms;
         let attempt = 0;
         while (true) {
             try {
-                const response = await this.sendRequest({
+                const requestPromise = this.sendRequest({
                     url,
                     method,
                     headers: finalHeaders,
                     cookies,
                     body: payload,
                 });
+
+                // Race against timeout
+                const response = timeoutMs > 0
+                    ? await Promise.race([
+                        requestPromise,
+                        this.sleep(timeoutMs).then(() => {
+                            throw new Error(`Request timed out after ${timeoutMs}ms`);
+                        }),
+                    ])
+                    : await requestPromise;
 
                 // Handle rate limiting with automatic backoff
                 if (response.status === 429 && attempt < MAX_RETRIES_ON_429) {

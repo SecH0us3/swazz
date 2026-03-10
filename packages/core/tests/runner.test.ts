@@ -242,6 +242,52 @@ describe('FuzzRunner — GET query parameters', () => {
     });
 });
 
+// ─── Timeout ─────────────────────────────────────────────────
+
+describe('FuzzRunner — timeout', () => {
+    it('returns error when request exceeds timeout_ms', async () => {
+        const sendRequest: SendRequestFn = async () => {
+            // Simulate slow request — will be resolved by fake timers
+            await new Promise((resolve) => setTimeout(resolve, 20_000));
+            return { status: 200, body: { ok: true }, duration: 20000 };
+        };
+
+        const config = makeConfig({
+            settings: {
+                iterations_per_profile: 1,
+                concurrency: 1,
+                timeout_ms: 500,
+                max_payload_size_bytes: 1048576,
+                delay_between_requests_ms: 0,
+                profiles: ['RANDOM'],
+            },
+            endpoints: [
+                {
+                    path: '/slow',
+                    method: 'GET',
+                    schema: { type: 'object', properties: {} },
+                },
+            ],
+        });
+
+        vi.useFakeTimers();
+
+        const results: FuzzResult[] = [];
+        const runner = new FuzzRunner(config, sendRequest);
+        runner.onResult = (r) => results.push(r);
+
+        const runPromise = runner.start();
+        await vi.runAllTimersAsync();
+        await runPromise;
+
+        vi.useRealTimers();
+
+        expect(results.length).toBe(1);
+        expect(results[0].status).toBe(0);
+        expect(results[0].error).toContain('timed out');
+    });
+});
+
 // ─── 429 retry logic ─────────────────────────────────────────
 
 describe('FuzzRunner — 429 backoff', () => {
