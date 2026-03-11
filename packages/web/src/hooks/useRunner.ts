@@ -54,7 +54,7 @@ export function previewPayload(value: any): string {
     return preview(value);
 }
 
-const RESPONSE_VALUE_LIMIT = 200;
+const RESPONSE_VALUE_LIMIT = 400;
 
 /** Like truncateValues but with a larger per-field limit for responses. */
 function truncateResponseValues(val: any): any {
@@ -81,8 +81,8 @@ export function previewResponse(value: any): string {
     if (value === undefined || value === null) return '';
     if (typeof value === 'string') {
         // Plain text / HTML error — show more generously
-        if (value.length <= 1000) return value;
-        return value.slice(0, 1000) + `\n… (${value.length - 1000} chars more)`;
+        if (value.length <= 2000) return value;
+        return value.slice(0, 2000) + `\n… (${value.length - 2000} chars more)`;
     }
     return JSON.stringify(truncateResponseValues(value), null, 2);
 }
