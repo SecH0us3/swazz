@@ -106,7 +106,7 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
     };
 
     const buckets: { key: StatusBucket; label: string }[] = [
-        { key: 'any', label: 'All' },
+        { key: 'any', label: 'Any' },
         { key: '2xx', label: '2xx' },
         { key: '4xx', label: '4xx' },
         { key: '5xx', label: '5xx' },
