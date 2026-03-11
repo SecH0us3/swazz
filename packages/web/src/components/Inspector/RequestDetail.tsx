@@ -127,9 +127,17 @@ export function RequestDetail({
 
     let responseBodyJson = '';
     if (liveResponse !== undefined) {
-        responseBodyJson = typeof liveResponse === 'string'
-            ? liveResponse
-            : JSON.stringify(liveResponse, null, 2);
+        if (typeof liveResponse === 'string') {
+            // Try to pretty-print if it looks like JSON
+            try {
+                const parsed = JSON.parse(liveResponse);
+                responseBodyJson = JSON.stringify(parsed, null, 2);
+            } catch {
+                responseBodyJson = liveResponse;
+            }
+        } else {
+            responseBodyJson = JSON.stringify(liveResponse, null, 2);
+        }
     }
 
     const statusColor =
