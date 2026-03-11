@@ -54,13 +54,37 @@ export function previewPayload(value: any): string {
     return preview(value);
 }
 
-const RESPONSE_LIMIT = 1000;
+const RESPONSE_VALUE_LIMIT = 200;
+
+/** Like truncateValues but with a larger per-field limit for responses. */
+function truncateResponseValues(val: any): any {
+    if (val === null || val === undefined) return val;
+    if (typeof val === 'string') {
+        if (val.length <= RESPONSE_VALUE_LIMIT) return val;
+        return val.slice(0, RESPONSE_VALUE_LIMIT) + `… (${val.length - RESPONSE_VALUE_LIMIT} chars)`;
+    }
+    if (Array.isArray(val)) {
+        if (val.length <= 5) return val.map(truncateResponseValues);
+        return [...val.slice(0, 5).map(truncateResponseValues), `… (${val.length - 5} more items)`];
+    }
+    if (typeof val === 'object') {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(val)) {
+            out[k] = truncateResponseValues(v);
+        }
+        return out;
+    }
+    return val;
+}
 
 export function previewResponse(value: any): string {
     if (value === undefined || value === null) return '';
-    const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-    if (text.length <= RESPONSE_LIMIT) return text;
-    return text.slice(0, RESPONSE_LIMIT) + `\n… (${text.length - RESPONSE_LIMIT} chars more)`;
+    if (typeof value === 'string') {
+        // Plain text / HTML error — show more generously
+        if (value.length <= 1000) return value;
+        return value.slice(0, 1000) + `\n… (${value.length - 1000} chars more)`;
+    }
+    return JSON.stringify(truncateResponseValues(value), null, 2);
 }
 
 function preview(value: any): string {
