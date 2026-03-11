@@ -78,10 +78,16 @@ export class FuzzRunner {
         this._stats = this.createEmptyStats();
 
         const { endpoints, settings, dictionaries, global_headers, cookies, base_url } = this.config;
-        const profiles = settings.profiles;
         const iterations = settings.iterations_per_profile;
         const concurrency = settings.concurrency;
         const delay = settings.delay_between_requests_ms;
+
+        // Heavy profiles (large payloads) run last and sequentially (concurrency=1)
+        // to avoid blowing up memory with many huge payloads in flight at once.
+        const HEAVY_PROFILES: Set<FuzzingProfile> = new Set(['BOUNDARY']);
+        const lightProfiles = settings.profiles.filter(p => !HEAVY_PROFILES.has(p));
+        const heavyProfiles = settings.profiles.filter(p => HEAVY_PROFILES.has(p));
+        const profiles = [...lightProfiles, ...heavyProfiles];
 
         // Pre-calculate total planned requests for progress
         let totalPlanned = 0;
@@ -124,6 +130,9 @@ export class FuzzRunner {
                     const effectiveIterations = hasFields ? iterations : 1;
 
                     const generator = new SmartPayloadGenerator(dictionaries, profile);
+
+                    // Heavy profiles run sequentially to keep memory bounded
+                    const profileConcurrency = HEAVY_PROFILES.has(profile) ? 1 : concurrency;
 
                     // Process iterations with concurrency control
                     const tasks: Promise<void>[] = [];
@@ -171,7 +180,7 @@ export class FuzzRunner {
                         if (this._shouldStop) break;
 
                         // Concurrency limiter
-                        while (activeCount >= concurrency) {
+                        while (activeCount >= profileConcurrency) {
                             await this.sleep(10);
                         }
 
