@@ -54,6 +54,15 @@ export function previewPayload(value: any): string {
     return preview(value);
 }
 
+const RESPONSE_LIMIT = 1000;
+
+export function previewResponse(value: any): string {
+    if (value === undefined || value === null) return '';
+    const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    if (text.length <= RESPONSE_LIMIT) return text;
+    return text.slice(0, RESPONSE_LIMIT) + `\n… (${text.length - RESPONSE_LIMIT} chars more)`;
+}
+
 function preview(value: any): string {
     if (value === undefined || value === null) return '';
     if (typeof value === 'string') {
@@ -75,7 +84,7 @@ function toSummary(r: FuzzResult): ResultSummary {
         duration: r.duration,
         retries: r.retries,
         payloadPreview: preview(r.payload),
-        responsePreview: preview(r.responseBody),
+        responsePreview: previewResponse(r.responseBody),
         error: r.error,
     };
 }

@@ -3,7 +3,7 @@ import type { FuzzResult, RunStats } from '@swazz/core';
 import { parseSwaggerSpec } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
-import { useRunner, previewPayload } from './hooks/useRunner.js';
+import { useRunner, previewPayload, previewResponse } from './hooks/useRunner.js';
 import type { ResultSummary } from './hooks/useRunner.js';
 import { useDb } from './hooks/useDb.js';
 import { Header } from './components/Header.js';
@@ -239,7 +239,7 @@ export default function App() {
                 duration: result.duration,
                 retries: result.retries,
                 payloadPreview: previewPayload(result.payload),
-                responsePreview: previewPayload(result.responseBody),
+                responsePreview: previewResponse(result.responseBody),
                 error: result.error,
             });
             if (pendingRows.length >= 50) {
