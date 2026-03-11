@@ -58,14 +58,12 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
         let list = endpointKeys;
 
         // Hide endpoints with no hits for the selected status bucket
-        if (statusBucket !== 'any') {
-            list = list.filter((epKey) => {
-                const counts = stats.endpointCounts[epKey] ?? {};
-                return Object.entries(counts).some(
-                    ([code, count]) => count > 0 && matchesBucket(Number(code), statusBucket),
-                );
-            });
-        }
+        list = list.filter((epKey) => {
+            const counts = stats.endpointCounts[epKey] ?? {};
+            return Object.entries(counts).some(
+                ([code, count]) => count > 0 && matchesBucket(Number(code), statusBucket),
+            );
+        });
 
         // Text search on top
         const q = search.trim().toLowerCase();
