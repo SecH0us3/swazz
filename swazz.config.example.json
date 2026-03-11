@@ -1,0 +1,41 @@
+{
+    "swagger_urls": [
+        "https://api.example.com/swagger.json"
+    ],
+    "base_url": "https://api.example.com",
+    "headers": {
+        "Authorization": "Bearer <token>"
+    },
+    "cookies": {},
+    "dictionaries": {
+        "username": ["admin", "test", "root"],
+        "email": ["admin@test.com", "a@b.c"]
+    },
+    "settings": {
+        "iterations_per_profile": 20,
+        "concurrency": 5,
+        "timeout_ms": 10000,
+        "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+    },
+    "endpoints": {
+        "include": [],
+        "exclude": ["/health", "/metrics"]
+    },
+    "rules": {
+        "ignore": [401, 403, 404, 405, 422, 429, 520],
+        "severity": {
+            "200": "warning",
+            "400": "warning",
+            "406": "warning"
+        },
+        "defaults": {
+            "1xx": "ignore",
+            "2xx": "ignore",
+            "3xx": "ignore",
+            "4xx": "error",
+            "5xx": "error",
+            "timeout": "error",
+            "network_error": "error"
+        }
+    }
+}

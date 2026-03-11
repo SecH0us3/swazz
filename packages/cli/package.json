@@ -1,0 +1,22 @@
+{
+    "name": "@swazz/cli",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "bin": {
+        "swazz": "./bin/swazz.mjs"
+    },
+    "scripts": {
+        "build": "tsc",
+        "start": "node --import tsx/esm src/index.ts",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@swazz/core": "*"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.0",
+        "typescript": "^5.7.0",
+        "vitest": "^3.0.0"
+    }
+}

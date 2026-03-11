@@ -29,3 +29,9 @@ npm-debug.log*
 # Cache
 .turbo/
 *.tsbuildinfo
+
+# CLI run artifacts
+test-run.config.json
+test-report.*
+*.sarif
+*.report.json
