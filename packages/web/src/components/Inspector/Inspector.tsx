@@ -31,19 +31,22 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
-export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatmapFilter, onExport, onFilteredCountChange }: Props) {
+export function Inspector({
+    results,
+    onSelectResult,
+    heatmapFilter,
+    onClearHeatmapFilter,
+    onExport,
+    onFilteredCountChange,
+}: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
 
-    const count5xx = useMemo(
-        () => results.filter((r) => r.status >= 500).length,
-        [results],
-    );
+    const count5xx = useMemo(() => results.filter((r) => r.status >= 500).length, [results]);
 
     const { filtered, totalFiltered } = useMemo(() => {
         let list = results;
 
-        // Heatmap cell filter takes priority (exact endpoint + exact status code)
         if (heatmapFilter) {
             list = list.filter(
                 (r) =>
@@ -52,13 +55,11 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                     r.status === heatmapFilter.status,
             );
         } else {
-            // Tab filter
             if (filter === '5xx') list = list.filter((r) => r.status >= 500);
             else if (filter === '4xx') list = list.filter((r) => r.status >= 400 && r.status < 500);
             else if (filter === '2xx') list = list.filter((r) => r.status >= 200 && r.status < 300);
         }
 
-        // Text search always applies on top
         if (search) {
             const q = search.toLowerCase();
             list = list.filter(
@@ -66,10 +67,7 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
             );
         }
 
-        return {
-            filtered: list.slice(-500).reverse(), // newest first
-            totalFiltered: list.length,
-        };
+        return { filtered: list.slice(-500).reverse(), totalFiltered: list.length };
     }, [results, filter, search, heatmapFilter]);
 
     useEffect(() => {
@@ -87,60 +85,31 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
         <div className="inspector">
             <div className="inspector-header">
                 {heatmapFilter ? (
-                    // When a heatmap cell is active, show a clear filter indicator instead of tabs
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                            Filtered:
-                        </span>
-                        <span
-                            style={{
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: 'var(--font-size-xs)',
-                                color: 'var(--text-secondary)',
-                            }}
-                        >
+                    <div style={{ display:'flex', alignItems:'center', gap:'var(--space-2)' }}>
+                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>Filtered:</span>
+                        <span style={{ fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)', color:'var(--text-secondary)' }}>
                             {heatmapFilter.method.toUpperCase()} {heatmapFilter.path}
                         </span>
                         <span
                             style={{
-                                background:
-                                    heatmapFilter.status >= 500
-                                        ? 'var(--color-error-bg)'
-                                        : heatmapFilter.status >= 400
-                                            ? 'var(--color-warning-bg)'
-                                            : 'var(--color-success-bg)',
-                                color:
-                                    heatmapFilter.status >= 500
-                                        ? 'var(--color-error)'
-                                        : heatmapFilter.status >= 400
-                                            ? 'var(--color-warning)'
-                                            : 'var(--color-success)',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: 10,
-                                padding: '1px 6px',
-                                borderRadius: 'var(--radius-full)',
-                                fontWeight: 600,
+                                background: heatmapFilter.status >= 500 ? 'var(--color-error-bg)' :
+                                            heatmapFilter.status >= 400 ? 'var(--color-warning-bg)' : 'var(--color-success-bg)',
+                                color: heatmapFilter.status >= 500 ? 'var(--color-error)' :
+                                       heatmapFilter.status >= 400 ? 'var(--color-warning)' : 'var(--color-success)',
+                                fontFamily:'var(--font-mono)', fontSize:10, padding:'2px 7px',
+                                borderRadius:'var(--radius-full)', fontWeight:600,
                             }}
                         >
                             {heatmapFilter.status}
                         </span>
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
-                            {totalFiltered} results
-                        </span>
+                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-disabled)' }}>{totalFiltered} results</span>
                         <button
                             onClick={onClearHeatmapFilter}
                             style={{
-                                marginLeft: 4,
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--text-disabled)',
-                                cursor: 'pointer',
-                                fontSize: 12,
-                                padding: '2px 4px',
-                                borderRadius: 'var(--radius-sm)',
-                                transition: 'color var(--duration-fast)',
+                                background:'transparent', border:'none', color:'var(--text-disabled)',
+                                cursor:'pointer', fontSize:11, padding:'2px 4px',
+                                borderRadius:'var(--radius-sm)', transition:'color var(--duration-fast)',
                             }}
-                            title="Clear filter"
                             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-error)')}
                             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-disabled)')}
                         >
@@ -157,7 +126,7 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                             >
                                 {tab.label}
                                 {tab.count !== undefined && tab.count > 0 && (
-                                    <span className="badge badge-error" style={{ marginLeft: 4, fontSize: 10, padding: '0 5px' }}>
+                                    <span className="badge badge-error" style={{ marginLeft:5, fontSize:9, padding:'0 5px' }}>
                                         {tab.count}
                                     </span>
                                 )}
@@ -166,21 +135,32 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
                     </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flex: 1 }}>
-                    <input
-                        className="input inspector-search"
-                        placeholder="Filter by path..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        style={{ flex: 1 }}
-                    />
+                <div style={{ display:'flex', gap:'var(--space-2)', alignItems:'center', flex:1 }}>
+                    <div style={{ flex:1, position:'relative' }}>
+                        <svg
+                            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)', pointerEvents:'none' }}
+                        >
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input
+                            className="input inspector-search"
+                            placeholder="Filter by path…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            style={{ flex:1, paddingLeft:28, width:'100%' }}
+                        />
+                    </div>
                     <button
-                        className="btn btn-ghost"
+                        className="btn btn-ghost btn-sm"
                         title="Export results as JSON"
                         onClick={onExport}
-                        style={{ whiteSpace: 'nowrap', fontSize: 'var(--font-size-xs)' }}
                     >
-                        📥 Export
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export
                     </button>
                 </div>
             </div>
@@ -188,8 +168,14 @@ export function Inspector({ results, onSelectResult, heatmapFilter, onClearHeatm
             <div className="request-log">
                 {filtered.length === 0 ? (
                     <div className="empty-state">
+                        <div className="empty-state-icon">🔍</div>
+                        <div className="empty-state-title">
+                            {results.length === 0 ? 'Waiting for requests' : 'No matching requests'}
+                        </div>
                         <div className="empty-state-text">
-                            {results.length === 0 ? 'Waiting for requests...' : 'No matching requests'}
+                            {results.length === 0
+                                ? 'Start a fuzz test to see results appear here in real time.'
+                                : 'Try adjusting filters or search query.'}
                         </div>
                     </div>
                 ) : (

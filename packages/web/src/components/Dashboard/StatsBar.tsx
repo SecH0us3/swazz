@@ -6,7 +6,7 @@ interface Props {
     isRunning: boolean;
 }
 
-function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
+function StatNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
     return (
         <span className="stat-value">
             {decimals > 0 ? value.toFixed(decimals) : Math.round(value).toLocaleString()}
@@ -43,50 +43,57 @@ export function StatsBar({ stats, isRunning }: Props) {
 
     return (
         <div className="stats-bar card">
-            {/* Stat tiles row */}
             <div className="stats-bar-row">
+                {/* RPS */}
                 <div className="stat-card stat-rps">
-                    <span className="stat-label">RPS</span>
-                    <AnimatedNumber value={stats.requestsPerSecond} decimals={1} />
+                    <span className="stat-label">Req / sec</span>
+                    <StatNumber value={stats.requestsPerSecond} decimals={1} />
                 </div>
                 <div className="stat-divider" />
+
+                {/* Total */}
                 <div className="stat-card stat-total">
                     <span className="stat-label">Total</span>
-                    <AnimatedNumber value={stats.totalRequests} />
+                    <StatNumber value={stats.totalRequests} />
                 </div>
                 <div className="stat-divider" />
+
+                {/* 2xx */}
                 <div className="stat-card stat-2xx">
                     <span className="stat-label">2xx Success</span>
-                    <AnimatedNumber value={count2xx} />
+                    <StatNumber value={count2xx} />
                 </div>
                 <div className="stat-divider" />
+
+                {/* 4xx */}
                 <div className="stat-card stat-4xx">
                     <span className="stat-label">4xx Client</span>
-                    <AnimatedNumber value={count4xx} />
+                    <StatNumber value={count4xx} />
                 </div>
                 <div className="stat-divider" />
+
+                {/* 5xx */}
                 <div className={`stat-card stat-5xx ${count5xx > 0 ? 'has-errors' : ''}`}>
-                    <span className="stat-label">{count5xx > 0 ? '5xx CRASHES!' : '5xx Errors'}</span>
-                    <AnimatedNumber value={count5xx} />
+                    <span className="stat-label">{count5xx > 0 ? '5xx CRASHES' : '5xx Errors'}</span>
+                    <StatNumber value={count5xx} />
                 </div>
             </div>
 
-            {/* Progress bar — separate row below stat tiles */}
             {showProgress && (
                 <div className="progress-strip">
                     <div className="progress-bar-track">
-                        <div
-                            className="progress-bar-fill"
-                            style={{ width: `${pct}%` }}
-                        />
+                        <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
                     </div>
                     <div className="progress-meta">
                         <span className="progress-pct">{pct}%</span>
                         <span className="progress-label">
                             {completedEndpoints}/{totalEndpoints} endpoints
-                            {currentEndpoint
-                                ? <> · <span className="progress-current">{currentProfile && <span className="progress-profile">{currentProfile}</span>} {currentEndpoint}</span></>
-                                : null}
+                            {currentEndpoint ? (
+                                <> · <span className="progress-current">
+                                    {currentProfile && <span className="progress-profile">{currentProfile}</span>}
+                                    {currentEndpoint}
+                                </span></>
+                            ) : null}
                         </span>
                     </div>
                 </div>

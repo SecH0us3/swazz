@@ -322,21 +322,26 @@ export default function App() {
     };
 
 
-    const [sidebarWidth, setSidebarWidth] = useState(600);
-    const isResizingRef = useRef(false);
+    const [sidebarWidth, setSidebarWidth] = useState(300);
+    const [configSidebarWidth, setConfigSidebarWidth] = useState(320);
+    const isResizingLeftRef = useRef(false);
+    const isResizingRightRef = useRef(false);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isResizingRef.current) return;
-            const newWidth = Math.max(200, Math.min(600, e.clientX));
-            setSidebarWidth(newWidth);
+            if (isResizingLeftRef.current) {
+                const newWidth = Math.max(200, Math.min(600, e.clientX));
+                setSidebarWidth(newWidth);
+            } else if (isResizingRightRef.current) {
+                const newWidth = Math.max(250, Math.min(600, window.innerWidth - e.clientX));
+                setConfigSidebarWidth(newWidth);
+            }
         };
 
         const handleMouseUp = () => {
-            if (isResizingRef.current) {
-                isResizingRef.current = false;
-                document.body.classList.remove('resizing');
-            }
+            isResizingLeftRef.current = false;
+            isResizingRightRef.current = false;
+            document.body.classList.remove('resizing');
         };
 
         document.addEventListener('mousemove', handleMouseMove);
@@ -409,75 +414,66 @@ export default function App() {
                 onLoadEndpoints={loadEndpoints}
             />
 
-            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px' }}>
+            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${configSidebarWidth}px` }}>
                 {/* Left: Dashboard + Results List */}
                 <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
                     {loadedRunId && (
-                        <div className="card" style={{ padding: 'var(--space-4)', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', color: 'var(--text-primary)' }}>Viewing History</h3>
-                                    <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                        {activeRows.length} requests · {new Date(historyStats?.startTime || Date.now()).toLocaleString()}
-                                    </div>
-                                </div>
-                                <button className="btn btn-primary" onClick={() => setLoadedRunId(null)}>
-                                    Back to Live Stream
-                                </button>
+                        <div style={{
+                            display:'flex', justifyContent:'space-between', alignItems:'center',
+                            padding:'10px 16px',
+                            background:'rgba(124,58,237,0.06)',
+                            border:'1px solid rgba(124,58,237,0.25)',
+                            borderRadius:'var(--radius-md)',
+                            flexShrink:0,
+                        }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'var(--space-2)' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2" strokeLinecap="round">
+                                    <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+                                </svg>
+                                <span style={{ fontSize:'var(--font-size-sm)', color:'var(--accent-light)', fontWeight:500 }}>Viewing History</span>
+                                <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>
+                                    · {activeRows.length.toLocaleString()} requests · {new Date(historyStats?.startTime || Date.now()).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })}
+                                </span>
                             </div>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setLoadedRunId(null)}>← Live</button>
                         </div>
                     )}
 
                     {!loadedRunId && config.endpoints.length === 0 && (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '32px', marginBottom: 12, opacity: 0.5 }}>⚡️</div>
-                                <h2 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: 'var(--text-primary)' }}>Start Fuzzing</h2>
-                                <p style={{ maxWidth: 320, fontSize: 'var(--font-size-sm)', lineHeight: 1.5 }}>
-                                    Add endpoints manually or provide a Swagger URL in the sidebar to begin.
-                                </p>
+                        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                            <div className="empty-state">
+                                <div className="empty-state-icon">⚡</div>
+                                <div className="empty-state-title">Ready to fuzz</div>
+                                <div className="empty-state-text">
+                                    Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color:'var(--accent-light)' }}>Run Fuzz Test</strong>.
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {(activeRows.length > 0 || config.endpoints.length > 0) && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
-                            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+                        <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-4)', flex:1, minHeight:0 }}>
+                            <div className="tab-bar">
                                 <button
-                                    style={{
-                                        padding: '8px 16px',
-                                        background: 'none',
-                                        border: 'none',
-                                        borderBottom: activeTab === 'heatmap' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                        color: activeTab === 'heatmap' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                        cursor: 'pointer',
-                                        fontSize: 'var(--font-size-sm)',
-                                        fontWeight: activeTab === 'heatmap' ? 600 : 400,
-                                    }}
+                                    className={`tab-bar-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
                                     onClick={() => setActiveTab('heatmap')}
                                 >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                                    </svg>
                                     Endpoint Heatmap
                                 </button>
                                 <button
-                                    style={{
-                                        padding: '8px 16px',
-                                        background: 'none',
-                                        border: 'none',
-                                        borderBottom: activeTab === 'logs' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                        color: activeTab === 'logs' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                        cursor: 'pointer',
-                                        fontSize: 'var(--font-size-sm)',
-                                        fontWeight: activeTab === 'logs' ? 600 : 400,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                    }}
+                                    className={`tab-bar-btn ${activeTab === 'logs' ? 'active' : ''}`}
                                     onClick={() => setActiveTab('logs')}
                                 >
-                                    <span>Request Logs</span>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                                    </svg>
+                                    Request Logs
                                     {activeRows.length > 0 && (
-                                        <span style={{ fontSize: '11px', color: 'var(--text-disabled)', fontWeight: 400 }}>
-                                            (<span style={{ color: 'var(--color-primary)' }}>{activeFilteredLogsCount}</span> from {activeRows.length})
+                                        <span className="tab-bar-count">
+                                            {activeFilteredLogsCount.toLocaleString()}
                                         </span>
                                     )}
                                 </button>
@@ -539,9 +535,21 @@ export default function App() {
 
             <div
                 className="sidebar-resizer"
+                style={{ left: sidebarWidth - 4 }}
                 onMouseDown={(e) => {
                     e.preventDefault();
-                    isResizingRef.current = true;
+                    isResizingLeftRef.current = true;
+                    document.body.classList.add('resizing');
+                }}
+                title="Drag to resize"
+            />
+
+            <div
+                className="sidebar-resizer"
+                style={{ right: configSidebarWidth - 4, left: 'auto' }}
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    isResizingRightRef.current = true;
                     document.body.classList.add('resizing');
                 }}
                 title="Drag to resize"

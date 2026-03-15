@@ -2,7 +2,17 @@ import React, { useState } from 'react';
 
 // ─── Collapsible Section ────────────────────────────────
 
-export function Section({ title, defaultOpen = true, count, children }: { title: string; defaultOpen?: boolean; count?: number; children: React.ReactNode }) {
+export function Section({
+    title,
+    defaultOpen = true,
+    count,
+    children,
+}: {
+    title: string;
+    defaultOpen?: boolean;
+    count?: number;
+    children: React.ReactNode;
+}) {
     const [open, setOpen] = useState(defaultOpen);
     return (
         <div className="sidebar-section">
@@ -11,13 +21,13 @@ export function Section({ title, defaultOpen = true, count, children }: { title:
                 data-collapsed={!open}
                 onClick={() => setOpen(!open)}
             >
-                <span>
+                <span style={{ display:'flex', alignItems:'center' }}>
                     {title}
                     {count !== undefined && count > 0 && (
-                        <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-disabled)', fontWeight: 400 }}>({count})</span>
+                        <span className="section-count">{count}</span>
                     )}
                 </span>
-                <span className="chevron">▼</span>
+                <span className="chevron">▶</span>
             </div>
             <div className="sidebar-section-content" data-collapsed={!open || undefined}>
                 {children}
@@ -55,8 +65,7 @@ export function KVEditor({
     };
 
     const add = () => {
-        const key = `new-${Date.now()}`;
-        onChange({ ...entries, [key]: '' });
+        onChange({ ...entries, [`new-${Date.now()}`]: '' });
     };
 
     return (
@@ -75,14 +84,10 @@ export function KVEditor({
                         placeholder={valuePlaceholder}
                         onChange={(e) => update(key, key, e.target.value)}
                     />
-                    <button className="kv-delete" onClick={() => remove(key)} title="Delete">
-                        ✕
-                    </button>
+                    <button className="kv-delete" onClick={() => remove(key)} title="Delete">✕</button>
                 </div>
             ))}
-            <button className="kv-add" onClick={add}>
-                + Add {keyPlaceholder}
-            </button>
+            <button className="kv-add" onClick={add}>+ Add {keyPlaceholder}</button>
         </div>
     );
 }

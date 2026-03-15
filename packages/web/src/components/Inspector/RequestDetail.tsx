@@ -10,12 +10,6 @@ interface Props {
     globalCookies: Record<string, string>;
 }
 
-/**
- * Escape characters that the browser interprets as HTML.
- * Applied BEFORE any <span> injection so user-controlled payload values
- * (e.g. <script>alert(1)</script> or <img onerror=alert(1)>)
- * are rendered as plain text and never executed.
- */
 function escapeHtml(s: string): string {
     return s
         .replace(/&/g, '&amp;')
@@ -23,25 +17,14 @@ function escapeHtml(s: string): string {
         .replace(/>/g, '&gt;');
 }
 
-/**
- * Syntax-highlight a pretty-printed JSON string.
- * The string is HTML-escaped first, so payload values cannot inject HTML.
- * After escaping, quote characters are still literal " (JSON.stringify output
- * doesn't produce &, < or > in key names, only in values).
- */
 function syntaxHighlight(json: string): string {
     const safe = escapeHtml(json);
     return safe
-        // Keys:  "key":
-        .replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span style="color:var(--color-info)">$1</span>:')
-        // String values:  : "value"
+        .replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span style="color:var(--accent-light)">$1</span>:')
         .replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span style="color:var(--color-success)">$1</span>')
-        // Numbers
         .replace(/:\s*(-?\d+\.?\d*)/g, ': <span style="color:var(--color-warning)">$1</span>')
-        // null / undefined / NaN
         .replace(/:\s*(null|undefined|NaN)/g, ': <span style="color:var(--color-error)">$1</span>')
-        // booleans
-        .replace(/:\s*(true|false)/g, ': <span style="color:var(--color-action)">$1</span>');
+        .replace(/:\s*(true|false)/g, ': <span style="color:var(--color-info)">$1</span>');
 }
 
 function joinUrl(base?: string, path?: string): string {
@@ -60,7 +43,6 @@ export function RequestDetail({
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
 
-    // Initial editable states
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = result.payload !== undefined
         ? (typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload, null, 2))
@@ -88,9 +70,7 @@ export function RequestDetail({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                onClose();
-            }
+            if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -98,15 +78,12 @@ export function RequestDetail({
 
     const handleReplay = async () => {
         if (!onReplay) return;
-
         setIsReplaying(true);
         try {
             let parsedBody = undefined;
-
             if (editedBody && editedBody.trim()) {
                 parsedBody = JSON.parse(editedBody);
             }
-
             const response = await onReplay({
                 url: editedUrl,
                 method: result.method,
@@ -114,7 +91,6 @@ export function RequestDetail({
                 cookies: { ...globalCookies },
                 body: parsedBody,
             });
-
             setLiveStatus(response.status);
             setLiveResponse(response.body);
         } catch (err) {
@@ -128,7 +104,6 @@ export function RequestDetail({
     let responseBodyJson = '';
     if (liveResponse !== undefined) {
         if (typeof liveResponse === 'string') {
-            // Try to pretty-print if it looks like JSON
             try {
                 const parsed = JSON.parse(liveResponse);
                 responseBodyJson = JSON.stringify(parsed, null, 2);
@@ -140,116 +115,78 @@ export function RequestDetail({
         }
     }
 
-    const statusColor =
-        liveStatus >= 500 ? 'var(--color-error)' :
-            liveStatus >= 400 ? 'var(--color-warning)' :
-                liveStatus > 0 ? 'var(--color-success)' :
-                    'var(--color-error)';
+    const statusClass =
+        liveStatus >= 500 ? 'status-5xx' :
+        liveStatus >= 400 ? 'status-4xx' :
+        liveStatus > 0 ? 'status-2xx' : 'status-5xx';
 
     return (
         <div className="modal-backdrop">
             <div className="modal-overlay" onClick={onClose} />
             <div className="modal-content">
-
-                {/* Header */}
                 <div className="modal-header">
-                    <div>
-                        <div className="detail-status" style={{ color: statusColor, fontSize: 'var(--font-size-2xl)' }}>
-                            {liveStatus || 'Error'}
+                    <div style={{ display:'flex', alignItems:'center', gap:'var(--space-4)' }}>
+                        <div className={`detail-status ${statusClass}`}>
+                            {liveStatus || 'ERR'}
                         </div>
-                        <div className="detail-meta" style={{ marginTop: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 600 }}>{result.method}</span>
-                            <span style={{ color: 'var(--text-muted)' }}> • {result.profile}</span>
-                            {/* We'll pass isLoading from App.tsx as a prop or just handle it here if we refactor more, for now just show if bodies are missing and it's from history */}
-                            {(result.payload === undefined && result.responseBody === undefined) && (
-                                <span style={{ color: 'var(--color-info)', fontSize: 10 }}>Loading details...</span>
-                            )}
+                        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <span className={`method method-${result.method.toLowerCase()}`} style={{ fontSize:'var(--font-size-md)' }}>
+                                    {result.method}
+                                </span>
+                                <span style={{ color:'var(--text-primary)', fontWeight:600 }}>{result.endpoint}</span>
+                            </div>
+                            <div style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>
+                                Profile: <span style={{ color:'var(--text-secondary)' }}>{result.profile}</span>
+                                { (result.payload === undefined && result.responseBody === undefined) && (
+                                    <span style={{ color:'var(--accent-light)', marginLeft:8 }}>· Loading full data...</span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleReplay}
-                            disabled={isReplaying}
-                        >
-                            {isReplaying ? '↺ Replaying...' : '↺ Replay Request'}
+                    <div style={{ display:'flex', gap:'var(--space-2)' }}>
+                        <button className="btn btn-primary" onClick={handleReplay} disabled={isReplaying}>
+                            {isReplaying ? '↺ Sending...' : '↺ Replay'}
                         </button>
-                        <button className="btn btn-ghost" onClick={onClose} style={{ fontSize: 20 }}>✕</button>
+                        <button className="btn btn-icon" onClick={onClose}>✕</button>
                     </div>
                 </div>
 
                 <div className="modal-split">
-                    {/* Left Panel: Request */}
                     <div className="modal-pane">
-                        <div className="detail-section-title">
-                            <span>Request URL</span>
-                        </div>
+                        <div className="detail-section-title">Request URL</div>
                         <input
-                            type="text"
+                            className="input"
+                            style={{ fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)', color:'var(--accent-light)' }}
                             value={editedUrl}
                             onChange={(e) => setEditedUrl(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: 'var(--space-3)',
-                                background: 'rgba(0,0,0,0.3)',
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 'var(--radius-md)',
-                                color: 'var(--color-action-hover)',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: 'var(--font-size-sm)',
-                                marginBottom: 'var(--space-4)'
-                            }}
                         />
 
-                        <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Request Payload (JSON)</span>
-                            <button
-                                className="btn btn-ghost"
-                                onClick={() => copy(editedBody, 'payload')}
-                                style={{ padding: '0 8px', height: 24, fontSize: 10 }}
-                            >
-                                {copied === 'payload' ? '✓ Copied!' : '📋 Copy'}
+                        <div className="detail-section-title" style={{ marginTop:'var(--space-4)', display:'flex', justifyContent:'space-between' }}>
+                            Payload
+                            <button className="btn btn-ghost btn-sm" onClick={() => copy(editedBody, 'payload')}>
+                                {copied === 'payload' ? '✓ Copied' : 'Copy'}
                             </button>
                         </div>
                         <textarea
+                            className="textarea"
+                            style={{ flex:1, margin:0, fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)' }}
                             value={editedBody}
                             onChange={(e) => setEditedBody(e.target.value)}
                             spellCheck={false}
-                            style={{
-                                width: '100%',
-                                flex: 1,
-                                padding: 'var(--space-4)',
-                                background: 'rgba(0,0,0,0.3)',
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 'var(--radius-md)',
-                                color: 'var(--text-primary)',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: 'var(--font-size-sm)',
-                                resize: 'none',
-                            }}
                         />
                     </div>
 
-                    {/* Right Panel: Response */}
                     <div className="modal-pane">
-                        <div className="detail-section-title">
-                            <span>Response Body</span>
+                        <div className="detail-section-title">Response Body</div>
+                        <div className="detail-json-wrapper">
+                            <pre
+                                className="detail-json"
+                                dangerouslySetInnerHTML={{ __html: responseBodyJson ? syntaxHighlight(responseBodyJson) : '<span style="color:var(--text-disabled)">No response</span>' }}
+                            />
                         </div>
-                        <pre
-                            className="detail-json"
-                            style={{
-                                flex: 1,
-                                margin: 0,
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-all',
-                                border: '1px solid var(--border-default)',
-                            }}
-                        >
-                            {responseBodyJson || 'No response body.'}
-                        </pre>
                     </div>
                 </div>
-
             </div>
         </div>
     );
