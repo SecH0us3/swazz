@@ -133,15 +133,6 @@ export function Sidebar({
                 )}
             </Section>
 
-            {/* Target URL */}
-            <Section title="Target">
-                <input
-                    className="input"
-                    value={config.base_url}
-                    placeholder="https://api.example.com"
-                    onChange={(e) => onUpdateConfig({ base_url: e.target.value })}
-                />
-            </Section>
 
             {/* Swagger/OpenAPI Loader */}
             <Section title="Swagger / OpenAPI" defaultOpen count={swaggerUrls.length}>
