@@ -1,8 +1,73 @@
 # ⚡️ swazz — Smart API Fuzzer
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?style=flat&logo=github)](https://github.com/SecH0us3/swazz)
+
 **swazz** is a modern, fast, and visual API Fuzzing tool. It automatically discovers your API surface by parsing Swagger/OpenAPI specifications and then blasts those endpoints with various unexpected, edge-case, and malicious inputs to identify breaking points, unhandled exceptions (5xx), and logic flaws.
 
 ![Dashboard Preview](docs/heatmap-preview.png) *(UI features a real-time Endpoints × Status Heatmap and Request Inspector)*
+
+---
+
+## 💻 CLI Usage
+
+The `swazz` CLI allows you to run fuzzing tests directly from your terminal. This is useful for CI/CD pipelines or automated security scans.
+
+1. **Configure your scan**:
+   Create a `swazz.config.json` file. You can see examples below or use [swazz.config.example.json](file:///Users/alex/src/swazz/swazz.config.example.json) as a template.
+
+### 📝 Configuration Examples
+
+#### Minimal Configuration
+```json
+{
+  "swagger_urls": ["https://petstore.swagger.io/v2/swagger.json"],
+  "base_url": "https://petstore.swagger.io/v2",
+  "settings": {
+    "iterations_per_profile": 10,
+    "profiles": ["RANDOM"]
+  }
+}
+```
+
+#### Full Configuration (with Auth & Rules)
+```json
+{
+  "swagger_urls": ["https://api.example.com/swagger.json"],
+  "base_url": "https://api.example.com",
+  "headers": {
+    "Authorization": "Bearer <your-token>"
+  },
+  "dictionaries": {
+    "username": ["admin", "guest"],
+    "productId": ["123", "456"]
+  },
+  "settings": {
+    "iterations_per_profile": 50,
+    "concurrency": 10,
+    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+  },
+  "rules": {
+    "ignore": [404, 401],
+    "defaults": {
+      "5xx": "error",
+      "timeout": "error"
+    }
+  }
+}
+```
+
+2. **Run the CLI locally**:
+   ```bash
+   # From the project root
+   cd packages/cli
+   npm start -- --config ../../swazz.config.json
+   ```
+
+3. **Options**:
+   - `-c, --config <path>`: Path to your configuration file (required).
+   - `-f, --format <fmt>`: Output format: `console`, `json`, `sarif` (default: `console`).
+   - `-o, --output <path>`: Write the report to a file.
+   - `-q, --quiet`: Suppress live progress output.
 
 ---
 
