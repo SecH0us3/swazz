@@ -68,6 +68,7 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
    - `-f, --format <fmt>`: Output format: `console`, `json`, `sarif` (default: `console`).
    - `-o, --output <path>`: Write the report to a file.
    - `-q, --quiet`: Suppress live progress output.
+   - `--fail-on-findings`: Exit with code 1 if findings are found (useful for CI).
 
 ---
 

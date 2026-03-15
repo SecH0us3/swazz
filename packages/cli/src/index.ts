@@ -27,6 +27,7 @@ function parseCliArgs(): CliOptions {
             format: { type: 'string', short: 'f', default: 'console' },
             output: { type: 'string', short: 'o' },
             quiet: { type: 'boolean', short: 'q', default: false },
+            'fail-on-findings': { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
         },
     });
@@ -44,6 +45,7 @@ Options:
   -f, --format <fmt>    Output format: console, json, sarif (default: console)
   -o, --output <path>   Write report to file (default: stdout for json/sarif)
   -q, --quiet           Suppress live progress output
+  --fail-on-findings    Exit with code 1 if findings are found (useful for CI)
   -h, --help            Show this help
 `);
         process.exit(values.help ? 0 : 1);
@@ -60,6 +62,7 @@ Options:
         format,
         output: values.output,
         quiet: values.quiet ?? false,
+        failOnFindings: values['fail-on-findings'] ?? false,
     };
 }
 
@@ -140,9 +143,12 @@ async function main(): Promise<void> {
         }
     }
 
-    // Exit with error code if there are error-level findings
+    // Exit with error code if there are error-level findings AND --fail-on-findings is set
     const hasErrors = findings.some(f => f.level === 'error');
-    process.exit(hasErrors ? 1 : 0);
+    if (hasErrors && !opts.failOnFindings) {
+        console.error('\nScan found potential issues. Use --fail-on-findings to exit with code 1 in CI environments.');
+    }
+    process.exit(hasErrors && opts.failOnFindings ? 1 : 0);
 }
 
 main().catch((err) => {

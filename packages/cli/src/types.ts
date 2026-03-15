@@ -62,4 +62,5 @@ export interface CliOptions {
     format: 'json' | 'sarif' | 'console';
     output?: string;
     quiet: boolean;
+    failOnFindings: boolean;
 }

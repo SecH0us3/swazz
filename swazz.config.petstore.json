@@ -1,0 +1,9 @@
+{
+  "swagger_urls": ["https://petstore.swagger.io/v2/swagger.json"],
+  "base_url": "https://petstore.swagger.io/v2",
+  "settings": {
+    "iterations_per_profile": 5,
+    "concurrency": 2,
+    "profiles": ["RANDOM"]
+  }
+}
