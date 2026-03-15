@@ -203,7 +203,7 @@ body::before {
 
 .app-layout {
   display: grid;
-  grid-template-rows: 52px 1fr;
+  grid-template-rows: auto 1fr;
   grid-template-areas:
     "header  header"
     "sidebar main";
@@ -241,11 +241,18 @@ body.resizing .sidebar-resizer {
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
-  align-items: center;
-  padding: 0 var(--space-4);
-  gap: var(--space-3);
+  flex-direction: column;
+  padding: 8px var(--space-4);
+  gap: var(--space-2);
   z-index: 50;
   position: relative;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 /* Accent underline */
@@ -306,10 +313,9 @@ body.resizing .sidebar-resizer {
   gap: var(--space-2);
   background: var(--bg-input);
   border: 1px solid var(--border-default);
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  flex: 1;
-  max-width: 520px;
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
+  width: 100%;
   transition:
     border-color var(--duration-fast),
     box-shadow var(--duration-fast),
@@ -1654,4 +1660,125 @@ body.resizing .sidebar-resizer {
 .tree-leaf-meta {
   font-size: 9.5px;
   color: var(--text-disabled);
+}
+
+/* ─── Responsive Adaptation ────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .stats-bar {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar, .config-sidebar {
+    position: fixed !important;
+    top: env(safe-area-inset-top, 0); /* Reset or adjust as needed */
+    margin-top: 104px; /* Approximate height of 2-row header */
+    bottom: 0 !important;
+    width: 280px !important;
+    z-index: 1000 !important;
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+    background: var(--bg-sidebar) !important;
+    transition: transform var(--duration-slow) var(--ease-out);
+    grid-area: auto !important;
+  }
+
+  .sidebar {
+    left: 0;
+    transform: translateX(-100%);
+    border-right: 1px solid var(--border-default);
+  }
+
+  .config-sidebar {
+    right: 0;
+    transform: translateX(100%);
+    border-left: 1px solid var(--border-default);
+  }
+
+  .sidebar.mobile-open,
+  .config-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .mobile-overlay {
+    position: fixed;
+    top: 104px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 900;
+  }
+
+  .main-content {
+    grid-template-columns: 1fr !important;
+    height: auto;
+  }
+
+  .stats-bar {
+    grid-template-columns: repeat(2, 1fr) !important;
+    padding: var(--space-4) !important;
+  }
+
+  .header-mobile-toggle {
+    display: flex !important;
+  }
+
+  .sidebar-resizer {
+    display: none !important;
+  }
+
+  .header-url-bar {
+    max-width: none !important;
+    width: 100%;
+    margin-top: var(--space-2);
+  }
+
+  .header-target-input {
+    font-size: 11px !important;
+  }
+
+  .logo-box span {
+    display: none; /* Hide 'swazz' text on very small screens if logo is present */
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-bar {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .header-url-bar {
+    display: flex; /* Keep it visible as it has its own row now */
+  }
+  
+  /* Show URL bar if needed, or just let it shrink */
+}
+
+/* Base style for mobile toggles */
+.header-mobile-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast);
+}
+
+.header-mobile-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }

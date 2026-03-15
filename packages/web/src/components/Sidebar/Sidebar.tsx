@@ -15,6 +15,7 @@ interface Props {
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
     onLoadEndpoints: (urls: string[]) => Promise<any>;
+    className?: string;
 }
 
 export function Sidebar({
@@ -26,6 +27,7 @@ export function Sidebar({
     onUpdateConfig,
     onToast,
     onLoadEndpoints,
+    className,
 }: Props) {
     const swaggerUrls: string[] = (config as any)._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
@@ -52,7 +54,7 @@ export function Sidebar({
     };
 
     return (
-        <aside className="sidebar">
+        <aside className={`sidebar ${className || ''}`}>
             {/* History */}
             <Section title="History" count={runs.length} defaultOpen={runs.length > 0}>
                 {runs.length === 0 ? (

@@ -107,6 +107,9 @@ export default function App() {
     const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
     const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
+
     // Active dataset (live or history) — only lightweight summaries
     const activeRows = loadedRunId ? historyRows : liveRows;
     const activeStats = loadedRunId ? historyStats : liveStats;
@@ -401,18 +404,31 @@ export default function App() {
                 onStop={stop}
                 onPause={pause}
                 onResume={resume}
+                onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+                onToggleConfig={() => setIsConfigOpen(!isConfigOpen)}
             />
 
             <Sidebar
+                className={isSidebarOpen ? 'mobile-open' : ''}
                 config={config}
                 runs={runs}
                 loadedRunId={loadedRunId}
-                onLoadRun={handleLoadRun}
+                onLoadRun={(id) => {
+                    handleLoadRun(id);
+                    setIsSidebarOpen(false);
+                }}
                 onDeleteRun={handleDeleteRun}
                 onUpdateConfig={updateConfig}
                 onToast={showToast}
                 onLoadEndpoints={loadEndpoints}
             />
+
+            {(isSidebarOpen || isConfigOpen) && (
+                <div className="mobile-overlay" onClick={() => {
+                    setIsSidebarOpen(false);
+                    setIsConfigOpen(false);
+                }} />
+            )}
 
             <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${configSidebarWidth}px` }}>
                 {/* Left: Dashboard + Results List */}
@@ -503,6 +519,7 @@ export default function App() {
                     )}
                 </div>
                 <ConfigSidebar
+                    className={isConfigOpen ? 'mobile-open' : ''}
                     config={config}
                     onUpdateHeaders={updateHeaders}
                     onUpdateCookies={updateCookies}

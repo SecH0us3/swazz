@@ -12,6 +12,7 @@ interface Props {
     onImportConfig: (json: string) => void;
     onExportConfig: () => string;
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
+    className?: string;
 }
 
 const ALL_PROFILES: FuzzingProfile[] = ['RANDOM', 'BOUNDARY', 'MALICIOUS'];
@@ -32,6 +33,7 @@ export function ConfigSidebar({
     onImportConfig,
     onExportConfig,
     onToast,
+    className,
 }: Props) {
     const fileRef = useRef<HTMLInputElement>(null);
     const [dictText, setDictText] = useState(JSON.stringify(config.dictionaries, null, 2));
@@ -79,7 +81,7 @@ export function ConfigSidebar({
     ];
 
     return (
-        <aside className="sidebar" style={{ gridArea:'unset', borderLeft:'1px solid var(--border-subtle)', borderRight:'none' }}>
+        <aside className={`config-sidebar ${className || ''}`} style={{ gridArea:'unset', borderLeft:'1px solid var(--border-subtle)', borderRight:'none' }}>
 
             {/* Profiles */}
             <Section title="Profiles">
