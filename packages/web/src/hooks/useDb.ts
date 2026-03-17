@@ -9,7 +9,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import type { RunStats } from '@swazz/core';
-import type { ResultSummary } from './useRunner.js';
+import { toSummary, type ResultSummary } from './useRunner.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -134,6 +134,78 @@ export function useDb() {
         setRuns((prev) => [run, ...prev.filter((r) => r.id !== run.id)]);
     }, [db]);
 
+    const importCliReport = useCallback(async (data: any) => {
+        if (!db) return;
+
+        // Basic validation of CLI JSON format
+        if (!data || data.tool !== 'swazz' || !Array.isArray(data.findings)) {
+            throw new Error('Invalid Swazz CLI report format');
+        }
+
+        const runId = `cli-${Date.now()}`;
+        const timestamp = new Date(data.timestamp).getTime() || Date.now();
+
+        // Map CLI summary to ScanRun stats
+        const endpointCounts: Record<string, Record<number, number>> = {};
+        const profileCounts = { RANDOM: 0, BOUNDARY: 0, MALICIOUS: 0 };
+
+        data.findings.forEach((f: any) => {
+            const key = `${f.method} ${f.endpoint}`;
+            if (!endpointCounts[key]) endpointCounts[key] = {};
+            endpointCounts[key][f.status] = (endpointCounts[key][f.status] || 0) + 1;
+            
+            if (f.profile in profileCounts) {
+                profileCounts[f.profile as keyof typeof profileCounts]++;
+            }
+        });
+
+        const stats: RunStats = {
+            totalRequests: data.summary?.totalRequests || data.findings.length,
+            totalPlanned: data.summary?.totalRequests || data.findings.length,
+            requestsPerSecond: 0,
+            statusCounts: data.summary?.statusCounts || {},
+            profileCounts,
+            endpointCounts,
+            startTime: timestamp,
+            isRunning: false,
+            progress: {
+                completedEndpoints: 0,
+                totalEndpoints: 0,
+                currentEndpoint: '',
+                currentProfile: '',
+            },
+        };
+
+        let baseUrl = 'CLI Import';
+        try {
+            if (data.findings[0]?.resolvedPath) {
+                baseUrl = new URL(data.findings[0].resolvedPath).origin;
+            }
+        } catch (e) {
+            // Fallback if resolvedPath is not a valid absolute URL
+        }
+
+        const run: ScanRun = {
+            id: runId,
+            startedAt: timestamp,
+            completedAt: timestamp + (data.summary?.durationSeconds || 0) * 1000,
+            baseUrl,
+            stats,
+        };
+
+        // Convert Findings to ResultSummary
+        const rows = data.findings.map((f: any) => toSummary({
+            ...f,
+            retries: f.retries || 0,
+        }));
+
+        await dbSaveRun(db, run);
+        await dbAppendResults(db, run.id, rows);
+        setRuns((prev) => [run, ...prev]);
+        
+        return { runId, run };
+    }, [db]);
+
     const getRunResults = useCallback(async (runId: string): Promise<ResultSummary[]> => {
         if (!db) return [];
         return dbGetRunResults(db, runId);
@@ -145,5 +217,5 @@ export function useDb() {
         setRuns((prev) => prev.filter((r) => r.id !== runId));
     }, [db]);
 
-    return { runs, saveRun, getRunResults, deleteRun };
+    return { runs, saveRun, importCliReport, getRunResults, deleteRun };
 }

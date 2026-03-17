@@ -15,6 +15,7 @@ interface Props {
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
     onLoadEndpoints: (urls: string[]) => Promise<any>;
+    onImportRun: (data: any) => Promise<{ runId: string, run: any } | undefined>;
     className?: string;
 }
 
@@ -27,10 +28,12 @@ export function Sidebar({
     onUpdateConfig,
     onToast,
     onLoadEndpoints,
+    onImportRun,
     className,
 }: Props) {
     const swaggerUrls: string[] = (config as any)._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const setSwaggerUrls = (urls: string[]) => {
         onUpdateConfig({ _swagger_urls: urls } as any);
@@ -53,10 +56,56 @@ export function Sidebar({
         setSwaggerUrls(swaggerUrls.filter((u) => u !== url));
     };
 
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const json = JSON.parse(evt.target?.result as string);
+                const result = await onImportRun(json);
+                if (result) {
+                    const { runId, run } = result;
+                    onToast('CLI Report imported successfully', 'success');
+                    (onLoadRun as any)(runId, run);
+                }
+            } catch (err) {
+                onToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
     return (
         <aside className={`sidebar ${className || ''}`}>
             {/* History */}
-            <Section title="History" count={runs.length} defaultOpen={runs.length > 0}>
+            <Section 
+                title="History" 
+                count={runs.length} 
+                defaultOpen={runs.length > 0}
+                action={
+                    <button 
+                        className="btn btn-ghost btn-sm" 
+                        style={{ padding: '2px 6px', height: 'auto', fontSize: 10 }}
+                        onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                        title="Import CLI Report (JSON)"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ marginRight: 4 }}>
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        Import
+                    </button>
+                }
+            >
+                <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    style={{ display: 'none' }} 
+                    accept=".json" 
+                    onChange={handleFileChange} 
+                />
                 {runs.length === 0 ? (
                     <div style={{ color:'var(--text-disabled)', fontSize:'var(--font-size-xs)', padding:'4px 0', fontStyle:'italic' }}>
                         No past scans yet

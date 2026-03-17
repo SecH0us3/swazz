@@ -6,11 +6,13 @@ export function Section({
     title,
     defaultOpen = true,
     count,
+    action,
     children,
 }: {
     title: string;
     defaultOpen?: boolean;
     count?: number;
+    action?: React.ReactNode;
     children: React.ReactNode;
 }) {
     const [open, setOpen] = useState(defaultOpen);
@@ -21,13 +23,16 @@ export function Section({
                 data-collapsed={!open}
                 onClick={() => setOpen(!open)}
             >
-                <span style={{ display:'flex', alignItems:'center' }}>
-                    {title}
-                    {count !== undefined && count > 0 && (
-                        <span className="section-count">{count}</span>
-                    )}
-                </span>
-                <span className="chevron">▶</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <span style={{ display:'flex', alignItems:'center' }}>
+                        <span className="chevron" style={{ marginRight: 6 }}>{open ? '▼' : '▶'}</span>
+                        {title}
+                        {count !== undefined && count > 0 && (
+                            <span className="section-count">{count}</span>
+                        )}
+                    </span>
+                    {action}
+                </div>
             </div>
             <div className="sidebar-section-content" data-collapsed={!open || undefined}>
                 {children}

@@ -87,7 +87,7 @@ export function previewResponse(value: any): string {
     return JSON.stringify(truncateResponseValues(value), null, 2);
 }
 
-function preview(value: any): string {
+export function preview(value: any): string {
     if (value === undefined || value === null) return '';
     if (typeof value === 'string') {
         if (value.length <= VALUE_LIMIT) return value;
@@ -96,7 +96,7 @@ function preview(value: any): string {
     return JSON.stringify(truncateValues(value), null, 2);
 }
 
-function toSummary(r: FuzzResult): ResultSummary {
+export function toSummary(r: FuzzResult): ResultSummary {
     return {
         id: r.id,
         timestamp: r.timestamp,
@@ -106,7 +106,7 @@ function toSummary(r: FuzzResult): ResultSummary {
         status: r.status,
         profile: r.profile,
         duration: r.duration,
-        retries: r.retries,
+        retries: r.retries || 0,
         payloadPreview: preview(r.payload),
         responsePreview: previewResponse(r.responseBody),
         error: r.error,
