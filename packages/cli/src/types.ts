@@ -57,9 +57,11 @@ export interface Finding {
 
 // ─── CLI Options (parsed from argv) ─────────────────────
 
+export type OutputFormat = 'json' | 'sarif' | 'html' | 'console';
+
 export interface CliOptions {
     config: string;
-    format: 'json' | 'sarif' | 'console';
+    format: OutputFormat[];
     output?: string;
     quiet: boolean;
     failOnFindings: boolean;

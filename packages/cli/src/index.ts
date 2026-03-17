@@ -17,8 +17,9 @@ import { Classifier } from './classifier.js';
 import { nodeSender } from './sender.js';
 import { toSarif } from './output/sarif.js';
 import { toJson } from './output/json.js';
+import { toHtml } from './output/html.js';
 import { printProgress, printSummary, clearProgress } from './output/console.js';
-import type { CliOptions, Finding } from './types.js';
+import type { CliOptions, Finding, OutputFormat } from './types.js';
 
 function parseCliArgs(): CliOptions {
     const { values } = parseArgs({
@@ -51,15 +52,19 @@ Options:
         process.exit(values.help ? 0 : 1);
     }
 
-    const format = values.format as CliOptions['format'];
-    if (!['console', 'json', 'sarif'].includes(format)) {
-        console.error(`Unknown format: ${format}. Use console, json, or sarif.`);
-        process.exit(1);
+    const formatStr = (values.format as string) || 'console';
+    const requestedFormats = formatStr.split(',').map(f => f.trim()) as OutputFormat[];
+    
+    for (const format of requestedFormats) {
+        if (!['console', 'json', 'sarif', 'html'].includes(format)) {
+            console.error(`Unknown format: ${format}. Use console, json, sarif, or html.`);
+            process.exit(1);
+        }
     }
 
     return {
         config: values.config,
-        format,
+        format: requestedFormats,
         output: values.output,
         quiet: values.quiet ?? false,
         failOnFindings: values['fail-on-findings'] ?? false,
@@ -126,20 +131,32 @@ async function main(): Promise<void> {
     printSummary(findings, stats);
 
     // Write output
-    let output: string | undefined;
+    for (const format of opts.format) {
+        if (format === 'console') continue;
 
-    if (opts.format === 'sarif') {
-        output = JSON.stringify(toSarif(findings), null, 2);
-    } else if (opts.format === 'json') {
-        output = JSON.stringify(toJson(findings, stats), null, 2);
-    }
+        let content: string | undefined;
+        let ext = format === 'sarif' ? 'sarif' : format;
 
-    if (output) {
-        if (opts.output) {
-            await writeFile(resolve(opts.output), output, 'utf-8');
-            console.error(`\nReport written to ${opts.output}`);
-        } else {
-            console.log(output);
+        if (format === 'sarif') {
+            content = JSON.stringify(toSarif(findings), null, 2);
+        } else if (format === 'json') {
+            content = JSON.stringify(toJson(findings, stats), null, 2);
+        } else if (format === 'html') {
+            content = toHtml(findings, stats);
+        }
+
+        if (content) {
+            if (opts.output) {
+                // If multiple formats, use output as base name
+                const finalPath = opts.format.filter(f => f !== 'console').length > 1
+                    ? `${opts.output}.${ext}`
+                    : opts.output;
+
+                await writeFile(resolve(finalPath), content, 'utf-8');
+                console.error(`\nReport written to ${finalPath}`);
+            } else {
+                console.log(content);
+            }
         }
     }
 
