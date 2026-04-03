@@ -101,6 +101,12 @@ export default function App() {
     const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
     const [historyRows, setHistoryRows] = useState<ResultSummary[]>([]);
     const [historyStats, setHistoryStats] = useState<RunStats | null>(null);
+    // Tracks the DB run ID for the *currently active* live fuzz run so we can
+    // read already-persisted results when the 500-row in-memory buffer rolls over.
+    const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+    // Results fetched from DB when the heatmap filter is applied during a live run
+    // and the in-memory buffer doesn't contain the target rows.
+    const [dbFilteredRows, setDbFilteredRows] = useState<ResultSummary[] | null>(null);
 
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
     const [toasts, setToasts] = useState<ToastData[]>([]);
@@ -112,7 +118,12 @@ export default function App() {
     const importFileInputRef = useRef<HTMLInputElement>(null);
 
     // Active dataset (live or history) — only lightweight summaries
-    const activeRows = loadedRunId ? historyRows : liveRows;
+    // During a live run with a heatmap filter active, we may use DB-fetched rows
+    // instead of the 500-row in-memory buffer to avoid showing 0 results.
+    const liveRowsForDisplay = (isRunning && heatmapFilter && dbFilteredRows !== null)
+        ? dbFilteredRows
+        : liveRows;
+    const activeRows = loadedRunId ? historyRows : liveRowsForDisplay;
     const activeStats = loadedRunId ? historyStats : liveStats;
 
     const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -193,6 +204,7 @@ export default function App() {
 
         // Clear UI state for new run
         setHeatmapFilter(null);
+        setDbFilteredRows(null);
         setSelectedResult(null);
         setLoadedRunId(null);
 
@@ -226,6 +238,7 @@ export default function App() {
         };
 
         const runId = `run_${Date.now()}`;
+        setCurrentRunId(runId);
         const runRec = {
             id: runId,
             startedAt: Date.now(),
@@ -260,6 +273,7 @@ export default function App() {
         const onComplete = (stats: RunStats) => {
             const completedRun = { ...runRec, completedAt: Date.now(), stats };
             saveRun(completedRun, pendingRows);
+            setCurrentRunId(null);
             showToast(`Scan saved to history`, 'success');
         };
 
@@ -282,6 +296,7 @@ export default function App() {
         setLoadedRunId(runId);
         setSelectedResult(null);
         setHeatmapFilter(null);
+        setDbFilteredRows(null);
         showToast(`Loaded ${rows.length} results from history`, 'success');
     };
 
@@ -530,8 +545,26 @@ export default function App() {
                                     stats={activeStats}
                                     endpointKeys={endpointKeys}
                                     heatmapFilter={heatmapFilter}
-                                    onHeatmapFilter={(filter) => {
+                                    onHeatmapFilter={async (filter) => {
                                         setHeatmapFilter(filter);
+                                        // During a live run the in-memory buffer (MAX_ROWS=500) may
+                                        // have evicted results for the clicked endpoint. Fetch them
+                                        // from IndexedDB so the user always sees the full picture.
+                                        if (filter && isRunning && currentRunId) {
+                                            const all = await getRunResults(currentRunId);
+                                            const matched = all.filter(
+                                                (r) =>
+                                                    r.method.toUpperCase() === filter.method.toUpperCase() &&
+                                                    r.endpoint === filter.path &&
+                                                    r.status === filter.status,
+                                            );
+                                            // Only use DB results if the buffer is missing some;
+                                            // if the buffer already has them all, keep liveRows
+                                            // so real-time updates still flow through.
+                                            setDbFilteredRows(matched.length > 0 ? matched : null);
+                                        } else {
+                                            setDbFilteredRows(null);
+                                        }
                                         if (filter) setActiveTab('logs');
                                     }}
                                     isRunning={isRunning}
