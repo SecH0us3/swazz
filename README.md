@@ -58,10 +58,30 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
 
 2. **Run the CLI locally**:
    ```bash
-   # From the project root
+   # 1. Clone the repository
+   git clone https://github.com/SecH0us3/swazz
+   cd swazz
+
+   # 2. Install all dependencies (run once in the project root)
+   npm install
+
+   # 3. Navigate to the CLI package
    cd packages/cli
+
+   # 4. Run a basic scan
+   # (The swazz.config.json file should be located in the project root)
    npm start -- --config ../../swazz.config.json
+
+   # 5. Generate reports in various formats (JSON, SARIF, HTML)
+   npm start -- --config ../../swazz.config.json --format json,html --output reports/scan
+
+   # 6. CI/CD mode (automatically fail the build if vulnerabilities are found)
+   npm start -- --config ../../swazz.config.json --fail-on-findings
    ```
+
+
+
+
 
 3. **Options**:
    - `-c, --config <path>`: Path to your configuration file (required).

@@ -42,9 +42,13 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                             <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
                                 Run Swazz locally against internal APIs or integrate it into your CI/CD pipeline to catch vulnerabilities before they reach production:
                             </p>
-                            <pre style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '14px', borderRadius: '6px', margin: '0 0 12px 0', fontSize: '12px', overflowX: 'auto', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                                <code><span style={{ color: 'var(--text-muted)' }}># Initialize configuration</span>{'\n'}npm run start --workspace=packages/cli -- init{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Run the fuzzer</span>{'\n'}npm run start --workspace=packages/cli -- run{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># View help options</span>{'\n'}npm run start --workspace=packages/cli -- --help</code>
+                            <pre style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '14px', borderRadius: '6px', margin: '0 0 12px 0', fontSize: '11px', overflowX: 'auto', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                                <code><span style={{ color: 'var(--text-muted)' }}># Clone the repository and install dependencies</span>{'\n'}git clone https://github.com/SecH0us3/swazz{'\n'}cd swazz{'\n'}npm install{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Navigate to CLI package and run scan</span>{'\n'}cd packages/cli{'\n'}npm start -- --config ../../swazz.config.json{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Generate a visual HTML report</span>{'\n'}npm start -- --config ../../swazz.config.json --format html -o report.html</code>
                             </pre>
+
+
+
+
                             <p style={{ margin: '0', fontSize: '12px', color: 'var(--text-muted)' }}>
                                 Tip: Use the <code style={{ color: 'var(--color-info)' }}>--fail-on-findings</code> flag in CI pipelines to automatically fail builds if security issues are discovered.
                             </p>
