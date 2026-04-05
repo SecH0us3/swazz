@@ -65,7 +65,7 @@ export function toSarif(findings: Finding[], toolVersion: string = '1.0.0'): any
                 driver: {
                     name: 'swazz',
                     version: toolVersion,
-                    informationUri: 'https://github.com/anthropics/swazz',
+                    informationUri: 'https://github.com/SecH0us3/swazz',
                     rules: [...rulesMap.values()],
                 },
             },

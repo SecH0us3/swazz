@@ -6,18 +6,26 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseSwaggerSpec, DEFAULT_SETTINGS } from '@swazz/core';
-import type { SwazzConfig, EndpointConfig } from '@swazz/core';
-import type { CliConfig } from './types.js';
+import type { SwazzConfig, EndpointConfig, SwazzSettings } from '@swazz/core';
+import type { CliConfig, RulesConfig } from './types.js';
 
 export async function loadConfig(configPath: string): Promise<{ cliConfig: CliConfig; runConfig: SwazzConfig }> {
     const fullPath = resolve(configPath);
-    const raw = await readFile(fullPath, 'utf-8');
-    const cliConfig: CliConfig = JSON.parse(raw);
-
-    // Validate required fields
-    if (!cliConfig.swagger_urls?.length) {
-        throw new Error('Config must include at least one swagger_urls entry');
+    let raw: string;
+    try {
+        raw = await readFile(fullPath, 'utf-8');
+    } catch {
+        throw new Error(`Cannot read config file: ${fullPath}`);
     }
+
+    let cliConfig: CliConfig;
+    try {
+        cliConfig = JSON.parse(raw);
+    } catch {
+        throw new Error(`Config file is not valid JSON: ${fullPath}`);
+    }
+
+    validateCliConfig(cliConfig);
 
     // Fetch and parse all swagger specs
     let allEndpoints: EndpointConfig[] = [];
@@ -62,25 +70,82 @@ export async function loadConfig(configPath: string): Promise<{ cliConfig: CliCo
     return { cliConfig, runConfig };
 }
 
+/**
+ * Quick-run loader: build a minimal CliConfig from a single Swagger URL.
+ * No config file needed — sensible defaults are applied.
+ */
+export async function loadConfigFromUrl(
+    swaggerUrl: string,
+    baseUrlOverride?: string,
+): Promise<{ cliConfig: CliConfig; runConfig: SwazzConfig }> {
+    const spec = await fetchSpec(swaggerUrl);
+    const parsed = parseSwaggerSpec(spec);
+
+    const basePath = baseUrlOverride || parsed.basePath;
+    if (!basePath) {
+        throw new Error(
+            'Could not determine base URL from spec. Use --base-url to provide one.',
+        );
+    }
+
+    const cliConfig: CliConfig = {
+        swagger_urls: [swaggerUrl],
+        base_url: basePath,
+    };
+
+    if (parsed.endpoints.length === 0) {
+        throw new Error('No endpoints found in the provided spec');
+    }
+
+    const settings = { ...DEFAULT_SETTINGS };
+
+    const runConfig: SwazzConfig = {
+        base_url: basePath,
+        global_headers: {},
+        cookies: {},
+        dictionaries: {},
+        settings,
+        endpoints: parsed.endpoints,
+    };
+
+    return { cliConfig, runConfig };
+}
+
 async function fetchSpec(url: string, headers?: Record<string, string>): Promise<any> {
     // Support local file paths
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        const raw = await readFile(resolve(url), 'utf-8');
-        return JSON.parse(raw);
+        let raw: string;
+        try {
+            raw = await readFile(resolve(url), 'utf-8');
+        } catch {
+            throw new Error(`Cannot read local spec file: ${url}`);
+        }
+        try {
+            return JSON.parse(raw);
+        } catch {
+            throw new Error(`Spec file is not valid JSON: ${url}`);
+        }
     }
 
-    const res = await fetch(url, {
-        headers: headers ?? {},
-    });
+    let res: Response;
+    try {
+        res = await fetch(url, { headers: headers ?? {} });
+    } catch (err) {
+        throw new Error(`Network error fetching spec from ${url}: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     if (!res.ok) {
         throw new Error(`Failed to fetch spec from ${url}: ${res.status} ${res.statusText}`);
     }
 
-    return res.json();
+    try {
+        return await res.json();
+    } catch {
+        throw new Error(`Spec at ${url} is not valid JSON`);
+    }
 }
 
-function filterEndpoints(
+export function filterEndpoints(
     endpoints: EndpointConfig[],
     filter: { include?: string[]; exclude?: string[] },
 ): EndpointConfig[] {
@@ -111,4 +176,84 @@ function matchPattern(value: string, pattern: string): boolean {
         .replace(/\*/g, '[^/]*')
         .replace(/<<<DOUBLESTAR>>>/g, '.*');
     return new RegExp(`^${regex}$`).test(value);
+}
+
+// ─── Config validation ───────────────────────────────────────
+
+function validateCliConfig(cfg: any): asserts cfg is CliConfig {
+    if (!cfg || typeof cfg !== 'object') {
+        throw new Error('Config must be a JSON object');
+    }
+
+    if (!Array.isArray(cfg.swagger_urls) || cfg.swagger_urls.length === 0) {
+        throw new Error('Config must include at least one "swagger_urls" entry (array of strings)');
+    }
+
+    for (const u of cfg.swagger_urls) {
+        if (typeof u !== 'string') {
+            throw new Error('"swagger_urls" entries must be strings');
+        }
+    }
+
+    if (cfg.base_url !== undefined && typeof cfg.base_url !== 'string') {
+        throw new Error('"base_url" must be a string');
+    }
+
+    if (cfg.headers !== undefined && !isStringRecord(cfg.headers)) {
+        throw new Error('"headers" must be an object with string values');
+    }
+
+    if (cfg.cookies !== undefined && !isStringRecord(cfg.cookies)) {
+        throw new Error('"cookies" must be an object with string values');
+    }
+
+    if (cfg.settings !== undefined) {
+        validateSettings(cfg.settings);
+    }
+
+    if (cfg.endpoints !== undefined) {
+        const ep = cfg.endpoints;
+        if (typeof ep !== 'object' || Array.isArray(ep)) {
+            throw new Error('"endpoints" must be an object with optional "include" and "exclude" arrays');
+        }
+        if (ep.include !== undefined && !isStringArray(ep.include)) {
+            throw new Error('"endpoints.include" must be an array of strings');
+        }
+        if (ep.exclude !== undefined && !isStringArray(ep.exclude)) {
+            throw new Error('"endpoints.exclude" must be an array of strings');
+        }
+    }
+}
+
+function validateSettings(s: any): void {
+    const numFields: Array<keyof SwazzSettings> = [
+        'iterations_per_profile', 'concurrency', 'timeout_ms',
+        'max_payload_size_bytes', 'delay_between_requests_ms',
+    ];
+    for (const field of numFields) {
+        if (s[field] !== undefined && typeof s[field] !== 'number') {
+            throw new Error(`"settings.${field}" must be a number, got ${JSON.stringify(s[field])}`);
+        }
+    }
+
+    if (s.profiles !== undefined) {
+        if (!Array.isArray(s.profiles)) {
+            throw new Error('"settings.profiles" must be an array');
+        }
+        const valid = new Set(['RANDOM', 'BOUNDARY', 'MALICIOUS']);
+        for (const p of s.profiles) {
+            if (!valid.has(p)) {
+                throw new Error(`"settings.profiles" contains unknown profile "${p}". Valid: RANDOM, BOUNDARY, MALICIOUS`);
+            }
+        }
+    }
+}
+
+function isStringRecord(v: any): boolean {
+    return typeof v === 'object' && !Array.isArray(v) && v !== null &&
+        Object.values(v).every(x => typeof x === 'string');
+}
+
+function isStringArray(v: any): boolean {
+    return Array.isArray(v) && v.every(x => typeof x === 'string');
 }

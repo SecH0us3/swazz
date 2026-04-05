@@ -60,9 +60,17 @@ export interface Finding {
 export type OutputFormat = 'json' | 'sarif' | 'html' | 'console';
 
 export interface CliOptions {
-    config: string;
+    config?: string;
+    /** Quick-run: Swagger spec URL, no config file needed */
+    url?: string;
+    /** Override base URL when using --url */
+    baseUrl?: string;
     format: OutputFormat[];
     output?: string;
     quiet: boolean;
     failOnFindings: boolean;
+    /** Endpoint glob patterns to include (merged with config) */
+    include: string[];
+    /** Endpoint glob patterns to exclude (merged with config) */
+    exclude: string[];
 }
