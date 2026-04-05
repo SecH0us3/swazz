@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "npm run dev --workspace=packages/web",
     "dev:worker": "npm run dev --workspace=packages/worker",
-    "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/web",
+    "build": "npm run build --workspace=packages/web",
     "test": "npm run test --workspace=packages/core",
     "deploy:worker": "npm run deploy --workspace=packages/worker",
     "deploy:web": "npm run deploy --workspace=packages/web"
