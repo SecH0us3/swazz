@@ -133,6 +133,10 @@ function extractParamsSchema(params: any[]): SchemaProperty | null {
             type: param.type || param.schema?.type || 'string',
             format: param.format || param.schema?.format,
             enum: param.enum || param.schema?.enum,
+            // Preserve nested schemas so the generator can produce correct values
+            // for array and object query parameters.
+            items: param.items || param.schema?.items,
+            properties: param.properties || param.schema?.properties,
         };
     }
 
@@ -163,15 +167,28 @@ function extractPathParams(params: any[]): Record<string, SchemaProperty> {
 }
 
 /**
- * Resolve $ref references in a schema (simple, 1-level deep).
+ * Resolve $ref references in a schema with cycle detection.
+ * `seenRefs` tracks all $ref strings currently on the call stack; if we
+ * encounter the same ref again we return a safe fallback to prevent
+ * Maximum Call Stack Size Exceeded errors on circular specs.
  */
-function resolveSchema(schema: any, spec: any): SchemaProperty {
+function resolveSchema(
+    schema: any,
+    spec: any,
+    seenRefs: Set<string> = new Set(),
+): SchemaProperty {
     if (!schema) return { type: 'object', properties: {} };
 
-    // Handle $ref
+    // Handle $ref with cycle detection
     if (schema.$ref) {
+        if (seenRefs.has(schema.$ref)) {
+            // Circular reference — return a safe fallback
+            return { type: 'object' };
+        }
+        const nextSeen = new Set(seenRefs);
+        nextSeen.add(schema.$ref);
         const resolved = resolveRef(schema.$ref, spec);
-        if (resolved) return resolveSchema(resolved, spec);
+        if (resolved) return resolveSchema(resolved, spec, nextSeen);
         return { type: 'object', properties: {} };
     }
 
@@ -186,7 +203,7 @@ function resolveSchema(schema: any, spec: any): SchemaProperty {
         result.type = 'object';
         result.properties = {};
         for (const [key, propSchema] of Object.entries(schema.properties as Record<string, any>)) {
-            result.properties[key] = resolveSchema(propSchema, spec);
+            result.properties[key] = resolveSchema(propSchema, spec, seenRefs);
         }
     }
 
@@ -195,7 +212,7 @@ function resolveSchema(schema: any, spec: any): SchemaProperty {
         result.type = 'object';
         result.properties = result.properties || {};
         for (const sub of schema.allOf) {
-            const resolved = resolveSchema(sub, spec);
+            const resolved = resolveSchema(sub, spec, seenRefs);
             if (resolved.properties) {
                 Object.assign(result.properties, resolved.properties);
             }
@@ -205,7 +222,7 @@ function resolveSchema(schema: any, spec: any): SchemaProperty {
     // Array items
     if (schema.items) {
         result.type = 'array';
-        result.items = resolveSchema(schema.items, spec);
+        result.items = resolveSchema(schema.items, spec, seenRefs);
     }
 
     return result;

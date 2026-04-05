@@ -46,6 +46,36 @@ function fillPathParams(
 const MAX_RETRIES_ON_429 = 3;
 const DEFAULT_BACKOFF_MS = 2000;
 
+/**
+ * Lightweight semaphore for concurrency control — avoids busy-wait polling.
+ * Waiters are queued and resolved in FIFO order as slots become available.
+ */
+class Semaphore {
+    private _available: number;
+    private _waiters: Array<() => void> = [];
+
+    constructor(concurrency: number) {
+        this._available = concurrency;
+    }
+
+    async acquire(): Promise<void> {
+        if (this._available > 0) {
+            this._available--;
+            return;
+        }
+        await new Promise<void>((resolve) => this._waiters.push(resolve));
+    }
+
+    release(): void {
+        const next = this._waiters.shift();
+        if (next) {
+            next();
+        } else {
+            this._available++;
+        }
+    }
+}
+
 export class FuzzRunner {
     private config: SwazzConfig;
     private sendRequest: SendRequestFn;
@@ -92,11 +122,11 @@ export class FuzzRunner {
         // Pre-calculate total planned requests for progress
         let totalPlanned = 0;
         for (const endpoint of endpoints) {
-            const hasFields = endpoint.schema?.properties &&
-                Object.keys(endpoint.schema.properties).length > 0;
-            const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(
-                endpoint.method.toUpperCase(),
-            );
+            const hasFields =
+                (endpoint.schema?.properties &&
+                    Object.keys(endpoint.schema.properties).length > 0) ||
+                (endpoint.pathParams !== undefined &&
+                    Object.keys(endpoint.pathParams).length > 0);
             const effectiveIter = hasFields ? iterations : 1;
             totalPlanned += profiles.length * effectiveIter;
         }
@@ -113,8 +143,11 @@ export class FuzzRunner {
                 this._stats.progress.completedEndpoints = epIdx;
 
                 // Determine if endpoint has fields to fuzz
-                const hasFields = endpoint.schema?.properties &&
-                    Object.keys(endpoint.schema.properties).length > 0;
+                const hasFields =
+                    (endpoint.schema?.properties &&
+                        Object.keys(endpoint.schema.properties).length > 0) ||
+                    (endpoint.pathParams !== undefined &&
+                        Object.keys(endpoint.pathParams).length > 0);
                 const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(
                     endpoint.method.toUpperCase(),
                 );
@@ -134,9 +167,9 @@ export class FuzzRunner {
                     // Heavy profiles run sequentially to keep memory bounded
                     const profileConcurrency = HEAVY_PROFILES.has(profile) ? 1 : concurrency;
 
-                    // Process iterations with concurrency control
+                    // Process iterations with semaphore-based concurrency control
                     const tasks: Promise<void>[] = [];
-                    let activeCount = 0;
+                    const semaphore = new Semaphore(profileConcurrency);
                     const seenHashes = new Set<number>();
 
                     for (let i = 0; i < effectiveIterations; i++) {
@@ -169,6 +202,8 @@ export class FuzzRunner {
 
                         if (isDuplicate) {
                             // Exhausted retries or it's a static request we already sent — skip it to avoid identical spam
+                            // Keep progress math accurate by removing the skipped request from the total.
+                            this._stats.totalPlanned--;
                             continue;
                         }
                         seenHashes.add(payloadHash);
@@ -179,10 +214,8 @@ export class FuzzRunner {
                         }
                         if (this._shouldStop) break;
 
-                        // Concurrency limiter
-                        while (activeCount >= profileConcurrency) {
-                            await this.sleep(10);
-                        }
+                        // Acquire semaphore slot (efficient — no busy-wait)
+                        await semaphore.acquire();
 
                         // Substitute path parameters for this iteration
                         const resolvedPath = fillPathParams(
@@ -191,7 +224,6 @@ export class FuzzRunner {
                             generator,
                         );
 
-                        activeCount++;
                         const taskPromise = (async () => {
                             try {
                                 const result = await this.executeRequest(
@@ -213,7 +245,7 @@ export class FuzzRunner {
                                 const error = err instanceof Error ? err : new Error(String(err));
                                 this.onError(error);
                             } finally {
-                                activeCount--;
+                                semaphore.release();
                             }
                         })();
 
@@ -324,14 +356,20 @@ export class FuzzRunner {
                     body: payload,
                 });
 
-                // Race against timeout
+                // Race against timeout — use a clearable timer to prevent memory leaks.
                 const response = timeoutMs > 0
-                    ? await Promise.race([
-                        requestPromise,
-                        this.sleep(timeoutMs).then(() => {
-                            throw new Error(`Request timed out after ${timeoutMs}ms`);
-                        }),
-                    ])
+                    ? await ((): Promise<Awaited<typeof requestPromise>> => {
+                        let timerId: ReturnType<typeof setTimeout>;
+                        const timeoutPromise = new Promise<never>((_resolve, reject) => {
+                            timerId = (globalThis as any).setTimeout(
+                                () => reject(new Error(`Request timed out after ${timeoutMs}ms`)),
+                                timeoutMs,
+                            );
+                        });
+                        return Promise.race([requestPromise, timeoutPromise]).finally(() => {
+                            (globalThis as any).clearTimeout(timerId);
+                        });
+                    })()
                     : await requestPromise;
 
                 // Handle rate limiting with automatic backoff
