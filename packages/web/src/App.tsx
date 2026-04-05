@@ -184,8 +184,8 @@ export default function App() {
         return null;
     }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
 
-    const handleStart = async () => {
-        const swaggerUrls: string[] = (config as any)._swagger_urls || [];
+    const handleStart = async (overrideUrls?: string[]) => {
+        const swaggerUrls: string[] = overrideUrls || (config as any)._swagger_urls || [];
 
         if (swaggerUrls.length === 0 && config.endpoints.length === 0) {
             showToast('Add at least one Swagger URL to begin', 'error');
@@ -201,11 +201,17 @@ export default function App() {
         let finalBaseUrl = config.base_url;
 
         // If we have Swagger URLs and no endpoints loaded yet (or just refreshing), load them
-        if (swaggerUrls.length > 0 && config.endpoints.length === 0) {
+        if (overrideUrls || (swaggerUrls.length > 0 && config.endpoints.length === 0)) {
             const loaded = await loadEndpoints(swaggerUrls);
             if (loaded) {
                 finalEndpoints = loaded.allEndpoints;
                 finalBaseUrl = loaded.detectedBaseUrl;
+                if (overrideUrls) {
+                    updateConfig({
+                        base_url: finalBaseUrl,
+                        _swagger_urls: swaggerUrls,
+                    } as any);
+                }
             } else {
                 return; // Error toast already shown in loadEndpoints
             }
@@ -412,7 +418,7 @@ export default function App() {
                 isRunning={isBusy}
                 isPaused={isPaused}
                 isLoadingSpecs={isLoadingSpecs}
-                onStart={handleStart}
+                onStart={() => handleStart()}
                 onStop={stop}
                 onPause={pause}
                 onResume={resume}
@@ -475,6 +481,18 @@ export default function App() {
                                 <div className="empty-state-title">Ready to fuzz</div>
                                 <div className="empty-state-text">
                                     Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color:'var(--accent-light)' }}>Run Fuzz Test</strong>.
+                                </div>
+                                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <button 
+                                        className="btn btn-primary"
+                                        style={{ padding: '8px 16px', fontSize: '14px' }}
+                                        onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
+                                    >
+                                        Try Petstore Demo
+                                    </button>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
+                                        Automatically loads endpoints and runs a quick fuzz test
+                                    </div>
                                 </div>
                             </div>
                         </div>
