@@ -126,7 +126,9 @@ export class FuzzRunner {
                 (endpoint.schema?.properties &&
                     Object.keys(endpoint.schema.properties).length > 0) ||
                 (endpoint.pathParams !== undefined &&
-                    Object.keys(endpoint.pathParams).length > 0);
+                    Object.keys(endpoint.pathParams).length > 0) ||
+                (endpoint.headerParams !== undefined &&
+                    Object.keys(endpoint.headerParams).length > 0);
             const effectiveIter = hasFields ? iterations : 1;
             totalPlanned += profiles.length * effectiveIter;
         }
@@ -147,8 +149,10 @@ export class FuzzRunner {
                     (endpoint.schema?.properties &&
                         Object.keys(endpoint.schema.properties).length > 0) ||
                     (endpoint.pathParams !== undefined &&
-                        Object.keys(endpoint.pathParams).length > 0);
-                const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(
+                        Object.keys(endpoint.pathParams).length > 0) ||
+                    (endpoint.headerParams !== undefined &&
+                        Object.keys(endpoint.headerParams).length > 0);
+                const isBodyMethod = !['GET', 'HEAD', 'OPTIONS'].includes(
                     endpoint.method.toUpperCase(),
                 );
 
@@ -226,6 +230,18 @@ export class FuzzRunner {
 
                         const taskPromise = (async () => {
                             try {
+                                // Generate header params for this specific iteration
+                                const generatedHeaders: Record<string, string> = {};
+                                if (endpoint.headerParams && Object.keys(endpoint.headerParams).length > 0) {
+                                    const headerObj = generator.buildObject({
+                                        type: 'object',
+                                        properties: endpoint.headerParams,
+                                    });
+                                    for (const [k, v] of Object.entries(headerObj)) {
+                                        generatedHeaders[k] = String(v);
+                                    }
+                                }
+
                                 const result = await this.executeRequest(
                                     base_url,
                                     resolvedPath,
@@ -236,6 +252,8 @@ export class FuzzRunner {
                                     payload,
                                     profile,
                                     queryParams,
+                                    generatedHeaders,
+                                    endpoint.contentType,
                                 );
 
                                 this.updateStats(result);
@@ -319,6 +337,8 @@ export class FuzzRunner {
         payload: any,
         profile: FuzzingProfile,
         queryParams?: Record<string, any>,
+        generatedHeaders: Record<string, string> = {},
+        contentType?: string,
     ): Promise<FuzzResult> {
         let url = baseUrl.replace(/\/$/, '') + resolvedPath;
 
@@ -330,17 +350,19 @@ export class FuzzRunner {
             url += (url.includes('?') ? '&' : '?') + qs;
         }
 
-        // Build final headers: user headers take precedence.
-        // Auto-inject Content-Type: application/json for body requests unless user already set one.
-        const isBodyMethod = !['GET', 'HEAD', 'DELETE', 'OPTIONS'].includes(method.toUpperCase());
-        const hasContentType = Object.keys(headers).some(
+        // Build final headers:
+        // Priority (high → low): user global_headers > generated header-param values > auto Content-Type
+        const isBodyMethod = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
+        const mergedHeaders = { ...generatedHeaders, ...headers };
+        const hasContentType = Object.keys(mergedHeaders).some(
             (k) => k.toLowerCase() === 'content-type',
         );
+        const effectiveContentType = contentType ?? 'application/json';
         const finalHeaders: Record<string, string> = {
             ...(isBodyMethod && payload !== undefined && !hasContentType
-                ? { 'Content-Type': 'application/json' }
+                ? { 'Content-Type': effectiveContentType }
                 : {}),
-            ...headers,
+            ...mergedHeaders,
         };
 
         // 429 backoff loop

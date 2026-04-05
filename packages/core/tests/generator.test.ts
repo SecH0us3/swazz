@@ -14,16 +14,31 @@ const uuidSchema: SchemaProperty = { type: 'string', format: 'uuid' };
 const dateSchema: SchemaProperty = { type: 'string', format: 'date-time' };
 const enumSchema: SchemaProperty = { enum: ['a', 'b', 'c'] };
 
-// ─── Enum always wins ────────────────────────────────────────
+// ─── Enum handling ───────────────────────────────────────────
 
 describe('SmartPayloadGenerator.generate — enum', () => {
-    it('always returns a value from enum regardless of profile', () => {
-        for (const profile of ['RANDOM', 'BOUNDARY', 'MALICIOUS'] as const) {
+    it('RANDOM profile always returns a value from enum', () => {
+        const gen = new SmartPayloadGenerator({}, 'RANDOM');
+        for (let i = 0; i < 30; i++) {
+            const v = gen.generate('status', enumSchema);
+            expect(['a', 'b', 'c']).toContain(v);
+        }
+    });
+
+    it('MALICIOUS/BOUNDARY profiles may bypass enum (30% probability) and return a non-enum value', () => {
+        // Run enough iterations to statistically guarantee at least one bypass fires.
+        // With 30% bypass chance over 200 iterations the probability of zero bypasses is < 1e-29.
+        for (const profile of ['BOUNDARY', 'MALICIOUS'] as const) {
             const gen = new SmartPayloadGenerator({}, profile);
-            for (let i = 0; i < 30; i++) {
+            let bypassSeen = false;
+            for (let i = 0; i < 200; i++) {
                 const v = gen.generate('status', enumSchema);
-                expect(['a', 'b', 'c']).toContain(v);
+                if (!['a', 'b', 'c'].includes(v)) {
+                    bypassSeen = true;
+                    break;
+                }
             }
+            expect(bypassSeen, `Expected at least one bypass for profile ${profile}`).toBe(true);
         }
     });
 });

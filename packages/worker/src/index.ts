@@ -72,11 +72,22 @@ app.post('/proxy', async (c) => {
 
     const startTime = Date.now();
 
+    // Serialize request body based on Content-Type
+    let requestBody: string | undefined;
+    if (req.body !== undefined) {
+        const reqContentType = finalHeaders['Content-Type'] || finalHeaders['content-type'] || '';
+        if (reqContentType.includes('x-www-form-urlencoded') && typeof req.body === 'object' && req.body !== null) {
+            requestBody = new URLSearchParams(req.body as Record<string, string>).toString();
+        } else {
+            requestBody = JSON.stringify(req.body);
+        }
+    }
+
     try {
         const response = await fetch(req.url, {
             method: req.method || 'POST',
             headers: finalHeaders,
-            body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+            body: requestBody,
         });
 
         const duration = Date.now() - startTime;

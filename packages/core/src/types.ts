@@ -10,6 +10,8 @@ export interface SchemaProperty {
     enum?: any[];
     properties?: Record<string, SchemaProperty>;
     items?: SchemaProperty;
+    /** List of required property keys (mirrors JSON Schema "required" array). */
+    required?: string[];
 }
 
 // ─── Dictionary ─────────────────────────────────────────
@@ -24,6 +26,10 @@ export interface EndpointConfig {
     schema: SchemaProperty;
     /** Schemas for {param} placeholders in the path (e.g. /users/{id}) */
     pathParams?: Record<string, SchemaProperty>;
+    /** Schemas for header parameters to be fuzzed (in: 'header' params from spec). */
+    headerParams?: Record<string, SchemaProperty>;
+    /** Content-Type for the request body (e.g. 'application/x-www-form-urlencoded'). */
+    contentType?: string;
 }
 
 // ─── Settings ───────────────────────────────────────────

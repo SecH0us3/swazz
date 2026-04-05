@@ -18,10 +18,21 @@ export const nodeSender: SendRequestFn = async (req) => {
         headers.set('cookie', existing ? `${existing}; ${newCookies}` : newCookies);
     }
 
+    // Serialize request body based on Content-Type
+    let requestBody: string | undefined;
+    if (req.body !== undefined) {
+        const reqContentType = headers.get('content-type') ?? '';
+        if (reqContentType.includes('x-www-form-urlencoded') && typeof req.body === 'object' && req.body !== null) {
+            requestBody = new URLSearchParams(req.body as Record<string, string>).toString();
+        } else {
+            requestBody = JSON.stringify(req.body);
+        }
+    }
+
     const res = await fetch(req.url, {
         method: req.method,
         headers,
-        body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        body: requestBody,
     });
 
     const duration = Date.now() - start;

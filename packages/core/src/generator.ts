@@ -38,9 +38,15 @@ export class SmartPayloadGenerator {
      * Priority: enum → dictionary → format-aware → profile-based
      */
     public generate(propertyName: string, schema: SchemaProperty): any {
-        // 1. Enum — always respect explicit enum values
+        // 1. Enum — respect explicit enum values, but allow bypass in security profiles
         if (schema.enum && schema.enum.length > 0) {
-            return rand.pick(schema.enum);
+            const shouldBypass =
+                (this.profile === 'MALICIOUS' || this.profile === 'BOUNDARY') &&
+                Math.random() < 0.3;
+            if (!shouldBypass) {
+                return rand.pick(schema.enum);
+            }
+            // Fall through to standard profile-based generation to probe out-of-spec values
         }
 
         // 2. User dictionary (highest priority after enum)
@@ -62,10 +68,26 @@ export class SmartPayloadGenerator {
         const payload: Record<string, any> = {};
 
         for (const [key, propSchema] of Object.entries(schema.properties)) {
+            const isRequired = schema.required?.includes(key) ?? false;
+
+            // 30% chance to omit optional fields in intensive profiles
+            if (
+                !isRequired &&
+                (this.profile === 'BOUNDARY' || this.profile === 'MALICIOUS') &&
+                Math.random() < 0.3
+            ) {
+                continue;
+            }
+
+            // 5% chance to omit REQUIRED fields in MALICIOUS profile to test server validation
+            if (isRequired && this.profile === 'MALICIOUS' && Math.random() < 0.05) {
+                continue;
+            }
+
             if (propSchema.type === 'object' && propSchema.properties) {
                 payload[key] = this.buildObject(propSchema);
             } else if (propSchema.type === 'array' && propSchema.items) {
-                const count = this.getArraySize();
+                const count = this.getArraySize(propSchema.items);
                 payload[key] = Array.from({ length: count }, () =>
                     propSchema.items!.type === 'object'
                         ? this.buildObject(propSchema.items!)
@@ -81,9 +103,11 @@ export class SmartPayloadGenerator {
 
     // ─── Private ────────────────────────────────────────────
 
-    private getArraySize(): number {
+    private getArraySize(itemSchema?: SchemaProperty): number {
         if (this.profile === 'BOUNDARY') {
-            return rand.pick(BOUNDARY_ARRAY_SIZES);
+            const size = rand.pick(BOUNDARY_ARRAY_SIZES);
+            // Cap complex object arrays to prevent OOM; primitives can be huge
+            return itemSchema?.type === 'object' ? Math.min(size, 50) : size;
         }
         return rand.int(1, 5);
     }
