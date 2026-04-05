@@ -111,7 +111,6 @@ export default function App() {
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
-    const importFileInputRef = useRef<HTMLInputElement>(null);
 
     // Active dataset (live or history) — only lightweight summaries
     const activeRows = loadedRunId ? historyRows : liveRows;
@@ -307,27 +306,7 @@ export default function App() {
         showToast('Run deleted', 'success');
     };
 
-    const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-            try {
-                const json = JSON.parse(evt.target?.result as string);
-                const result = await importCliReport(json);
-                if (result) {
-                    const { runId, run } = result;
-                    showToast('CLI Report imported successfully', 'success');
-                    handleLoadRun(runId, run);
-                }
-            } catch (err) {
-                showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
-            }
-        };
-        reader.readAsText(file);
-        e.target.value = '';
-    };
 
     const handleExport = () => {
         if (activeRows.length === 0) {
@@ -584,35 +563,6 @@ export default function App() {
                 ))}
             </div>
 
-            {/* Floating Import Button */}
-            <div style={{ position: 'fixed', bottom: 80, right: 16, zIndex: 150 }}>
-                <button 
-                    className="btn btn-primary" 
-                    style={{ 
-                        boxShadow: '0 4px 20px rgba(124,58,237,0.5)',
-                        padding: '10px 18px',
-                        borderRadius: 'var(--radius-full)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        fontWeight: 600,
-                        border: '1px solid rgba(255,255,255,0.2)'
-                    }}
-                    onClick={() => importFileInputRef.current?.click()}
-                >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    Import CLI Report
-                </button>
-                <input 
-                    type="file" 
-                    ref={importFileInputRef} 
-                    style={{ display: 'none' }} 
-                    accept=".json" 
-                    onChange={handleImportFile} 
-                />
-            </div>
 
             <div
                 className="sidebar-resizer"

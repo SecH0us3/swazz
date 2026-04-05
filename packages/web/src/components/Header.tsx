@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface Props {
     baseUrl: string;
@@ -27,6 +27,28 @@ export function Header({
     onToggleSidebar,
     onToggleConfig,
 }: Props) {
+    const [localUrl, setLocalUrl] = useState(baseUrl);
+
+    useEffect(() => {
+        setLocalUrl(baseUrl);
+    }, [baseUrl]);
+
+    const handleUrlCommit = (val: string) => {
+        let cleanUrl = val.trim();
+        if (!cleanUrl) {
+            if (onChangeBaseUrl) onChangeBaseUrl('');
+            setLocalUrl('');
+            return;
+        }
+        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
+            cleanUrl = `https://${cleanUrl}`;
+        }
+        setLocalUrl(cleanUrl);
+        if (onChangeBaseUrl && cleanUrl !== baseUrl) {
+            onChangeBaseUrl(cleanUrl);
+        }
+    };
+
     return (
         <header className="header">
             {/* Top Row: Logo, Status, Actions, Toggles */}
@@ -132,8 +154,15 @@ export function Header({
                     </svg>
                     <input
                         className="header-target-input"
-                        value={baseUrl}
-                        onChange={(e) => onChangeBaseUrl?.(e.target.value)}
+                        value={localUrl}
+                        onChange={(e) => setLocalUrl(e.target.value)}
+                        onBlur={() => handleUrlCommit(localUrl)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                handleUrlCommit(localUrl);
+                                e.currentTarget.blur();
+                            }
+                        }}
                         placeholder="https://api.example.com"
                         readOnly={!onChangeBaseUrl}
                     />
@@ -144,6 +173,19 @@ export function Header({
                     )}
                 </div>
             )}
+            {isRunning && !isLoadingSpecs && (
+                <div style={{ height: '2px', width: '100%', background: 'var(--bg-surface)', overflow: 'hidden', position: 'absolute', bottom: 0, left: 0 }}>
+                    <div style={{ width: '30%', height: '100%', background: 'var(--color-success)', animation: 'progress-indeterminate 1.5s infinite linear', transformOrigin: '0% 50%' }} />
+                </div>
+            )}
+            <style>
+                {`
+                @keyframes progress-indeterminate {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(400%); }
+                }
+                `}
+            </style>
         </header>
     );
 }

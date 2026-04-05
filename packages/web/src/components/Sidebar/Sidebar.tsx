@@ -39,8 +39,17 @@ export function Sidebar({
         onUpdateConfig({ _swagger_urls: urls } as any);
     };
 
+    const normalizeUrl = (url: string) => {
+        let cleanUrl = url.trim();
+        if (!cleanUrl) return '';
+        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
+            cleanUrl = `https://${cleanUrl}`;
+        }
+        return cleanUrl;
+    };
+
     const addUrl = () => {
-        const trimmed = urlInput.trim();
+        const trimmed = normalizeUrl(urlInput);
         if (!trimmed) return;
         if (swaggerUrls.includes(trimmed)) {
             onToast('This URL is already in the list', 'error');
@@ -88,7 +97,7 @@ export function Sidebar({
                 action={
                     <button 
                         className="btn btn-ghost btn-sm" 
-                        style={{ padding: '2px 6px', height: 'auto', fontSize: 10 }}
+                        style={{ padding: '2px 6px', height: 'auto', fontSize: 12 }}
                         onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
                         title="Import CLI Report (JSON)"
                     >
@@ -134,38 +143,38 @@ export function Sidebar({
                                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ color:'var(--text-disabled)', flexShrink:0 }}>
                                                 <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
                                             </svg>
-                                            <span style={{ fontSize:10, color:'var(--text-muted)' }}>
+                                            <span style={{ fontSize:12, color:'var(--text-muted)' }}>
                                                 {new Date(r.startedAt).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })}
                                             </span>
                                         </div>
                                         {errors5xx > 0 && (
-                                            <span className="badge badge-error" style={{ fontSize:9, padding:'1px 6px' }}>
+                                            <span className="badge badge-error" style={{ fontSize:12, fontWeight: 600, padding:'2px 8px' }}>
                                                 {errors5xx} crash{errors5xx > 1 ? 'es' : ''}
                                             </span>
                                         )}
                                     </div>
 
                                     {/* Row 2: URL */}
-                                    <div style={{ fontSize:11, fontFamily:'var(--font-mono)', color:'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:6 }}>
+                                    <div style={{ fontSize:12, fontFamily:'var(--font-mono)', color:'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:6 }}>
                                         {r.baseUrl || '(no url)'}
                                     </div>
 
                                     {/* Row 3: stats + buttons */}
                                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                                        <span style={{ fontSize:10, color:'var(--text-disabled)', fontFamily:'var(--font-mono)' }}>
+                                        <span style={{ fontSize:12, color:'var(--text-disabled)', fontFamily:'var(--font-mono)' }}>
                                             {r.stats?.totalRequests?.toLocaleString() || 0} requests
                                         </span>
                                         <div style={{ display:'flex', gap:4 }}>
                                             <button
                                                 className="btn btn-ghost btn-sm"
-                                                style={{ fontSize:10, padding:'3px 8px' }}
+                                                style={{ fontSize:12, padding:'3px 8px' }}
                                                 onClick={() => isLoaded ? onToast('Already loaded') : onLoadRun(r.id)}
                                             >
                                                 {isLoaded ? '✓ Loaded' : 'Load'}
                                             </button>
                                             <button
                                                 className="btn btn-ghost btn-sm"
-                                                style={{ fontSize:10, padding:'3px 7px', color:'var(--color-error)' }}
+                                                style={{ fontSize:12, padding:'3px 7px', color:'var(--color-error)' }}
                                                 onClick={() => { if (confirm('Delete this scan history?')) onDeleteRun(r.id); }}
                                                 title="Delete"
                                             >

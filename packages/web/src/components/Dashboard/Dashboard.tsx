@@ -21,6 +21,16 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                     <div className="empty-state-text" style={{ maxWidth: '600px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ textAlign: 'center' }}>
                             <div className="empty-state-title" style={{ fontSize: '18px', fontWeight: 600 }}>Welcome to Swazz API Fuzzer</div>
+                            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                                <button 
+                                    className="btn btn-primary" 
+                                    onClick={() => {
+                                        document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
+                                    }}>
+                                    Try Petstore Demo
+                                </button>
+                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>https://petstore.swagger.io/v2/swagger.json</p>
+                            </div>
                         </div>
                         
                         <div style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>

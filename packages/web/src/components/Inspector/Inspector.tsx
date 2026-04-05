@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 
@@ -41,6 +42,7 @@ export function Inspector({
 }: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
+    const [sortConfig, setSortConfig] = useState<{key: 'timestamp'|'duration', direction: 'asc'|'desc'}>({key: 'timestamp', direction: 'desc'});
 
     const count5xx = useMemo(() => results.filter((r) => r.status >= 500).length, [results]);
 
@@ -67,8 +69,16 @@ export function Inspector({
             );
         }
 
-        return { filtered: list.slice(-500).reverse(), totalFiltered: list.length };
-    }, [results, filter, search, heatmapFilter]);
+        list.sort((a, b) => {
+            if (sortConfig.key === 'timestamp') {
+                return sortConfig.direction === 'asc' ? a.timestamp - b.timestamp : b.timestamp - a.timestamp;
+            } else {
+                return sortConfig.direction === 'asc' ? a.duration - b.duration : b.duration - a.duration;
+            }
+        });
+
+        return { filtered: list, totalFiltered: list.length };
+    }, [results, filter, search, heatmapFilter, sortConfig]);
 
     useEffect(() => {
         onFilteredCountChange?.(totalFiltered);
@@ -96,7 +106,7 @@ export function Inspector({
                                             heatmapFilter.status >= 400 ? 'var(--color-warning-bg)' : 'var(--color-success-bg)',
                                 color: heatmapFilter.status >= 500 ? 'var(--color-error)' :
                                        heatmapFilter.status >= 400 ? 'var(--color-warning)' : 'var(--color-success)',
-                                fontFamily:'var(--font-mono)', fontSize:10, padding:'2px 7px',
+                                fontFamily:'var(--font-mono)', fontSize:12, padding:'2px 7px',
                                 borderRadius:'var(--radius-full)', fontWeight:600,
                             }}
                         >
@@ -107,7 +117,7 @@ export function Inspector({
                             onClick={onClearHeatmapFilter}
                             style={{
                                 background:'transparent', border:'none', color:'var(--text-disabled)',
-                                cursor:'pointer', fontSize:11, padding:'2px 4px',
+                                cursor:'pointer', fontSize:12, padding:'2px 4px',
                                 borderRadius:'var(--radius-sm)', transition:'color var(--duration-fast)',
                             }}
                             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-error)')}
@@ -126,7 +136,7 @@ export function Inspector({
                             >
                                 {tab.label}
                                 {tab.count !== undefined && tab.count > 0 && (
-                                    <span className="badge badge-error" style={{ marginLeft:5, fontSize:9, padding:'0 5px' }}>
+                                    <span className="badge badge-error" style={{ marginLeft:5, fontSize:12, padding:'0 5px' }}>
                                         {tab.count}
                                     </span>
                                 )}
@@ -179,20 +189,29 @@ export function Inspector({
                         </div>
                     </div>
                 ) : (
-                    filtered.map((r) => (
-                        <div
-                            key={r.id}
-                            className={`log-row ${getStatusClass(r.status)}`}
-                            onClick={() => onSelectResult(r)}
-                        >
-                            <span className="log-timestamp">{formatTime(r.timestamp)}</span>
-                            <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
-                            <span className="log-path">{r.endpoint}</span>
-                            <span className={getBadgeClass(r.status)}>{r.status || 'ERR'}</span>
-                            <span className="badge-profile">{r.profile}</span>
-                            <span className="log-duration">{r.duration}ms</span>
-                        </div>
-                    ))
+                    <Virtuoso
+                        style={{ height: '100%', flex: 1 }}
+                        data={filtered}
+                        itemContent={(index, r) => (
+                            <div
+                                key={r.id}
+                                className={`log-row ${getStatusClass(r.status)}`}
+                                onClick={() => onSelectResult(r)}
+                            >
+                                <span className="log-timestamp">{formatTime(r.timestamp)}</span>
+                                <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
+                                <span className="log-path">{r.endpoint}</span>
+                                <span className={getBadgeClass(r.status)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {r.status >= 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>}
+                                    {r.status >= 400 && r.status < 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>}
+                                    {r.status >= 200 && r.status < 300 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>}
+                                    {r.status || 'ERR'}
+                                </span>
+                                <span className="badge-profile">{r.profile}</span>
+                                <span className="log-duration">{r.duration}ms</span>
+                            </div>
+                        )}
+                    />
                 )}
             </div>
         </div>
