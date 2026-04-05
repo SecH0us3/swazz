@@ -115,7 +115,6 @@ export function toSummary(r: FuzzResult): ResultSummary {
 
 // ─── Constants ──────────────────────────────────────────────
 
-const MAX_ROWS = 500;
 const FLUSH_INTERVAL_MS = 250;
 const PROGRESS_THROTTLE_MS = 250;
 
@@ -163,12 +162,7 @@ export function useRunner(proxyUrl: string) {
                 const buf = rowBufferRef.current;
                 if (buf.length === 0) return;
                 rowBufferRef.current = [];
-                setRows((prev) => {
-                    const merged = prev.length + buf.length <= MAX_ROWS
-                        ? [...prev, ...buf]
-                        : [...prev, ...buf].slice(-MAX_ROWS);
-                    return merged;
-                });
+                setRows((prev) => [...prev, ...buf]);
             };
 
             const runner = new FuzzRunner(config, sendRequest);
