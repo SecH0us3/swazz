@@ -67,3 +67,10 @@ The project is a TypeScript monorepo using **npm workspaces**:
 - `packages/cli/src/`: CLI implementation, result classifiers, and output formatters.
 - `packages/worker/src/`: Cloudflare Worker proxy implementation.
 - `swazz.config.example.json`: Template for CLI configuration.
+
+## Project Architecture & Refactoring Notes (Updated)
+To maintain token efficiency and clean architecture, the application is strictly modular:
+- **UI Components:** Kept as "dumb" as possible.
+- **Complex UI State:** Handled by custom hooks in `packages/web/src/hooks/` (e.g., `useResizableLayout`, `useInspectorFilters`, `useToast`).
+- **Network & Business Logic (Frontend):** Separated into `packages/web/src/services/` (e.g., `swaggerService.ts`). Do not put `fetch` calls directly inside React components.
+- **Core Utilities:** Generic tech primitives (like `Semaphore`) are located in `packages/core/src/utils/`.

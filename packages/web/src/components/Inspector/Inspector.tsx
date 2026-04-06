@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
+import { useInspectorFilters } from '../../hooks/useInspectorFilters.js';
+import type { StatusFilter } from '../../hooks/useInspectorFilters.js';
 
 interface Props {
     results: ResultSummary[];
@@ -12,7 +14,7 @@ interface Props {
     onFilteredCountChange?: (count: number) => void;
 }
 
-type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
+
 
 function getStatusClass(status: number): string {
     if (status >= 500) return 'status-5xx';
@@ -46,39 +48,13 @@ export function Inspector({
 
     const count5xx = useMemo(() => results.filter((r) => r.status >= 500).length, [results]);
 
-    const { filtered, totalFiltered } = useMemo(() => {
-        let list = results;
-
-        if (heatmapFilter) {
-            list = list.filter(
-                (r) =>
-                    r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
-                    r.endpoint === heatmapFilter.path &&
-                    r.status === heatmapFilter.status,
-            );
-        } else {
-            if (filter === '5xx') list = list.filter((r) => r.status >= 500);
-            else if (filter === '4xx') list = list.filter((r) => r.status >= 400 && r.status < 500);
-            else if (filter === '2xx') list = list.filter((r) => r.status >= 200 && r.status < 300);
-        }
-
-        if (search) {
-            const q = search.toLowerCase();
-            list = list.filter(
-                (r) => r.endpoint.toLowerCase().includes(q) || r.profile.toLowerCase().includes(q),
-            );
-        }
-
-        list.sort((a, b) => {
-            if (sortConfig.key === 'timestamp') {
-                return sortConfig.direction === 'asc' ? a.timestamp - b.timestamp : b.timestamp - a.timestamp;
-            } else {
-                return sortConfig.direction === 'asc' ? a.duration - b.duration : b.duration - a.duration;
-            }
-        });
-
-        return { filtered: list, totalFiltered: list.length };
-    }, [results, filter, search, heatmapFilter, sortConfig]);
+    const { filtered, totalFiltered } = useInspectorFilters({
+        results,
+        filter,
+        search,
+        heatmapFilter,
+        sortConfig
+    });
 
     useEffect(() => {
         onFilteredCountChange?.(totalFiltered);

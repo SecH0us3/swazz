@@ -13,6 +13,7 @@ import type {
 import { SmartPayloadGenerator } from './generator.js';
 import type { SchemaProperty } from './types.js';
 import { uuid, int, word } from './random.js';
+import { Semaphore } from './utils/semaphore.js';
 
 /** Fast string hash (djb2) — good enough for dedup within a single profile run. */
 function hashStr(s: string): number {
@@ -46,35 +47,7 @@ function fillPathParams(
 const MAX_RETRIES_ON_429 = 3;
 const DEFAULT_BACKOFF_MS = 2000;
 
-/**
- * Lightweight semaphore for concurrency control — avoids busy-wait polling.
- * Waiters are queued and resolved in FIFO order as slots become available.
- */
-class Semaphore {
-    private _available: number;
-    private _waiters: Array<() => void> = [];
 
-    constructor(concurrency: number) {
-        this._available = concurrency;
-    }
-
-    async acquire(): Promise<void> {
-        if (this._available > 0) {
-            this._available--;
-            return;
-        }
-        await new Promise<void>((resolve) => this._waiters.push(resolve));
-    }
-
-    release(): void {
-        const next = this._waiters.shift();
-        if (next) {
-            next();
-        } else {
-            this._available++;
-        }
-    }
-}
 
 export class FuzzRunner {
     private config: SwazzConfig;

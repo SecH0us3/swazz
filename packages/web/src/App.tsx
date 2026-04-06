@@ -1,298 +1,83 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { FuzzResult, RunStats } from '@swazz/core';
-import { parseSwaggerSpec } from '@swazz/core';
+import React, { useState, useEffect } from 'react';
+import type { FuzzResult } from '@swazz/core';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
-import { useRunner, previewPayload, previewResponse } from './hooks/useRunner.js';
+import { useRunner } from './hooks/useRunner.js';
 import type { ResultSummary } from './hooks/useRunner.js';
 import { useDb } from './hooks/useDb.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar/Sidebar.js';
-import { Dashboard } from './components/Dashboard/Dashboard.js';
-import { Inspector } from './components/Inspector/Inspector.js';
 import { RequestDetail } from './components/Inspector/RequestDetail.js';
 import { ConfigSidebar } from './components/Sidebar/ConfigSidebar.js';
+import { Toast } from './components/Toast/Toast.js';
+import { useToast } from './hooks/useToast.js';
+import { useResizableLayout } from './hooks/useResizableLayout.js';
+import { useFuzzSession } from './hooks/useFuzzSession.js';
+import { useRunHistory } from './hooks/useRunHistory.js';
+import { MainWorkspace } from './components/MainWorkspace.js';
 
 // In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
-// ─── Toast ───────────────────────────────────────────────────
-
-interface ToastData {
-    id: number;
-    message: string;
-    type: 'info' | 'success' | 'error';
-}
-
-function Toast({ message, type, onDismiss }: { message: string; type: string; onDismiss: () => void }) {
-    const borderColor =
-        type === 'error' ? 'var(--color-error)' :
-            type === 'success' ? 'var(--color-success)' :
-                'var(--color-info)';
-
-    useEffect(() => {
-        const timer = setTimeout(onDismiss, 4000);
-        return () => clearTimeout(timer);
-    }, [onDismiss]);
-
-    return (
-        <div className="toast" style={{ borderLeft: `3px solid ${borderColor}` }} onClick={onDismiss}>
-            {message}
-        </div>
-    );
-}
-
-// ─── Swagger loader ──────────────────────────────────────────
-
-async function loadSwaggerUrl(
-    url: string,
-    headers: Record<string, string>,
-    cookies: Record<string, string>,
-): Promise<{ basePath: string; endpointCount: number; endpoints: any[] }> {
-    let specText: string;
-    try {
-        const res = await fetch(`${PROXY_URL}/proxy`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, method: 'GET', headers, cookies }),
-        });
-        const result = await res.json();
-        specText = typeof result.body === 'string' ? result.body : JSON.stringify(result.body);
-    } catch {
-        // Direct fetch fallback
-        const res = await fetch(url);
-        specText = await res.text();
-    }
-
-    const spec = JSON.parse(specText);
-    const { basePath, endpoints } = parseSwaggerSpec(spec);
-    return { basePath, endpointCount: endpoints.length, endpoints };
-}
-
-// ─── App ─────────────────────────────────────────────────────
-
 export default function App() {
     const [activeTab, setActiveTab] = useState<'heatmap' | 'logs'>('heatmap');
+    const { toasts, showToast, dismissToast } = useToast();
+    const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
+    const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
+
     const {
-        config,
-        updateConfig,
-        updateHeaders,
-        updateCookies,
-        updateDictionaries,
-        updateProfiles,
-        importConfig,
-        exportConfig,
+        config, updateConfig, updateHeaders, updateCookies,
+        updateDictionaries, updateProfiles, importConfig, exportConfig
     } = useConfig();
 
     const {
-        rows: liveRows,
-        stats: liveStats,
-        isRunning,
-        isPaused,
-        start,
-        stop,
-        pause,
-        resume,
-        sendRequest,
+        rows: liveRows, stats: liveStats, isRunning, isPaused,
+        start, stop, pause, resume, sendRequest
     } = useRunner(PROXY_URL);
 
     const { runs, saveRun, importCliReport, getRunResults, deleteRun } = useDb();
 
-    const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
-    const [historyRows, setHistoryRows] = useState<ResultSummary[]>([]);
-    const [historyStats, setHistoryStats] = useState<RunStats | null>(null);
-    // Tracks the DB run ID for the *currently active* live fuzz run.
-    const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+    // Controllers
+    const { loadedRunId, setLoadedRunId, historyRows, historyStats, handleLoadRun, handleDeleteRun, handleExport } = useRunHistory({
+        runs, getRunResults, deleteRun, showToast,
+        onRunLoaded: () => {
+            setSelectedResult(null);
+            setHeatmapFilter(null);
+        }
+    });
 
-    const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
-    const [toasts, setToasts] = useState<ToastData[]>([]);
-    const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
-    const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
+    const { isLoadingSpecs, loadEndpoints, handleStart } = useFuzzSession({
+        config: config as any,
+        updateConfig,
+        start,
+        saveRun,
+        showToast,
+        onRunStarted: () => {
+            setHeatmapFilter(null);
+            setSelectedResult(null);
+            setLoadedRunId(null);
+        }
+    });
 
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [isConfigOpen, setIsConfigOpen] = useState(false);
-
-    // Active dataset (live or history) — only lightweight summaries
     const activeRows = loadedRunId ? historyRows : liveRows;
     const activeStats = loadedRunId ? historyStats : liveStats;
-
-    const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
-        const id = Date.now();
-        setToasts((prev: ToastData[]) => [...prev.slice(-4), { id, message, type }]);
-    }, []);
-
-    const dismissToast = useCallback((id: number) => {
-        setToasts((prev: ToastData[]) => prev.filter((t: ToastData) => t.id !== id));
-    }, []);
-
-    const activeFilteredLogsCount = useMemo(() => {
-        if (!heatmapFilter) return activeRows.length;
-        return activeRows.filter(
-            (r) =>
-                r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
-                r.endpoint === heatmapFilter.path &&
-                r.status === heatmapFilter.status
-        ).length;
-    }, [activeRows, heatmapFilter]);
-
-    const endpointKeys = useMemo(() => {
-        // If we have data in activeStats (like from a CLI import), use those endpoints
-        if (activeStats?.endpointCounts && Object.keys(activeStats.endpointCounts).length > 0) {
-            return Object.keys(activeStats.endpointCounts).sort();
-        }
-        // Fallback to currently configured endpoints
-        const uniqueKeys = Array.from(new Set(config.endpoints.map((ep) => `${ep.method.toUpperCase()} ${ep.path}`)));
-        return uniqueKeys.sort((a, b) => a.localeCompare(b));
-    }, [config.endpoints, activeStats]);
-
-    // Resolved base URL — from config or taken from the first loaded spec
     const displayUrl = config.base_url || ((config as any)._swagger_urls?.[0] ?? '');
 
-    const loadEndpoints = useCallback(async (urls: string[]) => {
-        if (urls.length === 0) return;
+    const { sidebarWidth, configSidebarWidth, startResizingLeft, startResizingRight } = useResizableLayout(300, 320);
 
-        setIsLoadingSpecs(true);
-        showToast(`Loading ${urls.length} spec${urls.length > 1 ? 's' : ''}...`, 'info');
-
-        let allEndpoints: any[] = [];
-        let detectedBaseUrl = config.base_url;
-
-        for (const url of urls) {
-            try {
-                const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
-                const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
-                    urlToLoad,
-                    config.global_headers,
-                    config.cookies,
-                );
-                allEndpoints = [...allEndpoints, ...endpoints];
-                if (!detectedBaseUrl && basePath) {
-                    detectedBaseUrl = basePath;
-                }
-                showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}`, 'success');
-            } catch (err) {
-                showToast(`✗ Failed: ${url} — ${err instanceof Error ? err.message : String(err)}`, 'error');
-            }
-        }
-
-        setIsLoadingSpecs(false);
-
-        if (allEndpoints.length > 0) {
-            updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints });
-            return { detectedBaseUrl, allEndpoints };
-        }
-        return null;
-    }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
-
-    const handleStart = async (overrideUrls?: string[]) => {
-        const swaggerUrls: string[] = overrideUrls || (config as any)._swagger_urls || [];
-
-        if (swaggerUrls.length === 0 && config.endpoints.length === 0) {
-            showToast('Add at least one Swagger URL to begin', 'error');
-            return;
-        }
-
-        // Clear UI state for new run
-        setHeatmapFilter(null);
-        setSelectedResult(null);
-        setLoadedRunId(null);
-
-        let finalEndpoints = config.endpoints;
-        let finalBaseUrl = config.base_url;
-
-        // If we have Swagger URLs and no endpoints loaded yet (or just refreshing), load them
-        if (overrideUrls || (swaggerUrls.length > 0 && config.endpoints.length === 0)) {
-            const loaded = await loadEndpoints(swaggerUrls);
-            if (loaded) {
-                finalEndpoints = loaded.allEndpoints;
-                finalBaseUrl = loaded.detectedBaseUrl;
-                if (overrideUrls) {
-                    updateConfig({
-                        base_url: finalBaseUrl,
-                        _swagger_urls: swaggerUrls,
-                    } as any);
-                }
-            } else {
-                return; // Error toast already shown in loadEndpoints
-            }
-        }
-
-        const activeEndpoints = finalEndpoints.filter(
-            ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
-        );
-
-        if (activeEndpoints.length === 0) {
-            showToast('No active endpoints to fuzz', 'error');
-            return;
-        }
-
-        const finalConfig = {
-            ...config,
-            base_url: finalBaseUrl,
-            endpoints: activeEndpoints,
-        };
-
-        const runId = `run_${Date.now()}`;
-        setCurrentRunId(runId);
-        const runRec = {
-            id: runId,
-            startedAt: Date.now(),
-            completedAt: 0,
-            baseUrl: finalBaseUrl,
-            stats: null as any,
-        };
-
-        let pendingRows: ResultSummary[] = [];
-
-        const onResult = (result: FuzzResult) => {
-            pendingRows.push({
-                id: result.id,
-                timestamp: result.timestamp,
-                method: result.method,
-                endpoint: result.endpoint,
-                resolvedPath: result.resolvedPath,
-                status: result.status,
-                profile: result.profile,
-                duration: result.duration,
-                retries: result.retries,
-                payloadPreview: previewPayload(result.payload),
-                responsePreview: previewResponse(result.responseBody),
-                error: result.error,
-            });
-            if (pendingRows.length >= 50) {
-                saveRun(runRec, [...pendingRows]);
-                pendingRows = [];
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && activeTab === 'logs' && !selectedResult) {
+                setActiveTab('heatmap');
             }
         };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTab, selectedResult]);
 
-        const onComplete = (stats: RunStats) => {
-            const completedRun = { ...runRec, completedAt: Date.now(), stats };
-            saveRun(completedRun, pendingRows);
-            setCurrentRunId(null);
-            showToast(`Scan saved to history`, 'success');
-        };
-
-        start(finalConfig, onResult, onComplete);
-
-        showToast(
-            `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
-            'info',
-        );
-    };
-
-    const handleLoadRun = async (runId: string, importedRun?: any) => {
-        const runData = importedRun || runs.find(r => r.id === runId);
-        if (!runData) return;
-        
-        showToast(`Loading scan...`, 'info');
-        const rows = await getRunResults(runId);
-        setHistoryRows(rows);
-        setHistoryStats(runData.stats);
-        setLoadedRunId(runId);
-        setSelectedResult(null);
-        setHeatmapFilter(null);
-        showToast(`Loaded ${rows.length} results from history`, 'success');
-    };
+    const isBusy = isRunning || isLoadingSpecs;
 
     const handleSelectResult = (row: ResultSummary) => {
         setSelectedResult({
@@ -301,90 +86,6 @@ export default function App() {
             responseBody: row.responsePreview || undefined,
         } as FuzzResult);
     };
-
-    const handleDeleteRun = async (runId: string) => {
-        await deleteRun(runId);
-        if (loadedRunId === runId) {
-            setLoadedRunId(null);
-            setHistoryRows([]);
-            setHistoryStats(null);
-        }
-        showToast('Run deleted', 'success');
-    };
-
-
-
-    const handleExport = () => {
-        if (activeRows.length === 0) {
-            showToast('No results to export yet', 'error');
-            return;
-        }
-        const data = {
-            exportedAt: new Date().toISOString(),
-            baseUrl: config.base_url,
-            totalRequests: activeRows.length,
-            summary: {
-                crashes5xx: activeRows.filter((r) => r.status >= 500).length,
-                errors4xx: activeRows.filter((r) => r.status >= 400 && r.status < 500).length,
-                success2xx: activeRows.filter((r) => r.status >= 200 && r.status < 300).length,
-                networkErrors: activeRows.filter((r) => r.status === 0).length,
-                totalRetries: activeRows.reduce((sum: number, r) => sum + (r.retries ?? 0), 0),
-            },
-            results: activeRows,
-        };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `swazz-results-${Date.now()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast(`Exported ${activeRows.length} results`, 'success');
-    };
-
-
-    const [sidebarWidth, setSidebarWidth] = useState(300);
-    const [configSidebarWidth, setConfigSidebarWidth] = useState(320);
-    const isResizingLeftRef = useRef(false);
-    const isResizingRightRef = useRef(false);
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (isResizingLeftRef.current) {
-                const newWidth = Math.max(200, Math.min(600, e.clientX));
-                setSidebarWidth(newWidth);
-            } else if (isResizingRightRef.current) {
-                const newWidth = Math.max(250, Math.min(600, window.innerWidth - e.clientX));
-                setConfigSidebarWidth(newWidth);
-            }
-        };
-
-        const handleMouseUp = () => {
-            isResizingLeftRef.current = false;
-            isResizingRightRef.current = false;
-            document.body.classList.remove('resizing');
-        };
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-        return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, []);
-
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && activeTab === 'logs' && !selectedResult) {
-                setActiveTab('heatmap');
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeTab, selectedResult]);
-
-    const isBusy = isRunning || isLoadingSpecs;
 
     return (
         <div className="app-layout" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
@@ -399,16 +100,12 @@ export default function App() {
                             const currentUrls = (config as any)._swagger_urls || [];
                             if (!currentUrls.includes(trimmed)) {
                                 const newUrls = [...currentUrls, trimmed];
-                                updateConfig({
-                                    base_url: origin,
-                                    _swagger_urls: newUrls
-                                } as any);
+                                updateConfig({ base_url: origin, _swagger_urls: newUrls } as any);
                                 loadEndpoints(newUrls);
                             } else {
                                 updateConfig({ base_url: origin });
                             }
-                        } catch (e) {
-                            // If invalid URL, just set it as is
+                        } catch {
                             updateConfig({ base_url: trimmed });
                         }
                     } else {
@@ -450,105 +147,23 @@ export default function App() {
             )}
 
             <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${configSidebarWidth}px` }}>
-                {/* Left: Dashboard + Results List */}
-                <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
-                    {loadedRunId && (
-                        <div style={{
-                            display:'flex', justifyContent:'space-between', alignItems:'center',
-                            padding:'10px 16px',
-                            background:'rgba(124,58,237,0.06)',
-                            border:'1px solid rgba(124,58,237,0.25)',
-                            borderRadius:'var(--radius-md)',
-                            flexShrink:0,
-                        }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'var(--space-2)' }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2" strokeLinecap="round">
-                                    <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
-                                </svg>
-                                <span style={{ fontSize:'var(--font-size-sm)', color:'var(--accent-light)', fontWeight:500 }}>Viewing History</span>
-                                <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>
-                                    · {activeRows.length.toLocaleString()} requests · {new Date(historyStats?.startTime || Date.now()).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })}
-                                </span>
-                            </div>
-                            <button className="btn btn-ghost btn-sm" onClick={() => setLoadedRunId(null)}>← Live</button>
-                        </div>
-                    )}
-
-                    {!loadedRunId && config.endpoints.length === 0 && (
-                        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            <div className="empty-state">
-                                <div className="empty-state-icon">⚡</div>
-                                <div className="empty-state-title">Ready to fuzz</div>
-                                <div className="empty-state-text">
-                                    Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color:'var(--accent-light)' }}>Run Fuzz Test</strong>.
-                                </div>
-                                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                    <button 
-                                        className="btn btn-primary"
-                                        style={{ padding: '8px 16px', fontSize: '14px' }}
-                                        onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
-                                    >
-                                        Try Petstore Demo
-                                    </button>
-                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
-                                        Automatically loads endpoints and runs a quick fuzz test
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {(activeRows.length > 0 || config.endpoints.length > 0) && (
-                        <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-4)', flex:1, minHeight:0 }}>
-                            <div className="tab-bar">
-                                <button
-                                    className={`tab-bar-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('heatmap')}
-                                >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                                    </svg>
-                                    Endpoint Heatmap
-                                </button>
-                                <button
-                                    className={`tab-bar-btn ${activeTab === 'logs' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('logs')}
-                                >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-                                    </svg>
-                                    Request Logs
-                                    {activeRows.length > 0 && (
-                                        <span className="tab-bar-count">
-                                            {activeFilteredLogsCount.toLocaleString()}
-                                        </span>
-                                    )}
-                                </button>
-                            </div>
-
-                            {activeTab === 'heatmap' ? (
-                                <Dashboard
-                                    stats={activeStats}
-                                    endpointKeys={endpointKeys}
-                                    heatmapFilter={heatmapFilter}
-                                    onHeatmapFilter={(filter) => {
-                                        setHeatmapFilter(filter);
-                                        if (filter) setActiveTab('logs');
-                                    }}
-                                    isRunning={isRunning}
-                                />
-                            ) : (
-                                <Inspector
-                                    results={activeRows}
-                                    heatmapFilter={heatmapFilter}
-                                    onClearHeatmapFilter={() => setHeatmapFilter(null)}
-                                    onSelectResult={handleSelectResult}
-                                    onExport={handleExport}
-                                />
-                            )}
-                        </div>
-                    )}
-                </div>
+                <MainWorkspace
+                    config={config}
+                    activeRows={activeRows}
+                    activeStats={activeStats}
+                    loadedRunId={loadedRunId}
+                    historyStats={historyStats}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    heatmapFilter={heatmapFilter}
+                    setHeatmapFilter={setHeatmapFilter}
+                    isRunning={isRunning}
+                    handleStart={handleStart}
+                    setLoadedRunId={setLoadedRunId}
+                    handleSelectResult={handleSelectResult}
+                    handleExport={() => handleExport(activeRows, config.base_url)}
+                />
+                
                 <ConfigSidebar
                     className={isConfigOpen ? 'mobile-open' : ''}
                     config={config}
@@ -574,35 +189,14 @@ export default function App() {
                 />
             )}
 
-            {/* Toast stack */}
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
-                {toasts.map((t: ToastData) => (
+                {toasts.map((t) => (
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
             </div>
 
-
-            <div
-                className="sidebar-resizer"
-                style={{ left: sidebarWidth - 4 }}
-                onMouseDown={(e) => {
-                    e.preventDefault();
-                    isResizingLeftRef.current = true;
-                    document.body.classList.add('resizing');
-                }}
-                title="Drag to resize"
-            />
-
-            <div
-                className="sidebar-resizer"
-                style={{ right: configSidebarWidth - 4, left: 'auto' }}
-                onMouseDown={(e) => {
-                    e.preventDefault();
-                    isResizingRightRef.current = true;
-                    document.body.classList.add('resizing');
-                }}
-                title="Drag to resize"
-            />
+            <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />
+            <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />
         </div>
     );
 }
