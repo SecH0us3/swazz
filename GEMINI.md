@@ -70,7 +70,8 @@ The project is a TypeScript monorepo using **npm workspaces**:
 
 ## Project Architecture & Refactoring Notes (Updated)
 To maintain token efficiency and clean architecture, the application is strictly modular:
-- **UI Components:** Kept as "dumb" as possible.
+- **UI Components:** Kept as "dumb" as possible. Use `components/` for visual/layout logic (e.g., `MainWorkspace.tsx` manages internal application layout).
 - **Complex UI State:** Handled by custom hooks in `packages/web/src/hooks/` (e.g., `useResizableLayout`, `useInspectorFilters`, `useToast`).
+- **App Orchestration:** High-level app orchestration (like managing history or execution sessions) is done through domain-specific controller hooks (e.g., `useRunHistory`, `useFuzzSession`). Do not let `App.tsx` become a God Object.
 - **Network & Business Logic (Frontend):** Separated into `packages/web/src/services/` (e.g., `swaggerService.ts`). Do not put `fetch` calls directly inside React components.
 - **Core Utilities:** Generic tech primitives (like `Semaphore`) are located in `packages/core/src/utils/`.
