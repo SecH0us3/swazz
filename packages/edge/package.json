@@ -1,0 +1,12 @@
+{
+  "name": "@swazz/edge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.3"
+  },
+  "scripts": {
+    "deploy": "wrangler deploy"
+  }
+}

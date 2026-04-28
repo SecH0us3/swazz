@@ -35,3 +35,14 @@ test-run.config.json
 test-report.*
 *.sarif
 *.report.json
+
+# Go
+swazz-engine
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+__debug_bin

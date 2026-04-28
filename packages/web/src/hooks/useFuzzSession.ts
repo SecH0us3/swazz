@@ -144,12 +144,21 @@ export function useFuzzSession({
             showToast(`Scan saved to history`, 'success');
         };
 
-        start(finalConfig, onResult, onComplete);
+        try {
+            await start(finalConfig, onResult, onComplete);
 
-        showToast(
-            `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
-            'info',
-        );
+            showToast(
+                `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
+                'info',
+            );
+        } catch (err: any) {
+            let msg = err.message || "Failed to start run";
+            if (msg.includes("already in progress")) {
+                msg = "Сейчас сервер занят сканированием. Пожалуйста, подождите завершения текущей сессии.";
+            }
+            showToast(`Ошибка: ${msg}`, 'error');
+            setCurrentRunId(null);
+        }
     };
 
     return { isLoadingSpecs, currentRunId, loadEndpoints, handleStart };

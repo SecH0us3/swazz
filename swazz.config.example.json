@@ -12,9 +12,9 @@
         "email": ["admin@test.com", "a@b.c"]
     },
     "settings": {
-        "iterations_per_profile": 20,
-        "concurrency": 5,
-        "timeout_ms": 10000,
+        "iterations_per_profile": 2,
+        "concurrency": 2,
+        "timeout_ms": 2000,
         "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
     },
     "endpoints": {

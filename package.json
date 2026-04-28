@@ -7,17 +7,20 @@
     "packages/core",
     "packages/worker",
     "packages/web",
-    "packages/cli"
+    "packages/cli",
+    "packages/edge"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=packages/web",
-    "dev:worker": "npm run dev --workspace=packages/worker",
+    "dev:backend": "cd packages/container && go run main.go serve",
+    "dev:frontend": "VITE_PROXY_URL=http://localhost:8080 npm run dev --workspace=packages/web",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "npm run build --workspace=packages/web",
     "test": "npm run test --workspace=packages/core",
-    "deploy:worker": "npm run deploy --workspace=packages/worker",
+    "deploy:api": "npm run deploy --workspace=packages/edge",
     "deploy:web": "npm run deploy --workspace=packages/web"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "wrangler": "^4.71.0"
   }
 }

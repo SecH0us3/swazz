@@ -1,29 +1,26 @@
-import { parseSwaggerSpec } from '@swazz/core';
-
 // In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export async function loadSwaggerUrl(
     url: string,
-    headers: Record<string, string>,
-    cookies: Record<string, string>,
+    headers?: Record<string, string>,
+    cookies?: Record<string, string>,
 ): Promise<{ basePath: string; endpointCount: number; endpoints: any[] }> {
-    let specText: string;
-    try {
-        const res = await fetch(`${PROXY_URL}/proxy`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, method: 'GET', headers, cookies }),
-        });
-        const result = await res.json();
-        specText = typeof result.body === 'string' ? result.body : JSON.stringify(result.body);
-    } catch {
-        // Direct fetch fallback
-        const res = await fetch(url);
-        specText = await res.text();
+    const res = await fetch(`${PROXY_URL}/api/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }), // we can pass headers/cookies if the Go backend supports it eventually
+    });
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `Failed to parse swagger: ${res.status}`);
     }
 
-    const spec = JSON.parse(specText);
-    const { basePath, endpoints } = parseSwaggerSpec(spec);
-    return { basePath, endpointCount: endpoints.length, endpoints };
+    const data = await res.json();
+    return {
+        basePath: data.basePath,
+        endpointCount: data.endpoints.length,
+        endpoints: data.endpoints,
+    };
 }

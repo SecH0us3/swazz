@@ -1,0 +1,26 @@
+name = "swazz-api"
+main = "src/index.ts"
+compatibility_date = "2026-04-28"
+
+routes = [
+  { pattern = "swazz.secmy.app/api*", zone_name = "secmy.app" }
+]
+[[durable_objects.bindings]]
+name = "SWAZZ_DO"
+class_name = "SwazzContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SwazzContainer"]
+
+[[containers]]
+class_name = "SwazzContainer"
+image = "../container/Dockerfile"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true

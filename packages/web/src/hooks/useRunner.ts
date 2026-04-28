@@ -1,18 +1,37 @@
-/**
- * useRunner — wraps FuzzRunner for React, sends requests via CORS proxy.
- *
- * Memory strategy: only lightweight ResultSummary objects live in React state.
- * Full FuzzResult data (payload, responseBody) is never retained — the summary
- * carries a short payloadPreview string so the user can see what was sent.
- */
+import { useState, useCallback, useRef, useEffect } from 'react';
 
-import { useState, useCallback, useRef } from 'react';
-import type { SwazzConfig, FuzzResult, RunStats } from '@swazz/core';
-import { FuzzRunner } from '@swazz/core';
+// Lightweight types needed by the UI
+export interface RunStats {
+    totalRequests: number;
+    totalPlanned: number;
+    requestsPerSecond: number;
+    statusCounts: Record<number, number>;
+    profileCounts: Record<string, number>;
+    endpointCounts: Record<string, Record<number, number>>;
+    startTime: number;
+    isRunning: boolean;
+    progress: {
+        completedEndpoints: number;
+        totalEndpoints: number;
+        currentEndpoint: string;
+        currentProfile: string;
+    };
+}
 
-// ─── Lightweight row for the list / detail view ─────────────
-
-const VALUE_LIMIT = 80;
+export interface FuzzResult {
+    id: string;
+    endpoint: string;
+    resolvedPath: string;
+    method: string;
+    profile: string;
+    status: number;
+    duration: number;
+    payload: any;
+    responseBody?: any;
+    error?: string;
+    timestamp: number;
+    retries: number;
+}
 
 export interface ResultSummary {
     id: string;
@@ -24,12 +43,14 @@ export interface ResultSummary {
     profile: string;
     duration: number;
     retries: number;
-    payloadPreview: string;   // JSON with long values truncated per-field
-    responsePreview: string;  // error response body preview (4xx/5xx only)
+    payloadPreview: string;
+    responsePreview: string;
     error?: string;
 }
 
-/** Recursively truncate long leaf values, preserving object structure. */
+const VALUE_LIMIT = 80;
+const RESPONSE_VALUE_LIMIT = 400;
+
 function truncateValues(val: any): any {
     if (val === null || val === undefined) return val;
     if (typeof val === 'string') {
@@ -47,16 +68,13 @@ function truncateValues(val: any): any {
         }
         return out;
     }
-    return val; // numbers, booleans
+    return val;
 }
 
 export function previewPayload(value: any): string {
     return preview(value);
 }
 
-const RESPONSE_VALUE_LIMIT = 400;
-
-/** Like truncateValues but with a larger per-field limit for responses. */
 function truncateResponseValues(val: any): any {
     if (val === null || val === undefined) return val;
     if (typeof val === 'string') {
@@ -80,7 +98,6 @@ function truncateResponseValues(val: any): any {
 export function previewResponse(value: any): string {
     if (value === undefined || value === null) return '';
     if (typeof value === 'string') {
-        // Plain text / HTML error — show more generously
         if (value.length <= 2000) return value;
         return value.slice(0, 2000) + `\n… (${value.length - 2000} chars more)`;
     }
@@ -113,24 +130,20 @@ export function toSummary(r: FuzzResult): ResultSummary {
     };
 }
 
-// ─── Constants ──────────────────────────────────────────────
-
 const FLUSH_INTERVAL_MS = 250;
 const PROGRESS_THROTTLE_MS = 250;
-
-// ─── Hook ───────────────────────────────────────────────────
 
 export function useRunner(proxyUrl: string) {
     const [rows, setRows] = useState<ResultSummary[]>([]);
     const [stats, setStats] = useState<RunStats | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
-    const runnerRef = useRef<FuzzRunner | null>(null);
 
-    // Buffer for batching UI updates
+    const eventSourceRef = useRef<EventSource | null>(null);
     const rowBufferRef = useRef<ResultSummary[]>([]);
     const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Provide the sendRequest mock for manual interactions in UI
     const sendRequest = useCallback(
         async (req: {
             url: string;
@@ -139,7 +152,7 @@ export function useRunner(proxyUrl: string) {
             cookies: Record<string, string>;
             body: any;
         }) => {
-            const res = await fetch(`${proxyUrl}/proxy`, {
+            const res = await fetch(`${proxyUrl}/api/proxy`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(req),
@@ -150,13 +163,33 @@ export function useRunner(proxyUrl: string) {
     );
 
     const start = useCallback(
-        (config: SwazzConfig, onResult?: (result: FuzzResult) => void, onComplete?: (stats: RunStats) => void) => {
-            if (runnerRef.current?.isRunning) return;
+        async (config: any, onResult?: (result: FuzzResult) => void, onComplete?: (stats: RunStats) => void) => {
+            if (isRunning) return;
 
             setRows([]);
             setIsRunning(true);
             setIsPaused(false);
             rowBufferRef.current = [];
+
+            // Start via API
+            try {
+                const res = await fetch(`${proxyUrl}/api/fuzz/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config),
+                });
+                
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    console.error("Failed to start run:", err);
+                    setIsRunning(false);
+                    throw new Error(err.error || "Failed to start run");
+                }
+            } catch (err) {
+                console.error("Error starting run:", err);
+                setIsRunning(false);
+                throw err;
+            }
 
             const flushBuffer = () => {
                 const buf = rowBufferRef.current;
@@ -165,12 +198,16 @@ export function useRunner(proxyUrl: string) {
                 setRows((prev) => [...prev, ...buf]);
             };
 
-            const runner = new FuzzRunner(config, sendRequest);
+            let lastProgressTime = 0;
 
-            runner.onResult = (result: FuzzResult) => {
+            // Connect SSE
+            const es = new EventSource(`${proxyUrl}/api/fuzz/stream`);
+            eventSourceRef.current = es;
+
+            es.addEventListener('result', (e) => {
+                const result = JSON.parse(e.data) as FuzzResult;
                 onResult?.(result);
 
-                // Only a lightweight summary goes into the UI array
                 rowBufferRef.current.push(toSummary(result));
                 if (!flushTimerRef.current) {
                     flushTimerRef.current = setTimeout(() => {
@@ -178,52 +215,65 @@ export function useRunner(proxyUrl: string) {
                         flushBuffer();
                     }, FLUSH_INTERVAL_MS);
                 }
-            };
+            });
 
-            let lastProgressTime = 0;
-            runner.onProgress = (s: RunStats) => {
+            es.addEventListener('progress', (e) => {
                 const now = Date.now();
                 if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
                     lastProgressTime = now;
-                    setStats({ ...s });
+                    setStats(JSON.parse(e.data));
                 }
-            };
+            });
 
-            runner.onComplete = (s: RunStats) => {
+            es.addEventListener('complete', (e) => {
+                const finalStats = JSON.parse(e.data);
                 if (flushTimerRef.current) {
                     clearTimeout(flushTimerRef.current);
                     flushTimerRef.current = null;
                 }
                 flushBuffer();
-                setStats({ ...s });
+                setStats(finalStats);
                 setIsRunning(false);
                 setIsPaused(false);
-                runnerRef.current = null;
-                onComplete?.(s);
-            };
+                es.close();
+                eventSourceRef.current = null;
+                onComplete?.(finalStats);
+            });
 
-            runner.onError = (error: Error) => {
-                console.error('[swazz] Runner error:', error);
+            es.onerror = (err) => {
+                console.error("SSE error:", err);
+                es.close();
             };
-
-            runnerRef.current = runner;
-            runner.start().catch(console.error);
         },
-        [sendRequest],
+        [proxyUrl, isRunning],
     );
 
     const stop = useCallback(() => {
-        runnerRef.current?.stop();
-    }, []);
+        fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' }).catch(console.error);
+        if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+            eventSourceRef.current = null;
+        }
+        setIsRunning(false);
+    }, [proxyUrl]);
 
     const pause = useCallback(() => {
-        runnerRef.current?.pause();
+        fetch(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' }).catch(console.error);
         setIsPaused(true);
-    }, []);
+    }, [proxyUrl]);
 
     const resume = useCallback(() => {
-        runnerRef.current?.resume();
+        fetch(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' }).catch(console.error);
         setIsPaused(false);
+    }, [proxyUrl]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+            }
+        };
     }, []);
 
     return {
