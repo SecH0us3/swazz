@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -26,6 +27,8 @@ import (
 )
 
 func main() {
+	runtime.GOMAXPROCS(2)
+
 	if len(os.Args) < 2 {
 		printHelp()
 		os.Exit(1)

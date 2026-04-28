@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
-import type { ResultSummary } from '../../hooks/useRunner.js';
+import type { ResultSummary } from '../hooks/useRunner.js';
 import type { RunStats } from '@swazz/core';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 
@@ -53,7 +53,7 @@ export function MainWorkspace({
         if (activeStats?.endpointCounts && Object.keys(activeStats.endpointCounts).length > 0) {
             return Object.keys(activeStats.endpointCounts).sort();
         }
-        const uniqueKeys = Array.from(new Set(config.endpoints.map((ep: any) => `${ep.method.toUpperCase()} ${ep.path}`)));
+        const uniqueKeys = Array.from(new Set<string>(config.endpoints.map((ep: any) => `${ep.method.toUpperCase()} ${ep.path}`)));
         return uniqueKeys.sort((a, b) => a.localeCompare(b));
     }, [config.endpoints, activeStats]);
 

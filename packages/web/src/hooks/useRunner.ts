@@ -1,37 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-
-// Lightweight types needed by the UI
-export interface RunStats {
-    totalRequests: number;
-    totalPlanned: number;
-    requestsPerSecond: number;
-    statusCounts: Record<number, number>;
-    profileCounts: Record<string, number>;
-    endpointCounts: Record<string, Record<number, number>>;
-    startTime: number;
-    isRunning: boolean;
-    progress: {
-        completedEndpoints: number;
-        totalEndpoints: number;
-        currentEndpoint: string;
-        currentProfile: string;
-    };
-}
-
-export interface FuzzResult {
-    id: string;
-    endpoint: string;
-    resolvedPath: string;
-    method: string;
-    profile: string;
-    status: number;
-    duration: number;
-    payload: any;
-    responseBody?: any;
-    error?: string;
-    timestamp: number;
-    retries: number;
-}
+import type { FuzzResult, RunStats } from '@swazz/core';
 
 export interface ResultSummary {
     id: string;

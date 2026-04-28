@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,6 +37,12 @@ const (
 type Event struct {
 	Type string `json:"type"`
 	Data any    `json:"data"`
+}
+
+var bufPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
 }
 
 // JSON serializes the event data.
@@ -225,8 +232,12 @@ func (r *Runner) Start(ctx context.Context) error {
 						generated := gen.BuildObject(&endpoint.Schema)
 
 						// Enforce max_payload_size_bytes
-						serialized, err := json.Marshal(generated)
-						if err != nil || len(serialized) > maxPayloadSize {
+						buf := bufPool.Get().(*bytes.Buffer)
+						buf.Reset()
+						err := json.NewEncoder(buf).Encode(generated)
+						
+						if err != nil || buf.Len() > maxPayloadSize {
+							bufPool.Put(buf)
 							isDuplicate = true
 							continue
 						}
@@ -236,7 +247,11 @@ func (r *Runner) Start(ctx context.Context) error {
 						} else {
 							queryParams = generated
 						}
-						payloadHash = generator.HashStr(string(serialized))
+						// Strip the trailing newline from NewEncoder
+						payloadStr := strings.TrimSuffix(buf.String(), "\n")
+						payloadHash = generator.HashStr(payloadStr)
+						bufPool.Put(buf)
+						
 						if !seenHashes[payloadHash] {
 							isDuplicate = false
 							break
@@ -519,15 +534,18 @@ func (r *Runner) executeRequest(
 
 		var respBody any
 		if resp.StatusCode >= 400 {
-			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 51200)) // 50KB limit
-			if len(bodyBytes) > 0 {
+			buf := bufPool.Get().(*bytes.Buffer)
+			buf.Reset()
+			io.Copy(buf, io.LimitReader(resp.Body, 51200)) // 50KB limit
+			if buf.Len() > 0 {
 				var parsed any
-				if json.Unmarshal(bodyBytes, &parsed) == nil {
+				if json.Unmarshal(buf.Bytes(), &parsed) == nil {
 					respBody = parsed
 				} else {
-					respBody = string(bodyBytes)
+					respBody = buf.String()
 				}
 			}
+			bufPool.Put(buf)
 		} else {
 			io.Copy(io.Discard, resp.Body) // drain body to reuse connection
 		}

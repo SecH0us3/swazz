@@ -11,6 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o swazz-eng
 # Stage 2: Minimal final image
 FROM --platform=linux/amd64 alpine:latest
 RUN apk add --no-cache ca-certificates
+ENV GOMEMLIMIT=230MiB
 COPY --from=builder /app/swazz-engine /usr/local/bin/swazz-engine
 WORKDIR /app
 EXPOSE 8080

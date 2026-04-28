@@ -54,15 +54,16 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 		return map[string]any{}
 	}
 
-	requiredSet := make(map[string]bool, len(schema.Required))
-	for _, r := range schema.Required {
-		requiredSet[r] = true
-	}
-
 	payload := make(map[string]any, len(schema.Properties))
 
 	for key, propSchema := range schema.Properties {
-		isRequired := requiredSet[key]
+		isRequired := false
+		for _, r := range schema.Required {
+			if r == key {
+				isRequired = true
+				break
+			}
+		}
 
 		// 30% chance to omit optional fields in intensive profiles
 		if !isRequired &&
