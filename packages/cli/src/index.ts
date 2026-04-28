@@ -171,9 +171,24 @@ async function main(): Promise<void> {
     // Create runner — do NOT keep allResults in memory, only process findings on the fly
     const runner = new FuzzRunner(runConfig, nodeSender);
 
+    const MAX_FINDINGS_PER_DEFECT = 5;
+    const defectCounts: Record<string, number> = {};
+
     runner.onResult = (result) => {
         const finding = classifier.classify(result);
-        if (finding) findings.push(finding);
+        if (finding) {
+            const defectKey = `${finding.ruleId}::${finding.method} ${finding.endpoint}`;
+            const count = defectCounts[defectKey] || 0;
+            
+            if (count < MAX_FINDINGS_PER_DEFECT) {
+                // Truncate huge response bodies to prevent OOM
+                if (finding.responseBody && finding.responseBody.length > 50000) {
+                    finding.responseBody = finding.responseBody.substring(0, 50000) + '\n... [TRUNCATED BY SWAZZ]';
+                }
+                findings.push(finding);
+                defectCounts[defectKey] = count + 1;
+            }
+        }
     };
 
     runner.onProgress = (stats) => {
@@ -215,9 +230,19 @@ async function main(): Promise<void> {
         const ext = format === 'sarif' ? 'sarif' : format;
 
         if (format === 'sarif') {
-            content = JSON.stringify(toSarif(findings, version), null, 2);
+            try {
+                content = JSON.stringify(toSarif(findings, version), null, 2);
+            } catch (err) {
+                process.stderr.write(`\nFailed to serialize SARIF report: ${err instanceof Error ? err.message : 'Unknown error'}\n`);
+                continue;
+            }
         } else if (format === 'json') {
-            content = JSON.stringify(toJson(findings, stats, version), null, 2);
+            try {
+                content = JSON.stringify(toJson(findings, stats, version), null, 2);
+            } catch (err) {
+                process.stderr.write(`\nFailed to serialize JSON report: ${err instanceof Error ? err.message : 'Unknown error'}\n`);
+                continue;
+            }
         } else if (format === 'html') {
             content = toHtml(findings, stats);
         }
@@ -248,6 +273,16 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-    process.stderr.write(`\nFatal: ${err instanceof Error ? err.message : String(err)}\n`);
+    let msg = 'Unknown Error';
+    if (err instanceof Error) {
+        msg = err.message;
+    } else {
+        try {
+            msg = String(err);
+        } catch {
+            msg = '[Unstringifiable Error Object]';
+        }
+    }
+    process.stderr.write(`\nFatal: ${msg}\n`);
     process.exit(2);
 });

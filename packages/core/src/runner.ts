@@ -24,6 +24,26 @@ function hashStr(s: string): number {
     return h;
 }
 
+function safeString(val: any): string {
+    if (typeof val === 'object' && val !== null) {
+        try {
+            return String(val);
+        } catch {
+            return '[Unstringifiable Object]';
+        }
+    }
+    return String(val);
+}
+
+function safeEncodeURIComponent(str: string): string {
+    try {
+        return encodeURIComponent(str);
+    } catch {
+        // Fallback: replace unpaired surrogates with replacement character
+        return encodeURIComponent(str.replace(/[\uD800-\uDFFF]/g, '\uFFFD'));
+    }
+}
+
 /**
  * Substitute {param} placeholders in a URL path with sensible fuzz values.
  * Uses the endpoint's pathParams schema when available, otherwise falls back
@@ -38,7 +58,11 @@ function fillPathParams(
         const schema = pathParams[name] ?? pathParams[name.toLowerCase()] ?? { type: 'string' };
 
         const val = generator.generate(name, schema);
-        return encodeURIComponent(String(val));
+        let strVal = safeString(val);
+        if (strVal === '[Unstringifiable Object]') {
+            console.error(`\n[swazz core] Cannot convert path param object to string:`, val);
+        }
+        return safeEncodeURIComponent(strVal);
     });
 }
 
@@ -84,6 +108,7 @@ export class FuzzRunner {
         const iterations = settings.iterations_per_profile;
         const concurrency = settings.concurrency;
         const delay = settings.delay_between_requests_ms;
+        const maxPayloadSize = settings.max_payload_size_bytes || 1048576;
 
         // Heavy profiles (large payloads) run last and sequentially (concurrency=1)
         // to avoid blowing up memory with many huge payloads in flight at once.
@@ -106,33 +131,36 @@ export class FuzzRunner {
             totalPlanned += profiles.length * effectiveIter;
         }
         this._stats.totalPlanned = totalPlanned;
-        this._stats.progress.totalEndpoints = endpoints.length;
+        this._stats.progress.totalEndpoints = endpoints.length * profiles.length;
 
         try {
-            for (let epIdx = 0; epIdx < endpoints.length; epIdx++) {
-                const endpoint = endpoints[epIdx];
+            for (let profileIdx = 0; profileIdx < profiles.length; profileIdx++) {
+                const profile = profiles[profileIdx];
                 if (this._shouldStop) break;
 
-                const epKey = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
-                this._stats.progress.currentEndpoint = epKey;
-                this._stats.progress.completedEndpoints = epIdx;
+                this._stats.progress.currentProfile = profile;
 
-                // Determine if endpoint has fields to fuzz
-                const hasFields =
-                    (endpoint.schema?.properties &&
-                        Object.keys(endpoint.schema.properties).length > 0) ||
-                    (endpoint.pathParams !== undefined &&
-                        Object.keys(endpoint.pathParams).length > 0) ||
-                    (endpoint.headerParams !== undefined &&
-                        Object.keys(endpoint.headerParams).length > 0);
-                const isBodyMethod = !['GET', 'HEAD', 'OPTIONS'].includes(
-                    endpoint.method.toUpperCase(),
-                );
-
-                for (const profile of profiles) {
+                for (let epIdx = 0; epIdx < endpoints.length; epIdx++) {
+                    const endpoint = endpoints[epIdx];
                     if (this._shouldStop) break;
 
-                    this._stats.progress.currentProfile = profile;
+                    const epKey = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
+                    this._stats.progress.currentEndpoint = epKey;
+                    
+                    // Mark global completion index for smooth progress bar
+                    this._stats.progress.completedEndpoints = (profileIdx * endpoints.length) + epIdx;
+
+                    // Determine if endpoint has fields to fuzz
+                    const hasFields =
+                        (endpoint.schema?.properties &&
+                            Object.keys(endpoint.schema.properties).length > 0) ||
+                        (endpoint.pathParams !== undefined &&
+                            Object.keys(endpoint.pathParams).length > 0) ||
+                        (endpoint.headerParams !== undefined &&
+                            Object.keys(endpoint.headerParams).length > 0);
+                    const isBodyMethod = !['GET', 'HEAD', 'OPTIONS'].includes(
+                        endpoint.method.toUpperCase(),
+                    );
 
                     // Smart iteration count:
                     // - Has fuzzable fields (body or query params) → full iterations
@@ -161,6 +189,23 @@ export class FuzzRunner {
                             // Try up to 10 times to generate a unique payload for this iteration
                             for (let retries = 0; retries < 10; retries++) {
                                 const generated = generator.buildObject(endpoint.schema);
+                                
+                                // Enforce max_payload_size_bytes to prevent network/memory explosion
+                                let exceedsSize = false;
+                                try {
+                                    const serialized = JSON.stringify(generated);
+                                    if (serialized && serialized.length > maxPayloadSize) {
+                                        exceedsSize = true;
+                                    }
+                                } catch {
+                                    exceedsSize = true; // If it throws Invalid string length
+                                }
+
+                                if (exceedsSize) {
+                                    isDuplicate = true;
+                                    continue; // Retry generating a smaller payload
+                                }
+
                                 if (isBodyMethod) {
                                     payload = generated;
                                 } else {
@@ -194,15 +239,15 @@ export class FuzzRunner {
                         // Acquire semaphore slot (efficient — no busy-wait)
                         await semaphore.acquire();
 
-                        // Substitute path parameters for this iteration
-                        const resolvedPath = fillPathParams(
-                            endpoint.path,
-                            endpoint.pathParams ?? {},
-                            generator,
-                        );
-
                         const taskPromise = (async () => {
                             try {
+                                // Substitute path parameters for this iteration
+                                const resolvedPath = fillPathParams(
+                                    endpoint.path,
+                                    endpoint.pathParams ?? {},
+                                    generator,
+                                );
+
                                 // Generate header params for this specific iteration
                                 const generatedHeaders: Record<string, string> = {};
                                 if (endpoint.headerParams && Object.keys(endpoint.headerParams).length > 0) {
@@ -211,7 +256,11 @@ export class FuzzRunner {
                                         properties: endpoint.headerParams,
                                     });
                                     for (const [k, v] of Object.entries(headerObj)) {
-                                        generatedHeaders[k] = String(v);
+                                        let strVal = safeString(v);
+                                        if (strVal === '[Unstringifiable Object]') {
+                                            console.error(`\n[swazz core] Cannot convert header param object to string:`, v);
+                                        }
+                                        generatedHeaders[k] = strVal;
                                     }
                                 }
 
@@ -233,7 +282,7 @@ export class FuzzRunner {
                                 this.onResult(result);
                                 this.onProgress(this._stats);
                             } catch (err) {
-                                const error = err instanceof Error ? err : new Error(String(err));
+                                const error = err instanceof Error ? err : new Error(safeString(err));
                                 this.onError(error);
                             } finally {
                                 semaphore.release();
@@ -248,14 +297,14 @@ export class FuzzRunner {
                         }
                     }
 
-                    // Wait for remaining tasks in this profile batch, then release references
+                    // Wait for remaining tasks in this endpoint x profile batch, then release references
                     await Promise.all(tasks);
                     tasks.length = 0;
-                }
 
-                // Mark endpoint as done
-                this._stats.progress.completedEndpoints = epIdx + 1;
-                this.onProgress(this._stats);
+                    // Mark this specific step as done for progress updates
+                    this._stats.progress.completedEndpoints = (profileIdx * endpoints.length) + epIdx + 1;
+                    this.onProgress(this._stats);
+                }
             }
         } finally {
             this._isRunning = false;
@@ -318,7 +367,13 @@ export class FuzzRunner {
         // Append query parameters for non-body methods (GET, DELETE, etc.)
         if (queryParams && Object.keys(queryParams).length > 0) {
             const qs = Object.entries(queryParams)
-                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+                .map(([k, v]) => {
+                    let strVal = safeString(v);
+                    if (strVal === '[Unstringifiable Object]') {
+                         console.error(`\n[swazz core] Cannot convert query param object to string:`, v);
+                    }
+                    return `${safeEncodeURIComponent(k)}=${safeEncodeURIComponent(strVal)}`;
+                })
                 .join('&');
             url += (url.includes('?') ? '&' : '?') + qs;
         }
@@ -391,7 +446,7 @@ export class FuzzRunner {
                     retries: attempt,
                 };
             } catch (err) {
-                const error = err instanceof Error ? err : new Error(String(err));
+                const error = err instanceof Error ? err : new Error(safeString(err));
                 return {
                     id: uuid(),
                     endpoint: originalPath,
