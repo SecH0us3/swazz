@@ -1,7 +1,15 @@
 {
   "name": "swazz-web",
   "compatibility_date": "2026-04-30",
+  "main": "worker.ts",
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "API",
+      "service": "swazz-api"
+    }
+  ]
 }
