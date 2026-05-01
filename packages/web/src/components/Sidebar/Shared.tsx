@@ -81,15 +81,17 @@ export function KVEditor({
                         className="input"
                         value={key}
                         placeholder={keyPlaceholder}
+                        aria-label={keyPlaceholder}
                         onChange={(e) => update(key, e.target.value, value)}
                     />
                     <input
                         className="input"
                         value={value}
                         placeholder={valuePlaceholder}
+                        aria-label={valuePlaceholder}
                         onChange={(e) => update(key, key, e.target.value)}
                     />
-                    <button className="kv-delete" onClick={() => remove(key)} title="Delete">✕</button>
+                    <button className="kv-delete" onClick={() => remove(key)} title="Delete" aria-label={`Delete ${key || 'entry'}`}>✕</button>
                 </div>
             ))}
             <button className="kv-add" onClick={add}>+ Add {keyPlaceholder}</button>
