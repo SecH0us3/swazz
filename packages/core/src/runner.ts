@@ -12,7 +12,7 @@ import type {
 } from './types.js';
 import { SmartPayloadGenerator } from './generator.js';
 import type { SchemaProperty } from './types.js';
-import { uuid, int, word } from './random.js';
+import { uuid, int, word, next } from './random.js';
 import { Semaphore } from './utils/semaphore.js';
 
 /** Fast string hash (djb2) — good enough for dedup within a single profile run. */
@@ -427,7 +427,7 @@ export class FuzzRunner {
                     attempt++;
                     // Try to honor Retry-After header (sent back through body or via response headers)
                     // Since SendRequestFn doesn't expose headers, we use a fixed backoff with jitter
-                    const backoffMs = DEFAULT_BACKOFF_MS * attempt + Math.random() * 500;
+                    const backoffMs = DEFAULT_BACKOFF_MS * attempt + next() * 500;
                     await this.sleep(backoffMs);
                     continue; // retry
                 }

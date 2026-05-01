@@ -52,9 +52,23 @@ const DOMAINS = [
 
 // ─── Core random functions ──────────────────────────────
 
+/**
+ * Returns a cryptographically secure random number between 0 (inclusive) and 1 (exclusive).
+ * Works in Node.js, Browsers, and Cloudflare Workers.
+ */
+export function next(): number {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const array = new Uint32Array(1);
+        crypto.getRandomValues(array);
+        return array[0] / 4294967296; // 2^32
+    }
+    return Math.random();
+}
+
 /** Pick a random element from array */
 export function pick<T>(arr: readonly T[]): T {
-    return arr[Math.floor(Math.random() * arr.length)];
+    if (arr.length === 0) throw new Error('Cannot pick from empty array');
+    return arr[Math.floor(next() * arr.length)];
 }
 
 /** Generate a UUID v4 */
@@ -64,7 +78,7 @@ export function uuid(): string {
     }
     // Fallback
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-        const r = (Math.random() * 16) | 0;
+        const r = (next() * 16) | 0;
         const v = c === 'x' ? r : (r & 0x3) | 0x8;
         return v.toString(16);
     });
@@ -89,17 +103,17 @@ export function sentence(): string {
 
 /** Random integer in [min, max] inclusive */
 export function int(min: number, max: number): number {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+    return Math.floor(next() * (max - min + 1)) + min;
 }
 
 /** Random float in [min, max) */
 export function float(min: number, max: number): number {
-    return Math.random() * (max - min) + min;
+    return next() * (max - min) + min;
 }
 
 /** Random boolean */
 export function bool(): boolean {
-    return Math.random() < 0.5;
+    return next() < 0.5;
 }
 
 /** Random date between from and to */
@@ -109,7 +123,7 @@ export function date(
 ): Date {
     const fromMs = from.getTime();
     const toMs = to.getTime();
-    return new Date(fromMs + Math.random() * (toMs - fromMs));
+    return new Date(fromMs + next() * (toMs - fromMs));
 }
 
 /** Random email */
@@ -135,7 +149,7 @@ export function randomString(length: number): string {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
     for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+        result += chars.charAt(Math.floor(next() * chars.length));
     }
     return result;
 }
