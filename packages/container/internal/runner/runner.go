@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -235,7 +234,7 @@ func (r *Runner) Start(ctx context.Context) error {
 						buf := bufPool.Get().(*bytes.Buffer)
 						buf.Reset()
 						err := json.NewEncoder(buf).Encode(generated)
-						
+
 						if err != nil || buf.Len() > maxPayloadSize {
 							bufPool.Put(buf)
 							isDuplicate = true
@@ -251,7 +250,7 @@ func (r *Runner) Start(ctx context.Context) error {
 						payloadStr := strings.TrimSuffix(buf.String(), "\n")
 						payloadHash = generator.HashStr(payloadStr)
 						bufPool.Put(buf)
-						
+
 						if !seenHashes[payloadHash] {
 							isDuplicate = false
 							break
@@ -685,6 +684,3 @@ func copyMapEndpoint(src map[string]map[int]int64) map[string]map[int]int64 {
 	}
 	return dst
 }
-
-// Suppress unused import warning for log
-var _ = log.Printf
