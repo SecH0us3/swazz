@@ -300,6 +300,17 @@ body.resizing .sidebar-resizer {
   background-clip: text;
 }
 
+.header-github-link {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.header-github-link:hover {
+  color: var(--text-primary);
+}
+
 .header-divider {
   width: 1px;
   height: 20px;
