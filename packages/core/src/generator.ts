@@ -42,7 +42,7 @@ export class SmartPayloadGenerator {
         if (schema.enum && schema.enum.length > 0) {
             const shouldBypass =
                 (this.profile === 'MALICIOUS' || this.profile === 'BOUNDARY') &&
-                Math.random() < 0.3;
+                rand.next() < 0.3;
             if (!shouldBypass) {
                 return rand.pick(schema.enum);
             }
@@ -74,13 +74,13 @@ export class SmartPayloadGenerator {
             if (
                 !isRequired &&
                 (this.profile === 'BOUNDARY' || this.profile === 'MALICIOUS') &&
-                Math.random() < 0.3
+                rand.next() < 0.3
             ) {
                 continue;
             }
 
             // 5% chance to omit REQUIRED fields in MALICIOUS profile to test server validation
-            if (isRequired && this.profile === 'MALICIOUS' && Math.random() < 0.05) {
+            if (isRequired && this.profile === 'MALICIOUS' && rand.next() < 0.05) {
                 continue;
             }
 
@@ -114,7 +114,7 @@ export class SmartPayloadGenerator {
 
     private generateByProfile(type?: string, format?: string, propName?: string): any {
         // MALICIOUS: 5% chance to completely break the expected type
-        if (this.profile === 'MALICIOUS' && Math.random() < 0.05) {
+        if (this.profile === 'MALICIOUS' && rand.next() < 0.05) {
             return this.breakType();
         }
 
