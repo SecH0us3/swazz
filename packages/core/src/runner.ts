@@ -14,15 +14,7 @@ import { SmartPayloadGenerator } from './generator.js';
 import type { SchemaProperty } from './types.js';
 import { uuid, int, word, next } from './random.js';
 import { Semaphore } from './utils/semaphore.js';
-
-/** Fast string hash (djb2) — good enough for dedup within a single profile run. */
-function hashStr(s: string): number {
-    let h = 5381;
-    for (let i = 0; i < s.length; i++) {
-        h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-    }
-    return h;
-}
+import { hashStr } from './utils/hash.js';
 
 function safeString(val: any): string {
     if (typeof val === 'object' && val !== null) {
@@ -192,8 +184,9 @@ export class FuzzRunner {
                                 
                                 // Enforce max_payload_size_bytes to prevent network/memory explosion
                                 let exceedsSize = false;
+                                let serialized = '';
                                 try {
-                                    const serialized = JSON.stringify(generated);
+                                    serialized = JSON.stringify(generated);
                                     if (serialized && serialized.length > maxPayloadSize) {
                                         exceedsSize = true;
                                     }
@@ -211,7 +204,7 @@ export class FuzzRunner {
                                 } else {
                                     queryParams = generated;
                                 }
-                                payloadHash = hashStr(JSON.stringify(generated));
+                                payloadHash = hashStr(serialized);
                                 if (!seenHashes.has(payloadHash)) {
                                     isDuplicate = false;
                                     break;
