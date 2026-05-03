@@ -467,6 +467,16 @@ body.resizing .sidebar-resizer {
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity:0.45; cursor:not-allowed; transform:none !important; box-shadow:none !important; }
 
+.btn:focus-visible,
+.header-mobile-toggle:focus-visible,
+.kv-delete:focus-visible,
+.kv-add:focus-visible,
+.tree-chevron:focus-visible,
+.checkbox:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
 /* Primary — violet gradient */
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), #6d28d9);
