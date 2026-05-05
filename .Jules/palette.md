@@ -4,3 +4,6 @@
 ## 2024-05-18 - Header Link Addition
 **Learning:** Adding new functional items to the header while respecting the flexbox layout.
 **Action:** Used an inline SVG with a simple hover styling `.header-github-link` to place a GitHub logo inline inside the flex layout instead of using absolute positioning, staying consistent with the application design.
+## 2024-05-19 - Keyboard Accessibility Focus Styles
+**Learning:** Interactive elements like buttons were lacking visible focus states when navigating via keyboard, making it difficult for keyboard-only users to track their position on the screen.
+**Action:** Added global focus-visible outline styles for all buttons in index.css to ensure WCAG compliant focus indicators without impacting mouse users.
