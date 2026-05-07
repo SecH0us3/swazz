@@ -177,6 +177,7 @@ export function Sidebar({
                                                 style={{ fontSize:12, padding:'3px 7px', color:'var(--color-error)' }}
                                                 onClick={() => { if (confirm('Delete this scan history?')) onDeleteRun(r.id); }}
                                                 title="Delete"
+                                                aria-label="Delete scan history"
                                             >
                                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                                                     <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/>
@@ -210,6 +211,7 @@ export function Sidebar({
                                 className="kv-delete"
                                 onClick={() => removeUrl(url)}
                                 title="Remove"
+                                aria-label="Remove URL"
                             >✕</button>
                         </div>
                     ))}
