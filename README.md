@@ -35,7 +35,7 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
   "swagger_urls": ["https://api.example.com/swagger.json"],
   "base_url": "https://api.example.com",
   "headers": {
-    "Authorization": "Bearer <your-token>"
+    "Authorization": "Bearer YOUR_TOKEN_HERE"
   },
   "dictionaries": {
     "username": ["admin", "guest"],
@@ -109,7 +109,7 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
 
 4. **Run your first Fuzz Test**:
    - In the sidebar, enter one or more **Swagger URLs** (e.g., `https://petstore.swagger.io/v2/swagger.json`).
-   - Add any required **Auth Headers** (e.g., `Authorization: Bearer <token>`).
+   - Add any required **Auth Headers** (e.g., `Authorization: Bearer YOUR_TOKEN_HERE`).
    - Select your desired **Fuzz Profiles** (Random, Boundary, Malicious).
    - Press **Start** and watch the heatmap light up!
 
