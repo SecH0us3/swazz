@@ -145,18 +145,23 @@ export function useDb() {
         const runId = `cli-${Date.now()}`;
         const timestamp = new Date(data.timestamp).getTime() || Date.now();
 
-        // Map CLI summary to ScanRun stats
+        // Map CLI summary to ScanRun stats and convert findings in one pass
         const endpointCounts: Record<string, Record<number, number>> = {};
         const profileCounts = { RANDOM: 0, BOUNDARY: 0, MALICIOUS: 0 };
 
-        data.findings.forEach((f: any) => {
+        const rows = data.findings.map((f: any) => {
             const key = `${f.method} ${f.endpoint}`;
             if (!endpointCounts[key]) endpointCounts[key] = {};
             endpointCounts[key][f.status] = (endpointCounts[key][f.status] || 0) + 1;
-            
+
             if (f.profile in profileCounts) {
                 profileCounts[f.profile as keyof typeof profileCounts]++;
             }
+
+            return toSummary({
+                ...f,
+                retries: f.retries || 0,
+            });
         });
 
         const stats: RunStats = {
@@ -192,12 +197,6 @@ export function useDb() {
             baseUrl,
             stats,
         };
-
-        // Convert Findings to ResultSummary
-        const rows = data.findings.map((f: any) => toSummary({
-            ...f,
-            retries: f.retries || 0,
-        }));
 
         await dbSaveRun(db, run);
         await dbAppendResults(db, run.id, rows);
