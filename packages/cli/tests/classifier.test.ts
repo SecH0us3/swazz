@@ -59,6 +59,14 @@ describe('Classifier', () => {
             expect(c.classify(makeResult({ status: 404 }))).toBeNull();
         });
 
+        it('ignores 405 (in default ignore list)', () => {
+            expect(c.classify(makeResult({ status: 405 }))).toBeNull();
+        });
+
+        it('ignores 422 (in default ignore list)', () => {
+            expect(c.classify(makeResult({ status: 422 }))).toBeNull();
+        });
+
         it('ignores 429 (in default ignore list)', () => {
             expect(c.classify(makeResult({ status: 429 }))).toBeNull();
         });
@@ -135,6 +143,23 @@ describe('Classifier', () => {
             expect(c.classify(makeResult({ status: 500 }))).toBeNull();
         });
 
+        it('setting severity to "ignore" for specific status works', () => {
+            const c = new Classifier({
+                severity: { '500': 'ignore' },
+            });
+            expect(c.classify(makeResult({ status: 500 }))).toBeNull();
+        });
+
+        it('empty ignore list in config overrides defaults', () => {
+            const c = new Classifier({
+                ignore: [],
+            });
+            // 401 is normally ignored by default
+            const f = c.classify(makeResult({ status: 401 }));
+            expect(f).not.toBeNull();
+            expect(f!.level).toBe('error');
+        });
+
         it('unknown status falls back to defaults by range', () => {
             const c = new Classifier({
                 defaults: { '4xx': 'note' },
@@ -191,6 +216,13 @@ describe('Classifier', () => {
             expect(f!.ruleId).toBe('swazz/status-599');
         });
 
+        it('status 600 (out of range) classified as error (fallback)', () => {
+            const c = new Classifier();
+            const f = c.classify(makeResult({ status: 600 }));
+            expect(f).not.toBeNull();
+            expect(f!.level).toBe('error');
+        });
+
         it('status 999 with no defaults → fallback error', () => {
             const c = new Classifier({ ignore: [], severity: {}, defaults: {} });
             const f = c.classify(makeResult({ status: 999 }));
@@ -245,6 +277,15 @@ describe('Classifier', () => {
                 defaults: { 'network_error': 'ignore' },
             });
             expect(c.classify(makeResult({ status: 0, error: 'ECONNREFUSED' }))).toBeNull();
+        });
+
+        it('mixed rules: specific status severity + range defaults', () => {
+            const c = new Classifier({
+                severity: { '500': 'warning' },
+                defaults: { '5xx': 'error' },
+            });
+            expect(c.classify(makeResult({ status: 500 }))!.level).toBe('warning');
+            expect(c.classify(makeResult({ status: 501 }))!.level).toBe('error');
         });
 
         it('all three profiles produce correct findings', () => {
