@@ -149,12 +149,25 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
                     </div>
 
                     {/* Endpoint name search */}
-                    <input
-                        className="input heatmap-search"
-                        placeholder="Filter endpoints…"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
+                    <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
+                        <input
+                            className="input heatmap-search"
+                            placeholder="Filter endpoints…"
+                            aria-label="Filter endpoints"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            style={{ paddingRight: search ? 28 : undefined }}
+                        />
+                        {search && (
+                            <button
+                                className="btn btn-icon"
+                                style={{ position:'absolute', right:4, top:'50%', transform:'translateY(-50%)', width:20, height:20, padding:0, minHeight:0, minWidth:0 }}
+                                onClick={() => setSearch('')}
+                                aria-label="Clear filter"
+                                title="Clear filter"
+                            >✕</button>
+                        )}
+                    </div>
                 </div>
             </div>
 
