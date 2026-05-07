@@ -4,9 +4,11 @@
     ],
     "base_url": "https://api.example.com",
     "headers": {
-        "Authorization": "Bearer <token>"
+        "Authorization": "Bearer YOUR_AUTH_TOKEN_HERE"
     },
-    "cookies": {},
+    "cookies": {
+        "session_id": "YOUR_SESSION_ID_HERE"
+    },
     "dictionaries": {
         "username": ["admin", "test", "root"],
         "email": ["admin@test.com", "a@b.c"]
