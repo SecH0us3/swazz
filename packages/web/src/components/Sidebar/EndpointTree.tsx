@@ -97,13 +97,14 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
             <div key={nodeKey} className="tree-node" style={{ marginLeft: depth === 0 ? 0 : 12 }}>
                 {node.name !== 'root' && !isLeaf && (
                     <div className="tree-node-row">
-                        <button className="tree-chevron" onClick={() => toggleExpand(nodeKey)} data-expanded={isExpanded}>
+                        <button className="tree-chevron" onClick={() => toggleExpand(nodeKey)} data-expanded={isExpanded} aria-expanded={isExpanded} aria-label={`Toggle folder ${displayName}`}>
                             ▶
                         </button>
                         <input
                             type="checkbox"
                             className="checkbox"
                             checked={checked}
+                            aria-label={`Toggle all endpoints in ${displayName}`}
                             ref={(el) => { if (el) el.indeterminate = indeterminate; }}
                             onChange={toggleNode}
                         />
@@ -125,6 +126,7 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                                         type="checkbox"
                                         className="checkbox"
                                         checked={isChecked}
+                                        aria-label={`Enable endpoint ${ep.id}`}
                                         onChange={() => {
                                             if (isChecked) onUpdateDisabled([...disabledEndpoints, ep.id]);
                                             else onUpdateDisabled(disabledEndpoints.filter((id) => id !== ep.id));
