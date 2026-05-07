@@ -22,6 +22,15 @@ export function Section({
                 className="sidebar-section-header"
                 data-collapsed={!open}
                 onClick={() => setOpen(!open)}
+                role="button"
+                tabIndex={0}
+                aria-expanded={open}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setOpen(!open);
+                    }
+                }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                     <span style={{ display:'flex', alignItems:'center' }}>

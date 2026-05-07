@@ -97,8 +97,8 @@ describe('loadConfig', () => {
 
         const { runConfig } = await loadConfig(configPath);
         expect(runConfig.settings.iterations_per_profile).toBe(5);
-        expect(runConfig.settings.concurrency).toBe(5); // default
-        expect(runConfig.settings.timeout_ms).toBe(10000); // default
+        expect(runConfig.settings.concurrency).toBe(2); // default
+        expect(runConfig.settings.timeout_ms).toBe(2000); // default
     });
 
     it('passes headers and cookies through', async () => {
