@@ -133,10 +133,20 @@ export function Inspector({
                         <input
                             className="input inspector-search"
                             placeholder="Filter by path…"
+                            aria-label="Filter by path"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            style={{ flex:1, paddingLeft:28, width:'100%' }}
+                            style={{ flex:1, paddingLeft:28, paddingRight: search ? 28 : undefined, width:'100%' }}
                         />
+                        {search && (
+                            <button
+                                className="btn btn-icon"
+                                style={{ position:'absolute', right:4, top:'50%', transform:'translateY(-50%)', width:20, height:20, padding:0, minHeight:0, minWidth:0 }}
+                                onClick={() => setSearch('')}
+                                aria-label="Clear search"
+                                title="Clear search"
+                            >✕</button>
+                        )}
                     </div>
                     <button
                         className="btn btn-ghost btn-sm"

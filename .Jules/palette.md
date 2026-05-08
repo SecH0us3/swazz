@@ -10,6 +10,10 @@
 ## 2024-05-18 - Adding Keyboard Focus Styles
 **Learning:** Many interactive components (buttons, toggles, checkboxes) in custom UI frameworks often lack visible focus states, making the application inaccessible for keyboard navigation users. Relying purely on mouse interaction leaves out a subset of users.
 **Action:** By adding a global `:focus-visible` outline mapped to our `--accent-light` variable for elements like `.btn`, `.header-mobile-toggle`, `.kv-delete`, `.kv-add`, `.tree-chevron`, and `.checkbox`, we ensure that any keyboard tabbing highlights the currently focused element consistently, without adding unnecessary visual outlines for mouse clickers.
+
+## 2023-10-27 - Input Filter Clear Buttons
+**Learning:** Filter inputs that lack clear buttons cause friction because users must manually backspace to clear the filter, which is tedious, especially on smaller screens or during keyboard navigation.
+**Action:** Always wrap text filter inputs with a relatively positioned container and conditionally render a clear search button inside when the input has value. Don't forget to dynamically adjust `paddingRight` on the input so text doesn't flow underneath the clear button.
 ## 2026-05-04 - [Added missing aria-labels to custom Tree Component]
 **Learning:** Custom tree implementations often lack accessible names for structural components (like chevron expand/collapse buttons) and checkboxes that control multiple nested items or individual items.
 **Action:** When working on tree components, always ensure that fold/unfold buttons have `aria-expanded` and `aria-label`s and checkboxes have descriptive `aria-label`s to explain their context (e.g. "Toggle all endpoints in folder").
