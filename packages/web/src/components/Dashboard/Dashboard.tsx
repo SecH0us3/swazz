@@ -1,4 +1,3 @@
-import React from 'react';
 import type { RunStats } from '@swazz/core';
 import { StatsBar } from './StatsBar.js';
 import { Heatmap } from './Heatmap.js';
