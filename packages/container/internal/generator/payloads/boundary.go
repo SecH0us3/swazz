@@ -88,6 +88,8 @@ var BoundaryArraySizes = []any{
 	1,
 	100,
 	1000,
+	10000,
+	100000,
 }
 
 // ─── Boolean boundaries ─────────────────────────────────
