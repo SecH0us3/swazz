@@ -37,7 +37,7 @@ type Config struct {
 	Dictionaries     map[string][]any       `json:"dictionaries"`
 	Settings         Settings               `json:"settings"`
 	Endpoints        []EndpointConfig       `json:"endpoints"`
-	DisabledEndpoints []string              `json:"disabled_endpoints,omitempty"`
+
 }
 
 // Settings controls the fuzzing run behavior.
