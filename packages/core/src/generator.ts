@@ -10,6 +10,7 @@ import {
     BOUNDARY_INTEGERS,
     BOUNDARY_NUMBERS,
     BOUNDARY_DATES,
+    BOUNDARY_BOOLEANS,
     BOUNDARY_ARRAY_SIZES,
 } from './payloads/boundary.js';
 import {
@@ -24,6 +25,15 @@ export class SmartPayloadGenerator {
     private dictionaries: Dictionary;
     private profile: FuzzingProfile;
 
+    // Sequential index counters for BOUNDARY profile — ensures every value
+    // in each boundary array is visited in order across successive iterations.
+    private _bStrIdx = 0;
+    private _bIntIdx = 0;
+    private _bNumIdx = 0;
+    private _bDateIdx = 0;
+    private _bArrIdx = 0;
+    private _bBoolIdx = 0;
+
     constructor(dictionaries: Dictionary = {}, profile: FuzzingProfile = 'RANDOM') {
         // Normalize dictionary keys to lowercase
         this.dictionaries = Object.keys(dictionaries).reduce((acc, key) => {
@@ -31,6 +41,28 @@ export class SmartPayloadGenerator {
             return acc;
         }, {} as Dictionary);
         this.profile = profile;
+    }
+
+    /**
+     * How many iterations are needed to cover all boundary values.
+     * Equals the length of the longest boundary array.
+     */
+    public static boundaryIterationsNeeded(): number {
+        return Math.max(
+            BOUNDARY_STRINGS.length,
+            BOUNDARY_INTEGERS.length,
+            BOUNDARY_NUMBERS.length,
+            BOUNDARY_DATES.length,
+            BOUNDARY_BOOLEANS.length,
+            BOUNDARY_ARRAY_SIZES.length,
+        );
+    }
+
+    /** Sequential pick for BOUNDARY: advances index each call, wraps around. */
+    private boundaryPick<T>(arr: readonly T[], counter: '_bStrIdx' | '_bIntIdx' | '_bNumIdx' | '_bDateIdx' | '_bArrIdx' | '_bBoolIdx'): T {
+        const val = arr[this[counter] % arr.length];
+        this[counter]++;
+        return val;
     }
 
     /**
@@ -105,7 +137,7 @@ export class SmartPayloadGenerator {
 
     private getArraySize(itemSchema?: SchemaProperty): number {
         if (this.profile === 'BOUNDARY') {
-            const size = rand.pick(BOUNDARY_ARRAY_SIZES);
+            const size = this.boundaryPick(BOUNDARY_ARRAY_SIZES, '_bArrIdx');
             // Cap complex object arrays to prevent OOM; primitives can be huge
             return itemSchema?.type === 'object' ? Math.min(size, 50) : size;
         }
@@ -154,7 +186,7 @@ export class SmartPayloadGenerator {
 
         switch (this.profile) {
             case 'BOUNDARY':
-                return rand.pick(BOUNDARY_STRINGS);
+                return this.boundaryPick(BOUNDARY_STRINGS, '_bStrIdx');
 
             case 'MALICIOUS':
                 return rand.pick(ALL_MALICIOUS_STRINGS);
@@ -188,8 +220,8 @@ export class SmartPayloadGenerator {
         switch (this.profile) {
             case 'BOUNDARY':
                 return type === 'integer'
-                    ? rand.pick(BOUNDARY_INTEGERS)
-                    : rand.pick([...BOUNDARY_INTEGERS, ...BOUNDARY_NUMBERS]);
+                    ? this.boundaryPick(BOUNDARY_INTEGERS, '_bIntIdx')
+                    : this.boundaryPick([...BOUNDARY_INTEGERS, ...BOUNDARY_NUMBERS], '_bNumIdx');
 
             case 'MALICIOUS':
                 return rand.pick(MALICIOUS_NUMBERS);
@@ -204,10 +236,12 @@ export class SmartPayloadGenerator {
 
     private generateBoolean(): any {
         switch (this.profile) {
+            case 'BOUNDARY':
+                return this.boundaryPick(BOUNDARY_BOOLEANS, '_bBoolIdx');
+
             case 'MALICIOUS':
                 return rand.pick(MALICIOUS_BOOLEANS);
 
-            case 'BOUNDARY':
             case 'RANDOM':
             default:
                 return rand.bool();
@@ -217,7 +251,7 @@ export class SmartPayloadGenerator {
     private generateDate(): any {
         switch (this.profile) {
             case 'BOUNDARY':
-                return rand.pick(BOUNDARY_DATES);
+                return this.boundaryPick(BOUNDARY_DATES, '_bDateIdx');
 
             case 'MALICIOUS':
                 return rand.pick(MALICIOUS_DATES);

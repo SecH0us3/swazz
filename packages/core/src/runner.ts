@@ -167,6 +167,9 @@ export class FuzzRunner {
                     // Process iterations with semaphore-based concurrency control
                     const tasks: Promise<void>[] = [];
                     const semaphore = new Semaphore(profileConcurrency);
+                    // BOUNDARY uses fixed finite arrays — deduplication would skip most iterations
+                    // since boundary payloads repeat quickly. Only dedup for RANDOM/MALICIOUS.
+                    const enableDedup = profile !== 'BOUNDARY';
                     const seenHashes = new Set<number>();
 
                     for (let i = 0; i < effectiveIterations; i++) {
@@ -179,7 +182,8 @@ export class FuzzRunner {
 
                         if (hasFields) {
                             // Try up to 10 times to generate a unique payload for this iteration
-                            for (let retries = 0; retries < 10; retries++) {
+                            const maxRetries = enableDedup ? 10 : 1;
+                            for (let retries = 0; retries < maxRetries; retries++) {
                                 const generated = generator.buildObject(endpoint.schema);
                                 
                                 // Enforce max_payload_size_bytes to prevent network/memory explosion
@@ -205,14 +209,14 @@ export class FuzzRunner {
                                     queryParams = generated;
                                 }
                                 payloadHash = hashStr(serialized);
-                                if (!seenHashes.has(payloadHash)) {
+                                if (!enableDedup || !seenHashes.has(payloadHash)) {
                                     isDuplicate = false;
                                     break;
                                 }
                                 isDuplicate = true;
                             }
                         } else {
-                            isDuplicate = seenHashes.has(payloadHash);
+                            isDuplicate = enableDedup && seenHashes.has(payloadHash);
                         }
 
                         if (isDuplicate) {
@@ -221,7 +225,7 @@ export class FuzzRunner {
                             this._stats.totalPlanned--;
                             continue;
                         }
-                        seenHashes.add(payloadHash);
+                        if (enableDedup) seenHashes.add(payloadHash);
 
                         // Wait while paused
                         while (this._isPaused && !this._shouldStop) {

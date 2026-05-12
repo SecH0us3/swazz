@@ -72,11 +72,22 @@ export const BOUNDARY_DATES: string[] = [
 ];
 
 // ─── Boolean boundaries ─────────────────────────────────
-// (booleans have no special boundaries, but we ensure both)
+// Includes type-coercion edge cases: null, 0/1, string variants
 
-export const BOUNDARY_BOOLEANS: boolean[] = [
+export const BOUNDARY_BOOLEANS: any[] = [
     true,
     false,
+    null,               // null coercion
+    0,                  // falsy int
+    1,                  // truthy int
+    -1,                 // non-zero truthy
+    '',                 // empty string (falsy)
+    'true',             // string coercion
+    'false',            // string coercion
+    'yes',
+    'no',
+    '1',
+    '0',
 ];
 
 // ─── Array boundaries ───────────────────────────────────
