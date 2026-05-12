@@ -412,9 +412,9 @@ func printProgress(stats swagger.RunStats) {
 					colorCode = "36" // Cyan default
 				}
 
-				parts = append(parts, fmt.Sprintf("\033[1;%sm%d\033[0m: %-5d", colorCode, code, count))
+				parts = append(parts, fmt.Sprintf("\033[1;%sm%03d\033[0m: %-4d", colorCode, code, count))
 			}
-			statusStr := strings.Join(parts, "   ")
+			statusStr := strings.Join(parts, "  ")
 			if len(statusStr) > 200 { // Increased limit because of more ANSI characters
 				statusStr = statusStr[:197] + "..."
 			}
@@ -449,7 +449,7 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 	}
 	sort.Ints(statCodes)
 	for _, code := range statCodes {
-		fmt.Printf("    %3d: %5d\n", code, stats.StatusCounts[code])
+		fmt.Printf("    %03d: %5d\n", code, stats.StatusCounts[code])
 	}
 
 	var errs, warns, notes int
@@ -499,7 +499,7 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 					profiles = append(profiles, p)
 				}
 				level := sf[0].Level
-				fmt.Printf("      HTTP %d (%s) x%d [%s]\n", status, level, len(sf), strings.Join(profiles, ","))
+				fmt.Printf("      HTTP %03d (%s) x%d [%s]\n", status, level, len(sf), strings.Join(profiles, ","))
 			}
 		}
 	}
