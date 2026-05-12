@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary } from '@swazz/core';
+import { SmartPayloadGenerator } from '@swazz/core';
 import { Section, KVEditor } from './Shared.js';
 
 interface Props {
@@ -46,6 +47,14 @@ export function ConfigSidebar({
         if (next.length > 0) onUpdateProfiles(next);
     };
 
+    // Compute the minimum payloads needed across active profiles
+    const minPayloads = useMemo(() => {
+        return activeProfiles.reduce((max, p) => {
+            const needed = SmartPayloadGenerator.minIterationsNeeded(p);
+            return Math.max(max, needed);
+        }, 0);
+    }, [activeProfiles]);
+
     const handleDictBlur = () => {
         try {
             const parsed = JSON.parse(dictText);
@@ -74,7 +83,6 @@ export function ConfigSidebar({
     };
 
     const SETTINGS_FIELDS = [
-        { label: 'Intensity', key: 'iterations_per_profile', value: config.settings.iterations_per_profile },
         { label: 'Concurrency', key: 'concurrency', value: config.settings.concurrency },
         { label: 'Timeout (ms)', key: 'timeout_ms', value: config.settings.timeout_ms },
         { label: 'Delay (ms)', key: 'delay_between_requests_ms', value: config.settings.delay_between_requests_ms },
@@ -111,6 +119,31 @@ export function ConfigSidebar({
                             </div>
                         );
                     })}
+                </div>
+
+                {/* Intensity control */}
+                <div style={{ marginTop:10, padding:'8px 0 0', borderTop:'1px solid var(--border-subtle)' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-secondary)' }}>Intensity</span>
+                        <input
+                            className="input"
+                            type="number"
+                            min={1}
+                            style={{ width:64, flexShrink:0, textAlign:'center' }}
+                            value={config.settings.iterations_per_profile}
+                            onChange={(e) => onUpdateConfig({
+                                settings: { ...config.settings, iterations_per_profile: parseInt(e.target.value) || 1 } as any,
+                            })}
+                        />
+                    </div>
+                    {minPayloads > 0 && (
+                        <div style={{ fontSize:'var(--font-size-2xs)', color:'var(--text-disabled)', marginTop:4 }}>
+                            {config.settings.iterations_per_profile < minPayloads
+                                ? <>Auto-expanded to <strong style={{ color:'var(--text-muted)' }}>{minPayloads}</strong> for full coverage</>
+                                : <>Min <strong style={{ color:'var(--text-muted)' }}>{minPayloads}</strong> for full coverage</>
+                            }
+                        </div>
+                    )}
                 </div>
             </Section>
 
