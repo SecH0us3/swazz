@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -387,12 +388,32 @@ func printProgress(stats swagger.RunStats) {
 	} else {
 		for _, p := range sortedProfiles {
 			var parts []string
-			for code, count := range stats.StatusByProfile[p] {
-				parts = append(parts, fmt.Sprintf("\033[1;36m%d\033[0m: %-5d", code, count))
+			var codes []int
+			for code := range stats.StatusByProfile[p] {
+				codes = append(codes, code)
+			}
+			sort.Ints(codes)
+
+			for _, code := range codes {
+				count := stats.StatusByProfile[p][code]
+				var colorCode string
+				if code >= 200 && code < 300 {
+					colorCode = "35" // Purple
+				} else if code >= 300 && code < 400 {
+					colorCode = "90" // Gray
+				} else if code >= 400 && code < 500 {
+					colorCode = "33" // Orange/Yellow
+				} else if code >= 500 {
+					colorCode = "31" // Red
+				} else {
+					colorCode = "36" // Cyan default
+				}
+
+				parts = append(parts, fmt.Sprintf("\033[1;%sm%d\033[0m: %-5d", colorCode, code, count))
 			}
 			statusStr := strings.Join(parts, "   ")
-			if len(statusStr) > 120 {
-				statusStr = statusStr[:117] + "..."
+			if len(statusStr) > 200 { // Increased limit because of more ANSI characters
+				statusStr = statusStr[:197] + "..."
 			}
 			fmt.Printf("📊 \033[1mStatus [%-10s]:\033[0m %s\033[K\n", p, statusStr)
 		}
