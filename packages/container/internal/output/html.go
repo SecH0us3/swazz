@@ -203,29 +203,32 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
         <h2>Findings</h2>
         <div class="findings-list">%s</div>
     </div>
-    <script>
-    document.addEventListener("DOMContentLoaded", () => {
-        const epFilter = document.getElementById('endpointFilter');
-        const statusFilter = document.getElementById('statusFilter');
-        const profileFilter = document.getElementById('profileFilter');
+    document.addEventListener("DOMContentLoaded", function() {
+        var epFilter = document.getElementById('endpointFilter');
+        var statusFilter = document.getElementById('statusFilter');
+        var profileFilter = document.getElementById('profileFilter');
 
         function filterFindings() {
-            const epValue = epFilter.value.toLowerCase();
-            const statusValue = statusFilter.value;
-            const profileValue = profileFilter.value;
+            var epValue = epFilter.value.toLowerCase();
+            var statusValue = statusFilter.value;
+            var profileValue = profileFilter.value;
 
-            document.querySelectorAll('.finding-group').forEach(group => {
-                const endpoint = group.getAttribute('data-endpoint').toLowerCase();
-                const items = group.querySelectorAll('.finding-item');
-                let visibleItems = 0;
+            var groups = document.querySelectorAll('.finding-group');
+            for (var i = 0; i < groups.length; i++) {
+                var group = groups[i];
+                var endpoint = group.getAttribute('data-endpoint') || "";
+                endpoint = endpoint.toLowerCase();
+                var items = group.querySelectorAll('.finding-item');
+                var visibleItems = 0;
                 
-                items.forEach(item => {
-                    const status = item.getAttribute('data-status');
-                    const profile = item.getAttribute('data-profile');
+                for (var j = 0; j < items.length; j++) {
+                    var item = items[j];
+                    var status = item.getAttribute('data-status') || "";
+                    var profile = item.getAttribute('data-profile') || "";
                     
-                    const epMatch = endpoint.includes(epValue);
-                    const statusMatch = !statusValue || status === statusValue;
-                    const profileMatch = !profileValue || profile === profileValue;
+                    var epMatch = endpoint.indexOf(epValue) !== -1;
+                    var statusMatch = !statusValue || status === statusValue;
+                    var profileMatch = !profileValue || profile === profileValue;
 
                     if (epMatch && statusMatch && profileMatch) {
                         item.style.display = 'block';
@@ -233,21 +236,23 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
                     } else {
                         item.style.display = 'none';
                     }
-                });
+                }
 
                 if (visibleItems > 0) {
                     group.style.display = 'block';
-                    const countSpan = group.querySelector('.count');
-                    countSpan.innerText = visibleItems;
+                    var countSpan = group.querySelector('.count');
+                    if (countSpan) {
+                        countSpan.innerText = visibleItems;
+                    }
                 } else {
                     group.style.display = 'none';
                 }
-            });
+            }
         }
 
-        epFilter.addEventListener('input', filterFindings);
-        statusFilter.addEventListener('change', filterFindings);
-        profileFilter.addEventListener('change', filterFindings);
+        if (epFilter) epFilter.addEventListener('input', filterFindings);
+        if (statusFilter) statusFilter.addEventListener('change', filterFindings);
+        if (profileFilter) profileFilter.addEventListener('change', filterFindings);
     });
     </script>
 </body>
