@@ -85,14 +85,14 @@ func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty
 		shouldBypass := (g.profile == swagger.ProfileMalicious || g.profile == swagger.ProfileBoundary) &&
 			rand.Float64() < 0.3
 		if !shouldBypass {
-			return Pick(schema.Enum)
+			return payloads.Pick(schema.Enum)
 		}
 	}
 
 	// 2. User dictionary
 	normalizedName := strings.ToLower(propertyName)
 	if vals, ok := g.dictionaries[normalizedName]; ok && len(vals) > 0 {
-		return Pick(vals)
+		return payloads.Pick(vals)
 	}
 
 	// 3. Profile-based generation
@@ -160,7 +160,7 @@ func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 		}
 		return size
 	}
-	return IntRange(1, 5)
+	return payloads.IntRange(1, 5)
 }
 
 func (g *Generator) generateByProfile(typ, format, propName string) any {
@@ -186,16 +186,16 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 		if propName != "" {
 			lower := strings.ToLower(propName)
 			if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
-				return UUID()
+				return payloads.UUID()
 			}
 			if strings.Contains(lower, "slug") || strings.Contains(lower, "name") {
-				return Word()
+				return payloads.Word()
 			}
 			if strings.Contains(lower, "num") || strings.Contains(lower, "count") || strings.Contains(lower, "page") {
-				return IntRange(1, 100)
+				return payloads.IntRange(1, 100)
 			}
 		}
-		return RandomString(IntRange(3, 10))
+		return payloads.RandomString(payloads.IntRange(3, 10))
 	}
 }
 
@@ -203,13 +203,13 @@ func (g *Generator) generateString(format, propName string) any {
 	if format == "" && propName != "" {
 		lower := strings.ToLower(propName)
 		if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
-			return UUID()
+			return payloads.UUID()
 		}
 		if strings.Contains(lower, "slug") || strings.Contains(lower, "name") {
-			return Word()
+			return payloads.Word()
 		}
 		if strings.Contains(lower, "num") || strings.Contains(lower, "count") || strings.Contains(lower, "page") {
-			return IntRange(1, 100)
+			return payloads.IntRange(1, 100)
 		}
 	}
 
@@ -226,17 +226,17 @@ func (g *Generator) generateString(format, propName string) any {
 func generateRandomString(format string) string {
 	switch format {
 	case "uuid":
-		return UUID()
+		return payloads.UUID()
 	case "email":
-		return Email()
+		return payloads.Email()
 	case "uri", "url":
-		return URI()
+		return payloads.URI()
 	case "ipv4", "ip":
-		return IPv4()
+		return payloads.IPv4()
 	case "date-time":
-		return RandomDate().Format("2006-01-02T15:04:05.000Z")
+		return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
 	default:
-		return Word()
+		return payloads.Word()
 	}
 }
 
@@ -254,9 +254,9 @@ func (g *Generator) generateNumber(typ string) any {
 		return seqPick(payloads.MaliciousNumbers, &g.mNumIdx)
 	default:
 		if typ == "integer" {
-			return IntRange(1, 1000)
+			return payloads.IntRange(1, 1000)
 		}
-		return FloatRange(0, 1000)
+		return payloads.FloatRange(0, 1000)
 	}
 }
 
@@ -278,6 +278,6 @@ func (g *Generator) generateDate() any {
 	case swagger.ProfileMalicious:
 		return seqPick(payloads.MaliciousDates, &g.mDateIdx)
 	default:
-		return RandomDate().Format("2006-01-02T15:04:05.000Z")
+		return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
 	}
 }

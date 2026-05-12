@@ -6,72 +6,65 @@ This file provides essential context for Gemini CLI to understand the `swazz` pr
 **swazz** is a Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (like XSS or injection) by parsing Swagger/OpenAPI specifications and executing automated fuzzing runs.
 
 ### Core Architecture
-The project is a TypeScript monorepo using **npm workspaces**:
-- **`@swazz/core`**: The engine. Handles Swagger parsing, smart payload generation, and the parallel `FuzzRunner`. Framework-agnostic (runs in Browser/Node).
-- **`@swazz/web`**: A React 19 dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management.
-- **`@swazz/cli`**: A Node.js CLI for automated scanning and CI/CD integration. Supports SARIF, JSON, and HTML output.
-- **`@swazz/worker`**: A Cloudflare Worker proxy using **Hono**. Used by the web dashboard to bypass CORS when fuzzing remote APIs.
+The project is a hybrid repository using **npm workspaces** for the frontend and **Go modules** for the backend engine:
+- **`packages/container`**: The core Go engine. Contains the HTTP API server (for the web dashboard), the CLI runner (`swazz-engine start`), the Smart Payload Generator, and output formatters.
+- **`packages/web`**: A React 19 dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management.
+- **`packages/edge`**: Cloudflare integration (if applicable).
 
 ---
 
 ## 🛠 Tech Stack
-- **Language**: TypeScript (ESM)
-- **Monorepo**: npm workspaces
+- **Language**: Go (Backend), TypeScript/ESM (Frontend)
 - **Frontend**: React 19, Vite, Vanilla CSS (CSS Variables)
-- **Proxy/Worker**: Hono, Wrangler
-- **Testing**: Vitest
-- **API**: Native `fetch` (standardized across environments)
+- **Backend API**: Gin, standard `net/http`
+- **Testing**: `go test` (Backend), Vitest (Frontend if any)
 
 ---
 
 ## 🚀 Key Commands
 
 ### Root Commands
-- `npm install`: Install all dependencies.
-- `npm run dev`: Start the web dashboard development server.
-- `npm run build`: Build core and web packages.
-- `npm run test`: Run tests for the core engine.
+- `npm install`: Install frontend dependencies.
+- `npm run dev`: Starts the Go backend and Vite frontend concurrently.
+- `npm run build`: Build the web dashboard.
 - `npm run deploy:web`: Deploy the dashboard to Cloudflare Pages.
-- `npm run deploy:worker`: Deploy the proxy to Cloudflare Workers.
 
-### Package-Specific Commands
-- **Core**: `npm run test` (Vitest)
-- **Web**: `npm run dev` (Vite), `npm run build`, `npm run deploy`
-- **CLI**: `npm run start -- --config <path>` (using `tsx`)
-- **Worker**: `npm run dev` (Wrangler), `npm run deploy`
+### Backend Commands (in `packages/container`)
+- `go run main.go serve`: Start the HTTP API server.
+- `go run main.go start --config <path>`: Run the fuzzer in CLI mode.
+- `go test ./...`: Run all backend tests.
 
 ---
 
 ## 🧠 Development Conventions
 
 ### General
-- **TypeScript & ESM**: Use strict TypeScript and ES Modules across all packages.
-- **Surgical Updates**: When modifying `core`, ensure changes remain compatible with both `cli` (Node) and `web` (Browser).
+- **Go Best Practices**: The backend is written in Go. Ensure tests use `go test` and follow idiomatic Go conventions.
+- **Web UI Types**: The web dashboard maintains its own `types.ts` to sync with the Go API JSON structures.
 
 ### Testing
-- **Vitest**: Always add unit tests in `packages/core/tests` for new fuzzing logic or generators.
-- **Mocking**: Use `vitest` mocks for network requests (see `packages/core/tests/runner.test.ts` for patterns).
+- **Go Tests**: Always add unit tests in `packages/container/internal/...` for new fuzzing logic or generators. Tests should live alongside the files they test (e.g., `random_test.go` next to `random.go`).
 
 ### Styling (Web)
 - **Vanilla CSS**: Avoid utility-first frameworks. Use `packages/web/src/index.css` for global variables and component-specific CSS files.
 - **Theming**: Adhere to the established CSS variables (e.g., `--accent-light`, `--color-error`).
 
 ### CLI
-- **Output Formats**: When adding findings or classifications, ensure they are reflected in `sarif.ts`, `json.ts`, and `html.ts` output generators.
+- **Output Formats**: When adding findings or classifications, ensure they are reflected in `packages/container/internal/output/` (SARIF, JSON, HTML).
 
 ---
 
 ## 📁 Directory Structure
-- `packages/core/src/`: Fuzzing engine (`runner.ts`), payload generation (`generator.ts`), and types.
+- `packages/container/main.go`: Entrypoint for both the server and CLI.
+- `packages/container/internal/generator/`: Fuzz payload generation (`generator.go`) and static payloads (`payloads/`).
+- `packages/container/internal/runner/`: The concurrent fuzz execution engine.
+- `packages/container/api/`: Gin HTTP handlers for the web UI.
 - `packages/web/src/components/`: React UI components (Dashboard, Heatmap, Inspector).
-- `packages/cli/src/`: CLI implementation, result classifiers, and output formatters.
-- `packages/worker/src/`: Cloudflare Worker proxy implementation.
-- `swazz.config.example.json`: Template for CLI configuration.
 
 ## Project Architecture & Refactoring Notes (Updated)
-To maintain token efficiency and clean architecture, the application is strictly modular:
+To maintain clean architecture, the application is strictly modular:
 - **UI Components:** Kept as "dumb" as possible. Use `components/` for visual/layout logic (e.g., `MainWorkspace.tsx` manages internal application layout).
 - **Complex UI State:** Handled by custom hooks in `packages/web/src/hooks/` (e.g., `useResizableLayout`, `useInspectorFilters`, `useToast`).
 - **App Orchestration:** High-level app orchestration (like managing history or execution sessions) is done through domain-specific controller hooks (e.g., `useRunHistory`, `useFuzzSession`). Do not let `App.tsx` become a God Object.
 - **Network & Business Logic (Frontend):** Separated into `packages/web/src/services/` (e.g., `swaggerService.ts`). Do not put `fetch` calls directly inside React components.
-- **Core Utilities:** Generic tech primitives (like `Semaphore`) are located in `packages/core/src/utils/`.
+- **Payloads (Backend):** Static wordlists and payload definitions should be placed in `packages/container/internal/generator/payloads/`.
