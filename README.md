@@ -10,7 +10,7 @@
 
 ## 💻 CLI Usage
 
-The `swazz` CLI allows you to run fuzzing tests directly from your terminal. This is useful for CI/CD pipelines or automated security scans.
+The `swazz-engine` CLI allows you to run fuzzing tests natively via Go directly from your terminal. This is highly performant and useful for CI/CD pipelines or automated security scans.
 
 1. **Configure your scan**:
    Create a `swazz.config.json` file. You can see examples below or use [swazz.config.example.json](file:///Users/alex/src/swazz/swazz.config.example.json) as a template.
@@ -45,13 +45,6 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
     "iterations_per_profile": 50,
     "concurrency": 10,
     "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
-  },
-  "rules": {
-    "ignore": [404, 401],
-    "defaults": {
-      "5xx": "error",
-      "timeout": "error"
-    }
   }
 }
 ```
@@ -62,46 +55,35 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
    git clone https://github.com/SecH0us3/swazz
    cd swazz
 
-   # 2. Install all dependencies (run once in the project root)
-   npm install
+   # 2. Navigate to the Go container
+   cd packages/container
 
-   # 3. Navigate to the CLI package
-   cd packages/cli
-
-   # 4. Run a basic scan
+   # 3. Run a basic scan
    # (The swazz.config.json file should be located in the project root)
-   npm start -- --config ../../swazz.config.json
+   go run main.go start --config ../../swazz.config.json
 
-   # 5. Generate reports in various formats (JSON, SARIF, HTML)
-   npm start -- --config ../../swazz.config.json --format json,html --output reports/scan
-
-   # 6. CI/CD mode (automatically fail the build if vulnerabilities are found)
-   npm start -- --config ../../swazz.config.json --fail-on-findings
+   # 4. Generate reports in various formats (JSON, SARIF, HTML)
+   go run main.go start --config ../../swazz.config.json --sarif reports/scan.sarif --json reports/scan.json --html reports/scan.html
    ```
 
-
-
-
-
 3. **Options**:
-   - `-c, --config <path>`: Path to your configuration file (required).
-   - `-f, --format <fmt>`: Output format: `console`, `json`, `sarif` (default: `console`).
-   - `-o, --output <path>`: Write the report to a file.
-   - `-q, --quiet`: Suppress live progress output.
-   - `--fail-on-findings`: Exit with code 1 if findings are found (useful for CI).
+   - `--config <path>`: Path to your configuration file (required).
+   - `--sarif <path>`: Path to save SARIF output.
+   - `--json <path>`: Path to save JSON output.
+   - `--html <path>`: Path to save HTML output.
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Install dependencies** (the project uses npm workspaces):
+1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-2. **Start the development server**:
+2. **Start the development server** (starts both Go backend and Vite frontend):
    ```bash
-   npm run dev --workspace=packages/web
+   npm run dev
    ```
 
 3. **Open the Dashboard**:
@@ -115,7 +97,7 @@ The `swazz` CLI allows you to run fuzzing tests directly from your terminal. Thi
 
 ## 🚀 Cloudflare Deployment
 
-You can deploy the application to Cloudflare (Pages + Workers) using `wrangler`. The application consists of a React frontend and a Cloudflare Worker proxy.
+You can deploy the application to Cloudflare (Pages + Workers) using `wrangler`. 
 
 1. **Login to Cloudflare**:
    ```bash
@@ -127,19 +109,16 @@ You can deploy the application to Cloudflare (Pages + Workers) using `wrangler`.
    npm run deploy:web
    ```
 
-3. **Deploy the Proxy (Cloudflare Worker)**:
+3. **Deploy the API (Cloudflare Worker)**:
    ```bash
-   npm run deploy:worker
+   npm run deploy:api
    ```
-
-4. **Link Custom Domain**:
-   In the Cloudflare Dashboard, go to **Workers & Pages** -> **`swazz-web`** -> **Custom Domains**, and add your domain (e.g., `swazz.secmy.app`). The worker will automatically intercept `/proxy*` requests on this domain.
 
 ---
 
 ## 🧠 How it Works (General Architecture)
 
-This is a monorepo containing two main packages: `@swazz/web` (Dashboard) and `@swazz/core` (Engine).
+This is a hybrid monorepo containing two main parts: `packages/web` (React Dashboard) and `packages/container` (Go Engine).
 
 ```mermaid
 flowchart TD
@@ -148,7 +127,7 @@ flowchart TD
     classDef core fill:#13131a,stroke:#6366f1,stroke-width:2px,color:#f0f0f4
     classDef target fill:#1e1e28,stroke:#f43f5e,stroke-width:2px,color:#f0f0f4
 
-    subgraph Dashboard ["@swazz/web (React + Vite)"]
+    subgraph Dashboard ["packages/web (React + Vite)"]
         UI["User Interface"]
         Setup["Setup Panel\nURLs, Headers, Profiles"]
         Heatmap["Endpoint × Status Heatmap"]
@@ -159,12 +138,15 @@ flowchart TD
         UI --> Inspector
     end
 
-    subgraph Core ["@swazz/core (Engine)"]
+    subgraph Core ["packages/container (Go Engine)"]
         direction TB
+        API["Gin API Server"]
         Parser["Swagger / OpenAPI Parser"]
         Profiles["Fuzz Profiles\nRANDOM, BOUNDARY, MALICIOUS"]
         Runner["Parallel Fuzz Runner"]
         
+        API --> Parser
+        API --> Runner
         Parser --> Runner
         Profiles --> Runner
     end
@@ -175,29 +157,19 @@ flowchart TD
     end
 
     %% Flow
-    Setup -->|"1. Provide Swagger URLs"| Parser
-    Setup -->|"2. Select Attack Vectors"| Profiles
-    Runner -->|"3. Execute Fuzzed HTTP Requests"| Target
-    Target -->|"4. Responses (2xx, 4xx, 5xx)"| Runner
-    Runner -->|"5. Real-time Stats & Payload Data"| Heatmap
+    Setup -->|"1. Submit Config"| API
+    Runner -->|"2. Execute Fuzzed HTTP Requests"| Target
+    Target -->|"3. Responses (2xx, 4xx, 5xx)"| Runner
+    Runner -->|"4. Stream Real-time Stats"| Heatmap
     Runner -.->|"Raw Results"| Inspector
 
     %% Apply specific styles
-    class Parser,Profiles,Runner core;
+    class API,Parser,Profiles,Runner core;
     class API1,API2 target;
 ```
 
-## 🤖 Claude Code Skills
-
-If you use [Claude Code](https://claude.com/claude-code), the project includes slash commands for quick deployment:
-
-- `/deploy` — build and deploy both worker and web
-- `/deploy-worker` — deploy the CORS proxy worker only
-- `/deploy-web` — build and deploy the frontend only
-
 ## 🛠️ Tech Stack
 - **Frontend:** React, TypeScript, Vite, Vanilla CSS (CSS Variables for theming)
-- **Engine:** TypeScript, native `fetch`
-- **Proxy:** Cloudflare Worker (Hono)
+- **Engine:** Go (Gin, standard `net/http`)
 - **Hosting:** Cloudflare Pages + Workers
 - **Monorepo Management:** npm workspaces
