@@ -74,7 +74,7 @@ export function ConfigSidebar({
     };
 
     const SETTINGS_FIELDS = [
-        { label: 'Iterations / profile', key: 'iterations_per_profile', value: config.settings.iterations_per_profile },
+        { label: 'Intensity', key: 'iterations_per_profile', value: config.settings.iterations_per_profile },
         { label: 'Concurrency', key: 'concurrency', value: config.settings.concurrency },
         { label: 'Timeout (ms)', key: 'timeout_ms', value: config.settings.timeout_ms },
         { label: 'Delay (ms)', key: 'delay_between_requests_ms', value: config.settings.delay_between_requests_ms },
