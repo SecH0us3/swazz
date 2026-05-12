@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"swazz-engine/internal/generator"
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 
 	"github.com/google/uuid"
@@ -235,7 +236,7 @@ func (r *Runner) Start(ctx context.Context) error {
 
 				var payload any
 				var queryParams map[string]any
-				var payloadHash uint32 = generator.HashStr("empty")
+				var payloadHash uint32 = payloads.HashStr("empty")
 				isDuplicate := false
 
 				if hasFields(&endpoint) {
@@ -260,7 +261,7 @@ func (r *Runner) Start(ctx context.Context) error {
 						}
 						// Strip the trailing newline from NewEncoder
 						payloadStr := strings.TrimSuffix(buf.String(), "\n")
-						payloadHash = generator.HashStr(payloadStr)
+						payloadHash = payloads.HashStr(payloadStr)
 						bufPool.Put(buf)
 
 						if enableDedup {
@@ -539,7 +540,7 @@ func (r *Runner) executeRequest(
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
-			jitter := time.Duration(generator.IntRange(0, 500)) * time.Millisecond
+			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			select {
 			case <-time.After(backoff + jitter):
 				continue
