@@ -3,8 +3,8 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import type { SwazzConfig, SwazzSettings, Dictionary, FuzzingProfile } from '@swazz/core';
-import { DEFAULT_SETTINGS } from '@swazz/core';
+import type { SwazzConfig, SwazzSettings, Dictionary, FuzzingProfile } from '../types.js';
+import { DEFAULT_SETTINGS } from '../types.js';
 
 const STORAGE_KEY = 'swazz:config';
 

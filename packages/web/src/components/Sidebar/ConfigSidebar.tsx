@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import type { SwazzConfig, FuzzingProfile, Dictionary } from '@swazz/core';
-import { SmartPayloadGenerator } from '@swazz/core';
+import type { SwazzConfig, FuzzingProfile, Dictionary } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 
 interface Props {
@@ -50,7 +49,9 @@ export function ConfigSidebar({
     // Compute the minimum payloads needed across active profiles
     const minPayloads = useMemo(() => {
         return activeProfiles.reduce((max, p) => {
-            const needed = SmartPayloadGenerator.minIterationsNeeded(p);
+            let needed = 0;
+            if (p === 'BOUNDARY') needed = 15;
+            if (p === 'MALICIOUS') needed = 35;
             return Math.max(max, needed);
         }, 0);
     }, [activeProfiles]);

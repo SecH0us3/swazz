@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { RunStats } from '@swazz/core';
+import type { RunStats } from '../../types.js';
 
 export interface HeatmapFilter {
     method: string;

@@ -10,7 +10,6 @@
         "deploy": "vite build && wrangler deploy"
     },
     "dependencies": {
-        "@swazz/core": "*",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "react-virtuoso": "^4.18.4"

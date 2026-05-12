@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { RunStats } from '@swazz/core';
+import type { RunStats } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
 
 interface UseRunHistoryProps {

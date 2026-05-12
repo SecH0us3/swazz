@@ -4,10 +4,7 @@
   "private": true,
   "description": "Smart API Fuzzer — find crashes before your users do",
   "workspaces": [
-    "packages/core",
-    "packages/worker",
     "packages/web",
-    "packages/cli",
     "packages/edge"
   ],
   "scripts": {
@@ -15,7 +12,6 @@
     "dev:frontend": "VITE_PROXY_URL=http://localhost:8080 npm run dev --workspace=packages/web",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "npm run build --workspace=packages/web",
-    "test": "npm run test --workspace=packages/core",
     "deploy:api": "npm run deploy --workspace=packages/edge",
     "deploy:web": "npm run deploy --workspace=packages/web",
     "deploy:all": "concurrently \"npm run deploy:api\" \"npm run deploy:web\""

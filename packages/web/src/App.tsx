@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { FuzzResult } from '@swazz/core';
+import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { EndpointConfig } from '@swazz/core';
+import type { EndpointConfig } from '../../types.js';
 
 interface EndpointTreeProps {
     endpoints: EndpointConfig[];

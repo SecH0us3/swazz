@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import type { RunStats } from '@swazz/core';
+import type { RunStats } from '../types.js';
 import { toSummary, type ResultSummary } from './useRunner.js';
 
 // ─── Types ────────────────────────────────────────────────────

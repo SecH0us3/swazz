@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { FuzzResult, RunStats } from '@swazz/core';
+import type { FuzzResult, RunStats } from '../types.js';
 
 export interface ResultSummary {
     id: string;

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig, SchemaProperty } from '@swazz/core';
-import { parseSwaggerSpec } from '@swazz/core';
+import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig, SchemaProperty } from '../../types.js';
+
 import type { ScanRun } from '../../hooks/useDb.js';
 
 import { Section } from './Shared.js';

@@ -1,4 +1,4 @@
-import type { RunStats } from '@swazz/core';
+import type { RunStats } from '../../types.js';
 
 interface Props {
     stats: RunStats;

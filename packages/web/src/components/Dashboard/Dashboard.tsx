@@ -1,4 +1,4 @@
-import type { RunStats } from '@swazz/core';
+import type { RunStats } from '../../types.js';
 import { StatsBar } from './StatsBar.js';
 import { Heatmap } from './Heatmap.js';
 import type { HeatmapFilter } from './Heatmap.js';

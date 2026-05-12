@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { FuzzResult, RunStats, SwazzConfig } from '@swazz/core';
+import type { FuzzResult, RunStats, SwazzConfig } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
 import { loadSwaggerUrl } from '../services/swaggerService.js';
 import { previewPayload, previewResponse } from './useRunner.js';

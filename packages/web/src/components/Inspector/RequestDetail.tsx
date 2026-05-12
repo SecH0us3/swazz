@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { FuzzResult } from '@swazz/core';
+import type { FuzzResult } from '../../types.js';
 
 interface Props {
     result: FuzzResult;

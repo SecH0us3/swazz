@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import type { ResultSummary } from '../hooks/useRunner.js';
-import type { RunStats } from '@swazz/core';
+import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 
 interface MainWorkspaceProps {
