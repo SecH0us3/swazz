@@ -347,7 +347,7 @@ func writeJSON(path string, data any) {
 
 // ─── CLI Console Output ────────────────────────────────────
 
-var lastLineLength int
+var numLinesPrinted int
 
 func printProgress(stats swagger.RunStats) {
 	pct := 0
@@ -355,39 +355,58 @@ func printProgress(stats swagger.RunStats) {
 		pct = int(float64(stats.TotalRequests) / float64(stats.TotalPlanned) * 100)
 	}
 
-	var parts []string
-	for code, count := range stats.StatusCounts {
-		parts = append(parts, fmt.Sprintf("\033[1;36m%d\033[0m:%d", code, count))
-	}
-	statusStr := strings.Join(parts, " ")
-	if len(statusStr) > 100 {
-		statusStr = statusStr[:97] + "..."
-	}
-
 	ep := ""
 	if stats.Progress.CurrentEndpoint != "" {
 		ep = fmt.Sprintf("\033[1;33m%s\033[0m (\033[1;35m%s\033[0m)", stats.Progress.CurrentEndpoint, stats.Progress.CurrentProfile)
 	}
 
-	// ANSI clear up 4 lines (if not first time)
-	if lastLineLength > 0 {
-		fmt.Print("\033[4A")
+	// Calculate how many lines we will print
+	linesToPrint := 3 // Header, Progress, Active
+	var sortedProfiles []swagger.FuzzingProfile
+	for p := range stats.StatusByProfile {
+		sortedProfiles = append(sortedProfiles, p)
+	}
+	// Add 1 line for each profile, or at least 1 for overall status if empty
+	if len(sortedProfiles) == 0 {
+		linesToPrint += 1
 	} else {
-		lastLineLength = 1
+		linesToPrint += len(sortedProfiles)
+	}
+
+	// ANSI clear up `numLinesPrinted` lines (if not first time)
+	if numLinesPrinted > 0 {
+		fmt.Printf("\033[%dA", numLinesPrinted)
 	}
 
 	fmt.Printf("⚡ \033[1;34mSWAZZ ENGINE\033[0m running...\033[K\n")
 	fmt.Printf("🎯 \033[1mProgress:\033[0m [%d%%] %d/%d reqs | %.1f rps\033[K\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec)
 	fmt.Printf("🌐 \033[1mActive:\033[0m   %s\033[K\n", ep)
-	fmt.Printf("📊 \033[1mStatus:\033[0m   %s\033[K\n", statusStr)
+
+	if len(sortedProfiles) == 0 {
+		fmt.Printf("📊 \033[1mStatus:\033[0m   waiting...\033[K\n")
+	} else {
+		for _, p := range sortedProfiles {
+			var parts []string
+			for code, count := range stats.StatusByProfile[p] {
+				parts = append(parts, fmt.Sprintf("\033[1;36m%d\033[0m: %-5d", code, count))
+			}
+			statusStr := strings.Join(parts, "   ")
+			if len(statusStr) > 120 {
+				statusStr = statusStr[:117] + "..."
+			}
+			fmt.Printf("📊 \033[1mStatus [%-10s]:\033[0m %s\033[K\n", p, statusStr)
+		}
+	}
+
+	numLinesPrinted = linesToPrint
 }
 
 func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
-	if lastLineLength > 0 {
-		// Clear 4 lines downwards
-		fmt.Print("\033[4A\033[0J")
+	if numLinesPrinted > 0 {
+		// Clear lines downwards
+		fmt.Printf("\033[%dA\033[0J", numLinesPrinted)
 	}
-	lastLineLength = 0
+	numLinesPrinted = 0
 
 	sep := strings.Repeat("-", 60)
 	fmt.Println("\n" + sep)

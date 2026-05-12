@@ -83,9 +83,10 @@ type RunStats struct {
 	TotalRequests    int64                       `json:"totalRequests"`
 	TotalPlanned     int64                       `json:"totalPlanned"`
 	RequestsPerSec   float64                     `json:"requestsPerSecond"`
-	StatusCounts     map[int]int64               `json:"statusCounts"`
-	ProfileCounts    map[FuzzingProfile]int64     `json:"profileCounts"`
-	EndpointCounts   map[string]map[int]int64     `json:"endpointCounts"`
+	StatusCounts     map[int]int64                           `json:"statusCounts"`
+	StatusByProfile  map[FuzzingProfile]map[int]int64        `json:"statusByProfile"`
+	ProfileCounts    map[FuzzingProfile]int64                `json:"profileCounts"`
+	EndpointCounts   map[string]map[int]int64                `json:"endpointCounts"`
 	StartTime        int64                       `json:"startTime"`
 	IsRunning        bool                        `json:"isRunning"`
 	Progress         Progress                    `json:"progress"`

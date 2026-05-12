@@ -403,6 +403,7 @@ func (r *Runner) GetStats() swagger.RunStats {
 	// Shallow copy maps
 	stats := r.stats
 	stats.StatusCounts = copyMapIntInt64(r.stats.StatusCounts)
+	stats.StatusByProfile = copyMapStatusByProfile(r.stats.StatusByProfile)
 	stats.ProfileCounts = copyMapProfileInt64(r.stats.ProfileCounts)
 	stats.EndpointCounts = copyMapEndpoint(r.stats.EndpointCounts)
 	return stats
@@ -593,6 +594,14 @@ func (r *Runner) updateStats(result *swagger.FuzzResult) {
 	}
 	r.stats.StatusCounts[status]++
 
+	if r.stats.StatusByProfile == nil {
+		r.stats.StatusByProfile = make(map[swagger.FuzzingProfile]map[int]int64)
+	}
+	if r.stats.StatusByProfile[result.Profile] == nil {
+		r.stats.StatusByProfile[result.Profile] = make(map[int]int64)
+	}
+	r.stats.StatusByProfile[result.Profile][status]++
+
 	if r.stats.ProfileCounts == nil {
 		r.stats.ProfileCounts = make(map[swagger.FuzzingProfile]int64)
 	}
@@ -617,10 +626,11 @@ func (r *Runner) updateStats(result *swagger.FuzzResult) {
 
 func newEmptyStats() swagger.RunStats {
 	return swagger.RunStats{
-		StatusCounts:   make(map[int]int64),
-		ProfileCounts:  make(map[swagger.FuzzingProfile]int64),
-		EndpointCounts: make(map[string]map[int]int64),
-		StartTime:      time.Now().UnixMilli(),
+		StatusCounts:    make(map[int]int64),
+		StatusByProfile: make(map[swagger.FuzzingProfile]map[int]int64),
+		ProfileCounts:   make(map[swagger.FuzzingProfile]int64),
+		EndpointCounts:  make(map[string]map[int]int64),
+		StartTime:       time.Now().UnixMilli(),
 	}
 }
 
@@ -701,6 +711,17 @@ func copyMapEndpoint(src map[string]map[int]int64) map[string]map[int]int64 {
 		return nil
 	}
 	dst := make(map[string]map[int]int64, len(src))
+	for k, v := range src {
+		dst[k] = copyMapIntInt64(v)
+	}
+	return dst
+}
+
+func copyMapStatusByProfile(src map[swagger.FuzzingProfile]map[int]int64) map[swagger.FuzzingProfile]map[int]int64 {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[swagger.FuzzingProfile]map[int]int64, len(src))
 	for k, v := range src {
 		dst[k] = copyMapIntInt64(v)
 	}
