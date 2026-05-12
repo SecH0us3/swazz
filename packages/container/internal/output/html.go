@@ -34,12 +34,27 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 	// Group findings by endpoint
 	groups := make(map[string][]*classifier.Finding)
 	groupOrder := make([]string, 0)
+	
+	uniqueStatuses := make(map[int]bool)
+	uniqueProfiles := make(map[swagger.FuzzingProfile]bool)
+
 	for _, f := range findings {
 		key := fmt.Sprintf("%s %s", f.Method, f.Endpoint)
 		if _, exists := groups[key]; !exists {
 			groupOrder = append(groupOrder, key)
 		}
 		groups[key] = append(groups[key], f)
+		uniqueStatuses[f.Status] = true
+		uniqueProfiles[f.Profile] = true
+	}
+
+	var statusOptions strings.Builder
+	for status := range uniqueStatuses {
+		statusOptions.WriteString(fmt.Sprintf(`<option value="%d">%d</option>`, status, status))
+	}
+	var profileOptions strings.Builder
+	for profile := range uniqueProfiles {
+		profileOptions.WriteString(fmt.Sprintf(`<option value="%s">%s</option>`, profile, profile))
 	}
 
 	totalEndpoints := 0
@@ -63,9 +78,9 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 		method, path := parts[0], parts[1]
 
 		findingRows.WriteString(fmt.Sprintf(`
-            <div class="finding-group">
+            <div class="finding-group" data-endpoint="%s">
                 <h3><span class="method">%s</span> %s <span class="count">%d</span></h3>
-                <div class="group-items">`, html.EscapeString(method), html.EscapeString(path), len(group)))
+                <div class="group-items">`, html.EscapeString(path), html.EscapeString(method), html.EscapeString(path), len(group)))
 
 		for _, f := range group {
 			payloadHTML := ""
@@ -97,7 +112,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 			}
 
 			findingRows.WriteString(fmt.Sprintf(`
-                <div class="finding-item level-%s">
+                <div class="finding-item level-%s" data-status="%d" data-profile="%s">
                     <div class="finding-meta">
                         <span class="badge profile-%s">%s</span>
                         <span class="status">HTTP %d</span>
@@ -106,7 +121,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
                     %s
                     %s
                 </div>`,
-				f.Level, f.Profile, f.Profile, f.Status, f.Duration, payloadHTML, responseHTML))
+				f.Level, f.Status, f.Profile, f.Profile, f.Profile, f.Status, f.Duration, payloadHTML, responseHTML))
 		}
 
 		findingRows.WriteString(`</div></div>`)
@@ -155,6 +170,9 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
         .level-error { border-left: 4px solid var(--error); }
         .level-warning { border-left: 4px solid var(--warning); }
         .level-note { border-left: 4px solid var(--note); }
+        .filters { display: flex; gap: 1rem; margin-bottom: 2rem; background: var(--card); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }
+        .filters input, .filters select { flex: 1; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid var(--border); background: var(--bg); color: var(--fg); outline: none; }
+        .filters input:focus, .filters select:focus { border-color: var(--primary); }
     </style>
 </head>
 <body>
@@ -169,12 +187,72 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
             <div class="stat-card"><span class="stat-value" style="color: var(--warning)">%d</span><span class="stat-label">Warnings</span></div>
             <div class="stat-card"><span class="stat-value">%d</span><span class="stat-label">Endpoints</span></div>
         </div>
+
+        <div class="filters">
+            <input type="text" id="endpointFilter" placeholder="Filter by endpoint path...">
+            <select id="statusFilter">
+                <option value="">All Statuses</option>
+                %s
+            </select>
+            <select id="profileFilter">
+                <option value="">All Profiles</option>
+                %s
+            </select>
+        </div>
+
         <h2>Findings</h2>
         <div class="findings-list">%s</div>
     </div>
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const epFilter = document.getElementById('endpointFilter');
+        const statusFilter = document.getElementById('statusFilter');
+        const profileFilter = document.getElementById('profileFilter');
+
+        function filterFindings() {
+            const epValue = epFilter.value.toLowerCase();
+            const statusValue = statusFilter.value;
+            const profileValue = profileFilter.value;
+
+            document.querySelectorAll('.finding-group').forEach(group => {
+                const endpoint = group.getAttribute('data-endpoint').toLowerCase();
+                const items = group.querySelectorAll('.finding-item');
+                let visibleItems = 0;
+                
+                items.forEach(item => {
+                    const status = item.getAttribute('data-status');
+                    const profile = item.getAttribute('data-profile');
+                    
+                    const epMatch = endpoint.includes(epValue);
+                    const statusMatch = !statusValue || status === statusValue;
+                    const profileMatch = !profileValue || profile === profileValue;
+
+                    if (epMatch && statusMatch && profileMatch) {
+                        item.style.display = 'block';
+                        visibleItems++;
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+
+                if (visibleItems > 0) {
+                    group.style.display = 'block';
+                    const countSpan = group.querySelector('.count');
+                    countSpan.innerText = visibleItems;
+                } else {
+                    group.style.display = 'none';
+                }
+            });
+        }
+
+        epFilter.addEventListener('input', filterFindings);
+        statusFilter.addEventListener('change', filterFindings);
+        profileFilter.addEventListener('change', filterFindings);
+    });
+    </script>
 </body>
 </html>`,
-		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, findingsContent)
+		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, statusOptions.String(), profileOptions.String(), findingsContent)
 }
 
 const valueLimit = 100
