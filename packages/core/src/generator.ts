@@ -1,6 +1,9 @@
 /**
  * SmartPayloadGenerator — generates payloads based on JSON Schema
  * and the selected fuzzing profile (RANDOM / BOUNDARY / MALICIOUS).
+ *
+ * BOUNDARY and MALICIOUS profiles use sequential iteration through their
+ * payload arrays to guarantee full coverage. RANDOM uses true randomness.
  */
 
 import type { Dictionary, FuzzingProfile, SchemaProperty } from './types.js';
@@ -21,18 +24,30 @@ import {
     MALICIOUS_TYPE_CONFUSION,
 } from './payloads/malicious.js';
 
+// ─── Sequential counter key types ──────────────────────────
+
+type BoundaryCounter = '_bStrIdx' | '_bIntIdx' | '_bNumIdx' | '_bDateIdx' | '_bArrIdx' | '_bBoolIdx';
+type MaliciousCounter = '_mStrIdx' | '_mNumIdx' | '_mDateIdx' | '_mBoolIdx' | '_mTypeIdx';
+type SeqCounter = BoundaryCounter | MaliciousCounter;
+
 export class SmartPayloadGenerator {
     private dictionaries: Dictionary;
     private profile: FuzzingProfile;
 
-    // Sequential index counters for BOUNDARY profile — ensures every value
-    // in each boundary array is visited in order across successive iterations.
+    // ─── Sequential counters: BOUNDARY ──────────────────────
     private _bStrIdx = 0;
     private _bIntIdx = 0;
     private _bNumIdx = 0;
     private _bDateIdx = 0;
     private _bArrIdx = 0;
     private _bBoolIdx = 0;
+
+    // ─── Sequential counters: MALICIOUS ─────────────────────
+    private _mStrIdx = 0;
+    private _mNumIdx = 0;
+    private _mDateIdx = 0;
+    private _mBoolIdx = 0;
+    private _mTypeIdx = 0;
 
     constructor(dictionaries: Dictionary = {}, profile: FuzzingProfile = 'RANDOM') {
         // Normalize dictionary keys to lowercase
@@ -43,27 +58,51 @@ export class SmartPayloadGenerator {
         this.profile = profile;
     }
 
+    // ─── Static helpers ────────────────────────────────────
+
     /**
-     * How many iterations are needed to cover all boundary values.
-     * Equals the length of the longest boundary array.
+     * Minimum iterations needed to cover every payload in the given profile.
+     * Returns 0 for RANDOM (no fixed set to exhaust).
      */
-    public static boundaryIterationsNeeded(): number {
-        return Math.max(
-            BOUNDARY_STRINGS.length,
-            BOUNDARY_INTEGERS.length,
-            BOUNDARY_NUMBERS.length,
-            BOUNDARY_DATES.length,
-            BOUNDARY_BOOLEANS.length,
-            BOUNDARY_ARRAY_SIZES.length,
-        );
+    public static minIterationsNeeded(profile: FuzzingProfile): number {
+        switch (profile) {
+            case 'BOUNDARY':
+                return Math.max(
+                    BOUNDARY_STRINGS.length,
+                    BOUNDARY_INTEGERS.length,
+                    BOUNDARY_NUMBERS.length,
+                    BOUNDARY_DATES.length,
+                    BOUNDARY_BOOLEANS.length,
+                    BOUNDARY_ARRAY_SIZES.length,
+                );
+            case 'MALICIOUS':
+                return Math.max(
+                    ALL_MALICIOUS_STRINGS.length,
+                    MALICIOUS_NUMBERS.length,
+                    MALICIOUS_DATES.length,
+                    MALICIOUS_BOOLEANS.length,
+                    MALICIOUS_TYPE_CONFUSION.length,
+                );
+            default:
+                return 0;
+        }
     }
 
-    /** Sequential pick for BOUNDARY: advances index each call, wraps around. */
-    private boundaryPick<T>(arr: readonly T[], counter: '_bStrIdx' | '_bIntIdx' | '_bNumIdx' | '_bDateIdx' | '_bArrIdx' | '_bBoolIdx'): T {
+    /** @deprecated Use minIterationsNeeded('BOUNDARY') instead. */
+    public static boundaryIterationsNeeded(): number {
+        return SmartPayloadGenerator.minIterationsNeeded('BOUNDARY');
+    }
+
+    // ─── Sequential pick ───────────────────────────────────
+
+    /** Advances the counter each call, wraps around at array length. */
+    private seqPick<T>(arr: readonly T[], counter: SeqCounter): T {
         const val = arr[this[counter] % arr.length];
-        this[counter]++;
+        (this as any)[counter]++;
         return val;
     }
+
+    // ─── Public API ────────────────────────────────────────
 
     /**
      * Generate a value for a single property.
@@ -137,7 +176,7 @@ export class SmartPayloadGenerator {
 
     private getArraySize(itemSchema?: SchemaProperty): number {
         if (this.profile === 'BOUNDARY') {
-            const size = this.boundaryPick(BOUNDARY_ARRAY_SIZES, '_bArrIdx');
+            const size = this.seqPick(BOUNDARY_ARRAY_SIZES, '_bArrIdx');
             // Cap complex object arrays to prevent OOM; primitives can be huge
             return itemSchema?.type === 'object' ? Math.min(size, 50) : size;
         }
@@ -186,10 +225,10 @@ export class SmartPayloadGenerator {
 
         switch (this.profile) {
             case 'BOUNDARY':
-                return this.boundaryPick(BOUNDARY_STRINGS, '_bStrIdx');
+                return this.seqPick(BOUNDARY_STRINGS, '_bStrIdx');
 
             case 'MALICIOUS':
-                return rand.pick(ALL_MALICIOUS_STRINGS);
+                return this.seqPick(ALL_MALICIOUS_STRINGS, '_mStrIdx');
 
             case 'RANDOM':
             default:
@@ -220,11 +259,11 @@ export class SmartPayloadGenerator {
         switch (this.profile) {
             case 'BOUNDARY':
                 return type === 'integer'
-                    ? this.boundaryPick(BOUNDARY_INTEGERS, '_bIntIdx')
-                    : this.boundaryPick([...BOUNDARY_INTEGERS, ...BOUNDARY_NUMBERS], '_bNumIdx');
+                    ? this.seqPick(BOUNDARY_INTEGERS, '_bIntIdx')
+                    : this.seqPick([...BOUNDARY_INTEGERS, ...BOUNDARY_NUMBERS], '_bNumIdx');
 
             case 'MALICIOUS':
-                return rand.pick(MALICIOUS_NUMBERS);
+                return this.seqPick(MALICIOUS_NUMBERS, '_mNumIdx');
 
             case 'RANDOM':
             default:
@@ -237,10 +276,10 @@ export class SmartPayloadGenerator {
     private generateBoolean(): any {
         switch (this.profile) {
             case 'BOUNDARY':
-                return this.boundaryPick(BOUNDARY_BOOLEANS, '_bBoolIdx');
+                return this.seqPick(BOUNDARY_BOOLEANS, '_bBoolIdx');
 
             case 'MALICIOUS':
-                return rand.pick(MALICIOUS_BOOLEANS);
+                return this.seqPick(MALICIOUS_BOOLEANS, '_mBoolIdx');
 
             case 'RANDOM':
             default:
@@ -251,10 +290,10 @@ export class SmartPayloadGenerator {
     private generateDate(): any {
         switch (this.profile) {
             case 'BOUNDARY':
-                return this.boundaryPick(BOUNDARY_DATES, '_bDateIdx');
+                return this.seqPick(BOUNDARY_DATES, '_bDateIdx');
 
             case 'MALICIOUS':
-                return rand.pick(MALICIOUS_DATES);
+                return this.seqPick(MALICIOUS_DATES, '_mDateIdx');
 
             case 'RANDOM':
             default:
@@ -264,6 +303,6 @@ export class SmartPayloadGenerator {
 
     /** MALICIOUS: intentionally return wrong type to test strict typing */
     private breakType(): any {
-        return rand.pick(MALICIOUS_TYPE_CONFUSION);
+        return this.seqPick(MALICIOUS_TYPE_CONFUSION, '_mTypeIdx');
     }
 }

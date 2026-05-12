@@ -422,8 +422,13 @@ describe('FuzzRunner — progress tracking', () => {
         };
         await runner.start();
 
-        // 1 endpoint × 2 profiles × 5 iterations = 10 planned
-        expect(firstStats?.totalPlanned).toBe(10);
+        // 1 endpoint with fields:
+        //   RANDOM  → max(5, 0)  = 5 iterations
+        //   BOUNDARY → max(5, minIterationsNeeded('BOUNDARY')) iterations
+        const { SmartPayloadGenerator } = await import('../src/generator.js');
+        const boundaryMin = SmartPayloadGenerator.minIterationsNeeded('BOUNDARY');
+        const expected = 5 + Math.max(5, boundaryMin);
+        expect(firstStats?.totalPlanned).toBe(expected);
     });
 });
 

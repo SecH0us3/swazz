@@ -97,7 +97,7 @@ export class FuzzRunner {
         this._stats = this.createEmptyStats();
 
         const { endpoints, settings, dictionaries, global_headers, cookies, base_url } = this.config;
-        const iterations = settings.iterations_per_profile;
+        const userIterations = settings.iterations_per_profile;
         const concurrency = settings.concurrency;
         const delay = settings.delay_between_requests_ms;
         const maxPayloadSize = settings.max_payload_size_bytes || 1048576;
@@ -109,7 +109,8 @@ export class FuzzRunner {
         const heavyProfiles = settings.profiles.filter(p => HEAVY_PROFILES.has(p));
         const profiles = [...lightProfiles, ...heavyProfiles];
 
-        // Pre-calculate total planned requests for progress
+        // Pre-calculate total planned requests for progress.
+        // For BOUNDARY/MALICIOUS, iterations = max(user setting, payloads needed).
         let totalPlanned = 0;
         for (const endpoint of endpoints) {
             const hasFields =
@@ -119,8 +120,12 @@ export class FuzzRunner {
                     Object.keys(endpoint.pathParams).length > 0) ||
                 (endpoint.headerParams !== undefined &&
                     Object.keys(endpoint.headerParams).length > 0);
-            const effectiveIter = hasFields ? iterations : 1;
-            totalPlanned += profiles.length * effectiveIter;
+
+            for (const p of profiles) {
+                const minNeeded = SmartPayloadGenerator.minIterationsNeeded(p);
+                const baseIter = hasFields ? Math.max(userIterations, minNeeded) : 1;
+                totalPlanned += baseIter;
+            }
         }
         this._stats.totalPlanned = totalPlanned;
         this._stats.progress.totalEndpoints = endpoints.length * profiles.length;
@@ -131,6 +136,10 @@ export class FuzzRunner {
                 if (this._shouldStop) break;
 
                 this._stats.progress.currentProfile = profile;
+
+                // For deterministic profiles (BOUNDARY/MALICIOUS), ensure we run
+                // enough iterations to cover every payload in the longest array.
+                const minNeeded = SmartPayloadGenerator.minIterationsNeeded(profile);
 
                 for (let epIdx = 0; epIdx < endpoints.length; epIdx++) {
                     const endpoint = endpoints[epIdx];
@@ -155,9 +164,11 @@ export class FuzzRunner {
                     );
 
                     // Smart iteration count:
-                    // - Has fuzzable fields (body or query params) → full iterations
+                    // - Has fuzzable fields → max(user iterations, payload coverage needed)
                     // - No fields → 1 request
-                    const effectiveIterations = hasFields ? iterations : 1;
+                    const effectiveIterations = hasFields
+                        ? Math.max(userIterations, minNeeded)
+                        : 1;
 
                     const generator = new SmartPayloadGenerator(dictionaries, profile);
 
@@ -167,9 +178,10 @@ export class FuzzRunner {
                     // Process iterations with semaphore-based concurrency control
                     const tasks: Promise<void>[] = [];
                     const semaphore = new Semaphore(profileConcurrency);
-                    // BOUNDARY uses fixed finite arrays — deduplication would skip most iterations
-                    // since boundary payloads repeat quickly. Only dedup for RANDOM/MALICIOUS.
-                    const enableDedup = profile !== 'BOUNDARY';
+                    // BOUNDARY/MALICIOUS use sequential iteration through fixed arrays —
+                    // dedup is unnecessary and would incorrectly skip payloads.
+                    // Only deduplicate for RANDOM (truly random generation may collide).
+                    const enableDedup = profile === 'RANDOM';
                     const seenHashes = new Set<number>();
 
                     for (let i = 0; i < effectiveIterations; i++) {
