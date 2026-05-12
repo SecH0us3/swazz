@@ -367,6 +367,9 @@ func printProgress(stats swagger.RunStats) {
 	for p := range stats.StatusByProfile {
 		sortedProfiles = append(sortedProfiles, p)
 	}
+	sort.Slice(sortedProfiles, func(i, j int) bool {
+		return string(sortedProfiles[i]) < string(sortedProfiles[j])
+	})
 	// Add 1 line for each profile, or at least 1 for overall status if empty
 	if len(sortedProfiles) == 0 {
 		linesToPrint += 1
@@ -440,8 +443,13 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 	fmt.Printf("  Avg RPS:         %.1f\n", stats.RequestsPerSec)
 
 	fmt.Println("\n  Status distribution:")
-	for code, count := range stats.StatusCounts {
-		fmt.Printf("    %3d: %5d\n", code, count)
+	var statCodes []int
+	for code := range stats.StatusCounts {
+		statCodes = append(statCodes, code)
+	}
+	sort.Ints(statCodes)
+	for _, code := range statCodes {
+		fmt.Printf("    %3d: %5d\n", code, stats.StatusCounts[code])
 	}
 
 	var errs, warns, notes int
