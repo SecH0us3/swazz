@@ -98,6 +98,8 @@ type Progress struct {
 	TotalEndpoints     int    `json:"totalEndpoints"`
 	CurrentEndpoint    string `json:"currentEndpoint"`
 	CurrentProfile     string `json:"currentProfile"`
+	CurrentIteration   int    `json:"currentIteration"`
+	TotalIterations    int    `json:"totalIterations"`
 }
 
 // ParseResult is the output of ParseSpec.

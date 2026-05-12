@@ -303,6 +303,7 @@ func (r *Runner) Start(ctx context.Context) error {
 				capturedPayload := payload
 				capturedQueryParams := queryParams
 				capturedEndpoint := endpoint
+				iterationIndex := i
 
 				go func() {
 					defer func() {
@@ -339,6 +340,11 @@ func (r *Runner) Start(ctx context.Context) error {
 						generatedHeaders,
 						capturedEndpoint.ContentType,
 					)
+
+					r.mu.Lock()
+					r.stats.Progress.CurrentIteration = iterationIndex + 1
+					r.stats.Progress.TotalIterations = effectiveIterations
+					r.mu.Unlock()
 
 					r.updateStats(result)
 					r.broadcast(Event{Type: EventResult, Data: result})

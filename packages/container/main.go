@@ -358,7 +358,11 @@ func printProgress(stats swagger.RunStats) {
 
 	ep := ""
 	if stats.Progress.CurrentEndpoint != "" {
-		ep = fmt.Sprintf("\033[1;33m%s\033[0m (\033[1;35m%s\033[0m)", stats.Progress.CurrentEndpoint, stats.Progress.CurrentProfile)
+		iterInfo := ""
+		if stats.Progress.TotalIterations > 0 {
+			iterInfo = fmt.Sprintf(" \033[90m[test %d/%d]\033[0m", stats.Progress.CurrentIteration, stats.Progress.TotalIterations)
+		}
+		ep = fmt.Sprintf("\033[1;33m%s\033[0m (\033[1;35m%s\033[0m)%s", stats.Progress.CurrentEndpoint, stats.Progress.CurrentProfile, iterInfo)
 	}
 
 	// Calculate how many lines we will print
