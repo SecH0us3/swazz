@@ -98,11 +98,13 @@ export function useFuzzSession({
             return;
         }
 
-        const finalConfig = {
+        const finalConfig: SwazzConfig = {
             ...config,
             base_url: finalBaseUrl,
             endpoints: activeEndpoints,
-        } as SwazzConfig;
+        };
+        delete finalConfig.disabled_endpoints;
+
 
         const runId = `run_${Date.now()}`;
         setCurrentRunId(runId);
