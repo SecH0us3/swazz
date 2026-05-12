@@ -12,6 +12,12 @@ import (
 type Generator struct {
 	dictionaries map[string][]any
 	profile      swagger.FuzzingProfile
+
+	// Sequential counters: BOUNDARY
+	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx int
+
+	// Sequential counters: MALICIOUS
+	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx int
 }
 
 // New creates a new Generator.
@@ -23,6 +29,51 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile) *Generat
 	return &Generator{
 		dictionaries: norm,
 		profile:      profile,
+	}
+}
+
+func seqPick[T any](arr []T, counter *int) T {
+	if len(arr) == 0 {
+		var zero T
+		return zero
+	}
+	val := arr[*counter%len(arr)]
+	*counter++
+	return val
+}
+
+func maxInt(nums ...int) int {
+	m := 0
+	for _, n := range nums {
+		if n > m {
+			m = n
+		}
+	}
+	return m
+}
+
+// MinIterationsNeeded returns the minimum iterations required to cover all payloads in a profile.
+func MinIterationsNeeded(profile swagger.FuzzingProfile) int {
+	switch profile {
+	case swagger.ProfileBoundary:
+		return maxInt(
+			len(payloads.BoundaryStrings),
+			len(payloads.BoundaryIntegers),
+			len(payloads.BoundaryNumbers),
+			len(payloads.BoundaryDates),
+			len(payloads.BoundaryBooleans),
+			len(payloads.BoundaryArraySizes),
+		)
+	case swagger.ProfileMalicious:
+		return maxInt(
+			len(payloads.AllMaliciousStrings),
+			len(payloads.MaliciousNumbers),
+			len(payloads.MaliciousDates),
+			len(payloads.MaliciousBooleans),
+			len(payloads.MaliciousTypeConfusion),
+		)
+	default:
+		return 0
 	}
 }
 
@@ -100,7 +151,7 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 
 func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 	if g.profile == swagger.ProfileBoundary {
-		size := Pick(payloads.BoundaryArraySizes).(int)
+		size := seqPick(payloads.BoundaryArraySizes, &g.bArrIdx).(int)
 		// Cap complex object arrays to prevent OOM
 		if itemSchema != nil && itemSchema.Type == "object" {
 			if size > 50 {
@@ -115,7 +166,7 @@ func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 func (g *Generator) generateByProfile(typ, format, propName string) any {
 	// MALICIOUS: 5% chance to completely break the expected type
 	if g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 {
-		return Pick(payloads.MaliciousTypeConfusion)
+		return seqPick(payloads.MaliciousTypeConfusion, &g.mTypeIdx)
 	}
 
 	// Handle format-specific date-time before generic string
@@ -164,9 +215,9 @@ func (g *Generator) generateString(format, propName string) any {
 
 	switch g.profile {
 	case swagger.ProfileBoundary:
-		return Pick(payloads.BoundaryStrings)
+		return seqPick(payloads.BoundaryStrings, &g.bStrIdx)
 	case swagger.ProfileMalicious:
-		return Pick(payloads.AllMaliciousStrings)
+		return seqPick(payloads.AllMaliciousStrings, &g.mStrIdx)
 	default:
 		return generateRandomString(format)
 	}
@@ -193,14 +244,14 @@ func (g *Generator) generateNumber(typ string) any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
 		if typ == "integer" {
-			return Pick(payloads.BoundaryIntegers)
+			return seqPick(payloads.BoundaryIntegers, &g.bIntIdx)
 		}
 		merged := make([]any, 0, len(payloads.BoundaryIntegers)+len(payloads.BoundaryNumbers))
 		merged = append(merged, payloads.BoundaryIntegers...)
 		merged = append(merged, payloads.BoundaryNumbers...)
-		return Pick(merged)
+		return seqPick(merged, &g.bNumIdx)
 	case swagger.ProfileMalicious:
-		return Pick(payloads.MaliciousNumbers)
+		return seqPick(payloads.MaliciousNumbers, &g.mNumIdx)
 	default:
 		if typ == "integer" {
 			return IntRange(1, 1000)
@@ -211,8 +262,10 @@ func (g *Generator) generateNumber(typ string) any {
 
 func (g *Generator) generateBoolean() any {
 	switch g.profile {
+	case swagger.ProfileBoundary:
+		return seqPick(payloads.BoundaryBooleans, &g.bBoolIdx)
 	case swagger.ProfileMalicious:
-		return Pick(payloads.MaliciousBooleans)
+		return seqPick(payloads.MaliciousBooleans, &g.mBoolIdx)
 	default:
 		return rand.Float64() < 0.5
 	}
@@ -221,9 +274,9 @@ func (g *Generator) generateBoolean() any {
 func (g *Generator) generateDate() any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
-		return Pick(payloads.BoundaryDates)
+		return seqPick(payloads.BoundaryDates, &g.bDateIdx)
 	case swagger.ProfileMalicious:
-		return Pick(payloads.MaliciousDates)
+		return seqPick(payloads.MaliciousDates, &g.mDateIdx)
 	default:
 		return RandomDate().Format("2006-01-02T15:04:05.000Z")
 	}

@@ -169,11 +169,18 @@ func (r *Runner) Start(ctx context.Context) error {
 	// Calculate total planned requests
 	var totalPlanned int64
 	for _, ep := range endpoints {
-		effectiveIter := iterations
-		if !hasFields(&ep) {
-			effectiveIter = 1
+		hasF := hasFields(&ep)
+		for _, p := range profiles {
+			minNeeded := generator.MinIterationsNeeded(p)
+			baseIter := iterations
+			if minNeeded > baseIter {
+				baseIter = minNeeded
+			}
+			if !hasF {
+				baseIter = 1
+			}
+			totalPlanned += int64(baseIter)
 		}
-		totalPlanned += int64(len(profiles) * effectiveIter)
 	}
 	atomic.StoreInt64(&r.stats.TotalPlanned, totalPlanned)
 	r.stats.Progress.TotalEndpoints = len(endpoints) * len(profiles)
@@ -200,7 +207,11 @@ func (r *Runner) Start(ctx context.Context) error {
 
 			r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
+			minNeeded := generator.MinIterationsNeeded(profile)
 			effectiveIterations := iterations
+			if minNeeded > effectiveIterations {
+				effectiveIterations = minNeeded
+			}
 			if !hasFields(&endpoint) {
 				effectiveIterations = 1
 			}
@@ -213,6 +224,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			}
 
 			sem := make(chan struct{}, profileConcurrency)
+			enableDedup := profile == swagger.ProfileRandom
 			var wg sync.WaitGroup
 			seenHashes := make(map[uint32]bool)
 
@@ -251,21 +263,30 @@ func (r *Runner) Start(ctx context.Context) error {
 						payloadHash = generator.HashStr(payloadStr)
 						bufPool.Put(buf)
 
-						if !seenHashes[payloadHash] {
+						if enableDedup {
+							if !seenHashes[payloadHash] {
+								isDuplicate = false
+								break
+							}
+							isDuplicate = true
+						} else {
 							isDuplicate = false
 							break
 						}
-						isDuplicate = true
 					}
 				} else {
-					isDuplicate = seenHashes[payloadHash]
+					if enableDedup {
+						isDuplicate = seenHashes[payloadHash]
+					}
 				}
 
 				if isDuplicate {
 					atomic.AddInt64(&r.stats.TotalPlanned, -1)
 					continue
 				}
-				seenHashes[payloadHash] = true
+				if enableDedup {
+					seenHashes[payloadHash] = true
+				}
 
 				// Wait while paused
 				for r.paused() && !r.stopped() {

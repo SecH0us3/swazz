@@ -80,3 +80,22 @@ var BoundaryArraySizes = []any{
 	100,
 	1000,
 }
+
+// ─── Boolean boundaries ─────────────────────────────────
+
+var BoundaryBooleans = []any{
+	true,
+	false,
+	nil,
+	0,
+	1,
+	-1,
+	"",
+	"true",
+	"false",
+	"yes",
+	"no",
+	"1",
+	"0",
+}
+
