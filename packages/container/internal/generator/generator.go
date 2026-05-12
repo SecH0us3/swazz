@@ -14,10 +14,10 @@ type Generator struct {
 	profile      swagger.FuzzingProfile
 
 	// Sequential counters: BOUNDARY
-	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx int
+	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx, bUUIDIdx int
 
 	// Sequential counters: MALICIOUS
-	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx int
+	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx int
 }
 
 // New creates a new Generator.
@@ -63,6 +63,7 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile) int {
 			len(payloads.BoundaryDates),
 			len(payloads.BoundaryBooleans),
 			len(payloads.BoundaryArraySizes),
+			len(payloads.BoundaryUUIDs),
 		)
 	case swagger.ProfileMalicious:
 		return maxInt(
@@ -169,14 +170,21 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 		return seqPick(payloads.MaliciousTypeConfusion, &g.mTypeIdx)
 	}
 
-	// Handle format-specific date-time before generic string
-	if typ == "string" && format == "date-time" {
-		return g.generateDate()
+	formatLower := strings.ToLower(format)
+
+	// Handle format-specific date-time/uuid before generic string
+	if typ == "string" {
+		if formatLower == "date-time" {
+			return g.generateDate()
+		}
+		if formatLower == "uuid" {
+			return g.generateUUID()
+		}
 	}
 
 	switch typ {
 	case "string":
-		return g.generateString(format, propName)
+		return g.generateString(formatLower, propName)
 	case "integer", "number":
 		return g.generateNumber(typ)
 	case "boolean":
@@ -211,6 +219,10 @@ func (g *Generator) generateString(format, propName string) any {
 		if strings.Contains(lower, "num") || strings.Contains(lower, "count") || strings.Contains(lower, "page") {
 			return payloads.IntRange(1, 100)
 		}
+	}
+
+	if format == "uuid" {
+		return g.generateUUID()
 	}
 
 	switch g.profile {
@@ -279,5 +291,22 @@ func (g *Generator) generateDate() any {
 		return seqPick(payloads.MaliciousDates, &g.mDateIdx)
 	default:
 		return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
+	}
+}
+
+func (g *Generator) generateUUID() any {
+	// For UUIDs, we should avoid generating purely invalid formats in boundary arrays
+	// so that the API doesn't reject the request immediately on validation.
+	// We want to generate random valid UUIDs so the boundary test can actually hit the array logic.
+	switch g.profile {
+	case swagger.ProfileMalicious:
+		// In malicious profile, occasionally test invalid UUID format
+		if rand.Float64() < 0.1 {
+			return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
+		}
+		return payloads.UUID()
+	default:
+		// For both Boundary and Random profiles, generate valid UUIDs
+		return payloads.UUID()
 	}
 }

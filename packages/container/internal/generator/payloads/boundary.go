@@ -72,6 +72,15 @@ var BoundaryDates = []any{
 	"2024-01-01T00:00:00.000Z",
 }
 
+// ─── UUID boundaries ────────────────────────────────────
+
+var BoundaryUUIDs = []any{
+	"00000000-0000-0000-0000-000000000000", // Nil UUID
+	"ffffffff-ffff-ffff-ffff-ffffffffffff", // Max UUID
+	"not-a-uuid",                            // Invalid format
+	"",                                      // Empty
+}
+
 // ─── Array boundaries ───────────────────────────────────
 
 var BoundaryArraySizes = []any{

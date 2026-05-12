@@ -101,3 +101,84 @@ func TestMaxDepth(t *testing.T) {
 		t.Errorf("Payload should contain child key")
 	}
 }
+
+func TestGenerate_UUIDArrayBoundary(t *testing.T) {
+	schema := &swagger.SchemaProperty{
+		Type: "object",
+		Properties: map[string]*swagger.SchemaProperty{
+			"usersIds": {
+				Type: "array",
+				Items: &swagger.SchemaProperty{
+					Type:   "string",
+					Format: "uuid",
+				},
+			},
+		},
+		Required: []string{"usersIds"},
+	}
+
+	g := New(nil, swagger.ProfileBoundary)
+	
+	// Run multiple iterations to hit the large array boundary (100 or 1000)
+	foundLargeArray := false
+	for i := 0; i < 20; i++ {
+		payload := g.BuildObject(schema)
+		usersIds, ok := payload["usersIds"].([]any)
+		if !ok {
+			t.Fatalf("Expected usersIds to be []any, got %T", payload["usersIds"])
+		}
+
+		if len(usersIds) >= 100 {
+			foundLargeArray = true
+			// Check if elements are UUIDs or logical boundaries, NOT giant strings
+			for _, item := range usersIds {
+				str, ok := item.(string)
+				if !ok {
+					t.Errorf("Expected array item to be string, got %T", item)
+					continue
+				}
+				if len(str) > 50 {
+					t.Errorf("UUID field should not contain giant strings, got length %d", len(str))
+				}
+			}
+		}
+	}
+
+	if !foundLargeArray {
+		t.Errorf("Should have generated at least one large array in Boundary profile")
+	}
+}
+
+func TestGenerate_DictionaryArray(t *testing.T) {
+	schema := &swagger.SchemaProperty{
+		Type: "object",
+		Properties: map[string]*swagger.SchemaProperty{
+			"usersIds": {
+				Type: "array",
+				Items: &swagger.SchemaProperty{
+					Type:   "string",
+					Format: "uuid",
+				},
+			},
+		},
+		Required: []string{"usersIds"},
+	}
+
+	dict := map[string][]any{
+		"usersIds": {"custom-uuid-1", "custom-uuid-2"},
+	}
+	g := New(dict, swagger.ProfileRandom)
+
+	payload := g.BuildObject(schema)
+	usersIds, ok := payload["usersIds"].([]any)
+	if !ok {
+		t.Fatalf("Expected usersIds to be []any, got %T", payload["usersIds"])
+	}
+
+	for _, item := range usersIds {
+		str, _ := item.(string)
+		if str != "custom-uuid-1" && str != "custom-uuid-2" {
+			t.Errorf("Expected item from dictionary, got %v", item)
+		}
+	}
+}
