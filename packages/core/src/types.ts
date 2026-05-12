@@ -44,7 +44,7 @@ export interface SwazzSettings {
 }
 
 export const DEFAULT_SETTINGS: SwazzSettings = {
-    iterations_per_profile: 2,
+    iterations_per_profile: 10,
     concurrency: 2,
     timeout_ms: 2000,
     max_payload_size_bytes: 1048576, // 1MB
