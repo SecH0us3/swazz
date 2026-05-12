@@ -155,11 +155,10 @@ func (r *Runner) Start(ctx context.Context) error {
 		maxPayloadSize = 1048576
 	}
 
-	// Heavy profiles run sequentially
-	heavyProfiles := map[swagger.FuzzingProfile]bool{swagger.ProfileBoundary: true}
+	// Reorder profiles to run heavier ones last
 	var lightProfiles, heavyList []swagger.FuzzingProfile
 	for _, p := range settings.Profiles {
-		if heavyProfiles[p] {
+		if p == swagger.ProfileBoundary {
 			heavyList = append(heavyList, p)
 		} else {
 			lightProfiles = append(lightProfiles, p)
@@ -220,9 +219,6 @@ func (r *Runner) Start(ctx context.Context) error {
 
 			gen := generator.New(cfg.Dictionaries, profile)
 			profileConcurrency := concurrency
-			if heavyProfiles[profile] {
-				profileConcurrency = 1
-			}
 
 			sem := make(chan struct{}, profileConcurrency)
 			enableDedup := profile == swagger.ProfileRandom
