@@ -89,4 +89,23 @@ describe('swaggerService', () => {
 
         await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to fetch');
     });
+
+    it('throws error when successful response contains invalid json', async () => {
+        const mockResponse = new Response('Invalid JSON', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(SyntaxError);
+    });
+
+    it('throws error when data.endpoints is missing because it tries to read length property', async () => {
+        const mockResponse = new Response(JSON.stringify({ basePath: '/v1' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(TypeError);
+    });
 });
