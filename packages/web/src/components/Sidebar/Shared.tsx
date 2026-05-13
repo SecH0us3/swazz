@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { ReactNode, useState } from 'react';
 
 // ─── Collapsible Section ────────────────────────────────
 
@@ -12,8 +12,8 @@ export function Section({
     title: string;
     defaultOpen?: boolean;
     count?: number;
-    action?: React.ReactNode;
-    children: React.ReactNode;
+    action?: ReactNode;
+    children: ReactNode;
 }) {
     const [open, setOpen] = useState(defaultOpen);
     return (
