@@ -29,6 +29,15 @@ function getBadgeClass(status: number): string {
     return 'badge';
 }
 
+
+function formatBytes(bytes: number): string {
+    if (bytes === 0 || !bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
 function formatTime(ts: number): string {
     const d = new Date(ts);
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
@@ -194,6 +203,7 @@ export function Inspector({
                                     {r.status || 'ERR'}
                                 </span>
                                 <span className="badge-profile">{r.profile}</span>
+                                <span className="log-size">{formatBytes(r.payloadSize)}</span>
                                 <span className="log-duration">{r.duration}ms</span>
                             </div>
                         )}

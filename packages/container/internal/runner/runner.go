@@ -479,6 +479,7 @@ func (r *Runner) executeRequest(
 	}
 
 	for attempt := 0; ; attempt++ {
+		payloadSize := 0
 		reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 
 		var bodyReader io.Reader
@@ -490,11 +491,13 @@ func (r *Runner) executeRequest(
 						vals.Set(k, fmt.Sprintf("%v", v))
 					}
 					bodyReader = strings.NewReader(vals.Encode())
+					payloadSize = len(vals.Encode())
 				}
 			}
 			if bodyReader == nil {
 				b, _ := json.Marshal(payload)
 				bodyReader = strings.NewReader(string(b))
+				payloadSize = len(b)
 			}
 		}
 
@@ -503,7 +506,7 @@ func (r *Runner) executeRequest(
 			reqCancel()
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-				Method: method, Profile: profile, Status: 0, Payload: payload,
+				Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
 			}
 		}
@@ -532,7 +535,7 @@ func (r *Runner) executeRequest(
 			return &swagger.FuzzResult{
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				Method: method, Profile: profile, Status: 0, Duration: duration,
-				Payload: payload, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+				Payload: payload, PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 			}
 		}
 
@@ -549,7 +552,7 @@ func (r *Runner) executeRequest(
 				return &swagger.FuzzResult{
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 					Method: method, Profile: profile, Status: 429, Duration: duration,
-					Payload: payload, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+					Payload: payload, PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
 				}
 			}
 		}
@@ -575,7 +578,7 @@ func (r *Runner) executeRequest(
 		return &swagger.FuzzResult{
 			ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 			Method: method, Profile: profile, Status: resp.StatusCode, Duration: duration,
-			Payload: mergePayload(payload, queryParams), ResponseBody: respBody,
+			Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, ResponseBody: respBody,
 			Timestamp: time.Now().UnixMilli(), Retries: attempt,
 		}
 	}
