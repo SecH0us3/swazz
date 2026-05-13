@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig, SchemaProperty } from '../../types.js';
+import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig } from '../../types.js';
 
 import type { ScanRun } from '../../hooks/useDb.js';
 
