@@ -50,7 +50,7 @@ export function ConfigSidebar({
     const minPayloads = useMemo(() => {
         return activeProfiles.reduce((max, p) => {
             let needed = 0;
-            if (p === 'BOUNDARY') needed = 15;
+            if (p === 'BOUNDARY') needed = 17;
             if (p === 'MALICIOUS') needed = 35;
             return Math.max(max, needed);
         }, 0);
