@@ -7,6 +7,7 @@ import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
 
 interface Props {
+    style?: React.CSSProperties;
     config: SwazzConfig;
     runs: ScanRun[];
     loadedRunId: string | null;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function Sidebar({
+    style,
     config,
     runs,
     loadedRunId,
@@ -88,7 +90,7 @@ export function Sidebar({
     };
 
     return (
-        <aside className={`sidebar ${className || ''}`}>
+        <aside className={`sidebar ${className || ''}`} style={style}>
             {/* History */}
             <Section 
                 title="History" 

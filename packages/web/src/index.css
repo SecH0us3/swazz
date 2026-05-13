@@ -1750,9 +1750,7 @@ body.resizing .sidebar-resizer {
     padding: var(--space-4) !important;
   }
 
-  .header-mobile-toggle {
-    display: flex !important;
-  }
+
 
   .sidebar-resizer {
     display: none !important;
@@ -1787,17 +1785,29 @@ body.resizing .sidebar-resizer {
 
 /* Base style for mobile toggles */
 .header-mobile-toggle {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-default);
   background: var(--bg-elevated);
   cursor: pointer;
   color: var(--text-secondary);
   transition: all var(--duration-fast);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  position: fixed;
+  bottom: 24px;
+  z-index: 1000;
+}
+
+.header-mobile-toggle:first-of-type {
+  left: 24px;
+}
+
+.header-mobile-toggle:last-of-type {
+  right: 24px;
 }
 
 .header-mobile-toggle:hover {

@@ -23,3 +23,7 @@
 ## 2026-05-13 - [Track payload size]
 **Learning:** To render and calculate data on both backend and frontend, update the models on both boundaries (Go structs, TS interfaces), calculate it exactly when processing it on the backend, explicitly pass it back, parse and format it inside the display logic (React component or util helper), and update CSS formatting (e.g., CSS Grid columns).
 **Action:** Add payloadSize (int/number) to both `packages/container/internal/swagger/types.go` `FuzzResult` and `packages/web/src/types.ts`, compute size when creating payload buffer on backend, and inject into Virtualized list using format bytes helper.
+
+## 2026-05-13 - Add layout floating buttons
+**Learning:** For layout sidebars, passing inline styles is necessary when dynamically hiding them on desktop depending on state, while avoiding conflict with mobile CSS breakpoints. Also, `indexeddb-mock` should only be used when explicitly requested.
+**Action:** Created floating buttons positioned at the bottom corners by changing `.header-mobile-toggle` CSS.
