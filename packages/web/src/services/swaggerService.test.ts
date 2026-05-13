@@ -89,4 +89,32 @@ describe('swaggerService', () => {
 
         await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to fetch');
     });
+
+    it('handles missing endpoints in response gracefully (throws TypeError or similar)', async () => {
+        const mockResponseData = { basePath: '/v1' };
+        const mockResponse = new Response(JSON.stringify(mockResponseData), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow();
+    });
+
+    it('accepts headers and cookies arguments even though they are currently unused in fetch body', async () => {
+        const mockResponseData = { basePath: '/', endpoints: [] };
+        const mockResponse = new Response(JSON.stringify(mockResponseData), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+
+        const result = await loadSwaggerUrl('http://example.com/swagger.json', { 'X-Auth': 'token' }, { 'session': '123' });
+
+        expect(result).toEqual({
+            basePath: '/',
+            endpointCount: 0,
+            endpoints: []
+        });
+    });
 });
