@@ -17,3 +17,6 @@
 ## 2026-05-04 - [Added missing aria-labels to custom Tree Component]
 **Learning:** Custom tree implementations often lack accessible names for structural components (like chevron expand/collapse buttons) and checkboxes that control multiple nested items or individual items.
 **Action:** When working on tree components, always ensure that fold/unfold buttons have `aria-expanded` and `aria-label`s and checkboxes have descriptive `aria-label`s to explain their context (e.g. "Toggle all endpoints in folder").
+## 2026-05-13 - [Edge cases testing for React Hooks]
+**Learning:** It is important to test edge cases where a state manipulation hook is called with invalid parameters, e.g. dismissing a non-existent toast id, to ensure the state isn't incorrectly modified or an exception isn't thrown.
+**Action:** Added an edge-case test for the `useToast` hook to verify dismissing a non-existent toast behaves gracefully and does not throw errors or mutate the state.
