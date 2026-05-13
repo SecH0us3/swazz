@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult } from '../../types.js';
 
 interface Props {
@@ -10,13 +10,13 @@ interface Props {
     globalCookies: Record<string, string>;
 }
 
-function renderHighlightedJson(json: string): React.ReactNode {
+function renderHighlightedJson(json: string): ReactNode {
     if (!json) {
         return <span style={{ color: 'var(--text-disabled)' }}>No response</span>;
     }
 
     const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g;
-    const nodes: React.ReactNode[] = [];
+    const nodes: ReactNode[] = [];
     let lastIndex = 0;
     let match;
 

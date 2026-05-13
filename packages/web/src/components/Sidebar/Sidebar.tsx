@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { ChangeEvent, useState, useRef } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig } from '../../types.js';
 
 import type { ScanRun } from '../../hooks/useDb.js';
@@ -65,7 +65,7 @@ export function Sidebar({
         setSwaggerUrls(swaggerUrls.filter((u) => u !== url));
     };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
