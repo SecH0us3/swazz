@@ -10,21 +10,42 @@ interface Props {
     globalCookies: Record<string, string>;
 }
 
-function escapeHtml(s: string): string {
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
+function renderHighlightedJson(json: string): React.ReactNode {
+    if (!json) {
+        return <span style={{ color: 'var(--text-disabled)' }}>No response</span>;
+    }
 
-function syntaxHighlight(json: string): string {
-    const safe = escapeHtml(json);
-    return safe
-        .replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span style="color:var(--accent-light)">$1</span>:')
-        .replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span style="color:var(--color-success)">$1</span>')
-        .replace(/:\s*(-?\d+\.?\d*)/g, ': <span style="color:var(--color-warning)">$1</span>')
-        .replace(/:\s*(null|undefined|NaN)/g, ': <span style="color:var(--color-error)">$1</span>')
-        .replace(/:\s*(true|false)/g, ': <span style="color:var(--color-info)">$1</span>');
+    const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g;
+    const nodes: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(json)) !== null) {
+        if (match.index > lastIndex) {
+            nodes.push(json.slice(lastIndex, match.index));
+        }
+        let color = 'var(--color-warning)'; // number
+        if (/^"/.test(match[0])) {
+            color = /:$/.test(match[0]) ? 'var(--accent-light)' : 'var(--color-success)';
+        } else if (/true|false/.test(match[0])) {
+            color = 'var(--color-info)';
+        } else if (/null/.test(match[0])) {
+            color = 'var(--color-error)';
+        }
+
+        if (/:$/.test(match[0])) {
+            const colonIndex = match[0].lastIndexOf(':');
+            nodes.push(<span key={match.index} style={{ color }}>{match[0].slice(0, colonIndex)}</span>);
+            nodes.push(match[0].slice(colonIndex));
+        } else {
+            nodes.push(<span key={match.index} style={{ color }}>{match[0]}</span>);
+        }
+        lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < json.length) {
+        nodes.push(json.slice(lastIndex));
+    }
+    return nodes;
 }
 
 function joinUrl(base?: string, path?: string): string {
@@ -180,10 +201,9 @@ export function RequestDetail({
                     <div className="modal-pane">
                         <div className="detail-section-title">Response Body</div>
                         <div className="detail-json-wrapper">
-                            <pre
-                                className="detail-json"
-                                dangerouslySetInnerHTML={{ __html: responseBodyJson ? syntaxHighlight(responseBodyJson) : '<span style="color:var(--text-disabled)">No response</span>' }}
-                            />
+                            <pre className="detail-json">
+                                {renderHighlightedJson(responseBodyJson)}
+                            </pre>
                         </div>
                     </div>
                 </div>
