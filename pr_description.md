@@ -1,5 +1,7 @@
-🧪 [testing improvement] Add error path test for HTTP client failures
+Title: 🧹 [code health improvement] Remove unused React imports
 
-🎯 **What:** The previous testing coverage lacked a test to verify how the CLI's request runner (`packages/container/internal/runner/runner.go`) behaves when the HTTP client (`http.Client.Do`) encounters an immediate failure (e.g., DNS resolution failure or network timeout).
-📊 **Coverage:** A new test case `TestExecuteRequest_ErrorPath` was added to `packages/container/internal/runner/runner_test.go` that provides an invalid URL format to ensure an immediate failure. The test verifies that the `executeRequest` method correctly surfaces the error by populating the `Status` and `Error` fields of the returned `FuzzResult`.
-✨ **Result:** Enhanced test suite reliability by ensuring critical HTTP communication errors are appropriately captured and formatted within the runner logic, preventing unhandled edge cases during fuzzing.
+Description:
+🎯 **What:** Removed unused `React` imports from files in the `packages/web` codebase since `"jsx": "react-jsx"` handles JSX without requiring an explicit React import. Replaced usages like `React.ReactNode` with named imports (`import { ReactNode }`).
+💡 **Why:** Reduces noise in the codebase, aligns with modern React and TypeScript conventions, and improves maintainability by removing unnecessary unused dependencies in the scope.
+✅ **Verification:** Re-ran `npm run build --workspace=packages/web` and `npx vitest run --environment jsdom` to confirm functionality works as expected.
+✨ **Result:** A cleaner codebase, with unused imports completely stripped and typing remaining strong.

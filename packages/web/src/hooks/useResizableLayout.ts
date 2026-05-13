@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { MouseEvent as ReactMouseEvent, useState, useEffect, useRef, useCallback } from 'react';
 
 export function useResizableLayout(initialSidebarWidth: number, initialConfigSidebarWidth: number) {
     const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
@@ -31,13 +31,13 @@ export function useResizableLayout(initialSidebarWidth: number, initialConfigSid
         };
     }, []);
 
-    const startResizingLeft = useCallback((e: React.MouseEvent) => {
+    const startResizingLeft = useCallback((e: ReactMouseEvent) => {
         e.preventDefault();
         isResizingLeftRef.current = true;
         document.body.classList.add('resizing');
     }, []);
 
-    const startResizingRight = useCallback((e: React.MouseEvent) => {
+    const startResizingRight = useCallback((e: ReactMouseEvent) => {
         e.preventDefault();
         isResizingRightRef.current = true;
         document.body.classList.add('resizing');
