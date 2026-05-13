@@ -84,4 +84,26 @@ describe('useToast', () => {
         expect(result.current.toasts).toHaveLength(1);
         expect(result.current.toasts[0].message).toBe('Message 2');
     });
+
+    it('should ignore dismissing a non-existent toast id', () => {
+        vi.setSystemTime(new Date(1000));
+        const { result } = renderHook(() => useToast());
+
+        act(() => {
+            result.current.showToast('Message 1');
+        });
+
+        vi.setSystemTime(new Date(2000));
+        act(() => {
+            result.current.showToast('Message 2');
+        });
+
+        expect(result.current.toasts).toHaveLength(2);
+
+        act(() => {
+            result.current.dismissToast(9999);
+        });
+
+        expect(result.current.toasts).toHaveLength(2);
+    });
 });
