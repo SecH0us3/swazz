@@ -72,6 +72,7 @@ type FuzzResult struct {
 	Status       int            `json:"status"`
 	Duration     int64          `json:"duration"` // milliseconds
 	Payload      any            `json:"payload"`
+	PayloadSize  int            `json:"payloadSize"`
 	ResponseBody any            `json:"responseBody,omitempty"`
 	Error        string         `json:"error,omitempty"`
 	Timestamp    int64          `json:"timestamp"`

@@ -20,3 +20,6 @@
 ## 2026-05-13 - [Edge cases testing for React Hooks]
 **Learning:** It is important to test edge cases where a state manipulation hook is called with invalid parameters, e.g. dismissing a non-existent toast id, to ensure the state isn't incorrectly modified or an exception isn't thrown.
 **Action:** Added an edge-case test for the `useToast` hook to verify dismissing a non-existent toast behaves gracefully and does not throw errors or mutate the state.
+## 2026-05-13 - [Track payload size]
+**Learning:** To render and calculate data on both backend and frontend, update the models on both boundaries (Go structs, TS interfaces), calculate it exactly when processing it on the backend, explicitly pass it back, parse and format it inside the display logic (React component or util helper), and update CSS formatting (e.g., CSS Grid columns).
+**Action:** Add payloadSize (int/number) to both `packages/container/internal/swagger/types.go` `FuzzResult` and `packages/web/src/types.ts`, compute size when creating payload buffer on backend, and inject into Virtualized list using format bytes helper.

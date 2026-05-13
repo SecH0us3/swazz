@@ -75,6 +75,7 @@ export interface FuzzResult {
     status: number;
     duration: number;
     payload: any;
+    payloadSize: number;
     responseBody?: any;
     error?: string;
     timestamp: number;

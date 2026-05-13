@@ -10,6 +10,7 @@ export interface ResultSummary {
     status: number;
     profile: string;
     duration: number;
+    payloadSize: number;
     retries: number;
     payloadPreview: string;
     responsePreview: string;
@@ -91,6 +92,7 @@ export function toSummary(r: FuzzResult): ResultSummary {
         status: r.status,
         profile: r.profile,
         duration: r.duration,
+        payloadSize: r.payloadSize || 0,
         retries: r.retries || 0,
         payloadPreview: preview(r.payload),
         responsePreview: previewResponse(r.responseBody),
