@@ -37,6 +37,30 @@ export default function App() {
         start, stop, pause, resume, sendRequest
     } = useRunner(PROXY_URL);
 
+    const handleStop = async () => {
+        try {
+            await stop();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+    };
+
+    const handlePause = async () => {
+        try {
+            await pause();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+    };
+
+    const handleResume = async () => {
+        try {
+            await resume();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+    };
+
     const { runs, saveRun, importCliReport, getRunResults, deleteRun } = useDb();
 
     // Controllers
@@ -116,9 +140,9 @@ export default function App() {
                 isPaused={isPaused}
                 isLoadingSpecs={isLoadingSpecs}
                 onStart={() => handleStart()}
-                onStop={stop}
-                onPause={pause}
-                onResume={resume}
+                onStop={handleStop}
+                onPause={handlePause}
+                onResume={handleResume}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 onToggleConfig={() => setIsConfigOpen(!isConfigOpen)}
             />
