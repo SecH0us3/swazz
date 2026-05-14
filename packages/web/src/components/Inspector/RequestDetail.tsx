@@ -54,6 +54,24 @@ function joinUrl(base?: string, path?: string): string {
     return b && p ? `${b}/${p}` : `${b}${p}`;
 }
 
+function formatValue(val: any): string {
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'string') {
+        try {
+            // Check if it looks like JSON before trying to parse
+            const trimmed = val.trim();
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                const parsed = JSON.parse(trimmed);
+                return JSON.stringify(parsed, null, 2);
+            }
+        } catch {
+            // Not valid JSON or failed to parse
+        }
+        return val;
+    }
+    return JSON.stringify(val, null, 2);
+}
+
 export function RequestDetail({
     result,
     baseUrl,
@@ -65,17 +83,13 @@ export function RequestDetail({
     const [copied, setCopied] = useState<string | null>(null);
 
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
-    const initialBody = result.payload !== undefined
-        ? (typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload, null, 2))
-        : '';
+    const initialBody = formatValue(result.payload);
 
     const [editedUrl, setEditedUrl] = useState(initialUrl);
     const [editedBody, setEditedBody] = useState(initialBody);
 
     useEffect(() => {
-        setEditedBody(result.payload !== undefined
-            ? (typeof result.payload === 'string' ? result.payload : JSON.stringify(result.payload, null, 2))
-            : '');
+        setEditedBody(formatValue(result.payload));
     }, [result.payload]);
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);

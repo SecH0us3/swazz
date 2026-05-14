@@ -791,24 +791,46 @@ func toSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 	}
 }
 
-// previewAny serialises any value into a short human-readable string capped at maxLen bytes.
+// previewAny serialises any value into a short human-readable string.
+// Instead of linear truncation, it recursively processes objects and arrays
+// to keep all fields visible while capping long strings and large arrays.
 func previewAny(v any, maxLen int) string {
 	if v == nil {
 		return ""
 	}
-	var s string
+	truncated := truncateValue(v, maxLen)
+	b, _ := json.Marshal(truncated)
+	return string(b)
+}
+
+func truncateValue(v any, maxLen int) any {
 	switch val := v.(type) {
 	case string:
-		s = val
-	default:
-		b, err := json.Marshal(val)
-		if err != nil {
-			return ""
+		if len(val) > maxLen {
+			return fmt.Sprintf("%s... [truncated %d chars]", val[:maxLen], len(val)-maxLen)
 		}
-		s = string(b)
+		return val
+	case map[string]any:
+		res := make(map[string]any)
+		for k, v := range val {
+			res[k] = truncateValue(v, maxLen)
+		}
+		return res
+	case []any:
+		if len(val) <= 2 {
+			res := make([]any, len(val))
+			for i, v := range val {
+				res[i] = truncateValue(v, maxLen)
+			}
+			return res
+		}
+		// Truncate long arrays to 2 elements + a count note
+		res := make([]any, 0, 3)
+		res = append(res, truncateValue(val[0], maxLen))
+		res = append(res, truncateValue(val[1], maxLen))
+		res = append(res, fmt.Sprintf("... and %d more elements", len(val)-2))
+		return res
+	default:
+		return v
 	}
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "…"
 }
