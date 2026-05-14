@@ -1,21 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { FuzzResult, RunStats } from '../types.js';
-
-export interface ResultSummary {
-    id: string;
-    timestamp: number;
-    method: string;
-    endpoint: string;
-    resolvedPath: string;
-    status: number;
-    profile: string;
-    duration: number;
-    payloadSize: number;
-    retries: number;
-    payloadPreview: string;
-    responsePreview: string;
-    error?: string;
-}
+import type { RunStats } from '../types.js';
 
 const VALUE_LIMIT = 80;
 const RESPONSE_VALUE_LIMIT = 400;
@@ -82,7 +66,24 @@ export function preview(value: any): string {
     return JSON.stringify(truncateValues(value), null, 2);
 }
 
-export function toSummary(r: FuzzResult): ResultSummary {
+// Minimal shape stored in React state — no payload data
+export interface ResultSummary {
+    id: string;
+    timestamp: number;
+    method: string;
+    endpoint: string;
+    resolvedPath: string;
+    status: number;
+    profile: string;
+    duration: number;
+    payloadSize: number;
+    retries: number;
+    payloadPreview: string;
+    responsePreview: string;
+    error?: string;
+}
+
+export function toSummary(r: any): ResultSummary {
     return {
         id: r.id,
         timestamp: r.timestamp,
@@ -94,26 +95,22 @@ export function toSummary(r: FuzzResult): ResultSummary {
         duration: r.duration,
         payloadSize: r.payloadSize || 0,
         retries: r.retries || 0,
-        payloadPreview: preview(r.payload),
-        responsePreview: previewResponse(r.responseBody),
+        // Use server-generated previews if available (FuzzResultSSE), otherwise generate client-side
+        payloadPreview: r.payloadPreview ?? preview(r.payload),
+        responsePreview: r.responsePreview ?? previewResponse(r.responseBody),
         error: r.error,
     };
 }
 
-const FLUSH_INTERVAL_MS = 250;
-const PROGRESS_THROTTLE_MS = 250;
+const PROGRESS_THROTTLE_MS = 300;
 
 export function useRunner(proxyUrl: string) {
-    const [rows, setRows] = useState<ResultSummary[]>([]);
     const [stats, setStats] = useState<RunStats | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
 
     const eventSourceRef = useRef<EventSource | null>(null);
-    const rowBufferRef = useRef<ResultSummary[]>([]);
-    const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Provide the sendRequest mock for manual interactions in UI
     const sendRequest = useCallback(
         async (req: {
             url: string;
@@ -132,58 +129,50 @@ export function useRunner(proxyUrl: string) {
         [proxyUrl],
     );
 
+    /**
+     * start — starts a fuzz run.
+     * onResult is called for each SSE result event (caller writes to IDB).
+     * onComplete is called once when the run finishes.
+     * No rows[] are stored in this hook.
+     */
     const start = useCallback(
-        async (config: any, onResult?: (result: FuzzResult) => void, onComplete?: (stats: RunStats) => void) => {
+        async (
+            config: any,
+            onResult: (rawResult: any) => void,
+            onComplete: (stats: RunStats) => void,
+        ) => {
             if (isRunning) return;
 
-            setRows([]);
             setIsRunning(true);
             setIsPaused(false);
-            rowBufferRef.current = [];
 
-            // Start via API
             try {
                 const res = await fetch(`${proxyUrl}/api/fuzz/start`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config),
                 });
-                
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
-                    console.error("Failed to start run:", err);
                     setIsRunning(false);
-                    throw new Error(err.error || "Failed to start run");
+                    throw new Error(err.error || 'Failed to start run');
                 }
             } catch (err) {
-                console.error("Error starting run:", err);
                 setIsRunning(false);
                 throw err;
             }
 
-            const flushBuffer = () => {
-                const buf = rowBufferRef.current;
-                if (buf.length === 0) return;
-                rowBufferRef.current = [];
-                setRows((prev) => [...prev, ...buf]);
-            };
-
             let lastProgressTime = 0;
 
-            // Connect SSE
             const es = new EventSource(`${proxyUrl}/api/fuzz/stream`);
             eventSourceRef.current = es;
 
             es.addEventListener('result', (e) => {
-                const result = JSON.parse(e.data) as FuzzResult;
-                onResult?.(result);
-
-                rowBufferRef.current.push(toSummary(result));
-                if (!flushTimerRef.current) {
-                    flushTimerRef.current = setTimeout(() => {
-                        flushTimerRef.current = null;
-                        flushBuffer();
-                    }, FLUSH_INTERVAL_MS);
+                try {
+                    const raw = JSON.parse(e.data);
+                    onResult(raw);
+                } catch {
+                    // ignore parse errors
                 }
             });
 
@@ -191,28 +180,26 @@ export function useRunner(proxyUrl: string) {
                 const now = Date.now();
                 if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
                     lastProgressTime = now;
-                    setStats(JSON.parse(e.data));
+                    try { setStats(JSON.parse(e.data)); } catch { /* */ }
                 }
             });
 
             es.addEventListener('complete', (e) => {
-                const finalStats = JSON.parse(e.data);
-                if (flushTimerRef.current) {
-                    clearTimeout(flushTimerRef.current);
-                    flushTimerRef.current = null;
-                }
-                flushBuffer();
-                setStats(finalStats);
-                setIsRunning(false);
-                setIsPaused(false);
-                es.close();
-                eventSourceRef.current = null;
-                onComplete?.(finalStats);
+                try {
+                    const finalStats = JSON.parse(e.data);
+                    setStats(finalStats);
+                    setIsRunning(false);
+                    setIsPaused(false);
+                    es.close();
+                    eventSourceRef.current = null;
+                    onComplete(finalStats);
+                } catch { /* */ }
             });
 
-            es.onerror = (err) => {
-                console.error("SSE error:", err);
+            es.onerror = () => {
                 es.close();
+                eventSourceRef.current = null;
+                setIsRunning(false);
             };
         },
         [proxyUrl, isRunning],
@@ -220,56 +207,29 @@ export function useRunner(proxyUrl: string) {
 
     const stop = useCallback(async () => {
         try {
-            const res = await fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.error || "Failed to stop run");
-            }
+            await fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
         } finally {
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-                eventSourceRef.current = null;
-            }
+            eventSourceRef.current?.close();
+            eventSourceRef.current = null;
             setIsRunning(false);
         }
     }, [proxyUrl]);
 
     const pause = useCallback(async () => {
         const res = await fetch(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || "Failed to pause run");
-        }
+        if (!res.ok) throw new Error('Failed to pause');
         setIsPaused(true);
     }, [proxyUrl]);
 
     const resume = useCallback(async () => {
         const res = await fetch(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || "Failed to resume run");
-        }
+        if (!res.ok) throw new Error('Failed to resume');
         setIsPaused(false);
     }, [proxyUrl]);
 
-    // Cleanup on unmount
     useEffect(() => {
-        return () => {
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-            }
-        };
+        return () => { eventSourceRef.current?.close(); };
     }, []);
 
-    return {
-        rows,
-        stats,
-        isRunning,
-        isPaused,
-        start,
-        stop,
-        pause,
-        resume,
-        sendRequest,
-    };
+    return { stats, isRunning, isPaused, start, stop, pause, resume, sendRequest };
 }

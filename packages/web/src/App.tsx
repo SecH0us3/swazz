@@ -16,7 +16,6 @@ import { useFuzzSession } from './hooks/useFuzzSession.js';
 import { useRunHistory } from './hooks/useRunHistory.js';
 import { MainWorkspace } from './components/MainWorkspace.js';
 
-// In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export default function App() {
@@ -29,49 +28,29 @@ export default function App() {
     const [isSidebarHiddenDesktop, setIsSidebarHiddenDesktop] = useState(false);
     const [isConfigHiddenDesktop, setIsConfigHiddenDesktop] = useState(false);
 
+    // Live request counter — only int in React state, no array
+    const [liveCount, setLiveCount] = useState(0);
+    const [liveRunId, setLiveRunId] = useState<string | null>(null);
+
     const {
         config, updateConfig, updateHeaders, updateCookies,
         updateDictionaries, updateProfiles, importConfig, exportConfig
     } = useConfig();
 
-    const {
-        rows: liveRows, stats: liveStats, isRunning, isPaused,
-        start, stop, pause, resume, sendRequest
-    } = useRunner(PROXY_URL);
+    const { stats: liveStats, isRunning, isPaused, start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
 
-    const handleStop = async () => {
-        try {
-            await stop();
-        } catch (err) {
-            showToast(err instanceof Error ? err.message : String(err), 'error');
-        }
-    };
+    const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun } = useDb();
 
-    const handlePause = async () => {
-        try {
-            await pause();
-        } catch (err) {
-            showToast(err instanceof Error ? err.message : String(err), 'error');
-        }
-    };
-
-    const handleResume = async () => {
-        try {
-            await resume();
-        } catch (err) {
-            showToast(err instanceof Error ? err.message : String(err), 'error');
-        }
-    };
-
-    const { runs, saveRun, importCliReport, getRunResults, deleteRun } = useDb();
-
-    // Controllers
-    const { loadedRunId, setLoadedRunId, historyRows, historyStats, handleLoadRun, handleDeleteRun, handleExport } = useRunHistory({
-        runs, getRunResults, deleteRun, showToast,
+    const { loadedRunId, setLoadedRunId, historyStats, handleLoadRun, handleDeleteRun, handleExport } = useRunHistory({
+        runs,
+        queryResults,
+        getRunResults,
+        deleteRun,
+        showToast,
         onRunLoaded: () => {
             setSelectedResult(null);
             setHeatmapFilter(null);
-        }
+        },
     });
 
     const { isLoadingSpecs, loadEndpoints, handleStart } = useFuzzSession({
@@ -79,15 +58,18 @@ export default function App() {
         updateConfig,
         start,
         saveRun,
+        getDb,
         showToast,
-        onRunStarted: () => {
+        onRunStarted: (runId) => {
+            setLiveRunId(runId);
+            setLiveCount(0);
             setHeatmapFilter(null);
             setSelectedResult(null);
             setLoadedRunId(null);
-        }
+        },
+        onLiveCount: setLiveCount,
     });
 
-    const activeRows = loadedRunId ? historyRows : liveRows;
     const activeStats = loadedRunId ? historyStats : liveStats;
     const displayUrl = config.base_url || ((config as any)._swagger_urls?.[0] ?? '');
 
@@ -181,8 +163,9 @@ export default function App() {
             <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${isConfigHiddenDesktop ? 0 : configSidebarWidth}px` }}>
                 <MainWorkspace
                     config={config}
-                    activeRows={activeRows}
+                    activeRunId={liveRunId}
                     activeStats={activeStats}
+                    liveCount={liveCount}
                     loadedRunId={loadedRunId}
                     historyStats={historyStats}
                     activeTab={activeTab}
@@ -193,9 +176,10 @@ export default function App() {
                     handleStart={handleStart}
                     setLoadedRunId={setLoadedRunId}
                     handleSelectResult={handleSelectResult}
-                    handleExport={() => handleExport(activeRows, config.base_url)}
+                    handleExport={() => handleExport(loadedRunId ?? liveRunId, config.base_url)}
+                    queryResults={queryResults}
                 />
-                
+
                 <ConfigSidebar
                     className={`${isConfigOpen ? 'mobile-open' : ''} ${isConfigHiddenDesktop ? 'hidden-desktop' : ''}`}
                     config={config}

@@ -83,8 +83,7 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile) int {
 func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty) any {
 	// 1. Enum — respect explicit values, allow bypass in security profiles
 	if len(schema.Enum) > 0 {
-		shouldBypass := (g.profile == swagger.ProfileMalicious || g.profile == swagger.ProfileBoundary) &&
-			rand.Float64() < 0.3
+		shouldBypass := (g.profile == swagger.ProfileMalicious) && rand.Float64() < 0.3
 		if !shouldBypass {
 			return payloads.Pick(schema.Enum)
 		}
@@ -117,9 +116,9 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 			}
 		}
 
-		// 30% chance to omit optional fields in intensive profiles
+		// 30% chance to omit optional fields in MALICIOUS profile
 		if !isRequired &&
-			(g.profile == swagger.ProfileBoundary || g.profile == swagger.ProfileMalicious) &&
+			(g.profile == swagger.ProfileMalicious) &&
 			rand.Float64() < 0.3 {
 			continue
 		}
@@ -190,8 +189,8 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 	case "boolean":
 		return g.generateBoolean()
 	default:
-		// Fallback — guess by name
-		if propName != "" {
+		// Fallback — guess by name (only in RANDOM profile or if no other options)
+		if g.profile == swagger.ProfileRandom && propName != "" {
 			lower := strings.ToLower(propName)
 			if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
 				return payloads.UUID()
@@ -208,7 +207,7 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 }
 
 func (g *Generator) generateString(format, propName string) any {
-	if format == "" && propName != "" {
+	if g.profile == swagger.ProfileRandom && format == "" && propName != "" {
 		lower := strings.ToLower(propName)
 		if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
 			return payloads.UUID()

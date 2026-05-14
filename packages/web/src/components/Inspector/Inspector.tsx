@@ -1,20 +1,21 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
-import { useInspectorFilters } from '../../hooks/useInspectorFilters.js';
-import type { StatusFilter } from '../../hooks/useInspectorFilters.js';
+import type { QueryOptions } from '../../hooks/useDb.js';
+
+export type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
 
 interface Props {
-    results: ResultSummary[];
-    onSelectResult: (row: ResultSummary) => void;
+    runId: string | null;
+    queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
+    // liveCount triggers a reload when it changes during an active run
+    liveCount?: number;
     heatmapFilter: HeatmapFilter | null;
     onClearHeatmapFilter: () => void;
+    onSelectResult: (row: ResultSummary) => void;
     onExport: () => void;
-    onFilteredCountChange?: (count: number) => void;
 }
-
-
 
 function getStatusClass(status: number): string {
     if (status >= 500) return 'status-5xx';
@@ -29,7 +30,6 @@ function getBadgeClass(status: number): string {
     return 'badge';
 }
 
-
 function formatBytes(bytes: number): string {
     if (bytes === 0 || !bytes) return '0 B';
     const k = 1024;
@@ -43,35 +43,91 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
+const PAGE_SIZE = 1000;
+
 export function Inspector({
-    results,
-    onSelectResult,
+    runId,
+    queryResults,
+    liveCount = 0,
     heatmapFilter,
     onClearHeatmapFilter,
+    onSelectResult,
     onExport,
-    onFilteredCountChange,
 }: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
-    const [sortConfig, setSortConfig] = useState<{key: 'timestamp'|'duration', direction: 'asc'|'desc'}>({key: 'timestamp', direction: 'desc'});
+    const [sortConfig, setSortConfig] = useState<{ key: 'timestamp' | 'duration'; direction: 'asc' | 'desc' }>({ key: 'timestamp', direction: 'desc' });
 
-    const count5xx = useMemo(() => results.filter((r) => r.status >= 500).length, [results]);
+    const [rows, setRows] = useState<ResultSummary[]>([]);
+    const [total, setTotal] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const { filtered, totalFiltered } = useInspectorFilters({
-        results,
-        filter,
-        search,
-        heatmapFilter,
-        sortConfig
-    });
+    // Debounce search
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [debouncedSearch, setDebouncedSearch] = useState('');
 
     useEffect(() => {
-        onFilteredCountChange?.(totalFiltered);
-    }, [totalFiltered, onFilteredCountChange]);
+        searchDebounceRef.current && clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
+        return () => { searchDebounceRef.current && clearTimeout(searchDebounceRef.current); };
+    }, [search]);
 
-    const tabs: { key: StatusFilter; label: string; count?: number }[] = [
+    // Reload results from IDB when any filter/run changes or liveCount ticks
+    const reloadRef = useRef(0);
+    const loadResults = useCallback(async () => {
+        if (!runId) {
+            setRows([]);
+            setTotal(0);
+            return;
+        }
+        setIsLoading(true);
+        const token = ++reloadRef.current;
+
+        const statusFilter: StatusFilter = heatmapFilter ? 'all' : filter;
+        const { rows: newRows, total: newTotal } = await queryResults({
+            runId,
+            statusFilter,
+            search: debouncedSearch,
+            sortKey: sortConfig.key,
+            sortDir: sortConfig.direction,
+            limit: PAGE_SIZE,
+        });
+
+        // Apply heatmap filter client-side (small subset)
+        let displayed = newRows;
+        if (heatmapFilter) {
+            displayed = newRows.filter(
+                r =>
+                    r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                    r.endpoint === heatmapFilter.path &&
+                    r.status === heatmapFilter.status
+            );
+        }
+
+        if (token === reloadRef.current) {
+            setRows(displayed);
+            setTotal(heatmapFilter ? displayed.length : newTotal);
+            setIsLoading(false);
+        }
+    }, [runId, filter, debouncedSearch, sortConfig, heatmapFilter, queryResults]);
+
+    // Re-query when filters change
+    useEffect(() => { loadResults(); }, [loadResults]);
+
+    // Re-query on live count tick (throttled by useFuzzSession already)
+    const prevLiveCount = useRef(0);
+    useEffect(() => {
+        if (liveCount !== prevLiveCount.current) {
+            prevLiveCount.current = liveCount;
+            loadResults();
+        }
+    }, [liveCount, loadResults]);
+
+    const count5xx = rows.filter(r => r.status >= 500).length;
+
+    const tabs: { key: StatusFilter; label: string }[] = [
         { key: 'all', label: 'All' },
-        { key: '5xx', label: '5xx', count: count5xx },
+        { key: '5xx', label: '5xx' },
         { key: '4xx', label: '4xx' },
         { key: '2xx', label: '2xx' },
     ];
@@ -80,30 +136,30 @@ export function Inspector({
         <div className="inspector">
             <div className="inspector-header">
                 {heatmapFilter ? (
-                    <div style={{ display:'flex', alignItems:'center', gap:'var(--space-2)' }}>
-                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>Filtered:</span>
-                        <span style={{ fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)', color:'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Filtered:</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
                             {heatmapFilter.method.toUpperCase()} {heatmapFilter.path}
                         </span>
                         <span
                             style={{
                                 background: heatmapFilter.status >= 500 ? 'var(--color-error-bg)' :
-                                            heatmapFilter.status >= 400 ? 'var(--color-warning-bg)' : 'var(--color-success-bg)',
+                                    heatmapFilter.status >= 400 ? 'var(--color-warning-bg)' : 'var(--color-success-bg)',
                                 color: heatmapFilter.status >= 500 ? 'var(--color-error)' :
-                                       heatmapFilter.status >= 400 ? 'var(--color-warning)' : 'var(--color-success)',
-                                fontFamily:'var(--font-mono)', fontSize:12, padding:'2px 7px',
-                                borderRadius:'var(--radius-full)', fontWeight:600,
+                                    heatmapFilter.status >= 400 ? 'var(--color-warning)' : 'var(--color-success)',
+                                fontFamily: 'var(--font-mono)', fontSize: 12, padding: '2px 7px',
+                                borderRadius: 'var(--radius-full)', fontWeight: 600,
                             }}
                         >
                             {heatmapFilter.status}
                         </span>
-                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-disabled)' }}>{totalFiltered} results</span>
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>{total} results</span>
                         <button
                             onClick={onClearHeatmapFilter}
                             style={{
-                                background:'transparent', border:'none', color:'var(--text-disabled)',
-                                cursor:'pointer', fontSize:12, padding:'2px 4px',
-                                borderRadius:'var(--radius-sm)', transition:'color var(--duration-fast)',
+                                background: 'transparent', border: 'none', color: 'var(--text-disabled)',
+                                cursor: 'pointer', fontSize: 12, padding: '2px 4px',
+                                borderRadius: 'var(--radius-sm)', transition: 'color var(--duration-fast)',
                             }}
                             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-error)')}
                             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-disabled)')}
@@ -120,9 +176,9 @@ export function Inspector({
                                 onClick={() => setFilter(tab.key)}
                             >
                                 {tab.label}
-                                {tab.count !== undefined && tab.count > 0 && (
-                                    <span className="badge badge-error" style={{ marginLeft:5, fontSize:12, padding:'0 5px' }}>
-                                        {tab.count}
+                                {tab.key === '5xx' && count5xx > 0 && (
+                                    <span className="badge badge-error" style={{ marginLeft: 5, fontSize: 12, padding: '0 5px' }}>
+                                        {count5xx}
                                     </span>
                                 )}
                             </button>
@@ -130,14 +186,14 @@ export function Inspector({
                     </div>
                 )}
 
-                <div style={{ display:'flex', gap:'var(--space-2)', alignItems:'center', flex:1 }}>
-                    <div style={{ flex:1, position:'relative' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flex: 1 }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
                         <svg
                             width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                            style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)', pointerEvents:'none' }}
+                            style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}
                         >
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                         <input
                             className="input inspector-search"
@@ -145,25 +201,31 @@ export function Inspector({
                             aria-label="Filter by path"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            style={{ flex:1, paddingLeft:28, paddingRight: search ? 28 : undefined, width:'100%' }}
+                            style={{ flex: 1, paddingLeft: 28, paddingRight: search ? 28 : undefined, width: '100%' }}
                         />
                         {search && (
                             <button
                                 className="btn btn-icon"
-                                style={{ position:'absolute', right:4, top:'50%', transform:'translateY(-50%)', width:20, height:20, padding:0, minHeight:0, minWidth:0 }}
+                                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, padding: 0, minHeight: 0, minWidth: 0 }}
                                 onClick={() => setSearch('')}
                                 aria-label="Clear search"
-                                title="Clear search"
                             >✕</button>
                         )}
                     </div>
+                    {isLoading && (
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
+                    )}
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
+                        {total.toLocaleString()} req{total !== 1 ? 's' : ''}
+                        {total > PAGE_SIZE ? ` (showing ${Math.min(rows.length, PAGE_SIZE)})` : ''}
+                    </span>
                     <button
                         className="btn btn-ghost btn-sm"
                         title="Export results as JSON"
                         onClick={onExport}
                     >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
                         Export
                     </button>
@@ -171,23 +233,23 @@ export function Inspector({
             </div>
 
             <div className="request-log">
-                {filtered.length === 0 ? (
+                {rows.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-state-icon">🔍</div>
                         <div className="empty-state-title">
-                            {results.length === 0 ? 'Waiting for requests' : 'No matching requests'}
+                            {!runId ? 'Waiting for requests' : isLoading ? 'Loading…' : 'No matching requests'}
                         </div>
                         <div className="empty-state-text">
-                            {results.length === 0
+                            {!runId
                                 ? 'Start a fuzz test to see results appear here in real time.'
-                                : 'Try adjusting filters or search query.'}
+                                : isLoading ? '' : 'Try adjusting filters or search query.'}
                         </div>
                     </div>
                 ) : (
                     <Virtuoso
                         style={{ height: '100%', flex: 1 }}
-                        data={filtered}
-                        itemContent={(index, r) => (
+                        data={rows}
+                        itemContent={(_index, r) => (
                             <div
                                 key={r.id}
                                 className={`log-row ${getStatusClass(r.status)}`}
