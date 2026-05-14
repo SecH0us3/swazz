@@ -20,7 +20,7 @@ export function useInspectorFilters({
     sortConfig,
 }: UseInspectorFiltersProps) {
     return useMemo(() => {
-        let list = results;
+        let list = [...results];
 
         if (heatmapFilter) {
             list = list.filter(
