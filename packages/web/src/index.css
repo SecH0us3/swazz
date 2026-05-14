@@ -1788,27 +1788,19 @@ body.resizing .sidebar-resizer {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-default);
-  background: var(--bg-elevated);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
   cursor: pointer;
   color: var(--text-secondary);
   transition: all var(--duration-fast);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  position: fixed;
-  bottom: 24px;
-  z-index: 1000;
 }
 
-.header-mobile-toggle:first-of-type {
-  left: 24px;
-}
 
-.header-mobile-toggle:last-of-type {
-  right: 24px;
-}
+
+
 
 .header-mobile-toggle:hover {
   background: var(--bg-surface);
@@ -1826,3 +1818,5 @@ button:focus-visible {
 }
 
 .log-size { color: var(--text-muted); text-align: right; }
+
+@media (min-width: 769px) { .hidden-desktop { display: none !important; } }
