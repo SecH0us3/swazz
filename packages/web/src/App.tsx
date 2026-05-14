@@ -26,6 +26,8 @@ export default function App() {
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
+    const [isSidebarHiddenDesktop, setIsSidebarHiddenDesktop] = useState(false);
+    const [isConfigHiddenDesktop, setIsConfigHiddenDesktop] = useState(false);
 
     const {
         config, updateConfig, updateHeaders, updateCookies,
@@ -112,7 +114,7 @@ export default function App() {
     };
 
     return (
-        <div className="app-layout" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
+        <div className="app-layout" style={{ gridTemplateColumns: `${isSidebarHiddenDesktop ? 0 : sidebarWidth}px 1fr` }}>
             <Header
                 baseUrl={displayUrl}
                 onChangeBaseUrl={(url) => {
@@ -140,15 +142,21 @@ export default function App() {
                 isPaused={isPaused}
                 isLoadingSpecs={isLoadingSpecs}
                 onStart={() => handleStart()}
-                onStop={handleStop}
-                onPause={handlePause}
-                onResume={handleResume}
-                onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-                onToggleConfig={() => setIsConfigOpen(!isConfigOpen)}
+                onStop={stop}
+                onPause={pause}
+                onResume={resume}
+                onToggleSidebar={() => {
+                    if (window.innerWidth <= 768) setIsSidebarOpen(!isSidebarOpen);
+                    else setIsSidebarHiddenDesktop(!isSidebarHiddenDesktop);
+                }}
+                onToggleConfig={() => {
+                    if (window.innerWidth <= 768) setIsConfigOpen(!isConfigOpen);
+                    else setIsConfigHiddenDesktop(!isConfigHiddenDesktop);
+                }}
             />
 
             <Sidebar
-                className={isSidebarOpen ? 'mobile-open' : ''}
+                className={`${isSidebarOpen ? 'mobile-open' : ''} ${isSidebarHiddenDesktop ? 'hidden-desktop' : ''}`}
                 config={config}
                 runs={runs}
                 loadedRunId={loadedRunId}
@@ -170,7 +178,7 @@ export default function App() {
                 }} />
             )}
 
-            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${configSidebarWidth}px` }}>
+            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${isConfigHiddenDesktop ? 0 : configSidebarWidth}px` }}>
                 <MainWorkspace
                     config={config}
                     activeRows={activeRows}
@@ -189,7 +197,7 @@ export default function App() {
                 />
                 
                 <ConfigSidebar
-                    className={isConfigOpen ? 'mobile-open' : ''}
+                    className={`${isConfigOpen ? 'mobile-open' : ''} ${isConfigHiddenDesktop ? 'hidden-desktop' : ''}`}
                     config={config}
                     onUpdateHeaders={updateHeaders}
                     onUpdateCookies={updateCookies}
@@ -219,8 +227,8 @@ export default function App() {
                 ))}
             </div>
 
-            <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />
-            <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />
+            {!isSidebarHiddenDesktop && <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />}
+            {!isConfigHiddenDesktop && <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />}
         </div>
     );
 }
