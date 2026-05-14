@@ -46,3 +46,4 @@ swazz-engine
 *.test
 *.prof
 __debug_bin
+tmp/

@@ -78,15 +78,23 @@ func runServer() {
 	// CORS middleware
 	r.Use(func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		if allowedOrigin == "*" || origin == allowedOrigin {
-			if allowedOrigin == "*" {
-				c.Header("Access-Control-Allow-Origin", "*")
-			} else {
+		
+		// If origin is empty, it might be a direct request, but for CORS we need to check it
+		// For local dev, we'll be permissive if it's localhost
+		isLocalhost := strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")
+		
+		if allowedOrigin == "*" || origin == allowedOrigin || isLocalhost {
+			if origin != "" {
 				c.Header("Access-Control-Allow-Origin", origin)
+			} else if allowedOrigin == "*" {
+				c.Header("Access-Control-Allow-Origin", "*")
 			}
 		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		c.Header("Access-Control-Allow-Credentials", "true")
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
