@@ -130,9 +130,6 @@ func runServer() {
 		port = "8080"
 	}
 
-	// Serve embedded frontend SPA (only active when built with -tags embed)
-	serveEmbeddedFrontend(r)
-
 	log.Printf("swazz-engine starting on :%s", port)
 	if err := r.Run("0.0.0.0:" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
