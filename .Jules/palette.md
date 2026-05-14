@@ -33,3 +33,7 @@
 ## 2024-05-14 - Inline Patching Strategy
 **Learning:** `patch` can be very temperamental with formatting (whitespace, indenting, missing context) inside React component files causing hunk failures.
 **Action:** Use an inline node script like `node -e "const code = fs.readFileSync(...); const newCode = code.replace(...); fs.writeFileSync(..., newCode)"` when making targeted multi-line replacements if `patch` fails.
+
+## 2024-05-24 - Fix Method Badges Readability
+**Learning:** Adding a global CSS class property might have unintended visual regressions on specific elements that rely on system defaults or lack explicit overrides (e.g., `<button>` elements turning solid white when they inherit a white text color with their default background behavior in some states). Always test both the active/selected and inactive/unselected states of dynamic UI elements.
+**Action:** Applied the inline color fix selectively within `EndpointTree.tsx` to ensure unselected method badges are readable (`var(--text-primary)`) without breaking the active colored styling (`badge-info`, etc.).

@@ -224,7 +224,8 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                                 cursor: 'pointer',
                                 opacity: methodFilters.length === 0 || methodFilters.includes(method) ? 1 : 0.5,
                                 border: methodFilters.includes(method) ? '1px solid var(--color-info)' : '1px solid var(--border-default)',
-                                background: methodFilters.includes(method) ? 'rgba(56, 189, 248, 0.1)' : 'transparent'
+                                background: methodFilters.includes(method) ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
+                                color: methodFilters.includes(method) ? undefined : 'var(--text-primary)'
                             }}
                             onClick={() => toggleMethod(method)}
                         >
