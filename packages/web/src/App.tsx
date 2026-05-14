@@ -39,6 +39,30 @@ export default function App() {
         start, stop, pause, resume, sendRequest
     } = useRunner(PROXY_URL);
 
+    const handleStop = async () => {
+        try {
+            await stop();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+    };
+
+    const handlePause = async () => {
+        try {
+            await pause();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+    };
+
+    const handleResume = async () => {
+        try {
+            await resume();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+    };
+
     const { runs, saveRun, importCliReport, getRunResults, deleteRun } = useDb();
 
     // Controllers
