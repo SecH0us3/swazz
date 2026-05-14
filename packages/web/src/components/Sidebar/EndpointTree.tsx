@@ -219,13 +219,8 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                     {ALL_METHODS.map(method => (
                         <button
                             key={method}
-                            className={`badge ${methodFilters.includes(method) ? 'badge-info' : ''}`}
-                            style={{
-                                cursor: 'pointer',
-                                opacity: methodFilters.length === 0 || methodFilters.includes(method) ? 1 : 0.5,
-                                border: methodFilters.includes(method) ? '1px solid var(--color-info)' : '1px solid var(--border-default)',
-                                background: methodFilters.includes(method) ? 'rgba(56, 189, 248, 0.1)' : 'transparent'
-                            }}
+                            className={`badge method-filter ${methodFilters.includes(method) ? 'badge-info active-filter' : ''}`}
+                            style={{ opacity: methodFilters.length === 0 || methodFilters.includes(method) ? 1 : 0.5 }}
                             onClick={() => toggleMethod(method)}
                         >
                             {method}
