@@ -18,6 +18,11 @@ new_sqlite_classes = ["SwazzContainer"]
 class_name = "SwazzContainer"
 image = "../container/Dockerfile"
 
+  [containers.instance_type]
+  vcpu = 4
+  memory_mib = 12288
+  disk_mb = 20480
+
 [observability]
 enabled = true
 
