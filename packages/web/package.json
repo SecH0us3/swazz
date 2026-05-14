@@ -6,8 +6,9 @@
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
+        "build:cf": "tsc && vite build --outDir dist --emptyOutDir",
         "preview": "vite preview",
-        "deploy": "vite build && wrangler deploy"
+        "deploy": "npm run build:cf && wrangler deploy"
     },
     "dependencies": {
         "react": "^19.0.0",

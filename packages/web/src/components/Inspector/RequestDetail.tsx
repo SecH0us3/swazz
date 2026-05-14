@@ -101,9 +101,15 @@ export function RequestDetail({
         if (!onReplay) return;
         setIsReplaying(true);
         try {
-            let parsedBody = undefined;
+            // Try to parse as JSON, but fall back to raw string if it fails.
+            // Truncated or intentionally malformed payloads are valid fuzz cases.
+            let parsedBody: any = undefined;
             if (editedBody && editedBody.trim()) {
-                parsedBody = JSON.parse(editedBody);
+                try {
+                    parsedBody = JSON.parse(editedBody);
+                } catch {
+                    parsedBody = editedBody; // send as raw string
+                }
             }
             const response = await onReplay({
                 url: editedUrl,
@@ -183,15 +189,20 @@ export function RequestDetail({
                             onChange={(e) => setEditedUrl(e.target.value)}
                         />
 
-                        <div className="detail-section-title" style={{ marginTop:'var(--space-4)', display:'flex', justifyContent:'space-between' }}>
-                            Payload
+                        <div className="detail-section-title" style={{ marginTop: 'var(--space-4)', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>
+                                Payload
+                                {result.payload !== undefined && typeof result.payload === 'string' && result.payload.endsWith('…') && (
+                                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-disabled)', fontWeight: 400 }}>(preview — full payload not stored)</span>
+                                )}
+                            </span>
                             <button className="btn btn-ghost btn-sm" onClick={() => copy(editedBody, 'payload')}>
                                 {copied === 'payload' ? '✓ Copied' : 'Copy'}
                             </button>
                         </div>
                         <textarea
                             className="textarea"
-                            style={{ flex:1, margin:0, fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)' }}
+                            style={{ flex: 1, margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)' }}
                             value={editedBody}
                             onChange={(e) => setEditedBody(e.target.value)}
                             spellCheck={false}
