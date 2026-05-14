@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
@@ -27,6 +27,15 @@ function getBadgeClass(status: number): string {
     if (status >= 400) return 'badge badge-warning';
     if (status >= 200 && status < 300) return 'badge badge-success';
     return 'badge';
+}
+
+
+function formatBytes(bytes: number): string {
+    if (bytes === 0 || !bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function formatTime(ts: number): string {
@@ -194,6 +203,7 @@ export function Inspector({
                                     {r.status || 'ERR'}
                                 </span>
                                 <span className="badge-profile">{r.profile}</span>
+                                <span className="log-size">{formatBytes(r.payloadSize)}</span>
                                 <span className="log-duration">{r.duration}ms</span>
                             </div>
                         )}

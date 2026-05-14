@@ -1,6 +1,7 @@
 name = "swazz-api"
 main = "src/index.ts"
 compatibility_date = "2026-04-28"
+compatibility_flags = ["nodejs_compat"]
 
 routes = [
   { pattern = "swazz.secmy.app/api*", zone_name = "secmy.app" }
@@ -16,6 +17,11 @@ new_sqlite_classes = ["SwazzContainer"]
 [[containers]]
 class_name = "SwazzContainer"
 image = "../container/Dockerfile"
+
+  [containers.instance_type]
+  vcpu = 4
+  memory_mib = 12288
+  disk_mb = 10000
 
 [observability]
 enabled = true

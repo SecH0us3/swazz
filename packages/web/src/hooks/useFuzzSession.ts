@@ -129,6 +129,7 @@ export function useFuzzSession({
                 profile: result.profile,
                 duration: result.duration,
                 retries: result.retries,
+                payloadSize: result.payloadSize || 0,
                 payloadPreview: previewPayload(result.payload),
                 responsePreview: previewResponse(result.responseBody),
                 error: result.error,

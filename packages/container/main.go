@@ -70,9 +70,21 @@ func runServer() {
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 
+	allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "http://localhost:5173" // Default for local dev
+	}
+
 	// CORS middleware
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		if allowedOrigin == "*" || origin == allowedOrigin {
+			if allowedOrigin == "*" {
+				c.Header("Access-Control-Allow-Origin", "*")
+			} else {
+				c.Header("Access-Control-Allow-Origin", origin)
+			}
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {

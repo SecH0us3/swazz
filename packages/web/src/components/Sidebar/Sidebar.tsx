@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig, SchemaProperty } from '../../types.js';
+import { ChangeEvent, useState, useRef } from 'react';
+import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig } from '../../types.js';
 
 import type { ScanRun } from '../../hooks/useDb.js';
 
@@ -7,6 +7,7 @@ import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
 
 interface Props {
+    style?: React.CSSProperties;
     config: SwazzConfig;
     runs: ScanRun[];
     loadedRunId: string | null;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function Sidebar({
+    style,
     config,
     runs,
     loadedRunId,
@@ -65,7 +67,7 @@ export function Sidebar({
         setSwaggerUrls(swaggerUrls.filter((u) => u !== url));
     };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -88,7 +90,7 @@ export function Sidebar({
     };
 
     return (
-        <aside className={`sidebar ${className || ''}`}>
+        <aside className={`sidebar ${className || ''}`} style={style}>
             {/* History */}
             <Section 
                 title="History" 

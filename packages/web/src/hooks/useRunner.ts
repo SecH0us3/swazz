@@ -10,6 +10,7 @@ export interface ResultSummary {
     status: number;
     profile: string;
     duration: number;
+    payloadSize: number;
     retries: number;
     payloadPreview: string;
     responsePreview: string;
@@ -91,6 +92,7 @@ export function toSummary(r: FuzzResult): ResultSummary {
         status: r.status,
         profile: r.profile,
         duration: r.duration,
+        payloadSize: r.payloadSize || 0,
         retries: r.retries || 0,
         payloadPreview: preview(r.payload),
         responsePreview: previewResponse(r.responseBody),
@@ -216,22 +218,37 @@ export function useRunner(proxyUrl: string) {
         [proxyUrl, isRunning],
     );
 
-    const stop = useCallback(() => {
-        fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' }).catch(console.error);
-        if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-            eventSourceRef.current = null;
+    const stop = useCallback(async () => {
+        try {
+            const res = await fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || "Failed to stop run");
+            }
+        } finally {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+                eventSourceRef.current = null;
+            }
+            setIsRunning(false);
         }
-        setIsRunning(false);
     }, [proxyUrl]);
 
-    const pause = useCallback(() => {
-        fetch(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' }).catch(console.error);
+    const pause = useCallback(async () => {
+        const res = await fetch(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || "Failed to pause run");
+        }
         setIsPaused(true);
     }, [proxyUrl]);
 
-    const resume = useCallback(() => {
-        fetch(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' }).catch(console.error);
+    const resume = useCallback(async () => {
+        const res = await fetch(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || "Failed to resume run");
+        }
         setIsPaused(false);
     }, [proxyUrl]);
 

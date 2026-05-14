@@ -1,8 +1,9 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useMemo, useRef, useState } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 
 interface Props {
+    style?: React.CSSProperties;
     config: SwazzConfig;
     onUpdateHeaders: (h: Record<string, string>) => void;
     onUpdateCookies: (c: Record<string, string>) => void;
@@ -24,6 +25,7 @@ const PROFILE_LABELS: Record<string, string> = {
 };
 
 export function ConfigSidebar({
+    style,
     config,
     onUpdateHeaders,
     onUpdateCookies,
@@ -50,7 +52,7 @@ export function ConfigSidebar({
     const minPayloads = useMemo(() => {
         return activeProfiles.reduce((max, p) => {
             let needed = 0;
-            if (p === 'BOUNDARY') needed = 15;
+            if (p === 'BOUNDARY') needed = 17;
             if (p === 'MALICIOUS') needed = 35;
             return Math.max(max, needed);
         }, 0);
@@ -66,7 +68,7 @@ export function ConfigSidebar({
         }
     };
 
-    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImport = (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
@@ -90,7 +92,7 @@ export function ConfigSidebar({
     ];
 
     return (
-        <aside className={`config-sidebar ${className || ''}`} style={{ gridArea:'unset', borderLeft:'1px solid var(--border-subtle)', borderRight:'none' }}>
+        <aside className={`config-sidebar ${className || ''}`} style={{ gridArea:'unset', borderLeft:'1px solid var(--border-subtle)', borderRight:'none', ...style }}>
 
             {/* Profiles */}
             <Section title="Profiles">
