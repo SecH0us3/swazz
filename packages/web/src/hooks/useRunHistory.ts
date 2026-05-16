@@ -1,60 +1,62 @@
 import { useState } from 'react';
 import type { RunStats } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
+import type { QueryOptions } from './useDb.js';
 
 interface UseRunHistoryProps {
     runs: any[];
+    queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
     getRunResults: (id: string) => Promise<ResultSummary[]>;
     deleteRun: (id: string) => Promise<void>;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
     onRunLoaded: () => void;
 }
 
-export function useRunHistory({ runs, getRunResults, deleteRun, showToast, onRunLoaded }: UseRunHistoryProps) {
+export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, showToast, onRunLoaded }: UseRunHistoryProps) {
     const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
-    const [historyRows, setHistoryRows] = useState<ResultSummary[]>([]);
     const [historyStats, setHistoryStats] = useState<RunStats | null>(null);
 
     const handleLoadRun = async (runId: string, importedRun?: any) => {
         const runData = importedRun || runs.find(r => r.id === runId);
         if (!runData) return;
-        
-        showToast(`Loading scan...`, 'info');
-        const rows = await getRunResults(runId);
-        setHistoryRows(rows);
         setHistoryStats(runData.stats);
         setLoadedRunId(runId);
         onRunLoaded();
-        showToast(`Loaded ${rows.length} results from history`, 'success');
+        showToast(`Loaded run from history`, 'success');
     };
 
     const handleDeleteRun = async (runId: string) => {
         await deleteRun(runId);
         if (loadedRunId === runId) {
             setLoadedRunId(null);
-            setHistoryRows([]);
             setHistoryStats(null);
         }
         showToast('Run deleted', 'success');
     };
 
-    const handleExport = (activeRows: ResultSummary[], baseUrl?: string) => {
-        if (activeRows.length === 0) {
-            showToast('No results to export yet', 'error');
+    const handleExport = async (runId: string | null, baseUrl?: string) => {
+        if (!runId) {
+            showToast('No run selected to export', 'error');
+            return;
+        }
+        showToast('Preparing export…', 'info');
+        const rows = await getRunResults(runId);
+        if (rows.length === 0) {
+            showToast('No results to export', 'error');
             return;
         }
         const data = {
             exportedAt: new Date().toISOString(),
-            baseUrl: baseUrl,
-            totalRequests: activeRows.length,
+            baseUrl,
+            totalRequests: rows.length,
             summary: {
-                crashes5xx: activeRows.filter((r) => r.status >= 500).length,
-                errors4xx: activeRows.filter((r) => r.status >= 400 && r.status < 500).length,
-                success2xx: activeRows.filter((r) => r.status >= 200 && r.status < 300).length,
-                networkErrors: activeRows.filter((r) => r.status === 0).length,
-                totalRetries: activeRows.reduce((sum: number, r) => sum + (r.retries ?? 0), 0),
+                crashes5xx: rows.filter(r => r.status >= 500).length,
+                errors4xx: rows.filter(r => r.status >= 400 && r.status < 500).length,
+                success2xx: rows.filter(r => r.status >= 200 && r.status < 300).length,
+                networkErrors: rows.filter(r => r.status === 0).length,
+                totalRetries: rows.reduce((sum, r) => sum + (r.retries ?? 0), 0),
             },
-            results: activeRows,
+            results: rows,
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -63,8 +65,13 @@ export function useRunHistory({ runs, getRunResults, deleteRun, showToast, onRun
         a.download = `swazz-results-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast(`Exported ${activeRows.length} results`, 'success');
+        showToast(`Exported ${rows.length.toLocaleString()} results`, 'success');
     };
 
-    return { loadedRunId, setLoadedRunId, historyRows, historyStats, handleLoadRun, handleDeleteRun, handleExport };
+    return {
+        loadedRunId, setLoadedRunId,
+        historyStats,
+        handleLoadRun, handleDeleteRun, handleExport,
+        queryResults,
+    };
 }

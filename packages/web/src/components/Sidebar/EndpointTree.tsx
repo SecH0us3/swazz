@@ -12,6 +12,7 @@ type EndpointLeaf = {
     method: string;
     path: string;
     fieldCount: number;
+    fields: { name: string; type: string }[];
 };
 
 type TreeNode = {
@@ -40,6 +41,9 @@ function getAllEndpointIds(node: TreeNode): string[] {
 
 export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }: EndpointTreeProps) {
     const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+    const [searchQuery, setSearchQuery] = useState('');
+    const [methodFilters, setMethodFilters] = useState<string[]>([]);
+    const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
     const toggleExpand = (nodePath: string) => {
         setExpandedNodes((prev) => ({
@@ -48,9 +52,21 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
         }));
     };
 
+    const toggleMethod = (method: string) => {
+        setMethodFilters(prev =>
+            prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
+        );
+    };
+
     const tree = useMemo(() => {
+        const filteredEndpoints = endpoints.filter(ep => {
+            if (methodFilters.length > 0 && !methodFilters.includes(ep.method)) return false;
+            if (searchQuery && !ep.path.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            return true;
+        });
+
         const root: TreeNode = { name: 'root', children: {}, endpoints: [] };
-        for (const ep of endpoints) {
+        for (const ep of filteredEndpoints) {
             const segments = processPath(ep.path);
             let current = root;
             for (const seg of segments) {
@@ -59,15 +75,25 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                 }
                 current = current.children[seg];
             }
+            const fields: { name: string; type: string }[] = [];
+            if (ep.schema?.properties) {
+                for (const [name, prop] of Object.entries(ep.schema.properties)) {
+                    let typeStr = prop.type || 'any';
+                    if (prop.format) typeStr += ` (${prop.format})`;
+                    fields.push({ name, type: typeStr });
+                }
+            }
+
             current.endpoints.push({
                 id: `${ep.method} ${ep.path}`,
                 method: ep.method,
                 path: ep.path,
-                fieldCount: ep.schema?.properties ? Object.keys(ep.schema.properties).length : 0,
+                fieldCount: fields.length,
+                fields,
             });
         }
         return root;
-    }, [endpoints]);
+    }, [endpoints, searchQuery, methodFilters]);
 
     const renderNode = (node: TreeNode, currentPath: string, depth: number = 0) => {
         const allIds = getAllEndpointIds(node);
@@ -139,7 +165,26 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                                         {isLeaf ? node.name : '/'}
                                     </span>
                                     {ep.fieldCount > 0 && (
-                                        <span className="tree-leaf-meta">{ep.fieldCount} fields</span>
+                                        <div
+                                            style={{ position: 'relative' }}
+                                            onMouseEnter={() => setHoveredNodeId(ep.id)}
+                                            onMouseLeave={() => setHoveredNodeId(null)}
+                                        >
+                                            <span className="tree-leaf-meta" style={{ cursor: 'help' }}>{ep.fieldCount} fields</span>
+                                            {hoveredNodeId === ep.id && (
+                                                <div className="tooltip" style={{ whiteSpace: 'normal', textAlign: 'left', bottom: '100%', right: 0, left: 'auto', transform: 'none', marginBottom: 4, width: 'max-content', maxWidth: 200 }}>
+                                                    <div style={{ fontWeight: 600, marginBottom: 4, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 2 }}>Fields</div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                        {ep.fields.map(f => (
+                                                            <div key={f.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                                                <span style={{ color: 'var(--text-primary)' }}>{f.name}</span>
+                                                                <span style={{ color: 'var(--text-muted)' }}>{f.type}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             );
@@ -158,9 +203,34 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
         );
     }
 
+    const ALL_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+
     return (
-        <div className="endpoint-tree">
-            {renderNode(tree, '')}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ padding: '0 12px' }}>
+                <input
+                    className="input"
+                    placeholder="Search endpoints..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ width: '100%', marginBottom: 6 }}
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {ALL_METHODS.map(method => (
+                        <button
+                            key={method}
+                            className={`badge method-filter ${methodFilters.includes(method) ? 'badge-info active-filter' : ''}`}
+                            style={{ opacity: methodFilters.length === 0 || methodFilters.includes(method) ? 1 : 0.5 }}
+                            onClick={() => toggleMethod(method)}
+                        >
+                            {method}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <div className="endpoint-tree">
+                {renderNode(tree, '')}
+            </div>
         </div>
     );
 }

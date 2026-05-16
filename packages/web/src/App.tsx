@@ -16,7 +16,6 @@ import { useFuzzSession } from './hooks/useFuzzSession.js';
 import { useRunHistory } from './hooks/useRunHistory.js';
 import { MainWorkspace } from './components/MainWorkspace.js';
 
-// In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export default function App() {
@@ -26,26 +25,32 @@ export default function App() {
     const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
+    const [isSidebarHiddenDesktop, setIsSidebarHiddenDesktop] = useState(false);
+    const [isConfigHiddenDesktop, setIsConfigHiddenDesktop] = useState(false);
+
+    // Live request counter — only int in React state, no array
+    const [liveCount, setLiveCount] = useState(0);
+    const [liveRunId, setLiveRunId] = useState<string | null>(null);
 
     const {
         config, updateConfig, updateHeaders, updateCookies,
         updateDictionaries, updateProfiles, importConfig, exportConfig
     } = useConfig();
 
-    const {
-        rows: liveRows, stats: liveStats, isRunning, isPaused,
-        start, stop, pause, resume, sendRequest
-    } = useRunner(PROXY_URL);
+    const { stats: liveStats, isRunning, isPaused, start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
 
-    const { runs, saveRun, importCliReport, getRunResults, deleteRun } = useDb();
+    const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun } = useDb();
 
-    // Controllers
-    const { loadedRunId, setLoadedRunId, historyRows, historyStats, handleLoadRun, handleDeleteRun, handleExport } = useRunHistory({
-        runs, getRunResults, deleteRun, showToast,
+    const { loadedRunId, setLoadedRunId, historyStats, handleLoadRun, handleDeleteRun, handleExport } = useRunHistory({
+        runs,
+        queryResults,
+        getRunResults,
+        deleteRun,
+        showToast,
         onRunLoaded: () => {
             setSelectedResult(null);
             setHeatmapFilter(null);
-        }
+        },
     });
 
     const { isLoadingSpecs, loadEndpoints, handleStart } = useFuzzSession({
@@ -53,15 +58,18 @@ export default function App() {
         updateConfig,
         start,
         saveRun,
+        getDb,
         showToast,
-        onRunStarted: () => {
+        onRunStarted: (runId) => {
+            setLiveRunId(runId);
+            setLiveCount(0);
             setHeatmapFilter(null);
             setSelectedResult(null);
             setLoadedRunId(null);
-        }
+        },
+        onLiveCount: setLiveCount,
     });
 
-    const activeRows = loadedRunId ? historyRows : liveRows;
     const activeStats = loadedRunId ? historyStats : liveStats;
     const displayUrl = config.base_url || ((config as any)._swagger_urls?.[0] ?? '');
 
@@ -88,7 +96,7 @@ export default function App() {
     };
 
     return (
-        <div className="app-layout" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
+        <div className="app-layout" style={{ gridTemplateColumns: `${isSidebarHiddenDesktop ? 0 : sidebarWidth}px 1fr` }}>
             <Header
                 baseUrl={displayUrl}
                 onChangeBaseUrl={(url) => {
@@ -119,12 +127,18 @@ export default function App() {
                 onStop={stop}
                 onPause={pause}
                 onResume={resume}
-                onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-                onToggleConfig={() => setIsConfigOpen(!isConfigOpen)}
+                onToggleSidebar={() => {
+                    if (window.innerWidth <= 768) setIsSidebarOpen(!isSidebarOpen);
+                    else setIsSidebarHiddenDesktop(!isSidebarHiddenDesktop);
+                }}
+                onToggleConfig={() => {
+                    if (window.innerWidth <= 768) setIsConfigOpen(!isConfigOpen);
+                    else setIsConfigHiddenDesktop(!isConfigHiddenDesktop);
+                }}
             />
 
             <Sidebar
-                className={isSidebarOpen ? 'mobile-open' : ''}
+                className={`${isSidebarOpen ? 'mobile-open' : ''} ${isSidebarHiddenDesktop ? 'hidden-desktop' : ''}`}
                 config={config}
                 runs={runs}
                 loadedRunId={loadedRunId}
@@ -146,11 +160,12 @@ export default function App() {
                 }} />
             )}
 
-            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${configSidebarWidth}px` }}>
+            <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${isConfigHiddenDesktop ? 0 : configSidebarWidth}px` }}>
                 <MainWorkspace
                     config={config}
-                    activeRows={activeRows}
+                    activeRunId={liveRunId}
                     activeStats={activeStats}
+                    liveCount={liveCount}
                     loadedRunId={loadedRunId}
                     historyStats={historyStats}
                     activeTab={activeTab}
@@ -161,11 +176,12 @@ export default function App() {
                     handleStart={handleStart}
                     setLoadedRunId={setLoadedRunId}
                     handleSelectResult={handleSelectResult}
-                    handleExport={() => handleExport(activeRows, config.base_url)}
+                    handleExport={() => handleExport(loadedRunId ?? liveRunId, config.base_url)}
+                    queryResults={queryResults}
                 />
-                
+
                 <ConfigSidebar
-                    className={isConfigOpen ? 'mobile-open' : ''}
+                    className={`${isConfigOpen ? 'mobile-open' : ''} ${isConfigHiddenDesktop ? 'hidden-desktop' : ''}`}
                     config={config}
                     onUpdateHeaders={updateHeaders}
                     onUpdateCookies={updateCookies}
@@ -195,8 +211,8 @@ export default function App() {
                 ))}
             </div>
 
-            <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />
-            <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />
+            {!isSidebarHiddenDesktop && <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />}
+            {!isConfigHiddenDesktop && <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />}
         </div>
     );
 }

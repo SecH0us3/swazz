@@ -27,3 +27,9 @@
 ## 2026-05-13 - Add layout floating buttons
 **Learning:** For layout sidebars, passing inline styles is necessary when dynamically hiding them on desktop depending on state, while avoiding conflict with mobile CSS breakpoints. Also, `indexeddb-mock` should only be used when explicitly requested.
 **Action:** Created floating buttons positioned at the bottom corners by changing `.header-mobile-toggle` CSS.
+## 2026-05-14 - Support Responsive Sidebars on Desktop/Tablet
+**Learning:** When making previously mobile-only elements responsive, pay close attention to CSS media queries and states. A hidden state toggled on a desktop resolution might inadvertently keep elements hidden if the window is resized down to a mobile breakpoint if not wrapped in proper media query guards.
+**Action:** Add media queries wrapping specific desktop utility classes like `.hidden-desktop`.
+## 2024-05-14 - Inline Patching Strategy
+**Learning:** `patch` can be very temperamental with formatting (whitespace, indenting, missing context) inside React component files causing hunk failures.
+**Action:** Use an inline node script like `node -e "const code = fs.readFileSync(...); const newCode = code.replace(...); fs.writeFileSync(..., newCode)"` when making targeted multi-line replacements if `patch` fails.

@@ -8,8 +8,8 @@
     "packages/edge"
   ],
   "scripts": {
-    "dev:backend": "cd packages/container && go run main.go serve",
-    "dev:frontend": "VITE_PROXY_URL=http://localhost:8080 npm run dev --workspace=packages/web",
+    "dev:backend": "cd packages/container && air serve",
+    "dev:frontend": "npm run dev --workspace=packages/web",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "npm run build --workspace=packages/web",
     "deploy:api": "npm run deploy --workspace=packages/edge",

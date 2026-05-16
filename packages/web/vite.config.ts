@@ -12,6 +12,10 @@ export default defineConfig({
             }
         }
     },
+    build: {
+        outDir: '../container/web/dist',
+        emptyOutDir: true,
+    },
     resolve: {
         conditions: ['module'],
     },

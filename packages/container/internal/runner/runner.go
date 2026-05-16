@@ -150,16 +150,15 @@ func (r *Runner) Start(ctx context.Context) error {
 	iterations := settings.IterationsPerProfile
 	concurrency := settings.Concurrency
 	delay := time.Duration(settings.DelayBetweenRequestMs) * time.Millisecond
-	maxPayloadSize := settings.MaxPayloadSizeBytes
-	if maxPayloadSize <= 0 {
-		maxPayloadSize = 1048576
+	defaultMaxPayloadSize := settings.MaxPayloadSizeBytes
+	if defaultMaxPayloadSize <= 0 {
+		defaultMaxPayloadSize = 1048576 // 1MB default
 	}
 
-	// Heavy profiles run sequentially
-	heavyProfiles := map[swagger.FuzzingProfile]bool{swagger.ProfileBoundary: true}
+	// Reorder profiles to run heavier ones last
 	var lightProfiles, heavyList []swagger.FuzzingProfile
 	for _, p := range settings.Profiles {
-		if heavyProfiles[p] {
+		if p == swagger.ProfileBoundary {
 			heavyList = append(heavyList, p)
 		} else {
 			lightProfiles = append(lightProfiles, p)
@@ -216,13 +215,21 @@ func (r *Runner) Start(ctx context.Context) error {
 			if !hasFields(&endpoint) {
 				effectiveIterations = 1
 			}
-			isBodyMethod := !isNoBodyMethod(endpoint.Method)
 
-			gen := generator.New(cfg.Dictionaries, profile)
-			profileConcurrency := concurrency
-			if heavyProfiles[profile] {
-				profileConcurrency = 1
+			// Calculate max payload size for this specific profile
+			currentMaxPayloadSize := defaultMaxPayloadSize
+			if profile == swagger.ProfileBoundary {
+				if currentMaxPayloadSize < 536870912 {
+					currentMaxPayloadSize = 536870912
+				}
 			}
+			isBodyMethod := !isNoBodyMethod(endpoint.Method)
+			gen := generator.New(cfg.Dictionaries, profile)
+			// safeGen always uses RANDOM profile for path/header params.
+			// Boundary/malicious values in path segments cause 404s before the payload is processed,
+			// which means the body boundary test never actually runs on the server.
+			safeGen := generator.New(cfg.Dictionaries, swagger.ProfileRandom)
+			profileConcurrency := concurrency
 
 			sem := make(chan struct{}, profileConcurrency)
 			enableDedup := profile == swagger.ProfileRandom
@@ -248,7 +255,7 @@ func (r *Runner) Start(ctx context.Context) error {
 						buf.Reset()
 						err := json.NewEncoder(buf).Encode(generated)
 
-						if err != nil || buf.Len() > maxPayloadSize {
+						if err != nil || buf.Len() > currentMaxPayloadSize {
 							bufPool.Put(buf)
 							isDuplicate = true
 							continue
@@ -303,6 +310,7 @@ func (r *Runner) Start(ctx context.Context) error {
 				capturedPayload := payload
 				capturedQueryParams := queryParams
 				capturedEndpoint := endpoint
+				iterationIndex := i
 
 				go func() {
 					defer func() {
@@ -310,7 +318,8 @@ func (r *Runner) Start(ctx context.Context) error {
 						wg.Done()
 					}()
 
-					resolvedPath := fillPathParams(capturedEndpoint.Path, capturedEndpoint.PathParams, gen)
+					// Use safeGen for path params — valid values only, never boundary/malicious strings.
+					resolvedPath := fillPathParams(capturedEndpoint.Path, capturedEndpoint.PathParams, safeGen)
 
 					// Generate header params
 					generatedHeaders := make(map[string]string)
@@ -340,8 +349,15 @@ func (r *Runner) Start(ctx context.Context) error {
 						capturedEndpoint.ContentType,
 					)
 
+					r.mu.Lock()
+					r.stats.Progress.CurrentIteration = iterationIndex + 1
+					r.stats.Progress.TotalIterations = effectiveIterations
+					r.mu.Unlock()
+
 					r.updateStats(result)
-					r.broadcast(Event{Type: EventResult, Data: result})
+
+					// Send a lightweight SSE event — raw payload never reaches the browser
+					r.broadcast(Event{Type: EventResult, Data: toSSE(result)})
 					r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 				}()
 
@@ -436,10 +452,16 @@ func (r *Runner) executeRequest(
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
 
 	// Append query parameters
+	// Cap each value at 4000 chars — most servers/proxies reject URLs > 8KB (414).
+	// Boundary testing of long strings is still possible, just not at megabyte scale in a URL.
 	if len(queryParams) > 0 {
 		params := url.Values{}
 		for k, v := range queryParams {
-			params.Set(k, fmt.Sprintf("%v", v))
+			s := fmt.Sprintf("%v", v)
+			if len(s) > 4000 {
+				s = s[:4000]
+			}
+			params.Set(k, s)
 		}
 		if strings.Contains(rawURL, "?") {
 			rawURL += "&" + params.Encode()
@@ -657,8 +679,8 @@ func fillPathParams(path string, pathParams map[string]*swagger.SchemaProperty, 
 	for name, schema := range pathParams {
 		placeholder := "{" + name + "}"
 		if strings.Contains(result, placeholder) {
-			val := gen.Generate(name, schema)
-			result = strings.ReplaceAll(result, placeholder, url.PathEscape(fmt.Sprintf("%v", val)))
+			val := capPathParam(gen.Generate(name, schema))
+			result = strings.ReplaceAll(result, placeholder, url.PathEscape(val))
 		}
 	}
 
@@ -673,11 +695,23 @@ func fillPathParams(path string, pathParams map[string]*swagger.SchemaProperty, 
 			break
 		}
 		fallbackSchema := &swagger.SchemaProperty{Type: "string"}
-		val := gen.Generate("id", fallbackSchema)
-		result = result[:start] + url.PathEscape(fmt.Sprintf("%v", val)) + result[start+end+1:]
+		val := capPathParam(gen.Generate("id", fallbackSchema))
+		result = result[:start] + url.PathEscape(val) + result[start+end+1:]
 	}
 
 	return result
+}
+
+// capPathParam ensures a path parameter value is safe to embed in a URL segment.
+// Practical limit: ~256 chars — beyond that the value doesn't add testing value
+// and breaks URL parsers / logging infrastructure.
+func capPathParam(v any) string {
+	s := fmt.Sprintf("%v", v)
+	const maxPathParamLen = 256
+	if len(s) > maxPathParamLen {
+		return s[:maxPathParamLen]
+	}
+	return s
 }
 
 func mergePayload(payload any, queryParams map[string]any) any {
@@ -729,4 +763,74 @@ func copyMapStatusByProfile(src map[swagger.FuzzingProfile]map[int]int64) map[sw
 		dst[k] = copyMapIntInt64(v)
 	}
 	return dst
+}
+
+// toSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
+// Raw payload and responseBody are replaced by short preview strings (≤200 chars).
+// ResolvedPath is capped to 200 chars to avoid megabyte URLs in the UI.
+// This is the ONLY place payload content is summarised — it never reaches the browser as raw data.
+func toSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
+	resolvedPath := r.ResolvedPath
+	if len(resolvedPath) > 200 {
+		resolvedPath = resolvedPath[:200] + "…"
+	}
+	return &swagger.FuzzResultSSE{
+		ID:              r.ID,
+		Endpoint:        r.Endpoint,
+		ResolvedPath:    resolvedPath,
+		Method:          r.Method,
+		Profile:         r.Profile,
+		Status:          r.Status,
+		Duration:        r.Duration,
+		PayloadSize:     r.PayloadSize,
+		PayloadPreview:  previewAny(r.Payload, 200),
+		ResponsePreview: previewAny(r.ResponseBody, 1024),
+		Error:           r.Error,
+		Timestamp:       r.Timestamp,
+		Retries:         r.Retries,
+	}
+}
+
+// previewAny serialises any value into a short human-readable string.
+// Instead of linear truncation, it recursively processes objects and arrays
+// to keep all fields visible while capping long strings and large arrays.
+func previewAny(v any, maxLen int) string {
+	if v == nil {
+		return ""
+	}
+	truncated := truncateValue(v, maxLen)
+	b, _ := json.Marshal(truncated)
+	return string(b)
+}
+
+func truncateValue(v any, maxLen int) any {
+	switch val := v.(type) {
+	case string:
+		if len(val) > maxLen {
+			return fmt.Sprintf("%s... [truncated %d chars]", val[:maxLen], len(val)-maxLen)
+		}
+		return val
+	case map[string]any:
+		res := make(map[string]any)
+		for k, v := range val {
+			res[k] = truncateValue(v, maxLen)
+		}
+		return res
+	case []any:
+		if len(val) <= 2 {
+			res := make([]any, len(val))
+			for i, v := range val {
+				res[i] = truncateValue(v, maxLen)
+			}
+			return res
+		}
+		// Truncate long arrays to 2 elements + a count note
+		res := make([]any, 0, 3)
+		res = append(res, truncateValue(val[0], maxLen))
+		res = append(res, truncateValue(val[1], maxLen))
+		res = append(res, fmt.Sprintf("... and %d more elements", len(val)-2))
+		return res
+	default:
+		return v
+	}
 }

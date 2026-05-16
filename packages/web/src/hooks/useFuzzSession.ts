@@ -1,16 +1,19 @@
 import { useState, useCallback } from 'react';
-import type { FuzzResult, RunStats, SwazzConfig } from '../types.js';
-import type { ResultSummary } from './useRunner.js';
+import type { RunStats, SwazzConfig } from '../types.js';
+import { toSummary } from './useRunner.js';
 import { loadSwaggerUrl } from '../services/swaggerService.js';
-import { previewPayload, previewResponse } from './useRunner.js';
+import { dbStreamResult } from './useDb.js';
+import type { ScanRun } from './useDb.js';
 
 interface UseFuzzSessionProps {
     config: SwazzConfig;
     updateConfig: (updates: Partial<SwazzConfig>) => void;
-    start: (config: SwazzConfig, onResult: (r: FuzzResult) => void, onComplete: (stats: RunStats) => void) => void;
-    saveRun: (runRecord: any, rows: ResultSummary[]) => void;
+    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
+    saveRun: (runRecord: ScanRun, rows?: any[]) => void;
+    getDb: () => IDBDatabase | null;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
-    onRunStarted: () => void;
+    onRunStarted: (runId: string) => void;
+    onLiveCount: (count: number) => void;
 }
 
 export function useFuzzSession({
@@ -18,8 +21,10 @@ export function useFuzzSession({
     updateConfig,
     start,
     saveRun,
+    getDb,
     showToast,
     onRunStarted,
+    onLiveCount,
 }: UseFuzzSessionProps) {
     const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
     const [currentRunId, setCurrentRunId] = useState<string | null>(null);
@@ -68,8 +73,6 @@ export function useFuzzSession({
             return;
         }
 
-        onRunStarted();
-
         let finalEndpoints = config.endpoints;
         let finalBaseUrl = config.base_url;
 
@@ -79,10 +82,7 @@ export function useFuzzSession({
                 finalEndpoints = loaded.allEndpoints;
                 finalBaseUrl = loaded.detectedBaseUrl;
                 if (overrideUrls) {
-                    updateConfig({
-                        base_url: finalBaseUrl,
-                        _swagger_urls: swaggerUrls,
-                    } as any);
+                    updateConfig({ base_url: finalBaseUrl, _swagger_urls: swaggerUrls } as any);
                 }
             } else {
                 return;
@@ -105,10 +105,10 @@ export function useFuzzSession({
         };
         delete finalConfig.disabled_endpoints;
 
-
         const runId = `run_${Date.now()}`;
         setCurrentRunId(runId);
-        const runRec = {
+
+        const runRec: ScanRun = {
             id: runId,
             startedAt: Date.now(),
             completedAt: 0,
@@ -116,50 +116,58 @@ export function useFuzzSession({
             stats: null as any,
         };
 
-        let pendingRows: ResultSummary[] = [];
+        // Save the run metadata immediately so it appears in history
+        await saveRun(runRec);
 
-        const onResult = (result: FuzzResult) => {
-            pendingRows.push({
-                id: result.id,
-                timestamp: result.timestamp,
-                method: result.method,
-                endpoint: result.endpoint,
-                resolvedPath: result.resolvedPath,
-                status: result.status,
-                profile: result.profile,
-                duration: result.duration,
-                retries: result.retries,
-                payloadSize: result.payloadSize || 0,
-                payloadPreview: previewPayload(result.payload),
-                responsePreview: previewResponse(result.responseBody),
-                error: result.error,
+        // Notify App about new run — it switches to live view for this runId
+        onRunStarted(runId);
+
+        let liveCount = 0;
+        let lastCountUpdate = 0;
+
+        /**
+         * onResult: called per SSE event.
+         * We convert to a ResultSummary and write to IDB directly.
+         * No React state is touched here — only the db write + throttled counter.
+         */
+        const onResult = (raw: any) => {
+            const db = getDb();
+            if (!db) return;
+
+            const summary = toSummary(raw);
+            // Fire-and-forget IDB write — no await needed in the hot path
+            dbStreamResult(db, runId, summary).catch((err) => {
+                console.warn('[swazz] IDB write error:', err);
             });
-            if (pendingRows.length >= 50) {
-                saveRun(runRec, [...pendingRows]);
-                pendingRows = [];
+
+            liveCount++;
+            const now = Date.now();
+            if (now - lastCountUpdate > 500) {
+                lastCountUpdate = now;
+                onLiveCount(liveCount);
             }
         };
 
-        const onComplete = (stats: RunStats) => {
-            const completedRun = { ...runRec, completedAt: Date.now(), stats };
-            saveRun(completedRun, pendingRows);
+        const onComplete = (finalStats: RunStats) => {
+            const completedRun: ScanRun = { ...runRec, completedAt: Date.now(), stats: finalStats };
+            saveRun(completedRun);
+            onLiveCount(liveCount);
             setCurrentRunId(null);
-            showToast(`Scan saved to history`, 'success');
+            showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
         };
 
         try {
             await start(finalConfig, onResult, onComplete);
-
             showToast(
                 `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
                 'info',
             );
         } catch (err: any) {
-            let msg = err.message || "Failed to start run";
-            if (msg.includes("already in progress")) {
-                msg = "Сейчас сервер занят сканированием. Пожалуйста, подождите завершения текущей сессии.";
+            let msg = err.message || 'Failed to start run';
+            if (msg.includes('already in progress')) {
+                msg = 'Server is busy. Please wait for the current run to complete.';
             }
-            showToast(`Ошибка: ${msg}`, 'error');
+            showToast(`Error: ${msg}`, 'error');
             setCurrentRunId(null);
         }
     };
