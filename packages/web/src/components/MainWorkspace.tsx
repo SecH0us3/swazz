@@ -63,7 +63,7 @@ export function MainWorkspace({
     const hasActivity = !!inspectorRunId || config.endpoints.length > 0;
 
     return (
-        <div style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
+        <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
             {loadedRunId && (
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -92,7 +92,7 @@ export function MainWorkspace({
                         <div className="empty-state-icon">⚡</div>
                         <div className="empty-state-title">Ready to fuzz</div>
                         <div className="empty-state-text">
-                            Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run Fuzz Test</strong>.
+                            Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
                         </div>
                         <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <button

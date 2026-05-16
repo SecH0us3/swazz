@@ -17,7 +17,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
             <div className="dashboard">
                 <div className="empty-state">
                     <div className="empty-state-icon">⚡</div>
-                    <div className="empty-state-text" style={{ maxWidth: '600px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className="empty-state-text" style={{ maxWidth: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ textAlign: 'center' }}>
                             <div className="empty-state-title" style={{ fontSize: '18px', fontWeight: 600 }}>Welcome to Swazz API Fuzzer</div>
                             <div style={{ marginTop: '20px', textAlign: 'center' }}>
@@ -36,7 +36,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                             <h4 style={{ color: 'var(--text-primary)', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 🌍 Web Interface Quick Start
                             </h4>
-                            <ul style={{ margin: '0', paddingLeft: '24px', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <ul style={{ margin: '0', paddingLeft: '1.25rem', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <li>Enter your <strong>OpenAPI/Swagger URL</strong> or target domain in the top field.</li>
                                 <li>Press <span style={{ padding: '2px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-hover)', fontSize: '11px', color: 'var(--text-primary)' }}>Start</span> to begin finding vulnerabilities.</li>
                                 <li>Click on <strong>Heatmap cells</strong> to filter the request log by specific endpoints and status codes.</li>

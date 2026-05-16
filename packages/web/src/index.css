@@ -165,10 +165,10 @@ body::before {
 }
 
 [data-theme="light"] body::before {
+  animation: none;
   background:
-    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(124,58,237,0.08) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(34,211,160,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 30% at 0% 100%, rgba(244,63,94,0.03) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(124,58,237,0.04) 0%, transparent 70%),
+    white;
 }
 
 @keyframes ambient-drift {
@@ -1819,6 +1819,11 @@ body.resizing .sidebar-resizer {
 }
 
 @media (max-width: 768px) {
+  .header-target-input { direction: ltr !important; }
+  .header-url-bar { padding: 6px 10px !important; }
+  .header { padding: 0 var(--space-2); }
+  .dashboard { padding: var(--space-2); gap: var(--space-2); }
+  .empty-state { padding: var(--space-4) var(--space-2); }
   .app-layout {
     display: flex !important;
     flex-direction: column !important;
@@ -1832,7 +1837,7 @@ body.resizing .sidebar-resizer {
     bottom: 0 !important;
     width: 280px !important;
     z-index: 1000 !important;
-    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+    box-shadow: none;
     background: var(--bg-sidebar) !important;
     transition: transform var(--duration-slow) var(--ease-out);
     grid-area: auto !important;
@@ -1850,6 +1855,8 @@ body.resizing .sidebar-resizer {
     border-left: 1px solid var(--border-default);
   }
 
+  .sidebar.mobile-open { box-shadow: 10px 0 30px rgba(0,0,0,0.25); }
+  .config-sidebar.mobile-open { box-shadow: -10px 0 30px rgba(0,0,0,0.25); }
   .sidebar.mobile-open,
   .config-sidebar.mobile-open {
     transform: translateX(0);
@@ -2444,3 +2451,20 @@ button:focus-visible {
 }
 
 /* End-visibility for long URLs handled above */
+
+
+@media (max-width: 768px) {
+  .empty-state-text { width: 100%; max-width: none !important; }
+  .empty-state-text ul { padding-left: 20px !important; }
+}
+
+.workspace-container { padding: var(--space-6); }
+@media (max-width: 768px) {
+  .workspace-container { padding: var(--space-3); }
+}
+
+@media (max-width: 768px) {
+  .tab-bar { overflow-x: auto; scrollbar-width: none; }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar-btn { padding: 10px 12px; font-size: 12px; }
+}
