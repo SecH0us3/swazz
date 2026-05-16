@@ -17,7 +17,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
             <div className="dashboard">
                 <div className="empty-state">
                     <div className="empty-state-icon">⚡</div>
-                    <div className="empty-state-text" style={{ maxWidth: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className="empty-state-text welcome-text">
                         <div style={{ textAlign: 'center' }}>
                             <div className="empty-state-title" style={{ fontSize: '18px', fontWeight: 600 }}>Welcome to Swazz API Fuzzer</div>
                             <div style={{ marginTop: '20px', textAlign: 'center' }}>
