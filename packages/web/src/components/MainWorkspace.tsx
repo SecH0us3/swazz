@@ -63,7 +63,7 @@ export function MainWorkspace({
     const hasActivity = !!inspectorRunId || config.endpoints.length > 0;
 
     return (
-        <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
+        <div className="workspace-container">
             {loadedRunId && (
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
