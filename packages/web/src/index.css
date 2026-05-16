@@ -1203,7 +1203,7 @@ body.resizing .sidebar-resizer {
 
 .log-row {
   display: grid;
-  grid-template-columns: 78px 54px 1fr 44px 72px 60px 52px;
+  grid-template-columns: 78px 54px 1.2fr 1fr 54px 72px 60px 54px;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-4);
@@ -1243,6 +1243,34 @@ body.resizing .sidebar-resizer {
 .log-method { font-weight: 700; }
 .log-path { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .log-duration { color: var(--text-muted); text-align: right; }
+
+.log-payload {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-header {
+  height: 32px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.log-header span {
+  display: flex;
+  align-items: center;
+}
 
 /* ─── Tab Bar (main content tabs) ────────────────────────── */
 

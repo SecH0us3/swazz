@@ -246,7 +246,18 @@ export function Inspector({
                         </div>
                     </div>
                 ) : (
-                    <Virtuoso
+                    <>
+                        <div className="log-row log-header">
+                            <span>Time</span>
+                            <span>Method</span>
+                            <span>Endpoint</span>
+                            <span>Payload</span>
+                            <span>Status</span>
+                            <span>Profile</span>
+                            <span>Size</span>
+                            <span>Duration</span>
+                        </div>
+                        <Virtuoso
                         style={{ height: '100%', flex: 1 }}
                         data={rows}
                         itemContent={(_index, r) => (
@@ -258,6 +269,9 @@ export function Inspector({
                                 <span className="log-timestamp">{formatTime(r.timestamp)}</span>
                                 <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
                                 <span className="log-path">{r.endpoint}</span>
+                                <span className="log-payload" title={r.payloadPreview}>
+                                    {r.payloadPreview?.replace(/\s+/g, ' ')}
+                                </span>
                                 <span className={getBadgeClass(r.status)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     {r.status >= 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>}
                                     {r.status >= 400 && r.status < 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>}
@@ -270,6 +284,7 @@ export function Inspector({
                             </div>
                         )}
                     />
+                    </>
                 )}
             </div>
         </div>
