@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useConfig } from './useConfig.js';
@@ -22,13 +25,32 @@ describe('useConfig', () => {
     let setItemSpy: any;
 
     beforeEach(() => {
-        getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
-        setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-        localStorage.clear();
+        // Mock localStorage
+        const localStorageMock = (() => {
+            let store: Record<string, string> = {};
+            return {
+                getItem: vi.fn((key: string) => store[key] || null),
+                setItem: vi.fn((key: string, value: string) => {
+                    store[key] = value.toString();
+                }),
+                clear: vi.fn(() => {
+                    store = {};
+                }),
+                removeItem: vi.fn((key: string) => {
+                    delete store[key];
+                }),
+            };
+        })();
+
+        vi.stubGlobal('localStorage', localStorageMock);
+        getItemSpy = localStorageMock.getItem;
+        setItemSpy = localStorageMock.setItem;
+        
         vi.clearAllMocks();
     });
 
     afterEach(() => {
+        vi.unstubAllGlobals();
         vi.restoreAllMocks();
     });
 

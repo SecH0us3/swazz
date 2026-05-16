@@ -1,12 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import 'fake-indexeddb/auto';
-import { useDb } from './useDb.js';
+import { useDb, __resetDbPromise, DB_NAME } from './useDb.js';
 
 describe('useDb hook', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+        __resetDbPromise();
         // Clear fake-indexeddb between tests
-        indexedDB.deleteDatabase('swazz-db');
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        await new Promise((resolve, reject) => {
+            req.onsuccess = resolve;
+            req.onerror = reject;
+        });
     });
 
     it('initializes with empty runs', async () => {
@@ -14,7 +19,7 @@ describe('useDb hook', () => {
 
         // Wait for the asynchronous initialize to happen
         await waitFor(() => {
-            expect(result.current.runs).toBeDefined();
+            expect(result.current.db).not.toBeNull();
         });
 
         expect(result.current.runs).toEqual([]);
@@ -24,7 +29,7 @@ describe('useDb hook', () => {
         const { result } = renderHook(() => useDb());
 
         await waitFor(() => {
-            expect(result.current.runs).toBeDefined();
+            expect(result.current.db).not.toBeNull();
         });
 
         const mockRun = {
@@ -34,7 +39,7 @@ describe('useDb hook', () => {
             baseUrl: 'http://test.com',
             stats: { elapsedTimeMs: 1000, statusCounts: { '200': 1 }, totalRequests: 1 } as any
         };
-        const mockResults = [{ status: 200, duration: 10 }] as any;
+        const mockResults = [{ id: 'res_1', status: 200, duration: 10 }] as any;
 
         await act(async () => {
             await result.current.saveRun(mockRun, mockResults);
@@ -58,7 +63,7 @@ describe('useDb hook', () => {
         const { result } = renderHook(() => useDb());
 
         await waitFor(() => {
-            expect(result.current.runs).toBeDefined();
+            expect(result.current.db).not.toBeNull();
         });
 
         const mockRun = {
@@ -68,7 +73,7 @@ describe('useDb hook', () => {
             baseUrl: 'http://test.com',
             stats: {} as any
         };
-        const mockResults = [{ status: 500, duration: 50 }] as any;
+        const mockResults = [{ id: 'res_2', status: 500, duration: 50 }] as any;
 
         await act(async () => {
             await result.current.saveRun(mockRun, mockResults);

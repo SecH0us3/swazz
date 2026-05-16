@@ -37,12 +37,17 @@ export interface QueryOptions {
 
 // ─── DB open ─────────────────────────────────────────────────
 
-const DB_NAME = 'swazz-db';
+export const DB_NAME = 'swazz-db';
 const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function openDb(): Promise<IDBDatabase> {
+/** Test only: reset the internal DB promise to allow re-opening with a clean state. */
+export function __resetDbPromise() {
+    dbPromise = null;
+}
+
+export function openDb(): Promise<IDBDatabase> {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, DB_VERSION);

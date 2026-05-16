@@ -90,6 +90,16 @@ describe('swaggerService', () => {
         await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to fetch');
     });
 
+    it('throws error when successful response contains invalid json', async () => {
+        const mockResponse = new Response('Invalid JSON', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(SyntaxError);
+    });
+
     it('handles missing endpoints in response gracefully (throws TypeError or similar)', async () => {
         const mockResponseData = { basePath: '/v1' };
         const mockResponse = new Response(JSON.stringify(mockResponseData), {
@@ -98,7 +108,7 @@ describe('swaggerService', () => {
         });
         vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
 
-        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow();
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(TypeError);
     });
 
     it('accepts headers and cookies arguments even though they are currently unused in fetch body', async () => {

@@ -8,7 +8,8 @@
         "build": "tsc && vite build",
         "build:cf": "tsc && vite build --outDir dist --emptyOutDir",
         "preview": "vite preview",
-        "deploy": "npm run build:cf && wrangler deploy"
+        "deploy": "npm run build:cf && wrangler deploy",
+        "test": "vitest run"
     },
     "dependencies": {
         "react": "^19.0.0",

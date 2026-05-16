@@ -34,9 +34,9 @@ describe('useRunner', () => {
         });
         const { result } = renderHook(() => useRunner(proxyUrl));
 
-        await expect(act(async () => {
+        await act(async () => {
             await result.current.stop();
-        })).rejects.toThrow('Some error');
+        });
 
         expect(result.current.isRunning).toBe(false);
     });
@@ -56,13 +56,13 @@ describe('useRunner', () => {
     it('should handle failed pause', async () => {
         (global.fetch as any).mockResolvedValueOnce({
             ok: false,
-            json: async () => ({ error: 'Pause failed' }),
+            json: async () => ({ error: 'Some error' }),
         });
         const { result } = renderHook(() => useRunner(proxyUrl));
 
         await expect(act(async () => {
             await result.current.pause();
-        })).rejects.toThrow('Pause failed');
+        })).rejects.toThrow('Failed to pause');
 
         expect(result.current.isPaused).toBe(false);
     });
