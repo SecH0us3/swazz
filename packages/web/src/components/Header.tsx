@@ -47,6 +47,14 @@ export function Header({
         if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
             cleanUrl = `https://${cleanUrl}`;
         }
+        
+        try {
+            const u = new URL(cleanUrl);
+            cleanUrl = u.origin;
+        } catch {
+            // partial url
+        }
+
         setLocalUrl(cleanUrl);
         if (onChangeBaseUrl && cleanUrl !== baseUrl) {
             onChangeBaseUrl(cleanUrl);

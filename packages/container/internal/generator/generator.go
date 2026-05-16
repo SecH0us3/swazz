@@ -12,6 +12,9 @@ import (
 type Generator struct {
 	dictionaries map[string][]any
 	profile      swagger.FuzzingProfile
+	// activeCategories stores set of enabled category IDs for the current profile.
+	// If nil, all categories are enabled.
+	activeCategories map[string]bool
 
 	// Sequential counters: BOUNDARY
 	bStrIdx, bIntIdx, bNumIdx, bDateIdx, bArrIdx, bBoolIdx, bUUIDIdx int
@@ -21,15 +24,51 @@ type Generator struct {
 }
 
 // New creates a new Generator.
-func New(dictionaries map[string][]any, profile swagger.FuzzingProfile) *Generator {
+func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings swagger.Settings) *Generator {
 	norm := make(map[string][]any, len(dictionaries))
 	for k, v := range dictionaries {
 		norm[strings.ToLower(k)] = v
 	}
-	return &Generator{
-		dictionaries: norm,
-		profile:      profile,
+
+	var active map[string]bool
+	if settings.PayloadCategories != nil {
+		if ids, ok := settings.PayloadCategories[profile]; ok && len(ids) > 0 {
+			active = make(map[string]bool, len(ids))
+			for _, id := range ids {
+				active[id] = true
+			}
+		}
 	}
+
+	return &Generator{
+		dictionaries:     norm,
+		profile:          profile,
+		activeCategories: active,
+	}
+}
+
+func (g *Generator) isCategoryEnabled(id string) bool {
+	if g.activeCategories == nil {
+		return true
+	}
+	return g.activeCategories[id]
+}
+
+func (g *Generator) pickFrom(id string, fallback []any) any {
+	if !g.isCategoryEnabled(id) {
+		// If disabled, return a random "safe" value if possible, or just pick from fallback anyway
+		// but ideally we want to skip this iteration or use a default.
+		// For now, let's just return nil to signify "skip/default"
+		return nil
+	}
+	return payloads.Pick(fallback)
+}
+
+func (g *Generator) seqPickFrom(id string, arr []any, counter *int) any {
+	if !g.isCategoryEnabled(id) {
+		return nil
+	}
+	return seqPick(arr, counter)
 }
 
 func seqPick[T any](arr []T, counter *int) T {
@@ -52,27 +91,81 @@ func maxInt(nums ...int) int {
 	return m
 }
 
-// MinIterationsNeeded returns the minimum iterations required to cover all payloads in a profile.
-func MinIterationsNeeded(profile swagger.FuzzingProfile) int {
+// MinIterationsNeeded returns the minimum iterations required to cover all active payloads in a profile.
+func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settings) int {
+	var active map[string]bool
+	if settings.PayloadCategories != nil {
+		if ids, ok := settings.PayloadCategories[profile]; ok && len(ids) > 0 {
+			active = make(map[string]bool, len(ids))
+			for _, id := range ids {
+				active[id] = true
+			}
+		}
+	}
+
+	is := func(id string) bool {
+		if active == nil {
+			return true
+		}
+		return active[id]
+	}
+
 	switch profile {
 	case swagger.ProfileBoundary:
-		return maxInt(
-			len(payloads.BoundaryStrings),
-			len(payloads.BoundaryIntegers),
-			len(payloads.BoundaryNumbers),
-			len(payloads.BoundaryDates),
-			len(payloads.BoundaryBooleans),
-			len(payloads.BoundaryArraySizes),
-			len(payloads.BoundaryUUIDs),
-		)
+		max := 0
+		if is(payloads.CatBoundaryStrings) && len(payloads.BoundaryStrings) > max {
+			max = len(payloads.BoundaryStrings)
+		}
+		if is(payloads.CatBoundaryIntegers) && len(payloads.BoundaryIntegers) > max {
+			max = len(payloads.BoundaryIntegers)
+		}
+		if is(payloads.CatBoundaryNumbers) && len(payloads.BoundaryNumbers) > max {
+			max = len(payloads.BoundaryNumbers)
+		}
+		if is(payloads.CatBoundaryDates) && len(payloads.BoundaryDates) > max {
+			max = len(payloads.BoundaryDates)
+		}
+		if is(payloads.CatBoundaryBooleans) && len(payloads.BoundaryBooleans) > max {
+			max = len(payloads.BoundaryBooleans)
+		}
+		if is(payloads.CatBoundaryArrays) && len(payloads.BoundaryArraySizes) > max {
+			max = len(payloads.BoundaryArraySizes)
+		}
+		if is(payloads.CatBoundaryUUIDs) && len(payloads.BoundaryUUIDs) > max {
+			max = len(payloads.BoundaryUUIDs)
+		}
+		return max
+
 	case swagger.ProfileMalicious:
-		return maxInt(
-			len(payloads.AllMaliciousStrings),
-			len(payloads.MaliciousNumbers),
-			len(payloads.MaliciousDates),
-			len(payloads.MaliciousBooleans),
-			len(payloads.MaliciousTypeConfusion),
-		)
+		var all []any
+		if is(payloads.CatMaliciousEncoding) {
+			all = append(all, payloads.MaliciousEncoding...)
+		}
+		if is(payloads.CatMaliciousSQLi) {
+			all = append(all, payloads.MaliciousSQLi...)
+		}
+		if is(payloads.CatMaliciousXSS) {
+			all = append(all, payloads.MaliciousXSS...)
+		}
+		if is(payloads.CatMaliciousPathTraversal) {
+			all = append(all, payloads.MaliciousPathTraversal...)
+		}
+		// Plus other categories that are picked randomly but could be sequential if we wanted
+		// For now, AllMaliciousStrings is the main driver.
+		count := len(all)
+		if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > count {
+			count = len(payloads.MaliciousNumbers)
+		}
+		if is(payloads.CatMaliciousDates) && len(payloads.MaliciousDates) > count {
+			count = len(payloads.MaliciousDates)
+		}
+		if is(payloads.CatMaliciousBooleans) && len(payloads.MaliciousBooleans) > count {
+			count = len(payloads.MaliciousBooleans)
+		}
+		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > count {
+			count = len(payloads.MaliciousTypeConfusion)
+		}
+		return count
 	default:
 		return 0
 	}
@@ -150,7 +243,7 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 }
 
 func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
-	if g.profile == swagger.ProfileBoundary {
+	if g.profile == swagger.ProfileBoundary && g.isCategoryEnabled(payloads.CatBoundaryArrays) {
 		size := seqPick(payloads.BoundaryArraySizes, &g.bArrIdx).(int)
 		// Cap complex object arrays to prevent OOM
 		if itemSchema != nil && itemSchema.Type == "object" {
@@ -164,9 +257,11 @@ func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 }
 
 func (g *Generator) generateByProfile(typ, format, propName string) any {
-	// MALICIOUS: 5% chance to completely break the expected type
-	if g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 {
-		return seqPick(payloads.MaliciousTypeConfusion, &g.mTypeIdx)
+	// MALICIOUS: Type confusion check
+	if g.profile == swagger.ProfileMalicious && g.isCategoryEnabled(payloads.CatMaliciousTypeConfusion) {
+		if rand.Float64() < 0.05 {
+			return seqPick(payloads.MaliciousTypeConfusion, &g.mTypeIdx)
+		}
 	}
 
 	formatLower := strings.ToLower(format)
@@ -189,25 +284,151 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 	case "boolean":
 		return g.generateBoolean()
 	default:
-		// Fallback — guess by name (only in RANDOM profile or if no other options)
-		if g.profile == swagger.ProfileRandom && propName != "" {
-			lower := strings.ToLower(propName)
-			if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
-				return payloads.UUID()
-			}
-			if strings.Contains(lower, "slug") || strings.Contains(lower, "name") {
-				return payloads.Word()
-			}
-			if strings.Contains(lower, "num") || strings.Contains(lower, "count") || strings.Contains(lower, "page") {
-				return payloads.IntRange(1, 100)
-			}
-		}
-		return payloads.RandomString(payloads.IntRange(3, 10))
+		return g.fallbackRandom(propName)
 	}
 }
 
 func (g *Generator) generateString(format, propName string) any {
-	if g.profile == swagger.ProfileRandom && format == "" && propName != "" {
+	if g.profile == swagger.ProfileRandom {
+		return g.fallbackRandom(propName)
+	}
+
+	if format == "uuid" {
+		return g.generateUUID()
+	}
+
+	switch g.profile {
+	case swagger.ProfileBoundary:
+		if g.isCategoryEnabled(payloads.CatBoundaryStrings) {
+			return seqPick(payloads.BoundaryStrings, &g.bStrIdx)
+		}
+	case swagger.ProfileMalicious:
+		// Pick from enabled malicious categories
+		var pools [][]any
+		if g.isCategoryEnabled(payloads.CatMaliciousSQLi) {
+			pools = append(pools, payloads.MaliciousSQLi)
+		}
+		if g.isCategoryEnabled(payloads.CatMaliciousXSS) {
+			pools = append(pools, payloads.MaliciousXSS)
+		}
+		if g.isCategoryEnabled(payloads.CatMaliciousPathTraversal) {
+			pools = append(pools, payloads.MaliciousPathTraversal)
+		}
+		if g.isCategoryEnabled(payloads.CatMaliciousEncoding) {
+			pools = append(pools, payloads.MaliciousEncoding)
+		}
+
+		if len(pools) > 0 {
+			// Flatten or pick a pool? To keep seqPick working consistently, 
+			// we should probably have a single filtered slice for the whole run.
+			// But for simplicity, we pick a random enabled pool and then seqPick from it.
+			// However, seqPick needs a stable counter. 
+			// Let's just use the AllMaliciousStrings and filter it in New().
+			return seqPick(g.getActiveMaliciousStrings(), &g.mStrIdx)
+		}
+	}
+
+	return g.fallbackRandom(propName)
+}
+
+func (g *Generator) getActiveMaliciousStrings() []any {
+	// Ideally cached in New()
+	var all []any
+	if g.isCategoryEnabled(payloads.CatMaliciousEncoding) {
+		all = append(all, payloads.MaliciousEncoding...)
+	}
+	if g.isCategoryEnabled(payloads.CatMaliciousSQLi) {
+		all = append(all, payloads.MaliciousSQLi...)
+	}
+	if g.isCategoryEnabled(payloads.CatMaliciousXSS) {
+		all = append(all, payloads.MaliciousXSS...)
+	}
+	if g.isCategoryEnabled(payloads.CatMaliciousPathTraversal) {
+		all = append(all, payloads.MaliciousPathTraversal...)
+	}
+	if len(all) == 0 {
+		return []any{payloads.Word()} // Fallback
+	}
+	return all
+}
+
+func (g *Generator) generateNumber(typ string) any {
+	switch g.profile {
+	case swagger.ProfileBoundary:
+		if typ == "integer" {
+			if g.isCategoryEnabled(payloads.CatBoundaryIntegers) {
+				return seqPick(payloads.BoundaryIntegers, &g.bIntIdx)
+			}
+		} else {
+			if g.isCategoryEnabled(payloads.CatBoundaryNumbers) {
+				// Merged integers + numbers for float types
+				merged := append([]any{}, payloads.BoundaryIntegers...)
+				merged = append(merged, payloads.BoundaryNumbers...)
+				return seqPick(merged, &g.bNumIdx)
+			}
+		}
+	case swagger.ProfileMalicious:
+		if g.isCategoryEnabled(payloads.CatMaliciousNumbers) {
+			return seqPick(payloads.MaliciousNumbers, &g.mNumIdx)
+		}
+	}
+
+	// Default/Fallback
+	if typ == "integer" {
+		return payloads.IntRange(1, 1000)
+	}
+	return payloads.FloatRange(0, 1000)
+}
+
+func (g *Generator) generateBoolean() any {
+	switch g.profile {
+	case swagger.ProfileBoundary:
+		if g.isCategoryEnabled(payloads.CatBoundaryBooleans) {
+			return seqPick(payloads.BoundaryBooleans, &g.bBoolIdx)
+		}
+	case swagger.ProfileMalicious:
+		if g.isCategoryEnabled(payloads.CatMaliciousBooleans) {
+			return seqPick(payloads.MaliciousBooleans, &g.mBoolIdx)
+		}
+	}
+	return rand.Float64() < 0.5
+}
+
+func (g *Generator) generateDate() any {
+	switch g.profile {
+	case swagger.ProfileBoundary:
+		if g.isCategoryEnabled(payloads.CatBoundaryDates) {
+			return seqPick(payloads.BoundaryDates, &g.bDateIdx)
+		}
+	case swagger.ProfileMalicious:
+		if g.isCategoryEnabled(payloads.CatMaliciousDates) {
+			return seqPick(payloads.MaliciousDates, &g.mDateIdx)
+		}
+	}
+	return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
+}
+
+func (g *Generator) generateUUID() any {
+	switch g.profile {
+	case swagger.ProfileMalicious:
+		if g.isCategoryEnabled(payloads.CatBoundaryUUIDs) { // Use boundary UUIDs for "malicious" uuid testing
+			if rand.Float64() < 0.1 {
+				return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
+			}
+		}
+	case swagger.ProfileBoundary:
+		if g.isCategoryEnabled(payloads.CatBoundaryUUIDs) {
+			// Occasionally test boundary UUIDs
+			if rand.Float64() < 0.2 {
+				return seqPick(payloads.BoundaryUUIDs, &g.bUUIDIdx)
+			}
+		}
+	}
+	return payloads.UUID()
+}
+
+func (g *Generator) fallbackRandom(propName string) any {
+	if propName != "" {
 		lower := strings.ToLower(propName)
 		if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
 			return payloads.UUID()
@@ -219,93 +440,5 @@ func (g *Generator) generateString(format, propName string) any {
 			return payloads.IntRange(1, 100)
 		}
 	}
-
-	if format == "uuid" {
-		return g.generateUUID()
-	}
-
-	switch g.profile {
-	case swagger.ProfileBoundary:
-		return seqPick(payloads.BoundaryStrings, &g.bStrIdx)
-	case swagger.ProfileMalicious:
-		return seqPick(payloads.AllMaliciousStrings, &g.mStrIdx)
-	default:
-		return generateRandomString(format)
-	}
-}
-
-func generateRandomString(format string) string {
-	switch format {
-	case "uuid":
-		return payloads.UUID()
-	case "email":
-		return payloads.Email()
-	case "uri", "url":
-		return payloads.URI()
-	case "ipv4", "ip":
-		return payloads.IPv4()
-	case "date-time":
-		return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
-	default:
-		return payloads.Word()
-	}
-}
-
-func (g *Generator) generateNumber(typ string) any {
-	switch g.profile {
-	case swagger.ProfileBoundary:
-		if typ == "integer" {
-			return seqPick(payloads.BoundaryIntegers, &g.bIntIdx)
-		}
-		merged := make([]any, 0, len(payloads.BoundaryIntegers)+len(payloads.BoundaryNumbers))
-		merged = append(merged, payloads.BoundaryIntegers...)
-		merged = append(merged, payloads.BoundaryNumbers...)
-		return seqPick(merged, &g.bNumIdx)
-	case swagger.ProfileMalicious:
-		return seqPick(payloads.MaliciousNumbers, &g.mNumIdx)
-	default:
-		if typ == "integer" {
-			return payloads.IntRange(1, 1000)
-		}
-		return payloads.FloatRange(0, 1000)
-	}
-}
-
-func (g *Generator) generateBoolean() any {
-	switch g.profile {
-	case swagger.ProfileBoundary:
-		return seqPick(payloads.BoundaryBooleans, &g.bBoolIdx)
-	case swagger.ProfileMalicious:
-		return seqPick(payloads.MaliciousBooleans, &g.mBoolIdx)
-	default:
-		return rand.Float64() < 0.5
-	}
-}
-
-func (g *Generator) generateDate() any {
-	switch g.profile {
-	case swagger.ProfileBoundary:
-		return seqPick(payloads.BoundaryDates, &g.bDateIdx)
-	case swagger.ProfileMalicious:
-		return seqPick(payloads.MaliciousDates, &g.mDateIdx)
-	default:
-		return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
-	}
-}
-
-func (g *Generator) generateUUID() any {
-	// For UUIDs, we should avoid generating purely invalid formats in boundary arrays
-	// so that the API doesn't reject the request immediately on validation.
-	// We want to generate random valid UUIDs so the boundary test can actually hit the array logic.
-	switch g.profile {
-	case swagger.ProfileMalicious:
-		// In malicious profile, occasionally test invalid UUID format
-		if rand.Float64() < 0.1 {
-			return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
-		}
-		return payloads.UUID()
-	default:
-		// For both Boundary and Random profiles, generate valid UUIDs
-		return payloads.UUID()
-	}
+	return payloads.RandomString(payloads.IntRange(3, 10))
 }

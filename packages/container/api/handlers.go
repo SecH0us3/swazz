@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"swazz-engine/internal/classifier"
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
@@ -390,4 +391,40 @@ func (h *Handler) GetReport(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown format: %s. Use json, sarif, or html", format)})
 	}
+}
+
+// ─── GET /api/payload-catalog ────────────────────────────
+// Returns all available payload categories per profile.
+// The frontend uses this to render dynamic checkboxes without hardcoding.
+// Response: { "RANDOM": [...], "BOUNDARY": [...], "MALICIOUS": [...] }
+
+func (h *Handler) GetPayloadCatalog(c *gin.Context) {
+	catalog := swagger.PayloadCatalog{}
+
+	for _, cat := range payloads.RandomCategories {
+		catalog[swagger.ProfileRandom] = append(catalog[swagger.ProfileRandom], swagger.PayloadCategoryDef{
+			ID:          cat.ID,
+			Label:       cat.Label,
+			Description: cat.Description,
+			Count:       -1, // dynamic — no fixed count for random
+		})
+	}
+	for _, cat := range payloads.BoundaryCategories {
+		catalog[swagger.ProfileBoundary] = append(catalog[swagger.ProfileBoundary], swagger.PayloadCategoryDef{
+			ID:          cat.ID,
+			Label:       cat.Label,
+			Description: cat.Description,
+			Count:       len(cat.Items),
+		})
+	}
+	for _, cat := range payloads.MaliciousCategories {
+		catalog[swagger.ProfileMalicious] = append(catalog[swagger.ProfileMalicious], swagger.PayloadCategoryDef{
+			ID:          cat.ID,
+			Label:       cat.Label,
+			Description: cat.Description,
+			Count:       len(cat.Items),
+		})
+	}
+
+	c.JSON(http.StatusOK, catalog)
 }

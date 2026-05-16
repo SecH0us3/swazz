@@ -48,7 +48,12 @@ export function useFuzzSession({
                 );
                 allEndpoints = [...allEndpoints, ...endpoints];
                 if (!detectedBaseUrl && basePath) {
-                    detectedBaseUrl = basePath;
+                    try {
+                        const u = new URL(basePath);
+                        detectedBaseUrl = u.origin;
+                    } catch {
+                        detectedBaseUrl = basePath;
+                    }
                 }
                 showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}`, 'success');
             } catch (err) {

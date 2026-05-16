@@ -42,12 +42,15 @@ type Config struct {
 
 // Settings controls the fuzzing run behavior.
 type Settings struct {
-	IterationsPerProfile  int              `json:"iterations_per_profile"`
-	Concurrency           int              `json:"concurrency"`
-	TimeoutMs             int              `json:"timeout_ms"`
-	MaxPayloadSizeBytes   int              `json:"max_payload_size_bytes"`
-	DelayBetweenRequestMs int              `json:"delay_between_requests_ms"`
-	Profiles              []FuzzingProfile `json:"profiles"`
+	IterationsPerProfile  int                         `json:"iterations_per_profile"`
+	Concurrency           int                         `json:"concurrency"`
+	TimeoutMs             int                         `json:"timeout_ms"`
+	MaxPayloadSizeBytes   int                         `json:"max_payload_size_bytes"`
+	DelayBetweenRequestMs int                         `json:"delay_between_requests_ms"`
+	Profiles              []FuzzingProfile            `json:"profiles"`
+	// PayloadCategories controls which payload subcategories are active per profile.
+	// If nil or empty for a profile, all categories are enabled (backward compatible).
+	PayloadCategories     map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -129,3 +132,13 @@ type ParseResult struct {
 	BasePath  string           `json:"basePath"`
 	Endpoints []EndpointConfig `json:"endpoints"`
 }
+// PayloadCategoryDef describes a single payload subcategory for the UI.
+type PayloadCategoryDef struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+	Count       int    `json:"count"`
+}
+
+// PayloadCatalog maps each profile to its list of available categories.
+type PayloadCatalog map[FuzzingProfile][]PayloadCategoryDef

@@ -171,7 +171,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	for _, ep := range endpoints {
 		hasF := hasFields(&ep)
 		for _, p := range profiles {
-			minNeeded := generator.MinIterationsNeeded(p)
+			minNeeded := generator.MinIterationsNeeded(p, settings)
 			baseIter := iterations
 			if minNeeded > baseIter {
 				baseIter = minNeeded
@@ -207,7 +207,7 @@ func (r *Runner) Start(ctx context.Context) error {
 
 			r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-			minNeeded := generator.MinIterationsNeeded(profile)
+			minNeeded := generator.MinIterationsNeeded(profile, settings)
 			effectiveIterations := iterations
 			if minNeeded > effectiveIterations {
 				effectiveIterations = minNeeded
@@ -224,11 +224,11 @@ func (r *Runner) Start(ctx context.Context) error {
 				}
 			}
 			isBodyMethod := !isNoBodyMethod(endpoint.Method)
-			gen := generator.New(cfg.Dictionaries, profile)
+			gen := generator.New(cfg.Dictionaries, profile, settings)
 			// safeGen always uses RANDOM profile for path/header params.
 			// Boundary/malicious values in path segments cause 404s before the payload is processed,
 			// which means the body boundary test never actually runs on the server.
-			safeGen := generator.New(cfg.Dictionaries, swagger.ProfileRandom)
+			safeGen := generator.New(cfg.Dictionaries, swagger.ProfileRandom, settings)
 			profileConcurrency := concurrency
 
 			sem := make(chan struct{}, profileConcurrency)

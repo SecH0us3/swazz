@@ -67,6 +67,16 @@ export function useConfig() {
         setConfig((prev) => ({ ...prev, settings: { ...prev.settings, profiles } }));
     }, []);
 
+    const updatePayloadCategories = useCallback((categories: Record<string, string[]>) => {
+        setConfig((prev) => ({ 
+            ...prev, 
+            settings: { 
+                ...prev.settings, 
+                payload_categories: categories as Record<FuzzingProfile, string[]> 
+            } 
+        }));
+    }, []);
+
     const importConfig = useCallback((json: string) => {
         try {
             const parsed = JSON.parse(json) as SwazzConfig;
@@ -92,6 +102,7 @@ export function useConfig() {
         updateDictionaries,
         updateSettings,
         updateProfiles,
+        updatePayloadCategories,
         importConfig,
         exportConfig,
     };

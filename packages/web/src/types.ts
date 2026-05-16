@@ -41,7 +41,18 @@ export interface SwazzSettings {
     max_payload_size_bytes: number;
     delay_between_requests_ms: number;
     profiles: FuzzingProfile[];
+    /** Controls which payload subcategories are active per profile. */
+    payload_categories?: Record<FuzzingProfile, string[]>;
 }
+
+export interface PayloadCategoryDef {
+    id: string;
+    label: string;
+    description: string;
+    count: number;
+}
+
+export type PayloadCatalog = Record<FuzzingProfile, PayloadCategoryDef[]>;
 
 export const DEFAULT_SETTINGS: SwazzSettings = {
     iterations_per_profile: 10,

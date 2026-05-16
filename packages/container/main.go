@@ -123,6 +123,7 @@ func runServer() {
 		apiGroup.GET("/stats", handler.GetStats)
 		apiGroup.POST("/proxy", handler.Proxy)
 		apiGroup.GET("/report", handler.GetReport)
+		apiGroup.GET("/payload-catalog", handler.GetPayloadCatalog)
 	}
 
 	port := os.Getenv("PORT")

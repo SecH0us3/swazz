@@ -105,11 +105,12 @@ export default function App() {
                     const trimmed = url.trim();
                     if (trimmed.endsWith('swagger.json')) {
                         try {
-                            const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+                            const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+                            const parsed = new URL(inputUrl);
                             const origin = parsed.origin;
                             const currentUrls = (config as any)._swagger_urls || [];
-                            if (!currentUrls.includes(trimmed)) {
-                                const newUrls = [...currentUrls, trimmed];
+                            if (!currentUrls.includes(inputUrl)) {
+                                const newUrls = [...currentUrls, inputUrl];
                                 updateConfig({ base_url: origin, _swagger_urls: newUrls } as any);
                                 loadEndpoints(newUrls);
                             } else {
