@@ -33,3 +33,7 @@
 ## 2024-05-14 - Inline Patching Strategy
 **Learning:** `patch` can be very temperamental with formatting (whitespace, indenting, missing context) inside React component files causing hunk failures.
 **Action:** Use an inline node script like `node -e "const code = fs.readFileSync(...); const newCode = code.replace(...); fs.writeFileSync(..., newCode)"` when making targeted multi-line replacements if `patch` fails.
+
+## 2024-05-16 - [IndexedDB fake-indexeddb timeout tests fix]
+**Learning:** When testing IndexedDB with `fake-indexeddb`, calling `indexedDB.deleteDatabase()` in `beforeEach` without explicitly closing existing open connections to the database will cause the operation to block indefinitely, leading to test timeouts.
+**Action:** When a hook caches an open IDB connection (e.g., in a top-level module variable or promise), always implement an asynchronous reset/cleanup utility that awaits the connection and calls `db.close()` before setting the cache to null. Use this async utility in both `beforeEach` and `afterEach` hooks to guarantee a clean state and prevent `deleteDatabase` deadlocks.

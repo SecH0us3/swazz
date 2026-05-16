@@ -43,7 +43,8 @@ const DB_VERSION = 2;
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 /** Test only: reset the internal DB promise to allow re-opening with a clean state. */
-export function __resetDbPromise() {
+export async function __resetDbPromise() {
+    if (dbPromise) { const db = await dbPromise; db.close(); }
     dbPromise = null;
 }
 
