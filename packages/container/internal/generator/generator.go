@@ -54,23 +54,6 @@ func (g *Generator) isCategoryEnabled(id string) bool {
 	return g.activeCategories[id]
 }
 
-func (g *Generator) pickFrom(id string, fallback []any) any {
-	if !g.isCategoryEnabled(id) {
-		// If disabled, return a random "safe" value if possible, or just pick from fallback anyway
-		// but ideally we want to skip this iteration or use a default.
-		// For now, let's just return nil to signify "skip/default"
-		return nil
-	}
-	return payloads.Pick(fallback)
-}
-
-func (g *Generator) seqPickFrom(id string, arr []any, counter *int) any {
-	if !g.isCategoryEnabled(id) {
-		return nil
-	}
-	return seqPick(arr, counter)
-}
-
 func seqPick[T any](arr []T, counter *int) T {
 	if len(arr) == 0 {
 		var zero T
@@ -411,10 +394,9 @@ func (g *Generator) generateDate() any {
 func (g *Generator) generateUUID() any {
 	switch g.profile {
 	case swagger.ProfileMalicious:
-		if g.isCategoryEnabled(payloads.CatBoundaryUUIDs) { // Use boundary UUIDs for "malicious" uuid testing
-			if rand.Float64() < 0.1 {
-				return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
-			}
+		// Use boundary UUIDs occasionally for "malicious" uuid testing
+		if rand.Float64() < 0.1 {
+			return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
 		}
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryUUIDs) {
@@ -430,6 +412,9 @@ func (g *Generator) generateUUID() any {
 func (g *Generator) fallbackRandom(propName string) any {
 	if propName != "" {
 		lower := strings.ToLower(propName)
+		if strings.Contains(lower, "email") {
+			return payloads.Email()
+		}
 		if strings.Contains(lower, "id") || strings.Contains(lower, "uuid") {
 			return payloads.UUID()
 		}

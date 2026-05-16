@@ -1806,6 +1806,8 @@ body.resizing .sidebar-resizer {
 .tree-leaf-meta {
   font-size: 9.5px;
   color: var(--text-disabled);
+  display: inline-block;
+  min-width: 62px;
 }
 
 /* ─── Responsive Adaptation ────────────────────────────────── */

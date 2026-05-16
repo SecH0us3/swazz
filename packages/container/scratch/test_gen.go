@@ -15,9 +15,9 @@ func main() {
 		Required: []string{"data"},
 	}
 	
-	gen := generator.New(nil, swagger.ProfileBoundary)
+	gen := generator.New(nil, swagger.ProfileBoundary, swagger.Settings{})
 	
-	iterations := generator.MinIterationsNeeded(swagger.ProfileBoundary)
+	iterations := generator.MinIterationsNeeded(swagger.ProfileBoundary, swagger.Settings{})
 	fmt.Printf("Iterations needed: %d\n", iterations)
 	
 	for i := 0; i < iterations; i++ {

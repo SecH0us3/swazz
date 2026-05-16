@@ -52,7 +52,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                 Run Swazz locally against internal APIs or integrate it into your CI/CD pipeline to catch vulnerabilities before they reach production:
                             </p>
                             <pre style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '14px', borderRadius: '6px', margin: '0 0 12px 0', fontSize: '11px', overflowX: 'auto', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                                <code><span style={{ color: 'var(--text-muted)' }}># Clone the repository and install dependencies</span>{'\n'}git clone https://github.com/SecH0us3/swazz{'\n'}cd swazz{'\n'}npm install{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Navigate to CLI package and run scan</span>{'\n'}cd packages/cli{'\n'}npm start -- --config ../../swazz.config.json{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Generate a visual HTML report</span>{'\n'}npm start -- --config ../../swazz.config.json --format html -o report.html</code>
+                                <code><span style={{ color: 'var(--text-muted)' }}># Clone the repository and install dependencies</span>{'\n'}git clone https://github.com/SecH0us3/swazz{'\n'}cd swazz{'\n'}npm install{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Navigate to backend package and run scan</span>{'\n'}cd packages/container{'\n'}go run main.go start --config ../../swazz.config.json{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Generate a visual HTML report</span>{'\n'}go run main.go start --config ../../swazz.config.json --format html -o report.html</code>
                             </pre>
 
 
