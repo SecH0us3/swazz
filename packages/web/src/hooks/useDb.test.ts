@@ -1,11 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import 'fake-indexeddb/auto';
 import { useDb, __resetDbPromise, DB_NAME } from './useDb.js';
 
 describe('useDb hook', () => {
+    afterEach(async () => {
+        await __resetDbPromise();
+    });
     beforeEach(async () => {
-        __resetDbPromise();
+        await __resetDbPromise();
         // Clear fake-indexeddb between tests
         const req = indexedDB.deleteDatabase(DB_NAME);
         await new Promise((resolve, reject) => {
