@@ -2,7 +2,7 @@
   "name": "@swazz/edge",
   "version": "1.0.0",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@cloudflare/containers": "^0.3.3"
   },
@@ -11,10 +11,10 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.3.0",
+    "@cloudflare/vitest-pool-workers": "^0.16.6",
     "@cloudflare/workers-types": "^4.20260511.1",
-    "@vitest/snapshot": "^1.4.0",
+    "@vitest/snapshot": "^4.1.6",
     "pretty-format": "^29.7.0",
-    "vitest": "^1.6.1"
+    "vitest": "^4.1.6"
   }
 }
