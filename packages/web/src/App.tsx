@@ -14,11 +14,13 @@ import { useToast } from './hooks/useToast.js';
 import { useResizableLayout } from './hooks/useResizableLayout.js';
 import { useFuzzSession } from './hooks/useFuzzSession.js';
 import { useRunHistory } from './hooks/useRunHistory.js';
+import { useTheme } from './hooks/useTheme.js';
 import { MainWorkspace } from './components/MainWorkspace.js';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export default function App() {
+    const { theme, toggleTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<'heatmap' | 'logs'>('heatmap');
     const { toasts, showToast, dismissToast } = useToast();
     const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
@@ -135,6 +137,8 @@ export default function App() {
                     if (window.innerWidth <= 768) setIsConfigOpen(!isConfigOpen);
                     else setIsConfigHiddenDesktop(!isConfigHiddenDesktop);
                 }}
+                theme={theme}
+                onToggleTheme={toggleTheme}
             />
 
             <Sidebar
