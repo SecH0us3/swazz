@@ -56,13 +56,14 @@ func DefaultSettings() Settings {
 		IterationsPerProfile:  20,
 		Concurrency:           5,
 		TimeoutMs:             10000,
-		MaxPayloadSizeBytes:   1048576, // 1MB
+		MaxPayloadSizeBytes:   134217728, // 128MB (to allow large boundary strings)
 		DelayBetweenRequestMs: 0,
 		Profiles:              []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
 	}
 }
 
 // FuzzResult represents the outcome of a single fuzz request.
+// Used internally and in the report output — may contain large payload data.
 type FuzzResult struct {
 	ID           string         `json:"id"`
 	Endpoint     string         `json:"endpoint"`
@@ -72,11 +73,32 @@ type FuzzResult struct {
 	Status       int            `json:"status"`
 	Duration     int64          `json:"duration"` // milliseconds
 	Payload      any            `json:"payload"`
+	PayloadSize  int            `json:"payloadSize"`
 	ResponseBody any            `json:"responseBody,omitempty"`
 	Error        string         `json:"error,omitempty"`
 	Timestamp    int64          `json:"timestamp"`
 	Retries      int            `json:"retries"`
 }
+
+// FuzzResultSSE is the lightweight version sent over SSE to the browser.
+// Payload and ResponseBody are replaced with short preview strings (≤200 chars).
+// This prevents the browser from ever receiving megabyte-sized JSON strings.
+type FuzzResultSSE struct {
+	ID              string         `json:"id"`
+	Endpoint        string         `json:"endpoint"`
+	ResolvedPath    string         `json:"resolvedPath"`
+	Method          string         `json:"method"`
+	Profile         FuzzingProfile `json:"profile"`
+	Status          int            `json:"status"`
+	Duration        int64          `json:"duration"`
+	PayloadSize     int            `json:"payloadSize"`
+	PayloadPreview  string         `json:"payloadPreview,omitempty"`
+	ResponsePreview string         `json:"responsePreview,omitempty"`
+	Error           string         `json:"error,omitempty"`
+	Timestamp       int64          `json:"timestamp"`
+	Retries         int            `json:"retries"`
+}
+
 
 // RunStats tracks live statistics during a fuzzing run.
 type RunStats struct {
@@ -98,6 +120,8 @@ type Progress struct {
 	TotalEndpoints     int    `json:"totalEndpoints"`
 	CurrentEndpoint    string `json:"currentEndpoint"`
 	CurrentProfile     string `json:"currentProfile"`
+	CurrentIteration   int    `json:"currentIteration"`
+	TotalIterations    int    `json:"totalIterations"`
 }
 
 // ParseResult is the output of ParseSpec.

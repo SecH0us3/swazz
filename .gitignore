@@ -3,6 +3,9 @@ node_modules/
 
 # Build output
 dist/
+packages/web/dist/
+packages/container/web/dist/*
+!packages/container/web/dist/.gitkeep
 .wrangler/
 
 # IDE
@@ -46,3 +49,4 @@ swazz-engine
 *.test
 *.prof
 __debug_bin
+tmp/

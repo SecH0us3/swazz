@@ -20,3 +20,16 @@
 ## 2026-05-13 - [Edge cases testing for React Hooks]
 **Learning:** It is important to test edge cases where a state manipulation hook is called with invalid parameters, e.g. dismissing a non-existent toast id, to ensure the state isn't incorrectly modified or an exception isn't thrown.
 **Action:** Added an edge-case test for the `useToast` hook to verify dismissing a non-existent toast behaves gracefully and does not throw errors or mutate the state.
+## 2026-05-13 - [Track payload size]
+**Learning:** To render and calculate data on both backend and frontend, update the models on both boundaries (Go structs, TS interfaces), calculate it exactly when processing it on the backend, explicitly pass it back, parse and format it inside the display logic (React component or util helper), and update CSS formatting (e.g., CSS Grid columns).
+**Action:** Add payloadSize (int/number) to both `packages/container/internal/swagger/types.go` `FuzzResult` and `packages/web/src/types.ts`, compute size when creating payload buffer on backend, and inject into Virtualized list using format bytes helper.
+
+## 2026-05-13 - Add layout floating buttons
+**Learning:** For layout sidebars, passing inline styles is necessary when dynamically hiding them on desktop depending on state, while avoiding conflict with mobile CSS breakpoints. Also, `indexeddb-mock` should only be used when explicitly requested.
+**Action:** Created floating buttons positioned at the bottom corners by changing `.header-mobile-toggle` CSS.
+## 2026-05-14 - Support Responsive Sidebars on Desktop/Tablet
+**Learning:** When making previously mobile-only elements responsive, pay close attention to CSS media queries and states. A hidden state toggled on a desktop resolution might inadvertently keep elements hidden if the window is resized down to a mobile breakpoint if not wrapped in proper media query guards.
+**Action:** Add media queries wrapping specific desktop utility classes like `.hidden-desktop`.
+## 2024-05-14 - Inline Patching Strategy
+**Learning:** `patch` can be very temperamental with formatting (whitespace, indenting, missing context) inside React component files causing hunk failures.
+**Action:** Use an inline node script like `node -e "const code = fs.readFileSync(...); const newCode = code.replace(...); fs.writeFileSync(..., newCode)"` when making targeted multi-line replacements if `patch` fails.

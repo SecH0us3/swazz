@@ -78,15 +78,23 @@ func runServer() {
 	// CORS middleware
 	r.Use(func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		if allowedOrigin == "*" || origin == allowedOrigin {
-			if allowedOrigin == "*" {
-				c.Header("Access-Control-Allow-Origin", "*")
-			} else {
+		
+		// If origin is empty, it might be a direct request, but for CORS we need to check it
+		// For local dev, we'll be permissive if it's localhost
+		isLocalhost := strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")
+		
+		if allowedOrigin == "*" || origin == allowedOrigin || isLocalhost {
+			if origin != "" {
 				c.Header("Access-Control-Allow-Origin", origin)
+			} else if allowedOrigin == "*" {
+				c.Header("Access-Control-Allow-Origin", "*")
 			}
 		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		c.Header("Access-Control-Allow-Credentials", "true")
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -370,7 +378,11 @@ func printProgress(stats swagger.RunStats) {
 
 	ep := ""
 	if stats.Progress.CurrentEndpoint != "" {
-		ep = fmt.Sprintf("\033[1;33m%s\033[0m (\033[1;35m%s\033[0m)", stats.Progress.CurrentEndpoint, stats.Progress.CurrentProfile)
+		iterInfo := ""
+		if stats.Progress.TotalIterations > 0 {
+			iterInfo = fmt.Sprintf(" \033[90m[test %d/%d]\033[0m", stats.Progress.CurrentIteration, stats.Progress.TotalIterations)
+		}
+		ep = fmt.Sprintf("\033[1;33m%s\033[0m (\033[1;35m%s\033[0m)%s", stats.Progress.CurrentEndpoint, stats.Progress.CurrentProfile, iterInfo)
 	}
 
 	// Calculate how many lines we will print

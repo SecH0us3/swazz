@@ -16,12 +16,16 @@ var BoundaryStrings = []any{
 	strings.Repeat("A", 1000),      // Medium length
 	strings.Repeat("A", 10_000),    // Large string
 	strings.Repeat("A", 100_000),   // Very large string
-	strings.Repeat("A", 1_048_576), // 1MB string (stress test)
 	strings.Repeat("\n", 1000),     // Newlines only
 	strings.Repeat("0", 10_000),    // Numeric-looking string
 	strings.Repeat(" ", 10_000),    // Spaces only
 	strings.Repeat("あ", 5000),     // Multi-byte Unicode (Japanese)
 	strings.Repeat("🔥", 2500),    // 4-byte emoji sequence
+	strings.Repeat("A", 1_048_576), // 1MB string (stress test)
+	strings.Repeat("A", 5_242_880), // 5MB string
+	strings.Repeat("A", 10_485_760), // 10MB string
+	strings.Repeat("A", 52_428_800), // 50MB string
+	strings.Repeat("A", 104_857_600), // 100MB string
 }
 
 // ─── Integer boundaries ─────────────────────────────────
