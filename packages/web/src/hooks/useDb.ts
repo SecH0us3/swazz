@@ -169,19 +169,30 @@ export async function dbGetRunResults(db: IDBDatabase, runId: string): Promise<R
 }
 
 async function dbDeleteRun(db: IDBDatabase, runId: string): Promise<void> {
-    const tx1 = db.transaction('results', 'readwrite');
-    const index = tx1.objectStore('results').index('runId');
-    const keys = await promisify<IDBValidKey[]>(index.getAllKeys(runId) as IDBRequest<IDBValidKey[]>);
-    for (const key of keys) {
-        tx1.objectStore('results').delete(key);
-    }
-    await new Promise<void>((resolve, reject) => {
-        tx1.oncomplete = () => resolve();
-        tx1.onerror = () => reject(tx1.error);
-    });
+    // Delete all results for this run and the run metadata in a single atomic transaction.
+    // We use a cursor for results to avoid loading all keys into memory (O(1) memory vs O(N)).
+    const tx = db.transaction(['results', 'runs'], 'readwrite');
+    const resultsStore = tx.objectStore('results');
+    const runsStore = tx.objectStore('runs');
+    const index = resultsStore.index('runId');
 
-    const tx2 = db.transaction('runs', 'readwrite');
-    await promisify(tx2.objectStore('runs').delete(runId));
+    // Enqueue the deletion of run metadata
+    runsStore.delete(runId);
+
+    // Enqueue the deletion of all results via cursor
+    await new Promise<void>((resolve, reject) => {
+        const req = index.openKeyCursor(runId);
+        req.onsuccess = (e) => {
+            const cursor = (e.target as IDBRequest<IDBCursor>).result;
+            if (cursor) {
+                resultsStore.delete(cursor.primaryKey);
+                cursor.continue();
+            }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        req.onerror = () => reject(req.error);
+    });
 }
 
 async function dbCountResults(db: IDBDatabase, runId: string): Promise<number> {
