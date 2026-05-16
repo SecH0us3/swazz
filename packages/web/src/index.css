@@ -1811,6 +1811,7 @@ body.resizing .sidebar-resizer {
 }
 
 /* ─── Responsive Adaptation ────────────────────────────────── */
+.workspace-container { padding: var(--space-6); }
 
 @media (max-width: 1024px) {
   .stats-bar {
@@ -1824,6 +1825,12 @@ body.resizing .sidebar-resizer {
   .header { padding: 0 var(--space-2); }
   .dashboard { padding: var(--space-2); gap: var(--space-2); }
   .empty-state { padding: var(--space-4) var(--space-2); }
+  .empty-state-text { width: 100%; max-width: none !important; }
+  .empty-state-text ul { padding-left: 20px !important; }
+  .workspace-container { padding: var(--space-3); }
+  .tab-bar { overflow-x: auto; scrollbar-width: none; }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar-btn { padding: 10px 12px; font-size: 12px; }
   .app-layout {
     display: flex !important;
     flex-direction: column !important;
@@ -2451,20 +2458,3 @@ button:focus-visible {
 }
 
 /* End-visibility for long URLs handled above */
-
-
-@media (max-width: 768px) {
-  .empty-state-text { width: 100%; max-width: none !important; }
-  .empty-state-text ul { padding-left: 20px !important; }
-}
-
-.workspace-container { padding: var(--space-6); }
-@media (max-width: 768px) {
-  .workspace-container { padding: var(--space-3); }
-}
-
-@media (max-width: 768px) {
-  .tab-bar { overflow-x: auto; scrollbar-width: none; }
-  .tab-bar::-webkit-scrollbar { display: none; }
-  .tab-bar-btn { padding: 10px 12px; font-size: 12px; }
-}
