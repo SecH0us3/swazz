@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
@@ -85,18 +86,41 @@ func runWizard() {
 		Settings: swagger.DefaultSettings(),
 	}
 
-	config.SwaggerURLs = []string{ask("1. Swagger/OpenAPI URL (e.g., https://api.com/swagger.json): ")}
-	config.BaseURL = ask("2. Base API URL (e.g., https://api.com/v1): ")
+	var swaggerURL string
+	for {
+		swaggerURL = ask("\033[1;32m1. Swagger/OpenAPI URL (e.g., https://api.com/swagger.json):\033[0m ")
+		if swaggerURL != "" {
+			break
+		}
+		fmt.Println("   \033[31mSwagger URL cannot be empty.\033[0m")
+	}
+	config.SwaggerURLs = []string{swaggerURL}
 
-	if askYesNo("3. Do you want to set any static Global Headers or Cookies (e.g., a static Authorization token)?") {
+	parsedURL, err := url.Parse(swaggerURL)
+	var defaultBase string
+	if err == nil && parsedURL.Host != "" {
+		defaultBase = parsedURL.Scheme + "://" + parsedURL.Host
+	}
+
+	basePrompt := "\033[1;32m2. Base API URL (e.g., https://api.com/v1):\033[0m "
+	if defaultBase != "" {
+		basePrompt = fmt.Sprintf("\033[1;32m2. Base API URL [Default: %s]:\033[0m ", defaultBase)
+	}
+	base := ask(basePrompt)
+	if base == "" && defaultBase != "" {
+		base = defaultBase
+	}
+	config.BaseURL = base
+
+	if askYesNo("\033[1;32m3. Do you want to set any static Global Headers or Cookies (e.g., a static Authorization token)?\033[0m") {
 		fmt.Println()
-		fmt.Println("--- Static Variables ---")
+		fmt.Println("\033[1;36m--- Static Variables ---\033[0m")
 		
 		config.Headers = make(map[string]string)
 		config.Cookies = make(map[string]string)
 
 		for {
-			h := ask("   Add a Header (format Name:Value, or enter to skip): ")
+			h := ask("   \033[36mAdd a Header\033[0m (format Name:Value, or enter to skip): ")
 			if h == "" {
 				break
 			}
@@ -109,7 +133,7 @@ func runWizard() {
 		}
 
 		for {
-			c := ask("   Add a Cookie (format Name=Value, or enter to skip): ")
+			c := ask("   \033[35mAdd a Cookie\033[0m (format Name=Value, or enter to skip): ")
 			if c == "" {
 				break
 			}
@@ -127,7 +151,7 @@ func runWizard() {
 		for {
 			step := swagger.AuthStep{}
 			fmt.Println()
-			fmt.Println("--- New Auth Step ---")
+			fmt.Println("\033[1;33m--- New Auth Step ---\033[0m")
 			step.URL = ask("   URL (relative to BaseURL or absolute): ")
 			step.Method = strings.ToUpper(ask("   Method (GET/POST/PUT): "))
 			if step.Method == "" {
@@ -172,7 +196,7 @@ func runWizard() {
 		}
 	}
 
-	if askYesNo("5. Customize status code rules (which statuses to ignore/flag)?") {
+	if askYesNo("\033[1;32m5. Customize status code rules (which statuses to ignore/flag)?\033[0m") {
 		config.Rules = &swagger.RulesConfig{
 			Severity: make(map[string]string),
 		}
