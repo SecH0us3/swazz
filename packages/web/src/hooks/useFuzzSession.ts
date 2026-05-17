@@ -71,7 +71,7 @@ export function useFuzzSession({
     }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
 
     const handleStart = async (overrideUrls?: string[]) => {
-        const swaggerUrls: string[] = overrideUrls || (config as any)._swagger_urls || [];
+        const swaggerUrls: string[] = overrideUrls || config._swagger_urls || [];
 
         if (swaggerUrls.length === 0 && config.endpoints.length === 0) {
             showToast('Add at least one Swagger URL to begin', 'error');
@@ -87,7 +87,7 @@ export function useFuzzSession({
                 finalEndpoints = loaded.allEndpoints;
                 finalBaseUrl = loaded.detectedBaseUrl;
                 if (overrideUrls) {
-                    updateConfig({ base_url: finalBaseUrl, _swagger_urls: swaggerUrls } as any);
+                    updateConfig({ base_url: finalBaseUrl, _swagger_urls: swaggerUrls });
                 }
             } else {
                 return;

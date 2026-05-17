@@ -11,7 +11,7 @@ interface Props {
     config: SwazzConfig;
     runs: ScanRun[];
     loadedRunId: string | null;
-    onLoadRun: (runId: string) => void;
+    onLoadRun: (runId: string, importedRun?: any) => void;
     onDeleteRun: (runId: string) => void;
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
@@ -33,12 +33,12 @@ export function Sidebar({
     onImportRun,
     className,
 }: Props) {
-    const swaggerUrls: string[] = (config as any)._swagger_urls || [];
+    const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const setSwaggerUrls = (urls: string[]) => {
-        onUpdateConfig({ _swagger_urls: urls } as any);
+        onUpdateConfig({ _swagger_urls: urls });
     };
 
     const normalizeUrl = (url: string) => {
@@ -79,7 +79,7 @@ export function Sidebar({
                 if (result) {
                     const { runId, run } = result;
                     onToast('CLI Report imported successfully', 'success');
-                    (onLoadRun as any)(runId, run);
+                    onLoadRun(runId, run);
                 }
             } catch (err) {
                 onToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 'error');

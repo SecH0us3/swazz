@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS } from '../types.js';
 
 const STORAGE_KEY = 'swazz:config';
 
-const DEFAULT_CONFIG: SwazzConfig & { _swagger_urls?: string[] } = {
+const DEFAULT_CONFIG: SwazzConfig = {
     base_url: '',
     global_headers: {},
     cookies: {},
