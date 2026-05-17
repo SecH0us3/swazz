@@ -229,7 +229,10 @@ func (h *Handler) StreamResults(c *gin.Context) {
 				}
 			}
 
-			b, _ := json.Marshal(data)
+			b, err := json.Marshal(data)
+			if err != nil {
+				continue
+			}
 			fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", evt.Type, string(b))
 			flusher.Flush()
 

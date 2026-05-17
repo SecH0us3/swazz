@@ -158,11 +158,9 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			}
 		}
 		if len(cfg.Cookies) > 0 {
-			var parts []string
 			for k, v := range cfg.Cookies {
-				parts = append(parts, k+"="+v)
+				req.AddCookie(&http.Cookie{Name: k, Value: v})
 			}
-			req.Header.Set("Cookie", strings.Join(parts, "; "))
 		}
 
 		if cfg.Settings.Debug {
@@ -174,7 +172,6 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("auth step %d: request failed: %w", i, err)
 		}
-		defer resp.Body.Close()
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpResponse(resp, false)
@@ -205,9 +202,11 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			}
 		}
 
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+		resp.Body.Close()
+
 		// Extract JSON fields
 		if len(step.ExtractJSON) > 0 {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 			var parsed map[string]any
 			if err := json.Unmarshal(body, &parsed); err == nil {
 				for jsonKey, headerName := range step.ExtractJSON {
@@ -227,8 +226,11 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		}
 
 		if resp.StatusCode >= 400 {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, string(body))
+			errBody := string(body)
+			if len(errBody) > 1024 {
+				errBody = errBody[:1024]
+			}
+			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)
 		}
 	}
 
@@ -691,10 +693,9 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		defer resp.Body.Close()
-
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
+			resp.Body.Close()
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			select {
@@ -726,6 +727,7 @@ func (r *Runner) executeRequest(
 		} else {
 			io.Copy(io.Discard, resp.Body) // drain body to reuse connection
 		}
+		resp.Body.Close()
 
 		return &swagger.FuzzResult{
 			ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
