@@ -21,6 +21,18 @@
 
 ## 📦 Installation
 
+### Download Binary
+You can download the pre-compiled CLI binary from the [Releases](https://github.com/SecH0us3/swazz/releases) page for Linux, macOS, and Windows.
+
+### Docker & Cloudflare
+The engine is published to the GitHub Container Registry (`ghcr.io/sech0us3/swazz`) and is optimized for minimal resource usage. For security reasons, we do not provide a `latest` tag. Always use a specific version or commit SHA:
+```bash
+# Example with a specific version:
+docker pull ghcr.io/sech0us3/swazz:v1.0.0
+docker run -p 8080:8080 ghcr.io/sech0us3/swazz:v1.0.0
+```
+
+### Build from Source
 ```bash
 # Clone the repository
 git clone https://github.com/SecH0us3/swazz.git
