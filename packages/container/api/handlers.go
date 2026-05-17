@@ -281,20 +281,9 @@ func (h *Handler) Proxy(c *gin.Context) {
 		return
 	}
 
-	// Build Cookie header
-	cookieParts := make([]string, 0, len(req.Cookies))
-	for k, v := range req.Cookies {
-		if k != "" && v != "" {
-			cookieParts = append(cookieParts, k+"="+v)
-		}
-	}
-
 	finalHeaders := map[string]string{"Content-Type": "application/json"}
 	for k, v := range req.Headers {
 		finalHeaders[k] = v
-	}
-	if len(cookieParts) > 0 {
-		finalHeaders["Cookie"] = strings.Join(cookieParts, "; ")
 	}
 
 	var bodyReader io.Reader
@@ -333,6 +322,13 @@ func (h *Handler) Proxy(c *gin.Context) {
 	}
 	for k, v := range finalHeaders {
 		httpReq.Header.Set(k, v)
+	}
+
+	// Add Cookies idiometically
+	for k, v := range req.Cookies {
+		if k != "" && v != "" {
+			httpReq.AddCookie(&http.Cookie{Name: k, Value: v})
+		}
 	}
 
 	start := time.Now()
