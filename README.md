@@ -1,175 +1,101 @@
 # ⚡️ swazz — Smart API Fuzzer
 
-[![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?style=flat&logo=github)](https://github.com/SecH0us3/swazz)
+[![CI](https://github.com/alex/swazz/actions/workflows/ci.yml/badge.svg)](https://github.com/alex/swazz/actions)
+[![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**swazz** is a modern, fast, and visual API Fuzzing tool. It automatically discovers your API surface by parsing Swagger/OpenAPI specifications and then blasts those endpoints with various unexpected, edge-case, and malicious inputs to identify breaking points, unhandled exceptions (5xx), and logic flaws.
-
-![Dashboard Preview](docs/heatmap-preview.png) *(UI features a real-time Endpoints × Status Heatmap and Request Inspector)*
+**swazz** is a modern, smart API fuzzer designed for security researchers and developers. It parses OpenAPI (Swagger) specifications to automatically identify crashes, logic flaws, and security vulnerabilities (XSS, Injection, etc.) through intelligent payload generation.
 
 ---
 
-## 💻 CLI Usage
+## 🚀 Key Features
 
-The `swazz-engine` CLI allows you to run fuzzing tests natively via Go directly from your terminal. This is highly performant and useful for CI/CD pipelines or automated security scans.
+- **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
+- **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
+- **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
+- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports.
+- **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
+- **🌐 Web Dashboard**: Real-time Heatmap and Request Inspector for deep-dive analysis.
 
-1. **Configure your scan**:
-   Create a `swazz.config.json` file. You can see examples below or use [swazz.config.example.json](file:///Users/alex/src/swazz/swazz.config.example.json) as a template.
+---
 
-### 📝 Configuration Examples
+## 📦 Installation
 
-#### Minimal Configuration
-```json
-{
-  "swagger_urls": ["https://petstore.swagger.io/v2/swagger.json"],
-  "base_url": "https://petstore.swagger.io/v2",
-  "settings": {
-    "iterations_per_profile": 10,
-    "profiles": ["RANDOM"]
-  }
-}
+```bash
+# Clone the repository
+git clone https://github.com/your-username/swazz.git
+cd swazz
+
+# Build the engine
+cd packages/container
+go build -o swazz-engine main.go
 ```
 
-#### Full Configuration (with Auth & Rules)
+---
+
+## 🏁 Quick Start
+
+### 1. Interactive Setup
+Run the wizard to generate your configuration file automatically. It will guide you through Swagger URLs, Auth steps, and Rule definitions.
+```bash
+./swazz-engine wizard
+```
+
+### 2. Start Fuzzing
+Execute the fuzzing run using your generated config.
+```bash
+./swazz-engine start --config swazz.config.json --html report.html
+```
+
+### 3. CI/CD Integration
+Generate SARIF reports and fail the build if any security errors are found (perfect for GitHub Actions / GitLab CI).
+```bash
+./swazz-engine start --config swazz.config.json --fail-on-error --sarif findings.sarif
+```
+
+---
+
+## ⚙️ Configuration Example
+
+`swazz` uses a flexible JSON configuration for fine-grained control:
+
 ```json
 {
   "swagger_urls": ["https://api.example.com/swagger.json"],
-  "base_url": "https://api.example.com",
-  "headers": {
-    "Authorization": "Bearer YOUR_TOKEN_HERE"
-  },
-  "dictionaries": {
-    "username": ["admin", "guest"],
-    "productId": ["123", "456"]
-  },
-  "settings": {
-    "iterations_per_profile": 50,
-    "concurrency": 10,
-    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+  "base_url": "https://api.example.com/v1",
+  "auth_sequence": [
+    {
+      "method": "POST",
+      "url": "/login",
+      "body": { "user": "admin", "pass": "secret" }
+    }
+  ],
+  "rules": {
+    "ignore": [404],
+    "severity": {
+      "200": "warning",
+      "403": "error"
+    }
   }
 }
 ```
 
-2. **Run the CLI locally**:
-   ```bash
-   # 1. Clone the repository
-   git clone https://github.com/SecH0us3/swazz
-   cd swazz
+---
 
-   # 2. Navigate to the Go container
-   cd packages/container
+## 🛠 Tech Stack
 
-   # 3. Run a basic scan
-   # (The swazz.config.json file should be located in the project root)
-   go run main.go start --config ../../swazz.config.json
-
-   # 4. Generate reports in various formats (JSON, SARIF, HTML)
-   go run main.go start --config ../../swazz.config.json --sarif reports/scan.sarif --json reports/scan.json --html reports/scan.html
-   ```
-
-3. **Options**:
-   - `--config <path>`: Path to your configuration file (required).
-   - `--sarif <path>`: Path to save SARIF output.
-   - `--json <path>`: Path to save JSON output.
-   - `--html <path>`: Path to save HTML output.
+- **Engine**: Go (High-performance concurrency)
+- **Dashboard**: React 19, Vite, Vanilla CSS
+- **Formats**: OpenAPI 2.0/3.0, SARIF, JSON
 
 ---
 
-## 🚀 Quick Start
+## 🤝 Contributing
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-2. **Start the development server** (starts both Go backend and Vite frontend):
-   ```bash
-   npm run dev
-   ```
-
-3. **Open the Dashboard**:
-   Go to `http://localhost:5173` in your browser.
-
-4. **Run your first Fuzz Test**:
-   - In the sidebar, enter one or more **Swagger URLs** (e.g., `https://petstore.swagger.io/v2/swagger.json`).
-   - Add any required **Auth Headers** (e.g., `Authorization: Bearer YOUR_TOKEN_HERE`).
-   - Select your desired **Fuzz Profiles** (Random, Boundary, Malicious).
-   - Press **Start** and watch the heatmap light up!
-
-## 🚀 Cloudflare Deployment
-
-You can deploy the application to Cloudflare (Pages + Workers) using `wrangler`. 
-
-1. **Login to Cloudflare**:
-   ```bash
-   npx wrangler login
-   ```
-
-2. **Deploy the Frontend (Cloudflare Pages)**:
-   ```bash
-   npm run deploy:web
-   ```
-
-3. **Deploy the API (Cloudflare Worker)**:
-   ```bash
-   npm run deploy:api
-   ```
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-## 🧠 How it Works (General Architecture)
+## 📄 License
 
-This is a hybrid monorepo containing two main parts: `packages/web` (React Dashboard) and `packages/container` (Go Engine).
-
-```mermaid
-flowchart TD
-    %% Styling
-    classDef default fill:#1e1e28,stroke:#4a4a5a,stroke-width:1px,color:#f0f0f4
-    classDef core fill:#13131a,stroke:#6366f1,stroke-width:2px,color:#f0f0f4
-    classDef target fill:#1e1e28,stroke:#f43f5e,stroke-width:2px,color:#f0f0f4
-
-    subgraph Dashboard ["packages/web (React + Vite)"]
-        UI["User Interface"]
-        Setup["Setup Panel\nURLs, Headers, Profiles"]
-        Heatmap["Endpoint × Status Heatmap"]
-        Inspector["Request Inspector\nwith XSS-safe view"]
-        
-        UI --> Setup
-        UI --> Heatmap
-        UI --> Inspector
-    end
-
-    subgraph Core ["packages/container (Go Engine)"]
-        direction TB
-        API["Gin API Server"]
-        Parser["Swagger / OpenAPI Parser"]
-        Profiles["Fuzz Profiles\nRANDOM, BOUNDARY, MALICIOUS"]
-        Runner["Parallel Fuzz Runner"]
-        
-        API --> Parser
-        API --> Runner
-        Parser --> Runner
-        Profiles --> Runner
-    end
-
-    subgraph Target ["Target APIs"]
-        API1[Target Service 1]
-        API2[Target Service N]
-    end
-
-    %% Flow
-    Setup -->|"1. Submit Config"| API
-    Runner -->|"2. Execute Fuzzed HTTP Requests"| Target
-    Target -->|"3. Responses (2xx, 4xx, 5xx)"| Runner
-    Runner -->|"4. Stream Real-time Stats"| Heatmap
-    Runner -.->|"Raw Results"| Inspector
-
-    %% Apply specific styles
-    class API,Parser,Profiles,Runner core;
-    class API1,API2 target;
-```
-
-## 🛠️ Tech Stack
-- **Frontend:** React, TypeScript, Vite, Vanilla CSS (CSS Variables for theming)
-- **Engine:** Go (Gin, standard `net/http`)
-- **Hosting:** Cloudflare Pages + Workers
-- **Monorepo Management:** npm workspaces
+Distributed under the MIT License. See `LICENSE` for more information.

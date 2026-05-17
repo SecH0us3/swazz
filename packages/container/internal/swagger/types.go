@@ -37,7 +37,25 @@ type Config struct {
 	Dictionaries     map[string][]any       `json:"dictionaries"`
 	Settings         Settings               `json:"settings"`
 	Endpoints        []EndpointConfig       `json:"endpoints"`
+	Rules            *RulesConfig           `json:"rules,omitempty"`
+	AuthSequence     []AuthStep             `json:"auth_sequence,omitempty"`
+}
 
+// RulesConfig configures how results are classified.
+type RulesConfig struct {
+	Ignore   []int             `json:"ignore,omitempty"`
+	Severity map[string]string `json:"severity,omitempty"` // map status code or range (e.g. "5xx") to severity
+	Defaults map[string]string `json:"defaults,omitempty"`
+}
+
+// AuthStep describes a request to be made before fuzzing to establish a session.
+type AuthStep struct {
+	Method         string            `json:"method"`
+	URL            string            `json:"url"` // If relative, prefixed with BaseURL
+	Headers        map[string]string `json:"headers"`
+	Body           any               `json:"body"`
+	ExtractCookies []string          `json:"extract_cookies,omitempty"` // If empty, all cookies are saved
+	ExtractJSON    map[string]string `json:"extract_json,omitempty"`    // Map JSON field name (or simple path) to Global Header name
 }
 
 // Settings controls the fuzzing run behavior.
@@ -47,6 +65,7 @@ type Settings struct {
 	TimeoutMs             int                         `json:"timeout_ms"`
 	MaxPayloadSizeBytes   int                         `json:"max_payload_size_bytes"`
 	DelayBetweenRequestMs int                         `json:"delay_between_requests_ms"`
+	Debug                 bool                        `json:"debug,omitempty"`
 	Profiles              []FuzzingProfile            `json:"profiles"`
 	// PayloadCategories controls which payload subcategories are active per profile.
 	// If nil or empty for a profile, all categories are enabled (backward compatible).

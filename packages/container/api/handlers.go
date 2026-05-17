@@ -222,7 +222,15 @@ func (h *Handler) StreamResults(c *gin.Context) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", evt.Type, evt.JSON())
+			data := evt.Data
+			if evt.Type == runner.EventResult {
+				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
+					data = runner.ToSSE(res)
+				}
+			}
+
+			b, _ := json.Marshal(data)
+			fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", evt.Type, string(b))
 			flusher.Flush()
 
 			if evt.Type == runner.EventComplete {

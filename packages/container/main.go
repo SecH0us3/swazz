@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -42,6 +44,8 @@ func main() {
 		runServer()
 	case "start":
 		runCLI(os.Args[2:])
+	case "wizard":
+		runWizard()
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printHelp()
@@ -50,15 +54,191 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Println("swazz-engine - Smart API Fuzzer")
-	fmt.Println("\nUsage:")
-	fmt.Println("  swazz-engine serve            Start the HTTP API server (for web dashboard/worker)")
-	fmt.Println("  swazz-engine start [options]  Start a CLI fuzzing run")
-	fmt.Println("\nCLI Options for 'start':")
-	fmt.Println("  --config <path>       Path to swazz.config.json")
-	fmt.Println("  --sarif <path>        Path to save SARIF report")
-	fmt.Println("  --json <path>         Path to save JSON report")
-	fmt.Println("  --html <path>         Path to save HTML report")
+	fmt.Println("\033[1;34m⚡ SWAZZ ENGINE\033[0m - Smart API Fuzzer")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  swazz-engine serve            Start the HTTP API server (for web dashboard)")
+	fmt.Println("  swazz-engine start [options]  Start a CLI fuzzing run using config")
+	fmt.Println("  swazz-engine wizard           Interactive setup to generate swazz.config.json")
+	fmt.Println()
+	fmt.Println("Options for 'start':")
+	fmt.Println("  --config <path>   Path to config file (default: swazz.config.json)")
+	fmt.Println("  --sarif <path>    Export findings in SARIF format (for CI/CD)")
+	fmt.Println("  --json <path>     Export findings in JSON format")
+	fmt.Println("  --html <path>     Generate a standalone HTML report")
+	fmt.Println("  --fail-on-error   Exit with code 1 if any 'error' level findings are detected (useful for CI/CD)")
+	fmt.Println("  --debug           Enable debug logging for all HTTP interactions")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  swazz-engine wizard")
+	fmt.Println("  swazz-engine start --config production.json --html report.html")
+}
+
+// ─── WIZARD MODE ──────────────────────────────────────────
+
+func runWizard() {
+	fmt.Println("\033[1;34mWelcome to the SWAZZ Configuration Wizard!\033[0m")
+	fmt.Println("I'll help you create a 'swazz.config.json' file.")
+	fmt.Println()
+
+	config := CliConfig{
+		Settings: swagger.DefaultSettings(),
+	}
+
+	config.SwaggerURLs = []string{ask("1. Swagger/OpenAPI URL (e.g., https://api.com/swagger.json): ")}
+	config.BaseURL = ask("2. Base API URL (e.g., https://api.com/v1): ")
+
+	if askYesNo("3. Do you want to set any static Global Headers or Cookies (e.g., a static Authorization token)?") {
+		fmt.Println()
+		fmt.Println("--- Static Variables ---")
+		
+		config.Headers = make(map[string]string)
+		config.Cookies = make(map[string]string)
+
+		for {
+			h := ask("   Add a Header (format Name:Value, or enter to skip): ")
+			if h == "" {
+				break
+			}
+			parts := strings.SplitN(h, ":", 2)
+			if len(parts) == 2 {
+				config.Headers[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			} else {
+				fmt.Println("   \033[31mInvalid format, must be Name:Value\033[0m")
+			}
+		}
+
+		for {
+			c := ask("   Add a Cookie (format Name=Value, or enter to skip): ")
+			if c == "" {
+				break
+			}
+			parts := strings.SplitN(c, "=", 2)
+			if len(parts) == 2 {
+				config.Cookies[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			} else {
+				fmt.Println("   \033[31mInvalid format, must be Name=Value\033[0m")
+			}
+		}
+		fmt.Println()
+	}
+
+	if askYesNo("4. Do you need an authentication sequence (multi-step login before fuzzing)?") {
+		for {
+			step := swagger.AuthStep{}
+			fmt.Println()
+			fmt.Println("--- New Auth Step ---")
+			step.URL = ask("   URL (relative to BaseURL or absolute): ")
+			step.Method = strings.ToUpper(ask("   Method (GET/POST/PUT): "))
+			if step.Method == "" {
+				step.Method = "GET"
+			}
+			if step.Method == "POST" || step.Method == "PUT" {
+				bodyStr := ask("   Body JSON (single-line, optional, press enter to skip): ")
+				if bodyStr != "" {
+					var body any
+					if err := json.Unmarshal([]byte(bodyStr), &body); err == nil {
+						step.Body = body
+					} else {
+						fmt.Println("   \033[31mInvalid JSON, skipping body.\033[0m")
+					}
+				}
+			}
+
+			if askYesNo("   Extract data from this response (cookies/token)?") {
+				cookieStr := ask("   Specific cookies to save (comma separated, or enter for all): ")
+				if cookieStr != "" {
+					for _, s := range strings.Split(cookieStr, ",") {
+						step.ExtractCookies = append(step.ExtractCookies, strings.TrimSpace(s))
+					}
+				}
+
+				jsonStr := ask("   Extract JSON field to header? (format: field:Header, e.g., data.token:Authorization, or enter to skip): ")
+				if jsonStr != "" {
+					step.ExtractJSON = make(map[string]string)
+					for _, pair := range strings.Split(jsonStr, ",") {
+						parts := strings.SplitN(pair, ":", 2)
+						if len(parts) == 2 {
+							step.ExtractJSON[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+						}
+					}
+				}
+			}
+
+			config.AuthSequence = append(config.AuthSequence, step)
+			if !askYesNo("   Add another step?") {
+				break
+			}
+		}
+	}
+
+	if askYesNo("5. Customize status code rules (which statuses to ignore/flag)?") {
+		config.Rules = &swagger.RulesConfig{
+			Severity: make(map[string]string),
+		}
+		ignoreStr := ask("   Status codes to IGNORE (comma separated, e.g., 401,404,405): ")
+		if ignoreStr != "" {
+			for _, s := range strings.Split(ignoreStr, ",") {
+				if code, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+					config.Rules.Ignore = append(config.Rules.Ignore, code)
+				}
+			}
+		}
+		warnStr := ask("   Status codes to treat as WARNING (comma separated, e.g., 200,400): ")
+		if warnStr != "" {
+			for _, s := range strings.Split(warnStr, ",") {
+				config.Rules.Severity[strings.TrimSpace(s)] = "warning"
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--- Configuration Summary ---")
+	fmt.Printf("   Swagger:  %s\n", config.SwaggerURLs[0])
+	fmt.Printf("   Base URL: %s\n", config.BaseURL)
+	fmt.Printf("   Headers:  %d static headers\n", len(config.Headers))
+	fmt.Printf("   Cookies:  %d static cookies\n", len(config.Cookies))
+	fmt.Printf("   Auth:     %d steps\n", len(config.AuthSequence))
+	fmt.Println()
+
+	if askYesNo("Save to 'swazz.config.json'?") {
+		writeJSON("swazz.config.json", config)
+		fmt.Println("\033[1;32mConfig saved successfully!\033[0m")
+		fmt.Println()
+		fmt.Println("You can now start the fuzzer. Here are some examples:")
+		fmt.Println("  \033[90m# Run normally:\033[0m")
+		fmt.Println("  \033[36m./swazz-engine start --config swazz.config.json\033[0m")
+		fmt.Println()
+		fmt.Println("  \033[90m# Run and save a visual HTML report:\033[0m")
+		fmt.Println("  \033[36m./swazz-engine start --config swazz.config.json --html report.html\033[0m")
+		fmt.Println()
+		fmt.Println("  \033[90m# Run in CI/CD (fails the build if errors are found, exports SARIF for GitHub/GitLab):\033[0m")
+		fmt.Println("  \033[36m./swazz-engine start --config swazz.config.json --fail-on-error --sarif report.sarif\033[0m")
+	} else {
+		fmt.Println("Aborted. No changes made.")
+	}
+}
+
+func ask(question string) string {
+	fmt.Print(question)
+	var input string
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		input = scanner.Text()
+	}
+	return strings.TrimSpace(input)
+}
+
+func askYesNo(question string) bool {
+	for {
+		res := strings.ToLower(ask(question + " (y/n): "))
+		if res == "y" || res == "yes" {
+			return true
+		}
+		if res == "n" || res == "no" || res == "" {
+			return false
+		}
+	}
 }
 
 // ─── SERVER MODE ──────────────────────────────────────────
@@ -145,11 +325,13 @@ type CliConfig struct {
 	Headers      map[string]string      `json:"headers"`
 	Cookies      map[string]string      `json:"cookies"`
 	Dictionaries map[string][]any       `json:"dictionaries"`
-	Settings     swagger.Settings        `json:"settings"`
+	Settings     swagger.Settings       `json:"settings"`
 	Endpoints    *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
+	Rules        *swagger.RulesConfig `json:"rules"`
+	AuthSequence []swagger.AuthStep   `json:"auth_sequence"`
 }
 
 func runCLI(args []string) {
@@ -158,6 +340,8 @@ func runCLI(args []string) {
 	sarifOut := flags.String("sarif", "", "Path to save SARIF output")
 	jsonOut := flags.String("json", "", "Path to save JSON output")
 	htmlOut := flags.String("html", "", "Path to save HTML output")
+	failOnError := flags.Bool("fail-on-error", false, "Exit with code 1 if error level findings exist")
+	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 
 	if err := flags.Parse(args); err != nil {
 		fmt.Println(err)
@@ -173,6 +357,10 @@ func runCLI(args []string) {
 	var cliCfg CliConfig
 	if err := json.Unmarshal(configData, &cliCfg); err != nil {
 		log.Fatalf("Invalid config JSON: %v", err)
+	}
+
+	if *debugMode {
+		cliCfg.Settings.Debug = true
 	}
 
 	if len(cliCfg.SwaggerURLs) == 0 {
@@ -241,6 +429,8 @@ func runCLI(args []string) {
 		Dictionaries:  cliCfg.Dictionaries,
 		Settings:      cliCfg.Settings,
 		Endpoints:     allEndpoints,
+		Rules:         cliCfg.Rules,
+		AuthSequence:  cliCfg.AuthSequence,
 	}
 
 	// 4. Initialize and start runner
@@ -257,6 +447,11 @@ func runCLI(args []string) {
 		fmt.Println("\nStopping fuzzing run...")
 		r.Stop()
 	}()
+
+	// Run auth sequence if present
+	if err := r.RunAuthSequence(ctx); err != nil {
+		log.Fatalf("Authentication failed: %v", err)
+	}
 
 	resultsCh := r.Subscribe()
 	var results []*swagger.FuzzResult
@@ -291,7 +486,23 @@ func runCLI(args []string) {
 	finalResults := results
 	resultsMu.Unlock()
 
-	cls := classifier.New(nil)
+	// Map swagger.RulesConfig to classifier.RulesConfig
+	var clsRules *classifier.RulesConfig
+	if runCfg.Rules != nil {
+		clsRules = &classifier.RulesConfig{
+			Ignore:   runCfg.Rules.Ignore,
+			Severity: make(map[string]classifier.Severity),
+			Defaults: make(map[string]classifier.Severity),
+		}
+		for k, v := range runCfg.Rules.Severity {
+			clsRules.Severity[k] = classifier.Severity(v)
+		}
+		for k, v := range runCfg.Rules.Defaults {
+			clsRules.Defaults[k] = classifier.Severity(v)
+		}
+	}
+
+	cls := classifier.New(clsRules)
 	findings := cls.ClassifyAll(finalResults)
 	stats := r.GetStats()
 
@@ -313,6 +524,15 @@ func runCLI(args []string) {
 			log.Printf("Failed to write HTML report: %v", err)
 		} else {
 			fmt.Printf("Saved HTML to %s\n", *htmlOut)
+		}
+	}
+
+	if *failOnError {
+		for _, f := range findings {
+			if f.Level == classifier.SeverityError {
+				fmt.Println("\n\033[1;31m[CI/CD] Error level findings detected. Exiting with code 1.\033[0m")
+				os.Exit(1)
+			}
 		}
 	}
 }

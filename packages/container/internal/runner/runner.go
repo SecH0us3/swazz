@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strings"
 	"sync"
@@ -114,6 +115,125 @@ func (r *Runner) broadcast(evt Event) {
 			// Drop if subscriber is slow
 		}
 	}
+}
+
+func (r *Runner) RunAuthSequence(ctx context.Context) error {
+	cfg := r.config
+	if len(cfg.AuthSequence) == 0 {
+		return nil
+	}
+
+	fmt.Printf("Running authentication sequence (%d steps)...\n", len(cfg.AuthSequence))
+
+	for i, step := range cfg.AuthSequence {
+		fullURL := step.URL
+		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
+			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(step.URL, "/")
+		}
+
+		var bodyReader io.Reader
+		if step.Body != nil {
+			b, err := json.Marshal(step.Body)
+			if err != nil {
+				return fmt.Errorf("auth step %d: failed to marshal body: %w", i, err)
+			}
+			bodyReader = bytes.NewReader(b)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, step.Method, fullURL, bodyReader)
+		if err != nil {
+			return fmt.Errorf("auth step %d: failed to create request: %w", i, err)
+		}
+
+		if step.Body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		for k, v := range step.Headers {
+			req.Header.Set(k, v)
+		}
+		// Apply currently collected headers and cookies
+		if len(cfg.GlobalHeaders) > 0 {
+			for k, v := range cfg.GlobalHeaders {
+				req.Header.Set(k, v)
+			}
+		}
+		if len(cfg.Cookies) > 0 {
+			var parts []string
+			for k, v := range cfg.Cookies {
+				parts = append(parts, k+"="+v)
+			}
+			req.Header.Set("Cookie", strings.Join(parts, "; "))
+		}
+
+		if cfg.Settings.Debug {
+			dump, _ := httputil.DumpRequestOut(req, true)
+			fmt.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+		}
+
+		resp, err := r.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("auth step %d: request failed: %w", i, err)
+		}
+		defer resp.Body.Close()
+
+		if cfg.Settings.Debug {
+			dump, _ := httputil.DumpResponse(resp, false)
+			fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
+		}
+
+		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
+
+		// Collect cookies
+		for _, cookie := range resp.Cookies() {
+			shouldSave := true
+			if len(step.ExtractCookies) > 0 {
+				shouldSave = false
+				for _, name := range step.ExtractCookies {
+					if name == cookie.Name {
+						shouldSave = true
+						break
+					}
+				}
+			}
+
+			if shouldSave {
+				if cfg.Cookies == nil {
+					cfg.Cookies = make(map[string]string)
+				}
+				cfg.Cookies[cookie.Name] = cookie.Value
+				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
+			}
+		}
+
+		// Extract JSON fields
+		if len(step.ExtractJSON) > 0 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+			var parsed map[string]any
+			if err := json.Unmarshal(body, &parsed); err == nil {
+				for jsonKey, headerName := range step.ExtractJSON {
+					val := extractJSONPath(parsed, jsonKey)
+					if val != nil {
+						if cfg.GlobalHeaders == nil {
+							cfg.GlobalHeaders = make(map[string]string)
+						}
+						// If headerName is "Authorization" and doesn't have Bearer,
+						// we might want to be smart, but let's keep it literal for now.
+						strVal := fmt.Sprintf("%v", val)
+						cfg.GlobalHeaders[headerName] = strVal
+						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
+					}
+				}
+			}
+		}
+
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, string(body))
+		}
+	}
+
+	fmt.Println("Authentication sequence complete.")
+	return nil
 }
 
 // Start begins the fuzzing run. Blocks until complete or stopped.
@@ -356,8 +476,8 @@ func (r *Runner) Start(ctx context.Context) error {
 
 					r.updateStats(result)
 
-					// Send a lightweight SSE event — raw payload never reaches the browser
-					r.broadcast(Event{Type: EventResult, Data: toSSE(result)})
+					// Broadcast the full result. Subscribers (like SSE) will downsample.
+					r.broadcast(Event{Type: EventResult, Data: result})
 					r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 				}()
 
@@ -544,10 +664,20 @@ func (r *Runner) executeRequest(
 			req.Header.Set("Cookie", strings.Join(parts, "; "))
 		}
 
+		if r.config.Settings.Debug {
+			dump, _ := httputil.DumpRequestOut(req, true)
+			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(dump))
+		}
+
 		start := time.Now()
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
 		reqCancel()
+
+		if err == nil && r.config.Settings.Debug {
+			dump, _ := httputil.DumpResponse(resp, false)
+			fmt.Printf("\n--- [DEBUG] Fuzz Response ---\n%s\n-----------------------------\n", string(dump))
+		}
 
 		if err != nil {
 			errMsg := err.Error()
@@ -765,11 +895,11 @@ func copyMapStatusByProfile(src map[swagger.FuzzingProfile]map[int]int64) map[sw
 	return dst
 }
 
-// toSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
+// ToSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
 // Raw payload and responseBody are replaced by short preview strings (≤200 chars).
 // ResolvedPath is capped to 200 chars to avoid megabyte URLs in the UI.
 // This is the ONLY place payload content is summarised — it never reaches the browser as raw data.
-func toSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
+func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 	resolvedPath := r.ResolvedPath
 	if len(resolvedPath) > 200 {
 		resolvedPath = resolvedPath[:200] + "…"
@@ -833,4 +963,24 @@ func truncateValue(v any, maxLen int) any {
 	default:
 		return v
 	}
+}
+
+// extractJSONPath allows retrieving a nested value from a JSON map using dot notation (e.g., "data.token").
+func extractJSONPath(data map[string]any, path string) any {
+	parts := strings.Split(path, ".")
+	var current any = data
+	for i, part := range parts {
+		if m, ok := current.(map[string]any); ok {
+			current = m[part]
+		} else {
+			return nil
+		}
+		if current == nil {
+			return nil
+		}
+		if i == len(parts)-1 {
+			return current
+		}
+	}
+	return nil
 }
