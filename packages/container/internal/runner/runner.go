@@ -171,7 +171,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 
 		resp, err := r.client.Do(req)
 		if err != nil {
-			return fmt.Errorf("auth step %d: request failed: %w", i, err)
+			return fmt.Errorf("auth step %d: request failed: %w", i+1, err)
 		}
 
 		if cfg.Settings.Debug {
@@ -180,6 +180,18 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		}
 
 		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
+
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+		io.Copy(io.Discard, resp.Body) // Ensure body is fully drained for connection reuse
+		resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			errBody := string(body)
+			if len(errBody) > 1024 {
+				errBody = errBody[:1024]
+			}
+			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)
+		}
 
 		// Collect cookies
 		for _, cookie := range resp.Cookies() {
@@ -203,13 +215,12 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			}
 		}
 
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
-		resp.Body.Close()
-
 		// Extract JSON fields
 		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 			var parsed map[string]any
-			if err := json.Unmarshal(body, &parsed); err == nil {
+			if err := json.Unmarshal(body, &parsed); err != nil {
+				fmt.Printf("    \033[31m[Auth] Failed to parse response JSON: %v\033[0m\n", err)
+			} else {
 				for jsonKey, headerName := range step.ExtractJSON {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
@@ -234,14 +245,6 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 					}
 				}
 			}
-		}
-
-		if resp.StatusCode >= 400 {
-			errBody := string(body)
-			if len(errBody) > 1024 {
-				errBody = errBody[:1024]
-			}
-			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)
 		}
 	}
 
@@ -582,7 +585,34 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	// Merge headers: generatedHeaders < global headers
+	isBody := !isNoBodyMethod(method)
+	mergedHeaders := make(map[string]string)
+	for k, v := range generatedHeaders {
+		mergedHeaders[k] = v
+	}
+	for k, v := range headers {
+		// Apply variable substitution to global headers too
+		mergedHeaders[k] = substituteVariables(v, r.config.Variables)
+	}
+
+	effectiveCT := contentType
+	if effectiveCT == "" {
+		effectiveCT = "application/json"
+	}
+	hasContentType := false
+	for k := range mergedHeaders {
+		if strings.EqualFold(k, "content-type") {
+			hasContentType = true
+			break
+		}
+	}
+	if isBody && payload != nil && !hasContentType {
+		mergedHeaders["Content-Type"] = effectiveCT
+	}
+
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
+	rawURL = substituteVariables(rawURL, r.config.Variables)
 
 	// Append query parameters
 	// Cap each value at 4000 chars — most servers/proxies reject URLs > 8KB (414).
@@ -601,31 +631,6 @@ func (r *Runner) executeRequest(
 		} else {
 			rawURL += "?" + params.Encode()
 		}
-	}
-
-	// Merge headers: generatedHeaders < global headers
-	isBody := !isNoBodyMethod(method)
-	mergedHeaders := make(map[string]string)
-	for k, v := range generatedHeaders {
-		mergedHeaders[k] = v
-	}
-	for k, v := range headers {
-		mergedHeaders[k] = v
-	}
-
-	effectiveCT := contentType
-	if effectiveCT == "" {
-		effectiveCT = "application/json"
-	}
-	hasContentType := false
-	for k := range mergedHeaders {
-		if strings.EqualFold(k, "content-type") {
-			hasContentType = true
-			break
-		}
-	}
-	if isBody && payload != nil && !hasContentType {
-		mergedHeaders["Content-Type"] = effectiveCT
 	}
 
 	timeoutMs := r.config.Settings.TimeoutMs
@@ -670,11 +675,9 @@ func (r *Runner) executeRequest(
 			req.Header.Set(k, v)
 		}
 		if len(cookies) > 0 {
-			parts := make([]string, 0, len(cookies))
 			for k, v := range cookies {
-				parts = append(parts, k+"="+v)
+				req.AddCookie(&http.Cookie{Name: k, Value: v})
 			}
-			req.Header.Set("Cookie", strings.Join(parts, "; "))
 		}
 
 		if r.config.Settings.Debug {
