@@ -1,0 +1,21 @@
+{
+    "swagger_urls": ["https://petstore.swagger.io/v2/swagger.json"],
+    "base_url": "https://httpbin.org",
+    "auth_sequence": [
+        {
+            "method": "GET",
+            "url": "https://httpbin.org/json",
+            "extract_json": {
+                "title": "X-Extracted-Title"
+            }
+        }
+    ],
+    "settings": {
+        "iterations_per_profile": 1,
+        "concurrency": 1,
+        "profiles": ["RANDOM"]
+    },
+    "endpoints": {
+        "include": ["GET /pet/findByStatus"]
+    }
+}

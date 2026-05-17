@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +68,9 @@ type Runner struct {
 	// SSE subscribers
 	subsMu sync.RWMutex
 	subs   map[chan Event]struct{}
+
+	configMu sync.RWMutex
+	varReplacer *strings.Replacer
 }
 
 // New creates a new Runner.
@@ -79,12 +84,14 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 			},
 		}
 	}
-	return &Runner{
+	r := &Runner{
 		config: config,
 		client: client,
 		stats:  newEmptyStats(),
 		subs:   make(map[chan Event]struct{}),
 	}
+	r.updateReplacer()
+	return r
 }
 
 // Subscribe returns a channel for receiving live events.
@@ -104,7 +111,7 @@ func (r *Runner) Unsubscribe(ch chan Event) {
 	close(ch)
 }
 
-func (r *Runner) broadcast(evt Event) {
+func (r *Runner) Broadcast(evt Event) {
 	r.subsMu.RLock()
 	defer r.subsMu.RUnlock()
 	for ch := range r.subs {
@@ -114,6 +121,187 @@ func (r *Runner) broadcast(evt Event) {
 			// Drop if subscriber is slow
 		}
 	}
+}
+
+func (r *Runner) updateReplacer() {
+	r.configMu.RLock()
+	vars := r.config.Variables
+	r.configMu.RUnlock()
+
+	args := make([]string, 0, len(vars)*2)
+	for k, v := range vars {
+		args = append(args, "{{"+k+"}}", fmt.Sprintf("%v", v))
+	}
+
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
+	if len(args) > 0 {
+		r.varReplacer = strings.NewReplacer(args...)
+	} else {
+		r.varReplacer = nil
+	}
+}
+
+func (r *Runner) subVars(input string) string {
+	r.configMu.RLock()
+	replacer := r.varReplacer
+	r.configMu.RUnlock()
+	if replacer != nil {
+		return replacer.Replace(input)
+	}
+	return input
+}
+
+func (r *Runner) RunAuthSequence(ctx context.Context) error {
+	cfg := r.config
+	if len(cfg.AuthSequence) == 0 {
+		return nil
+	}
+
+	fmt.Printf("Running authentication sequence (%d steps)...\n", len(cfg.AuthSequence))
+
+	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer reqCancel()
+
+	for i, step := range cfg.AuthSequence {
+		fullURL := r.subVars(step.URL)
+		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
+			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
+		}
+
+		var bodyReader io.Reader
+		if step.Body != nil {
+			subBody := r.substituteInObject(step.Body)
+			b, err := json.Marshal(subBody)
+			if err != nil {
+				return fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
+			}
+			bodyReader = bytes.NewReader(b)
+		}
+
+		req, err := http.NewRequestWithContext(reqCtx, step.Method, fullURL, bodyReader)
+		if err != nil {
+			return fmt.Errorf("auth step %d: failed to create request: %w", i+1, err)
+		}
+
+		if step.Body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		
+		r.configMu.RLock()
+		for k, v := range step.Headers {
+			req.Header.Set(k, r.subVars(v))
+		}
+		// Apply currently collected headers and cookies
+		if len(cfg.GlobalHeaders) > 0 {
+			for k, v := range cfg.GlobalHeaders {
+				req.Header.Set(k, v)
+			}
+		}
+		if len(cfg.Cookies) > 0 {
+			for k, v := range cfg.Cookies {
+				req.AddCookie(&http.Cookie{Name: k, Value: v})
+			}
+		}
+		r.configMu.RUnlock()
+
+		if cfg.Settings.Debug {
+			dump, _ := httputil.DumpRequestOut(req, true)
+			fmt.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+		}
+
+		resp, err := r.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("auth step %d: request failed: %w", i+1, err)
+		}
+
+		if cfg.Settings.Debug {
+			dump, _ := httputil.DumpResponse(resp, false)
+			fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
+		}
+
+		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
+
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+		io.Copy(io.Discard, resp.Body) // Ensure body is fully drained for connection reuse
+		resp.Body.Close()
+
+		if err != nil {
+			return fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)
+		}
+
+		if resp.StatusCode >= 400 {
+			errBody := string(body)
+			if len(errBody) > 1024 {
+				errBody = errBody[:1024]
+			}
+			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)
+		}
+
+		// Collect cookies
+		for _, cookie := range resp.Cookies() {
+			shouldSave := true
+			if len(step.ExtractCookies) > 0 {
+				shouldSave = false
+				for _, name := range step.ExtractCookies {
+					if name == cookie.Name {
+						shouldSave = true
+						break
+					}
+				}
+			}
+
+			if shouldSave {
+				r.configMu.Lock()
+				if cfg.Cookies == nil {
+					cfg.Cookies = make(map[string]string)
+				}
+				cfg.Cookies[cookie.Name] = cookie.Value
+				r.configMu.Unlock()
+				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
+			}
+		}
+
+		// Extract JSON fields
+		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
+			var parsed map[string]any
+			if err := json.Unmarshal(body, &parsed); err != nil {
+				fmt.Printf("    \033[31m[Auth] Failed to parse response JSON: %v\033[0m\n", err)
+			} else {
+				for jsonKey, headerName := range step.ExtractJSON {
+					val := extractJSONPath(parsed, jsonKey)
+					if val != nil {
+						r.configMu.Lock()
+						if cfg.GlobalHeaders == nil {
+							cfg.GlobalHeaders = make(map[string]string)
+						}
+						// If headerName is "Authorization" and doesn't have Bearer,
+						// we might want to be smart, but let's keep it literal for now.
+						strVal := fmt.Sprintf("%v", val)
+						cfg.GlobalHeaders[headerName] = strVal
+						r.configMu.Unlock()
+						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
+					}
+				}
+				for jsonKey, varName := range step.ExtractVariables {
+					val := extractJSONPath(parsed, jsonKey)
+					if val != nil {
+						r.configMu.Lock()
+						if cfg.Variables == nil {
+							cfg.Variables = make(map[string]any)
+						}
+						cfg.Variables[varName] = val
+						r.configMu.Unlock()
+						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
+						r.updateReplacer()
+					}
+				}
+			}
+		}
+	}
+
+	fmt.Println("Authentication sequence complete.")
+	return nil
 }
 
 // Start begins the fuzzing run. Blocks until complete or stopped.
@@ -141,7 +329,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.stats.Progress.CurrentProfile = ""
 		r.mu.Unlock()
 
-		r.broadcast(Event{Type: EventComplete, Data: r.GetStats()})
+		r.Broadcast(Event{Type: EventComplete, Data: r.GetStats()})
 	}()
 
 	cfg := r.config
@@ -205,7 +393,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			r.stats.Progress.CompletedEndpoints = profileIdx*len(endpoints) + epIdx
 			r.mu.Unlock()
 
-			r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 			minNeeded := generator.MinIterationsNeeded(profile, settings)
 			effectiveIterations := iterations
@@ -356,9 +544,9 @@ func (r *Runner) Start(ctx context.Context) error {
 
 					r.updateStats(result)
 
-					// Send a lightweight SSE event — raw payload never reaches the browser
-					r.broadcast(Event{Type: EventResult, Data: toSSE(result)})
-					r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+					// Broadcast the full result. Subscribers (like SSE) will downsample.
+					r.Broadcast(Event{Type: EventResult, Data: result})
+					r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 				}()
 
 				if delay > 0 {
@@ -371,7 +559,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			r.mu.Lock()
 			r.stats.Progress.CompletedEndpoints = profileIdx*len(endpoints) + epIdx + 1
 			r.mu.Unlock()
-			r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 		}
 	}
 
@@ -449,7 +637,37 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	// Merge headers: generatedHeaders < global headers
+	isBody := !isNoBodyMethod(method)
+	mergedHeaders := make(map[string]string)
+	for k, v := range generatedHeaders {
+		mergedHeaders[k] = v
+	}
+	
+	r.configMu.RLock()
+	for k, v := range headers {
+		// Apply variable substitution to global headers too
+		mergedHeaders[k] = r.subVars(v)
+	}
+
+	effectiveCT := contentType
+	if effectiveCT == "" {
+		effectiveCT = "application/json"
+	}
+	hasContentType := false
+	for k := range mergedHeaders {
+		if strings.EqualFold(k, "content-type") {
+			hasContentType = true
+			break
+		}
+	}
+	if isBody && payload != nil && !hasContentType {
+		mergedHeaders["Content-Type"] = effectiveCT
+	}
+
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
+	rawURL = r.subVars(rawURL)
+	r.configMu.RUnlock()
 
 	// Append query parameters
 	// Cap each value at 4000 chars — most servers/proxies reject URLs > 8KB (414).
@@ -468,31 +686,6 @@ func (r *Runner) executeRequest(
 		} else {
 			rawURL += "?" + params.Encode()
 		}
-	}
-
-	// Merge headers: generatedHeaders < global headers
-	isBody := !isNoBodyMethod(method)
-	mergedHeaders := make(map[string]string)
-	for k, v := range generatedHeaders {
-		mergedHeaders[k] = v
-	}
-	for k, v := range headers {
-		mergedHeaders[k] = v
-	}
-
-	effectiveCT := contentType
-	if effectiveCT == "" {
-		effectiveCT = "application/json"
-	}
-	hasContentType := false
-	for k := range mergedHeaders {
-		if strings.EqualFold(k, "content-type") {
-			hasContentType = true
-			break
-		}
-	}
-	if isBody && payload != nil && !hasContentType {
-		mergedHeaders["Content-Type"] = effectiveCT
 	}
 
 	timeoutMs := r.config.Settings.TimeoutMs
@@ -537,17 +730,25 @@ func (r *Runner) executeRequest(
 			req.Header.Set(k, v)
 		}
 		if len(cookies) > 0 {
-			parts := make([]string, 0, len(cookies))
 			for k, v := range cookies {
-				parts = append(parts, k+"="+v)
+				req.AddCookie(&http.Cookie{Name: k, Value: v})
 			}
-			req.Header.Set("Cookie", strings.Join(parts, "; "))
+		}
+
+		if r.config.Settings.Debug {
+			dump, _ := httputil.DumpRequestOut(req, true)
+			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(dump))
 		}
 
 		start := time.Now()
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
 		reqCancel()
+
+		if err == nil && r.config.Settings.Debug {
+			dump, _ := httputil.DumpResponse(resp, false)
+			fmt.Printf("\n--- [DEBUG] Fuzz Response ---\n%s\n-----------------------------\n", string(dump))
+		}
 
 		if err != nil {
 			errMsg := err.Error()
@@ -561,10 +762,9 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		defer resp.Body.Close()
-
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
+			resp.Body.Close()
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			select {
@@ -596,6 +796,7 @@ func (r *Runner) executeRequest(
 		} else {
 			io.Copy(io.Discard, resp.Body) // drain body to reuse connection
 		}
+		resp.Body.Close()
 
 		return &swagger.FuzzResult{
 			ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
@@ -765,11 +966,11 @@ func copyMapStatusByProfile(src map[swagger.FuzzingProfile]map[int]int64) map[sw
 	return dst
 }
 
-// toSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
+// ToSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
 // Raw payload and responseBody are replaced by short preview strings (≤200 chars).
 // ResolvedPath is capped to 200 chars to avoid megabyte URLs in the UI.
 // This is the ONLY place payload content is summarised — it never reaches the browser as raw data.
-func toSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
+func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 	resolvedPath := r.ResolvedPath
 	if len(resolvedPath) > 200 {
 		resolvedPath = resolvedPath[:200] + "…"
@@ -829,6 +1030,68 @@ func truncateValue(v any, maxLen int) any {
 		res = append(res, truncateValue(val[0], maxLen))
 		res = append(res, truncateValue(val[1], maxLen))
 		res = append(res, fmt.Sprintf("... and %d more elements", len(val)-2))
+		return res
+	default:
+		return v
+	}
+}
+
+// extractJSONPath allows retrieving a nested value from a JSON map using dot notation (e.g., "data.token" or "data.users[0].id").
+func extractJSONPath(data map[string]any, path string) any {
+	parts := strings.Split(path, ".")
+	var current any = data
+	for i, part := range parts {
+		var key = part
+		var arrIdx = -1
+		if start := strings.IndexByte(part, '['); start >= 0 {
+			if end := strings.IndexByte(part, ']'); end > start {
+				if idx, err := strconv.Atoi(part[start+1 : end]); err == nil {
+					arrIdx = idx
+					key = part[:start]
+				}
+			}
+		}
+
+		if m, ok := current.(map[string]any); ok {
+			current = m[key]
+		} else {
+			return nil
+		}
+
+		if current != nil && arrIdx >= 0 {
+			if arr, ok := current.([]any); ok && arrIdx < len(arr) {
+				current = arr[arrIdx]
+			} else {
+				return nil
+			}
+		}
+
+		if current == nil {
+			return nil
+		}
+		if i == len(parts)-1 {
+			return current
+		}
+	}
+	return nil
+}
+
+// substituteInObject deeply substitutes string variables inside maps/slices.
+func (r *Runner) substituteInObject(v any) any {
+	switch val := v.(type) {
+	case string:
+		return r.subVars(val)
+	case map[string]any:
+		res := make(map[string]any)
+		for k, v := range val {
+			res[k] = r.substituteInObject(v)
+		}
+		return res
+	case []any:
+		res := make([]any, len(val))
+		for i, v := range val {
+			res[i] = r.substituteInObject(v)
+		}
 		return res
 	default:
 		return v

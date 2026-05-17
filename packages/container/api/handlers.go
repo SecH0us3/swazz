@@ -137,6 +137,13 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 			}
 		}()
 
+if err := r.RunAuthSequence(c.Request.Context()); err != nil {
+			fmt.Printf("Authentication sequence failed: %v\n", err)
+			r.Broadcast(runner.Event{Type: runner.EventError, Data: fmt.Sprintf("Authentication sequence failed: %v", err)})
+			r.Unsubscribe(resultsCh)
+			return
+		}
+
 		r.Start(context.Background())
 		r.Unsubscribe(resultsCh)
 	}()
@@ -222,7 +229,19 @@ func (h *Handler) StreamResults(c *gin.Context) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", evt.Type, evt.JSON())
+			data := evt.Data
+			if evt.Type == runner.EventResult {
+				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
+					data = runner.ToSSE(res)
+				}
+			}
+
+			b, err := json.Marshal(data)
+			if err != nil {
+				fmt.Printf("Failed to marshal SSE event %s: %v\n", evt.Type, err)
+				continue
+			}
+			fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", evt.Type, string(b))
 			flusher.Flush()
 
 			if evt.Type == runner.EventComplete {
@@ -270,20 +289,9 @@ func (h *Handler) Proxy(c *gin.Context) {
 		return
 	}
 
-	// Build Cookie header
-	cookieParts := make([]string, 0, len(req.Cookies))
-	for k, v := range req.Cookies {
-		if k != "" && v != "" {
-			cookieParts = append(cookieParts, k+"="+v)
-		}
-	}
-
 	finalHeaders := map[string]string{"Content-Type": "application/json"}
 	for k, v := range req.Headers {
 		finalHeaders[k] = v
-	}
-	if len(cookieParts) > 0 {
-		finalHeaders["Cookie"] = strings.Join(cookieParts, "; ")
 	}
 
 	var bodyReader io.Reader
@@ -322,6 +330,13 @@ func (h *Handler) Proxy(c *gin.Context) {
 	}
 	for k, v := range finalHeaders {
 		httpReq.Header.Set(k, v)
+	}
+
+	// Add Cookies idiometically
+	for k, v := range req.Cookies {
+		if k != "" && v != "" {
+			httpReq.AddCookie(&http.Cookie{Name: k, Value: v})
+		}
 	}
 
 	start := time.Now()

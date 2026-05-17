@@ -50,3 +50,5 @@ swazz-engine
 *.prof
 __debug_bin
 tmp/
+coverage.out
+*.config.json

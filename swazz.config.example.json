@@ -23,6 +23,20 @@
         "include": [],
         "exclude": ["/health", "/metrics"]
     },
+    "auth_sequence": [
+        {
+            "method": "POST",
+            "url": "/api/login",
+            "body": {
+                "username": "admin",
+                "password": "password"
+            }
+        },
+        {
+            "method": "GET",
+            "url": "/api/session/verify"
+        }
+    ],
     "rules": {
         "ignore": [401, 403, 404, 405, 422, 429, 520],
         "severity": {
