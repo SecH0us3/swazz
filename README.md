@@ -23,7 +23,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/swazz.git
+git clone https://github.com/SecH0us3/swazz.git
 cd swazz
 
 # Build the engine
