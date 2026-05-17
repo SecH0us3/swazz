@@ -207,7 +207,8 @@ export function useRunner(proxyUrl: string) {
 
     const stop = useCallback(async () => {
         try {
-            await fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
+            const res = await fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
+            if (!res.ok) throw new Error('Failed to stop run');
         } finally {
             eventSourceRef.current?.close();
             eventSourceRef.current = null;

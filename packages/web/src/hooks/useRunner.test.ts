@@ -35,7 +35,7 @@ describe('useRunner', () => {
         const { result } = renderHook(() => useRunner(proxyUrl));
 
         await act(async () => {
-            await result.current.stop();
+            await expect(result.current.stop()).rejects.toThrow("Failed to stop run");
         });
 
         expect(result.current.isRunning).toBe(false);
