@@ -127,9 +127,9 @@ export default function App() {
                 isPaused={isPaused}
                 isLoadingSpecs={isLoadingSpecs}
                 onStart={() => handleStart()}
-                onStop={async () => { try { await stop(); } catch (err: any) { showToast(err.message, 'error'); } }}
-                onPause={async () => { try { await pause(); } catch (err: any) { showToast(err.message, 'error'); } }}
-                onResume={async () => { try { await resume(); } catch (err: any) { showToast(err.message, 'error'); } }}
+                onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
+                onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
+                onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}
                 onToggleSidebar={() => {
                     if (window.innerWidth <= 768) setIsSidebarOpen(!isSidebarOpen);
                     else setIsSidebarHiddenDesktop(!isSidebarHiddenDesktop);
