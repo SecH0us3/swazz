@@ -1,6 +1,6 @@
 # ⚡️ swazz — Smart API Fuzzer
 
-[![CI](https://github.com/alex/swazz/actions/workflows/ci.yml/badge.svg)](https://github.com/alex/swazz/actions)
+[![CI](https://github.com/SecH0us3/swazz/actions/workflows/ci.yml/badge.svg)](https://github.com/SecH0us3/swazz/actions)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

@@ -137,6 +137,10 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 			}
 		}()
 
+		if err := r.RunAuthSequence(context.Background()); err != nil {
+			fmt.Printf("Authentication sequence failed: %v\n", err)
+		}
+
 		r.Start(context.Background())
 		r.Unsubscribe(resultsCh)
 	}()
@@ -231,6 +235,7 @@ func (h *Handler) StreamResults(c *gin.Context) {
 
 			b, err := json.Marshal(data)
 			if err != nil {
+				fmt.Printf("Failed to marshal SSE event %s: %v\n", evt.Type, err)
 				continue
 			}
 			fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", evt.Type, string(b))
