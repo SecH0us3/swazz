@@ -73,7 +73,7 @@ export default function App() {
     });
 
     const activeStats = loadedRunId ? historyStats : liveStats;
-    const displayUrl = config.base_url || ((config as any)._swagger_urls?.[0] ?? '');
+    const displayUrl = config.base_url || (config._swagger_urls?.[0] ?? '');
 
     const { sidebarWidth, configSidebarWidth, startResizingLeft, startResizingRight } = useResizableLayout(300, 320);
 
@@ -108,10 +108,10 @@ export default function App() {
                             const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
                             const parsed = new URL(inputUrl);
                             const origin = parsed.origin;
-                            const currentUrls = (config as any)._swagger_urls || [];
+                            const currentUrls = config._swagger_urls || [];
                             if (!currentUrls.includes(inputUrl)) {
                                 const newUrls = [...currentUrls, inputUrl];
-                                updateConfig({ base_url: origin, _swagger_urls: newUrls } as any);
+                                updateConfig({ base_url: origin, _swagger_urls: newUrls });
                                 loadEndpoints(newUrls);
                             } else {
                                 updateConfig({ base_url: origin });
@@ -147,8 +147,8 @@ export default function App() {
                 config={config}
                 runs={runs}
                 loadedRunId={loadedRunId}
-                onLoadRun={(id) => {
-                    handleLoadRun(id);
+                onLoadRun={(id, importedRun) => {
+                    handleLoadRun(id, importedRun);
                     setIsSidebarOpen(false);
                 }}
                 onDeleteRun={handleDeleteRun}

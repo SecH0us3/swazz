@@ -73,6 +73,7 @@ export interface SwazzConfig {
     settings: SwazzSettings;
     endpoints: EndpointConfig[];
     disabled_endpoints?: string[];
+    _swagger_urls?: string[];
 }
 
 // ─── Results ────────────────────────────────────────────

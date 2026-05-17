@@ -37,3 +37,7 @@
 ## 2024-05-16 - [IndexedDB fake-indexeddb timeout tests fix]
 **Learning:** When testing IndexedDB with `fake-indexeddb`, calling `indexedDB.deleteDatabase()` in `beforeEach` without explicitly closing existing open connections to the database will cause the operation to block indefinitely, leading to test timeouts.
 **Action:** When a hook caches an open IDB connection (e.g., in a top-level module variable or promise), always implement an asynchronous reset/cleanup utility that awaits the connection and calls `db.close()` before setting the cache to null. Use this async utility in both `beforeEach` and `afterEach` hooks to guarantee a clean state and prevent `deleteDatabase` deadlocks.
+
+## 2025-05-22 - [Config Import/Export Verification]
+**Learning:** Verified that `useConfig` hook correctly handles JSON import/export and maintains state in localStorage. Discovered that `_swagger_urls` was being used as an ad-hoc property on `SwazzConfig` without being defined in the interface, leading to many `as any` casts.
+**Action:** Updated `SwazzConfig` interface to include `_swagger_urls` and removed unnecessary type casts across the web package. Verified the UI buttons (Import/Export) in the ConfigSidebar are functional and correctly update the application state.
