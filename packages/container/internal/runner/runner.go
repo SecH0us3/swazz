@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -67,6 +68,8 @@ type Runner struct {
 	// SSE subscribers
 	subsMu sync.RWMutex
 	subs   map[chan Event]struct{}
+
+	configMu sync.RWMutex
 }
 
 // New creates a new Runner.
@@ -125,23 +128,30 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 
 	fmt.Printf("Running authentication sequence (%d steps)...\n", len(cfg.AuthSequence))
 
+	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer reqCancel()
+
 	for i, step := range cfg.AuthSequence {
+		r.configMu.RLock()
 		fullURL := substituteVariables(step.URL, cfg.Variables)
+		r.configMu.RUnlock()
 		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
 			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
 		}
 
 		var bodyReader io.Reader
 		if step.Body != nil {
-			b, err := json.Marshal(step.Body)
+			r.configMu.RLock()
+			subBody := substituteInObject(step.Body, cfg.Variables)
+			r.configMu.RUnlock()
+			b, err := json.Marshal(subBody)
 			if err != nil {
 				return fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
 			}
-			bStr := substituteVariables(string(b), cfg.Variables)
-			bodyReader = strings.NewReader(bStr)
+			bodyReader = bytes.NewReader(b)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, step.Method, fullURL, bodyReader)
+		req, err := http.NewRequestWithContext(reqCtx, step.Method, fullURL, bodyReader)
 		if err != nil {
 			return fmt.Errorf("auth step %d: failed to create request: %w", i+1, err)
 		}
@@ -149,6 +159,8 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		if step.Body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
+		
+		r.configMu.RLock()
 		for k, v := range step.Headers {
 			req.Header.Set(k, substituteVariables(v, cfg.Variables))
 		}
@@ -163,6 +175,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 				req.AddCookie(&http.Cookie{Name: k, Value: v})
 			}
 		}
+		r.configMu.RUnlock()
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
@@ -211,10 +224,12 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			}
 
 			if shouldSave {
+				r.configMu.Lock()
 				if cfg.Cookies == nil {
 					cfg.Cookies = make(map[string]string)
 				}
 				cfg.Cookies[cookie.Name] = cookie.Value
+				r.configMu.Unlock()
 				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
 			}
 		}
@@ -228,6 +243,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 				for jsonKey, headerName := range step.ExtractJSON {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
+						r.configMu.Lock()
 						if cfg.GlobalHeaders == nil {
 							cfg.GlobalHeaders = make(map[string]string)
 						}
@@ -235,16 +251,19 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 						// we might want to be smart, but let's keep it literal for now.
 						strVal := fmt.Sprintf("%v", val)
 						cfg.GlobalHeaders[headerName] = strVal
+						r.configMu.Unlock()
 						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 					}
 				}
 				for jsonKey, varName := range step.ExtractVariables {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
+						r.configMu.Lock()
 						if cfg.Variables == nil {
 							cfg.Variables = make(map[string]any)
 						}
 						cfg.Variables[varName] = val
+						r.configMu.Unlock()
 						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
 					}
 				}
@@ -595,6 +614,8 @@ func (r *Runner) executeRequest(
 	for k, v := range generatedHeaders {
 		mergedHeaders[k] = v
 	}
+	
+	r.configMu.RLock()
 	for k, v := range headers {
 		// Apply variable substitution to global headers too
 		mergedHeaders[k] = substituteVariables(v, r.config.Variables)
@@ -617,6 +638,7 @@ func (r *Runner) executeRequest(
 
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
 	rawURL = substituteVariables(rawURL, r.config.Variables)
+	r.configMu.RUnlock()
 
 	// Append query parameters
 	// Cap each value at 4000 chars — most servers/proxies reject URLs > 8KB (414).
@@ -985,16 +1007,36 @@ func truncateValue(v any, maxLen int) any {
 	}
 }
 
-// extractJSONPath allows retrieving a nested value from a JSON map using dot notation (e.g., "data.token").
+// extractJSONPath allows retrieving a nested value from a JSON map using dot notation (e.g., "data.token" or "data.users[0].id").
 func extractJSONPath(data map[string]any, path string) any {
 	parts := strings.Split(path, ".")
 	var current any = data
 	for i, part := range parts {
+		var key = part
+		var arrIdx = -1
+		if start := strings.IndexByte(part, '['); start >= 0 {
+			if end := strings.IndexByte(part, ']'); end > start {
+				if idx, err := strconv.Atoi(part[start+1 : end]); err == nil {
+					arrIdx = idx
+					key = part[:start]
+				}
+			}
+		}
+
 		if m, ok := current.(map[string]any); ok {
-			current = m[part]
+			current = m[key]
 		} else {
 			return nil
 		}
+
+		if current != nil && arrIdx >= 0 {
+			if arr, ok := current.([]any); ok && arrIdx < len(arr) {
+				current = arr[arrIdx]
+			} else {
+				return nil
+			}
+		}
+
 		if current == nil {
 			return nil
 		}
@@ -1003,6 +1045,28 @@ func extractJSONPath(data map[string]any, path string) any {
 		}
 	}
 	return nil
+}
+
+// substituteInObject deeply substitutes string variables inside maps/slices.
+func substituteInObject(v any, vars map[string]any) any {
+	switch val := v.(type) {
+	case string:
+		return substituteVariables(val, vars)
+	case map[string]any:
+		res := make(map[string]any)
+		for k, v := range val {
+			res[k] = substituteInObject(v, vars)
+		}
+		return res
+	case []any:
+		res := make([]any, len(val))
+		for i, v := range val {
+			res[i] = substituteInObject(v, vars)
+		}
+		return res
+	default:
+		return v
+	}
 }
 
 // substituteVariables replaces placeholders like {{varName}} with their values.
