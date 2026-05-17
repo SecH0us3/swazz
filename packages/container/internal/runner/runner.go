@@ -1007,9 +1007,9 @@ func extractJSONPath(data map[string]any, path string) any {
 
 // substituteVariables replaces placeholders like {{varName}} with their values.
 func substituteVariables(input string, vars map[string]any) string {
-	res := input
+	args := make([]string, 0, len(vars)*2)
 	for k, v := range vars {
-		res = strings.ReplaceAll(res, "{{"+k+"}}", fmt.Sprintf("%v", v))
+		args = append(args, "{{"+k+"}}", fmt.Sprintf("%v", v))
 	}
-	return res
+	return strings.NewReplacer(args...).Replace(input)
 }
