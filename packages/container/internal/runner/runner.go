@@ -126,30 +126,31 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 	fmt.Printf("Running authentication sequence (%d steps)...\n", len(cfg.AuthSequence))
 
 	for i, step := range cfg.AuthSequence {
-		fullURL := step.URL
+		fullURL := substituteVariables(step.URL, cfg.Variables)
 		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
-			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(step.URL, "/")
+			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
 		}
 
 		var bodyReader io.Reader
 		if step.Body != nil {
 			b, err := json.Marshal(step.Body)
 			if err != nil {
-				return fmt.Errorf("auth step %d: failed to marshal body: %w", i, err)
+				return fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
 			}
-			bodyReader = bytes.NewReader(b)
+			bStr := substituteVariables(string(b), cfg.Variables)
+			bodyReader = strings.NewReader(bStr)
 		}
 
 		req, err := http.NewRequestWithContext(ctx, step.Method, fullURL, bodyReader)
 		if err != nil {
-			return fmt.Errorf("auth step %d: failed to create request: %w", i, err)
+			return fmt.Errorf("auth step %d: failed to create request: %w", i+1, err)
 		}
 
 		if step.Body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
 		for k, v := range step.Headers {
-			req.Header.Set(k, v)
+			req.Header.Set(k, substituteVariables(v, cfg.Variables))
 		}
 		// Apply currently collected headers and cookies
 		if len(cfg.GlobalHeaders) > 0 {
@@ -206,7 +207,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		resp.Body.Close()
 
 		// Extract JSON fields
-		if len(step.ExtractJSON) > 0 {
+		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 			var parsed map[string]any
 			if err := json.Unmarshal(body, &parsed); err == nil {
 				for jsonKey, headerName := range step.ExtractJSON {
@@ -220,6 +221,16 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 						strVal := fmt.Sprintf("%v", val)
 						cfg.GlobalHeaders[headerName] = strVal
 						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
+					}
+				}
+				for jsonKey, varName := range step.ExtractVariables {
+					val := extractJSONPath(parsed, jsonKey)
+					if val != nil {
+						if cfg.Variables == nil {
+							cfg.Variables = make(map[string]any)
+						}
+						cfg.Variables[varName] = val
+						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
 					}
 				}
 			}
@@ -985,4 +996,13 @@ func extractJSONPath(data map[string]any, path string) any {
 		}
 	}
 	return nil
+}
+
+// substituteVariables replaces placeholders like {{varName}} with their values.
+func substituteVariables(input string, vars map[string]any) string {
+	res := input
+	for k, v := range vars {
+		res = strings.ReplaceAll(res, "{{"+k+"}}", fmt.Sprintf("%v", v))
+	}
+	return res
 }

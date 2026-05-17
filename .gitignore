@@ -51,3 +51,4 @@ swazz-engine
 __debug_bin
 tmp/
 coverage.out
+*.config.json

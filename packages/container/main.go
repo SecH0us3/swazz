@@ -187,6 +187,17 @@ func runWizard() {
 						}
 					}
 				}
+
+				varStr := ask("   Extract JSON field to template variable? (format: field:var_name, e.g., data.userId:user_id, or enter to skip): ")
+				if varStr != "" {
+					step.ExtractVariables = make(map[string]string)
+					for _, pair := range strings.Split(varStr, ",") {
+						parts := strings.SplitN(pair, ":", 2)
+						if len(parts) == 2 {
+							step.ExtractVariables[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+						}
+					}
+				}
 			}
 
 			config.AuthSequence = append(config.AuthSequence, step)

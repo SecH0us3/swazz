@@ -23,11 +23,12 @@ func TestRunAuthSequence(t *testing.T) {
 				"data": map[string]string{
 					"token": "bearer-123",
 					"user":  "admin",
+					"userId": "999",
 				},
 			})
 			return
 		}
-		if r.URL.Path == "/verify" {
+		if r.URL.Path == "/verify/999" {
 			// Check if we got the session cookie and the header from previous step
 			cookie, err := r.Cookie("session")
 			if err != nil || cookie.Value != "secret-session" {
@@ -60,10 +61,13 @@ func TestRunAuthSequence(t *testing.T) {
 				ExtractJSON: map[string]string{
 					"data.token": "Authorization",
 				},
+				ExtractVariables: map[string]string{
+					"data.userId": "user_id",
+				},
 			},
 			{
 				Method: "GET",
-				URL:    "/verify",
+				URL:    "/verify/{{user_id}}",
 			},
 		},
 	}
