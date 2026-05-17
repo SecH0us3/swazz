@@ -70,6 +70,7 @@ type Runner struct {
 	subs   map[chan Event]struct{}
 
 	configMu sync.RWMutex
+	varReplacer *strings.Replacer
 }
 
 // New creates a new Runner.
@@ -83,12 +84,14 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 			},
 		}
 	}
-	return &Runner{
+	r := &Runner{
 		config: config,
 		client: client,
 		stats:  newEmptyStats(),
 		subs:   make(map[chan Event]struct{}),
 	}
+	r.updateReplacer()
+	return r
 }
 
 // Subscribe returns a channel for receiving live events.
@@ -108,7 +111,7 @@ func (r *Runner) Unsubscribe(ch chan Event) {
 	close(ch)
 }
 
-func (r *Runner) broadcast(evt Event) {
+func (r *Runner) Broadcast(evt Event) {
 	r.subsMu.RLock()
 	defer r.subsMu.RUnlock()
 	for ch := range r.subs {
@@ -118,6 +121,35 @@ func (r *Runner) broadcast(evt Event) {
 			// Drop if subscriber is slow
 		}
 	}
+}
+
+func (r *Runner) updateReplacer() {
+	r.configMu.RLock()
+	vars := r.config.Variables
+	r.configMu.RUnlock()
+
+	args := make([]string, 0, len(vars)*2)
+	for k, v := range vars {
+		args = append(args, "{{"+k+"}}", fmt.Sprintf("%v", v))
+	}
+
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
+	if len(args) > 0 {
+		r.varReplacer = strings.NewReplacer(args...)
+	} else {
+		r.varReplacer = nil
+	}
+}
+
+func (r *Runner) subVars(input string) string {
+	r.configMu.RLock()
+	replacer := r.varReplacer
+	r.configMu.RUnlock()
+	if replacer != nil {
+		return replacer.Replace(input)
+	}
+	return input
 }
 
 func (r *Runner) RunAuthSequence(ctx context.Context) error {
@@ -132,18 +164,14 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 	defer reqCancel()
 
 	for i, step := range cfg.AuthSequence {
-		r.configMu.RLock()
-		fullURL := substituteVariables(step.URL, cfg.Variables)
-		r.configMu.RUnlock()
+		fullURL := r.subVars(step.URL)
 		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
 			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
 		}
 
 		var bodyReader io.Reader
 		if step.Body != nil {
-			r.configMu.RLock()
-			subBody := substituteInObject(step.Body, cfg.Variables)
-			r.configMu.RUnlock()
+			subBody := r.substituteInObject(step.Body)
 			b, err := json.Marshal(subBody)
 			if err != nil {
 				return fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
@@ -162,7 +190,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		
 		r.configMu.RLock()
 		for k, v := range step.Headers {
-			req.Header.Set(k, substituteVariables(v, cfg.Variables))
+			req.Header.Set(k, r.subVars(v))
 		}
 		// Apply currently collected headers and cookies
 		if len(cfg.GlobalHeaders) > 0 {
@@ -265,6 +293,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 						cfg.Variables[varName] = val
 						r.configMu.Unlock()
 						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
+						r.updateReplacer()
 					}
 				}
 			}
@@ -300,7 +329,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		r.stats.Progress.CurrentProfile = ""
 		r.mu.Unlock()
 
-		r.broadcast(Event{Type: EventComplete, Data: r.GetStats()})
+		r.Broadcast(Event{Type: EventComplete, Data: r.GetStats()})
 	}()
 
 	cfg := r.config
@@ -364,7 +393,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			r.stats.Progress.CompletedEndpoints = profileIdx*len(endpoints) + epIdx
 			r.mu.Unlock()
 
-			r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 			minNeeded := generator.MinIterationsNeeded(profile, settings)
 			effectiveIterations := iterations
@@ -516,8 +545,8 @@ func (r *Runner) Start(ctx context.Context) error {
 					r.updateStats(result)
 
 					// Broadcast the full result. Subscribers (like SSE) will downsample.
-					r.broadcast(Event{Type: EventResult, Data: result})
-					r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+					r.Broadcast(Event{Type: EventResult, Data: result})
+					r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 				}()
 
 				if delay > 0 {
@@ -530,7 +559,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			r.mu.Lock()
 			r.stats.Progress.CompletedEndpoints = profileIdx*len(endpoints) + epIdx + 1
 			r.mu.Unlock()
-			r.broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 		}
 	}
 
@@ -618,7 +647,7 @@ func (r *Runner) executeRequest(
 	r.configMu.RLock()
 	for k, v := range headers {
 		// Apply variable substitution to global headers too
-		mergedHeaders[k] = substituteVariables(v, r.config.Variables)
+		mergedHeaders[k] = r.subVars(v)
 	}
 
 	effectiveCT := contentType
@@ -637,7 +666,7 @@ func (r *Runner) executeRequest(
 	}
 
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
-	rawURL = substituteVariables(rawURL, r.config.Variables)
+	rawURL = r.subVars(rawURL)
 	r.configMu.RUnlock()
 
 	// Append query parameters
@@ -1048,32 +1077,23 @@ func extractJSONPath(data map[string]any, path string) any {
 }
 
 // substituteInObject deeply substitutes string variables inside maps/slices.
-func substituteInObject(v any, vars map[string]any) any {
+func (r *Runner) substituteInObject(v any) any {
 	switch val := v.(type) {
 	case string:
-		return substituteVariables(val, vars)
+		return r.subVars(val)
 	case map[string]any:
 		res := make(map[string]any)
 		for k, v := range val {
-			res[k] = substituteInObject(v, vars)
+			res[k] = r.substituteInObject(v)
 		}
 		return res
 	case []any:
 		res := make([]any, len(val))
 		for i, v := range val {
-			res[i] = substituteInObject(v, vars)
+			res[i] = r.substituteInObject(v)
 		}
 		return res
 	default:
 		return v
 	}
-}
-
-// substituteVariables replaces placeholders like {{varName}} with their values.
-func substituteVariables(input string, vars map[string]any) string {
-	args := make([]string, 0, len(vars)*2)
-	for k, v := range vars {
-		args = append(args, "{{"+k+"}}", fmt.Sprintf("%v", v))
-	}
-	return strings.NewReplacer(args...).Replace(input)
 }

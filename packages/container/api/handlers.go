@@ -139,6 +139,9 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 
 		if err := r.RunAuthSequence(context.Background()); err != nil {
 			fmt.Printf("Authentication sequence failed: %v\n", err)
+			r.Broadcast(runner.Event{Type: runner.EventError, Data: fmt.Sprintf("Authentication sequence failed: %v", err)})
+			r.Unsubscribe(resultsCh)
+			return
 		}
 
 		r.Start(context.Background())
