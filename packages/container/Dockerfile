@@ -9,10 +9,11 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o swazz-engine .
 
 # Stage 2: Minimal final image
-FROM --platform=linux/amd64 alpine:latest
-RUN apk add --no-cache ca-certificates
+FROM gcr.io/distroless/static-debian12:nonroot
 ENV GOMEMLIMIT=230MiB
-COPY --from=builder /app/swazz-engine /usr/local/bin/swazz-engine
-WORKDIR /app
+COPY --from=builder /app/swazz-engine /swazz-engine
+WORKDIR /
 EXPOSE 8080
-CMD ["swazz-engine", "serve"]
+USER nonroot:nonroot
+ENTRYPOINT ["/swazz-engine"]
+CMD ["serve"]

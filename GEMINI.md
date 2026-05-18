@@ -52,6 +52,10 @@ The project is a hybrid repository using **npm workspaces** for the frontend and
 ### CLI
 - **Output Formats**: When adding findings or classifications, ensure they are reflected in `packages/container/internal/output/` (SARIF, JSON, HTML).
 
+### Supply Chain Security
+- **Strict Pinning**: Always pin external dependencies, GitHub Actions, Docker base images, and external scripts to specific commit SHAs or verifiable hashes (e.g. `actions/checkout@<sha>`). Never use mutable tags like `latest`, `master`, or `v1` to prevent supply chain attacks.
+
+
 ---
 
 ## 📁 Directory Structure
