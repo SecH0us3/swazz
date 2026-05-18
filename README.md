@@ -3,6 +3,7 @@
 [![CI](https://github.com/SecH0us3/swazz/actions/workflows/ci.yml/badge.svg)](https://github.com/SecH0us3/swazz/actions)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docs](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://SecH0us3.github.io/swazz/)
 
 **swazz** is a modern, smart API fuzzer designed for security researchers and developers. It parses OpenAPI (Swagger) specifications to automatically identify crashes, logic flaws, and security vulnerabilities (XSS, Injection, etc.) through intelligent payload generation.
 
@@ -99,6 +100,12 @@ Generate SARIF reports and fail the build if any security errors are found (perf
 - **Engine**: Go (High-performance concurrency)
 - **Dashboard**: React 19, Vite, Vanilla CSS
 - **Formats**: OpenAPI 2.0/3.0, SARIF, JSON
+
+---
+
+## 📚 Documentation
+
+Comprehensive documentation, including installation guides, usage instructions, and architecture details, is available at the [Official Swazz Documentation](https://SecH0us3.github.io/swazz/).
 
 ---
 
