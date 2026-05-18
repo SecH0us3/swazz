@@ -23,3 +23,9 @@ This roadmap tracks planned features, documentation improvements, and architectu
 ## 🎨 Web Dashboard Enhancements
 
 - [ ] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
+
+## 🛡 Internal Security & Infrastructure
+
+- [ ] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
+- [ ] **Task 14:** Setup Static Application Security Testing (SAST) for Swazz itself using `gosec` (Go Security Checker) and GitHub CodeQL.
+- [ ] **Task 15:** Configure Dependabot or Renovate to automatically update Go modules and npm dependencies.
