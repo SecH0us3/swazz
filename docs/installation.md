@@ -14,7 +14,9 @@ Before installing, ensure you have the following installed on your system:
 - **Node.js** (version 18 or later)
 - **npm** (Node Package Manager)
 
-## Getting Started
+## Getting Started (Without Docker)
+
+If you prefer to run everything locally without containers, follow these steps:
 
 1. **Clone the Repository**
 
@@ -41,11 +43,22 @@ Before installing, ensure you have the following installed on your system:
 
 ## Running the Application
 
-### Development Mode
+### Run Everything At Once (No Docker)
 
-To start both the Go backend and the Vite frontend concurrently in development mode, simply run:
+The easiest way to start both the Go backend and the Vite frontend concurrently in development mode is:
 ```bash
 npm run dev
+```
+
+### Docker (Recommended for Production)
+
+We publish the Swazz engine to the GitHub Container Registry. For security reasons, we do not use the `latest` tag. Always use a specific commit hash.
+
+**Current latest hash:** `66d38828530b772f497289af49c77598046beb45`
+
+```bash
+docker pull ghcr.io/sech0us3/swazz:66d38828530b772f497289af49c77598046beb45
+docker run -p 8080:8080 ghcr.io/sech0us3/swazz:66d38828530b772f497289af49c77598046beb45
 ```
 
 ### CLI Mode (Backend Only)
