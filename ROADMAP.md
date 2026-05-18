@@ -14,11 +14,10 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
-- [ ] **Task 5:** Write a guide on creating custom rules, wordlists, and payload definitions (`docs/custom_payloads.md`).
+- [ ] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
 - [ ] **Task 6:** Investigate and implement GraphQL schema parsing and fuzzing support.
 - [ ] **Task 7:** Add support for importing Postman Collections alongside OpenAPI specs.
 
 ## 🎨 Web Dashboard Enhancements
 
-- [ ] **Task 8:** Implement a "Replay Request" button in the Request Inspector to manually resend payloads to the target.
-- [ ] **Task 9:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
+- [ ] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
