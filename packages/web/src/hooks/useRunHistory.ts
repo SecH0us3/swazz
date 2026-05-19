@@ -75,7 +75,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         }
         showToast('Generating HTML report…', 'info');
         try {
-            const res = await fetch(`${import.meta.env.VITE_PROXY_URL || ''}/api/report?format=html`);
+            const res = await fetch(`/api/report?format=html&runId=${runId}`);
             if (!res.ok) throw new Error('Failed to generate report');
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
