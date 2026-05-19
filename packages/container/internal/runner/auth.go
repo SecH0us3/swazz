@@ -151,6 +151,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 					}
 				}
+				varsUpdated := false
 				for jsonKey, varName := range step.ExtractVariables {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
@@ -161,8 +162,11 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 						cfg.Variables[varName] = val
 						r.configMu.Unlock()
 						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
-						r.updateReplacer()
+						varsUpdated = true
 					}
+				}
+				if varsUpdated {
+					r.updateReplacer()
 				}
 			}
 		}
