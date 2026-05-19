@@ -218,7 +218,6 @@ func (r *Runner) fuzzEndpoint(ctx context.Context, profileIdx int, profile swagg
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, settings)
 	isBodyMethod := !isNoBodyMethod(endpoint.Method)
 	gen := generator.New(r.config.Dictionaries, profile, settings)
-	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, settings)
 	
 	sem := make(chan struct{}, settings.Concurrency)
 	enableDedup := profile == swagger.ProfileRandom
