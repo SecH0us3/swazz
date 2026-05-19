@@ -124,9 +124,18 @@ func (r *Runner) Broadcast(evt Event) {
 		} else {
 			select {
 			case ch <- evt:
-			case <-time.After(2 * time.Second):
-				// Prevent deadlocks if client disconnected abruptly,
-				// but allow sufficient time to guarantee delivery of results.
+			default:
+				go func(c chan Event, e Event) {
+					defer func() {
+						recover()
+					}()
+					timer := time.NewTimer(2 * time.Second)
+					defer timer.Stop()
+					select {
+					case c <- e:
+					case <-timer.C:
+					}
+				}(ch, evt)
 			}
 		}
 	}
