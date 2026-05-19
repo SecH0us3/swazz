@@ -114,6 +114,13 @@ func (r *Runner) Unsubscribe(ch chan Event) {
 func (r *Runner) Broadcast(evt Event) {
 	r.subsMu.RLock()
 	defer r.subsMu.RUnlock()
+
+	var timer *time.Timer
+	if evt.Type != EventProgress {
+		timer = time.NewTimer(50 * time.Millisecond)
+		defer timer.Stop()
+	}
+
 	for ch := range r.subs {
 		if evt.Type == EventProgress {
 			select {
@@ -122,20 +129,20 @@ func (r *Runner) Broadcast(evt Event) {
 				// Drop redundant stats updates if client is slow
 			}
 		} else {
+			// Clear the channel if it was previously fired and not read
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(50 * time.Millisecond)
+
 			select {
 			case ch <- evt:
-			default:
-				go func(c chan Event, e Event) {
-					defer func() {
-						recover()
-					}()
-					timer := time.NewTimer(2 * time.Second)
-					defer timer.Stop()
-					select {
-					case c <- e:
-					case <-timer.C:
-					}
-				}(ch, evt)
+			case <-timer.C:
+				// Prevent deadlocks if client disconnected abruptly,
+				// but allow sufficient time to guarantee delivery of results.
 			}
 		}
 	}
