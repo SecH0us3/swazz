@@ -1,6 +1,8 @@
 title: Swazz
 description: A Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities by parsing Swagger/OpenAPI specifications.
-theme: jekyll-theme-minimal
+theme: just-the-docs
+remote_theme: just-the-docs/just-the-docs
 url: ""
+search_enabled: true
 plugins:
   - jekyll-seo-tag
