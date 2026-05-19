@@ -34,10 +34,13 @@ func (r *Runner) updateReplacer() {
 
 func (r *Runner) subVars(input string) string {
 	r.configMu.RLock()
-	replacer := r.varReplacer
-	r.configMu.RUnlock()
-	if replacer != nil {
-		return replacer.Replace(input)
+	defer r.configMu.RUnlock()
+	return r.subVarsLocked(input)
+}
+
+func (r *Runner) subVarsLocked(input string) string {
+	if r.varReplacer != nil {
+		return r.varReplacer.Replace(input)
 	}
 	return input
 }

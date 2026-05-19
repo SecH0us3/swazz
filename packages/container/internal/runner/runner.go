@@ -424,7 +424,7 @@ func (r *Runner) executeRequest(
 	r.configMu.RLock()
 	for k, v := range headers {
 		// Apply variable substitution to global headers too
-		mergedHeaders[k] = r.subVars(v)
+		mergedHeaders[k] = r.subVarsLocked(v)
 	}
 
 	effectiveCT := contentType
@@ -443,29 +443,9 @@ func (r *Runner) executeRequest(
 	}
 
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
-	rawURL = r.subVars(rawURL)
-	r.configMu.RUnlock()
-
-	// Append query parameters
-	// Cap each value at 4000 chars — most servers/proxies reject URLs > 8KB (414).
-	// Boundary testing of long strings is still possible, just not at megabyte scale in a URL.
-	if len(queryParams) > 0 {
-		params := url.Values{}
-		for k, v := range queryParams {
-			s := fmt.Sprintf("%v", v)
-			if len(s) > 4000 {
-				s = s[:4000]
-			}
-			params.Set(k, s)
-		}
-		if strings.Contains(rawURL, "?") {
-			rawURL += "&" + params.Encode()
-		} else {
-			rawURL += "?" + params.Encode()
-		}
-	}
-
+	rawURL = r.subVarsLocked(rawURL)
 	timeoutMs := r.config.Settings.TimeoutMs
+	r.configMu.RUnlock()
 	if timeoutMs <= 0 {
 		timeoutMs = 10000
 	}

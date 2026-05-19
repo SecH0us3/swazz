@@ -36,7 +36,9 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 
 		var bodyReader io.Reader
 		if step.Body != nil {
+			r.configMu.RLock()
 			subBody := r.substituteInObject(step.Body)
+			r.configMu.RUnlock()
 			b, err := json.Marshal(subBody)
 			if err != nil {
 				return fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
@@ -55,7 +57,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		
 		r.configMu.RLock()
 		for k, v := range step.Headers {
-			req.Header.Set(k, r.subVars(v))
+			req.Header.Set(k, r.subVarsLocked(v))
 		}
 		// Apply currently collected headers and cookies
 		if len(cfg.GlobalHeaders) > 0 {
@@ -217,10 +219,11 @@ func extractJSONPath(data map[string]any, path string) any {
 }
 
 // substituteInObject deeply substitutes string variables inside maps/slices.
+// Must be called while holding configMu.RLock.
 func (r *Runner) substituteInObject(v any) any {
 	switch val := v.(type) {
 	case string:
-		return r.subVars(val)
+		return r.subVarsLocked(val)
 	case map[string]any:
 		res := make(map[string]any)
 		for k, v := range val {
