@@ -25,7 +25,7 @@
         "@vitejs/plugin-react": "^6.0.2",
         "fake-indexeddb": "^6.2.5",
         "jsdom": "^28.1.0",
-        "typescript": "^5.7.0",
+        "typescript": "^6.0.3",
         "vite": "^8.0.13",
         "vitest": "^4.1.6"
     }
