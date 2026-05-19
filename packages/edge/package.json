@@ -14,7 +14,7 @@
     "@cloudflare/vitest-pool-workers": "^0.16.6",
     "@cloudflare/workers-types": "^4.20260511.1",
     "@vitest/snapshot": "^4.1.6",
-    "pretty-format": "^29.7.0",
+    "pretty-format": "^30.4.1",
     "vitest": "^4.1.6"
   }
 }
