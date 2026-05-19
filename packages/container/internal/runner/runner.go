@@ -1,3 +1,7 @@
+// runner.go: Core execution engine for the swazz fuzzer.
+// It orchestrates the fuzzing process across endpoints, profiles, and iterations,
+// managing concurrency and the request-response lifecycle.
+
 package runner
 
 import (

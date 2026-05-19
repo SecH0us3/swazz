@@ -1,3 +1,7 @@
+// auth.go: Handles authentication sequences and variable management.
+// It provides functionality to run multi-step authentication flows, substitute
+// variables in requests, and extract values from responses.
+
 package runner
 
 import (

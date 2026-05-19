@@ -1,3 +1,7 @@
+// utils.go: General helper functions for the runner package.
+// Includes path parameter handling, value truncation for previews,
+// and payload merging logic.
+
 package runner
 
 import (

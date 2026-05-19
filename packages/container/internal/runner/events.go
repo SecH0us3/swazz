@@ -1,3 +1,7 @@
+// events.go: Manages the real-time event system for progress reporting.
+// It handles SSE (Server-Sent Events) subscribers, message broadcasting,
+// and ensures critical events are delivered to the dashboard.
+
 package runner
 
 import (

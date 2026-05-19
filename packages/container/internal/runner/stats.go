@@ -1,3 +1,7 @@
+// stats.go: Aggregates and tracks metrics for the fuzzing session.
+// It maintains real-time counters for status codes, endpoint performance,
+// and overall progress, providing snapshots for the UI.
+
 package runner
 
 import (
