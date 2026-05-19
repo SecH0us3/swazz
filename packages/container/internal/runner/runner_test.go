@@ -88,6 +88,9 @@ func TestStartIntegration(t *testing.T) {
 		t.Fatalf("Start failed: %v", err)
 	}
 
+	// Give the async broadcast loop a moment to process the events
+	time.Sleep(100 * time.Millisecond)
+
 	r.Unsubscribe(resultsCh)
 	<-done
 

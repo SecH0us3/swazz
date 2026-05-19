@@ -25,6 +25,7 @@ import (
 const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
+	broadcastTimeout = 50 * time.Millisecond
 )
 
 // Event types for SSE streaming.
@@ -69,6 +70,8 @@ type Runner struct {
 	subsMu sync.RWMutex
 	subs   map[chan Event]struct{}
 
+	broadcastCh chan Event
+
 	configMu sync.RWMutex
 	varReplacer *strings.Replacer
 }
@@ -89,8 +92,10 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		client: client,
 		stats:  newEmptyStats(),
 		subs:   make(map[chan Event]struct{}),
+		broadcastCh: make(chan Event, 1024),
 	}
 	r.updateReplacer()
+	go r.broadcastLoop()
 	return r
 }
 
@@ -112,37 +117,65 @@ func (r *Runner) Unsubscribe(ch chan Event) {
 }
 
 func (r *Runner) Broadcast(evt Event) {
-	r.subsMu.RLock()
-	defer r.subsMu.RUnlock()
+	select {
+	case r.broadcastCh <- evt:
+	default:
+		// Queue is full, drop event to avoid blocking
+	}
+}
 
+func (r *Runner) broadcastLoop() {
 	var timer *time.Timer
-	if evt.Type != EventProgress {
-		timer = time.NewTimer(50 * time.Millisecond)
-		defer timer.Stop()
+	timer = time.NewTimer(broadcastTimeout)
+	if !timer.Stop() {
+		<-timer.C
 	}
 
-	for ch := range r.subs {
-		if evt.Type == EventProgress {
-			select {
-			case ch <- evt:
-			default:
-				// Drop redundant stats updates if client is slow
+	for evt := range r.broadcastCh {
+		r.subsMu.RLock()
+		subs := make([]chan Event, 0, len(r.subs))
+		for ch := range r.subs {
+			subs = append(subs, ch)
+		}
+		r.subsMu.RUnlock()
+
+		if evt.Type != EventProgress {
+			timer.Reset(broadcastTimeout)
+		}
+
+		for _, ch := range subs {
+			if evt.Type == EventProgress {
+				select {
+				case ch <- evt:
+				default:
+					// Drop redundant stats updates if client is slow
+				}
+			} else {
+				// Clear the channel if it was previously fired and not read
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(broadcastTimeout)
+
+				select {
+				case ch <- evt:
+				case <-timer.C:
+					// Prevent deadlocks if client disconnected abruptly,
+					// but allow sufficient time to guarantee delivery of results.
+				}
 			}
-		} else {
-			// Clear the channel if it was previously fired and not read
+		}
+
+		// Ensure timer is stopped after handling an event that used it
+		if evt.Type != EventProgress {
 			if !timer.Stop() {
 				select {
 				case <-timer.C:
 				default:
 				}
-			}
-			timer.Reset(50 * time.Millisecond)
-
-			select {
-			case ch <- evt:
-			case <-timer.C:
-				// Prevent deadlocks if client disconnected abruptly,
-				// but allow sufficient time to guarantee delivery of results.
 			}
 		}
 	}
