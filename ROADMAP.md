@@ -22,7 +22,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🎨 Web Dashboard Enhancements
 
-- [ ] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
+- [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
 
 ## 🛡 Internal Security & Infrastructure
 

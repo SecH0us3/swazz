@@ -14,7 +14,7 @@
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
-- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports.
+- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
 - **🌐 Web Dashboard**: Real-time Heatmap and Request Inspector for deep-dive analysis.
 
