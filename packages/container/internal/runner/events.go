@@ -7,6 +7,7 @@ package runner
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -33,7 +34,11 @@ var bufPool = sync.Pool{
 
 // JSON serializes the event data.
 func (e *Event) JSON() string {
-	b, _ := json.Marshal(e.Data)
+	b, err := json.Marshal(e.Data)
+	if err != nil {
+		fmt.Printf("[ERROR] Failed to marshal event data for type %s: %v\n", e.Type, err)
+		return `{"error": "failed to marshal event data on server"}`
+	}
 	return string(b)
 }
 
