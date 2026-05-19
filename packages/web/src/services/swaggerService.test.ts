@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadSwaggerUrl } from './swaggerService.js';
 
 describe('swaggerService', () => {
-    let originalFetch: typeof global.fetch;
+    let originalFetch: typeof globalThis.fetch;
 
     beforeEach(() => {
-        originalFetch = global.fetch;
-        global.fetch = vi.fn();
+        originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn();
     });
 
     afterEach(() => {
-        global.fetch = originalFetch;
+        globalThis.fetch = originalFetch;
         vi.restoreAllMocks();
     });
 
@@ -28,11 +28,11 @@ describe('swaggerService', () => {
             headers: { 'Content-Type': 'application/json' }
         });
 
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
         const result = await loadSwaggerUrl('http://example.com/swagger.json');
 
-        expect(global.fetch).toHaveBeenCalledWith('/api/parse', {
+        expect(globalThis.fetch).toHaveBeenCalledWith('/api/parse', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: 'http://example.com/swagger.json' })
@@ -54,7 +54,7 @@ describe('swaggerService', () => {
             headers: { 'Content-Type': 'application/json' }
         });
 
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
         await expect(loadSwaggerUrl('http://invalid-url')).rejects.toThrow('Invalid URL provided');
     });
@@ -66,7 +66,7 @@ describe('swaggerService', () => {
             statusText: 'Internal Server Error'
         });
 
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
         await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Internal Server Error');
     });
@@ -78,14 +78,14 @@ describe('swaggerService', () => {
             statusText: ''
         });
 
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
         await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to parse swagger: 502');
     });
 
     it('propagates network errors from fetch', async () => {
         const networkError = new TypeError('Failed to fetch');
-        vi.mocked(global.fetch).mockRejectedValueOnce(networkError);
+        vi.mocked(globalThis.fetch).mockRejectedValueOnce(networkError);
 
         await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to fetch');
     });
@@ -96,7 +96,7 @@ describe('swaggerService', () => {
             headers: { 'Content-Type': 'application/json' }
         });
 
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
         await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(SyntaxError);
     });
 
@@ -106,7 +106,7 @@ describe('swaggerService', () => {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
         });
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
         await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(TypeError);
     });
@@ -117,7 +117,7 @@ describe('swaggerService', () => {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
         });
-        vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
         const result = await loadSwaggerUrl('http://example.com/swagger.json', { 'X-Auth': 'token' }, { 'session': '123' });
 
