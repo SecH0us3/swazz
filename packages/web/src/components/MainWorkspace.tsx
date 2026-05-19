@@ -22,6 +22,7 @@ interface MainWorkspaceProps {
     setLoadedRunId: (id: string | null) => void;
     handleSelectResult: (r: ResultSummary) => void;
     handleExport: () => void;
+    handleExportHTML: () => void;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
 }
 
@@ -41,6 +42,7 @@ export function MainWorkspace({
     setLoadedRunId,
     handleSelectResult,
     handleExport,
+    handleExportHTML,
     queryResults,
 }: MainWorkspaceProps) {
 
@@ -146,6 +148,7 @@ export function MainWorkspace({
                                 if (filter) setActiveTab('logs');
                             }}
                             isRunning={isRunning}
+                            onExportHTML={handleExportHTML}
                         />
                     ) : (
                         <Inspector

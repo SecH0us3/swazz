@@ -9,9 +9,10 @@ interface Props {
     heatmapFilter: HeatmapFilter | null;
     onHeatmapFilter: (f: HeatmapFilter | null) => void;
     isRunning: boolean;
+    onExportHTML: () => void;
 }
 
-export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
+export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning, onExportHTML }: Props) {
     if (!stats) {
         return (
             <div className="dashboard">
@@ -70,7 +71,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
 
     return (
         <div className="dashboard">
-            <StatsBar stats={stats} isRunning={isRunning} />
+            <StatsBar stats={stats} isRunning={isRunning} onExportHTML={onExportHTML} />
             <Heatmap
                 stats={stats}
                 endpointKeys={endpointKeys}
