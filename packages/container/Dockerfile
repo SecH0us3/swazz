@@ -1,7 +1,7 @@
 # === DOCKERFILE FOR CLOUDFLARE CONTAINERS (AMD64 / Linux x64) ===
 
 # Stage 1: Build Go Application
-FROM --platform=linux/amd64 golang:alpine3.22@sha256:7ef94116875d0aa8799133184ed57cf79ff24bdefe8c8820470602a9d3d6d9192b8 AS builder
+FROM --platform=linux/amd64 golang:alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
