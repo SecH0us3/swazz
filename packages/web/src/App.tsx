@@ -43,7 +43,7 @@ export default function App() {
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun } = useDb();
 
-    const { loadedRunId, setLoadedRunId, historyStats, handleLoadRun, handleDeleteRun, handleExport } = useRunHistory({
+    const { loadedRunId, setLoadedRunId, historyStats, handleLoadRun, handleDeleteRun, handleExport, handleExportHTML } = useRunHistory({
         runs,
         queryResults,
         getRunResults,
@@ -182,6 +182,7 @@ export default function App() {
                     setLoadedRunId={setLoadedRunId}
                     handleSelectResult={handleSelectResult}
                     handleExport={() => handleExport(loadedRunId ?? liveRunId, config.base_url)}
+                    handleExportHTML={() => handleExportHTML(loadedRunId ?? liveRunId)}
                     queryResults={queryResults}
                 />
 
