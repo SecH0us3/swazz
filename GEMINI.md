@@ -52,6 +52,10 @@ The project is a hybrid repository using **npm workspaces** for the frontend and
 ### CLI
 - **Output Formats**: When adding findings or classifications, ensure they are reflected in `packages/container/internal/output/` (SARIF, JSON, HTML).
 
+### CI/CD & Documentation
+- **Selective Triggers**: GitHub Actions use path-based filters. `ci.yml` ignores meta files (README, etc.) and docs. `release.yml` conditionally builds components based on changes in `packages/`.
+- **Documentation**: Use the `jekyll-theme-minimal` theme for `docs/`. Documentation is deployed via a dedicated `docs.yml` workflow when files in `docs/` change.
+
 ### Supply Chain Security
 - **Strict Pinning**: Always pin external dependencies, GitHub Actions, Docker base images, and external scripts to specific commit SHAs or verifiable hashes (e.g. `actions/checkout@<sha>`). Never use mutable tags like `latest`, `master`, or `v1` to prevent supply chain attacks.
 
