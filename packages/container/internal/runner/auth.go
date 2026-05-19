@@ -138,35 +138,34 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 				}
 				fmt.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)
 			} else {
+				r.configMu.Lock()
+				if cfg.GlobalHeaders == nil {
+					cfg.GlobalHeaders = make(map[string]string)
+				}
+				if cfg.Variables == nil {
+					cfg.Variables = make(map[string]any)
+				}
+
 				for jsonKey, headerName := range step.ExtractJSON {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
-						r.configMu.Lock()
-						if cfg.GlobalHeaders == nil {
-							cfg.GlobalHeaders = make(map[string]string)
-						}
-						// If headerName is "Authorization" and doesn't have Bearer,
-						// we might want to be smart, but let's keep it literal for now.
 						strVal := fmt.Sprintf("%v", val)
 						cfg.GlobalHeaders[headerName] = strVal
-						r.configMu.Unlock()
 						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 					}
 				}
+
 				varsUpdated := false
 				for jsonKey, varName := range step.ExtractVariables {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
-						r.configMu.Lock()
-						if cfg.Variables == nil {
-							cfg.Variables = make(map[string]any)
-						}
 						cfg.Variables[varName] = val
-						r.configMu.Unlock()
 						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
 						varsUpdated = true
 					}
 				}
+				r.configMu.Unlock()
+
 				if varsUpdated {
 					r.updateReplacer()
 				}

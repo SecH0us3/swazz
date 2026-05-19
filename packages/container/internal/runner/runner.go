@@ -135,7 +135,10 @@ func (r *Runner) Start(ctx context.Context) error {
 				break
 			}
 
-			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint)
+			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
+			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+
+			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
 		}
 	}
 
@@ -179,7 +182,15 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	r.stats.Progress.TotalEndpoints = len(endpoints) * len(profiles)
 }
 
-func (r *Runner) fuzzEndpoint(ctx context.Context, profileIdx int, profile swagger.FuzzingProfile, epIdx int, endpoint swagger.EndpointConfig) {
+func (r *Runner) fuzzEndpoint(
+	ctx context.Context,
+	profileIdx int,
+	profile swagger.FuzzingProfile,
+	epIdx int,
+	endpoint swagger.EndpointConfig,
+	gen *generator.Generator,
+	safeGen *generator.Generator,
+) {
 	settings := r.config.Settings
 	endpoints := r.config.Endpoints
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
@@ -212,13 +223,8 @@ func (r *Runner) fuzzEndpoint(ctx context.Context, profileIdx int, profile swagg
 			currentMaxPayloadSize = 536870912
 		}
 	}
-	// safeGen always uses the RANDOM profile for path/header params.
-	// Using boundary/malicious values in path segments can cause 404s before the payload is processed,
-	// which means the body fuzzer never actually runs on the server.
-	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, settings)
+
 	isBodyMethod := !isNoBodyMethod(endpoint.Method)
-	gen := generator.New(r.config.Dictionaries, profile, settings)
-	
 	sem := make(chan struct{}, settings.Concurrency)
 	enableDedup := profile == swagger.ProfileRandom
 	var wg sync.WaitGroup
