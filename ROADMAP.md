@@ -12,7 +12,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 4:** Create `CONTRIBUTING.md` (and `docs/contributing.md`) with local setup instructions, code standards, and testing guides (`go test ./...`).
 - [ ] **Task 10:** Upgrade the documentation site to a modern theme with built-in search and interactive code examples (e.g., using "Just the Docs" Jekyll theme or migrating to Docusaurus/VitePress).
 - [ ] **Task 11:** Design and add an Open Graph social preview image (1280x640) for the GitHub repository and documentation site.
-- [ ] **Task 12:** Create a local "Vulnerable Demo API" (e.g., in a `demo/` folder) so users can immediately test Swazz capabilities out of the box.
+- [x] **Task 12:** Create a local "Vulnerable Demo API" (e.g., in a `demo/` folder) so users can immediately test Swazz capabilities out of the box.
 
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
@@ -29,3 +29,9 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
 - [ ] **Task 14:** Setup Static Application Security Testing (SAST) for Swazz itself using `gosec` (Go Security Checker) and GitHub CodeQL.
 - [ ] **Task 15:** Configure Dependabot or Renovate to automatically update Go modules and npm dependencies.
+
+## ⚡️ Performance & Architecture
+
+- [ ] **Task 16:** Replace the blocking select-timeout SSE Broadcast implementation with a non-blocking lock-free concurrent collection or ring-buffer pattern (similar to LMAX Disruptor or a lock-free MPSC ring-buffer queue).
+  - *Technical Details*: Decouple fuzzer thread execution from SSE network transport. Instead of blocking the engine on slow clients, fuzzing goroutines will write events to a lock-free, concurrent multi-producer single-consumer (MPSC) queue. This prevents slow SSE flushes or browser rendering lags from introducing backpressure/latency to the main scan executor, while guaranteeing delivery of all critical fuzzer findings (`EventResult`).
+
