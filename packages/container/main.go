@@ -471,6 +471,7 @@ func runCLI(args []string) {
 	// 4. Initialize and start runner
 	client := &http.Client{Timeout: time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond}
 	r := runner.New(runCfg, client)
+	defer r.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
