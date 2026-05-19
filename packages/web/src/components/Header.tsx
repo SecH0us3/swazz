@@ -85,6 +85,13 @@ export function Header({
                         </svg>
                     </a>
 
+                    <a href="https://SecH0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="header-docs-link" title="Documentation">
+                        <span>docs</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </a>
+
                     <div className="header-divider" />
 
                     {/* Running status pill */}
