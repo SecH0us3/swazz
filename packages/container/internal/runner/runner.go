@@ -51,6 +51,8 @@ type Runner struct {
 
 	configMu sync.RWMutex
 	varReplacer *strings.Replacer
+
+	pauseCond *sync.Cond
 }
 
 // New creates a new Runner.
@@ -72,6 +74,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		eventQueue: NewMPSCQueue(),
 		doneCh:      make(chan struct{}),
 	}
+	r.pauseCond = sync.NewCond(&r.mu)
 	r.updateReplacer()
 	go r.broadcastLoop()
 	return r
@@ -278,12 +281,15 @@ func (r *Runner) fuzzEndpoint(ctx context.Context, profileIdx int, profile swagg
 			seenHashes[payloadHash] = true
 		}
 
-		for r.paused() && !r.stopped() {
-			time.Sleep(100 * time.Millisecond)
+		r.mu.Lock()
+		for r.isPaused && !r.shouldStop {
+			r.pauseCond.Wait()
 		}
-		if r.stopped() {
+		if r.shouldStop {
+			r.mu.Unlock()
 			break
 		}
+		r.mu.Unlock()
 
 		sem <- struct{}{}
 		wg.Add(1)
@@ -354,6 +360,7 @@ func (r *Runner) Stop() {
 	if r.cancel != nil {
 		r.cancel()
 	}
+	r.pauseCond.Broadcast()
 	r.mu.Unlock()
 }
 
@@ -370,6 +377,7 @@ func (r *Runner) Pause() {
 func (r *Runner) Resume() {
 	r.mu.Lock()
 	r.isPaused = false
+	r.pauseCond.Broadcast()
 	r.mu.Unlock()
 }
 
