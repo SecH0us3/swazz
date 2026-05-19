@@ -174,7 +174,7 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 			if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError {
 				// Critical events MUST be delivered, but with a timeout to prevent OOM
 				// if a client stalls indefinitely.
-				if !safeSend(ch, evt, 3*time.Second) {
+				if !safeSend(ch, evt, 5*time.Second) {
 					stalledSubs[ch] = true
 					r.Unsubscribe(ch)
 				}
