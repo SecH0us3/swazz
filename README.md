@@ -66,6 +66,10 @@ Generate SARIF reports and fail the build if any security errors are found (perf
 ./swazz-engine start --config swazz.config.json --fail-on-error --sarif findings.sarif
 ```
 
+### 4. Test on the Vulnerable Demo API
+If you want to quickly test Swazz's capabilities, we provide a built-in vulnerable API simulated as a Cloudflare Worker in the `demo/` folder.
+> **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (like SQL injection) for testing Swazz. It should **NOT** be used in production or audited for security issues.
+
 ---
 
 ## ⚙️ Configuration Example

@@ -1,0 +1,4 @@
+{
+  "swagger_urls": ["http://localhost:8787/swagger.json"],
+  "base_url": "http://localhost:8787"
+}

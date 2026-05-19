@@ -115,10 +115,19 @@ func (r *Runner) Broadcast(evt Event) {
 	r.subsMu.RLock()
 	defer r.subsMu.RUnlock()
 	for ch := range r.subs {
-		select {
-		case ch <- evt:
-		default:
-			// Drop if subscriber is slow
+		if evt.Type == EventProgress {
+			select {
+			case ch <- evt:
+			default:
+				// Drop redundant stats updates if client is slow
+			}
+		} else {
+			select {
+			case ch <- evt:
+			case <-time.After(2 * time.Second):
+				// Prevent deadlocks if client disconnected abruptly,
+				// but allow sufficient time to guarantee delivery of results.
+			}
 		}
 	}
 }
