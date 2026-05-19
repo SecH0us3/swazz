@@ -69,7 +69,7 @@ type Runner struct {
 	subsMu sync.RWMutex
 	subs   map[chan Event]struct{}
 
-	broadcastCh chan Event
+	eventQueue *MPSCQueue
 	doneCh      chan struct{}
 
 	configMu sync.RWMutex
@@ -92,7 +92,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		client: client,
 		stats:  newEmptyStats(),
 		subs:   make(map[chan Event]struct{}),
-		broadcastCh: make(chan Event, 1024),
+		eventQueue: NewMPSCQueue(),
 		doneCh:      make(chan struct{}),
 	}
 	r.updateReplacer()
@@ -113,7 +113,7 @@ func (r *Runner) Close() {
 }
 
 func (r *Runner) Subscribe() chan Event {
-	ch := make(chan Event, 64)
+	ch := make(chan Event, 10000)
 	r.subsMu.Lock()
 	r.subs[ch] = struct{}{}
 	r.subsMu.Unlock()
@@ -129,11 +129,7 @@ func (r *Runner) Unsubscribe(ch chan Event) {
 }
 
 func (r *Runner) Broadcast(evt Event) {
-	select {
-	case r.broadcastCh <- evt:
-	default:
-		// Queue is full, drop event to avoid blocking
-	}
+	r.eventQueue.Push(evt)
 }
 
 func (r *Runner) broadcastLoop() {
@@ -141,19 +137,33 @@ func (r *Runner) broadcastLoop() {
 		select {
 		case <-r.doneCh:
 			return
-		case evt := <-r.broadcastCh:
-			r.subsMu.RLock()
-			subs := make([]chan Event, 0, len(r.subs))
-			for ch := range r.subs {
-				subs = append(subs, ch)
-			}
-			r.subsMu.RUnlock()
+		case <-r.eventQueue.WaitChan():
+			nodes := r.eventQueue.PopAll()
+			for nodes != nil {
+				evt := nodes.Value
+				nodes = nodes.Next
 
-			for _, ch := range subs {
-				select {
-				case ch <- evt:
-				default:
-					// Drop event for this specific slow client to avoid blocking others
+				r.subsMu.RLock()
+				subs := make([]chan Event, 0, len(r.subs))
+				for ch := range r.subs {
+					subs = append(subs, ch)
+				}
+				r.subsMu.RUnlock()
+
+				for _, ch := range subs {
+					if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError {
+						// Critical events MUST be delivered. Block if necessary.
+						// Because fuzzer execution is decoupled via MPSC, this will ONLY
+						// affect the broadcaster and SSE clients, not the main fuzzer engine.
+						ch <- evt
+					} else {
+						// Non-critical events (like progress stats) can be dropped if the client is too slow.
+						select {
+						case ch <- evt:
+						default:
+							// Drop event for this specific slow client
+						}
+					}
 				}
 			}
 		}
