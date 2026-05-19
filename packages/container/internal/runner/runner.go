@@ -25,7 +25,6 @@ import (
 const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
-	broadcastTimeout = 50 * time.Millisecond
 )
 
 // Event types for SSE streaming.
@@ -71,6 +70,7 @@ type Runner struct {
 	subs   map[chan Event]struct{}
 
 	broadcastCh chan Event
+	doneCh      chan struct{}
 
 	configMu sync.RWMutex
 	varReplacer *strings.Replacer
@@ -93,6 +93,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		stats:  newEmptyStats(),
 		subs:   make(map[chan Event]struct{}),
 		broadcastCh: make(chan Event, 1024),
+		doneCh:      make(chan struct{}),
 	}
 	r.updateReplacer()
 	go r.broadcastLoop()
@@ -100,6 +101,17 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 }
 
 // Subscribe returns a channel for receiving live events.
+
+// Close stops the background broadcast loop and cleans up resources.
+func (r *Runner) Close() {
+	r.mu.Lock()
+	if r.cancel != nil {
+		r.cancel()
+	}
+	r.mu.Unlock()
+	close(r.doneCh)
+}
+
 func (r *Runner) Subscribe() chan Event {
 	ch := make(chan Event, 64)
 	r.subsMu.Lock()
@@ -125,56 +137,23 @@ func (r *Runner) Broadcast(evt Event) {
 }
 
 func (r *Runner) broadcastLoop() {
-	var timer *time.Timer
-	timer = time.NewTimer(broadcastTimeout)
-	if !timer.Stop() {
-		<-timer.C
-	}
-
-	for evt := range r.broadcastCh {
-		r.subsMu.RLock()
-		subs := make([]chan Event, 0, len(r.subs))
-		for ch := range r.subs {
-			subs = append(subs, ch)
-		}
-		r.subsMu.RUnlock()
-
-		if evt.Type != EventProgress {
-			timer.Reset(broadcastTimeout)
-		}
-
-		for _, ch := range subs {
-			if evt.Type == EventProgress {
-				select {
-				case ch <- evt:
-				default:
-					// Drop redundant stats updates if client is slow
-				}
-			} else {
-				// Clear the channel if it was previously fired and not read
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				timer.Reset(broadcastTimeout)
-
-				select {
-				case ch <- evt:
-				case <-timer.C:
-					// Prevent deadlocks if client disconnected abruptly,
-					// but allow sufficient time to guarantee delivery of results.
-				}
+	for {
+		select {
+		case <-r.doneCh:
+			return
+		case evt := <-r.broadcastCh:
+			r.subsMu.RLock()
+			subs := make([]chan Event, 0, len(r.subs))
+			for ch := range r.subs {
+				subs = append(subs, ch)
 			}
-		}
+			r.subsMu.RUnlock()
 
-		// Ensure timer is stopped after handling an event that used it
-		if evt.Type != EventProgress {
-			if !timer.Stop() {
+			for _, ch := range subs {
 				select {
-				case <-timer.C:
+				case ch <- evt:
 				default:
+					// Drop event for this specific slow client to avoid blocking others
 				}
 			}
 		}

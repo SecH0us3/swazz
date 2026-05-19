@@ -115,6 +115,9 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 
 	h.config = &config
 	h.results = nil
+	if h.runner != nil {
+		h.runner.Close()
+	}
 	h.runner = runner.New(&config, nil)
 
 	// Collect results

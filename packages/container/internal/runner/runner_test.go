@@ -69,6 +69,7 @@ func TestStartIntegration(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 	
 	// Collect results to ensure it broadcasted
 	resultsCh := r.Subscribe()
@@ -79,6 +80,9 @@ func TestStartIntegration(t *testing.T) {
 			if evt.Type == EventResult {
 				resultsCount++
 			}
+			if evt.Type == EventComplete {
+				break
+			}
 		}
 		done <- true
 	}()
@@ -88,11 +92,13 @@ func TestStartIntegration(t *testing.T) {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// Give the async broadcast loop a moment to process the events
-	time.Sleep(100 * time.Millisecond)
-
+	// Wait until EventComplete is received
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timeout waiting for events")
+	}
 	r.Unsubscribe(resultsCh)
-	<-done
 
 	if resultsCount == 0 {
 		t.Errorf("Expected at least 1 result, got %d", resultsCount)
