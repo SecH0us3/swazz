@@ -28,10 +28,10 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
 - [ ] **Task 14:** Setup Static Application Security Testing (SAST) for Swazz itself using `gosec` (Go Security Checker) and GitHub CodeQL.
-- [ ] **Task 15:** Configure Dependabot or Renovate to automatically update Go modules and npm dependencies.
+- [x] **Task 15:** Configure Dependabot or Renovate to automatically update Go modules and npm dependencies.
 
 ## ⚡️ Performance & Architecture
 
-- [ ] **Task 16:** Replace the blocking select-timeout SSE Broadcast implementation with a non-blocking lock-free concurrent collection or ring-buffer pattern (similar to LMAX Disruptor or a lock-free MPSC ring-buffer queue).
+- [x] **Task 16:** Replace the blocking select-timeout SSE Broadcast implementation with a non-blocking lock-free concurrent collection or ring-buffer pattern (similar to LMAX Disruptor or a lock-free MPSC ring-buffer queue).
   - *Technical Details*: Decouple fuzzer thread execution from SSE network transport. Instead of blocking the engine on slow clients, fuzzing goroutines will write events to a lock-free, concurrent multi-producer single-consumer (MPSC) queue. This prevents slow SSE flushes or browser rendering lags from introducing backpressure/latency to the main scan executor, while guaranteeing delivery of all critical fuzzer findings (`EventResult`).
 
