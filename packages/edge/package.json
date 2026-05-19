@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@cloudflare/containers": "^0.3.3"
+    "@cloudflare/containers": "^0.3.4"
   },
   "scripts": {
     "deploy": "wrangler deploy",
