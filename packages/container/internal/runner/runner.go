@@ -212,7 +212,10 @@ func (r *Runner) fuzzEndpoint(ctx context.Context, profileIdx int, profile swagg
 			currentMaxPayloadSize = 536870912
 		}
 	}
-
+	// safeGen always uses the RANDOM profile for path/header params.
+	// Using boundary/malicious values in path segments can cause 404s before the payload is processed,
+	// which means the body fuzzer never actually runs on the server.
+	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, settings)
 	isBodyMethod := !isNoBodyMethod(endpoint.Method)
 	gen := generator.New(r.config.Dictionaries, profile, settings)
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, settings)
