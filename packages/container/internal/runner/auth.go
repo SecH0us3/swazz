@@ -131,7 +131,10 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 			var parsed map[string]any
 			if err := json.Unmarshal(body, &parsed); err != nil {
-				fmt.Printf("    \033[31m[Auth] Failed to parse response JSON: %v\033[0m\n", err)
+				if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
+					return fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
+				}
+				fmt.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)
 			} else {
 				for jsonKey, headerName := range step.ExtractJSON {
 					val := extractJSONPath(parsed, jsonKey)
