@@ -20,8 +20,7 @@ func LoadWordlists(config *Config) error {
 
 	for category, filePath := range config.WordlistFiles {
 		if !strings.HasSuffix(filePath, ".txt") {
-			// Skip or enforce .txt, instruction says "reads each .txt file specified"
-			// But maybe the path is just expected to be .txt
+			return fmt.Errorf("invalid wordlist file: %s (must be a .txt file)", filePath)
 		}
 
 		// Prevent path traversal by extracting only the filename and forcing the 'wordlists' directory.
