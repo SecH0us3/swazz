@@ -193,6 +193,20 @@ export function ConfigSidebar({
                 />
             </Section>
 
+            {/* Wordlist Files */}
+            <Section
+                title="Wordlist Files"
+                count={Object.keys(config.wordlist_files || {}).length}
+                defaultOpen={Object.keys(config.wordlist_files || {}).length > 0}
+            >
+                <KVEditor
+                    entries={config.wordlist_files || {}}
+                    onChange={(w) => onUpdateConfig({ wordlist_files: w })}
+                    keyPlaceholder="Category Name"
+                    valuePlaceholder="File Path"
+                />
+            </Section>
+
             {/* Dictionaries */}
             <Section title="Dictionaries" defaultOpen={false}>
                 <textarea

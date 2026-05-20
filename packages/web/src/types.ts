@@ -74,6 +74,7 @@ export interface SwazzConfig {
     endpoints: EndpointConfig[];
     disabled_endpoints?: string[];
     _swagger_urls?: string[];
+    wordlist_files?: Record<string, string>;
 }
 
 // ─── Results ────────────────────────────────────────────

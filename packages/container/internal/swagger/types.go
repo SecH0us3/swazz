@@ -35,6 +35,7 @@ type Config struct {
 	GlobalHeaders    map[string]string      `json:"global_headers"`
 	Cookies          map[string]string      `json:"cookies"`
 	Dictionaries     map[string][]any       `json:"dictionaries"`
+	WordlistFiles    map[string]string      `json:"wordlist_files,omitempty"`
 	Settings         Settings               `json:"settings"`
 	Endpoints        []EndpointConfig       `json:"endpoints"`
 	Rules            *RulesConfig           `json:"rules,omitempty"`
