@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "Running backend tests for swazz (SANDBOXED)..."
+cd packages/container && go test -timeout 30s -cpu 1,2 ./...

@@ -1,0 +1,5 @@
+{
+  "name": "swazz-toolkit",
+  "version": "1.0.0",
+  "description": "Core toolkit, skills, and subagents for the swazz hybrid fuzzer repo."
+}
