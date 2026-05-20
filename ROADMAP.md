@@ -16,7 +16,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
-- [ ] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
+- [x] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
 - [ ] **Task 6:** Investigate and implement GraphQL schema parsing and fuzzing support.
 - [ ] **Task 7:** Add support for importing Postman Collections alongside OpenAPI specs. *(Depends on: Task 6)*
 

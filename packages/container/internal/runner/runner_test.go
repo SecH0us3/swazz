@@ -109,3 +109,45 @@ func TestStartIntegration(t *testing.T) {
 		t.Errorf("Expected TotalRequests > 0, got %d", stats.TotalRequests)
 	}
 }
+
+func TestExecuteRequest_QueryParams(t *testing.T) {
+	var capturedURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedURL = r.URL.String()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	runner := &Runner{
+		client: server.Client(),
+		config: &swagger.Config{
+			Settings: swagger.Settings{
+				TimeoutMs: 1000,
+			},
+		},
+	}
+
+	queryParams := map[string]any{
+		"q":  "fuzz payload",
+		"id": 123,
+	}
+
+	res := runner.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "GET",
+		nil, nil, nil, swagger.ProfileRandom, queryParams, nil, "",
+	)
+
+	if res == nil {
+		t.Fatal("Expected FuzzResult, got nil")
+	}
+	if res.Error != "" {
+		t.Fatalf("Expected no error, got %s", res.Error)
+	}
+
+	// url.Values.Encode() sorts keys alphabetically
+	expectedQuery := "/test?id=123&q=fuzz+payload"
+	if capturedURL != expectedQuery {
+		t.Errorf("Expected URL to be %s, got: %s", expectedQuery, capturedURL)
+	}
+}

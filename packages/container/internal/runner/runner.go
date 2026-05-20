@@ -450,6 +450,18 @@ func (r *Runner) executeRequest(
 
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
 	rawURL = r.subVarsLocked(rawURL)
+
+	if len(queryParams) > 0 {
+		if parsedURL, err := url.Parse(rawURL); err == nil {
+			query := parsedURL.Query()
+			for k, v := range queryParams {
+				query.Set(k, fmt.Sprintf("%v", v))
+			}
+			parsedURL.RawQuery = query.Encode()
+			rawURL = parsedURL.String()
+		}
+	}
+
 	timeoutMs := r.config.Settings.TimeoutMs
 	r.configMu.RUnlock()
 	if timeoutMs <= 0 {
