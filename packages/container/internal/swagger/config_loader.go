@@ -28,7 +28,7 @@ func LoadWordlists(config *Config) error {
 
 		// Prevent path traversal by extracting only the filename and forcing the 'wordlists' directory.
 		safePath := filepath.Join("wordlists", filepath.Base(filePath))
-		file, err := os.Open(safePath)
+		file, err := os.Open(safePath) // #nosec G304 -- path sanitized via filepath.Base + forced wordlists/ prefix
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}

@@ -539,7 +539,7 @@ func (r *Runner) executeRequest(
 
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
-			resp.Body.Close()
+			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			select {
@@ -558,7 +558,7 @@ func (r *Runner) executeRequest(
 		if resp.StatusCode >= 400 {
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
-			io.Copy(buf, io.LimitReader(resp.Body, 51200)) // 50KB limit
+			io.Copy(buf, io.LimitReader(resp.Body, 51200)) // #nosec G104 -- error intentionally ignored; buf.Len() check handles empty reads
 			if buf.Len() > 0 {
 				var parsed any
 				if json.Unmarshal(buf.Bytes(), &parsed) == nil {
@@ -569,9 +569,9 @@ func (r *Runner) executeRequest(
 			}
 			bufPool.Put(buf)
 		} else {
-			io.Copy(io.Discard, resp.Body) // drain body to reuse connection
+			io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain body for connection reuse, error irrelevant
 		}
-		resp.Body.Close()
+		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
 
 		return &swagger.FuzzResult{
 			ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,

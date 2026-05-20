@@ -90,8 +90,8 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
-		io.Copy(io.Discard, resp.Body) // Ensure body is fully drained for connection reuse
-		resp.Body.Close()
+		io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse, error irrelevant
+		resp.Body.Close() // #nosec G104 -- close error irrelevant after body drained
 
 		if err != nil {
 			return fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)

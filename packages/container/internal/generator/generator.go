@@ -159,7 +159,7 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty) any {
 	// 1. Enum — respect explicit values, allow bypass in security profiles
 	if len(schema.Enum) > 0 {
-		shouldBypass := (g.profile == swagger.ProfileMalicious) && rand.Float64() < 0.3
+		shouldBypass := (g.profile == swagger.ProfileMalicious) && rand.Float64() < 0.3 // #nosec G404 -- non-security randomness for fuzzer
 		if !shouldBypass {
 			return payloads.Pick(schema.Enum)
 		}
@@ -195,12 +195,12 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 		// 30% chance to omit optional fields in MALICIOUS profile
 		if !isRequired &&
 			(g.profile == swagger.ProfileMalicious) &&
-			rand.Float64() < 0.3 {
+			rand.Float64() < 0.3 { // #nosec G404 -- non-security randomness for fuzzer
 			continue
 		}
 
 		// 5% chance to omit REQUIRED fields in MALICIOUS profile
-		if isRequired && g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 {
+		if isRequired && g.profile == swagger.ProfileMalicious && rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
 			continue
 		}
 
@@ -242,7 +242,7 @@ func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 func (g *Generator) generateByProfile(typ, format, propName string) any {
 	// MALICIOUS: Type confusion check
 	if g.profile == swagger.ProfileMalicious && g.isCategoryEnabled(payloads.CatMaliciousTypeConfusion) {
-		if rand.Float64() < 0.05 {
+		if rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
 			return seqPick(payloads.MaliciousTypeConfusion, &g.mTypeIdx)
 		}
 	}
@@ -374,7 +374,7 @@ func (g *Generator) generateBoolean() any {
 			return seqPick(payloads.MaliciousBooleans, &g.mBoolIdx)
 		}
 	}
-	return rand.Float64() < 0.5
+	return rand.Float64() < 0.5 // #nosec G404 -- non-security randomness for fuzzer
 }
 
 func (g *Generator) generateDate() any {
@@ -395,13 +395,13 @@ func (g *Generator) generateUUID() any {
 	switch g.profile {
 	case swagger.ProfileMalicious:
 		// Use boundary UUIDs occasionally for "malicious" uuid testing
-		if rand.Float64() < 0.1 {
+		if rand.Float64() < 0.1 { // #nosec G404 -- non-security randomness for fuzzer
 			return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
 		}
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryUUIDs) {
 			// Occasionally test boundary UUIDs
-			if rand.Float64() < 0.2 {
+			if rand.Float64() < 0.2 { // #nosec G404 -- non-security randomness for fuzzer
 				return seqPick(payloads.BoundaryUUIDs, &g.bUUIDIdx)
 			}
 		}
