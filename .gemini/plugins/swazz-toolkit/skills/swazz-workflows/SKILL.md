@@ -24,6 +24,7 @@ When handling a Task N, delegate to specialized subagents:
 1. Create a git branch `feature/task-N`.
 2. Generate `implementation_plan.md`. CRITICAL: Read the ENTIRE task description in ROADMAP.md (including parentheses) and explicitly include Documentation updates in the plan. Wait for user approval.
 3. Write code, sandboxed unit tests (`test-backend.sh`), and Fuzzer E2E tests.
-4. Update `README.md` or files in `docs/` to reflect any new configurations or features.
+4. INTEGRATION CHECK: Verify that new backend features are actually invoked by the main execution pipeline (`main.go` and `api/handlers.go`). Ensure frontend UI completely aligns with backend security constraints.
+5. Update `README.md` or files in `docs/` to reflect any new configurations or features.
 5. Mark task as `[/]` in ROADMAP.md, generate `walkthrough.md`, wait for review.
 6. Only check off `[x]` upon explicit human consent.
