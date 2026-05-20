@@ -1,0 +1,19 @@
+{
+  "findings": null,
+  "summary": {
+    "byLevel": {
+      "error": 0,
+      "note": 0,
+      "warning": 0
+    },
+    "durationSeconds": 10,
+    "statusCounts": {
+      "404": 42
+    },
+    "totalFindings": 0,
+    "totalRequests": 42
+  },
+  "timestamp": "2026-05-20T16:17:54Z",
+  "tool": "swazz",
+  "version": "0.1.0"
+}
