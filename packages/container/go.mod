@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/securego/gosec/v2 v2.12.0 // indirect
 	github.com/google/uuid v1.6.0
 )
 
