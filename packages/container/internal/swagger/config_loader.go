@@ -11,7 +11,7 @@ import (
 // LoadWordlists reads each file specified in config.WordlistFiles
 // and appends its lines to config.Dictionaries[category].
 func LoadWordlists(config *Config) error {
-	if config.WordlistFiles == nil {
+	if len(config.WordlistFiles) == 0 {
 		return nil
 	}
 	if config.Dictionaries == nil {
