@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -23,7 +24,9 @@ func LoadWordlists(config *Config) error {
 			// But maybe the path is just expected to be .txt
 		}
 
-		file, err := os.Open(filePath)
+		// Prevent path traversal by extracting only the filename and forcing the 'wordlists' directory.
+		safePath := filepath.Join("wordlists", filepath.Base(filepath.Clean(filePath)))
+		file, err := os.Open(safePath)
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}

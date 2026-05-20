@@ -7,19 +7,23 @@ import (
 )
 
 func TestLoadWordlists(t *testing.T) {
-	// Create a temporary directory for our test wordlists
-	tempDir := t.TempDir()
+	// Ensure wordlists directory exists for tests
+	os.MkdirAll("wordlists", 0755)
+	defer os.RemoveAll("wordlists")
 
-	// Create test wordlists
-	list1Path := filepath.Join(tempDir, "list1.txt")
-	list2Path := filepath.Join(tempDir, "list2.txt")
+	// Create test wordlists in the allowed directory
+	list1Path := "list1.txt"
+	list2Path := "list2.txt"
+	
+	list1Abs := filepath.Join("wordlists", list1Path)
+	list2Abs := filepath.Join("wordlists", list2Path)
 
-	err := os.WriteFile(list1Path, []byte("admin\nroot\n \ntestuser\n"), 0644)
+	err := os.WriteFile(list1Abs, []byte("admin\nroot\n \ntestuser\n"), 0644)
 	if err != nil {
 		t.Fatalf("failed to write list1: %v", err)
 	}
 
-	err = os.WriteFile(list2Path, []byte("123456\npassword\n"), 0644)
+	err = os.WriteFile(list2Abs, []byte("123456\npassword\n"), 0644)
 	if err != nil {
 		t.Fatalf("failed to write list2: %v", err)
 	}
