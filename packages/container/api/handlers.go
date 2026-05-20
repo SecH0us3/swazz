@@ -106,6 +106,11 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 		config.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
+	if err := swagger.LoadWordlists(&config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to load custom wordlists: " + err.Error()})
+		return
+	}
+
 	h.mu.Lock()
 	if h.runner != nil && h.runner.IsRunning() {
 		h.mu.Unlock()

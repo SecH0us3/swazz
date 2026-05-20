@@ -357,9 +357,10 @@ func runServer() {
 type CliConfig struct {
 	SwaggerURLs  []string               `json:"swagger_urls"`
 	BaseURL      string                 `json:"base_url"`
-	Headers      map[string]string      `json:"headers"`
-	Cookies      map[string]string      `json:"cookies"`
-	Dictionaries map[string][]any       `json:"dictionaries"`
+	Headers       map[string]string    `json:"headers"`
+	Cookies       map[string]string    `json:"cookies"`
+	WordlistFiles map[string]string    `json:"wordlist_files"`
+	Dictionaries  map[string][]any     `json:"dictionaries"`
 	Settings     swagger.Settings       `json:"settings"`
 	Endpoints    *struct {
 		Include []string `json:"include"`
@@ -461,11 +462,16 @@ func runCLI(args []string) {
 		BaseURL:       basePath,
 		GlobalHeaders: cliCfg.Headers,
 		Cookies:       cliCfg.Cookies,
+		WordlistFiles: cliCfg.WordlistFiles,
 		Dictionaries:  cliCfg.Dictionaries,
 		Settings:      cliCfg.Settings,
 		Endpoints:     allEndpoints,
 		Rules:         cliCfg.Rules,
 		AuthSequence:  cliCfg.AuthSequence,
+	}
+
+	if err := swagger.LoadWordlists(runCfg); err != nil {
+		log.Fatalf("Failed to load custom wordlists: %v", err)
 	}
 
 	// 4. Initialize and start runner

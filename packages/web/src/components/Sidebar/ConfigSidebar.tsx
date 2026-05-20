@@ -202,8 +202,8 @@ export function ConfigSidebar({
                 <KVEditor
                     entries={config.wordlist_files || {}}
                     onChange={(w) => onUpdateConfig({ wordlist_files: w })}
-                    keyPlaceholder="Category Name"
-                    valuePlaceholder="File Path"
+                    keyPlaceholder="Category (e.g. xss)"
+                    valuePlaceholder="Filename (in wordlists/ dir)"
                 />
             </Section>
 
