@@ -22,7 +22,8 @@ When handling a Task N, delegate to specialized subagents:
 
 **Universal Workflow:**
 1. Create a git branch `feature/task-N`.
-2. Generate `implementation_plan.md` and wait for user approval.
+2. Generate `implementation_plan.md`. CRITICAL: Read the ENTIRE task description in ROADMAP.md (including parentheses) and explicitly include Documentation updates in the plan. Wait for user approval.
 3. Write code, sandboxed unit tests (`test-backend.sh`), and Fuzzer E2E tests.
-4. Mark task as `[/]` in ROADMAP.md, generate `walkthrough.md`, wait for review.
-5. Only check off `[x]` upon explicit human consent.
+4. Update `README.md` or files in `docs/` to reflect any new configurations or features.
+5. Mark task as `[/]` in ROADMAP.md, generate `walkthrough.md`, wait for review.
+6. Only check off `[x]` upon explicit human consent.
