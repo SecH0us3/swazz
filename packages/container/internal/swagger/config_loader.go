@@ -31,6 +31,11 @@ func LoadWordlists(config *Config) error {
 		}
 
 		scanner := bufio.NewScanner(file)
+		// Increase buffer size to 1MB to support very long payloads (e.g. for buffer overflow tests)
+		const maxCapacity = 1024 * 1024
+		buf := make([]byte, maxCapacity)
+		scanner.Buffer(buf, maxCapacity)
+
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if line != "" {
