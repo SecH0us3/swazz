@@ -22,7 +22,7 @@ func LoadWordlists(config *Config) error {
 	buf := make([]byte, maxCapacity)
 
 	for category, filePath := range config.WordlistFiles {
-		if !strings.HasSuffix(filePath, ".txt") {
+		if !strings.HasSuffix(strings.ToLower(filePath), ".txt") {
 			return fmt.Errorf("invalid wordlist file: %s (must be a .txt file)", filePath)
 		}
 
