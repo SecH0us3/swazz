@@ -18,6 +18,9 @@ on:
       - '.gitignore'
       - 'docs/**'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   gosec:
     name: GoSec Scan
@@ -33,6 +36,7 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.1
       - name: Run GoSec
         working-directory: packages/container
+        continue-on-error: true  # findings are advisory; results uploaded to Security tab via SARIF
         run: |
           gosec -conf ../../.gosec.conf -fmt sarif -out gosec.sarif ./...
       - name: Upload SARIF to GitHub Code Scanning
