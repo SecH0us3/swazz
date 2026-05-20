@@ -80,6 +80,10 @@ If you want to quickly test Swazz's capabilities, we provide a built-in vulnerab
 {
   "swagger_urls": ["https://api.example.com/swagger.json"],
   "base_url": "https://api.example.com/v1",
+  "wordlist_files": {
+    "xss": "custom_xss.txt",
+    "sqli": "custom_sqli.txt"
+  },
   "auth_sequence": [
     {
       "method": "POST",
