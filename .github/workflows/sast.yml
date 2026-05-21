@@ -36,9 +36,11 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.1
       - name: Run GoSec
         working-directory: packages/container
+        continue-on-error: true  # exit 1 when findings exist; SARIF upload must still run
         run: |
           gosec -conf ../../.gosec.conf -exclude=G404 -fmt sarif -out gosec.sarif ./...
       - name: Upload SARIF to GitHub Code Scanning
+        if: always()  # upload findings even when gosec exits with code 1
         uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
         with:
           sarif_file: packages/container/gosec.sarif
