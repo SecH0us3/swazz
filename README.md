@@ -28,7 +28,7 @@ You can download the pre-compiled CLI binary from the [Releases](https://github.
 ### Docker & Cloudflare
 We publish the Swazz engine Docker container to the GitHub Container Registry (`ghcr.io/sech0us3/swazz`) for our users. It is optimized for minimal resource usage. For security reasons and to guarantee reproducibility, we **never use the `latest` tag**.
 
-Always use a specific commit SHA hash. You must specify the hash of the new build you want to use (you can find these hashes in our Release notes or commit history).
+Always use a specific commit SHA. You must specify the hash of the new build you want to use (you can find these hashes in our [Release notes](https://github.com/SecH0us3/swazz/releases) or commit history).
 
 ```bash
 # Example using a commit SHA hash (replace <COMMIT_SHA> with the actual hash from the latest build):
