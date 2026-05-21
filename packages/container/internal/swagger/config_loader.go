@@ -26,19 +26,25 @@ func LoadWordlists(config *Config) error {
 		if filePath == "" {
 			return fmt.Errorf("invalid wordlist file for category %s: empty file name", category)
 		}
-		if filePath != filepath.Base(filePath) ||
-			strings.Contains(filePath, "/") ||
-			strings.Contains(filePath, "\\") ||
-			strings.Contains(filePath, "..") {
-			return fmt.Errorf("invalid wordlist file: %s (must be a simple file name)", filePath)
+
+		// Validate that filePath is a plain filename with no path components.
+		// filepath.Base strips any directory prefix; if the result differs, the
+		// input contained a path separator or traversal sequence.
+		base := filepath.Base(filePath)
+		if base != filePath || strings.ContainsAny(filePath, `/\`) || strings.Contains(filePath, "..") {
+			return fmt.Errorf("invalid wordlist file: %q (must be a plain filename with no path components)", filePath)
 		}
 		if !strings.HasSuffix(strings.ToLower(filePath), ".txt") {
-			return fmt.Errorf("invalid wordlist file: %s (must be a .txt file)", filePath)
+			return fmt.Errorf("invalid wordlist file: %q (must be a .txt file)", filePath)
 		}
 
-		// Only allow validated single-file names under the fixed 'wordlists' directory.
-		safePath := filepath.Join("wordlists", filePath)
-		file, err := os.Open(safePath) // #nosec G304 -- filename validated as a single component + fixed base dir
+		// Build the safe path by joining only the validated base name under the
+		// fixed 'wordlists/' directory, then re-clean and assert the prefix.
+		safePath := filepath.Join("wordlists", base)
+		if !strings.HasPrefix(filepath.Clean(safePath), "wordlists") {
+			return fmt.Errorf("invalid wordlist file: %q resolved outside wordlists directory", filePath)
+		}
+		file, err := os.Open(safePath) //nolint:gosec // G304: path constructed from validated base + fixed prefix
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}
