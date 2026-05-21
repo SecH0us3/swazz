@@ -44,7 +44,10 @@ func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
 		// Path-level parameters
 		var pathLevelParams []any
 		if pRaw, ok := pathItem["parameters"]; ok {
-			json.Unmarshal(pRaw, &pathLevelParams)
+			if err := json.Unmarshal(pRaw, &pathLevelParams); err != nil {
+				// Non-fatal: malformed path-level parameters are skipped
+				_ = err
+			}
 		}
 
 		for _, method := range methods {

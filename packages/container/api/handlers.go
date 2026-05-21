@@ -152,7 +152,10 @@ if err := r.RunAuthSequence(c.Request.Context()); err != nil {
 			return
 		}
 
-		r.Start(context.Background())
+		if err := r.Start(context.Background()); err != nil {
+			fmt.Printf("Fuzzer run failed: %v\n", err)
+			r.Broadcast(runner.Event{Type: runner.EventError, Data: fmt.Sprintf("Fuzzer run failed: %v", err)})
+		}
 		r.Unsubscribe(resultsCh)
 	}()
 

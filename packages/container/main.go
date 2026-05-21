@@ -562,7 +562,7 @@ func runCLI(args []string) {
 	}
 	if *htmlOut != "" {
 		html := output.ToHTML(findings, &stats)
-		if err := os.WriteFile(*htmlOut, []byte(html), 0644); err != nil {
+		if err := os.WriteFile(*htmlOut, []byte(html), 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
 			log.Printf("Failed to write HTML report: %v", err)
 		} else {
 			fmt.Printf("Saved HTML to %s\n", *htmlOut)
@@ -581,7 +581,7 @@ func runCLI(args []string) {
 
 func fetchSpec(url string, headers map[string]string) (json.RawMessage, error) {
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return os.ReadFile(url)
+		return os.ReadFile(url) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
 	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -624,7 +624,7 @@ func writeJSON(path string, data any) {
 		log.Printf("Failed to marshal JSON for %s: %v", path, err)
 		return
 	}
-	if err := os.WriteFile(path, b, 0644); err != nil {
+	if err := os.WriteFile(path, b, 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
 		log.Printf("Failed to write %s: %v", path, err)
 	}
 }

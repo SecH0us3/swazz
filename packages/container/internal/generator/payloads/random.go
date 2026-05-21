@@ -51,7 +51,7 @@ const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345
 
 // Pick returns a random element from a slice.
 func Pick[T any](arr []T) T {
-	return arr[rand.IntN(len(arr))]
+	return arr[rand.IntN(len(arr))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 }
 
 // UUID generates a UUID v4.
@@ -78,12 +78,12 @@ func Words(n int) string {
 
 // IntRange returns a random integer in [min, max] inclusive.
 func IntRange(min, max int) int {
-	return min + rand.IntN(max-min+1)
+	return min + rand.IntN(max-min+1) // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 }
 
 // FloatRange returns a random float in [min, max).
 func FloatRange(min, max float64) float64 {
-	return min + rand.Float64()*(max-min)
+	return min + rand.Float64()*(max-min) // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 }
 
 // RandomDate returns a random date between 2020-01-01 and now.
@@ -91,7 +91,7 @@ func RandomDate() time.Time {
 	from := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Now().UTC()
 	diff := to.Sub(from)
-	return from.Add(time.Duration(rand.Int64N(int64(diff))))
+	return from.Add(time.Duration(rand.Int64N(int64(diff)))) // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 }
 
 // Email generates a random email address.
@@ -116,7 +116,7 @@ func URI() string {
 func RandomString(length int) string {
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = alphanumeric[rand.IntN(len(alphanumeric))]
+		b[i] = alphanumeric[rand.IntN(len(alphanumeric))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	}
 	return string(b)
 }

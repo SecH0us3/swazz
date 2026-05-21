@@ -1,0 +1,69 @@
+name: SAST
+
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'GEMINI.md'
+      - '.gitignore'
+      - 'docs/**'
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'GEMINI.md'
+      - '.gitignore'
+      - 'docs/**'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  gosec:
+    name: GoSec Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26.3'
+          cache-dependency-path: packages/container/go.sum
+      - name: Install GoSec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.1
+      - name: Run GoSec
+        working-directory: packages/container
+        continue-on-error: true  # exit 1 when findings exist; SARIF upload must still run
+        run: |
+          gosec -conf ../../.gosec.conf -exclude=G404 -fmt sarif -out gosec.sarif ./...
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()  # upload findings even when gosec exits with code 1
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          sarif_file: packages/container/gosec.sarif
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        language: [go]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          languages: ${{ matrix.language }}
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          category: "${{ matrix.language }}-analysis"

@@ -22,13 +22,36 @@ func LoadWordlists(config *Config) error {
 	buf := make([]byte, maxCapacity)
 
 	for category, filePath := range config.WordlistFiles {
-		if !strings.HasSuffix(strings.ToLower(filePath), ".txt") {
-			return fmt.Errorf("invalid wordlist file: %s (must be a .txt file)", filePath)
+		filePath = strings.TrimSpace(filePath)
+		if filePath == "" {
+			return fmt.Errorf("invalid wordlist file for category %s: empty file name", category)
 		}
 
-		// Prevent path traversal by extracting only the filename and forcing the 'wordlists' directory.
-		safePath := filepath.Join("wordlists", filepath.Base(filePath))
-		file, err := os.Open(safePath)
+		// Validate that filePath is a plain filename with no path components.
+		// filepath.Base strips any directory prefix; if the result differs, the
+		// input contained a path separator or traversal sequence.
+		base := filepath.Base(filePath)
+		if base != filePath || strings.ContainsAny(filePath, `/\`) || strings.Contains(filePath, "..") {
+			return fmt.Errorf("invalid wordlist file: %q (must be a plain filename with no path components)", filePath)
+		}
+		if !strings.HasSuffix(strings.ToLower(filePath), ".txt") {
+			return fmt.Errorf("invalid wordlist file: %q (must be a .txt file)", filePath)
+		}
+
+		// Resolve against a trusted absolute base directory and verify containment.
+		safeBaseDir, err := filepath.Abs("wordlists")
+		if err != nil {
+			return fmt.Errorf("failed to resolve wordlists directory: %w", err)
+		}
+		safePath, err := filepath.Abs(filepath.Join(safeBaseDir, base))
+		if err != nil {
+			return fmt.Errorf("failed to resolve wordlist file path for category %s: %w", category, err)
+		}
+		rel, err := filepath.Rel(safeBaseDir, safePath)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+			return fmt.Errorf("invalid wordlist file: %q resolved outside wordlists directory", filePath)
+		}
+		file, err := os.Open(safePath) //nolint:gosec // G304: path validated to remain within trusted base directory
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}
