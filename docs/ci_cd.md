@@ -197,9 +197,14 @@ Never commit real credentials. Instead, read auth tokens from environment variab
 ```yaml
 # In your GitHub Actions workflow:
 - name: Patch auth token into CI config
+  # Pass the secret via env: so it is masked in logs even if jq fails.
+  # Never interpolate ${{ secrets.* }} directly inside a shell string.
+  env:
+    API_TEST_TOKEN: ${{ secrets.API_TEST_TOKEN }}
   run: |
-    jq '.headers.Authorization = "Bearer ${{ secrets.API_TEST_TOKEN }}"' \
-      swazz.config.ci.json > swazz.config.ci.patched.json
+    jq --arg token "$API_TEST_TOKEN" \
+       '.headers.Authorization = ("Bearer " + $token)' \
+       swazz.config.ci.json > swazz.config.ci.patched.json
 
 - name: Run Swazz fuzzer
   working-directory: packages/container
