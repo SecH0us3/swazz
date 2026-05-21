@@ -53,6 +53,24 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
 - **`concurrency`**: Number of parallel requests to send.
 - **`fuzzProfiles`**: Which payload generators to run (e.g., boundaries, malicious payloads).
 
+## GraphQL Schema Parsing & Fuzzing 🛡️
+
+Swazz supports fuzzing APIs that use GraphQL. It achieves this by retrieving the GraphQL schema via Introspection, mapping individual queries and mutations to virtual HTTP POST endpoints, and fuzzing their variables.
+
+### How to use GraphQL with Swazz
+
+1. **Provide a GraphQL Introspection Spec**:
+   - In `swagger_urls`, supply the GraphQL HTTP endpoint (e.g., `http://localhost:8080/graphql`). Swazz will automatically perform an `IntrospectionQuery` POST request to fetch the schema.
+   - Alternatively, you can supply a local path to a saved GraphQL Introspection JSON file (e.g., `./introspection.json`).
+2. **Virtual Endpoint Generation**:
+   - For every query or mutation defined in the GraphQL schema, Swazz creates a virtual GET/POST endpoint in the format:
+     - `/graphql?query=QueryName`
+     - `/graphql?mutation=MutationName`
+   - These show up dynamically on the React Heatmap dashboard and the inspector.
+3. **Payload Generation & Fuzzing**:
+   - Swazz generates appropriate GraphQL requests (`{"query": "...", "variables": {...}}`).
+   - The variables defined in the schema (e.g., custom input types, scalars) are fuzzed using active payloads, and Swazz monitors for any 500 Internal Server Errors, crashes, or unhandled exceptions.
+
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:

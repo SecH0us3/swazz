@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -23,6 +22,7 @@ import (
 
 	"swazz-engine/api"
 	"swazz-engine/internal/classifier"
+	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
@@ -412,21 +412,36 @@ func runCLI(args []string) {
 		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
-	// 2. Fetch and parse swagger specs
+	// 2. Fetch and parse specs
 	var allEndpoints []swagger.EndpointConfig
 	basePath := cliCfg.BaseURL
 
-	for _, url := range cliCfg.SwaggerURLs {
-		specRaw, err := fetchSpec(url, cliCfg.Headers)
+	for _, urlStr := range cliCfg.SwaggerURLs {
+		specRaw, err := fetchSpec(urlStr, cliCfg.Headers)
 		if err != nil {
-			log.Fatalf("Failed to fetch spec %s: %v", url, err)
+			log.Fatalf("Failed to fetch spec %s: %v", urlStr, err)
 		}
 		parsed, err := swagger.ParseSpec(specRaw)
 		if err != nil {
-			log.Fatalf("Failed to parse spec %s: %v", url, err)
+			// Try GraphQL parser fallback
+			defaultPath := "/graphql"
+			if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+				if parsedURL.Path != "" && parsedURL.Path != "/" {
+					defaultPath = parsedURL.Path
+				}
+			}
+			parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+			if errGQL != nil {
+				log.Fatalf("Failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
+			}
+			parsed = parsedGQL
 		}
 		if basePath == "" {
-			basePath = parsed.BasePath
+			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
+				basePath = parsedURL.Scheme + "://" + parsedURL.Host
+			} else {
+				basePath = parsed.BasePath
+			}
 		}
 		allEndpoints = append(allEndpoints, parsed.Endpoints...)
 	}
@@ -587,23 +602,13 @@ func runCLI(args []string) {
 	}
 }
 
-func fetchSpec(url string, headers map[string]string) (json.RawMessage, error) {
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return os.ReadFile(url) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
+func fetchSpec(urlStr string, headers map[string]string) (json.RawMessage, error) {
+	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+		return os.ReadFile(urlStr) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
 	}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	return swagger.FetchRemoteSpec(context.Background(), client, urlStr, headers, graphql.IntrospectionQuery)
 }
 
 func matchesAny(key, path string, patterns []string) bool {
