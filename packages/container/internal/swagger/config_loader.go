@@ -38,13 +38,20 @@ func LoadWordlists(config *Config) error {
 			return fmt.Errorf("invalid wordlist file: %q (must be a .txt file)", filePath)
 		}
 
-		// Build the safe path by joining only the validated base name under the
-		// fixed 'wordlists/' directory, then re-clean and assert the prefix.
-		safePath := filepath.Join("wordlists", base)
-		if !strings.HasPrefix(filepath.Clean(safePath), "wordlists") {
+		// Resolve against a trusted absolute base directory and verify containment.
+		safeBaseDir, err := filepath.Abs("wordlists")
+		if err != nil {
+			return fmt.Errorf("failed to resolve wordlists directory: %w", err)
+		}
+		safePath, err := filepath.Abs(filepath.Join(safeBaseDir, base))
+		if err != nil {
+			return fmt.Errorf("failed to resolve wordlist file path for category %s: %w", category, err)
+		}
+		rel, err := filepath.Rel(safeBaseDir, safePath)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
 			return fmt.Errorf("invalid wordlist file: %q resolved outside wordlists directory", filePath)
 		}
-		file, err := os.Open(safePath) //nolint:gosec // G304: path constructed from validated base + fixed prefix
+		file, err := os.Open(safePath) //nolint:gosec // G304: path validated to remain within trusted base directory
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}
