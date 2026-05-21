@@ -55,11 +55,23 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o swazz-engine-darwin-arm64 main.go
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o swazz-engine-windows-amd64.exe main.go
 
+      - name: Lowercase repository name
+        run: |
+          echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Create Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ github.ref_name == 'master' && format('rev-{0}', github.sha) || github.ref_name }}
           name: ${{ github.ref_name == 'master' && format('Commit {0}', github.sha) || github.ref_name }}
+          body: |
+            ## Docker Image
+            A new Docker image has been built for this release. We never use the `latest` tag. To use this build, run:
+
+            ```bash
+            docker pull ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
+            docker run -p 8080:8080 ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
+            ```
           files: |
             packages/container/swazz-engine-linux-amd64
             packages/container/swazz-engine-darwin-amd64
