@@ -1,4 +1,4 @@
-Title: 🔒 [security fix description]
+Title: 🔒 [security audit] Verify XSS mitigation in RequestDetail
 
 Description:
 🎯 **What:** Analyzed a reported Cross-Site Scripting (XSS) vulnerability related to `dangerouslySetInnerHTML` in `packages/web/src/components/Inspector/RequestDetail.tsx`.
