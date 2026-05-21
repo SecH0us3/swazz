@@ -223,7 +223,7 @@ export function useDb() {
             const existing = await dbGetRuns(database);
             if (mounted) setRuns(existing);
         }).catch((err: unknown) => {
-            console.error('[swazz] IndexedDB open failed:', err instanceof Error ? err.message : String(err));
+            console.error('[swazz] IndexedDB open failed:', err);
         });
         return () => { mounted = false; };
     }, []);
