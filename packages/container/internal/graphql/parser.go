@@ -201,10 +201,6 @@ func ParseGraphQLIntrospection(raw []byte, defaultPath string) (*swagger.ParseRe
 				queryStr = fmt.Sprintf("%s %s(%s) { %s(%s)%s }", opType, field.Name, strings.Join(argDefs, ", "), field.Name, strings.Join(argCalls, ", "), selection)
 			} else {
 				if isMutation {
-			if len(argDefs) > 0 {
-				queryStr = fmt.Sprintf("%s %s(%s) { %s(%s)%s }", opType, field.Name, strings.Join(argDefs, ", "), field.Name, strings.Join(argCalls, ", "), selection)
-			} else {
-				if isMutation {
 					queryStr = fmt.Sprintf("mutation { %s%s }", field.Name, selection)
 				} else {
 					queryStr = fmt.Sprintf("{ %s%s }", field.Name, selection)
@@ -344,60 +340,64 @@ func buildSelectionSet(ref TypeRef, typesMap map[string]TypeDef, depth int) stri
 }
 
 func mapGQLTypeToSchema(ref TypeRef, typesMap map[string]TypeDef) *swagger.SchemaProperty {
-	if ref.Kind == "NON_NULL" && ref.OfType != nil {
-		return mapGQLTypeToSchema(*ref.OfType, typesMap)
-	}
-
-	if ref.Kind == "LIST" && ref.OfType != nil {
-		innerProp := mapGQLTypeToSchema(*ref.OfType, typesMap)
-		return &swagger.SchemaProperty{
-			Type:  "array",
-			Items: innerProp,
+	var mapper func(TypeRef, int) *swagger.SchemaProperty
+	mapper = func(r TypeRef, depth int) *swagger.SchemaProperty {
+		if depth > 5 {
+			return &swagger.SchemaProperty{Type: "string"}
 		}
-	}
-
-	if ref.Name == nil {
-		return &swagger.SchemaProperty{Type: "string"}
-	}
-
-	name := *ref.Name
-	switch name {
-	case "Int":
-		return &swagger.SchemaProperty{Type: "integer"}
-	case "Float":
-		return &swagger.SchemaProperty{Type: "number"}
-	case "Boolean":
-		return &swagger.SchemaProperty{Type: "boolean"}
-	case "String", "ID":
-		return &swagger.SchemaProperty{Type: "string"}
-	default:
-		t, ok := typesMap[name]
-		if ok {
-			if t.Kind == "INPUT_OBJECT" {
-				props := make(map[string]*swagger.SchemaProperty)
-				var req []string
-				for _, f := range t.InputFields {
-					props[f.Name] = mapGQLTypeToSchema(f.Type, typesMap)
-					if f.Type.Kind == "NON_NULL" {
-						req = append(req, f.Name)
-					}
-				}
-				return &swagger.SchemaProperty{
-					Type:       "object",
-					Properties: props,
-					Required:   req,
-				}
-			} else if t.Kind == "ENUM" {
-				var enumVals []any
-				for _, ev := range t.EnumValues {
-					enumVals = append(enumVals, ev.Name)
-				}
-				return &swagger.SchemaProperty{
-					Type: "string",
-					Enum: enumVals,
-				}
+		if r.Kind == "NON_NULL" && r.OfType != nil {
+			return mapper(*r.OfType, depth)
+		}
+		if r.Kind == "LIST" && r.OfType != nil {
+			return &swagger.SchemaProperty{
+				Type:  "array",
+				Items: mapper(*r.OfType, depth),
 			}
 		}
-		return &swagger.SchemaProperty{Type: "string"}
+		if r.Name == nil {
+			return &swagger.SchemaProperty{Type: "string"}
+		}
+
+		name := *r.Name
+		switch name {
+		case "Int":
+			return &swagger.SchemaProperty{Type: "integer"}
+		case "Float":
+			return &swagger.SchemaProperty{Type: "number"}
+		case "Boolean":
+			return &swagger.SchemaProperty{Type: "boolean"}
+		case "String", "ID":
+			return &swagger.SchemaProperty{Type: "string"}
+		default:
+			t, ok := typesMap[name]
+			if ok {
+				if t.Kind == "INPUT_OBJECT" {
+					props := make(map[string]*swagger.SchemaProperty)
+					var req []string
+					for _, f := range t.InputFields {
+						props[f.Name] = mapper(f.Type, depth+1)
+						if f.Type.Kind == "NON_NULL" {
+							req = append(req, f.Name)
+						}
+					}
+					return &swagger.SchemaProperty{
+						Type:       "object",
+						Properties: props,
+						Required:   req,
+					}
+				} else if t.Kind == "ENUM" {
+					var enumVals []any
+					for _, ev := range t.EnumValues {
+						enumVals = append(enumVals, ev.Name)
+					}
+					return &swagger.SchemaProperty{
+						Type: "string",
+						Enum: enumVals,
+					}
+				}
+			}
+			return &swagger.SchemaProperty{Type: "string"}
+		}
 	}
+	return mapper(ref, 0)
 }

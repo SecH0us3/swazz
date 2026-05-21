@@ -2,12 +2,10 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -609,71 +607,8 @@ func fetchSpec(urlStr string, headers map[string]string) (json.RawMessage, error
 		return os.ReadFile(urlStr) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
 	}
 
-	// 1. Try GET request first
-	req, err := http.NewRequest("GET", urlStr, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	var body []byte
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
-			if err == nil {
-				if swagger.IsValidSpec(body) {
-					return body, nil
-				}
-			}
-		}
-	}
-
-	// 2. If GET was not a valid API spec or failed, try sending a POST with the GraphQL Introspection Query
-	gqlQuery := map[string]string{
-		"query": graphql.IntrospectionQuery,
-	}
-	gqlBody, err := json.Marshal(gqlQuery)
-	if err != nil {
-		return nil, err
-	}
-
-	postReq, err := http.NewRequest("POST", urlStr, bytes.NewBuffer(gqlBody))
-	if err != nil {
-		return nil, err
-	}
-	postReq.Header.Set("Content-Type", "application/json")
-	postReq.Header.Set("Accept", "application/json")
-	for k, v := range headers {
-		postReq.Header.Set(k, v)
-	}
-
-	postResp, err := client.Do(postReq)
-	if err != nil {
-		if body != nil {
-			return body, nil
-		}
-		return nil, fmt.Errorf("failed to fetch via GET and POST: %w", err)
-	}
-	defer postResp.Body.Close()
-
-	if postResp.StatusCode == http.StatusOK {
-		postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024)) // 10MB limit
-		if err == nil {
-			if swagger.IsValidSpec(postBody) {
-				return postBody, nil
-			}
-		}
-	}
-
-	if body != nil {
-		return body, nil
-	}
-	return nil, fmt.Errorf("spec server returned status %d on POST introspection request", postResp.StatusCode)
+	return swagger.FetchRemoteSpec(context.Background(), client, urlStr, headers, graphql.IntrospectionQuery)
 }
 
 func matchesAny(key, path string, patterns []string) bool {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,15 +23,32 @@ import (
 
 // Handler holds references to the runner and current config.
 type Handler struct {
-	mu      sync.Mutex
-	runner  *runner.Runner
-	config  *swagger.Config
-	results []*swagger.FuzzResult
+	mu         sync.Mutex
+	runner     *runner.Runner
+	config     *swagger.Config
+	results    []*swagger.FuzzResult
+	httpClient *http.Client
 }
 
 // NewHandler creates a new API handler.
 func NewHandler() *Handler {
-	return &Handler{}
+	return &Handler{
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
+	}
+}
+
+func (h *Handler) getClient() *http.Client {
+	if h.httpClient != nil {
+		return h.httpClient
+	}
+	return http.DefaultClient
 }
 
 // ─── POST /api/parse ────────────────────────────────────
@@ -67,72 +83,10 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
 
-		// 1. Try GET request first
-		// #nosec G107 -- URL is user-controlled by design in this fuzzer tool
-		httpReq, err := http.NewRequestWithContext(ctx, "GET", sanitizedURL, nil)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid URL: %s", err)})
-			return
-		}
-		httpReq.Header.Set("Accept", "application/json")
-
-		// codeql[go/request-forgery]
-		resp, err := http.DefaultClient.Do(httpReq)
-		var body []byte
-		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
-				if err == nil {
-					if swagger.IsValidSpec(body) {
-						raw = body
-					}
-				}
-			}
-		}
-
-		// 2. Try POST Introspection if raw is still empty
-		if len(raw) == 0 {
-			gqlQuery := map[string]string{
-				"query": graphql.IntrospectionQuery,
-			}
-			gqlBody, err := json.Marshal(gqlQuery)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to marshal introspection query: %s", err)})
-				return
-			}
-
-			// #nosec G107 -- URL is user-controlled by design in this fuzzer tool
-			postReq, err := http.NewRequestWithContext(ctx, "POST", sanitizedURL, bytes.NewBuffer(gqlBody))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid POST request: %s", err)})
-				return
-			}
-			postReq.Header.Set("Content-Type", "application/json")
-			postReq.Header.Set("Accept", "application/json")
-
-			// codeql[go/request-forgery]
-			postResp, err := http.DefaultClient.Do(postReq)
-			if err == nil {
-				defer postResp.Body.Close()
-				if postResp.StatusCode == http.StatusOK {
-					postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024))
-					if err == nil {
-						if swagger.IsValidSpec(postBody) {
-							raw = postBody
-						}
-					}
-				}
-			}
-		}
-
-		// If both failed but we got some GET body, fallback to it
-		if len(raw) == 0 && len(body) > 0 {
-			raw = body
-		}
-
-		if len(raw) == 0 {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch valid OpenAPI or GraphQL spec from the URL"})
+		var fetchErr error
+		raw, fetchErr = swagger.FetchRemoteSpec(ctx, h.getClient(), sanitizedURL, nil, graphql.IntrospectionQuery)
+		if fetchErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to fetch valid OpenAPI or GraphQL spec from the URL: %s", fetchErr)})
 			return
 		}
 	} else {
@@ -433,7 +387,7 @@ func (h *Handler) Proxy(c *gin.Context) {
 
 	start := time.Now()
 	// codeql[go/request-forgery]
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := h.getClient().Do(httpReq)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {

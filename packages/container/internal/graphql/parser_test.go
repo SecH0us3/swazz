@@ -596,3 +596,91 @@ func TestParseGraphQLIntrospection_MutationWithoutArgs(t *testing.T) {
 	}
 }
 
+func TestParseGraphQLIntrospection_RecursiveInputObject(t *testing.T) {
+	mockJSON := `{
+		"data": {
+			"__schema": {
+				"queryType": { "name": "Query" },
+				"types": [
+					{
+						"kind": "OBJECT",
+						"name": "Query",
+						"fields": [
+							{
+								"name": "search",
+								"args": [
+									{
+										"name": "filter",
+										"type": { "kind": "INPUT_OBJECT", "name": "FilterInput" }
+									}
+								],
+								"type": { "kind": "SCALAR", "name": "String" }
+							}
+						]
+					},
+					{
+						"kind": "INPUT_OBJECT",
+						"name": "FilterInput",
+						"inputFields": [
+							{
+								"name": "and",
+								"type": { "kind": "LIST", "ofType": { "kind": "INPUT_OBJECT", "name": "FilterInput" } }
+							},
+							{
+								"name": "term",
+								"type": { "kind": "SCALAR", "name": "String" }
+							}
+						]
+					}
+				]
+			}
+		}
+	}`
+
+	parsed, err := ParseGraphQLIntrospection([]byte(mockJSON), "/graphql")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(parsed.Endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(parsed.Endpoints))
+	}
+
+	ep := parsed.Endpoints[0]
+	variablesProp, ok := ep.Schema.Properties["variables"]
+	if !ok {
+		t.Fatalf("missing variables property in schema")
+	}
+
+	// Traverse the schema definition to ensure it didn't infinite loop and resolved depth > 5 as string property
+	filterProp, ok := variablesProp.Properties["filter"]
+	if !ok {
+		t.Fatalf("missing filter property in variables")
+	}
+
+	curr := filterProp
+	for i := 0; i < 4; i++ {
+		andProp, ok := curr.Properties["and"]
+		if !ok || andProp.Type != "array" || andProp.Items == nil {
+			t.Fatalf("expected 'and' array property at depth %d, got %v", i, andProp)
+		}
+		curr = andProp.Items
+	}
+
+	// At depth 4, the "and" property is still an array (at depth 5)
+	andProp, ok := curr.Properties["and"]
+	if !ok || andProp.Type != "array" || andProp.Items == nil {
+		t.Fatalf("expected 'and' array property at depth 4, got %v", andProp)
+	}
+
+	// But its items (at depth 5) is FilterInput, whose "and" property (depth 6) falls back to "string"
+	leafObject := andProp.Items
+	leafAndProp, ok := leafObject.Properties["and"]
+	if !ok {
+		t.Fatalf("missing 'and' property in leaf object")
+	}
+	if leafAndProp.Type != "string" {
+		t.Errorf("expected leaf 'and' property type to be 'string' due to recursion limit, got %s", leafAndProp.Type)
+	}
+}
+
