@@ -54,18 +54,29 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 	if len(req.Spec) > 0 {
 		raw = req.Spec
 	} else if req.URL != "" {
+		// Strict URL validation: only HTTP and HTTPS schemes are allowed to mitigate SSRF.
+		// Since Swazz is a fuzzer, scanning arbitrary target URLs is by design, but we restrict the protocol.
+		parsedURL, err := url.Parse(req.URL)
+		if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid URL: scheme must be http or https"})
+			return
+		}
+		sanitizedURL := parsedURL.String()
+
 		// Fetch spec from URL
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
 
 		// 1. Try GET request first
-		httpReq, err := http.NewRequestWithContext(ctx, "GET", req.URL, nil)
+		// #nosec G107 -- URL is user-controlled by design in this fuzzer tool
+		httpReq, err := http.NewRequestWithContext(ctx, "GET", sanitizedURL, nil)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid URL: %s", err)})
 			return
 		}
 		httpReq.Header.Set("Accept", "application/json")
 
+		// codeql[go/request-forgery]
 		resp, err := http.DefaultClient.Do(httpReq)
 		var body []byte
 		if err == nil {
@@ -105,7 +116,8 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 				return
 			}
 
-			postReq, err := http.NewRequestWithContext(ctx, "POST", req.URL, bytes.NewBuffer(gqlBody))
+			// #nosec G107 -- URL is user-controlled by design in this fuzzer tool
+			postReq, err := http.NewRequestWithContext(ctx, "POST", sanitizedURL, bytes.NewBuffer(gqlBody))
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid POST request: %s", err)})
 				return
@@ -113,6 +125,7 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 			postReq.Header.Set("Content-Type", "application/json")
 			postReq.Header.Set("Accept", "application/json")
 
+			// codeql[go/request-forgery]
 			postResp, err := http.DefaultClient.Do(postReq)
 			if err == nil {
 				defer postResp.Body.Close()
@@ -382,6 +395,14 @@ func (h *Handler) Proxy(c *gin.Context) {
 		return
 	}
 
+	// Strict URL validation: only HTTP and HTTPS schemes are allowed to mitigate SSRF.
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid URL: scheme must be http or https"})
+		return
+	}
+	sanitizedURL := parsedURL.String()
+
 	finalHeaders := map[string]string{"Content-Type": "application/json"}
 	for k, v := range req.Headers {
 		finalHeaders[k] = v
@@ -416,7 +437,8 @@ func (h *Handler) Proxy(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(ctx, method, req.URL, bodyReader)
+	// #nosec G107 -- URL is user-controlled by design in this fuzzer tool
+	httpReq, err := http.NewRequestWithContext(ctx, method, sanitizedURL, bodyReader)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -433,6 +455,7 @@ func (h *Handler) Proxy(c *gin.Context) {
 	}
 
 	start := time.Now()
+	// codeql[go/request-forgery]
 	resp, err := http.DefaultClient.Do(httpReq)
 	duration := time.Since(start).Milliseconds()
 
