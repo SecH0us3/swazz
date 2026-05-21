@@ -11,6 +11,58 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
+const reportJS = `document.addEventListener("DOMContentLoaded", function() {
+        var epFilter = document.getElementById('endpointFilter');
+        var statusFilter = document.getElementById('statusFilter');
+        var profileFilter = document.getElementById('profileFilter');
+
+        function filterFindings() {
+            var epValue = epFilter.value.toLowerCase();
+            var statusValue = statusFilter.value;
+            var profileValue = profileFilter.value;
+
+            var groups = document.querySelectorAll('.finding-group');
+            for (var i = 0; i < groups.length; i++) {
+                var group = groups[i];
+                var endpoint = group.getAttribute('data-endpoint') || "";
+                endpoint = endpoint.toLowerCase();
+                var items = group.querySelectorAll('.finding-item');
+                var visibleItems = 0;
+
+                for (var j = 0; j < items.length; j++) {
+                    var item = items[j];
+                    var status = item.getAttribute('data-status') || "";
+                    var profile = item.getAttribute('data-profile') || "";
+
+                    var epMatch = endpoint.indexOf(epValue) !== -1;
+                    var statusMatch = !statusValue || status === statusValue;
+                    var profileMatch = !profileValue || profile === profileValue;
+
+                    if (epMatch && statusMatch && profileMatch) {
+                        item.style.display = 'block';
+                        visibleItems++;
+                    } else {
+                        item.style.display = 'none';
+                    }
+                }
+
+                if (visibleItems > 0) {
+                    group.style.display = 'block';
+                    var countSpan = group.querySelector('.count');
+                    if (countSpan) {
+                        countSpan.innerText = visibleItems;
+                    }
+                } else {
+                    group.style.display = 'none';
+                }
+            }
+        }
+
+        if (epFilter) epFilter.addEventListener('input', filterFindings);
+        if (statusFilter) statusFilter.addEventListener('change', filterFindings);
+        if (profileFilter) profileFilter.addEventListener('change', filterFindings);
+    });`
+
 // ToHTML generates a premium dark-theme HTML report.
 func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
@@ -34,7 +86,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 	// Group findings by endpoint
 	groups := make(map[string][]*classifier.Finding)
 	groupOrder := make([]string, 0)
-	
+
 	uniqueStatuses := make(map[int]bool)
 	uniqueProfiles := make(map[swagger.FuzzingProfile]bool)
 
@@ -203,61 +255,12 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
         <h2>Findings</h2>
         <div class="findings-list">%s</div>
     </div>
-    document.addEventListener("DOMContentLoaded", function() {
-        var epFilter = document.getElementById('endpointFilter');
-        var statusFilter = document.getElementById('statusFilter');
-        var profileFilter = document.getElementById('profileFilter');
-
-        function filterFindings() {
-            var epValue = epFilter.value.toLowerCase();
-            var statusValue = statusFilter.value;
-            var profileValue = profileFilter.value;
-
-            var groups = document.querySelectorAll('.finding-group');
-            for (var i = 0; i < groups.length; i++) {
-                var group = groups[i];
-                var endpoint = group.getAttribute('data-endpoint') || "";
-                endpoint = endpoint.toLowerCase();
-                var items = group.querySelectorAll('.finding-item');
-                var visibleItems = 0;
-                
-                for (var j = 0; j < items.length; j++) {
-                    var item = items[j];
-                    var status = item.getAttribute('data-status') || "";
-                    var profile = item.getAttribute('data-profile') || "";
-                    
-                    var epMatch = endpoint.indexOf(epValue) !== -1;
-                    var statusMatch = !statusValue || status === statusValue;
-                    var profileMatch = !profileValue || profile === profileValue;
-
-                    if (epMatch && statusMatch && profileMatch) {
-                        item.style.display = 'block';
-                        visibleItems++;
-                    } else {
-                        item.style.display = 'none';
-                    }
-                }
-
-                if (visibleItems > 0) {
-                    group.style.display = 'block';
-                    var countSpan = group.querySelector('.count');
-                    if (countSpan) {
-                        countSpan.innerText = visibleItems;
-                    }
-                } else {
-                    group.style.display = 'none';
-                }
-            }
-        }
-
-        if (epFilter) epFilter.addEventListener('input', filterFindings);
-        if (statusFilter) statusFilter.addEventListener('change', filterFindings);
-        if (profileFilter) profileFilter.addEventListener('change', filterFindings);
-    });
+    <script>
+%s
     </script>
 </body>
 </html>`,
-		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, statusOptions.String(), profileOptions.String(), findingsContent)
+		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, statusOptions.String(), profileOptions.String(), findingsContent, reportJS)
 }
 
 const valueLimit = 100
