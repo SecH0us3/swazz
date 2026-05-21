@@ -201,6 +201,10 @@ func ParseGraphQLIntrospection(raw []byte, defaultPath string) (*swagger.ParseRe
 				queryStr = fmt.Sprintf("%s %s(%s) { %s(%s)%s }", opType, field.Name, strings.Join(argDefs, ", "), field.Name, strings.Join(argCalls, ", "), selection)
 			} else {
 				if isMutation {
+			if len(argDefs) > 0 {
+				queryStr = fmt.Sprintf("%s %s(%s) { %s(%s)%s }", opType, field.Name, strings.Join(argDefs, ", "), field.Name, strings.Join(argCalls, ", "), selection)
+			} else {
+				if isMutation {
 					queryStr = fmt.Sprintf("mutation { %s%s }", field.Name, selection)
 				} else {
 					queryStr = fmt.Sprintf("{ %s%s }", field.Name, selection)
