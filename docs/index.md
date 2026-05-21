@@ -23,6 +23,7 @@ Explore the documentation to get started and master Swazz:
 
 - [Installation Guide](./installation.html) - Learn how to build and install Swazz.
 - [Usage & Configuration](./usage.html) - Discover CLI and Web UI usage.
+- [CI/CD Integration](./ci_cd.html) - Integrate Swazz into GitHub Actions, GitLab CI, and more with SARIF reporting.
 - [Architecture & Internals](./architecture.html) - Deep dive into the hybrid architecture and source code structure.
 
 ---
