@@ -165,6 +165,129 @@ export default {
         return new Response("Unauthorized", { status: 401, headers: corsHeaders });
       }
 
+      if (path === "/graphql") {
+        const introspectionSchema = {
+          data: {
+            __schema: {
+              queryType: { name: "Query" },
+              mutationType: { name: "Mutation" },
+              types: [
+                {
+                  kind: "OBJECT",
+                  name: "Query",
+                  fields: [
+                    {
+                      name: "user",
+                      args: [
+                        {
+                          name: "id",
+                          type: {
+                            kind: "NON_NULL",
+                            ofType: {
+                              kind: "SCALAR",
+                              name: "ID"
+                            }
+                          }
+                        }
+                      ],
+                      type: {
+                        kind: "OBJECT",
+                        name: "User"
+                      }
+                    }
+                  ]
+                },
+                {
+                  kind: "OBJECT",
+                  name: "Mutation",
+                  fields: [
+                    {
+                      name: "createUser",
+                      args: [
+                        {
+                          name: "username",
+                          type: {
+                            kind: "NON_NULL",
+                            ofType: {
+                              kind: "SCALAR",
+                              name: "String"
+                            }
+                          }
+                        }
+                      ],
+                      type: {
+                        kind: "OBJECT",
+                        name: "User"
+                      }
+                    }
+                  ]
+                },
+                {
+                  kind: "OBJECT",
+                  name: "User",
+                  fields: [
+                    {
+                      name: "id",
+                      type: {
+                        kind: "SCALAR",
+                        name: "ID"
+                      }
+                    },
+                    {
+                      name: "name",
+                      type: {
+                        kind: "SCALAR",
+                        name: "String"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        };
+
+        if (method === "GET") {
+          return new Response(JSON.stringify(introspectionSchema), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        if (method === "POST") {
+          let body: any;
+          try {
+            body = await request.json();
+          } catch (e) {
+            return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+          }
+
+          if (body && typeof body === "object") {
+            const query = body.query || "";
+            if (query.includes("IntrospectionQuery") || query.includes("__schema")) {
+              return new Response(JSON.stringify(introspectionSchema), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" }
+              });
+            }
+
+            if (body.variables && typeof body.variables === "object") {
+              for (const key of Object.keys(body.variables)) {
+                checkAllVulnerabilities(body.variables[key]);
+              }
+            }
+          }
+
+          // Return mock GraphQL execution success response
+          return new Response(JSON.stringify({
+            data: {
+              user: { id: "1", name: "Alice" },
+              createUser: { id: "2", name: "Bob" }
+            }
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
       return new Response("Not Found", { status: 404, headers: corsHeaders });
 
     } catch (e: any) {

@@ -1,17 +1,20 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
@@ -55,6 +58,7 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
 
+		// 1. Try GET request first
 		httpReq, err := http.NewRequestWithContext(ctx, "GET", req.URL, nil)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid URL: %s", err)})
@@ -63,18 +67,84 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 		httpReq.Header.Set("Accept", "application/json")
 
 		resp, err := http.DefaultClient.Do(httpReq)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to fetch spec: %s", err)})
-			return
+		var body []byte
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
+				if err == nil {
+					// Check if valid spec
+					var check map[string]any
+					if json.Unmarshal(body, &check) == nil {
+						if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
+							raw = body
+						} else if _, hasSwagger := check["swagger"]; hasSwagger {
+							raw = body
+						} else if _, hasData := check["data"]; hasData {
+							if dataMap, ok := check["data"].(map[string]any); ok {
+								if _, hasSchema := dataMap["__schema"]; hasSchema {
+									raw = body
+								}
+							}
+						} else if _, hasSchema := check["__schema"]; hasSchema {
+							raw = body
+						}
+					}
+				}
+			}
 		}
-		defer resp.Body.Close()
 
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to read spec: %s", err)})
+		// 2. Try POST Introspection if raw is still empty
+		if len(raw) == 0 {
+			gqlQuery := map[string]string{
+				"query": graphql.IntrospectionQuery,
+			}
+			gqlBody, err := json.Marshal(gqlQuery)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to marshal introspection query: %s", err)})
+				return
+			}
+
+			postReq, err := http.NewRequestWithContext(ctx, "POST", req.URL, bytes.NewBuffer(gqlBody))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid POST request: %s", err)})
+				return
+			}
+			postReq.Header.Set("Content-Type", "application/json")
+			postReq.Header.Set("Accept", "application/json")
+
+			postResp, err := http.DefaultClient.Do(postReq)
+			if err == nil {
+				defer postResp.Body.Close()
+				if postResp.StatusCode == http.StatusOK {
+					postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024))
+					if err == nil {
+						var check map[string]any
+						if json.Unmarshal(postBody, &check) == nil {
+							if _, hasData := check["data"]; hasData {
+								if dataMap, ok := check["data"].(map[string]any); ok {
+									if _, hasSchema := dataMap["__schema"]; hasSchema {
+										raw = postBody
+									}
+								}
+							} else if _, hasSchema := check["__schema"]; hasSchema {
+								raw = postBody
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// If both failed but we got some GET body, fallback to it
+		if len(raw) == 0 && len(body) > 0 {
+			raw = body
+		}
+
+		if len(raw) == 0 {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch valid OpenAPI or GraphQL spec from the URL"})
 			return
 		}
-		raw = body
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "provide either 'url' or 'spec'"})
 		return
@@ -82,8 +152,20 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 
 	result, err := swagger.ParseSpec(raw)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		return
+		defaultPath := "/graphql"
+		if req.URL != "" {
+			if parsedURL, errURL := url.Parse(req.URL); errURL == nil {
+				if parsedURL.Path != "" && parsedURL.Path != "/" {
+					defaultPath = parsedURL.Path
+				}
+			}
+		}
+		resultGQL, errGQL := graphql.ParseGraphQLIntrospection(raw, defaultPath)
+		if errGQL != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as OpenAPI (%v) or GraphQL (%v)", err.Error(), errGQL.Error())})
+			return
+		}
+		result = resultGQL
 	}
 
 	c.JSON(http.StatusOK, result)

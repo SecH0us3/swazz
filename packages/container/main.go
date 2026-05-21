@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -23,6 +24,7 @@ import (
 
 	"swazz-engine/api"
 	"swazz-engine/internal/classifier"
+	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
@@ -412,21 +414,36 @@ func runCLI(args []string) {
 		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
-	// 2. Fetch and parse swagger specs
+	// 2. Fetch and parse specs
 	var allEndpoints []swagger.EndpointConfig
 	basePath := cliCfg.BaseURL
 
-	for _, url := range cliCfg.SwaggerURLs {
-		specRaw, err := fetchSpec(url, cliCfg.Headers)
+	for _, urlStr := range cliCfg.SwaggerURLs {
+		specRaw, err := fetchSpec(urlStr, cliCfg.Headers)
 		if err != nil {
-			log.Fatalf("Failed to fetch spec %s: %v", url, err)
+			log.Fatalf("Failed to fetch spec %s: %v", urlStr, err)
 		}
 		parsed, err := swagger.ParseSpec(specRaw)
 		if err != nil {
-			log.Fatalf("Failed to parse spec %s: %v", url, err)
+			// Try GraphQL parser fallback
+			defaultPath := "/graphql"
+			if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+				if parsedURL.Path != "" && parsedURL.Path != "/" {
+					defaultPath = parsedURL.Path
+				}
+			}
+			parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+			if errGQL != nil {
+				log.Fatalf("Failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
+			}
+			parsed = parsedGQL
 		}
 		if basePath == "" {
-			basePath = parsed.BasePath
+			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
+				basePath = parsedURL.Scheme + "://" + parsedURL.Host
+			} else {
+				basePath = parsed.BasePath
+			}
 		}
 		allEndpoints = append(allEndpoints, parsed.Endpoints...)
 	}
@@ -587,23 +604,103 @@ func runCLI(args []string) {
 	}
 }
 
-func fetchSpec(url string, headers map[string]string) (json.RawMessage, error) {
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return os.ReadFile(url) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
+func fetchSpec(urlStr string, headers map[string]string) (json.RawMessage, error) {
+	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+		return os.ReadFile(urlStr) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
 	}
-	req, err := http.NewRequest("GET", url, nil)
+
+	// 1. Try GET request first
+	req, err := http.NewRequest("GET", urlStr, nil)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	var body []byte
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			body, err = io.ReadAll(resp.Body)
+			if err == nil {
+				// Check if this is a valid OpenAPI JSON or GraphQL Introspection JSON
+				var check map[string]any
+				if json.Unmarshal(body, &check) == nil {
+					if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
+						return body, nil
+					}
+					if _, hasSwagger := check["swagger"]; hasSwagger {
+						return body, nil
+					}
+					if _, hasData := check["data"]; hasData {
+						if dataMap, ok := check["data"].(map[string]any); ok {
+							if _, hasSchema := dataMap["__schema"]; hasSchema {
+								return body, nil
+							}
+						}
+					}
+					if _, hasSchema := check["__schema"]; hasSchema {
+						return body, nil
+					}
+				}
+			}
+		}
+	}
+
+	// 2. If GET was not a valid API spec or failed, try sending a POST with the GraphQL Introspection Query
+	gqlQuery := map[string]string{
+		"query": graphql.IntrospectionQuery,
+	}
+	gqlBody, err := json.Marshal(gqlQuery)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+
+	postReq, err := http.NewRequest("POST", urlStr, bytes.NewBuffer(gqlBody))
+	if err != nil {
+		return nil, err
+	}
+	postReq.Header.Set("Content-Type", "application/json")
+	postReq.Header.Set("Accept", "application/json")
+	for k, v := range headers {
+		postReq.Header.Set(k, v)
+	}
+
+	postResp, err := client.Do(postReq)
+	if err != nil {
+		if body != nil {
+			return body, nil
+		}
+		return nil, fmt.Errorf("failed to fetch via GET and POST: %w", err)
+	}
+	defer postResp.Body.Close()
+
+	if postResp.StatusCode == http.StatusOK {
+		postBody, err := io.ReadAll(postResp.Body)
+		if err == nil {
+			var check map[string]any
+			if json.Unmarshal(postBody, &check) == nil {
+				if _, hasData := check["data"]; hasData {
+					if dataMap, ok := check["data"].(map[string]any); ok {
+						if _, hasSchema := dataMap["__schema"]; hasSchema {
+							return postBody, nil
+						}
+					}
+				}
+				if _, hasSchema := check["__schema"]; hasSchema {
+					return postBody, nil
+				}
+			}
+		}
+	}
+
+	if body != nil {
+		return body, nil
+	}
+	return nil, fmt.Errorf("spec server returned status %d on POST introspection request", postResp.StatusCode)
 }
 
 func matchesAny(key, path string, patterns []string) bool {
