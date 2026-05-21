@@ -47,9 +47,9 @@ type Runner struct {
 	subs   map[chan Event]struct{}
 
 	eventQueue *MPSCQueue
-	doneCh      chan struct{}
+	doneCh     chan struct{}
 
-	configMu sync.RWMutex
+	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
 
 	pauseCond *sync.Cond
@@ -67,12 +67,12 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		}
 	}
 	r := &Runner{
-		config: config,
-		client: client,
-		stats:  newEmptyStats(),
-		subs:   make(map[chan Event]struct{}),
+		config:     config,
+		client:     client,
+		stats:      newEmptyStats(),
+		subs:       make(map[chan Event]struct{}),
 		eventQueue: NewMPSCQueue(),
-		doneCh:      make(chan struct{}),
+		doneCh:     make(chan struct{}),
 	}
 	r.pauseCond = sync.NewCond(&r.mu)
 	r.updateReplacer()
@@ -359,7 +359,6 @@ func (r *Runner) fuzzEndpoint(
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 
-
 // Stop signals the runner to stop.
 func (r *Runner) Stop() {
 	r.mu.Lock()
@@ -426,7 +425,7 @@ func (r *Runner) executeRequest(
 	for k, v := range generatedHeaders {
 		mergedHeaders[k] = v
 	}
-	
+
 	r.configMu.RLock()
 	for k, v := range headers {
 		// Apply variable substitution to global headers too

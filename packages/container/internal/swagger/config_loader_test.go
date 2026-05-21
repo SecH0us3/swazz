@@ -14,7 +14,7 @@ func TestLoadWordlists(t *testing.T) {
 	// Create test wordlists in the allowed directory
 	list1Path := "list1.txt"
 	list2Path := "list2.txt"
-	
+
 	list1Abs := filepath.Join("wordlists", list1Path)
 	list2Abs := filepath.Join("wordlists", list2Path)
 

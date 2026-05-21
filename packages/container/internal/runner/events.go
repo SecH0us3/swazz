@@ -121,7 +121,7 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 	}
 }
 
-// safeSend attempts to write to a channel with a timeout. 
+// safeSend attempts to write to a channel with a timeout.
 // It safely recovers from panics if the channel is closed concurrently.
 func safeSend(ch chan Event, evt Event, timeout time.Duration) (ok bool) {
 	defer func() {

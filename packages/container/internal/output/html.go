@@ -34,7 +34,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 	// Group findings by endpoint
 	groups := make(map[string][]*classifier.Finding)
 	groupOrder := make([]string, 0)
-	
+
 	uniqueStatuses := make(map[int]bool)
 	uniqueProfiles := make(map[swagger.FuzzingProfile]bool)
 

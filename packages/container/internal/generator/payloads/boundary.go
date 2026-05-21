@@ -9,22 +9,22 @@ import (
 // ─── String boundaries ─────────────────────────────────
 
 var BoundaryStrings = []any{
-	"",                             // Empty string
-	" ",                            // Single space
-	"  \t\n  ",                     // Whitespace variants
-	strings.Repeat("A", 256),       // Common VARCHAR limit
-	strings.Repeat("A", 1000),      // Medium length
-	strings.Repeat("A", 10_000),    // Large string
-	strings.Repeat("A", 100_000),   // Very large string
-	strings.Repeat("\n", 1000),     // Newlines only
-	strings.Repeat("0", 10_000),    // Numeric-looking string
-	strings.Repeat(" ", 10_000),    // Spaces only
-	strings.Repeat("あ", 5000),     // Multi-byte Unicode (Japanese)
-	strings.Repeat("🔥", 2500),    // 4-byte emoji sequence
-	strings.Repeat("A", 1_048_576), // 1MB string (stress test)
-	strings.Repeat("A", 5_242_880), // 5MB string
-	strings.Repeat("A", 10_485_760), // 10MB string
-	strings.Repeat("A", 52_428_800), // 50MB string
+	"",                               // Empty string
+	" ",                              // Single space
+	"  \t\n  ",                       // Whitespace variants
+	strings.Repeat("A", 256),         // Common VARCHAR limit
+	strings.Repeat("A", 1000),        // Medium length
+	strings.Repeat("A", 10_000),      // Large string
+	strings.Repeat("A", 100_000),     // Very large string
+	strings.Repeat("\n", 1000),       // Newlines only
+	strings.Repeat("0", 10_000),      // Numeric-looking string
+	strings.Repeat(" ", 10_000),      // Spaces only
+	strings.Repeat("あ", 5000),        // Multi-byte Unicode (Japanese)
+	strings.Repeat("🔥", 2500),        // 4-byte emoji sequence
+	strings.Repeat("A", 1_048_576),   // 1MB string (stress test)
+	strings.Repeat("A", 5_242_880),   // 5MB string
+	strings.Repeat("A", 10_485_760),  // 10MB string
+	strings.Repeat("A", 52_428_800),  // 50MB string
 	strings.Repeat("A", 104_857_600), // 100MB string
 }
 
@@ -34,15 +34,15 @@ var BoundaryIntegers = []any{
 	0,
 	-1,
 	1,
-	127,           // Max Int8
-	-128,          // Min Int8
-	255,           // Max UInt8
-	32767,         // Max Int16
-	-32768,        // Min Int16
-	65535,         // Max UInt16
-	2147483647,    // Max Int32
-	-2147483648,   // Min Int32
-	4294967295,    // Max UInt32
+	127,               // Max Int8
+	-128,              // Min Int8
+	255,               // Max UInt8
+	32767,             // Max Int16
+	-32768,            // Min Int16
+	65535,             // Max UInt16
+	2147483647,        // Max Int32
+	-2147483648,       // Min Int32
+	4294967295,        // Max UInt32
 	9007199254740991,  // 2^53 - 1 (JS MAX_SAFE_INTEGER)
 	-9007199254740991, // -(2^53 - 1)
 }
@@ -52,7 +52,7 @@ var BoundaryIntegers = []any{
 var BoundaryNumbers = []any{
 	0.0,
 	-0.0,
-	0.1 + 0.2,          // Floating point precision: 0.30000000000000004
+	0.1 + 0.2, // Floating point precision: 0.30000000000000004
 	math.SmallestNonzeroFloat64,
 	math.MaxFloat64,
 	1e308,
@@ -81,8 +81,8 @@ var BoundaryDates = []any{
 var BoundaryUUIDs = []any{
 	"00000000-0000-0000-0000-000000000000", // Nil UUID
 	"ffffffff-ffff-ffff-ffff-ffffffffffff", // Max UUID
-	"not-a-uuid",                            // Invalid format
-	"",                                      // Empty
+	"not-a-uuid",                           // Invalid format
+	"",                                     // Empty
 }
 
 // ─── Array boundaries ───────────────────────────────────
@@ -113,4 +113,3 @@ var BoundaryBooleans = []any{
 	"1",
 	"0",
 }
-

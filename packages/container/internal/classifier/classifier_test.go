@@ -70,7 +70,7 @@ func TestClassifier_Truncation(t *testing.T) {
 	}
 
 	findings := cls.ClassifyAll([]*swagger.FuzzResult{res})
-	
+
 	if len(findings) != 1 {
 		t.Fatalf("Expected 1 finding")
 	}
@@ -83,7 +83,7 @@ func TestClassifier_Truncation(t *testing.T) {
 	if len(bodyStr) > 50100 {
 		t.Errorf("Response body was not truncated. Length: %d", len(bodyStr))
 	}
-	
+
 	if !strings.Contains(bodyStr, "[TRUNCATED") {
 		t.Errorf("Expected truncated body to contain truncation notice")
 	}
