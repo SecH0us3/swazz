@@ -26,11 +26,14 @@
 You can download the pre-compiled CLI binary from the [Releases](https://github.com/SecH0us3/swazz/releases) page for Linux, macOS, and Windows.
 
 ### Docker & Cloudflare
-The engine is published to the GitHub Container Registry (`ghcr.io/sech0us3/swazz`) and is optimized for minimal resource usage. For security reasons, we do not provide a `latest` tag. Always use a specific version or commit SHA:
+We publish the Swazz engine Docker container to the GitHub Container Registry (`ghcr.io/sech0us3/swazz`) for our users. It is optimized for minimal resource usage. For security reasons and to guarantee reproducibility, we **never use the `latest` tag**.
+
+Always use a specific commit SHA hash. You must specify the hash of the new build you want to use (you can find these hashes in our Release notes or commit history).
+
 ```bash
-# Example with a specific version:
-docker pull ghcr.io/sech0us3/swazz:v1.0.0
-docker run -p 8080:8080 ghcr.io/sech0us3/swazz:v1.0.0
+# Example using a commit SHA hash (replace <COMMIT_SHA> with the actual hash from the latest build):
+docker pull ghcr.io/sech0us3/swazz:<COMMIT_SHA>
+docker run -p 8080:8080 ghcr.io/sech0us3/swazz:<COMMIT_SHA>
 ```
 
 ### Build from Source
