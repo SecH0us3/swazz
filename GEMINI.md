@@ -28,6 +28,7 @@ The project is a hybrid repository using **npm workspaces** for the frontend and
 - `npm run dev`: Starts the Go backend and Vite frontend concurrently.
 - `npm run build`: Build the web dashboard.
 - `npm run deploy:web`: Deploy the dashboard to Cloudflare Pages.
+- `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` Antigravity CLI plugin from `.gemini/plugins/swazz-toolkit/` into `~/.gemini/config/plugins/` so the agent picks up project-specific skills and subagents automatically.
 
 ### Backend Commands (in `packages/container`)
 - `go run main.go serve`: Start the HTTP API server.
