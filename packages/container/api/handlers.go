@@ -84,22 +84,8 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 			if resp.StatusCode == http.StatusOK {
 				body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 				if err == nil {
-					// Check if valid spec
-					var check map[string]any
-					if json.Unmarshal(body, &check) == nil {
-						if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
-							raw = body
-						} else if _, hasSwagger := check["swagger"]; hasSwagger {
-							raw = body
-						} else if _, hasData := check["data"]; hasData {
-							if dataMap, ok := check["data"].(map[string]any); ok {
-								if _, hasSchema := dataMap["__schema"]; hasSchema {
-									raw = body
-								}
-							}
-						} else if _, hasSchema := check["__schema"]; hasSchema {
-							raw = body
-						}
+					if swagger.IsValidSpec(body) {
+						raw = body
 					}
 				}
 			}
@@ -132,17 +118,8 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 				if postResp.StatusCode == http.StatusOK {
 					postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024))
 					if err == nil {
-						var check map[string]any
-						if json.Unmarshal(postBody, &check) == nil {
-							if _, hasData := check["data"]; hasData {
-								if dataMap, ok := check["data"].(map[string]any); ok {
-									if _, hasSchema := dataMap["__schema"]; hasSchema {
-										raw = postBody
-									}
-								}
-							} else if _, hasSchema := check["__schema"]; hasSchema {
-								raw = postBody
-							}
+						if swagger.IsValidSpec(postBody) {
+							raw = postBody
 						}
 					}
 				}

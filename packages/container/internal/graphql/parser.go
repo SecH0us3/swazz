@@ -200,7 +200,11 @@ func ParseGraphQLIntrospection(raw []byte, defaultPath string) (*swagger.ParseRe
 			if len(argDefs) > 0 {
 				queryStr = fmt.Sprintf("%s %s(%s) { %s(%s)%s }", opType, field.Name, strings.Join(argDefs, ", "), field.Name, strings.Join(argCalls, ", "), selection)
 			} else {
-				queryStr = fmt.Sprintf("{ %s%s }", field.Name, selection)
+				if isMutation {
+					queryStr = fmt.Sprintf("mutation { %s%s }", field.Name, selection)
+				} else {
+					queryStr = fmt.Sprintf("{ %s%s }", field.Name, selection)
+				}
 			}
 
 			// 2. Build Variables Schema

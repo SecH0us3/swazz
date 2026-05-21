@@ -624,27 +624,10 @@ func fetchSpec(urlStr string, headers map[string]string) (json.RawMessage, error
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
-			body, err = io.ReadAll(resp.Body)
+			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 			if err == nil {
-				// Check if this is a valid OpenAPI JSON or GraphQL Introspection JSON
-				var check map[string]any
-				if json.Unmarshal(body, &check) == nil {
-					if _, hasOpenAPI := check["openapi"]; hasOpenAPI {
-						return body, nil
-					}
-					if _, hasSwagger := check["swagger"]; hasSwagger {
-						return body, nil
-					}
-					if _, hasData := check["data"]; hasData {
-						if dataMap, ok := check["data"].(map[string]any); ok {
-							if _, hasSchema := dataMap["__schema"]; hasSchema {
-								return body, nil
-							}
-						}
-					}
-					if _, hasSchema := check["__schema"]; hasSchema {
-						return body, nil
-					}
+				if swagger.IsValidSpec(body) {
+					return body, nil
 				}
 			}
 		}
@@ -679,20 +662,10 @@ func fetchSpec(urlStr string, headers map[string]string) (json.RawMessage, error
 	defer postResp.Body.Close()
 
 	if postResp.StatusCode == http.StatusOK {
-		postBody, err := io.ReadAll(postResp.Body)
+		postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024)) // 10MB limit
 		if err == nil {
-			var check map[string]any
-			if json.Unmarshal(postBody, &check) == nil {
-				if _, hasData := check["data"]; hasData {
-					if dataMap, ok := check["data"].(map[string]any); ok {
-						if _, hasSchema := dataMap["__schema"]; hasSchema {
-							return postBody, nil
-						}
-					}
-				}
-				if _, hasSchema := check["__schema"]; hasSchema {
-					return postBody, nil
-				}
+			if swagger.IsValidSpec(postBody) {
+				return postBody, nil
 			}
 		}
 	}

@@ -539,3 +539,60 @@ func TestParseGraphQLIntrospection_UnionAndInterface(t *testing.T) {
 	}
 }
 
+func TestParseGraphQLIntrospection_MutationWithoutArgs(t *testing.T) {
+	mockJSON := `{
+		"data": {
+			"__schema": {
+				"queryType": { "name": "Query" },
+				"mutationType": { "name": "Mutation" },
+				"types": [
+					{
+						"kind": "OBJECT",
+						"name": "Query",
+						"fields": [
+							{
+								"name": "hello",
+								"type": { "kind": "SCALAR", "name": "String" }
+							}
+						]
+					},
+					{
+						"kind": "OBJECT",
+						"name": "Mutation",
+						"fields": [
+							{
+								"name": "ping",
+								"type": { "kind": "SCALAR", "name": "String" }
+							}
+						]
+					}
+				]
+			}
+		}
+	}`
+
+	parsed, err := ParseGraphQLIntrospection([]byte(mockJSON), "/graphql")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(parsed.Endpoints) != 2 {
+		t.Fatalf("expected 2 endpoints, got %d", len(parsed.Endpoints))
+	}
+
+	// Verify mutation endpoint query format
+	mEp := parsed.Endpoints[1]
+	if mEp.Path != "/graphql?mutation=ping" {
+		t.Errorf("expected path /graphql?mutation=ping, got %s", mEp.Path)
+	}
+
+	queryProp, ok := mEp.Schema.Properties["query"]
+	if !ok {
+		t.Fatalf("missing query property in schema")
+	}
+	expectedQuery := "mutation { ping }"
+	if queryProp.Enum[0] != expectedQuery {
+		t.Errorf("expected query '%s', got '%s'", expectedQuery, queryProp.Enum[0])
+	}
+}
+
