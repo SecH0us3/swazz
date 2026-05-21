@@ -40,7 +40,7 @@ func TestRandomString(t *testing.T) {
 		if len(str) != 10 {
 			t.Errorf("RandomString(10) generated string of length %d", len(str))
 		}
-		
+
 		matched, _ := regexp.MatchString("^[a-zA-Z0-9]+$", str)
 		if !matched {
 			t.Errorf("RandomString contains invalid characters: %s", str)

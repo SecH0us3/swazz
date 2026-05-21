@@ -23,7 +23,7 @@ func TestGenerate_Random(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		payload := g.BuildObject(schema)
-		
+
 		if _, ok := payload["id"].(int); !ok {
 			t.Errorf("Expected id to be int, got %T", payload["id"])
 		}
@@ -62,7 +62,7 @@ func TestGenerate_Malicious(t *testing.T) {
 
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
 	payload := g.Generate("test", schema)
-	
+
 	// Sometimes Malicious profile does TypeConfusion, so it might not be a string
 	if str, ok := payload.(string); ok {
 		if !strings.ContainsAny(str, "'\"<>()$;\\") {
@@ -87,7 +87,7 @@ func TestMaxDepth(t *testing.T) {
 	}
 
 	schema := createNested(10) // Deeper than maxDepth=5
-	
+
 	// Limit testing is not strictly enforced in BuildObject without a depth parameter,
 	// but the array maxes are. If we want to test array limits, we can do so here.
 	// We'll just verify the generator doesn't crash on standard deep objects.
@@ -96,7 +96,7 @@ func TestMaxDepth(t *testing.T) {
 
 	b, _ := json.Marshal(payload)
 	strPayload := string(b)
-	
+
 	if !strings.Contains(strPayload, "child") {
 		t.Errorf("Payload should contain child key")
 	}
@@ -118,7 +118,7 @@ func TestGenerate_UUIDArrayBoundary(t *testing.T) {
 	}
 
 	g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
-	
+
 	// Run multiple iterations to hit the large array boundary (100 or 1000)
 	foundLargeArray := false
 	for i := 0; i < 20; i++ {

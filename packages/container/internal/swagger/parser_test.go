@@ -88,7 +88,7 @@ func TestParseSpec_OpenAPI3(t *testing.T) {
 	if len(getEndpoint.PathParams) != 1 {
 		t.Errorf("Expected 1 path parameter for GET /users/{id}")
 	}
-	
+
 	if len(getEndpoint.HeaderParams) != 1 {
 		t.Errorf("Expected 1 header parameter for GET /users/{id}")
 	}

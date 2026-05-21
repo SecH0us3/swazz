@@ -55,7 +55,7 @@ func LoadWordlists(config *Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}
-		
+
 		// Use anonymous function to safely defer file.Close() inside the loop
 		err = func() error {
 			defer file.Close()
@@ -74,7 +74,7 @@ func LoadWordlists(config *Config) error {
 			}
 			return nil
 		}()
-		
+
 		if err != nil {
 			return err
 		}

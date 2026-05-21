@@ -115,7 +115,7 @@ func runWizard() {
 	if askYesNo("\033[1;32m3. Do you want to set any static Global Headers or Cookies (e.g., a static Authorization token)?\033[0m") {
 		fmt.Println()
 		fmt.Println("\033[1;36m--- Static Variables ---\033[0m")
-		
+
 		config.Headers = make(map[string]string)
 		config.Cookies = make(map[string]string)
 
@@ -237,7 +237,9 @@ func runWizard() {
 	fmt.Println()
 
 	if askYesNo("Save to 'swazz.config.json'?") {
-		writeJSON("swazz.config.json", config)
+		if err := writeJSON("swazz.config.json", config); err != nil {
+			log.Fatalf("Failed to save config: %v", err)
+		}
 		fmt.Println("\033[1;32mConfig saved successfully!\033[0m")
 		fmt.Println()
 		fmt.Println("You can now start the fuzzer. Here are some examples:")
@@ -293,11 +295,11 @@ func runServer() {
 	// CORS middleware
 	r.Use(func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		
+
 		// If origin is empty, it might be a direct request, but for CORS we need to check it
 		// For local dev, we'll be permissive if it's localhost
 		isLocalhost := strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")
-		
+
 		if allowedOrigin == "*" || origin == allowedOrigin || isLocalhost {
 			if origin != "" {
 				c.Header("Access-Control-Allow-Origin", origin)
@@ -355,14 +357,14 @@ func runServer() {
 // ─── CLI MODE ─────────────────────────────────────────────
 
 type CliConfig struct {
-	SwaggerURLs  []string               `json:"swagger_urls"`
-	BaseURL      string                 `json:"base_url"`
-	Headers       map[string]string    `json:"headers"`
-	Cookies       map[string]string    `json:"cookies"`
-	WordlistFiles map[string]string    `json:"wordlist_files"`
-	Dictionaries  map[string][]any     `json:"dictionaries"`
-	Settings     swagger.Settings       `json:"settings"`
-	Endpoints    *struct {
+	SwaggerURLs   []string          `json:"swagger_urls"`
+	BaseURL       string            `json:"base_url"`
+	Headers       map[string]string `json:"headers"`
+	Cookies       map[string]string `json:"cookies"`
+	WordlistFiles map[string]string `json:"wordlist_files"`
+	Dictionaries  map[string][]any  `json:"dictionaries"`
+	Settings      swagger.Settings  `json:"settings"`
+	Endpoints     *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
@@ -552,13 +554,19 @@ func runCLI(args []string) {
 
 	if *sarifOut != "" {
 		report := output.ToSARIF(findings, "0.1.0")
-		writeJSON(*sarifOut, report)
-		fmt.Printf("Saved SARIF to %s\n", *sarifOut)
+		if err := writeJSON(*sarifOut, report); err != nil {
+			log.Printf("Failed to save SARIF: %v", err)
+		} else {
+			fmt.Printf("Saved SARIF to %s\n", *sarifOut)
+		}
 	}
 	if *jsonOut != "" {
 		report := output.ToJSON(findings, &stats, "0.1.0")
-		writeJSON(*jsonOut, report)
-		fmt.Printf("Saved JSON to %s\n", *jsonOut)
+		if err := writeJSON(*jsonOut, report); err != nil {
+			log.Printf("Failed to save JSON: %v", err)
+		} else {
+			fmt.Printf("Saved JSON to %s\n", *jsonOut)
+		}
 	}
 	if *htmlOut != "" {
 		html := output.ToHTML(findings, &stats)
@@ -618,15 +626,15 @@ func regexpMatch(pattern, s string) (bool, error) {
 	return regexp.MatchString(importRegexp, s)
 }
 
-func writeJSON(path string, data any) {
-	b, err := json.MarshalIndent(data, "", "  ")
+func writeJSON(path string, data any) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G302 G306
 	if err != nil {
-		log.Printf("Failed to marshal JSON for %s: %v", path, err)
-		return
+		return err
 	}
-	if err := os.WriteFile(path, b, 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
-		log.Printf("Failed to write %s: %v", path, err)
-	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(data)
 }
 
 // ─── CLI Console Output ────────────────────────────────────

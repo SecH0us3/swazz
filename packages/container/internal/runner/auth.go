@@ -54,7 +54,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		if step.Body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		
+
 		r.configMu.RLock()
 		for k, v := range step.Headers {
 			req.Header.Set(k, r.subVarsLocked(v))
@@ -91,7 +91,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 		io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse, error irrelevant
-		resp.Body.Close() // #nosec G104 -- close error irrelevant after body drained
+		resp.Body.Close()              // #nosec G104 -- close error irrelevant after body drained
 
 		if err != nil {
 			return fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)

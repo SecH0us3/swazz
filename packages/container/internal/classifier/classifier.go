@@ -20,19 +20,19 @@ const (
 
 // Finding is a classified fuzz result that is reportable.
 type Finding struct {
-	ID           string                `json:"id"`
-	RuleID       string                `json:"ruleId"`
-	Level        Severity              `json:"level"`
-	Endpoint     string                `json:"endpoint"`
-	ResolvedPath string                `json:"resolvedPath"`
-	Method       string                `json:"method"`
+	ID           string                 `json:"id"`
+	RuleID       string                 `json:"ruleId"`
+	Level        Severity               `json:"level"`
+	Endpoint     string                 `json:"endpoint"`
+	ResolvedPath string                 `json:"resolvedPath"`
+	Method       string                 `json:"method"`
 	Profile      swagger.FuzzingProfile `json:"profile"`
-	Status       int                   `json:"status"`
-	Duration     int64                 `json:"duration"`
-	Payload      any                   `json:"payload"`
-	ResponseBody any                   `json:"responseBody,omitempty"`
-	Error        string                `json:"error,omitempty"`
-	Timestamp    int64                 `json:"timestamp"`
+	Status       int                    `json:"status"`
+	Duration     int64                  `json:"duration"`
+	Payload      any                    `json:"payload"`
+	ResponseBody any                    `json:"responseBody,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Timestamp    int64                  `json:"timestamp"`
 }
 
 // RulesConfig configures how results are classified.

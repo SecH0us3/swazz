@@ -90,5 +90,3 @@ var MaliciousCategories = []Category{
 var RandomCategories = []Category{
 	{ID: CatRandomValues, Label: "Random Values", Description: "Format-aware random strings, numbers, UUIDs, emails, dates", Items: nil},
 }
-
-

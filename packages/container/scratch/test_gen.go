@@ -14,12 +14,12 @@ func main() {
 		},
 		Required: []string{"data"},
 	}
-	
+
 	gen := generator.New(nil, swagger.ProfileBoundary, swagger.Settings{})
-	
+
 	iterations := generator.MinIterationsNeeded(swagger.ProfileBoundary, swagger.Settings{})
 	fmt.Printf("Iterations needed: %d\n", iterations)
-	
+
 	for i := 0; i < iterations; i++ {
 		obj := gen.BuildObject(schema)
 		if data, ok := obj["data"].(string); ok {

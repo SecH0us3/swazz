@@ -16,13 +16,13 @@ func TestRunAuthSequence(t *testing.T) {
 			// Set some cookies
 			http.SetCookie(w, &http.Cookie{Name: "session", Value: "secret-session"})
 			http.SetCookie(w, &http.Cookie{Name: "ignore-me", Value: "trash"})
-			
+
 			// Return JSON with token
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]string{
-					"token": "bearer-123",
-					"user":  "admin",
+					"token":  "bearer-123",
+					"user":   "admin",
 					"userId": "999",
 				},
 			})
@@ -35,13 +35,13 @@ func TestRunAuthSequence(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			
+
 			auth := r.Header.Get("Authorization")
 			if auth != "bearer-123" {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -54,9 +54,9 @@ func TestRunAuthSequence(t *testing.T) {
 		BaseURL: server.URL,
 		AuthSequence: []swagger.AuthStep{
 			{
-				Method: "POST",
-				URL:    "/login",
-				Body:   map[string]string{"user": "admin"},
+				Method:         "POST",
+				URL:            "/login",
+				Body:           map[string]string{"user": "admin"},
 				ExtractCookies: []string{"session"}, // Ignore "ignore-me"
 				ExtractJSON: map[string]string{
 					"data.token": "Authorization",

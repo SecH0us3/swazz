@@ -302,10 +302,10 @@ func (g *Generator) generateString(format, propName string) any {
 		}
 
 		if len(pools) > 0 {
-			// Flatten or pick a pool? To keep seqPick working consistently, 
+			// Flatten or pick a pool? To keep seqPick working consistently,
 			// we should probably have a single filtered slice for the whole run.
 			// But for simplicity, we pick a random enabled pool and then seqPick from it.
-			// However, seqPick needs a stable counter. 
+			// However, seqPick needs a stable counter.
 			// Let's just use the AllMaliciousStrings and filter it in New().
 			return seqPick(g.getActiveMaliciousStrings(), &g.mStrIdx)
 		}

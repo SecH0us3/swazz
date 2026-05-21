@@ -4,8 +4,8 @@ package swagger
 type FuzzingProfile string
 
 const (
-	ProfileRandom   FuzzingProfile = "RANDOM"
-	ProfileBoundary FuzzingProfile = "BOUNDARY"
+	ProfileRandom    FuzzingProfile = "RANDOM"
+	ProfileBoundary  FuzzingProfile = "BOUNDARY"
 	ProfileMalicious FuzzingProfile = "MALICIOUS"
 )
 
@@ -31,16 +31,16 @@ type EndpointConfig struct {
 
 // Config holds the full fuzzing configuration.
 type Config struct {
-	BaseURL          string                 `json:"base_url"`
-	GlobalHeaders    map[string]string      `json:"global_headers"`
-	Cookies          map[string]string      `json:"cookies"`
-	Dictionaries     map[string][]any       `json:"dictionaries"`
-	WordlistFiles    map[string]string      `json:"wordlist_files,omitempty"`
-	Settings         Settings               `json:"settings"`
-	Endpoints        []EndpointConfig       `json:"endpoints"`
-	Rules            *RulesConfig           `json:"rules,omitempty"`
-	AuthSequence     []AuthStep             `json:"auth_sequence,omitempty"`
-	Variables        map[string]any         `json:"variables,omitempty"`
+	BaseURL       string            `json:"base_url"`
+	GlobalHeaders map[string]string `json:"global_headers"`
+	Cookies       map[string]string `json:"cookies"`
+	Dictionaries  map[string][]any  `json:"dictionaries"`
+	WordlistFiles map[string]string `json:"wordlist_files,omitempty"`
+	Settings      Settings          `json:"settings"`
+	Endpoints     []EndpointConfig  `json:"endpoints"`
+	Rules         *RulesConfig      `json:"rules,omitempty"`
+	AuthSequence  []AuthStep        `json:"auth_sequence,omitempty"`
+	Variables     map[string]any    `json:"variables,omitempty"`
 }
 
 // RulesConfig configures how results are classified.
@@ -63,16 +63,16 @@ type AuthStep struct {
 
 // Settings controls the fuzzing run behavior.
 type Settings struct {
-	IterationsPerProfile  int                         `json:"iterations_per_profile"`
-	Concurrency           int                         `json:"concurrency"`
-	TimeoutMs             int                         `json:"timeout_ms"`
-	MaxPayloadSizeBytes   int                         `json:"max_payload_size_bytes"`
-	DelayBetweenRequestMs int                         `json:"delay_between_requests_ms"`
-	Debug                 bool                        `json:"debug,omitempty"`
-	Profiles              []FuzzingProfile            `json:"profiles"`
+	IterationsPerProfile  int              `json:"iterations_per_profile"`
+	Concurrency           int              `json:"concurrency"`
+	TimeoutMs             int              `json:"timeout_ms"`
+	MaxPayloadSizeBytes   int              `json:"max_payload_size_bytes"`
+	DelayBetweenRequestMs int              `json:"delay_between_requests_ms"`
+	Debug                 bool             `json:"debug,omitempty"`
+	Profiles              []FuzzingProfile `json:"profiles"`
 	// PayloadCategories controls which payload subcategories are active per profile.
 	// If nil or empty for a profile, all categories are enabled (backward compatible).
-	PayloadCategories     map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
+	PayloadCategories map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -124,19 +124,18 @@ type FuzzResultSSE struct {
 	Retries         int            `json:"retries"`
 }
 
-
 // RunStats tracks live statistics during a fuzzing run.
 type RunStats struct {
-	TotalRequests    int64                       `json:"totalRequests"`
-	TotalPlanned     int64                       `json:"totalPlanned"`
-	RequestsPerSec   float64                     `json:"requestsPerSecond"`
-	StatusCounts     map[int]int64                           `json:"statusCounts"`
-	StatusByProfile  map[FuzzingProfile]map[int]int64        `json:"statusByProfile"`
-	ProfileCounts    map[FuzzingProfile]int64                `json:"profileCounts"`
-	EndpointCounts   map[string]map[int]int64                `json:"endpointCounts"`
-	StartTime        int64                       `json:"startTime"`
-	IsRunning        bool                        `json:"isRunning"`
-	Progress         Progress                    `json:"progress"`
+	TotalRequests   int64                            `json:"totalRequests"`
+	TotalPlanned    int64                            `json:"totalPlanned"`
+	RequestsPerSec  float64                          `json:"requestsPerSecond"`
+	StatusCounts    map[int]int64                    `json:"statusCounts"`
+	StatusByProfile map[FuzzingProfile]map[int]int64 `json:"statusByProfile"`
+	ProfileCounts   map[FuzzingProfile]int64         `json:"profileCounts"`
+	EndpointCounts  map[string]map[int]int64         `json:"endpointCounts"`
+	StartTime       int64                            `json:"startTime"`
+	IsRunning       bool                             `json:"isRunning"`
+	Progress        Progress                         `json:"progress"`
 }
 
 // Progress tracks endpoint-level completion.
@@ -154,6 +153,7 @@ type ParseResult struct {
 	BasePath  string           `json:"basePath"`
 	Endpoints []EndpointConfig `json:"endpoints"`
 }
+
 // PayloadCategoryDef describes a single payload subcategory for the UI.
 type PayloadCategoryDef struct {
 	ID          string `json:"id"`
