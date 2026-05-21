@@ -627,14 +627,14 @@ func regexpMatch(pattern, s string) (bool, error) {
 }
 
 func writeJSON(path string, data any) error {
-	b, err := json.MarshalIndent(data, "", "  ")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G302 G306
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, b, 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
-		return err
-	}
-	return nil
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(data)
 }
 
 // ─── CLI Console Output ────────────────────────────────────
