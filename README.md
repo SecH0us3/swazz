@@ -110,7 +110,7 @@ If you want to quickly test Swazz's capabilities, we provide a built-in vulnerab
 
 - **Engine**: Go (High-performance concurrency)
 - **Dashboard**: React 19, Vite, Vanilla CSS
-- **Formats**: OpenAPI 2.0/3.0, SARIF, JSON
+- **Formats**: OpenAPI 2.0/3.0, SOAP (WSDL), SARIF, JSON
 
 ---
 

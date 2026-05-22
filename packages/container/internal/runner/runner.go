@@ -483,6 +483,15 @@ func (r *Runner) executeRequest(
 					payloadSize = len(vals.Encode())
 				}
 			}
+			if bodyReader == nil && strings.Contains(effectiveCT, "xml") {
+				if m, ok := payload.(map[string]any); ok {
+					xmlContent, _ := generator.ToXML(m, "request")
+					soapBody, _ := generator.WrapInSOAP(xmlContent)
+					bodyReader = strings.NewReader(soapBody)
+					payloadSize = len(soapBody)
+				}
+			}
+
 			if bodyReader == nil {
 				b, _ := json.Marshal(payload)
 				bodyReader = strings.NewReader(string(b))
