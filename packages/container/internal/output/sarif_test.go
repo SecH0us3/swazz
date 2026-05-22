@@ -24,6 +24,9 @@ func TestToSARIF(t *testing.T) {
 					t.Errorf("expected version 2.1.0, got %v", output["version"])
 				}
 				runs := output["runs"].([]map[string]any)
+				if len(runs) == 0 {
+					t.Fatalf("expected at least one run")
+				}
 				driver := runs[0]["tool"].(map[string]any)["driver"].(map[string]any)
 				if driver["version"] != "1.0.0" {
 					t.Errorf("expected default tool version 1.0.0, got %v", driver["version"])
