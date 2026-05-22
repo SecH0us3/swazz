@@ -170,7 +170,7 @@ func TestToSARIF(t *testing.T) {
 					Method:    "GET",
 					Endpoint:  "/slow",
 					Profile:   "random",
-					Timestamp: time.Now().UnixMilli(),
+					Timestamp: 1716352320000,
 					Status:    0,
 				},
 			},
