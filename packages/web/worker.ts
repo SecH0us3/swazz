@@ -26,16 +26,15 @@ export default {
       const acceptHeader = request.headers.get("Accept") || "";
       if (acceptHeader.includes("text/markdown")) {
         const markdownUrl = new URL('/index.md', request.url);
-        const markdownResponse = await env.ASSETS.fetch(new Request(markdownUrl.toString(), request));
+        const markdownResponse = await env.ASSETS.fetch(new Request(markdownUrl.toString()));
         if (markdownResponse.ok) {
-          const body = await markdownResponse.text();
-          response = new Response(body, {
+          const headers = new Headers(markdownResponse.headers);
+          headers.set("Content-Type", "text/markdown; charset=utf-8");
+          headers.set("Access-Control-Allow-Origin", "*");
+          response = new Response(markdownResponse.body, {
             status: markdownResponse.status,
             statusText: markdownResponse.statusText,
-            headers: {
-              "Content-Type": "text/markdown; charset=utf-8",
-              "Access-Control-Allow-Origin": "*",
-            }
+            headers: headers
           });
         } else {
           response = await env.ASSETS.fetch(request);
