@@ -26,6 +26,7 @@ import (
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/wsdl"
 
 	"github.com/gin-gonic/gin"
 )
@@ -423,18 +424,26 @@ func runCLI(args []string) {
 		}
 		parsed, err := swagger.ParseSpec(specRaw)
 		if err != nil {
-			// Try GraphQL parser fallback
-			defaultPath := "/graphql"
-			if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-				if parsedURL.Path != "" && parsedURL.Path != "/" {
-					defaultPath = parsedURL.Path
+			if swagger.IsWSDL(specRaw) {
+				parsedWSDL, errWSDL := wsdl.ParseWSDL(specRaw)
+				if errWSDL != nil {
+					log.Fatalf("Failed to parse spec %s as WSDL: %v", urlStr, errWSDL)
 				}
+				parsed = parsedWSDL
+			} else {
+				// Try GraphQL parser fallback
+				defaultPath := "/graphql"
+				if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+					if parsedURL.Path != "" && parsedURL.Path != "/" {
+						defaultPath = parsedURL.Path
+					}
+				}
+				parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+				if errGQL != nil {
+					log.Fatalf("Failed to parse spec %s as OpenAPI (%v), WSDL or GraphQL (%v)", urlStr, err, errGQL)
+				}
+				parsed = parsedGQL
 			}
-			parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-			if errGQL != nil {
-				log.Fatalf("Failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
-			}
-			parsed = parsedGQL
 		}
 		if basePath == "" {
 			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {

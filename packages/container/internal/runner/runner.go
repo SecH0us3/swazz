@@ -485,8 +485,24 @@ func (r *Runner) executeRequest(
 			}
 			if bodyReader == nil && strings.Contains(effectiveCT, "xml") {
 				if m, ok := payload.(map[string]any); ok {
-					xmlContent, _ := generator.ToXML(m, "request")
-					soapBody, _ := generator.WrapInSOAP(xmlContent)
+					xmlContent, errXML := generator.ToXML(m, "request")
+					if errXML != nil {
+						reqCancel()
+						return &swagger.FuzzResult{
+							ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+							Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: 0,
+							Error: "failed to generate XML payload: " + errXML.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
+						}
+					}
+					soapBody, errSOAP := generator.WrapInSOAP(xmlContent)
+					if errSOAP != nil {
+						reqCancel()
+						return &swagger.FuzzResult{
+							ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+							Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: 0,
+							Error: "failed to wrap SOAP payload: " + errSOAP.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
+						}
+					}
 					bodyReader = strings.NewReader(soapBody)
 					payloadSize = len(soapBody)
 				}

@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 )
 
 // IsValidSpec checks if the given raw JSON is a valid OpenAPI/Swagger specification
@@ -40,11 +40,16 @@ func IsValidSpec(raw json.RawMessage) bool {
 
 // IsWSDL checks if the given raw bytes represent a WSDL specification.
 func IsWSDL(raw []byte) bool {
-	content := strings.TrimSpace(string(raw))
-	if !strings.HasPrefix(content, "<?xml") && !strings.HasPrefix(content, "<") {
-		return false
+	decoder := xml.NewDecoder(bytes.NewReader(raw))
+	for {
+		t, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		if se, ok := t.(xml.StartElement); ok {
+			return se.Name.Local == "definitions"
+		}
 	}
-	return strings.Contains(content, "<definitions") || strings.Contains(content, "<wsdl:definitions")
 }
 
 // FetchRemoteSpec fetches a specification from a URL, trying GET first, and then trying POST with the provided GraphQL introspection query if GET does not return a valid spec.

@@ -2,8 +2,10 @@ package runner
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,5 +151,60 @@ func TestExecuteRequest_QueryParams(t *testing.T) {
 	expectedQuery := "/test?id=123&q=fuzz+payload"
 	if capturedURL != expectedQuery {
 		t.Errorf("Expected URL to be %s, got: %s", expectedQuery, capturedURL)
+	}
+}
+
+func TestExecuteRequest_XMLPayload(t *testing.T) {
+	var capturedBody string
+	var capturedContentType string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedContentType = r.Header.Get("Content-Type")
+		bodyBytes, _ := io.ReadAll(r.Body)
+		capturedBody = string(bodyBytes)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	runner := &Runner{
+		client: server.Client(),
+		config: &swagger.Config{
+			Settings: swagger.Settings{
+				TimeoutMs: 1000,
+			},
+		},
+	}
+
+	payload := map[string]any{
+		"TradePriceRequest": map[string]any{
+			"tickerSymbol": "MSFT",
+		},
+	}
+
+	res := runner.executeRequest(
+		context.Background(),
+		server.URL, "/soap", "/soap", "POST",
+		nil, nil, payload, swagger.ProfileRandom, nil, nil, "text/xml; charset=utf-8",
+	)
+
+	if res == nil {
+		t.Fatal("Expected FuzzResult, got nil")
+	}
+	if res.Error != "" {
+		t.Fatalf("Expected no error, got %s", res.Error)
+	}
+
+	if !strings.Contains(capturedContentType, "xml") {
+		t.Errorf("Expected Content-Type to contain 'xml', got %q", capturedContentType)
+	}
+
+	// Verify it's wrapped in SOAP envelope and contains XML elements
+	if !strings.Contains(capturedBody, "<soap:Envelope") {
+		t.Errorf("Expected body to contain soap Envelope, got %q", capturedBody)
+	}
+	if !strings.Contains(capturedBody, "<TradePriceRequest>") {
+		t.Errorf("Expected body to contain TradePriceRequest, got %q", capturedBody)
+	}
+	if !strings.Contains(capturedBody, "<tickerSymbol>MSFT</tickerSymbol>") {
+		t.Errorf("Expected body to contain tickerSymbol MSFT, got %q", capturedBody)
 	}
 }
