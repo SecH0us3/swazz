@@ -24,7 +24,7 @@ export default {
     } else {
       // Content negotiation: return clean Markdown if requested
       const acceptHeader = request.headers.get("Accept") || "";
-      if (acceptHeader.includes("text/markdown")) {
+      if ((url.pathname === '/' || url.pathname === '/index.html') && acceptHeader.includes("text/markdown")) {
         const markdownUrl = new URL('/index.md', request.url);
         const markdownResponse = await env.ASSETS.fetch(new Request(markdownUrl.toString()));
         if (markdownResponse.ok) {
