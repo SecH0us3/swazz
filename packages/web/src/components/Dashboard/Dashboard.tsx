@@ -38,7 +38,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                 🌍 Web Interface Quick Start
                             </h4>
                             <ul style={{ margin: '0', paddingLeft: '1.25rem', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <li>Enter your <strong>OpenAPI/Swagger URL</strong> or target domain in the top field.</li>
+                                <li>Enter your <strong>OpenAPI/Swagger or WSDL URL</strong> or target domain in the top field.</li>
                                 <li>Press <span style={{ padding: "2px 6px", background: "var(--bg-surface)", borderRadius: "4px", border: "1px solid var(--border-hover)", fontSize: "11px", color: "var(--text-primary)" }}>Run</span> to begin finding vulnerabilities.</li>
                                 <li>Click on <strong>Heatmap cells</strong> to filter the request log by specific endpoints and status codes.</li>
                                 <li>Select any request in the <strong>Timeline</strong> to inspect full payloads and headers.</li>

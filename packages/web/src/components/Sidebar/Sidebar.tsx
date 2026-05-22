@@ -196,7 +196,7 @@ export function Sidebar({
 
 
             {/* Swagger/OpenAPI/GraphQL Loader */}
-            <Section title="API Specs (OpenAPI / GraphQL)" defaultOpen count={swaggerUrls.length}>
+            <Section title="API Specs (OpenAPI / SOAP / GraphQL)" defaultOpen count={swaggerUrls.length}>
                 <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {swaggerUrls.length === 0 && (
                         <div style={{ color:'var(--text-disabled)', fontSize:'var(--font-size-xs)', padding:'2px 0', fontStyle:'italic' }}>
@@ -222,7 +222,7 @@ export function Sidebar({
                             className="input"
                             style={{ flex:1, minWidth:0 }}
                             value={urlInput}
-                            placeholder="https://api.com/swagger.json or /graphql"
+                            placeholder="https://api.com/swagger.json, ?wsdl or /graphql"
                             onChange={(e) => setUrlInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && addUrl()}
                         />
