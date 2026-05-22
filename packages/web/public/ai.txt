@@ -1,0 +1,5 @@
+# ai.txt - Spawning format
+# Declares TDM permissions per EU CDSM Article 4
+
+User-Agent: GPTBot
+Disallow: /
