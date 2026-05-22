@@ -16,13 +16,24 @@ interface Env {
   SWAZZ_DO: DurableObjectNamespace;
 }
 
+function addContentSignalHeader(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('Content-Signal', 'ai-train=no, search=yes');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: headers
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    let response: Response;
 
     // ─── Health check at edge level ──────────────────────────
     if (url.pathname === "/") {
-      return new Response(
+      response = new Response(
         JSON.stringify({
           service: "swazz-edge",
           status: "ok",
@@ -33,14 +44,15 @@ export default {
         }
       );
     }
-
     // ─── API routes → proxy to Go container ──────────────────
-    if (url.pathname.startsWith("/api/") || url.pathname === "/health") {
+    else if (url.pathname.startsWith("/api/") || url.pathname === "/health") {
       const id = env.SWAZZ_DO.idFromName("global-swazz");
       const stub = env.SWAZZ_DO.get(id);
-      return stub.fetch(request);
+      response = await stub.fetch(request);
+    } else {
+      response = new Response("Not Found", { status: 404 });
     }
 
-    return new Response("Not Found", { status: 404 });
+    return addContentSignalHeader(response);
   },
 };

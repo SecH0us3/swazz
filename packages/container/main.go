@@ -287,6 +287,12 @@ func runServer() {
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 
+	// Content-Signal middleware to declare AI scraping policies
+	r.Use(func(c *gin.Context) {
+		c.Header("Content-Signal", "ai-train=no, search=yes")
+		c.Next()
+	})
+
 	allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
 	if allowedOrigin == "" {
 		allowedOrigin = "http://localhost:5173" // Default for local dev

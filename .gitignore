@@ -55,3 +55,8 @@ coverage.out
 
 # AI Assistants Local Data
 .antigravitycli/
+
+# Auto-generated static files in frontend public directory
+packages/web/public/ai.txt
+packages/web/public/llms.txt
+packages/web/public/llms-full.txt

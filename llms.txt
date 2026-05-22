@@ -1,0 +1,14 @@
+# Swazz Docs
+> swazz is a modern, smart API fuzzer designed for security researchers and developers. It parses OpenAPI (Swagger) specifications to automatically identify crashes, logic flaws, and security vulnerabilities (XSS, Injection, etc.) through intelligent payload generation.
+
+## Documentation
+
+- [Getting Started](https://github.com/SecH0us3/swazz/blob/master/docs/index.md) - Overview and entry point for Swazz documentation.
+- [Installation Guide](https://github.com/SecH0us3/swazz/blob/master/docs/installation.md) - How to build and install Swazz from source, run with Docker, or deploy to Cloudflare.
+- [Usage & Configuration](https://github.com/SecH0us3/swazz/blob/master/docs/usage.md) - Detailed guide on CLI commands, interactive wizard, and config schema.
+- [CI/CD Integration](https://github.com/SecH0us3/swazz/blob/master/docs/ci_cd.md) - How to run Swazz in GitHub Actions or GitLab CI/CD, export SARIF results, and fail builds on error.
+- [Architecture & Internals](https://github.com/SecH0us3/swazz/blob/master/docs/architecture.md) - A deep dive into the hybrid architecture, concurrent runner, and payload generators.
+
+## Key Resources
+- [Main README](https://github.com/SecH0us3/swazz/blob/master/README.md) - Quick start and setup overview.
+- [Roadmap](https://github.com/SecH0us3/swazz/blob/master/ROADMAP.md) - Development timeline and completed features.
