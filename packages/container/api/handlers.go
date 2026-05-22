@@ -1,6 +1,7 @@
 package api
 
 import (
+	"swazz-engine/internal/wsdl"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -104,9 +105,16 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 				}
 			}
 		}
+		if swagger.IsWSDL(raw) {
+			resultWSDL, errWSDL := wsdl.ParseWSDL(raw)
+			if errWSDL == nil {
+				c.JSON(http.StatusOK, resultWSDL)
+				return
+			}
+		}
 		resultGQL, errGQL := graphql.ParseGraphQLIntrospection(raw, defaultPath)
 		if errGQL != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as OpenAPI (%v) or GraphQL (%v)", err.Error(), errGQL.Error())})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as OpenAPI (%v), WSDL or GraphQL (%v)", err.Error(), errGQL.Error())})
 			return
 		}
 		result = resultGQL

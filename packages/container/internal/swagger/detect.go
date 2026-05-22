@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // IsValidSpec checks if the given raw JSON is a valid OpenAPI/Swagger specification
@@ -37,6 +38,15 @@ func IsValidSpec(raw json.RawMessage) bool {
 	return false
 }
 
+// IsWSDL checks if the given raw bytes represent a WSDL specification.
+func IsWSDL(raw []byte) bool {
+	content := strings.TrimSpace(string(raw))
+	if !strings.HasPrefix(content, "<?xml") && !strings.HasPrefix(content, "<") {
+		return false
+	}
+	return strings.Contains(content, "<definitions") || strings.Contains(content, "<wsdl:definitions")
+}
+
 // FetchRemoteSpec fetches a specification from a URL, trying GET first, and then trying POST with the provided GraphQL introspection query if GET does not return a valid spec.
 func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, headers map[string]string, gqlIntrospectionQuery string) (json.RawMessage, error) {
 	// 1. Try GET request first
@@ -45,7 +55,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/xml, application/xml")
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -58,7 +68,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 		if resp.StatusCode == http.StatusOK {
 			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 			if err == nil {
-				if IsValidSpec(body) {
+				if IsValidSpec(body) || IsWSDL(body) {
 					return body, nil
 				}
 			}
@@ -109,4 +119,3 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	}
 	return nil, fmt.Errorf("spec server returned status %d on POST introspection request", postResp.StatusCode)
 }
-
