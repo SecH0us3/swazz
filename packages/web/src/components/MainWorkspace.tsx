@@ -94,7 +94,7 @@ export function MainWorkspace({
                         <div className="empty-state-icon">⚡</div>
                         <div className="empty-state-title">Ready to fuzz</div>
                         <div className="empty-state-text">
-                            Add a Swagger/WSDL URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
+                            Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
                         </div>
                         <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <button

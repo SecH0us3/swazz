@@ -103,13 +103,7 @@ export default function App() {
                 baseUrl={displayUrl}
                 onChangeBaseUrl={(url) => {
                     const trimmed = url.trim();
-                    if (
-                        trimmed.endsWith('swagger.json') ||
-                        trimmed.endsWith('openapi.json') ||
-                        trimmed.endsWith('.yaml') ||
-                        trimmed.endsWith('.yml') ||
-                        trimmed.toLowerCase().includes('wsdl')
-                    ) {
+                    if (trimmed.endsWith('swagger.json')) {
                         try {
                             const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
                             const parsed = new URL(inputUrl);

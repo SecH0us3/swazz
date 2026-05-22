@@ -95,12 +95,6 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 		return
 	}
 
-	// If raw is a JSON string (e.g. XML spec uploaded as a JSON string), decode it to get the raw content.
-	var decodedStr string
-	if err := json.Unmarshal(raw, &decodedStr); err == nil {
-		raw = json.RawMessage(decodedStr)
-	}
-
 	result, err := swagger.ParseSpec(raw)
 	if err != nil {
 		defaultPath := "/graphql"
@@ -117,8 +111,6 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 				c.JSON(http.StatusOK, resultWSDL)
 				return
 			}
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as WSDL: %v", errWSDL.Error())})
-			return
 		}
 		resultGQL, errGQL := graphql.ParseGraphQLIntrospection(raw, defaultPath)
 		if errGQL != nil {
