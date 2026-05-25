@@ -113,6 +113,8 @@ func (u *URLWrapper) UnmarshalJSON(data []byte) error {
 			for _, item := range h {
 				if s, ok := item.(string); ok {
 					u.Host = append(u.Host, s)
+				} else if item != nil {
+					u.Host = append(u.Host, fmt.Sprintf("%v", item))
 				}
 			}
 		}
@@ -127,6 +129,8 @@ func (u *URLWrapper) UnmarshalJSON(data []byte) error {
 			for _, item := range p {
 				if s, ok := item.(string); ok {
 					u.Path = append(u.Path, s)
+				} else if item != nil {
+					u.Path = append(u.Path, fmt.Sprintf("%v", item))
 				}
 			}
 		}
@@ -258,7 +262,7 @@ func parseRequestItem(item Item) swagger.EndpointConfig {
 	}
 
 	// If no body schema, create from query parameters
-	if len(schema.Properties) == 0 && req.URL != nil && len(req.URL.Query) > 0 {
+	if !hasBody && len(schema.Properties) == 0 && req.URL != nil && len(req.URL.Query) > 0 {
 		sp := swagger.SchemaProperty{
 			Type:       "object",
 			Properties: make(map[string]*swagger.SchemaProperty),
@@ -320,6 +324,10 @@ func parseURL(urlObj *URLWrapper) (string, map[string]*swagger.SchemaProperty) {
 			pathParams[paramName] = &swagger.SchemaProperty{Type: "string"}
 		} else if strings.HasPrefix(seg, "{{") && strings.HasSuffix(seg, "}}") {
 			paramName := seg[2 : len(seg)-2]
+			lowerParam := strings.ToLower(paramName)
+			if lowerParam == "baseurl" || lowerParam == "base_url" || lowerParam == "url" || lowerParam == "host" {
+				continue
+			}
 			segments = append(segments, "{"+paramName+"}")
 			pathParams[paramName] = &swagger.SchemaProperty{Type: "string"}
 		} else {
@@ -394,7 +402,11 @@ func inferSchema(val any) *swagger.SchemaProperty {
 	case []any:
 		sp := &swagger.SchemaProperty{Type: "array"}
 		if len(v) > 0 {
-			sp.Items = inferSchema(v[0])
+			if resolved := inferSchema(v[0]); resolved != nil {
+				sp.Items = resolved
+			} else {
+				sp.Items = &swagger.SchemaProperty{Type: "string"}
+			}
 		} else {
 			sp.Items = &swagger.SchemaProperty{Type: "string"}
 		}

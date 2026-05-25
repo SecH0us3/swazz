@@ -640,3 +640,82 @@ func TestInferSchema_EdgeCases(t *testing.T) {
 		t.Errorf("expected string for unsupported type, got %v", s)
 	}
 }
+
+func TestParsePostman_CodeReviewFixes(t *testing.T) {
+	// 1. Base URL variables skipped as path params
+	collectionJSON := `{
+		"info": {
+			"name": "Base URL Skip Test",
+			"schema": "schema"
+		},
+		"item": [
+			{
+				"name": "Request 1",
+				"request": {
+					"method": "GET",
+					"url": {
+						"raw": "http://example.com/{{baseUrl}}/v1/users/{{userId}}",
+						"path": ["{{baseUrl}}", "v1", "users", "{{userId}}"]
+					}
+				}
+			}
+		]
+	}`
+	res, err := ParsePostman([]byte(collectionJSON))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ep := res.Endpoints[0]
+	if ep.Path != "/v1/users/{userId}" {
+		t.Errorf("expected /v1/users/{userId}, got %s", ep.Path)
+	}
+	if _, ok := ep.PathParams["baseUrl"]; ok {
+		t.Error("did not expect 'baseUrl' in PathParams")
+	}
+	if _, ok := ep.PathParams["userId"]; !ok {
+		t.Error("expected 'userId' in PathParams")
+	}
+
+	// 2. hasBody true, but schema properties empty (raw string body), schema should not be overwritten by query parameters
+	collectionJSON2 := `{
+		"info": {
+			"name": "Body Overwrite Test",
+			"schema": "schema"
+		},
+		"item": [
+			{
+				"name": "Request 2",
+				"request": {
+					"method": "POST",
+					"body": {
+						"mode": "raw",
+						"raw": "hello world"
+					},
+					"url": {
+						"raw": "http://example.com/api?active=true",
+						"query": [
+							{"key": "active", "value": "true"}
+						]
+					}
+				}
+			}
+		]
+	}`
+	res2, err := ParsePostman([]byte(collectionJSON2))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ep2 := res2.Endpoints[0]
+	if ep2.Schema.Type != "string" {
+		t.Errorf("expected string schema, got %s", ep2.Schema.Type)
+	}
+	if len(ep2.Schema.Properties) != 0 {
+		t.Errorf("expected no properties in schema, got %v", ep2.Schema.Properties)
+	}
+
+	// 3. Array with nil first item
+	nilArraySchema := inferSchema([]any{nil})
+	if nilArraySchema == nil || nilArraySchema.Type != "array" || nilArraySchema.Items == nil || nilArraySchema.Items.Type != "string" {
+		t.Errorf("expected array of string for nil-item array, got %v", nilArraySchema)
+	}
+}
