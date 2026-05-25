@@ -63,7 +63,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 			Timeout: 30 * time.Second,
 		}
 	}
-	client.Transport = security.NewSSRFProtectedTransport(config.Security.AllowPrivateIPs)
+	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 	r := &Runner{
 		config:     config,
 		client:     client,

@@ -23,6 +23,9 @@ func TestIsPrivateIP(t *testing.T) {
 		{"127.0.0.1", true},
 		{"127.255.255.255", true},
 
+		// IPv4 Unspecified
+		{"0.0.0.0", true},
+
 		// IPv4 Link-Local
 		{"169.254.1.1", true},
 
@@ -33,6 +36,9 @@ func TestIsPrivateIP(t *testing.T) {
 
 		// IPv6 Loopback
 		{"::1", true},
+
+		// IPv6 Unspecified
+		{"::", true},
 
 		// IPv6 Unique Local
 		{"fc00::1", true},
