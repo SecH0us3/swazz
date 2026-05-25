@@ -24,6 +24,7 @@ import (
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/output"
+	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
 
@@ -429,18 +430,26 @@ func runCLI(args []string) {
 		}
 		parsed, err := swagger.ParseSpec(specRaw)
 		if err != nil {
-			// Try GraphQL parser fallback
-			defaultPath := "/graphql"
-			if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-				if parsedURL.Path != "" && parsedURL.Path != "/" {
-					defaultPath = parsedURL.Path
+			if swagger.IsPostman(specRaw) {
+				parsedPostman, errPostman := postman.ParsePostman(specRaw)
+				if errPostman != nil {
+					log.Fatalf("Failed to parse spec %s as Postman Collection: %v", urlStr, errPostman)
 				}
+				parsed = parsedPostman
+			} else {
+				// Try GraphQL parser fallback
+				defaultPath := "/graphql"
+				if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+					if parsedURL.Path != "" && parsedURL.Path != "/" {
+						defaultPath = parsedURL.Path
+					}
+				}
+				parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+				if errGQL != nil {
+					log.Fatalf("Failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
+				}
+				parsed = parsedGQL
 			}
-			parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-			if errGQL != nil {
-				log.Fatalf("Failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
-			}
-			parsed = parsedGQL
 		}
 		if basePath == "" {
 			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {

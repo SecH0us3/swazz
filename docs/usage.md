@@ -71,6 +71,20 @@ Swazz supports fuzzing APIs that use GraphQL. It achieves this by retrieving the
    - Swazz generates appropriate GraphQL requests (`{"query": "...", "variables": {...}}`).
    - The variables defined in the schema (e.g., custom input types, scalars) are fuzzed using active payloads, and Swazz monitors for any 500 Internal Server Errors, crashes, or unhandled exceptions.
 
+## Postman Collections Import 📂
+
+Swazz supports importing Postman Collection JSON files (v2.0.0 and v2.1.0) directly. This allows you to fuzz any API that you have already mapped in Postman without needing an OpenAPI/Swagger spec.
+
+### How to use Postman Collections with Swazz
+
+1. **Supply your Postman Collection JSON**:
+   - In CLI mode, configure `swagger_urls` to point to a local Postman Collection JSON file (e.g. `./my_collection.json`) or a remote URL hosting it.
+   - In Web UI, upload/fetch the collection using the input URL field.
+2. **Endpoint Mapping & Path Variables**:
+   - Swazz recursively traverses folders inside your Postman Collection and extracts all requests.
+   - Path variables like `:userId` or `{{userId}}` are automatically converted to `{userId}` format.
+   - If the request includes query parameters or a body (JSON payloads, URL-encoded forms, or multipart form-data), Swazz infers their schemas and fuzzes their inputs.
+
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:

@@ -47,6 +47,23 @@ func IsWSDL(raw []byte) bool {
 	return strings.Contains(content, "<definitions") || strings.Contains(content, "<wsdl:definitions")
 }
 
+// IsPostman checks if the given raw JSON represents a Postman Collection.
+func IsPostman(raw []byte) bool {
+	var check map[string]any
+	if err := json.Unmarshal(raw, &check); err != nil {
+		return false
+	}
+
+	info, hasInfo := check["info"].(map[string]any)
+	if !hasInfo {
+		return false
+	}
+
+	schema, _ := info["schema"].(string)
+	_, hasItem := check["item"].([]any)
+	return hasItem && (strings.Contains(schema, "schema.getpostman.com") || schema != "")
+}
+
 // FetchRemoteSpec fetches a specification from a URL, trying GET first, and then trying POST with the provided GraphQL introspection query if GET does not return a valid spec.
 func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, headers map[string]string, gqlIntrospectionQuery string) (json.RawMessage, error) {
 	// 1. Try GET request first
@@ -68,7 +85,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 		if resp.StatusCode == http.StatusOK {
 			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 			if err == nil {
-				if IsValidSpec(body) || IsWSDL(body) {
+				if IsValidSpec(body) || IsWSDL(body) || IsPostman(body) {
 					return body, nil
 				}
 			}
@@ -108,7 +125,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	if postResp.StatusCode == http.StatusOK {
 		postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024)) // 10MB limit
 		if err == nil {
-			if IsValidSpec(postBody) {
+			if IsValidSpec(postBody) || IsPostman(postBody) {
 				return postBody, nil
 			}
 		}

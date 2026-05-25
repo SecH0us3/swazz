@@ -16,6 +16,7 @@ import (
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/output"
+	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
 
@@ -97,6 +98,16 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 
 	result, err := swagger.ParseSpec(raw)
 	if err != nil {
+		if swagger.IsPostman(raw) {
+			resultPostman, errPostman := postman.ParsePostman(raw)
+			if errPostman == nil {
+				c.JSON(http.StatusOK, resultPostman)
+				return
+			}
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as Postman Collection: %v", errPostman.Error())})
+			return
+		}
+
 		defaultPath := "/graphql"
 		if req.URL != "" {
 			if parsedURL, errURL := url.Parse(req.URL); errURL == nil {
@@ -114,7 +125,7 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 		}
 		resultGQL, errGQL := graphql.ParseGraphQLIntrospection(raw, defaultPath)
 		if errGQL != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as OpenAPI (%v), WSDL or GraphQL (%v)", err.Error(), errGQL.Error())})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as OpenAPI (%v), WSDL, Postman or GraphQL (%v)", err.Error(), errGQL.Error())})
 			return
 		}
 		result = resultGQL
