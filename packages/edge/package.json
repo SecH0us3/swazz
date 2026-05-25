@@ -15,6 +15,6 @@
     "@cloudflare/workers-types": "^4.20260522.1",
     "@vitest/snapshot": "^4.1.7",
     "pretty-format": "^30.4.1",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.7"
   }
 }
