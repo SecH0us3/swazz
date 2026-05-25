@@ -20,7 +20,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [x] **Task 6:** Investigate and implement GraphQL schema parsing and fuzzing support.
 - [x] **Task 17:** Add support for SOAP (WSDL) protocol fuzzing and XML payload generation.
 - [x] **Task 7:** Add support for importing Postman Collections alongside OpenAPI specs. *(Depends on: Task 6)*
-- [/] **Task 18:** Implement a configurable Private IP / Localhost filter (SSRF Protection) for remote/cloud deployments.
+- [x] **Task 18:** Implement a configurable Private IP / Localhost filter (SSRF Protection) for remote/cloud deployments.
   - **Design Goal:** Protect centralized cloud instances (e.g., hosted on Cloudflare Workers/Pages or cloud VMs) from being abused to scan internal corporate networks, cloud metadata endpoints (`169.254.169.254`), or loopback interfaces, while preserving the ability for local CLI and self-hosted users to scan local development APIs (`localhost`).
   - **Implementation Details:**
     - Introduce `security.allow_private_ips` in `swazz.config.json` and a CLI flag `--allow-private-ips`.
