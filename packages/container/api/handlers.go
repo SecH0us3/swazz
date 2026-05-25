@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"os"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
+	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 
 	"github.com/gin-gonic/gin"
@@ -34,15 +36,9 @@ type Handler struct {
 
 // NewHandler creates a new API handler.
 func NewHandler() *Handler {
+	allowPrivate := os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") == "true"
 	return &Handler{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
+		httpClient: security.NewSSRFProtectedClient(30 * time.Second, allowPrivate),
 	}
 }
 
@@ -141,6 +137,11 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 	if err := c.ShouldBindJSON(&config); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config: " + err.Error()})
 		return
+	}
+
+	allowPrivate := os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") == "true"
+	if !allowPrivate {
+		config.Security.AllowPrivateIPs = false
 	}
 
 	// Apply defaults
