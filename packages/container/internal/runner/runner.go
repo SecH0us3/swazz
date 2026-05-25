@@ -20,6 +20,7 @@ import (
 
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 
 	"github.com/google/uuid"
@@ -59,13 +60,10 @@ type Runner struct {
 func New(config *swagger.Config, client *http.Client) *Runner {
 	if client == nil {
 		client = &http.Client{
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 20,
-				IdleConnTimeout:     90 * time.Second,
-			},
+			Timeout: 30 * time.Second,
 		}
 	}
+	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 	r := &Runner{
 		config:     config,
 		client:     client,

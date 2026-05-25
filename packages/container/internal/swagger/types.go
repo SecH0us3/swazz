@@ -29,6 +29,11 @@ type EndpointConfig struct {
 	ContentType  string                     `json:"contentType,omitempty"`
 }
 
+// SecurityConfig holds configuration for engine security policies.
+type SecurityConfig struct {
+	AllowPrivateIPs bool `json:"allow_private_ips"`
+}
+
 // Config holds the full fuzzing configuration.
 type Config struct {
 	BaseURL       string            `json:"base_url"`
@@ -41,6 +46,7 @@ type Config struct {
 	Rules         *RulesConfig      `json:"rules,omitempty"`
 	AuthSequence  []AuthStep        `json:"auth_sequence,omitempty"`
 	Variables     map[string]any    `json:"variables,omitempty"`
+	Security      SecurityConfig    `json:"security,omitempty"`
 }
 
 // RulesConfig configures how results are classified.

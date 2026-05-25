@@ -53,5 +53,8 @@
             "timeout": "error",
             "network_error": "error"
         }
+    },
+    "security": {
+        "allow_private_ips": true
     }
 }

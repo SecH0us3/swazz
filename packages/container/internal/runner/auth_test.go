@@ -52,6 +52,9 @@ func TestRunAuthSequence(t *testing.T) {
 	// 2. Define config
 	cfg := &swagger.Config{
 		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
 		AuthSequence: []swagger.AuthStep{
 			{
 				Method:         "POST",
@@ -101,6 +104,9 @@ func TestRunAuthSequenceFailures(t *testing.T) {
 
 	cfg := &swagger.Config{
 		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
 		AuthSequence: []swagger.AuthStep{
 			{Method: "GET", URL: "/fail"},
 		},

@@ -26,6 +26,7 @@ import (
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
+	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 
 	"github.com/gin-gonic/gin"
@@ -364,19 +365,20 @@ func runServer() {
 // ─── CLI MODE ─────────────────────────────────────────────
 
 type CliConfig struct {
-	SwaggerURLs   []string          `json:"swagger_urls"`
-	BaseURL       string            `json:"base_url"`
-	Headers       map[string]string `json:"headers"`
-	Cookies       map[string]string `json:"cookies"`
-	WordlistFiles map[string]string `json:"wordlist_files"`
-	Dictionaries  map[string][]any  `json:"dictionaries"`
-	Settings      swagger.Settings  `json:"settings"`
+	SwaggerURLs   []string               `json:"swagger_urls"`
+	BaseURL       string                 `json:"base_url"`
+	Headers       map[string]string      `json:"headers"`
+	Cookies       map[string]string      `json:"cookies"`
+	WordlistFiles map[string]string      `json:"wordlist_files"`
+	Dictionaries  map[string][]any       `json:"dictionaries"`
+	Settings      swagger.Settings       `json:"settings"`
 	Endpoints     *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
-	Rules        *swagger.RulesConfig `json:"rules"`
-	AuthSequence []swagger.AuthStep   `json:"auth_sequence"`
+	Rules        *swagger.RulesConfig   `json:"rules"`
+	AuthSequence []swagger.AuthStep     `json:"auth_sequence"`
+	Security     swagger.SecurityConfig `json:"security"`
 }
 
 func runCLI(args []string) {
@@ -386,6 +388,7 @@ func runCLI(args []string) {
 	jsonOut := flags.String("json", "", "Path to save JSON output")
 	htmlOut := flags.String("html", "", "Path to save HTML output")
 	failOnError := flags.Bool("fail-on-error", false, "Exit with code 1 if error level findings exist")
+	allowPrivateIps := flags.Bool("allow-private-ips", true, "Allow requests to private IP addresses (default: true for CLI mode)")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 
 	if err := flags.Parse(args); err != nil {
@@ -393,15 +396,30 @@ func runCLI(args []string) {
 		os.Exit(1)
 	}
 
+	allowPrivateExplicit := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "allow-private-ips" {
+			allowPrivateExplicit = true
+		}
+	})
+
 	// 1. Read config
 	configData, err := os.ReadFile(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to read config file %s: %v", *configPath, err)
 	}
 
-	var cliCfg CliConfig
+	cliCfg := CliConfig{
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
 	if err := json.Unmarshal(configData, &cliCfg); err != nil {
 		log.Fatalf("Invalid config JSON: %v", err)
+	}
+
+	if allowPrivateExplicit {
+		cliCfg.Security.AllowPrivateIPs = *allowPrivateIps
 	}
 
 	if *debugMode {
@@ -424,7 +442,7 @@ func runCLI(args []string) {
 	basePath := cliCfg.BaseURL
 
 	for _, urlStr := range cliCfg.SwaggerURLs {
-		specRaw, err := fetchSpec(urlStr, cliCfg.Headers)
+		specRaw, err := fetchSpec(urlStr, cliCfg.Headers, cliCfg.Security.AllowPrivateIPs)
 		if err != nil {
 			log.Fatalf("Failed to fetch spec %s: %v", urlStr, err)
 		}
@@ -500,6 +518,7 @@ func runCLI(args []string) {
 		Endpoints:     allEndpoints,
 		Rules:         cliCfg.Rules,
 		AuthSequence:  cliCfg.AuthSequence,
+		Security:      cliCfg.Security,
 	}
 
 	if err := swagger.LoadWordlists(runCfg); err != nil {
@@ -617,12 +636,12 @@ func runCLI(args []string) {
 	}
 }
 
-func fetchSpec(urlStr string, headers map[string]string) (json.RawMessage, error) {
+func fetchSpec(urlStr string, headers map[string]string, allowPrivate bool) (json.RawMessage, error) {
 	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
 		return os.ReadFile(urlStr) // #nosec G304 -- path is a CLI-supplied swagger spec path, not attacker-controlled
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := security.NewSSRFProtectedClient(10 * time.Second, allowPrivate)
 	return swagger.FetchRemoteSpec(context.Background(), client, urlStr, headers, graphql.IntrospectionQuery)
 }
 

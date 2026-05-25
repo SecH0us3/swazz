@@ -85,6 +85,35 @@ Swazz supports importing Postman Collection JSON files (v2.0.0 and v2.1.0) direc
    - Path variables like `:userId` or `{{userId}}` are automatically converted to `{userId}` format.
    - If the request includes query parameters or a body (JSON payloads, URL-encoded forms, or multipart form-data), Swazz infers their schemas and fuzzes their inputs.
 
+## SSRF Protection & Private IP Filtering 🛡️
+
+To prevent Server-Side Request Forgery (SSRF) when Swazz is hosted as a shared remote service (e.g., in a cloud environment or Cloudflare Workers/Pages), Swazz includes built-in private IP filtering.
+
+### Security Configurations
+
+Swazz enforces SSRF protection by verifying resolved host IP addresses before making spec-fetching or fuzzing HTTP requests.
+
+- **Server Mode (`swazz-engine serve`)**:
+  - By default, requests targeting private IP ranges (RFC 1918, loopback, link-local) are **blocked**.
+  - To allow internal API scanning, set the environment variable:
+    ```bash
+    export SWAZZ_ALLOW_PRIVATE_IPS=true
+    ```
+- **CLI Mode (`swazz-engine start`)**:
+  - By default, CLI mode **allows** private IP/localhost connections to support scanning local developer APIs.
+  - To block private IP connections in CLI mode, supply the command-line flag or config setting:
+    ```bash
+    swazz-engine start --config config.json --allow-private-ips=false
+    ```
+    Or in `swazz.config.json`:
+    ```json
+    {
+      "security": {
+        "allow_private_ips": false
+      }
+    }
+    ```
+
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:

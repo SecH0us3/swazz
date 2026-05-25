@@ -54,6 +54,9 @@ func TestStartIntegration(t *testing.T) {
 
 	cfg := &swagger.Config{
 		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
 		Endpoints: []swagger.EndpointConfig{
 			{
 				Path:   "/test",
