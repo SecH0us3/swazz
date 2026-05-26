@@ -194,6 +194,7 @@ export default function App() {
                     onReplay={sendRequest}
                     globalHeaders={config.global_headers}
                     globalCookies={config.cookies}
+                    config={config}
                 />
             )}
 

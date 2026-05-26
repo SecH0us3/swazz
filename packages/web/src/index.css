@@ -1428,6 +1428,163 @@ body.resizing .sidebar-resizer {
 
 .detail-status { font-size: var(--font-size-xl); font-weight: 700; }
 
+.detail-url-display {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--border-radius-md);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--accent-light);
+  word-break: break-all;
+}
+
+/* Layout/styling for RequestDetail panel */
+.detail-pane-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.detail-toggle-group {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.detail-toggle-btn {
+  border-radius: 0 !important;
+  padding: 4px 8px !important;
+  font-size: var(--font-size-xs) !important;
+}
+
+.detail-diff-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  overflow: hidden;
+}
+
+.detail-query-diff-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+}
+
+.detail-body-diff-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+}
+
+.detail-diff-json-wrapper {
+  margin: 0 !important;
+  padding: var(--space-2) !important;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.detail-diff-json-pre {
+  margin: 0 !important;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+}
+
+/* Mutation diff styling classes */
+.diff-mutated-boundary {
+  background-color: var(--color-warning-bg);
+  border: 1px dashed var(--color-warning);
+  color: var(--color-warning);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.diff-mutated-malicious {
+  background-color: var(--color-error-bg);
+  border: 1px dashed var(--color-error);
+  color: var(--color-error);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.diff-deleted-key {
+  color: var(--text-disabled);
+  text-decoration: line-through;
+}
+
+.diff-added-key {
+  background-color: var(--color-success-bg);
+  border: 1px dashed var(--color-success);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: inline-block;
+  margin: 2px 0;
+}
+
+.diff-added-key-name {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.diff-key-name {
+  color: var(--accent-light);
+}
+
+.diff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.diff-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.diff-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.diff-legend-dot.added {
+  background-color: var(--color-success);
+}
+
+.diff-legend-dot.deleted {
+  background-color: var(--text-disabled);
+  text-decoration: line-through;
+  width: 12px;
+  height: 2px;
+  border-radius: 0;
+}
+
+.diff-legend-dot.mutated {
+  background-color: var(--color-warning);
+}
+
+.diff-legend-dot.malicious {
+  background-color: var(--color-error);
+}
+
 .detail-meta {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
