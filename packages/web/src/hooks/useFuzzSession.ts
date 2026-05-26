@@ -26,7 +26,7 @@ export function useFuzzSession({
     const loadEndpoints = useCallback(async (urls: string[]) => {
         if (urls.length === 0) return;
 
-        useAppStore.getState().setRunnerState({ isLoadingSpecs: true });
+        useAppStore.setState({ isLoadingSpecs: true });
         showToast(`Loading ${urls.length} spec${urls.length > 1 ? 's' : ''}...`, 'info');
 
         let allEndpoints: any[] = [];
@@ -55,7 +55,7 @@ export function useFuzzSession({
             }
         }
 
-        useAppStore.getState().setRunnerState({ isLoadingSpecs: false });
+        useAppStore.setState({ isLoadingSpecs: false });
 
         if (allEndpoints.length > 0) {
             updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints } as any);
@@ -124,6 +124,7 @@ export function useFuzzSession({
             heatmapFilter: null,
             selectedResult: null,
             loadedRunId: null,
+            activeTab: 'heatmap',
         });
 
         let liveCount = 0;
@@ -148,7 +149,7 @@ export function useFuzzSession({
             const now = Date.now();
             if (now - lastCountUpdate > 500) {
                 lastCountUpdate = now;
-                useAppStore.getState().setLiveCount(liveCount);
+                useAppStore.setState({ liveCount });
             }
         };
 
@@ -174,7 +175,7 @@ export function useFuzzSession({
                 msg = 'Server is busy. Please wait for the current run to complete.';
             }
             showToast(`Error: ${msg}`, 'error');
-            useAppStore.getState().setLiveRunId(null);
+            useAppStore.setState({ liveRunId: null });
         }
     };
 

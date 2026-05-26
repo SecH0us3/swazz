@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Props {
     baseUrl: string;
@@ -26,9 +27,11 @@ export function Header({
     theme,
     onToggleTheme,
 }: Props) {
-    const isRunning = useAppStore(state => state.isRunning);
-    const isPaused = useAppStore(state => state.isPaused);
-    const isLoadingSpecs = useAppStore(state => state.isLoadingSpecs);
+    const { isRunning, isPaused, isLoadingSpecs } = useAppStore(useShallow(state => ({
+        isRunning: state.isRunning,
+        isPaused: state.isPaused,
+        isLoadingSpecs: state.isLoadingSpecs,
+    })));
 
     const isBusy = isRunning || isLoadingSpecs;
 

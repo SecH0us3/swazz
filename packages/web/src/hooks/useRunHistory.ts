@@ -13,8 +13,7 @@ interface UseRunHistoryProps {
 }
 
 export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, showToast, onRunLoaded }: UseRunHistoryProps) {
-    const loadedRunId = useAppStore(state => state.loadedRunId);
-    const historyStats = useAppStore(state => state.historyStats);
+    // No need to subscribe to store state here since we use getState() in callbacks
 
     const handleLoadRun = async (runId: string, importedRun?: any) => {
         const runData = importedRun || runs.find(r => r.id === runId);

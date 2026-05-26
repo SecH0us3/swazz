@@ -17,6 +17,7 @@ import { useRunHistory } from './hooks/useRunHistory.js';
 import { useTheme } from './hooks/useTheme.js';
 import { MainWorkspace } from './components/MainWorkspace.js';
 import { useAppStore } from './store/appStore.js';
+import { useShallow } from 'zustand/react/shallow';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
@@ -25,20 +26,21 @@ export default function App() {
     const { toasts, showToast, dismissToast } = useToast();
 
     // Only subscribe to what App.tsx needs for rendering
-    const activeTab = useAppStore(state => state.activeTab);
-    const setActiveTab = useAppStore(state => state.setActiveTab);
-    const selectedResult = useAppStore(state => state.selectedResult);
-    const setSelectedResult = useAppStore(state => state.setSelectedResult);
-    
-    const isSidebarOpen = useAppStore(state => state.isSidebarOpen);
-    const setIsSidebarOpen = useAppStore(state => state.setIsSidebarOpen);
-    const isConfigOpen = useAppStore(state => state.isConfigOpen);
-    const setIsConfigOpen = useAppStore(state => state.setIsConfigOpen);
-    
-    const isSidebarHiddenDesktop = useAppStore(state => state.isSidebarHiddenDesktop);
-    const setIsSidebarHiddenDesktop = useAppStore(state => state.setIsSidebarHiddenDesktop);
-    const isConfigHiddenDesktop = useAppStore(state => state.isConfigHiddenDesktop);
-    const setIsConfigHiddenDesktop = useAppStore(state => state.setIsConfigHiddenDesktop);
+    const {
+        activeTab,
+        selectedResult,
+        isSidebarOpen,
+        isConfigOpen,
+        isSidebarHiddenDesktop,
+        isConfigHiddenDesktop
+    } = useAppStore(useShallow(state => ({
+        activeTab: state.activeTab,
+        selectedResult: state.selectedResult,
+        isSidebarOpen: state.isSidebarOpen,
+        isConfigOpen: state.isConfigOpen,
+        isSidebarHiddenDesktop: state.isSidebarHiddenDesktop,
+        isConfigHiddenDesktop: state.isConfigHiddenDesktop,
+    })));
 
     const {
         config, updateConfig, updateHeaders, updateCookies,
@@ -79,7 +81,7 @@ export default function App() {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && activeTab === 'logs' && !selectedResult) {
-                setActiveTab('heatmap');
+                useAppStore.setState({ activeTab: 'heatmap' });
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -87,11 +89,11 @@ export default function App() {
     }, [activeTab, selectedResult]);
 
     const handleSelectResult = (row: ResultSummary) => {
-        setSelectedResult({
+        useAppStore.setState({ selectedResult: {
             ...row,
             payload: row.payloadPreview || undefined,
             responseBody: row.responsePreview || undefined,
-        } as FuzzResult);
+        } as FuzzResult });
     };
 
     return (
@@ -125,12 +127,12 @@ export default function App() {
                 onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
                 onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}
                 onToggleSidebar={() => {
-                    if (window.innerWidth <= 768) setIsSidebarOpen(!isSidebarOpen);
-                    else setIsSidebarHiddenDesktop(!isSidebarHiddenDesktop);
+                    if (window.innerWidth <= 768) useAppStore.setState({ isSidebarOpen: !isSidebarOpen });
+                    else useAppStore.setState({ isSidebarHiddenDesktop: !isSidebarHiddenDesktop });
                 }}
                 onToggleConfig={() => {
-                    if (window.innerWidth <= 768) setIsConfigOpen(!isConfigOpen);
-                    else setIsConfigHiddenDesktop(!isConfigHiddenDesktop);
+                    if (window.innerWidth <= 768) useAppStore.setState({ isConfigOpen: !isConfigOpen });
+                    else useAppStore.setState({ isConfigHiddenDesktop: !isConfigHiddenDesktop });
                 }}
                 theme={theme}
                 onToggleTheme={toggleTheme}
@@ -142,7 +144,7 @@ export default function App() {
                 runs={runs}
                 onLoadRun={(id, importedRun) => {
                     handleLoadRun(id, importedRun);
-                    setIsSidebarOpen(false);
+                    useAppStore.setState({ isSidebarOpen: false });
                 }}
                 onDeleteRun={handleDeleteRun}
                 onUpdateConfig={updateConfig}
@@ -153,8 +155,10 @@ export default function App() {
 
             {(isSidebarOpen || isConfigOpen) && (
                 <div className="mobile-overlay" onClick={() => {
-                    setIsSidebarOpen(false);
-                    setIsConfigOpen(false);
+                    useAppStore.setState({
+                        isSidebarOpen: false,
+                        isConfigOpen: false,
+                    });
                 }} />
             )}
 
@@ -186,7 +190,7 @@ export default function App() {
                 <RequestDetail
                     result={selectedResult}
                     baseUrl={displayUrl}
-                    onClose={() => setSelectedResult(null)}
+                    onClose={() => useAppStore.setState({ selectedResult: null })}
                     onReplay={sendRequest}
                     globalHeaders={config.global_headers}
                     globalCookies={config.cookies}
