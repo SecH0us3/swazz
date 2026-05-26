@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useAppStore } from '../store/appStore.js';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import type { RunStats } from '../types.js';
@@ -8,18 +9,7 @@ import type { ResultSummary } from '../hooks/useRunner.js';
 
 interface MainWorkspaceProps {
     config: any;
-    activeRunId: string | null;
-    activeStats: RunStats | null;
-    liveCount: number;
-    loadedRunId: string | null;
-    historyStats: RunStats | null;
-    activeTab: 'heatmap' | 'logs';
-    setActiveTab: (tab: 'heatmap' | 'logs') => void;
-    heatmapFilter: HeatmapFilter | null;
-    setHeatmapFilter: (f: HeatmapFilter | null) => void;
-    isRunning: boolean;
     handleStart: (urls?: string[]) => void;
-    setLoadedRunId: (id: string | null) => void;
     handleSelectResult: (r: ResultSummary) => void;
     handleExport: () => void;
     handleExportHTML: () => void;
@@ -28,23 +18,23 @@ interface MainWorkspaceProps {
 
 export function MainWorkspace({
     config,
-    activeRunId,
-    activeStats,
-    liveCount,
-    loadedRunId,
-    historyStats,
-    activeTab,
-    setActiveTab,
-    heatmapFilter,
-    setHeatmapFilter,
-    isRunning,
     handleStart,
-    setLoadedRunId,
     handleSelectResult,
     handleExport,
     handleExportHTML,
     queryResults,
 }: MainWorkspaceProps) {
+    const activeRunId = useAppStore(state => state.liveRunId);
+    const activeStats = useAppStore(state => state.stats);
+    const liveCount = useAppStore(state => state.liveCount);
+    const loadedRunId = useAppStore(state => state.loadedRunId);
+    const historyStats = useAppStore(state => state.historyStats);
+    const activeTab = useAppStore(state => state.activeTab);
+    const setActiveTab = useAppStore(state => state.setActiveTab);
+    const heatmapFilter = useAppStore(state => state.heatmapFilter);
+    const setHeatmapFilter = useAppStore(state => state.setHeatmapFilter);
+    const isRunning = useAppStore(state => state.isRunning);
+    const setLoadedRunId = useAppStore(state => state.setLoadedRunId);
 
     // Endpoint keys for heatmap — derive from stats or config
     const endpointKeys = useMemo(() => {

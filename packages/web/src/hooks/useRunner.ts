@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { RunStats } from '../types.js';
+import { useAppStore } from '../store/appStore.js';
 
 const VALUE_LIMIT = 80;
 const RESPONSE_VALUE_LIMIT = 400;
@@ -105,10 +106,6 @@ export function toSummary(r: any): ResultSummary {
 const PROGRESS_THROTTLE_MS = 300;
 
 export function useRunner(proxyUrl: string) {
-    const [stats, setStats] = useState<RunStats | null>(null);
-    const [isRunning, setIsRunning] = useState(false);
-    const [isPaused, setIsPaused] = useState(false);
-
     const eventSourceRef = useRef<EventSource | null>(null);
 
     const sendRequest = useCallback(
@@ -141,10 +138,9 @@ export function useRunner(proxyUrl: string) {
             onResult: (rawResult: any) => void,
             onComplete: (stats: RunStats) => void,
         ) => {
-            if (isRunning) return;
+            if (useAppStore.getState().isRunning) return;
 
-            setIsRunning(true);
-            setIsPaused(false);
+            useAppStore.getState().setRunnerState({ isRunning: true, isPaused: false });
 
             try {
                 const res = await fetch(`${proxyUrl}/api/fuzz/start`, {
@@ -154,11 +150,11 @@ export function useRunner(proxyUrl: string) {
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
-                    setIsRunning(false);
+                    useAppStore.getState().setRunnerState({ isRunning: false });
                     throw new Error(err.error || 'Failed to start run');
                 }
             } catch (err) {
-                setIsRunning(false);
+                useAppStore.getState().setRunnerState({ isRunning: false });
                 throw err;
             }
 
@@ -180,16 +176,14 @@ export function useRunner(proxyUrl: string) {
                 const now = Date.now();
                 if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
                     lastProgressTime = now;
-                    try { setStats(JSON.parse(e.data)); } catch { /* */ }
+                    try { useAppStore.getState().setRunnerState({ stats: JSON.parse(e.data) }); } catch { /* */ }
                 }
             });
 
             es.addEventListener('complete', (e) => {
                 try {
                     const finalStats = JSON.parse(e.data);
-                    setStats(finalStats);
-                    setIsRunning(false);
-                    setIsPaused(false);
+                    useAppStore.getState().setRunnerState({ stats: finalStats, isRunning: false, isPaused: false });
                     es.close();
                     eventSourceRef.current = null;
                     onComplete(finalStats);
@@ -199,10 +193,10 @@ export function useRunner(proxyUrl: string) {
             es.onerror = () => {
                 es.close();
                 eventSourceRef.current = null;
-                setIsRunning(false);
+                useAppStore.getState().setRunnerState({ isRunning: false });
             };
         },
-        [proxyUrl, isRunning],
+        [proxyUrl],
     );
 
     const stop = useCallback(async () => {
@@ -212,25 +206,25 @@ export function useRunner(proxyUrl: string) {
         } finally {
             eventSourceRef.current?.close();
             eventSourceRef.current = null;
-            setIsRunning(false);
+            useAppStore.getState().setRunnerState({ isRunning: false });
         }
     }, [proxyUrl]);
 
     const pause = useCallback(async () => {
         const res = await fetch(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to pause');
-        setIsPaused(true);
+        useAppStore.getState().setRunnerState({ isPaused: true });
     }, [proxyUrl]);
 
     const resume = useCallback(async () => {
         const res = await fetch(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to resume');
-        setIsPaused(false);
+        useAppStore.getState().setRunnerState({ isPaused: false });
     }, [proxyUrl]);
 
     useEffect(() => {
         return () => { eventSourceRef.current?.close(); };
     }, []);
 
-    return { stats, isRunning, isPaused, start, stop, pause, resume, sendRequest };
+    return { start, stop, pause, resume, sendRequest };
 }

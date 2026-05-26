@@ -31,7 +31,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
-- [ ] **Task 20:** Decouple React state in the Web Dashboard by migrating global state to a React Context or Zustand store.
+- [x] **Task 20:** Decouple React state in the Web Dashboard by migrating global state to a React Context or Zustand store.
   - **Design Goal:** Eliminate rendering lag and interface blocking in the browser when streaming high-concurrency fuzzing runs, especially on lower-end local developer machines.
   - **Implementation Details:**
     - Refactor [App.tsx](file:///Users/alex/src/swazz/packages/web/src/App.tsx) to move live session state (`logs`, `heatmapStats`, `activeTab`, `liveCount`, `isRunning`, `isPaused`) out of the root element into a Zustand store or optimized React Context.

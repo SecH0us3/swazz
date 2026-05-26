@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import type { RunStats } from '../types.js';
 import type { ResultSummary } from './useRunner.js';
 import type { QueryOptions } from './useDb.js';
+import { useAppStore } from '../store/appStore.js';
 
 interface UseRunHistoryProps {
     runs: any[];
@@ -13,23 +13,23 @@ interface UseRunHistoryProps {
 }
 
 export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, showToast, onRunLoaded }: UseRunHistoryProps) {
-    const [loadedRunId, setLoadedRunId] = useState<string | null>(null);
-    const [historyStats, setHistoryStats] = useState<RunStats | null>(null);
+    const loadedRunId = useAppStore(state => state.loadedRunId);
+    const historyStats = useAppStore(state => state.historyStats);
 
     const handleLoadRun = async (runId: string, importedRun?: any) => {
         const runData = importedRun || runs.find(r => r.id === runId);
         if (!runData) return;
-        setHistoryStats(runData.stats);
-        setLoadedRunId(runId);
+        useAppStore.getState().setHistoryStats(runData.stats);
+        useAppStore.getState().setLoadedRunId(runId);
         onRunLoaded();
         showToast(`Loaded run from history`, 'success');
     };
 
     const handleDeleteRun = async (runId: string) => {
         await deleteRun(runId);
-        if (loadedRunId === runId) {
-            setLoadedRunId(null);
-            setHistoryStats(null);
+        if (useAppStore.getState().loadedRunId === runId) {
+            useAppStore.getState().setLoadedRunId(null);
+            useAppStore.getState().setHistoryStats(null);
         }
         showToast('Run deleted', 'success');
     };
@@ -91,8 +91,6 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
     };
 
     return {
-        loadedRunId, setLoadedRunId,
-        historyStats,
         handleLoadRun, handleDeleteRun, handleExport, handleExportHTML,
         queryResults,
     };

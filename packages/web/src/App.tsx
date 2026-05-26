@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig } from './hooks/useConfig.js';
@@ -16,34 +16,40 @@ import { useFuzzSession } from './hooks/useFuzzSession.js';
 import { useRunHistory } from './hooks/useRunHistory.js';
 import { useTheme } from './hooks/useTheme.js';
 import { MainWorkspace } from './components/MainWorkspace.js';
+import { useAppStore } from './store/appStore.js';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export default function App() {
     const { theme, toggleTheme } = useTheme();
-    const [activeTab, setActiveTab] = useState<'heatmap' | 'logs'>('heatmap');
     const { toasts, showToast, dismissToast } = useToast();
-    const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
-    const [selectedResult, setSelectedResult] = useState<FuzzResult | null>(null);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [isConfigOpen, setIsConfigOpen] = useState(false);
-    const [isSidebarHiddenDesktop, setIsSidebarHiddenDesktop] = useState(false);
-    const [isConfigHiddenDesktop, setIsConfigHiddenDesktop] = useState(false);
 
-    // Live request counter — only int in React state, no array
-    const [liveCount, setLiveCount] = useState(0);
-    const [liveRunId, setLiveRunId] = useState<string | null>(null);
+    // Only subscribe to what App.tsx needs for rendering
+    const activeTab = useAppStore(state => state.activeTab);
+    const setActiveTab = useAppStore(state => state.setActiveTab);
+    const selectedResult = useAppStore(state => state.selectedResult);
+    const setSelectedResult = useAppStore(state => state.setSelectedResult);
+    
+    const isSidebarOpen = useAppStore(state => state.isSidebarOpen);
+    const setIsSidebarOpen = useAppStore(state => state.setIsSidebarOpen);
+    const isConfigOpen = useAppStore(state => state.isConfigOpen);
+    const setIsConfigOpen = useAppStore(state => state.setIsConfigOpen);
+    
+    const isSidebarHiddenDesktop = useAppStore(state => state.isSidebarHiddenDesktop);
+    const setIsSidebarHiddenDesktop = useAppStore(state => state.setIsSidebarHiddenDesktop);
+    const isConfigHiddenDesktop = useAppStore(state => state.isConfigHiddenDesktop);
+    const setIsConfigHiddenDesktop = useAppStore(state => state.setIsConfigHiddenDesktop);
 
     const {
         config, updateConfig, updateHeaders, updateCookies,
         updateDictionaries, updateProfiles, importConfig, exportConfig
     } = useConfig();
 
-    const { stats: liveStats, isRunning, isPaused, start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
+    const { start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun } = useDb();
 
-    const { loadedRunId, setLoadedRunId, historyStats, handleLoadRun, handleDeleteRun, handleExport, handleExportHTML } = useRunHistory({
+    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML } = useRunHistory({
         runs,
         queryResults,
         getRunResults,
@@ -51,28 +57,19 @@ export default function App() {
         showToast,
         onRunLoaded: () => {
             setSelectedResult(null);
-            setHeatmapFilter(null);
+            useAppStore.getState().setHeatmapFilter(null);
         },
     });
 
-    const { isLoadingSpecs, loadEndpoints, handleStart } = useFuzzSession({
+    const { loadEndpoints, handleStart } = useFuzzSession({
         config: config as any,
         updateConfig,
         start,
         saveRun,
         getDb,
         showToast,
-        onRunStarted: (runId) => {
-            setLiveRunId(runId);
-            setLiveCount(0);
-            setHeatmapFilter(null);
-            setSelectedResult(null);
-            setLoadedRunId(null);
-        },
-        onLiveCount: setLiveCount,
     });
 
-    const activeStats = loadedRunId ? historyStats : liveStats;
     const displayUrl = config.base_url || (config._swagger_urls?.[0] ?? '');
 
     const { sidebarWidth, configSidebarWidth, startResizingLeft, startResizingRight } = useResizableLayout(300, 320);
@@ -86,8 +83,6 @@ export default function App() {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeTab, selectedResult]);
-
-    const isBusy = isRunning || isLoadingSpecs;
 
     const handleSelectResult = (row: ResultSummary) => {
         setSelectedResult({
@@ -123,9 +118,6 @@ export default function App() {
                         updateConfig({ base_url: trimmed });
                     }
                 }}
-                isRunning={isBusy}
-                isPaused={isPaused}
-                isLoadingSpecs={isLoadingSpecs}
                 onStart={() => handleStart()}
                 onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
                 onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
@@ -146,7 +138,6 @@ export default function App() {
                 className={`${isSidebarOpen ? 'mobile-open' : ''} ${isSidebarHiddenDesktop ? 'hidden-desktop' : ''}`}
                 config={config}
                 runs={runs}
-                loadedRunId={loadedRunId}
                 onLoadRun={(id, importedRun) => {
                     handleLoadRun(id, importedRun);
                     setIsSidebarOpen(false);
@@ -168,21 +159,10 @@ export default function App() {
             <main className="main-content" style={{ gridArea: 'main', minWidth: 0, height: '100%', overflow: 'hidden', display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${isConfigHiddenDesktop ? 0 : configSidebarWidth}px` }}>
                 <MainWorkspace
                     config={config}
-                    activeRunId={liveRunId}
-                    activeStats={activeStats}
-                    liveCount={liveCount}
-                    loadedRunId={loadedRunId}
-                    historyStats={historyStats}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    heatmapFilter={heatmapFilter}
-                    setHeatmapFilter={setHeatmapFilter}
-                    isRunning={isRunning}
                     handleStart={handleStart}
-                    setLoadedRunId={setLoadedRunId}
                     handleSelectResult={handleSelectResult}
-                    handleExport={() => handleExport(loadedRunId ?? liveRunId, config.base_url)}
-                    handleExportHTML={() => handleExportHTML(loadedRunId ?? liveRunId)}
+                    handleExport={() => handleExport(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId, config.base_url)}
+                    handleExportHTML={() => handleExportHTML(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
                     queryResults={queryResults}
                 />
 

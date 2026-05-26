@@ -5,12 +5,12 @@ import type { ScanRun } from '../../hooks/useDb.js';
 
 import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
+import { useAppStore } from '../../store/appStore.js';
 
 interface Props {
     style?: React.CSSProperties;
     config: SwazzConfig;
     runs: ScanRun[];
-    loadedRunId: string | null;
     onLoadRun: (runId: string, importedRun?: any) => void;
     onDeleteRun: (runId: string) => void;
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
@@ -24,7 +24,6 @@ export function Sidebar({
     style,
     config,
     runs,
-    loadedRunId,
     onLoadRun,
     onDeleteRun,
     onUpdateConfig,
@@ -33,6 +32,8 @@ export function Sidebar({
     onImportRun,
     className,
 }: Props) {
+    const loadedRunId = useAppStore(state => state.loadedRunId);
+    
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
