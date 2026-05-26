@@ -195,6 +195,61 @@ convert-sast:
 
 > **Supply-chain note:** In both options above, base images are pinned to specific SHA-256 digests (`golang@sha256:...` and `sarif-converter@sha256:...`) to defend against supply-chain compromise. Always verify these digests when updating CI dependencies.
 
+### Validating and Testing GitLab Configurations
+
+To ensure your GitLab CI/CD configuration works correctly before pushing to your main repository, you can validate and test it using the following approaches:
+
+#### 1. GitLab CI Lint Tool (Web UI)
+GitLab provides a web-based linting tool that validates the syntax of your configuration:
+1. Navigate to **Build > Pipeline editor** (or **CI/CD > Editor**) in your GitLab project.
+2. Click the **Lint** tab.
+3. Paste your `.gitlab-ci.yml` snippet to verify it is syntax-valid and doesn't contain reference errors.
+*   *Alternatively, access the lint tool directly at `https://gitlab.com/<namespace>/<project>/-/ci/lint`.*
+
+#### 2. Local Testing
+
+You can test the execution of your GitLab CI/CD jobs locally before pushing.
+
+##### Option A: `gitlab-ci-local` (Recommended)
+For a complete local pipeline run that respects job dependencies (`needs`) and artifact passing (essential for the `convert-sast` job), use [gitlab-ci-local](https://github.com/firecow/gitlab-ci-local):
+1. Install it via npm or Homebrew (requires Docker to be running):
+   ```bash
+   # Run directly using npx (no install needed)
+   npx gitlab-ci-local
+
+   # Or install globally via npm
+   npm install -g gitlab-ci-local
+
+   # Or install via Homebrew (macOS)
+   brew install gitlab-ci-local
+   ```
+2. Run the pipeline locally:
+   ```bash
+   # Run the entire pipeline locally
+   gitlab-ci-local
+
+   # Run a specific job locally
+   gitlab-ci-local swazz-fuzz
+   ```
+
+##### Option B: GitLab Runner CLI (Legacy)
+Alternatively, use the `gitlab-runner` CLI to run individual jobs in isolation (requires Docker):
+1. Install the runner locally (e.g., `brew install gitlab-runner` on macOS or `apt-get install gitlab-runner` on Linux).
+2. Execute the fuzzing job:
+   ```bash
+   gitlab-runner exec docker swazz-fuzz
+   ```
+   *Note: `gitlab-runner exec` is deprecated by GitLab and does not support artifact passing between jobs, so running `convert-sast` directly this way will fail unless the SARIF file is already present in your local workspace.*
+
+#### 3. IDE Schema Validation
+To catch syntax errors in real-time, configure your IDE to validate `.gitlab-ci.yml` using the JSON Schema from SchemaStore:
+- **VS Code:** Install the **YAML** extension by Red Hat and add the following mapping in your `settings.json`:
+  ```json
+  "yaml.schemas": {
+    "https://json.schemastore.org/gitlab-ci.json": ".gitlab-ci.yml"
+  }
+  ```
+
 ---
 
 ## Configuration Tips for CI
