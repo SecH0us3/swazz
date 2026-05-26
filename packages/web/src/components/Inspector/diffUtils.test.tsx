@@ -85,16 +85,14 @@ describe('diffUtils', () => {
         it('should detect mutations for boundary/random profiles', () => {
             const node = renderJsonDiff('mutated', 'original', false);
             const element = node as any;
-            expect(element.props.style.backgroundColor).toBe('var(--color-warning-bg)');
-            expect(element.props.style.color).toBe('var(--color-warning)');
+            expect(element.props.className).toBe('diff-mutated-boundary');
             expect(element.props.children).toBe('"mutated"');
         });
 
         it('should detect mutations for malicious profiles', () => {
             const node = renderJsonDiff('mutated', 'original', true);
             const element = node as any;
-            expect(element.props.style.backgroundColor).toBe('var(--color-error-bg)');
-            expect(element.props.style.color).toBe('var(--color-error)');
+            expect(element.props.className).toBe('diff-mutated-malicious');
             expect(element.props.children).toBe('"mutated"');
         });
     });
@@ -171,17 +169,17 @@ describe('diffUtils', () => {
 
         it('should handle type mismatches', () => {
             const node = renderJsonDiff(123, '123', false) as any;
-            expect(node.props.style.backgroundColor).toBe('var(--color-warning-bg)');
+            expect(node.props.className).toBe('diff-mutated-boundary');
             expect(node.props.children).toBe('123');
         });
 
         it('should handle null mismatches', () => {
             const node1 = renderJsonDiff(null, 'hello', false) as any;
-            expect(node1.props.style.backgroundColor).toBe('var(--color-warning-bg)');
+            expect(node1.props.className).toBe('diff-mutated-boundary');
             expect(node1.props.children).toBe('null');
 
             const node2 = renderJsonDiff('hello', null, false) as any;
-            expect(node2.props.style.backgroundColor).toBe('var(--color-warning-bg)');
+            expect(node2.props.className).toBe('diff-mutated-boundary');
             expect(node2.props.children).toBe('"hello"');
         });
 
@@ -203,10 +201,10 @@ describe('diffUtils', () => {
 
         it('should handle array mismatches and empty arrays', () => {
             const nodeMismatch = renderJsonDiff([1, 2], 'not-array', false) as any;
-            expect(nodeMismatch.props.style.backgroundColor).toBe('var(--color-warning-bg)');
+            expect(nodeMismatch.props.className).toBe('diff-mutated-boundary');
 
             const nodeObjVsArrMismatch = renderJsonDiff({ a: 1 }, [1, 2], false) as any;
-            expect(nodeObjVsArrMismatch.props.style.backgroundColor).toBe('var(--color-warning-bg)');
+            expect(nodeObjVsArrMismatch.props.className).toBe('diff-mutated-boundary');
 
             const nodeEmpty = renderJsonDiff([], [], false) as any;
             expect(nodeEmpty.props.children).toBe('[]');
@@ -231,21 +229,20 @@ describe('diffUtils', () => {
         it('should render deleted keys with line-through decoration', () => {
             const node = renderJsonDiff({}, { deletedKey: 'value' }, false) as any;
             const childSpan = node.props.children[1];
-            expect(childSpan.props.style.textDecoration).toBe('line-through');
-            expect(childSpan.props.style.color).toBe('var(--text-disabled)');
+            expect(childSpan.props.className).toBe('diff-deleted-key');
         });
 
         it('should render added keys with success background', () => {
             const node = renderJsonDiff({ addedKey: 'value' }, {}, false) as any;
             const childSpan = node.props.children[1];
-            expect(childSpan.props.style.backgroundColor).toBe('var(--color-success-bg)');
+            expect(childSpan.props.className).toBe('diff-added-key');
         });
 
         it('should render shared keys with same value', () => {
             const node = renderJsonDiff({ key: 'val' }, { key: 'val' }, false) as any;
             const childSpan = node.props.children[1];
             const keySpan = childSpan.props.children[1];
-            expect(keySpan.props.style.color).toBe('var(--accent-light)');
+            expect(keySpan.props.className).toBe('diff-key-name');
         });
     });
 });

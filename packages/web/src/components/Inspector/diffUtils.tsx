@@ -81,21 +81,10 @@ export function renderJsonDiff(
         const valueString = JSON.stringify(val);
 
         if (isMutated) {
-            const highlightBg = isMalicious ? 'var(--color-error-bg)' : 'var(--color-warning-bg)';
-            const highlightBorder = isMalicious ? '1px dashed var(--color-error)' : '1px dashed var(--color-warning)';
-            const highlightColor = isMalicious ? 'var(--color-error)' : 'var(--color-warning)';
             return createElement(
                 'span',
                 {
-                    style: {
-                        backgroundColor: highlightBg,
-                        border: highlightBorder,
-                        color: highlightColor,
-                        padding: '2px 4px',
-                        borderRadius: '4px',
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 500,
-                    },
+                    className: isMalicious ? 'diff-mutated-malicious' : 'diff-mutated-boundary',
                 },
                 valueString
             );
@@ -176,10 +165,7 @@ export function renderJsonDiff(
                     'span',
                     {
                         key,
-                        style: {
-                            color: 'var(--text-disabled)',
-                            textDecoration: 'line-through',
-                        },
+                        className: 'diff-deleted-key',
                     },
                     `${indent}  "${key}": ${JSON.stringify(template[key])}${comma}`
                 )
@@ -194,17 +180,10 @@ export function renderJsonDiff(
                     'span',
                     {
                         key,
-                        style: {
-                            backgroundColor: 'var(--color-success-bg)',
-                            border: '1px dashed var(--color-success)',
-                            padding: '2px 4px',
-                            borderRadius: '4px',
-                            display: 'inline-block',
-                            margin: '2px 0',
-                        },
+                        className: 'diff-added-key',
                     },
                     `${indent}  `,
-                    createElement('span', { style: { color: 'var(--color-success)', fontWeight: 600 } }, `"${key}"`),
+                    createElement('span', { className: 'diff-added-key-name' }, `"${key}"`),
                     `: ${JSON.stringify(fuzzed[key])}${idx < allKeys.length - 1 ? ',' : ''}`
                 )
             );
@@ -222,7 +201,7 @@ export function renderJsonDiff(
                 'span',
                 { key },
                 `${indent}  `,
-                createElement('span', { style: { color: 'var(--accent-light)' } }, `"${key}"`),
+                createElement('span', { className: 'diff-key-name' }, `"${key}"`),
                 ': ',
                 renderJsonDiff(valFuzzed, valTemplate, isMalicious, depth + 1),
                 comma

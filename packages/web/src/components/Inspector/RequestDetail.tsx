@@ -247,19 +247,17 @@ export function RequestDetail({
 
                 <div className="modal-split">
                     <div className="modal-pane">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                        <div className="detail-pane-header">
                             <span className="detail-section-title" style={{ margin: 0 }}>Request Details</span>
-                            <div className="toggle-group" style={{ display: 'flex', marginLeft: 'auto', border: '1px solid var(--border-default)', borderRadius: '6px', overflow: 'hidden' }}>
+                            <div className="detail-toggle-group">
                                 <button
-                                    className={`btn btn-sm ${viewMode === 'diff' ? 'btn-primary' : 'btn-ghost'}`}
-                                    style={{ borderRadius: 0, padding: '4px 8px', fontSize: 'var(--font-size-xs)' }}
+                                    className={`btn btn-sm detail-toggle-btn ${viewMode === 'diff' ? 'btn-primary' : 'btn-ghost'}`}
                                     onClick={() => setViewMode('diff')}
                                 >
                                     Mutation Diff
                                 </button>
                                 <button
-                                    className={`btn btn-sm ${viewMode === 'raw' ? 'btn-primary' : 'btn-ghost'}`}
-                                    style={{ borderRadius: 0, padding: '4px 8px', fontSize: 'var(--font-size-xs)' }}
+                                    className={`btn btn-sm detail-toggle-btn ${viewMode === 'raw' ? 'btn-primary' : 'btn-ghost'}`}
                                     onClick={() => setViewMode('raw')}
                                 >
                                     Raw Request
@@ -268,7 +266,7 @@ export function RequestDetail({
                         </div>
 
                         {viewMode === 'diff' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, overflow: 'hidden' }}>
+                            <div className="detail-diff-container">
                                 <div>
                                     <div className="detail-section-title">Request URL</div>
                                     <div className="detail-url-display">
@@ -277,10 +275,10 @@ export function RequestDetail({
                                 </div>
 
                                 {hasQueryDiff && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px' }}>
+                                    <div className="detail-query-diff-section">
                                         <div className="detail-section-title">Query Parameters Diff</div>
-                                        <div className="detail-json-wrapper" style={{ margin: 0, padding: 'var(--space-2)' }}>
-                                            <pre className="detail-json" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                        <div className="detail-json-wrapper detail-diff-json-wrapper">
+                                            <pre className="detail-json detail-diff-json-pre">
                                                 {renderJsonDiff(fuzzedQueryParams, templateQueryParams, result.profile === 'MALICIOUS')}
                                             </pre>
                                         </div>
@@ -288,21 +286,14 @@ export function RequestDetail({
                                 )}
 
                                 {result.payload !== undefined && result.payload !== null && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0 }}>
+                                    <div className="detail-body-diff-section">
                                         <div className="detail-section-title">Request Body Diff</div>
-                                        <div className="detail-json-wrapper" style={{ margin: 0, flex: 1, overflowY: 'auto', padding: 'var(--space-2)' }}>
-                                            <pre className="detail-json" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                        <div className="detail-json-wrapper detail-diff-json-wrapper">
+                                            <pre className="detail-json detail-diff-json-pre">
                                                 {isJson ? (
                                                     renderJsonDiff(parsedFuzzedBody, parsedTemplateBody, result.profile === 'MALICIOUS')
                                                 ) : (
-                                                    <span style={{
-                                                        backgroundColor: result.profile === 'MALICIOUS' ? 'var(--color-error-bg)' : 'var(--color-warning-bg)',
-                                                        border: result.profile === 'MALICIOUS' ? '1px dashed var(--color-error)' : '1px dashed var(--color-warning)',
-                                                        color: result.profile === 'MALICIOUS' ? 'var(--color-error)' : 'var(--color-warning)',
-                                                        padding: '2px 4px',
-                                                        borderRadius: '4px',
-                                                        fontFamily: 'var(--font-mono)'
-                                                    }}>
+                                                    <span className={result.profile === 'MALICIOUS' ? 'diff-mutated-malicious' : 'diff-mutated-boundary'}>
                                                         {String(result.payload)}
                                                     </span>
                                                 )}
