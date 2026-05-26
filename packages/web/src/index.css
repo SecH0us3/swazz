@@ -1541,6 +1541,50 @@ body.resizing .sidebar-resizer {
   color: var(--accent-light);
 }
 
+.diff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.diff-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.diff-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.diff-legend-dot.added {
+  background-color: var(--color-success);
+}
+
+.diff-legend-dot.deleted {
+  background-color: var(--text-disabled);
+  text-decoration: line-through;
+  width: 12px;
+  height: 2px;
+  border-radius: 0;
+}
+
+.diff-legend-dot.mutated {
+  background-color: var(--color-warning);
+}
+
+.diff-legend-dot.malicious {
+  background-color: var(--color-error);
+}
+
 .detail-meta {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);

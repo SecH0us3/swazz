@@ -267,6 +267,24 @@ export function RequestDetail({
 
                         {viewMode === 'diff' ? (
                             <div className="detail-diff-container">
+                                <div className="diff-legend">
+                                    <span style={{ fontWeight: 500, marginRight: '4px' }}>Diff Legend:</span>
+                                    <span className="diff-legend-item">
+                                        <span className="diff-legend-dot added" /> Added Key
+                                    </span>
+                                    <span className="diff-legend-item">
+                                        <span className="diff-legend-dot deleted" /> Deleted Key
+                                    </span>
+                                    <span className="diff-legend-item">
+                                        <span className="diff-legend-dot mutated" /> Mutation
+                                    </span>
+                                    {result.profile === 'MALICIOUS' && (
+                                        <span className="diff-legend-item">
+                                            <span className="diff-legend-dot malicious" /> Malicious Payload
+                                        </span>
+                                    )}
+                                </div>
+
                                 <div>
                                     <div className="detail-section-title">Request URL</div>
                                     <div className="detail-url-display">
