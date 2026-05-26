@@ -81,5 +81,5 @@ export const useAppStore = create<AppState>((set) => ({
     setHeatmapFilter: (filter) => set({ heatmapFilter: filter }),
     setSelectedResult: (result) => set({ selectedResult: result }),
     
-    setRunnerState: (partial) => set((state) => ({ ...state, ...partial })),
+    setRunnerState: (partial) => set(partial),
 }));
