@@ -125,6 +125,7 @@ export function useFuzzSession({
             selectedResult: null,
             loadedRunId: null,
             activeTab: 'heatmap',
+            stats: null,
         });
 
         let liveCount = 0;
