@@ -180,6 +180,19 @@ Running a fuzzer in CI requires a slightly different configuration profile than 
 | `endpoints.exclude` | `/health`, `/metrics`, `/readyz` | Probes are not business logic — exclude them to keep the findings signal clean. |
 | `rules.ignore` | `401`, `403`, `404`, `405`, `429` | Expected defensive responses are not findings. |
 
+### Supply Chain Security (Commit-Level Pinning)
+
+To protect your CI/CD pipelines from compromised third-party GitHub Actions, Swazz requires and recommends pinning all actions to specific 40-character commit SHAs. Never use mutable tags like `@v4` or `@latest`.
+
+You can configure Dependabot to automatically update these pinned dependencies by adding the following to your `.github/dependabot.yml`:
+
+```yaml
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+```
+
 ### Using a separate CI config file
 
 Keep a dedicated `swazz.config.ci.json` in your repository and pass it with `--config`:
