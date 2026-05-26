@@ -19,8 +19,10 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
     const handleLoadRun = async (runId: string, importedRun?: any) => {
         const runData = importedRun || runs.find(r => r.id === runId);
         if (!runData) return;
-        useAppStore.getState().setHistoryStats(runData.stats);
-        useAppStore.getState().setLoadedRunId(runId);
+        useAppStore.setState({
+            historyStats: runData.stats,
+            loadedRunId: runId,
+        });
         onRunLoaded();
         showToast(`Loaded run from history`, 'success');
     };
