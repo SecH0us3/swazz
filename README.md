@@ -75,6 +75,17 @@ If you want to quickly test Swazz's capabilities, we provide a built-in vulnerab
 
 ---
 
+## 🔄 CI/CD Integration
+
+Swazz is designed to work seamlessly in continuous integration pipelines. It supports exporting fuzz results to **SARIF (Static Analysis Results Interchange Format)**, allowing you to view and manage vulnerabilities directly inside your version control platform.
+
+*   **GitHub Actions:** Automatically runs on pull requests, reporting findings inline on the files. See the [GitHub Actions Guide](docs/ci_cd.md#github-actions--sarif-reporting).
+*   **GitLab CI:** Integrates directly with GitLab's Security Dashboard (via native SARIF or converted SAST reports). See the [GitLab CI Guide](docs/ci_cd.md#gitlab-ci).
+
+For detailed setup instructions, including advanced configuration, caching, and credential injection, check out the full [CI/CD Integration Guide](docs/ci_cd.md).
+
+---
+
 ## ⚙️ Configuration Example
 
 `swazz` uses a flexible JSON configuration for fine-grained control:

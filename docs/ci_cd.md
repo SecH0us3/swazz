@@ -112,16 +112,25 @@ jobs:
 
 ## GitLab CI
 
-For GitLab, pipe the SARIF file as a job artifact. GitLab's Security Dashboard can ingest SARIF reports placed at the standard path.
+Depending on your GitLab version and tier, you can integrate Swazz in one of three ways:
+
+1. **Native SARIF Ingestion (GitLab 18.11+ / Ultimate):** Upload the SARIF report directly.
+2. **GitLab SAST Report Format (GitLab Ultimate):** Convert SARIF to `gl-sast-report.json` using a converter tool.
+3. **Basic Artifacts (GitLab Free / All Tiers):** Download and inspect `swazz.sarif` manually.
+
+### Option A: Native SARIF Ingestion (GitLab 18.11+)
+
+If you are using a GitLab version that supports native SARIF reports, you can specify `reports: sarif` directly in your configuration:
 
 ```yaml
-# .gitlab-ci.yml (relevant excerpt)
+# .gitlab-ci.yml
 stages:
   - security
 
 swazz-fuzz:
   stage: security
-  image: golang:1.26-alpine
+  # Pinned to specific alpine-based Go image digest for supply-chain security
+  image: golang:1.26.3-alpine@sha256:70dd6c2a4efd226a0b7cfb5ad289bf65d83626e542dbde55d491f24d45542a27
   script:
     - cd packages/container
     - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
@@ -133,12 +142,55 @@ swazz-fuzz:
   artifacts:
     when: always
     reports:
-      sast: packages/container/swazz.sarif
+      sarif: packages/container/swazz.sarif
     paths:
       - packages/container/swazz.sarif
     expire_in: 30 days
-  allow_failure: true   # advisory gate — change to false to block merges
+  allow_failure: true   # advisory gate — set to false to block merge requests
 ```
+
+### Option B: GitLab SAST Ingestion (Via Conversion)
+
+For full integration with the GitLab Security Dashboard and Merge Request vulnerability widgets on standard configurations, convert the SARIF file to GitLab's proprietary SAST JSON format (`gl-sast-report.json`) using the `sarif-converter` utility.
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - security
+
+swazz-fuzz:
+  stage: security
+  image: golang:1.26.3-alpine@sha256:70dd6c2a4efd226a0b7cfb5ad289bf65d83626e542dbde55d491f24d45542a27
+  script:
+    - cd packages/container
+    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
+    - |
+      ./swazz-engine start \
+        --config ../../swazz.config.json \
+        --sarif  swazz.sarif \
+        --fail-on-error || true
+  artifacts:
+    when: always
+    paths:
+      - packages/container/swazz.sarif
+    expire_in: 30 days
+
+convert-sast:
+  stage: security
+  needs: [swazz-fuzz]
+  image:
+    name: ignisbuild/sarif-converter:0.1.2@sha256:4b497cb5b54a5c928427e1f40d39893d58ef8a9a4b2776c5b5a6c11cd98df671
+    entrypoint: [""]
+  script:
+    - sarif-converter --type sast packages/container/swazz.sarif gl-sast-report.json
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+    expire_in: 30 days
+```
+
+> **Supply-chain note:** In both options above, base images are pinned to specific SHA-256 digests (`golang@sha256:...` and `sarif-converter@sha256:...`) to defend against supply-chain compromise. Always verify these digests when updating CI dependencies.
 
 ---
 
