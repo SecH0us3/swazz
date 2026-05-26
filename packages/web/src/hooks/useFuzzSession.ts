@@ -122,8 +122,7 @@ export function useFuzzSession({
         useAppStore.getState().setLiveCount(0);
         useAppStore.getState().setHeatmapFilter(null);
         useAppStore.getState().setSelectedResult(null);
-        // The loadedRunId is now in useRunHistory but we'll need to reset it.
-        // Actually, we should probably add loadedRunId to the appStore too.
+        useAppStore.getState().setLoadedRunId(null);
 
         let liveCount = 0;
         let lastCountUpdate = 0;
