@@ -120,6 +120,7 @@ export function useFuzzSession({
 
         // Notify App about new run — it switches to live view for this runId
         useAppStore.setState({
+            liveRunId: runId,
             liveCount: 0,
             heatmapFilter: null,
             selectedResult: null,
