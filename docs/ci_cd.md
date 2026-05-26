@@ -194,6 +194,38 @@ convert-sast:
 
 > **Supply-chain note:** In both options above, base images are pinned to specific SHA-256 digests (`golang@sha256:...` and `sarif-converter@sha256:...`) to defend against supply-chain compromise. Always verify these digests when updating CI dependencies.
 
+### Validating and Testing GitLab Configurations
+
+To ensure your GitLab CI/CD configuration works correctly before pushing to your main repository, you can validate and test it using the following approaches:
+
+#### 1. GitLab CI Lint Tool (Web UI)
+GitLab provides a web-based linting tool that validates the syntax of your configuration:
+1. Navigate to **Build > Pipeline editor** (or **CI/CD > Editor**) in your GitLab project.
+2. Click the **Lint** tab.
+3. Paste your `.gitlab-ci.yml` snippet to verify it is syntax-valid and doesn't contain reference errors.
+*   *Alternatively, access the lint tool directly at `https://gitlab.com/<namespace>/<project>/-/ci/lint`.*
+
+#### 2. Local Testing with the GitLab Runner CLI
+You can test the execution of individual jobs locally on your development machine using the `gitlab-runner` CLI (requires Docker to be running):
+1. Install the runner locally (e.g., `brew install gitlab-runner` on macOS or `apt-get install gitlab-runner` on Linux).
+2. Execute a specific job locally to verify that building, fuzzing, and artifact output work as expected:
+   ```bash
+   # Run the fuzzing job locally
+   gitlab-runner exec docker swazz-fuzz
+
+   # Run the conversion job locally
+   gitlab-runner exec docker convert-sast
+   ```
+
+#### 3. IDE Schema Validation
+To catch syntax errors in real-time, configure your IDE to validate `.gitlab-ci.yml` using the JSON Schema from SchemaStore:
+- **VS Code:** Install the **YAML** extension by Red Hat and add the following mapping in your `settings.json`:
+  ```json
+  "yaml.schemas": {
+    "https://json.schemastore.org/gitlab-ci.json": ".gitlab-ci.yml"
+  }
+  ```
+
 ---
 
 ## Configuration Tips for CI
