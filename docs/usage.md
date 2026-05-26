@@ -15,7 +15,9 @@ The Web UI is the easiest way to manage your fuzzer, inspect requests, and visua
    Run `npm run dev` from the project root. This starts the React frontend and Go API.
 2. **Dashboard Features**
    - **Heatmap**: Visualizes the `Endpoint × Status Code` responses in real time. Perfect for quickly identifying anomalous 500 errors or unexpected 200s.
-   - **Inspector**: Click on any cell in the heatmap to drill down into the raw HTTP requests and responses. Filter by method or status.
+   - **Inspector**: Click on any cell in the heatmap to drill down into the fuzzed HTTP requests and responses.
+     - **Mutation Diff**: Automatically compares fuzzed payloads and query parameters against the original API schemas or template structures. Mutated values are highlighted in **yellow** (for random/boundary mutations) or **red** (for malicious/security payloads), while newly added keys are highlighted in **green** and deleted keys are struck through.
+     - **Raw Request**: Toggle to the raw request view to manually edit URLs, headers, and body payloads, then click **Replay** to send custom requests and view real-time responses.
    - **Configuration Management**: Configure target hosts, auth tokens, and concurrency limits directly in the browser.
 
 ## CLI Mode

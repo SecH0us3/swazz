@@ -1,5 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
-import type { FuzzResult } from '../../types.js';
+import type { FuzzResult, SwazzConfig } from '../../types.js';
+import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.jsx';
 
 interface Props {
     result: FuzzResult;
@@ -8,6 +9,7 @@ interface Props {
     onReplay?: (req: any) => Promise<any>;
     globalHeaders: Record<string, string>;
     globalCookies: Record<string, string>;
+    config?: SwazzConfig;
 }
 
 function renderHighlightedJson(json: string): ReactNode {
@@ -78,9 +80,11 @@ export function RequestDetail({
     onClose,
     onReplay,
     globalHeaders,
-    globalCookies
+    globalCookies,
+    config
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
 
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = formatValue(result.payload);
@@ -91,6 +95,54 @@ export function RequestDetail({
     useEffect(() => {
         setEditedBody(formatValue(result.payload));
     }, [result.payload]);
+
+    const matchingEndpoint = config?.endpoints.find(
+        (ep) => ep.path === result.endpoint && ep.method.toUpperCase() === result.method.toUpperCase()
+    );
+
+    // Process body payload diff
+    let parsedFuzzedBody: any = undefined;
+    let parsedTemplateBody: any = undefined;
+    let isJson = false;
+
+    if (result.payload !== undefined && result.payload !== null) {
+        if (typeof result.payload === 'string') {
+            const trimmed = result.payload.trim();
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                try {
+                    parsedFuzzedBody = JSON.parse(trimmed);
+                    isJson = true;
+                } catch {
+                    parsedFuzzedBody = result.payload;
+                }
+            } else {
+                parsedFuzzedBody = result.payload;
+            }
+        } else if (typeof result.payload === 'object') {
+            parsedFuzzedBody = result.payload;
+            isJson = true;
+        } else {
+            parsedFuzzedBody = result.payload;
+        }
+    }
+
+    if (isJson && matchingEndpoint?.schema) {
+        try {
+            parsedTemplateBody = generateTemplateFromSchema(matchingEndpoint.schema);
+        } catch { /* ignore */ }
+    }
+
+    // Process query params diff
+    const fuzzedQueryParams = parseQueryParams(result.resolvedPath);
+    let templateQueryParams: Record<string, any> = {};
+    if (matchingEndpoint?.schema && (!matchingEndpoint.schema.type || matchingEndpoint.schema.type === 'object') && matchingEndpoint.schema.properties) {
+        // If there's no body, schema properties represent the query params (e.g. GET requests)
+        const parsedQuerySchema = generateTemplateFromSchema(matchingEndpoint.schema);
+        if (parsedQuerySchema && typeof parsedQuerySchema === 'object') {
+            templateQueryParams = parsedQuerySchema;
+        }
+    }
+    const hasQueryDiff = Object.keys(fuzzedQueryParams).length > 0 || Object.keys(templateQueryParams).length > 0;
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
     const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
@@ -195,32 +247,113 @@ export function RequestDetail({
 
                 <div className="modal-split">
                     <div className="modal-pane">
-                        <div className="detail-section-title">Request URL</div>
-                        <input
-                            className="input"
-                            style={{ fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)', color:'var(--accent-light)' }}
-                            value={editedUrl}
-                            onChange={(e) => setEditedUrl(e.target.value)}
-                        />
-
-                        <div className="detail-section-title" style={{ marginTop: 'var(--space-4)', display: 'flex', justifyContent: 'space-between' }}>
-                            <span>
-                                Payload
-                                {result.payload !== undefined && typeof result.payload === 'string' && result.payload.endsWith('…') && (
-                                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-disabled)', fontWeight: 400 }}>(preview — full payload not stored)</span>
-                                )}
-                            </span>
-                            <button className="btn btn-ghost btn-sm" onClick={() => copy(editedBody, 'payload')}>
-                                {copied === 'payload' ? '✓ Copied' : 'Copy'}
-                            </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                            <span className="detail-section-title" style={{ margin: 0 }}>Request Details</span>
+                            <div className="toggle-group" style={{ display: 'flex', marginLeft: 'auto', border: '1px solid var(--border-default)', borderRadius: '6px', overflow: 'hidden' }}>
+                                <button
+                                    className={`btn btn-sm ${viewMode === 'diff' ? 'btn-primary' : 'btn-ghost'}`}
+                                    style={{ borderRadius: 0, padding: '4px 8px', fontSize: 'var(--font-size-xs)' }}
+                                    onClick={() => setViewMode('diff')}
+                                >
+                                    Mutation Diff
+                                </button>
+                                <button
+                                    className={`btn btn-sm ${viewMode === 'raw' ? 'btn-primary' : 'btn-ghost'}`}
+                                    style={{ borderRadius: 0, padding: '4px 8px', fontSize: 'var(--font-size-xs)' }}
+                                    onClick={() => setViewMode('raw')}
+                                >
+                                    Raw Request
+                                </button>
+                            </div>
                         </div>
-                        <textarea
-                            className="textarea"
-                            style={{ flex: 1, margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)' }}
-                            value={editedBody}
-                            onChange={(e) => setEditedBody(e.target.value)}
-                            spellCheck={false}
-                        />
+
+                        {viewMode === 'diff' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, overflow: 'hidden' }}>
+                                <div>
+                                    <div className="detail-section-title">Request URL</div>
+                                    <div style={{
+                                        padding: 'var(--space-2) var(--space-3)',
+                                        borderRadius: 'var(--border-radius-md)',
+                                        backgroundColor: 'var(--bg-input)',
+                                        border: '1px solid var(--border-default)',
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: 'var(--font-size-xs)',
+                                        color: 'var(--accent-light)',
+                                        wordBreak: 'break-all'
+                                    }}>
+                                        {result.resolvedPath || result.endpoint}
+                                    </div>
+                                </div>
+
+                                {hasQueryDiff && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px' }}>
+                                        <div className="detail-section-title">Query Parameters Diff</div>
+                                        <div className="detail-json-wrapper" style={{ margin: 0, padding: 'var(--space-2)' }}>
+                                            <pre className="detail-json" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                                {renderJsonDiff(fuzzedQueryParams, templateQueryParams, result.profile === 'MALICIOUS')}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {result.payload !== undefined && result.payload !== null && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0 }}>
+                                        <div className="detail-section-title">Request Body Diff</div>
+                                        <div className="detail-json-wrapper" style={{ margin: 0, flex: 1, overflowY: 'auto', padding: 'var(--space-2)' }}>
+                                            <pre className="detail-json" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                                {isJson ? (
+                                                    renderJsonDiff(parsedFuzzedBody, parsedTemplateBody, result.profile === 'MALICIOUS')
+                                                ) : (
+                                                    <span style={{
+                                                        backgroundColor: result.profile === 'MALICIOUS' ? 'var(--color-error-bg)' : 'var(--color-warning-bg)',
+                                                        border: result.profile === 'MALICIOUS' ? '1px dashed var(--color-error)' : '1px dashed var(--color-warning)',
+                                                        color: result.profile === 'MALICIOUS' ? 'var(--color-error)' : 'var(--color-warning)',
+                                                        padding: '2px 4px',
+                                                        borderRadius: '4px',
+                                                        fontFamily: 'var(--font-mono)'
+                                                    }}>
+                                                        {String(result.payload)}
+                                                    </span>
+                                                )}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, overflow: 'hidden' }}>
+                                <div>
+                                    <div className="detail-section-title">Request URL</div>
+                                    <input
+                                        className="input"
+                                        style={{ fontFamily:'var(--font-mono)', fontSize:'var(--font-size-xs)', color:'var(--accent-light)' }}
+                                        value={editedUrl}
+                                        onChange={(e) => setEditedUrl(e.target.value)}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0 }}>
+                                    <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span>
+                                            Payload
+                                            {result.payload !== undefined && typeof result.payload === 'string' && result.payload.endsWith('…') && (
+                                                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-disabled)', fontWeight: 400 }}>(preview — full payload not stored)</span>
+                                            )}
+                                        </span>
+                                        <button className="btn btn-ghost btn-sm" onClick={() => copy(editedBody, 'payload')}>
+                                            {copied === 'payload' ? '✓ Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        className="textarea"
+                                        style={{ flex: 1, margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)' }}
+                                        value={editedBody}
+                                        onChange={(e) => setEditedBody(e.target.value)}
+                                        spellCheck={false}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="modal-pane">
