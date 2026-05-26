@@ -1,6 +1,8 @@
 // stats.go: Aggregates and tracks metrics for the fuzzing session.
-// It maintains real-time counters for status codes, endpoint performance,
-// and overall progress, providing snapshots for the UI.
+// Uses a dedicated aggregator goroutine that owns stats data exclusively,
+// eliminating mutex contention from the worker hot path. Workers send
+// results via a buffered channel; the aggregator publishes immutable
+// snapshots through atomic.Pointer at a fixed 150ms interval.
 
 package runner
 
@@ -11,58 +13,115 @@ import (
 	"time"
 )
 
-// GetStats returns a snapshot of current stats.
-func (r *Runner) GetStats() swagger.RunStats {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// Shallow copy maps
-	stats := r.stats
-	stats.StatusCounts = copyMapIntInt64(r.stats.StatusCounts)
-	stats.StatusByProfile = copyMapStatusByProfile(r.stats.StatusByProfile)
-	stats.ProfileCounts = copyMapProfileInt64(r.stats.ProfileCounts)
-	stats.EndpointCounts = copyMapEndpoint(r.stats.EndpointCounts)
-	return stats
+// statsMsg is sent from worker goroutines to the stats aggregator.
+type statsMsg struct {
+	result           *swagger.FuzzResult
+	currentIteration int
+	totalIterations  int
 }
 
-func (r *Runner) updateStats(result *swagger.FuzzResult) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// GetStats returns an immutable snapshot of current stats (lock-free).
+func (r *Runner) GetStats() swagger.RunStats {
+	p := r.latestStats.Load()
+	if p == nil {
+		return newEmptyStats()
+	}
+	return *p
+}
 
-	r.stats.TotalRequests++
-	r.stats.IsRunning = true
+// statsAggregator runs as a single background goroutine that owns all
+// mutable stats data. It consumes results from statsChan, accumulates
+// them without any locks, and publishes snapshots at a fixed interval.
+func (r *Runner) statsAggregator() {
+	defer close(r.statsDone)
+
+	ticker := time.NewTicker(150 * time.Millisecond)
+	defer ticker.Stop()
+
+	stats := newEmptyStats()
+	stats.IsRunning = true
+	var latestIteration, latestTotalIterations int
+	dirty := false
+
+	for {
+		select {
+		case msg, ok := <-r.statsChan:
+			if !ok {
+				// Channel closed — publish final snapshot and exit
+				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
+				return
+			}
+			accumulateResult(&stats, msg.result)
+			if msg.currentIteration > latestIteration {
+				latestIteration = msg.currentIteration
+			}
+			if msg.totalIterations > latestTotalIterations {
+				latestTotalIterations = msg.totalIterations
+			}
+			dirty = true
+
+		case <-ticker.C:
+			if dirty {
+				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
+				dirty = false
+			}
+		}
+	}
+}
+
+// publishSnapshot builds an immutable stats snapshot, stores it atomically,
+// and broadcasts an EventProgress to all SSE subscribers.
+func (r *Runner) publishSnapshot(stats *swagger.RunStats, iteration, totalIterations int) {
+	snap := *stats // shallow copy
+	snap.StatusCounts = copyMapIntInt64(stats.StatusCounts)
+	snap.StatusByProfile = copyMapStatusByProfile(stats.StatusByProfile)
+	snap.ProfileCounts = copyMapProfileInt64(stats.ProfileCounts)
+	snap.EndpointCounts = copyMapEndpoint(stats.EndpointCounts)
+
+	// Merge atomic progress values set by the main loop
+	snap.TotalPlanned = r.totalPlanned.Load()
+	if ep, ok := r.currentEndpoint.Load().(string); ok {
+		snap.Progress.CurrentEndpoint = ep
+	}
+	if pr, ok := r.currentProfile.Load().(string); ok {
+		snap.Progress.CurrentProfile = pr
+	}
+	snap.Progress.CompletedEndpoints = int(r.completedEndpoints.Load())
+	snap.Progress.TotalEndpoints = int(r.totalEndpoints.Load())
+	snap.Progress.CurrentIteration = iteration
+	snap.Progress.TotalIterations = totalIterations
+
+	// Calculate RPS
+	elapsed := float64(time.Now().UnixMilli()-snap.StartTime) / 1000.0
+	if elapsed > 0 {
+		snap.RequestsPerSec = float64(int(float64(snap.TotalRequests)/elapsed*10)) / 10
+	}
+
+	r.latestStats.Store(&snap)
+	r.Broadcast(Event{Type: EventProgress, Data: snap})
+}
+
+// accumulateResult integrates a single fuzz result into the running stats.
+// Called exclusively by the statsAggregator goroutine — no locks needed.
+func accumulateResult(stats *swagger.RunStats, result *swagger.FuzzResult) {
+	stats.TotalRequests++
+	stats.IsRunning = true
 
 	status := result.Status
-	if r.stats.StatusCounts == nil {
-		r.stats.StatusCounts = make(map[int]int64)
-	}
-	r.stats.StatusCounts[status]++
+	stats.StatusCounts[status]++
 
-	if r.stats.StatusByProfile == nil {
-		r.stats.StatusByProfile = make(map[swagger.FuzzingProfile]map[int]int64)
+	if stats.StatusByProfile[result.Profile] == nil {
+		stats.StatusByProfile[result.Profile] = make(map[int]int64)
 	}
-	if r.stats.StatusByProfile[result.Profile] == nil {
-		r.stats.StatusByProfile[result.Profile] = make(map[int]int64)
-	}
-	r.stats.StatusByProfile[result.Profile][status]++
+	stats.StatusByProfile[result.Profile][status]++
 
-	if r.stats.ProfileCounts == nil {
-		r.stats.ProfileCounts = make(map[swagger.FuzzingProfile]int64)
-	}
-	r.stats.ProfileCounts[result.Profile]++
+	stats.ProfileCounts[result.Profile]++
 
 	epKey := fmt.Sprintf("%s %s", strings.ToUpper(result.Method), result.Endpoint)
-	if r.stats.EndpointCounts == nil {
-		r.stats.EndpointCounts = make(map[string]map[int]int64)
+	if stats.EndpointCounts[epKey] == nil {
+		stats.EndpointCounts[epKey] = make(map[int]int64)
 	}
-	if r.stats.EndpointCounts[epKey] == nil {
-		r.stats.EndpointCounts[epKey] = make(map[int]int64)
-	}
-	r.stats.EndpointCounts[epKey][status]++
-
-	elapsed := float64(time.Now().UnixMilli()-r.stats.StartTime) / 1000.0
-	if elapsed > 0 {
-		r.stats.RequestsPerSec = float64(int(float64(r.stats.TotalRequests)/elapsed*10)) / 10
-	}
+	stats.EndpointCounts[epKey][status]++
 }
 
 func newEmptyStats() swagger.RunStats {

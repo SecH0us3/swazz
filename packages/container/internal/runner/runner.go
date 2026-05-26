@@ -36,12 +36,26 @@ type Runner struct {
 	config *swagger.Config
 	client *http.Client
 
-	mu         sync.Mutex
-	isRunning  bool
-	isPaused   bool
-	shouldStop bool
-	stats      swagger.RunStats
-	cancel     context.CancelFunc
+	// Control-flow flags — atomic, zero-lock reads from hot path.
+	isRunning  atomic.Bool
+	isPaused   atomic.Bool
+	shouldStop atomic.Bool
+
+	// Lifecycle guard — only for Start/Stop/Close state transitions.
+	lifecycleMu sync.Mutex
+	cancel      context.CancelFunc
+
+	// Stats aggregation — channel-based, owned by statsAggregator goroutine.
+	statsChan   chan statsMsg
+	latestStats atomic.Pointer[swagger.RunStats]
+	statsDone   chan struct{}
+
+	// Progress metadata — written by main loop (single writer), read by aggregator.
+	currentEndpoint    atomic.Value // string
+	currentProfile     atomic.Value // string
+	completedEndpoints atomic.Int32
+	totalEndpoints     atomic.Int32
+	totalPlanned       atomic.Int64
 
 	// SSE subscribers
 	subsMu sync.RWMutex
@@ -53,6 +67,8 @@ type Runner struct {
 	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
 
+	// Pause/resume — separate mutex, not on hot path.
+	pauseMu   sync.Mutex
 	pauseCond *sync.Cond
 }
 
@@ -67,53 +83,71 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 	r := &Runner{
 		config:     config,
 		client:     client,
-		stats:      newEmptyStats(),
 		subs:       make(map[chan Event]struct{}),
 		eventQueue: NewMPSCQueue(),
 		doneCh:     make(chan struct{}),
+		statsChan:  make(chan statsMsg, 4096),
+		statsDone:  make(chan struct{}),
 	}
-	r.pauseCond = sync.NewCond(&r.mu)
+	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
+	// Publish initial empty stats snapshot.
+	empty := newEmptyStats()
+	r.latestStats.Store(&empty)
 	go r.broadcastLoop()
 	return r
 }
 
 // Close stops the background broadcast loop and cleans up resources.
 func (r *Runner) Close() {
-	r.mu.Lock()
+	r.lifecycleMu.Lock()
 	if r.cancel != nil {
 		r.cancel()
 	}
-	r.mu.Unlock()
+	r.lifecycleMu.Unlock()
 	close(r.doneCh)
 }
 
 // Start begins the fuzzing run. Blocks until complete or stopped.
 func (r *Runner) Start(ctx context.Context) error {
-	r.mu.Lock()
-	if r.isRunning {
-		r.mu.Unlock()
+	r.lifecycleMu.Lock()
+	if r.isRunning.Load() {
+		r.lifecycleMu.Unlock()
 		return fmt.Errorf("already running")
 	}
-	r.isRunning = true
-	r.isPaused = false
-	r.shouldStop = false
-	r.stats = newEmptyStats()
+	r.isRunning.Store(true)
+	r.isPaused.Store(false)
+	r.shouldStop.Store(false)
+
+	// Re-create stats channel (may have been closed by a previous run).
+	r.statsChan = make(chan statsMsg, 4096)
+	r.statsDone = make(chan struct{})
+	empty := newEmptyStats()
+	r.latestStats.Store(&empty)
 
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
-	r.mu.Unlock()
+	r.lifecycleMu.Unlock()
+
+	// Launch the stats aggregator goroutine.
+	go r.statsAggregator()
 
 	defer func() {
 		cancel()
-		r.mu.Lock()
-		r.isRunning = false
-		r.stats.IsRunning = false
-		r.stats.Progress.CurrentEndpoint = ""
-		r.stats.Progress.CurrentProfile = ""
-		r.mu.Unlock()
 
-		r.Broadcast(Event{Type: EventComplete, Data: r.GetStats()})
+		// Close the stats channel to signal aggregator shutdown,
+		// then wait for it to drain and publish the final snapshot.
+		close(r.statsChan)
+		<-r.statsDone
+
+		r.isRunning.Store(false)
+		// Publish final snapshot with IsRunning=false.
+		final := r.GetStats()
+		final.IsRunning = false
+		final.Progress.CurrentEndpoint = ""
+		final.Progress.CurrentProfile = ""
+		r.latestStats.Store(&final)
+		r.Broadcast(Event{Type: EventComplete, Data: final})
 	}()
 
 	profiles := r.getOrderedProfiles()
@@ -124,9 +158,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			break
 		}
 
-		r.mu.Lock()
-		r.stats.Progress.CurrentProfile = string(profile)
-		r.mu.Unlock()
+		r.currentProfile.Store(string(profile))
 
 		for epIdx, endpoint := range r.config.Endpoints {
 			if r.stopped() {
@@ -176,8 +208,8 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 			totalPlanned += int64(baseIter)
 		}
 	}
-	atomic.StoreInt64(&r.stats.TotalPlanned, totalPlanned)
-	r.stats.Progress.TotalEndpoints = len(endpoints) * len(profiles)
+	r.totalPlanned.Store(totalPlanned)
+	r.totalEndpoints.Store(int32(len(endpoints) * len(profiles)))
 }
 
 func (r *Runner) fuzzEndpoint(
@@ -193,10 +225,8 @@ func (r *Runner) fuzzEndpoint(
 	endpoints := r.config.Endpoints
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
 
-	r.mu.Lock()
-	r.stats.Progress.CurrentEndpoint = epKey
-	r.stats.Progress.CompletedEndpoints = profileIdx*len(endpoints) + epIdx
-	r.mu.Unlock()
+	r.currentEndpoint.Store(epKey)
+	r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx))
 
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
@@ -280,22 +310,21 @@ func (r *Runner) fuzzEndpoint(
 		}
 
 		if isDuplicate {
-			atomic.AddInt64(&r.stats.TotalPlanned, -1)
+			r.totalPlanned.Add(-1)
 			continue
 		}
 		if enableDedup {
 			seenHashes[payloadHash] = true
 		}
 
-		r.mu.Lock()
-		for r.isPaused && !r.shouldStop {
+		r.pauseMu.Lock()
+		for r.isPaused.Load() && !r.shouldStop.Load() {
 			r.pauseCond.Wait()
 		}
-		if r.shouldStop {
-			r.mu.Unlock()
+		r.pauseMu.Unlock()
+		if r.shouldStop.Load() {
 			break
 		}
-		r.mu.Unlock()
 
 		sem <- struct{}{}
 		wg.Add(1)
@@ -334,14 +363,14 @@ func (r *Runner) fuzzEndpoint(
 				endpoint.ContentType,
 			)
 
-			r.mu.Lock()
-			r.stats.Progress.CurrentIteration = it + 1
-			r.stats.Progress.TotalIterations = effectiveIterations
-			r.mu.Unlock()
-
-			r.updateStats(result)
+			// Send result to aggregator (buffered, non-blocking under normal load).
+			r.statsChan <- statsMsg{
+				result:           result,
+				currentIteration: it + 1,
+				totalIterations:  effectiveIterations,
+			}
+			// Broadcast individual result immediately (lock-free MPSCQueue).
 			r.Broadcast(Event{Type: EventResult, Data: result})
-			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 		}(i, payload, queryParams)
 
 		if delay > 0 {
@@ -351,61 +380,46 @@ func (r *Runner) fuzzEndpoint(
 
 	wg.Wait()
 
-	r.mu.Lock()
-	r.stats.Progress.CompletedEndpoints = profileIdx*len(endpoints) + epIdx + 1
-	r.mu.Unlock()
+	r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx + 1))
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 
 // Stop signals the runner to stop.
 func (r *Runner) Stop() {
-	r.mu.Lock()
-	r.shouldStop = true
-	r.isPaused = false
+	r.shouldStop.Store(true)
+	r.isPaused.Store(false)
+	r.lifecycleMu.Lock()
 	if r.cancel != nil {
 		r.cancel()
 	}
+	r.lifecycleMu.Unlock()
+	// Wake any goroutines waiting on pauseCond.
 	r.pauseCond.Broadcast()
-	r.mu.Unlock()
 }
 
 // Pause pauses the runner.
 func (r *Runner) Pause() {
-	r.mu.Lock()
-	if r.isRunning {
-		r.isPaused = true
+	if r.isRunning.Load() {
+		r.isPaused.Store(true)
 	}
-	r.mu.Unlock()
 }
 
 // Resume resumes a paused runner.
 func (r *Runner) Resume() {
-	r.mu.Lock()
-	r.isPaused = false
+	r.isPaused.Store(false)
 	r.pauseCond.Broadcast()
-	r.mu.Unlock()
 }
 
 // IsRunning returns whether the runner is active.
 func (r *Runner) IsRunning() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.isRunning
+	return r.isRunning.Load()
 }
 
 // ─── Private ────────────────────────────────────────────
 
-func (r *Runner) stopped() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.shouldStop
-}
+func (r *Runner) stopped() bool { return r.shouldStop.Load() }
 
-func (r *Runner) paused() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.isPaused
-}
+func (r *Runner) paused() bool { return r.isPaused.Load() }
 
 func (r *Runner) executeRequest(
 	ctx context.Context,

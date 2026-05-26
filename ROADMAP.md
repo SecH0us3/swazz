@@ -63,7 +63,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 ## ⚡️ Performance & Architecture
 
 - [x] **Task 16:** Replace the blocking select-timeout SSE Broadcast implementation with a non-blocking lock-free concurrent collection or ring-buffer pattern (similar to LMAX Disruptor or a lock-free MPSC ring-buffer queue).
-- [ ] **Task 19:** Reduce Mutex contention in the Go runner by refactoring statistical aggregation to run off-thread via channels/batching.
+- [x] **Task 19:** Reduce Mutex contention in the Go runner by refactoring statistical aggregation to run off-thread via channels/batching.
   - **Design Goal:** Unlock maximum hardware utilization during local CLI runs. Under high concurrency configurations, worker threads must not get blocked waiting for the single global stats mutex.
   - **Implementation Details:**
     - Modify [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) and [stats.go](file:///Users/alex/src/swazz/packages/container/internal/runner/stats.go) to remove immediate calls to `r.mu.Lock()` from request completion hooks.
