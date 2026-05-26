@@ -138,7 +138,7 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-error || true   # don't block artifact upload on findings
+        --fail-on-error
   artifacts:
     when: always
     reports:
@@ -168,12 +168,13 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-error || true
+        --fail-on-error
   artifacts:
     when: always
     paths:
       - packages/container/swazz.sarif
     expire_in: 30 days
+  allow_failure: true   # advisory gate — set to false to block merge requests
 
 convert-sast:
   stage: security
@@ -188,6 +189,7 @@ convert-sast:
     reports:
       sast: gl-sast-report.json
     expire_in: 30 days
+  allow_failure: true
 ```
 
 > **Supply-chain note:** In both options above, base images are pinned to specific SHA-256 digests (`golang@sha256:...` and `sarif-converter@sha256:...`) to defend against supply-chain compromise. Always verify these digests when updating CI dependencies.
