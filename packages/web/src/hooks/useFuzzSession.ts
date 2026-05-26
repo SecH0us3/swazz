@@ -159,7 +159,6 @@ export function useFuzzSession({
             saveRun(completedRun);
             useAppStore.setState({
                 liveCount,
-                liveRunId: null,
             });
             showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
         };
