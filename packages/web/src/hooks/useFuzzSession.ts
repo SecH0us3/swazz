@@ -119,10 +119,12 @@ export function useFuzzSession({
         await saveRun(runRec);
 
         // Notify App about new run — it switches to live view for this runId
-        useAppStore.getState().setLiveCount(0);
-        useAppStore.getState().setHeatmapFilter(null);
-        useAppStore.getState().setSelectedResult(null);
-        useAppStore.getState().setLoadedRunId(null);
+        useAppStore.setState({
+            liveCount: 0,
+            heatmapFilter: null,
+            selectedResult: null,
+            loadedRunId: null,
+        });
 
         let liveCount = 0;
         let lastCountUpdate = 0;
