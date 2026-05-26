@@ -205,14 +205,15 @@ GitLab provides a web-based linting tool that validates the syntax of your confi
 3. Paste your `.gitlab-ci.yml` snippet to verify it is syntax-valid and doesn't contain reference errors.
 *   *Alternatively, access the lint tool directly at `https://gitlab.com/<namespace>/<project>/-/ci/lint`.*
 
-#### 2. Local Testing with `gitlab-ci-local` (Recommended)
-While GitLab CI provides a native `gitlab-runner exec` command, it is deprecated and has severe limitations, such as not supporting artifact passing between jobs. This means the downstream `convert-sast` job will fail to find the SARIF artifact produced by `swazz-fuzz` when run locally via `gitlab-runner exec`.
+#### 2. Local Testing
 
-To fully test multi-job pipelines locally (including artifact and cache passing), use the modern community-maintained tool **`gitlab-ci-local`**:
+You can test the execution of your GitLab CI/CD jobs locally before pushing.
 
-1. Install it on your machine (requires Docker to be running):
+##### Option A: `gitlab-ci-local` (Recommended)
+For a complete local pipeline run that respects job dependencies (`needs`) and artifact passing (essential for the `convert-sast` job), use [gitlab-ci-local](https://github.com/firecow/gitlab-ci-local):
+1. Install it via npm or Homebrew (requires Docker to be running):
    ```bash
-   # Run directly using npx
+   # Run directly using npx (no install needed)
    npx gitlab-ci-local
 
    # Or install globally via npm
@@ -221,7 +222,7 @@ To fully test multi-job pipelines locally (including artifact and cache passing)
    # Or install via Homebrew (macOS)
    brew install gitlab-ci-local
    ```
-2. Execute the pipeline locally. The tool will run the jobs inside local Docker containers, preserving artifact outputs and passing the `swazz.sarif` file from the `swazz-fuzz` job to `convert-sast` automatically:
+2. Run the pipeline locally:
    ```bash
    # Run the entire pipeline locally
    gitlab-ci-local
@@ -229,6 +230,15 @@ To fully test multi-job pipelines locally (including artifact and cache passing)
    # Run a specific job locally
    gitlab-ci-local swazz-fuzz
    ```
+
+##### Option B: GitLab Runner CLI (Legacy)
+Alternatively, use the `gitlab-runner` CLI to run individual jobs in isolation (requires Docker):
+1. Install the runner locally (e.g., `brew install gitlab-runner` on macOS or `apt-get install gitlab-runner` on Linux).
+2. Execute the fuzzing job:
+   ```bash
+   gitlab-runner exec docker swazz-fuzz
+   ```
+   *Note: `gitlab-runner exec` is deprecated by GitLab and does not support artifact passing between jobs, so running `convert-sast` directly this way will fail unless the SARIF file is already present in your local workspace.*
 
 #### 3. IDE Schema Validation
 To catch syntax errors in real-time, configure your IDE to validate `.gitlab-ci.yml` using the JSON Schema from SchemaStore:
