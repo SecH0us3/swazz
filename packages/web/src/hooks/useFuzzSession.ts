@@ -105,7 +105,6 @@ export function useFuzzSession({
         delete finalConfig.disabled_endpoints;
 
         const runId = `run_${Date.now()}`;
-        useAppStore.getState().setLiveRunId(runId);
 
         const runRec: ScanRun = {
             id: runId,

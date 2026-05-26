@@ -30,8 +30,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
     const handleDeleteRun = async (runId: string) => {
         await deleteRun(runId);
         if (useAppStore.getState().loadedRunId === runId) {
-            useAppStore.getState().setLoadedRunId(null);
-            useAppStore.getState().setHistoryStats(null);
+            useAppStore.setState({ loadedRunId: null, historyStats: null });
         }
         showToast('Run deleted', 'success');
     };
