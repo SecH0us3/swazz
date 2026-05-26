@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useRunner } from './useRunner.js';
+import { useAppStore } from '../store/appStore.js';
 
 describe('useRunner', () => {
     const proxyUrl = 'http://localhost:8080';
@@ -13,6 +14,7 @@ describe('useRunner', () => {
             close: vi.fn(),
             onerror: null,
         }));
+        useAppStore.setState({ isRunning: false, isPaused: false, stats: null });
     });
 
     it('should handle successful stop', async () => {
@@ -24,7 +26,7 @@ describe('useRunner', () => {
         });
 
         expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
-        expect(result.current.isRunning).toBe(false);
+        expect(useAppStore.getState().isRunning).toBe(false);
     });
 
     it('should handle failed stop and still set isRunning to false', async () => {
@@ -38,7 +40,7 @@ describe('useRunner', () => {
             await expect(result.current.stop()).rejects.toThrow("Failed to stop run");
         });
 
-        expect(result.current.isRunning).toBe(false);
+        expect(useAppStore.getState().isRunning).toBe(false);
     });
 
     it('should handle successful pause', async () => {
@@ -50,7 +52,7 @@ describe('useRunner', () => {
         });
 
         expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' });
-        expect(result.current.isPaused).toBe(true);
+        expect(useAppStore.getState().isPaused).toBe(true);
     });
 
     it('should handle failed pause', async () => {
@@ -64,7 +66,7 @@ describe('useRunner', () => {
             await result.current.pause();
         })).rejects.toThrow('Failed to pause');
 
-        expect(result.current.isPaused).toBe(false);
+        expect(useAppStore.getState().isPaused).toBe(false);
     });
 
     it('should handle successful resume', async () => {
@@ -76,6 +78,6 @@ describe('useRunner', () => {
         });
 
         expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' });
-        expect(result.current.isPaused).toBe(false);
+        expect(useAppStore.getState().isPaused).toBe(false);
     });
 });

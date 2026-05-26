@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import type { RunStats, SwazzConfig } from '../types.js';
 import { toSummary } from './useRunner.js';
 import { loadSwaggerUrl } from '../services/swaggerService.js';
 import { dbStreamResult } from './useDb.js';
 import type { ScanRun } from './useDb.js';
+import { useAppStore } from '../store/appStore.js';
 
 interface UseFuzzSessionProps {
     config: SwazzConfig;
@@ -12,8 +13,6 @@ interface UseFuzzSessionProps {
     saveRun: (runRecord: ScanRun, rows?: any[]) => void;
     getDb: () => IDBDatabase | null;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
-    onRunStarted: (runId: string) => void;
-    onLiveCount: (count: number) => void;
 }
 
 export function useFuzzSession({
@@ -23,16 +22,11 @@ export function useFuzzSession({
     saveRun,
     getDb,
     showToast,
-    onRunStarted,
-    onLiveCount,
 }: UseFuzzSessionProps) {
-    const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
-    const [currentRunId, setCurrentRunId] = useState<string | null>(null);
-
     const loadEndpoints = useCallback(async (urls: string[]) => {
         if (urls.length === 0) return;
 
-        setIsLoadingSpecs(true);
+        useAppStore.setState({ isLoadingSpecs: true });
         showToast(`Loading ${urls.length} spec${urls.length > 1 ? 's' : ''}...`, 'info');
 
         let allEndpoints: any[] = [];
@@ -61,7 +55,7 @@ export function useFuzzSession({
             }
         }
 
-        setIsLoadingSpecs(false);
+        useAppStore.setState({ isLoadingSpecs: false });
 
         if (allEndpoints.length > 0) {
             updateConfig({ base_url: detectedBaseUrl, endpoints: allEndpoints } as any);
@@ -111,7 +105,6 @@ export function useFuzzSession({
         delete finalConfig.disabled_endpoints;
 
         const runId = `run_${Date.now()}`;
-        setCurrentRunId(runId);
 
         const runRec: ScanRun = {
             id: runId,
@@ -125,7 +118,15 @@ export function useFuzzSession({
         await saveRun(runRec);
 
         // Notify App about new run — it switches to live view for this runId
-        onRunStarted(runId);
+        useAppStore.setState({
+            liveRunId: runId,
+            liveCount: 0,
+            heatmapFilter: null,
+            selectedResult: null,
+            loadedRunId: null,
+            activeTab: 'heatmap',
+            stats: null,
+        });
 
         let liveCount = 0;
         let lastCountUpdate = 0;
@@ -149,15 +150,17 @@ export function useFuzzSession({
             const now = Date.now();
             if (now - lastCountUpdate > 500) {
                 lastCountUpdate = now;
-                onLiveCount(liveCount);
+                useAppStore.setState({ liveCount });
             }
         };
 
         const onComplete = (finalStats: RunStats) => {
             const completedRun: ScanRun = { ...runRec, completedAt: Date.now(), stats: finalStats };
             saveRun(completedRun);
-            onLiveCount(liveCount);
-            setCurrentRunId(null);
+            useAppStore.setState({
+                liveCount,
+                liveRunId: null,
+            });
             showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
         };
 
@@ -173,9 +176,9 @@ export function useFuzzSession({
                 msg = 'Server is busy. Please wait for the current run to complete.';
             }
             showToast(`Error: ${msg}`, 'error');
-            setCurrentRunId(null);
+            useAppStore.setState({ liveRunId: null });
         }
     };
 
-    return { isLoadingSpecs, currentRunId, loadEndpoints, handleStart };
+    return { loadEndpoints, handleStart };
 }

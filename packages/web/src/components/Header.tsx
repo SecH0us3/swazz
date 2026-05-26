@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useAppStore } from '../store/appStore.js';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Props {
     baseUrl: string;
     onChangeBaseUrl?: (url: string) => void;
-    isRunning: boolean;
-    isPaused: boolean;
-    isLoadingSpecs?: boolean;
     onStart: () => void;
     onStop: () => void;
     onPause: () => void;
@@ -19,9 +18,6 @@ interface Props {
 export function Header({
     baseUrl,
     onChangeBaseUrl,
-    isRunning,
-    isPaused,
-    isLoadingSpecs,
     onStart,
     onStop,
     onPause,
@@ -31,6 +27,14 @@ export function Header({
     theme,
     onToggleTheme,
 }: Props) {
+    const { isRunning, isPaused, isLoadingSpecs } = useAppStore(useShallow(state => ({
+        isRunning: state.isRunning,
+        isPaused: state.isPaused,
+        isLoadingSpecs: state.isLoadingSpecs,
+    })));
+
+    const isBusy = isRunning || isLoadingSpecs;
+
     const [localUrl, setLocalUrl] = useState(baseUrl);
 
     useEffect(() => {
@@ -95,7 +99,7 @@ export function Header({
                     <div className="header-divider" />
 
                     {/* Running status pill */}
-                    {isRunning && (
+                    {isBusy && (
                         <div className={`header-status${isLoadingSpecs ? ' loading' : isPaused ? ' paused' : ''}`}>
                             {isLoadingSpecs ? (
                                 <>
@@ -124,7 +128,7 @@ export function Header({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
                     {/* Actions */}
                     <div className="header-actions">
-                        {!isRunning ? (
+                        {!isBusy ? (
                             <button className="btn btn-primary" id="btn-start" onClick={onStart}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                                     <polygon points="5,3 19,12 5,21"/>
@@ -205,14 +209,14 @@ export function Header({
                         placeholder="https://api.example.com"
                         readOnly={!onChangeBaseUrl}
                     />
-                    {isRunning && !isLoadingSpecs && (
+                    {isBusy && !isLoadingSpecs && (
                         <span
                             style={{ width:6, height:6, borderRadius:'50%', background:'var(--color-success)', flexShrink:0, boxShadow:'0 0 6px var(--color-success)', animation:'pulse-success 1.5s infinite' }}
                         />
                     )}
                 </div>
             )}
-            {isRunning && !isLoadingSpecs && (
+            {isBusy && !isLoadingSpecs && (
                 <div style={{ height: '2px', width: '100%', background: 'var(--bg-surface)', overflow: 'hidden', position: 'absolute', bottom: 0, left: 0 }}>
                     <div style={{ width: '30%', height: '100%', background: 'var(--color-success)', animation: 'progress-indeterminate 1.5s infinite linear', transformOrigin: '0% 50%' }} />
                 </div>

@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { useAppStore } from '../store/appStore.js';
+import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import type { RunStats } from '../types.js';
@@ -8,18 +10,7 @@ import type { ResultSummary } from '../hooks/useRunner.js';
 
 interface MainWorkspaceProps {
     config: any;
-    activeRunId: string | null;
-    activeStats: RunStats | null;
-    liveCount: number;
-    loadedRunId: string | null;
-    historyStats: RunStats | null;
-    activeTab: 'heatmap' | 'logs';
-    setActiveTab: (tab: 'heatmap' | 'logs') => void;
-    heatmapFilter: HeatmapFilter | null;
-    setHeatmapFilter: (f: HeatmapFilter | null) => void;
-    isRunning: boolean;
     handleStart: (urls?: string[]) => void;
-    setLoadedRunId: (id: string | null) => void;
     handleSelectResult: (r: ResultSummary) => void;
     handleExport: () => void;
     handleExportHTML: () => void;
@@ -28,23 +19,31 @@ interface MainWorkspaceProps {
 
 export function MainWorkspace({
     config,
-    activeRunId,
-    activeStats,
-    liveCount,
-    loadedRunId,
-    historyStats,
-    activeTab,
-    setActiveTab,
-    heatmapFilter,
-    setHeatmapFilter,
-    isRunning,
     handleStart,
-    setLoadedRunId,
     handleSelectResult,
     handleExport,
     handleExportHTML,
     queryResults,
 }: MainWorkspaceProps) {
+    const {
+        activeRunId,
+        activeStats,
+        liveCount,
+        loadedRunId,
+        historyStats,
+        activeTab,
+        heatmapFilter,
+        isRunning
+    } = useAppStore(useShallow(state => ({
+        activeRunId: state.liveRunId,
+        activeStats: state.stats,
+        liveCount: state.liveCount,
+        loadedRunId: state.loadedRunId,
+        historyStats: state.historyStats,
+        activeTab: state.activeTab,
+        heatmapFilter: state.heatmapFilter,
+        isRunning: state.isRunning
+    })));
 
     // Endpoint keys for heatmap — derive from stats or config
     const endpointKeys = useMemo(() => {
@@ -84,7 +83,7 @@ export function MainWorkspace({
                             · {new Date(historyStats?.startTime || Date.now()).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                         </span>
                     </div>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setLoadedRunId(null)}>← Live</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => useAppStore.setState({ loadedRunId: null })}>← Live</button>
                 </div>
             )}
 
@@ -117,7 +116,7 @@ export function MainWorkspace({
                     <div className="tab-bar">
                         <button
                             className={`tab-bar-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('heatmap')}
+                            onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
                         >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
@@ -126,7 +125,7 @@ export function MainWorkspace({
                         </button>
                         <button
                             className={`tab-bar-btn ${activeTab === 'logs' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('logs')}
+                            onClick={() => useAppStore.setState({ activeTab: 'logs' })}
                         >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
@@ -144,8 +143,8 @@ export function MainWorkspace({
                             endpointKeys={endpointKeys}
                             heatmapFilter={heatmapFilter}
                             onHeatmapFilter={(filter) => {
-                                setHeatmapFilter(filter);
-                                if (filter) setActiveTab('logs');
+                                useAppStore.setState({ heatmapFilter: filter });
+                                if (filter) useAppStore.setState({ activeTab: 'logs' });
                             }}
                             isRunning={isRunning}
                             onExportHTML={handleExportHTML}
@@ -156,7 +155,7 @@ export function MainWorkspace({
                             queryResults={queryResults}
                             liveCount={liveCount}
                             heatmapFilter={heatmapFilter}
-                            onClearHeatmapFilter={() => setHeatmapFilter(null)}
+                            onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
                             onSelectResult={handleSelectResult}
                             onExport={handleExport}
                         />

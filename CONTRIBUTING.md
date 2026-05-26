@@ -67,7 +67,8 @@ To keep the codebase maintainable, secure, and clean, please adhere to the follo
 
 ### 2. TypeScript / React Frontend (packages/web)
 - **Dumb Components**: UI components inside `src/components/` must remain as "dumb" as possible, focusing purely on layout and visual presentation.
-- **Hooks for Complex State**: Business logic, resizes, and multi-component UI states must be encapsulated inside custom hooks (`src/hooks/`).
+- **Zustand Global State**: The application uses **Zustand** for global UI and Fuzzing Session state (`src/store/appStore.ts`). Use selector-based rendering (e.g. `useAppStore(state => state.activeTab)`) instead of React Context or prop-drilling to handle high-frequency updates from Server-Sent Events without lagging the UI.
+- **Hooks for Complex State**: Business logic, resizes, and multi-component UI states must be encapsulated inside custom hooks (`src/hooks/`). These hooks should dispatch updates directly to the Zustand store when interacting with global state.
 - **Services for Network Logic**: Network fetch calls and API communications must be isolated inside `src/services/` (e.g. `swaggerService.ts`). Do not put fetch logic directly in React components.
 - **Vanilla CSS**: We use Vanilla CSS for styling. Global variables and standard theme variables (e.g., `--accent-light`, `--color-error`) are located in `src/index.css`. **Avoid using TailwindCSS** or other utility frameworks unless explicitly required.
 - **Type Syncing**: Ensure frontend type definitions in `src/types.ts` are strictly synced with Go JSON response structures.
