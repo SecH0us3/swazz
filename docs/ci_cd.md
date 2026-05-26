@@ -179,6 +179,7 @@ swazz-fuzz:
 convert-sast:
   stage: security
   needs: [swazz-fuzz]
+  when: always
   image:
     name: ignisbuild/sarif-converter:0.1.2@sha256:4b497cb5b54a5c928427e1f40d39893d58ef8a9a4b2776c5b5a6c11cd98df671
     entrypoint: [""]
