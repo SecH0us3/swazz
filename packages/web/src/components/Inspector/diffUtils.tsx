@@ -4,8 +4,8 @@ import type { SchemaProperty } from '../../types.js';
 /**
  * Generates a default/mock template object based on a JSON Schema.
  */
-export function generateTemplateFromSchema(schema?: SchemaProperty): any {
-    if (!schema) return undefined;
+export function generateTemplateFromSchema(schema?: SchemaProperty, depth: number = 0): any {
+    if (!schema || depth > 10) return undefined;
     if (schema.enum && schema.enum.length > 0) {
         return schema.enum[0];
     }
@@ -14,12 +14,12 @@ export function generateTemplateFromSchema(schema?: SchemaProperty): any {
             const obj: Record<string, any> = {};
             if (schema.properties) {
                 for (const [k, prop] of Object.entries(schema.properties)) {
-                    obj[k] = generateTemplateFromSchema(prop);
+                    obj[k] = generateTemplateFromSchema(prop, depth + 1);
                 }
             }
             return obj;
         case 'array':
-            return schema.items ? [generateTemplateFromSchema(schema.items)] : [];
+            return schema.items ? [generateTemplateFromSchema(schema.items, depth + 1)] : [];
         case 'string':
             if (schema.format === 'date-time') return '2026-05-26T21:30:00Z';
             if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000';
@@ -33,7 +33,7 @@ export function generateTemplateFromSchema(schema?: SchemaProperty): any {
         default:
             // Fallback for simple values or undefined type
             if (schema.properties) {
-                return generateTemplateFromSchema({ ...schema, type: 'object' });
+                return generateTemplateFromSchema({ ...schema, type: 'object' }, depth + 1);
             }
             return '';
     }
@@ -108,11 +108,12 @@ export function renderJsonDiff(
         return createElement('span', { style: { color: 'var(--text-disabled)' } }, 'undefined');
     }
 
-    // Handle primitive mismatch or nulls
+    // Handle primitive mismatch, nulls, or array vs object mismatches
     if (
         typeof fuzzed !== typeof template ||
         (fuzzed === null && template !== null) ||
-        (fuzzed !== null && template === null)
+        (fuzzed !== null && template === null) ||
+        (Array.isArray(fuzzed) !== Array.isArray(template))
     ) {
         return renderPrimitiveValue(fuzzed, true);
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.jsx';
+import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 import type { SchemaProperty } from '../../types.js';
 
 describe('diffUtils', () => {
@@ -142,6 +142,24 @@ describe('diffUtils', () => {
             const schema: any = { type: 'unknown' };
             expect(generateTemplateFromSchema(schema)).toBe('');
         });
+
+        it('should terminate recursion on recursive schemas', () => {
+            const schema: any = {
+                type: 'object',
+                properties: {}
+            };
+            schema.properties.self = schema; // recursive reference
+            const result = generateTemplateFromSchema(schema);
+            expect(result).toBeDefined();
+            expect(result.self).toBeDefined();
+            
+            // Traverse down 11 levels
+            let current = result;
+            for (let i = 0; i < 11; i++) {
+                if (current) current = current.self;
+            }
+            expect(current).toBeUndefined(); // Recursion stops at depth limit 10
+        });
     });
 
     describe('renderJsonDiff - Complex Data & Edge Cases', () => {
@@ -186,6 +204,9 @@ describe('diffUtils', () => {
         it('should handle array mismatches and empty arrays', () => {
             const nodeMismatch = renderJsonDiff([1, 2], 'not-array', false) as any;
             expect(nodeMismatch.props.style.backgroundColor).toBe('var(--color-warning-bg)');
+
+            const nodeObjVsArrMismatch = renderJsonDiff({ a: 1 }, [1, 2], false) as any;
+            expect(nodeObjVsArrMismatch.props.style.backgroundColor).toBe('var(--color-warning-bg)');
 
             const nodeEmpty = renderJsonDiff([], [], false) as any;
             expect(nodeEmpty.props.children).toBe('[]');

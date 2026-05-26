@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig } from '../../types.js';
-import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.jsx';
+import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 
 interface Props {
     result: FuzzResult;
@@ -271,16 +271,7 @@ export function RequestDetail({
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, overflow: 'hidden' }}>
                                 <div>
                                     <div className="detail-section-title">Request URL</div>
-                                    <div style={{
-                                        padding: 'var(--space-2) var(--space-3)',
-                                        borderRadius: 'var(--border-radius-md)',
-                                        backgroundColor: 'var(--bg-input)',
-                                        border: '1px solid var(--border-default)',
-                                        fontFamily: 'var(--font-mono)',
-                                        fontSize: 'var(--font-size-xs)',
-                                        color: 'var(--accent-light)',
-                                        wordBreak: 'break-all'
-                                    }}>
+                                    <div className="detail-url-display">
                                         {result.resolvedPath || result.endpoint}
                                     </div>
                                 </div>
