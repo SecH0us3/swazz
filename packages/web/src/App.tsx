@@ -56,8 +56,10 @@ export default function App() {
         deleteRun,
         showToast,
         onRunLoaded: () => {
-            setSelectedResult(null);
-            useAppStore.getState().setHeatmapFilter(null);
+            useAppStore.setState({
+                selectedResult: null,
+                heatmapFilter: null,
+            });
         },
     });
 

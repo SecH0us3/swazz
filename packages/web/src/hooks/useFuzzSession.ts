@@ -155,8 +155,10 @@ export function useFuzzSession({
         const onComplete = (finalStats: RunStats) => {
             const completedRun: ScanRun = { ...runRec, completedAt: Date.now(), stats: finalStats };
             saveRun(completedRun);
-            useAppStore.getState().setLiveCount(liveCount);
-            useAppStore.getState().setLiveRunId(null);
+            useAppStore.setState({
+                liveCount,
+                liveRunId: null,
+            });
             showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
         };
 
