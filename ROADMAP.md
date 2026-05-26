@@ -53,7 +53,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Create a suite of TypeScript Playwright tests under a new directory `tests/e2e/`.
     - Configure GitHub Actions to spin up the local Vulnerable Demo API, start `swazz-engine serve`, build/run the React application, automate the browser to trigger a demo fuzzing run, and assert that findings are properly populated on the heatmap grid and can be exported.
-- [/] **Task 23:** Pin all GitHub Actions in `.github/workflows/` to specific commit SHAs (commit-level pinning).
+- [x] **Task 23:** Pin all GitHub Actions in `.github/workflows/` to specific commit SHAs (commit-level pinning).
   - **Design Goal:** Hardening CI/CD security against potential compromised third-party GitHub Action repository tags (Supply Chain protection).
   - **Implementation Details:**
     - Replace version tags (e.g. `actions/checkout@v4`, `actions/setup-go@v5`) in `.github/workflows/` with exact 40-character commit hashes.
