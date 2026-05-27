@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/security"
@@ -70,6 +71,8 @@ type Runner struct {
 	// Pause/resume — separate mutex, not on hot path.
 	pauseMu   sync.Mutex
 	pauseCond *sync.Cond
+
+	analyzer *analyzer.AnalyzerRegistry
 }
 
 // New creates a new Runner.
@@ -88,6 +91,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		doneCh:     make(chan struct{}),
 		statsChan:  make(chan statsMsg, 4096),
 		statsDone:  make(chan struct{}),
+		analyzer:   analyzer.NewRegistry(),
 	}
 	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
@@ -575,16 +579,21 @@ func (r *Runner) executeRequest(
 		}
 
 		var respBody any
-		if resp.StatusCode >= 400 {
+		var rawBodyBytes []byte
+		if resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody {
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
 			io.Copy(buf, io.LimitReader(resp.Body, 51200)) // #nosec G104 -- error intentionally ignored; buf.Len() check handles empty reads
 			if buf.Len() > 0 {
-				var parsed any
-				if json.Unmarshal(buf.Bytes(), &parsed) == nil {
-					respBody = parsed
-				} else {
-					respBody = buf.String()
+				rawBodyBytes = make([]byte, buf.Len())
+				copy(rawBodyBytes, buf.Bytes())
+				if resp.StatusCode >= 400 {
+					var parsed any
+					if json.Unmarshal(rawBodyBytes, &parsed) == nil {
+						respBody = parsed
+					} else {
+						respBody = string(rawBodyBytes)
+					}
 				}
 			}
 			bufPool.Put(buf)
@@ -593,11 +602,35 @@ func (r *Runner) executeRequest(
 		}
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
 
-		return &swagger.FuzzResult{
-			ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
-			Method: method, Profile: profile, Status: resp.StatusCode, Duration: duration,
-			Payload: mergePayload(payload, queryParams), PayloadSize: payloadSize, ResponseBody: respBody,
-			Timestamp: time.Now().UnixMilli(), Retries: attempt,
+		result := &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: resolvedPath,
+			Method:       method,
+			Profile:      profile,
+			Status:       resp.StatusCode,
+			Duration:     duration,
+			Payload:      mergePayload(payload, queryParams),
+			PayloadSize:  payloadSize,
+			ResponseBody: respBody,
+			ResponseSize: int64(len(rawBodyBytes)),
+			Timestamp:    time.Now().UnixMilli(),
+			Retries:      attempt,
 		}
+
+		if r.config.Settings.AnalyzeResponseBody && len(rawBodyBytes) > 0 {
+			input := &analyzer.AnalysisInput{
+				SentPayload:     result.Payload,
+				ResponseBody:    rawBodyBytes,
+				ResponseHeaders: resp.Header,
+				Duration:        duration,
+				Profile:         profile,
+				Endpoint:        originalPath,
+				Method:          method,
+			}
+			result.AnalyzerFindings = r.analyzer.Analyze(input)
+		}
+
+		return result
 	}
 }

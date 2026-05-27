@@ -130,6 +130,8 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		Error:           r.Error,
 		Timestamp:       r.Timestamp,
 		Retries:         r.Retries,
+		ResponseSize:     r.ResponseSize,
+		AnalyzerFindings: r.AnalyzerFindings,
 	}
 }
 

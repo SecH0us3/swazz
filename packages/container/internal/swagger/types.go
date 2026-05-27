@@ -79,6 +79,7 @@ type Settings struct {
 	// PayloadCategories controls which payload subcategories are active per profile.
 	// If nil or empty for a profile, all categories are enabled (backward compatible).
 	PayloadCategories map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
+	AnalyzeResponseBody bool                      `json:"analyze_response_body"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -90,44 +91,56 @@ func DefaultSettings() Settings {
 		MaxPayloadSizeBytes:   134217728, // 128MB (to allow large boundary strings)
 		DelayBetweenRequestMs: 0,
 		Profiles:              []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
+		AnalyzeResponseBody:   true,
 	}
+}
+
+type AnalysisFinding struct {
+	RuleID   string `json:"ruleId"`
+	Level    string `json:"level"` // "error", "warning", "note"
+	Message  string `json:"message"`
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // FuzzResult represents the outcome of a single fuzz request.
 // Used internally and in the report output — may contain large payload data.
 type FuzzResult struct {
-	ID           string         `json:"id"`
-	Endpoint     string         `json:"endpoint"`
-	ResolvedPath string         `json:"resolvedPath"`
-	Method       string         `json:"method"`
-	Profile      FuzzingProfile `json:"profile"`
-	Status       int            `json:"status"`
-	Duration     int64          `json:"duration"` // milliseconds
-	Payload      any            `json:"payload"`
-	PayloadSize  int            `json:"payloadSize"`
-	ResponseBody any            `json:"responseBody,omitempty"`
-	Error        string         `json:"error,omitempty"`
-	Timestamp    int64          `json:"timestamp"`
-	Retries      int            `json:"retries"`
+	ID               string            `json:"id"`
+	Endpoint         string            `json:"endpoint"`
+	ResolvedPath     string            `json:"resolvedPath"`
+	Method           string            `json:"method"`
+	Profile          FuzzingProfile    `json:"profile"`
+	Status           int               `json:"status"`
+	Duration         int64             `json:"duration"` // milliseconds
+	Payload          any               `json:"payload"`
+	PayloadSize      int               `json:"payloadSize"`
+	ResponseBody     any               `json:"responseBody,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	Timestamp        int64             `json:"timestamp"`
+	Retries          int               `json:"retries"`
+	ResponseSize     int64             `json:"responseSize"`
+	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }
 
 // FuzzResultSSE is the lightweight version sent over SSE to the browser.
 // Payload and ResponseBody are replaced with short preview strings (≤200 chars).
 // This prevents the browser from ever receiving megabyte-sized JSON strings.
 type FuzzResultSSE struct {
-	ID              string         `json:"id"`
-	Endpoint        string         `json:"endpoint"`
-	ResolvedPath    string         `json:"resolvedPath"`
-	Method          string         `json:"method"`
-	Profile         FuzzingProfile `json:"profile"`
-	Status          int            `json:"status"`
-	Duration        int64          `json:"duration"`
-	PayloadSize     int            `json:"payloadSize"`
-	PayloadPreview  string         `json:"payloadPreview,omitempty"`
-	ResponsePreview string         `json:"responsePreview,omitempty"`
-	Error           string         `json:"error,omitempty"`
-	Timestamp       int64          `json:"timestamp"`
-	Retries         int            `json:"retries"`
+	ID              string            `json:"id"`
+	Endpoint        string            `json:"endpoint"`
+	ResolvedPath    string            `json:"resolvedPath"`
+	Method          string            `json:"method"`
+	Profile         FuzzingProfile    `json:"profile"`
+	Status          int               `json:"status"`
+	Duration        int64             `json:"duration"`
+	PayloadSize     int               `json:"payloadSize"`
+	PayloadPreview  string            `json:"payloadPreview,omitempty"`
+	ResponsePreview string            `json:"responsePreview,omitempty"`
+	Error           string            `json:"error,omitempty"`
+	Timestamp       int64             `json:"timestamp"`
+	Retries         int               `json:"retries"`
+	ResponseSize     int64             `json:"responseSize"`
+	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }
 
 // RunStats tracks live statistics during a fuzzing run.

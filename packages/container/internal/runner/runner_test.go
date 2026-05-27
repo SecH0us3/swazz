@@ -367,3 +367,50 @@ func TestPauseResumeAtomic(t *testing.T) {
 		t.Error("Expected runner to not be running after completion")
 	}
 }
+
+func TestExecuteRequest_VulnerabilityAnalysis(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`Fatal error: You have an error in your SQL syntax near line 1.`))
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		Settings: swagger.Settings{
+			AnalyzeResponseBody: true,
+			TimeoutMs:           1000,
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	r := newTestRunner(server.Client(), cfg)
+	defer r.Close()
+
+	res := r.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "POST",
+		nil, nil, nil, swagger.ProfileMalicious, nil, nil, "",
+	)
+
+	if res == nil {
+		t.Fatal("Expected FuzzResult, got nil")
+	}
+
+	if len(res.AnalyzerFindings) == 0 {
+		t.Fatal("Expected analyzer findings, got none")
+	}
+
+	foundSQLi := false
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/sql-error-leak" {
+			foundSQLi = true
+		}
+	}
+
+	if !foundSQLi {
+		t.Errorf("Expected 'swazz/sql-error-leak' finding, got findings: %+v", res.AnalyzerFindings)
+	}
+}

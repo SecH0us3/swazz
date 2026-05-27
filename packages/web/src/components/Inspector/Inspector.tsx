@@ -15,6 +15,7 @@ interface Props {
     onClearHeatmapFilter: () => void;
     onSelectResult: (row: ResultSummary) => void;
     onExport: () => void;
+    findingsOnly?: boolean;
 }
 
 function getStatusClass(status: number): string {

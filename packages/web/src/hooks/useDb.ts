@@ -33,6 +33,7 @@ export interface QueryOptions {
     sortDir?: 'asc' | 'desc';
     limit?: number;
     offset?: number;
+    findingsOnly?: boolean;
 }
 
 // ─── DB open ─────────────────────────────────────────────────
@@ -151,6 +152,16 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
     if (statusFilter === '5xx') list = list.filter(r => r.status >= 500);
     else if (statusFilter === '4xx') list = list.filter(r => r.status >= 400 && r.status < 500);
     else if (statusFilter === '2xx') list = list.filter(r => r.status >= 200 && r.status < 300);
+
+    // Filter by findings
+    if (opts.findingsOnly) {
+        list = list.filter(r => 
+            (r.analyzerFindings && r.analyzerFindings.length > 0) || 
+            r.status >= 500 || 
+            (r.status === 0 && r.error) ||
+            (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
+        );
+    }
 
     // Search
     if (search) {

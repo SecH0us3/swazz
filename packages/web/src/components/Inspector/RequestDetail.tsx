@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect } from 'react';
-import type { FuzzResult, SwazzConfig } from '../../types.js';
+import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 
 interface Props {
@@ -244,6 +244,54 @@ export function RequestDetail({
                         <button className="btn btn-icon" onClick={onClose} aria-label="Close" title="Close (Esc)">✕</button>
                     </div>
                 </div>
+
+                {result.analyzerFindings && result.analyzerFindings.length > 0 && (
+                    <div className="analyzer-findings-alerts" style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                        {result.analyzerFindings.map((finding, idx) => (
+                            <div key={idx} className={`alert-banner alert-${finding.level}`} style={{
+                                padding: 'var(--space-3)',
+                                borderRadius: '4px',
+                                borderLeft: `4px solid ${finding.level === 'error' ? 'var(--color-error)' : 'var(--color-warning)'}`,
+                                background: finding.level === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                                color: 'var(--text-primary)',
+                                fontSize: 'var(--font-size-sm)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px'
+                            }}>
+                                <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                        background: finding.level === 'error' ? 'var(--color-error)' : 'var(--color-warning)',
+                                        color: '#fff',
+                                        padding: '2px 6px',
+                                        borderRadius: '3px',
+                                        fontSize: '10px',
+                                        textTransform: 'uppercase'
+                                    }}>
+                                        {finding.level}
+                                    </span>
+                                    <span>Vulnerability: {finding.ruleId}</span>
+                                </div>
+                                <div style={{ color: 'var(--text-secondary)' }}>{finding.message}</div>
+                                {finding.evidence && (
+                                    <div style={{
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: 'var(--font-size-xs)',
+                                        background: 'var(--bg-surface)',
+                                        padding: 'var(--space-2)',
+                                        borderRadius: '3px',
+                                        marginTop: '4px',
+                                        border: '1px solid var(--border-color)',
+                                        whiteSpace: 'pre-wrap',
+                                        overflowX: 'auto'
+                                    }}>
+                                        {finding.evidence}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 <div className="modal-split">
                     <div className="modal-pane">
