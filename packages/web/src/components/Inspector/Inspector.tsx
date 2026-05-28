@@ -61,7 +61,7 @@ export function Inspector({
     const [sortConfig, setSortConfig] = useState<{ key: 'timestamp' | 'duration'; direction: 'asc' | 'desc' }>({ key: 'timestamp', direction: 'desc' });
 
     const [rows, setRows] = useState<ResultSummary[]>([]);
-    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
     const groupedFindings = useMemo(() => {
         if (!findingsOnly) return [];
@@ -152,7 +152,7 @@ export function Inspector({
     }, [rows, findingsOnly]);
 
     const toggleGroup = (key: string) => {
-        setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
     };
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
@@ -359,14 +359,14 @@ export function Inspector({
                                     onClick={() => toggleGroup(group.key)}
                                 >
                                     <div className="findings-group-title-row">
-                                        <span className={`findings-group-chevron ${collapsedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
+                                        <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
                                         <span className="findings-group-title">{group.title}</span>
                                         <span className="findings-group-count" style={{ background: group.color }}>
                                             {group.items.length}
                                         </span>
                                     </div>
                                 </div>
-                                {!collapsedGroups[group.key] && (
+                                {expandedGroups[group.key] && (
                                     <div className="findings-group-items">
                                         {group.items.map((item, idx) => (
                                             <div 
