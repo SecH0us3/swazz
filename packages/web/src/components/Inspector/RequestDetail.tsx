@@ -190,7 +190,7 @@ export function RequestDetail({
             if (response.headers) {
                 const formattedHeaders: Record<string, string[]> = {};
                 for (const [k, v] of Object.entries(response.headers)) {
-                    formattedHeaders[k] = [v as string];
+                    formattedHeaders[k] = Array.isArray(v) ? v : [v as string];
                 }
                 setLiveHeaders(formattedHeaders);
             } else {
