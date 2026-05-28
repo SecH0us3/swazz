@@ -44,6 +44,45 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
+function cleanErrorMessage(msg: string): string {
+    if (!msg) return 'Unknown Error';
+    
+    // Take only the first line of multi-line error messages/stacktraces
+    let firstLine = msg.split('\n')[0].trim();
+    
+    // Detect specific Postgres / Npgsql errors
+    if (firstLine.includes('Npgsql.PostgresException')) {
+        let part = firstLine.replace(/^Npgsql\.PostgresException\s*\([^)]*\):?/, '').trim();
+        // Strip leading error code if present, e.g. "22021:"
+        part = part.replace(/^\d+:\s*/, '').trim();
+        return `Postgres Error: ${part}`;
+    }
+    
+    // Detect unique constraint violations (e.g. Postgres duplicate key)
+    if (firstLine.includes('duplicate key value violates unique constraint')) {
+        const match = firstLine.match(/violates unique constraint "([^"]+)"/);
+        if (match) {
+            return `Unique Constraint Violation: ${match[1]}`;
+        }
+        return 'Unique Constraint Violation';
+    }
+
+    // Detect foreign key violations
+    if (firstLine.includes('violates foreign key constraint')) {
+        const match = firstLine.match(/violates foreign key constraint "([^"]+)"/);
+        if (match) {
+            return `Foreign Key Violation: ${match[1]}`;
+        }
+        return 'Foreign Key Violation';
+    }
+    
+    // Default truncation for long single-line error messages
+    if (firstLine.length > 80) {
+        return firstLine.substring(0, 77) + '...';
+    }
+    return firstLine;
+}
+
 function extractErrorSubtype(responsePreview: string | undefined): { title: string; key: string } | null {
     if (!responsePreview) return null;
     try {
@@ -51,10 +90,11 @@ function extractErrorSubtype(responsePreview: string | undefined): { title: stri
         if (body && typeof body === 'object') {
             // 1. Exception Type + Message (e.g. ContractValidation: InvalidToken)
             if (body.exceptionType) {
-                const msg = body.message || 'UnknownException';
+                const rawMsg = body.message || 'UnknownException';
+                const msg = cleanErrorMessage(rawMsg);
                 return {
                     title: `${body.exceptionType}: ${msg}`,
-                    key: `${body.exceptionType.toLowerCase()}_${msg.toLowerCase()}`,
+                    key: `${body.exceptionType.toLowerCase()}_${msg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
                 };
             }
             // 2. Validation details (ASP.NET Core validation)
@@ -70,21 +110,24 @@ function extractErrorSubtype(responsePreview: string | undefined): { title: stri
             }
             // 3. Simple message or error fields
             if (body.message && typeof body.message === 'string') {
+                const msg = cleanErrorMessage(body.message);
                 return {
-                    title: body.message,
-                    key: `msg_${body.message.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    title: msg,
+                    key: `msg_${msg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
                 };
             }
             if (body.error && typeof body.error === 'string') {
+                const err = cleanErrorMessage(body.error);
                 return {
-                    title: body.error,
-                    key: `err_${body.error.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    title: err,
+                    key: `err_${err.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
                 };
             }
             if (body.title && typeof body.title === 'string') {
+                const titleText = cleanErrorMessage(body.title);
                 return {
-                    title: body.title,
-                    key: `title_${body.title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    title: titleText,
+                    key: `title_${titleText.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
                 };
             }
         }
