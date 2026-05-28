@@ -1,3 +1,8 @@
+/** Normalize a string into a lowercase slug suitable for grouping keys. */
+export function slugify(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+}
+
 export function cleanErrorMessage(msg: string): string {
     if (!msg) return 'Unknown Error';
     
@@ -7,6 +12,9 @@ export function cleanErrorMessage(msg: string): string {
     // Replace UUIDs/GUIDs to group dynamic paths/resources together
     const guidRegex = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/g;
     firstLine = firstLine.replace(guidRegex, '<guid>');
+
+    // Replace long numeric IDs to avoid over-grouping (e.g. "Order 12345" vs "Order 67890")
+    firstLine = firstLine.replace(/\b\d{4,}\b/g, '<id>');
     
     // Detect specific Postgres / Npgsql errors
     if (firstLine.includes('Npgsql.PostgresException')) {
@@ -74,12 +82,12 @@ export function extractErrorSubtype(responsePreview: string | undefined): { titl
                 if (body.exceptionType.toLowerCase() === 'apierror' && msg.includes('Exception:')) {
                     return {
                         title: msg,
-                        key: msg.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+                        key: slugify(msg),
                     };
                 }
                 return {
                     title: `${body.exceptionType}: ${msg}`,
-                    key: `${body.exceptionType.toLowerCase()}_${msg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    key: `${body.exceptionType.toLowerCase()}_${slugify(msg)}`,
                 };
             }
             // 2. Validation details (ASP.NET Core validation)
@@ -98,21 +106,21 @@ export function extractErrorSubtype(responsePreview: string | undefined): { titl
                 const msg = cleanErrorMessage(body.message);
                 return {
                     title: msg,
-                    key: `msg_${msg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    key: `msg_${slugify(msg)}`,
                 };
             }
             if (body.error && typeof body.error === 'string') {
                 const err = cleanErrorMessage(body.error);
                 return {
                     title: err,
-                    key: `err_${err.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    key: `err_${slugify(err)}`,
                 };
             }
             if (body.title && typeof body.title === 'string') {
                 const titleText = cleanErrorMessage(body.title);
                 return {
                     title: titleText,
-                    key: `title_${titleText.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    key: `title_${slugify(titleText)}`,
                 };
             }
         }

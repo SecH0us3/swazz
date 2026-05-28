@@ -24,7 +24,7 @@ func init() {
 		{"Python", `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+)`},
 		{"Go", `(?m)(goroutine\s+\d+\s+\[|panic:|runtime\s+error:)`},
 		{"NodeJS", `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/)`},
-		{".NET", `(?m)(at\s+System\.|System\.NullReferenceException|Server\s+Error\s+in\s+)`},
+		{".NET", `(?m)(at\s+System\..+\sin\s.+:\w+\s\d+|System\.\w+Exception:|Server\s+Error\s+in\s+)`},
 		{"PHP", `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/)`},
 	}
 

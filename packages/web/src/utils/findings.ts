@@ -1,5 +1,5 @@
 import type { AnalysisFinding } from '../types.js';
-import { extractErrorSubtype } from './errors.js';
+import { extractErrorSubtype, slugify } from './errors.js';
 
 export interface FindingCategory {
     title: string;
@@ -16,13 +16,13 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-error)';
         title = 'Reflected XSS';
         key = 'reflected_xss';
-    } else if (f.ruleId === 'swazz/sqli-error' || f.ruleId === 'swazz/sql-error-leak') {
+    } else if (f.ruleId === 'swazz/sql-error-leak') {
         color = 'var(--color-error)';
         const dbMatch = f.message?.match(/\(([^)]+)\)/);
         const dbName = dbMatch ? dbMatch[1] : 'Generic';
         title = `SQLi Error: ${dbName}`;
         key = `sqli_${dbName.toLowerCase()}`;
-    } else if (f.ruleId === 'swazz/stack-trace' || f.ruleId === 'swazz/stack-trace-leak') {
+    } else if (f.ruleId === 'swazz/stack-trace-leak') {
         color = 'var(--color-warning)';
         
         if (responsePreview) {
@@ -40,15 +40,15 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         const lang = langMatch ? langMatch[1] : 'Generic';
         title = `Stack Trace Leak: ${lang}`;
         key = `stack_${lang.toLowerCase()}`;
-    } else if (f.ruleId === 'swazz/sensitive-data' || f.ruleId === 'swazz/sensitive-data-leak') {
+    } else if (f.ruleId === 'swazz/sensitive-data-leak') {
         color = 'var(--color-warning)';
         const catMatch = f.message?.match(/\(([^)]+)\)/);
         const catName = catMatch ? catMatch[1] : 'Sensitive Data';
         title = `Sensitive Data: ${catName}`;
-        key = `sensitive_${catName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+        key = `sensitive_${slugify(catName)}`;
     } else {
         title = f.message || 'Suspicious Anomaly';
-        key = `other_${f.ruleId.replace(/[^a-z0-9]+/g, '_')}`;
+        key = `other_${slugify(f.ruleId)}`;
     }
 
     return { title, color, key };

@@ -3,6 +3,7 @@ import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
+import type { AnalysisFinding } from '../../types.js';
 import { extractErrorSubtype } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
 
@@ -75,7 +76,7 @@ export function Inspector({
     const groupedFindings = useMemo(() => {
         if (!findingsOnly) return [];
 
-        const groups: Record<string, { title: string; color: string; items: { result: ResultSummary; finding?: any }[] }> = {};
+        const groups: Record<string, { title: string; color: string; items: { result: ResultSummary; finding?: AnalysisFinding }[] }> = {};
 
         for (const row of rows) {
             let placed = false;

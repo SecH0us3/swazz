@@ -33,6 +33,17 @@ func TestStackTraceAnalyzer(t *testing.T) {
 			contains:      "at java.",
 		},
 		{
+			name:          ".NET stack trace with file path",
+			response:      `System.NullReferenceException: Object reference not set to an instance of an object.\n   at Bank.Cards.API.Handler.Handle() in /builds/back/src/Bank/Cards/API/Handler.cs:line 50`,
+			expectedCount: 1,
+			contains:      "Exception:",
+		},
+		{
+			name:          ".NET stack trace - plain documentation text should not match",
+			response:      `{"description": "Look at System.Configuration for more details about settings"}`,
+			expectedCount: 0,
+		},
+		{
 			name:          "No match on regular response",
 			response:      `{"status":"ok"}`,
 			expectedCount: 0,

@@ -10,6 +10,18 @@ import (
 
 type XSSAnalyzer struct{}
 
+// maliciousXSSSet is a pre-built set for O(1) payload lookups instead of O(N) slice scan.
+var maliciousXSSSet map[string]struct{}
+
+func init() {
+	maliciousXSSSet = make(map[string]struct{}, len(payloads.MaliciousXSS))
+	for _, x := range payloads.MaliciousXSS {
+		if s, ok := x.(string); ok {
+			maliciousXSSSet[s] = struct{}{}
+		}
+	}
+}
+
 func extractStrings(v any) []string {
 	var stringsList []string
 	extractStringsHelper(v, &stringsList)
@@ -58,16 +70,8 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			continue
 		}
 
-		// Verify if the sent payload is one of the malicious XSS payloads
-		isXSSPayload := false
-		for _, x := range payloads.MaliciousXSS {
-			if xStr, ok := x.(string); ok && xStr == payloadStr {
-				isXSSPayload = true
-				break
-			}
-		}
-
-		if !isXSSPayload {
+		// O(1) lookup in pre-built set instead of O(N) slice scan
+		if _, ok := maliciousXSSSet[payloadStr]; !ok {
 			continue
 		}
 
