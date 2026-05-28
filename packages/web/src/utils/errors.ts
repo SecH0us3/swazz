@@ -12,9 +12,6 @@ export function cleanErrorMessage(msg: string): string {
     // Replace UUIDs/GUIDs to group dynamic paths/resources together
     const guidRegex = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/g;
     firstLine = firstLine.replace(guidRegex, '<guid>');
-
-    // Replace long numeric IDs to avoid over-grouping (e.g. "Order 12345" vs "Order 67890")
-    firstLine = firstLine.replace(/\b\d{4,}\b/g, '<id>');
     
     // Detect specific Postgres / Npgsql errors
     if (firstLine.includes('Npgsql.PostgresException')) {
@@ -61,6 +58,10 @@ export function cleanErrorMessage(msg: string): string {
         }
         return `${type}: ${detail}`;
     }
+
+    // Replace long numeric IDs to avoid over-grouping (e.g. "Order 12345" vs "Order 67890")
+    // Applied AFTER specific parsers so error codes (like Postgres 22021) are handled first.
+    firstLine = firstLine.replace(/\b\d{4,}\b/g, '<id>');
 
     // Default truncation for long single-line error messages
     if (firstLine.length > 80) {
