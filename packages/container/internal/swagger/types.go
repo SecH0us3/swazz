@@ -1,5 +1,7 @@
 package swagger
 
+import "net/http"
+
 // FuzzingProfile represents the type of payload generation strategy.
 type FuzzingProfile string
 
@@ -119,6 +121,7 @@ type FuzzResult struct {
 	Timestamp        int64             `json:"timestamp"`
 	Retries          int               `json:"retries"`
 	ResponseSize     int64             `json:"responseSize"`
+	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }
 
@@ -140,6 +143,7 @@ type FuzzResultSSE struct {
 	Timestamp       int64             `json:"timestamp"`
 	Retries         int               `json:"retries"`
 	ResponseSize     int64             `json:"responseSize"`
+	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }
 

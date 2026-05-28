@@ -83,6 +83,7 @@ export interface ResultSummary {
     responsePreview: string;
     error?: string;
     responseSize?: number;
+    responseHeaders?: Record<string, string[]>;
     analyzerFindings?: AnalysisFinding[];
 }
 
@@ -103,6 +104,7 @@ export function toSummary(r: any): ResultSummary {
         responsePreview: r.responsePreview ?? previewResponse(r.responseBody),
         error: r.error,
         responseSize: r.responseSize || 0,
+        responseHeaders: r.responseHeaders || {},
         analyzerFindings: r.analyzerFindings || [],
     };
 }

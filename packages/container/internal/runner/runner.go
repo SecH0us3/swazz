@@ -603,19 +603,20 @@ func (r *Runner) executeRequest(
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
 
 		result := &swagger.FuzzResult{
-			ID:           uuid.New().String(),
-			Endpoint:     originalPath,
-			ResolvedPath: resolvedPath,
-			Method:       method,
-			Profile:      profile,
-			Status:       resp.StatusCode,
-			Duration:     duration,
-			Payload:      mergePayload(payload, queryParams),
-			PayloadSize:  payloadSize,
-			ResponseBody: respBody,
-			ResponseSize: int64(len(rawBodyBytes)),
-			Timestamp:    time.Now().UnixMilli(),
-			Retries:      attempt,
+			ID:              uuid.New().String(),
+			Endpoint:        originalPath,
+			ResolvedPath:    resolvedPath,
+			Method:          method,
+			Profile:         profile,
+			Status:          resp.StatusCode,
+			Duration:        duration,
+			Payload:         mergePayload(payload, queryParams),
+			PayloadSize:     payloadSize,
+			ResponseBody:    respBody,
+			ResponseSize:    int64(len(rawBodyBytes)),
+			ResponseHeaders: resp.Header,
+			Timestamp:       time.Now().UnixMilli(),
+			Retries:         attempt,
 		}
 
 		if r.config.Settings.AnalyzeResponseBody && len(rawBodyBytes) > 0 {

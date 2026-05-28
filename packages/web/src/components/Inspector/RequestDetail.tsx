@@ -379,11 +379,27 @@ export function RequestDetail({
 
                     <div className="modal-pane">
                         <div className="detail-section-title">Response Body</div>
-                        <div className="detail-json-wrapper">
+                        <div className="detail-json-wrapper" style={{ marginBottom: 'var(--space-6)' }}>
                             <pre className="detail-json">
                                 {renderHighlightedJson(responseBodyJson)}
                             </pre>
                         </div>
+
+                        {result.responseHeaders && Object.keys(result.responseHeaders).length > 0 && (
+                            <>
+                                <div className="detail-section-title" style={{ borderTop: '1px solid var(--border-default)', paddingTop: 'var(--space-6)' }}>Response Headers</div>
+                                <div className="detail-json-wrapper">
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)', padding: '12px' }}>
+                                        {Object.entries(result.responseHeaders).map(([key, values]) => (
+                                            <div key={key} style={{ display: 'contents' }}>
+                                                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{key}:</span>
+                                                <span style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{values.join(', ')}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
