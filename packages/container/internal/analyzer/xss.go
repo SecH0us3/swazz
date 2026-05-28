@@ -12,19 +12,23 @@ type XSSAnalyzer struct{}
 
 func extractStrings(v any) []string {
 	var stringsList []string
+	extractStringsHelper(v, &stringsList)
+	return stringsList
+}
+
+func extractStringsHelper(v any, out *[]string) {
 	switch val := v.(type) {
 	case string:
-		stringsList = append(stringsList, val)
+		*out = append(*out, val)
 	case map[string]any:
 		for _, item := range val {
-			stringsList = append(stringsList, extractStrings(item)...)
+			extractStringsHelper(item, out)
 		}
 	case []any:
 		for _, item := range val {
-			stringsList = append(stringsList, extractStrings(item)...)
+			extractStringsHelper(item, out)
 		}
 	}
-	return stringsList
 }
 
 func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {

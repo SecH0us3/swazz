@@ -138,9 +138,9 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config: " + err.Error()})
 		return
 	}
-	config.Security.AllowPrivateIPs = os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") == "true"
-	fmt.Printf("[DEBUG] StartFuzz config: BaseURL=%q, AllowPrivateIPs=%t, SWAZZ_ALLOW_PRIVATE_IPS=%q\n", 
-		config.BaseURL, config.Security.AllowPrivateIPs, os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS"))
+	if os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") != "true" {
+		config.Security.AllowPrivateIPs = false
+	}
 
 	// Apply defaults
 	if config.Settings.IterationsPerProfile <= 0 {

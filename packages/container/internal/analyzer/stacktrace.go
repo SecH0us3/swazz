@@ -37,17 +37,16 @@ func init() {
 }
 
 func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	bodyStr := string(input.ResponseBody)
-	if bodyStr == "" {
+	if len(input.ResponseBody) == 0 {
 		return nil
 	}
 
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range stackSignatures {
-		loc := sig.pattern.FindStringIndex(bodyStr)
+		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
-			matchText := bodyStr[loc[0]:loc[1]]
+			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 
 			// Extract snippet of traceback context (up to 150 chars)
 			start := loc[0] - 20
@@ -55,10 +54,10 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				start = 0
 			}
 			end := loc[1] + 100
-			if end > len(bodyStr) {
-				end = len(bodyStr)
+			if end > len(input.ResponseBody) {
+				end = len(input.ResponseBody)
 			}
-			contextSnippet := bodyStr[start:end]
+			contextSnippet := string(input.ResponseBody[start:end])
 			if len(contextSnippet) > 150 {
 				contextSnippet = contextSnippet[:150]
 			}

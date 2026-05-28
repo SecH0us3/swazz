@@ -1236,6 +1236,11 @@ body.resizing .sidebar-resizer {
 /* ─── Log Rows ───────────────────────────────────────────── */
 
 .request-log { flex: 1; overflow-y: auto; }
+.request-log.findings-only {
+  overflow-y: auto;
+  display: block;
+  height: 100%;
+}
 
 .log-row {
   display: grid;

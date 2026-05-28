@@ -83,19 +83,19 @@ export function Inspector({
                         groupKey = 'reflected_xss';
                     } else if (f.ruleId === 'swazz/sqli-error' || f.ruleId === 'swazz/sql-error-leak') {
                         color = 'var(--color-error)';
-                        const dbMatch = f.message.match(/\(([^)]+)\)/);
+                        const dbMatch = f.message?.match(/\(([^)]+)\)/);
                         const dbName = dbMatch ? dbMatch[1] : 'Generic';
                         categoryTitle = `SQLi Error: ${dbName}`;
                         groupKey = `sqli_${dbName.toLowerCase()}`;
                     } else if (f.ruleId === 'swazz/stack-trace' || f.ruleId === 'swazz/stack-trace-leak') {
                         color = 'var(--color-warning)';
-                        const langMatch = f.message.match(/\(([^)]+)\)/);
+                        const langMatch = f.message?.match(/\(([^)]+)\)/);
                         const lang = langMatch ? langMatch[1] : 'Generic';
                         categoryTitle = `Stack Trace Leak: ${lang}`;
                         groupKey = `stack_${lang.toLowerCase()}`;
                     } else if (f.ruleId === 'swazz/sensitive-data' || f.ruleId === 'swazz/sensitive-data-leak') {
                         color = 'var(--color-warning)';
-                        const catMatch = f.message.match(/\(([^)]+)\)/);
+                        const catMatch = f.message?.match(/\(([^)]+)\)/);
                         const catName = catMatch ? catMatch[1] : 'Sensitive Data';
                         categoryTitle = `Sensitive Data: ${catName}`;
                         groupKey = `sensitive_${catName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
@@ -337,7 +337,7 @@ export function Inspector({
                 </div>
             </div>
 
-            <div className="request-log" style={findingsOnly ? { overflowY: 'auto', display: 'block', height: '100%' } : undefined}>
+            <div className={`request-log ${findingsOnly ? 'findings-only' : ''}`}>
                 {rows.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-state-icon">🔍</div>

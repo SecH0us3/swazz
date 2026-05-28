@@ -37,17 +37,16 @@ func init() {
 }
 
 func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	bodyStr := string(input.ResponseBody)
-	if bodyStr == "" {
+	if len(input.ResponseBody) == 0 {
 		return nil
 	}
 
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range dbSignatures {
-		loc := sig.pattern.FindStringIndex(bodyStr)
+		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
-			matchText := bodyStr[loc[0]:loc[1]]
+			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 
 			// Extract context around the match
 			start := loc[0] - 50
@@ -55,10 +54,10 @@ func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				start = 0
 			}
 			end := loc[1] + 50
-			if end > len(bodyStr) {
-				end = len(bodyStr)
+			if end > len(input.ResponseBody) {
+				end = len(input.ResponseBody)
 			}
-			contextSnippet := bodyStr[start:end]
+			contextSnippet := string(input.ResponseBody[start:end])
 			if len(contextSnippet) > 200 {
 				contextSnippet = contextSnippet[:200]
 			}

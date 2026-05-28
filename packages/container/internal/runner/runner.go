@@ -597,10 +597,14 @@ func (r *Runner) executeRequest(
 				}
 			}
 			bufPool.Put(buf)
-		} else {
-			io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain body for connection reuse, error irrelevant
 		}
+		io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
+
+		responseSize := resp.ContentLength
+		if responseSize < 0 {
+			responseSize = int64(len(rawBodyBytes))
+		}
 
 		result := &swagger.FuzzResult{
 			ID:              uuid.New().String(),
@@ -613,7 +617,7 @@ func (r *Runner) executeRequest(
 			Payload:         mergePayload(payload, queryParams),
 			PayloadSize:     payloadSize,
 			ResponseBody:    respBody,
-			ResponseSize:    int64(len(rawBodyBytes)),
+			ResponseSize:    responseSize,
 			ResponseHeaders: resp.Header,
 			Timestamp:       time.Now().UnixMilli(),
 			Retries:         attempt,

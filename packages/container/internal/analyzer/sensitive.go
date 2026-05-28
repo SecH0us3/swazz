@@ -36,17 +36,16 @@ func init() {
 }
 
 func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	bodyStr := string(input.ResponseBody)
-	if bodyStr == "" {
+	if len(input.ResponseBody) == 0 {
 		return nil
 	}
 
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range secretSignatures {
-		loc := sig.pattern.FindStringIndex(bodyStr)
+		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
-			matchText := bodyStr[loc[0]:loc[1]]
+			matchText := string(input.ResponseBody[loc[0]:loc[1]])
 
 			// Redact matched sensitive strings for security before logging
 			redactedMatch := matchText
