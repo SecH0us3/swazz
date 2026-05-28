@@ -66,45 +66,89 @@ export function Inspector({
     const groupedFindings = useMemo(() => {
         if (!findingsOnly) return [];
 
-        const groups: Record<string, { title: string; color: string; items: { result: ResultSummary; finding?: any }[] }> = {
-            'xss': { title: 'Reflected Cross-Site Scripting (XSS)', color: 'var(--color-error)', items: [] },
-            'sqli': { title: 'SQL Injection Error Disclosures', color: 'var(--color-error)', items: [] },
-            'stack': { title: 'Server Stack Trace Leaks', color: 'var(--color-warning)', items: [] },
-            'sensitive': { title: 'Sensitive Data Disclosures (AWS, JWT, IPs)', color: 'var(--color-warning)', items: [] },
-            'server_error': { title: 'Internal Server Errors (5xx)', color: 'var(--color-error)', items: [] },
-            'other': { title: 'Other Suspicious Anomalies', color: 'var(--color-info)', items: [] },
-        };
+        const groups: Record<string, { title: string; color: string; items: { result: ResultSummary; finding?: any }[] }> = {};
 
         for (const row of rows) {
             let placed = false;
             if (row.analyzerFindings && row.analyzerFindings.length > 0) {
                 for (const f of row.analyzerFindings) {
+                    placed = true;
+                    let categoryTitle = 'Other Finding';
+                    let groupKey = 'other';
+                    let color = 'var(--color-info)';
+
                     if (f.ruleId === 'swazz/reflected-xss') {
-                        groups['xss'].items.push({ result: row, finding: f });
-                        placed = true;
-                    } else if (f.ruleId === 'swazz/sqli-error') {
-                        groups['sqli'].items.push({ result: row, finding: f });
-                        placed = true;
-                    } else if (f.ruleId === 'swazz/stack-trace') {
-                        groups['stack'].items.push({ result: row, finding: f });
-                        placed = true;
-                    } else if (f.ruleId === 'swazz/sensitive-data') {
-                        groups['sensitive'].items.push({ result: row, finding: f });
-                        placed = true;
+                        color = 'var(--color-error)';
+                        categoryTitle = 'Reflected XSS';
+                        groupKey = 'reflected_xss';
+                    } else if (f.ruleId === 'swazz/sqli-error' || f.ruleId === 'swazz/sql-error-leak') {
+                        color = 'var(--color-error)';
+                        const dbMatch = f.message.match(/\(([^)]+)\)/);
+                        const dbName = dbMatch ? dbMatch[1] : 'Generic';
+                        categoryTitle = `SQLi Error: ${dbName}`;
+                        groupKey = `sqli_${dbName.toLowerCase()}`;
+                    } else if (f.ruleId === 'swazz/stack-trace' || f.ruleId === 'swazz/stack-trace-leak') {
+                        color = 'var(--color-warning)';
+                        const langMatch = f.message.match(/\(([^)]+)\)/);
+                        const lang = langMatch ? langMatch[1] : 'Generic';
+                        categoryTitle = `Stack Trace Leak: ${lang}`;
+                        groupKey = `stack_${lang.toLowerCase()}`;
+                    } else if (f.ruleId === 'swazz/sensitive-data' || f.ruleId === 'swazz/sensitive-data-leak') {
+                        color = 'var(--color-warning)';
+                        const catMatch = f.message.match(/\(([^)]+)\)/);
+                        const catName = catMatch ? catMatch[1] : 'Sensitive Data';
+                        categoryTitle = `Sensitive Data: ${catName}`;
+                        groupKey = `sensitive_${catName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
                     } else {
-                        groups['other'].items.push({ result: row, finding: f });
-                        placed = true;
+                        categoryTitle = f.message || 'Suspicious Anomaly';
+                        groupKey = `other_${f.ruleId.replace(/[^a-z0-9]+/g, '_')}`;
                     }
+
+                    if (!groups[groupKey]) {
+                        groups[groupKey] = { title: categoryTitle, color, items: [] };
+                    }
+                    groups[groupKey].items.push({ result: row, finding: f });
                 }
             }
-            if (!placed && row.status >= 500) {
-                groups['server_error'].items.push({ result: row });
+
+            if (!placed) {
+                const isErrorStatus = row.status >= 500 || 
+                                     (row.status === 0 && row.error) ||
+                                     (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status));
+                if (isErrorStatus) {
+                    let categoryTitle = `HTTP ${row.status} Error`;
+                    let groupKey = `status_${row.status}`;
+                    let color = row.status >= 500 ? 'var(--color-error)' : 'var(--color-warning)';
+
+                    if (row.status === 0) {
+                        categoryTitle = 'Network Timeout / Error';
+                        groupKey = 'status_0';
+                        color = 'var(--color-error)';
+                    }
+
+                    if (!groups[groupKey]) {
+                        groups[groupKey] = { title: categoryTitle, color, items: [] };
+                    }
+                    groups[groupKey].items.push({ result: row });
+                }
             }
         }
 
+        const colorPriority: Record<string, number> = {
+            'var(--color-error)': 1,
+            'var(--color-warning)': 2,
+            'var(--color-info)': 3,
+        };
+
         return Object.entries(groups)
             .filter(([_, group]) => group.items.length > 0)
-            .map(([key, group]) => ({ key, ...group }));
+            .map(([key, group]) => ({ key, ...group }))
+            .sort((a, b) => {
+                const prioA = colorPriority[a.color] || 99;
+                const prioB = colorPriority[b.color] || 99;
+                if (prioA !== prioB) return prioA - prioB;
+                return a.title.localeCompare(b.title);
+            });
     }, [rows, findingsOnly]);
 
     const toggleGroup = (key: string) => {
