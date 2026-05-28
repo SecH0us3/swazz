@@ -1660,6 +1660,19 @@ body.resizing .sidebar-resizer {
   word-break: break-all;
 }
 
+.btn-show-all {
+  padding: 2px 4px;
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  color: var(--accent-light);
+  text-decoration: underline;
+  font-size: var(--font-size-xs);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
 /* ─── Profile Toggles ────────────────────────────────────── */
 
 .profile-toggles {

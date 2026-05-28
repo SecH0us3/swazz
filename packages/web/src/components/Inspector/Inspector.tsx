@@ -344,19 +344,7 @@ export function Inspector({
                             <>
                                 <span>(showing {Math.min(rows.length, limit).toLocaleString()})</span>
                                 <button
-                                    className="btn btn-ghost btn-sm"
-                                    style={{
-                                        padding: '2px 4px',
-                                        height: 'auto',
-                                        minHeight: 0,
-                                        minWidth: 0,
-                                        color: 'var(--accent-light)',
-                                        textDecoration: 'underline',
-                                        fontSize: 'var(--font-size-xs)',
-                                        border: 'none',
-                                        background: 'transparent',
-                                        cursor: 'pointer',
-                                    }}
+                                    className="btn btn-ghost btn-sm btn-show-all"
                                     onClick={() => setLimit(total)}
                                 >
                                     show all
