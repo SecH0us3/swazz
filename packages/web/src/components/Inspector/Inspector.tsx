@@ -62,6 +62,12 @@ export function Inspector({
 
     const [rows, setRows] = useState<ResultSummary[]>([]);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+    const [limit, setLimit] = useState(PAGE_SIZE);
+
+    // Reset limit to PAGE_SIZE when runId changes
+    useEffect(() => {
+        setLimit(PAGE_SIZE);
+    }, [runId]);
 
     const groupedFindings = useMemo(() => {
         if (!findingsOnly) return [];
@@ -185,7 +191,7 @@ export function Inspector({
             search: debouncedSearch,
             sortKey: sortConfig.key,
             sortDir: sortConfig.direction,
-            limit: PAGE_SIZE,
+            limit,
             findingsOnly,
         });
 
@@ -205,7 +211,7 @@ export function Inspector({
             setTotal(heatmapFilter ? displayed.length : newTotal);
             setIsLoading(false);
         }
-    }, [runId, filter, debouncedSearch, sortConfig, heatmapFilter, queryResults, findingsOnly]);
+    }, [runId, filter, debouncedSearch, sortConfig, heatmapFilter, queryResults, findingsOnly, limit]);
 
     // Re-query when filters change
     useEffect(() => { loadResults(); }, [loadResults]);
@@ -320,9 +326,31 @@ export function Inspector({
                     {isLoading && (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
                     )}
-                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                         {total.toLocaleString()} req{total !== 1 ? 's' : ''}
-                        {total > PAGE_SIZE ? ` (showing ${Math.min(rows.length, PAGE_SIZE)})` : ''}
+                        {total > limit && (
+                            <>
+                                <span>(showing {Math.min(rows.length, limit).toLocaleString()})</span>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    style={{
+                                        padding: '2px 4px',
+                                        height: 'auto',
+                                        minHeight: 0,
+                                        minWidth: 0,
+                                        color: 'var(--accent-light)',
+                                        textDecoration: 'underline',
+                                        fontSize: 'var(--font-size-xs)',
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: 'pointer',
+                                    }}
+                                    onClick={() => setLimit(total)}
+                                >
+                                    show all
+                                </button>
+                            </>
+                        )}
                     </span>
                     <button
                         className="btn btn-ghost btn-sm"
@@ -405,6 +433,16 @@ export function Inspector({
                                 )}
                             </div>
                         ))}
+                        {total > rows.length && (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-4)' }}>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setLimit(prev => prev + 1000)}
+                                >
+                                    Load More (showing {rows.length} of {total})
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -421,6 +459,11 @@ export function Inspector({
                         <Virtuoso
                             style={{ height: '100%', flex: 1 }}
                             data={rows}
+                            endReached={() => {
+                                if (total > rows.length && !isLoading) {
+                                    setLimit(prev => prev + 1000);
+                                }
+                            }}
                             itemContent={(_index, r) => (
                                 <div
                                     key={r.id}
