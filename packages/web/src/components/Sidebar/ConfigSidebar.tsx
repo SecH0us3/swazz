@@ -165,16 +165,15 @@ export function ConfigSidebar({
                 </div>
 
                 {/* Analyze Response Body */}
-                <div style={{ marginTop:10, padding:'8px 0 0', borderTop:'1px solid var(--border-subtle)' }}>
+                <div className="sidebar-setting-row">
                     <div 
-                        className={`catalog-item ${(config.settings.analyze_response_body ?? true) ? 'active' : ''}`}
-                        style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'4px 8px', borderRadius:'4px', cursor:'pointer' }}
+                        className={`sidebar-setting-toggle ${(config.settings.analyze_response_body ?? true) ? 'active' : ''}`}
                         onClick={() => onUpdateConfig({
                             settings: { ...config.settings, analyze_response_body: !(config.settings.analyze_response_body ?? true) } as any,
                         })}
                     >
-                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-secondary)' }}>Analyze Response Body</span>
-                        <div className="toggle-switch" aria-hidden="true" style={{ margin: 0 }} />
+                        <span className="sidebar-setting-toggle-label">Analyze Response Body</span>
+                        <div className="toggle-switch" aria-hidden="true" />
                     </div>
                 </div>
             </Section>

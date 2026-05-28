@@ -587,7 +587,7 @@ func (r *Runner) executeRequest(
 			if buf.Len() > 0 {
 				rawBodyBytes = make([]byte, buf.Len())
 				copy(rawBodyBytes, buf.Bytes())
-				if resp.StatusCode >= 400 {
+				if resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody {
 					var parsed any
 					if json.Unmarshal(rawBodyBytes, &parsed) == nil {
 						respBody = parsed

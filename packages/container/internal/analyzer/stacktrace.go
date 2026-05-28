@@ -16,19 +16,22 @@ type stackSignature struct {
 var stackSignatures []stackSignature
 
 func init() {
-	signatures := map[string]string{
-		"Java":    `(?m)(at\s+java\.|at\s+sun\.|at\s+org\.springframework\.|.+\.java:\d+\))`,
-		"Python":  `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+)`,
-		"Go":      `(?m)(goroutine\s+\d+\s+\[|panic:|runtime\s+error:)`,
-		"NodeJS":  `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/)`,
-		".NET":    `(?m)(at\s+System\.|System\.NullReferenceException|Server\s+Error\s+in\s+)`,
-		"PHP":     `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/)`,
+	signatures := []struct {
+		language string
+		pattern  string
+	}{
+		{"Java", `(?m)(at\s+java\.|at\s+sun\.|at\s+org\.springframework\.|.+\.java:\d+\))`},
+		{"Python", `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+)`},
+		{"Go", `(?m)(goroutine\s+\d+\s+\[|panic:|runtime\s+error:)`},
+		{"NodeJS", `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/)`},
+		{".NET", `(?m)(at\s+System\.|System\.NullReferenceException|Server\s+Error\s+in\s+)`},
+		{"PHP", `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/)`},
 	}
 
-	for lang, pat := range signatures {
+	for _, sig := range signatures {
 		stackSignatures = append(stackSignatures, stackSignature{
-			language: lang,
-			pattern:  regexp.MustCompile(pat),
+			language: sig.language,
+			pattern:  regexp.MustCompile(sig.pattern),
 		})
 	}
 }

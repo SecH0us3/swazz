@@ -2644,3 +2644,113 @@ button:focus-visible {
 }
 
 /* End-visibility for long URLs handled above */
+
+/* ─── Analyzer Findings Alerts ───────────────────────────── */
+.analyzer-findings-alerts {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.alert-banner {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.alert-banner.alert-error {
+  border-left: 4px solid var(--color-error);
+  background: rgba(244, 63, 94, 0.08);
+}
+
+.alert-banner.alert-warning {
+  border-left: 4px solid var(--color-warning);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.alert-banner-header {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.alert-badge {
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--font-size-2xs);
+  text-transform: uppercase;
+}
+
+.alert-badge.badge-error {
+  background: var(--color-error);
+}
+
+.alert-badge.badge-warning {
+  background: var(--color-warning);
+}
+
+.alert-banner-message {
+  color: var(--text-secondary);
+}
+
+.alert-banner-evidence {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background: var(--bg-surface);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  margin-top: var(--space-1);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+/* ─── Sidebar Settings Toggle ────────────────────────────── */
+.sidebar-setting-row {
+  margin-top: 10px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sidebar-setting-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-setting-toggle:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.sidebar-setting-toggle.active {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+}
+
+.sidebar-setting-toggle-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sidebar-setting-toggle.active .sidebar-setting-toggle-label {
+  color: var(--text-primary);
+}

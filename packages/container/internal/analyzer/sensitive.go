@@ -16,18 +16,21 @@ type secretSignature struct {
 var secretSignatures []secretSignature
 
 func init() {
-	signatures := map[string]string{
-		"AWS Access Key":     `\b(AKIA[0-9A-Z]{16})\b`,
-		"Private Key Block":  `-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----`,
-		"JWT Token":          `\b(eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_.+/=]+)\b`,
-		"Internal IP":        `\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b`,
-		"Generic Secret/Key": `(?i)(api[_-]?key|apikey|secret[_-]?key|access[_-]?token)\s*[:=]\s*["']?([A-Za-z0-9-_]{20,})["']?`,
+	signatures := []struct {
+		category string
+		pattern  string
+	}{
+		{"AWS Access Key", `\b(AKIA[0-9A-Z]{16})\b`},
+		{"Private Key Block", `-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----`},
+		{"JWT Token", `\b(eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_.+/=]+)\b`},
+		{"Internal IP", `\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b`},
+		{"Generic Secret/Key", `(?i)(api[_-]?key|apikey|secret[_-]?key|access[_-]?token)\s*[:=]\s*["']?([A-Za-z0-9-_]{20,})["']?`},
 	}
 
-	for cat, pat := range signatures {
+	for _, sig := range signatures {
 		secretSignatures = append(secretSignatures, secretSignature{
-			category: cat,
-			pattern:  regexp.MustCompile(pat),
+			category: sig.category,
+			pattern:  regexp.MustCompile(sig.pattern),
 		})
 	}
 }

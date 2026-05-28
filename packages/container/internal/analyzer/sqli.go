@@ -16,19 +16,22 @@ type dbSignature struct {
 var dbSignatures []dbSignature
 
 func init() {
-	signatures := map[string]string{
-		"MySQL":      `(?i)(You have an error in your SQL syntax|mysql_fetch|MySQLSyntaxErrorException)`,
-		"PostgreSQL": `(?i)(ERROR:\s+syntax error at or near|pg_query|PSQLException)`,
-		"SQLite":     `(?i)(SQLITE_ERROR|near ".*": syntax error)`,
-		"MSSQL":      `(?i)(Unclosed quotation mark|Microsoft OLE DB|ODBC SQL Server Driver)`,
-		"Oracle":     `(?i)(ORA-\d{5}|quoted string not properly terminated)`,
-		"Generic":    `(?i)(SQLSTATE\[\w+\]|java\.sql\.SQLException|System\.Data\.SqlClient)`,
+	signatures := []struct {
+		name    string
+		pattern string
+	}{
+		{"MySQL", `(?i)(You have an error in your SQL syntax|mysql_fetch|MySQLSyntaxErrorException)`},
+		{"PostgreSQL", `(?i)(ERROR:\s+syntax error at or near|pg_query|PSQLException)`},
+		{"SQLite", `(?i)(SQLITE_ERROR|near ".*": syntax error)`},
+		{"MSSQL", `(?i)(Unclosed quotation mark|Microsoft OLE DB|ODBC SQL Server Driver)`},
+		{"Oracle", `(?i)(ORA-\d{5}|quoted string not properly terminated)`},
+		{"Generic", `(?i)(SQLSTATE\[\w+\]|java\.sql\.SQLException|System\.Data\.SqlClient)`},
 	}
 
-	for name, pat := range signatures {
+	for _, sig := range signatures {
 		dbSignatures = append(dbSignatures, dbSignature{
-			name:    name,
-			pattern: regexp.MustCompile(pat),
+			name:    sig.name,
+			pattern: regexp.MustCompile(sig.pattern),
 		})
 	}
 }
