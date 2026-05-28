@@ -44,6 +44,56 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
+function extractErrorSubtype(responsePreview: string | undefined): { title: string; key: string } | null {
+    if (!responsePreview) return null;
+    try {
+        const body = JSON.parse(responsePreview);
+        if (body && typeof body === 'object') {
+            // 1. Exception Type + Message (e.g. ContractValidation: InvalidToken)
+            if (body.exceptionType) {
+                const msg = body.message || 'UnknownException';
+                return {
+                    title: `${body.exceptionType}: ${msg}`,
+                    key: `${body.exceptionType.toLowerCase()}_${msg.toLowerCase()}`,
+                };
+            }
+            // 2. Validation details (ASP.NET Core validation)
+            if (body.errors && typeof body.errors === 'object') {
+                const keys = Object.keys(body.errors);
+                if (keys.length > 0) {
+                    const firstKey = keys[0];
+                    return {
+                        title: `Validation Error: ${firstKey}`,
+                        key: `val_err_${firstKey.toLowerCase()}`,
+                    };
+                }
+            }
+            // 3. Simple message or error fields
+            if (body.message && typeof body.message === 'string') {
+                return {
+                    title: body.message,
+                    key: `msg_${body.message.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                };
+            }
+            if (body.error && typeof body.error === 'string') {
+                return {
+                    title: body.error,
+                    key: `err_${body.error.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                };
+            }
+            if (body.title && typeof body.title === 'string') {
+                return {
+                    title: body.title,
+                    key: `title_${body.title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                };
+            }
+        }
+    } catch {
+        // Not a JSON response
+    }
+    return null;
+}
+
 const PAGE_SIZE = 1000;
 
 export function Inspector({
@@ -130,6 +180,12 @@ export function Inspector({
                         categoryTitle = 'Network Timeout / Error';
                         groupKey = 'status_0';
                         color = 'var(--color-error)';
+                    } else {
+                        const subType = extractErrorSubtype(row.responsePreview);
+                        if (subType) {
+                            categoryTitle = `${row.status} - ${subType.title}`;
+                            groupKey = `status_${row.status}_${subType.key}`;
+                        }
                     }
 
                     if (!groups[groupKey]) {
