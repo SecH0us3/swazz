@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
@@ -61,6 +61,55 @@ export function Inspector({
     const [sortConfig, setSortConfig] = useState<{ key: 'timestamp' | 'duration'; direction: 'asc' | 'desc' }>({ key: 'timestamp', direction: 'desc' });
 
     const [rows, setRows] = useState<ResultSummary[]>([]);
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+    const groupedFindings = useMemo(() => {
+        if (!findingsOnly) return [];
+
+        const groups: Record<string, { title: string; color: string; items: { result: ResultSummary; finding?: any }[] }> = {
+            'xss': { title: 'Reflected Cross-Site Scripting (XSS)', color: 'var(--color-error)', items: [] },
+            'sqli': { title: 'SQL Injection Error Disclosures', color: 'var(--color-error)', items: [] },
+            'stack': { title: 'Server Stack Trace Leaks', color: 'var(--color-warning)', items: [] },
+            'sensitive': { title: 'Sensitive Data Disclosures (AWS, JWT, IPs)', color: 'var(--color-warning)', items: [] },
+            'server_error': { title: 'Internal Server Errors (5xx)', color: 'var(--color-error)', items: [] },
+            'other': { title: 'Other Suspicious Anomalies', color: 'var(--color-info)', items: [] },
+        };
+
+        for (const row of rows) {
+            let placed = false;
+            if (row.analyzerFindings && row.analyzerFindings.length > 0) {
+                for (const f of row.analyzerFindings) {
+                    if (f.ruleId === 'swazz/reflected-xss') {
+                        groups['xss'].items.push({ result: row, finding: f });
+                        placed = true;
+                    } else if (f.ruleId === 'swazz/sqli-error') {
+                        groups['sqli'].items.push({ result: row, finding: f });
+                        placed = true;
+                    } else if (f.ruleId === 'swazz/stack-trace') {
+                        groups['stack'].items.push({ result: row, finding: f });
+                        placed = true;
+                    } else if (f.ruleId === 'swazz/sensitive-data') {
+                        groups['sensitive'].items.push({ result: row, finding: f });
+                        placed = true;
+                    } else {
+                        groups['other'].items.push({ result: row, finding: f });
+                        placed = true;
+                    }
+                }
+            }
+            if (!placed && row.status >= 500) {
+                groups['server_error'].items.push({ result: row });
+            }
+        }
+
+        return Object.entries(groups)
+            .filter(([_, group]) => group.items.length > 0)
+            .map(([key, group]) => ({ key, ...group }));
+    }, [rows, findingsOnly]);
+
+    const toggleGroup = (key: string) => {
+        setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    };
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -244,7 +293,7 @@ export function Inspector({
                 </div>
             </div>
 
-            <div className="request-log">
+            <div className="request-log" style={findingsOnly ? { overflowY: 'auto', display: 'block', height: '100%' } : undefined}>
                 {rows.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-state-icon">🔍</div>
@@ -256,6 +305,62 @@ export function Inspector({
                                 ? 'Start a fuzz test to see results appear here in real time.'
                                 : isLoading ? '' : 'Try adjusting filters or search query.'}
                         </div>
+                    </div>
+                ) : findingsOnly ? (
+                    <div className="findings-group-container">
+                        {groupedFindings.map((group) => (
+                            <div key={group.key} className="findings-group">
+                                <div 
+                                    className="findings-group-header" 
+                                    onClick={() => toggleGroup(group.key)}
+                                >
+                                    <div className="findings-group-title-row">
+                                        <span className={`findings-group-chevron ${collapsedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
+                                        <span className="findings-group-title">{group.title}</span>
+                                        <span className="findings-group-count" style={{ background: group.color }}>
+                                            {group.items.length}
+                                        </span>
+                                    </div>
+                                </div>
+                                {!collapsedGroups[group.key] && (
+                                    <div className="findings-group-items">
+                                        {group.items.map((item, idx) => (
+                                            <div 
+                                                key={idx} 
+                                                className="finding-item" 
+                                                onClick={() => onSelectResult(item.result)}
+                                                style={{ borderLeft: `3px solid ${group.color}` }}
+                                            >
+                                                <div className="finding-item-row">
+                                                    <div className="finding-item-endpoint">
+                                                        <span className={`method method-${item.result.method.toLowerCase()}`}>{item.result.method}</span>
+                                                        <span className="finding-item-path">{item.result.endpoint}</span>
+                                                    </div>
+                                                    <span className={getBadgeClass(item.result.status)}>
+                                                        {item.result.status || 'ERR'}
+                                                    </span>
+                                                </div>
+                                                {item.finding?.message && (
+                                                    <div className="finding-item-message">
+                                                        {item.finding.message}
+                                                    </div>
+                                                )}
+                                                {item.result.status >= 500 && !item.finding && (
+                                                    <div className="finding-item-message">
+                                                        Server returned unhandled error status {item.result.status}
+                                                    </div>
+                                                )}
+                                                {item.finding?.evidence && (
+                                                    <div className="finding-item-evidence" title={item.finding.evidence}>
+                                                        <strong>Evidence:</strong> {item.finding.evidence}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 ) : (
                     <>
@@ -270,32 +375,32 @@ export function Inspector({
                             <span>Duration</span>
                         </div>
                         <Virtuoso
-                        style={{ height: '100%', flex: 1 }}
-                        data={rows}
-                        itemContent={(_index, r) => (
-                            <div
-                                key={r.id}
-                                className={`log-row ${getStatusClass(r.status)}`}
-                                onClick={() => onSelectResult(r)}
-                            >
-                                <span className="log-timestamp">{formatTime(r.timestamp)}</span>
-                                <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
-                                <span className="log-path">{r.endpoint}</span>
-                                <span className="log-payload" title={r.payloadPreview}>
-                                    {r.payloadPreview?.replace(/\s+/g, ' ')}
-                                </span>
-                                <span className={getBadgeClass(r.status)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    {r.status >= 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>}
-                                    {r.status >= 400 && r.status < 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>}
-                                    {r.status >= 200 && r.status < 300 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>}
-                                    {r.status || 'ERR'}
-                                </span>
-                                <span className="badge-profile">{r.profile}</span>
-                                <span className="log-size">{formatBytes(r.payloadSize)}</span>
-                                <span className="log-duration">{r.duration}ms</span>
-                            </div>
-                        )}
-                    />
+                            style={{ height: '100%', flex: 1 }}
+                            data={rows}
+                            itemContent={(_index, r) => (
+                                <div
+                                    key={r.id}
+                                    className={`log-row ${getStatusClass(r.status)}`}
+                                    onClick={() => onSelectResult(r)}
+                                >
+                                    <span className="log-timestamp">{formatTime(r.timestamp)}</span>
+                                    <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
+                                    <span className="log-path">{r.endpoint}</span>
+                                    <span className="log-payload" title={r.payloadPreview}>
+                                        {r.payloadPreview?.replace(/\s+/g, ' ')}
+                                    </span>
+                                    <span className={getBadgeClass(r.status)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {r.status >= 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>}
+                                        {r.status >= 400 && r.status < 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>}
+                                        {r.status >= 200 && r.status < 300 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>}
+                                        {r.status || 'ERR'}
+                                    </span>
+                                    <span className="badge-profile">{r.profile}</span>
+                                    <span className="log-size">{formatBytes(r.payloadSize)}</span>
+                                    <span className="log-duration">{r.duration}ms</span>
+                                </div>
+                            )}
+                        />
                     </>
                 )}
             </div>

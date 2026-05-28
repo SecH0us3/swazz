@@ -165,16 +165,18 @@ export function ConfigSidebar({
                 </div>
 
                 {/* Analyze Response Body */}
-                <div className="sidebar-setting-row">
-                    <div 
-                        className={`sidebar-setting-toggle ${(config.settings.analyze_response_body ?? true) ? 'active' : ''}`}
-                        onClick={() => onUpdateConfig({
-                            settings: { ...config.settings, analyze_response_body: !(config.settings.analyze_response_body ?? true) } as any,
-                        })}
-                    >
-                        <span className="sidebar-setting-toggle-label">Analyze Response Body</span>
-                        <div className="toggle-switch" aria-hidden="true" />
-                    </div>
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center' }}>
+                    <label className="premium-checkbox-label">
+                        <input
+                            type="checkbox"
+                            className="premium-checkbox"
+                            checked={config.settings.analyze_response_body ?? true}
+                            onChange={() => onUpdateConfig({
+                                settings: { ...config.settings, analyze_response_body: !(config.settings.analyze_response_body ?? true) } as any,
+                            })}
+                        />
+                        <span>Analyze Response Body</span>
+                    </label>
                 </div>
             </Section>
 

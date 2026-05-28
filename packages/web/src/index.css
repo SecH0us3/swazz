@@ -2754,3 +2754,172 @@ button:focus-visible {
 .sidebar-setting-toggle.active .sidebar-setting-toggle-label {
   color: var(--text-primary);
 }
+
+/* ─── Premium Checkbox ───────────────────────────────────── */
+.premium-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  transition: color var(--duration-base) var(--ease-out);
+}
+
+.premium-checkbox-label:hover {
+  color: var(--text-primary);
+}
+
+.premium-checkbox {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--duration-base) var(--ease-out);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  outline: none;
+}
+
+.premium-checkbox:hover {
+  border-color: var(--border-hover);
+}
+
+.premium-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.premium-checkbox:checked::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-left: 1.5px solid #ffffff;
+  border-bottom: 1.5px solid #ffffff;
+  transform: rotate(-45deg) translate(0.5px, -1px);
+}
+
+/* ─── Grouped Findings UI ────────────────────────────────── */
+.findings-group-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow-y: auto;
+  flex: 1;
+  height: 100%;
+}
+
+.findings-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-base) var(--ease-out);
+}
+
+.findings-group-header:hover {
+  background: var(--bg-card-hover);
+}
+
+.findings-group-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.findings-group-chevron {
+  transition: transform var(--duration-base) var(--ease-out);
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.findings-group-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.findings-group-count {
+  color: #000000;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-2xs);
+}
+
+.findings-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-left: var(--space-2);
+}
+
+.finding-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-base) var(--ease-out);
+}
+
+.finding-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.finding-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.finding-item-endpoint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.finding-item-path {
+  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+}
+
+.finding-item-message {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.finding-item-evidence {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background: var(--bg-surface);
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  overflow-x: auto;
+  margin-top: 4px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
