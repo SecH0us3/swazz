@@ -127,7 +127,7 @@ export function useRunner(proxyUrl: string) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(req),
             });
-            return res.json() as Promise<{ status: number; body: any; duration: number }>;
+            return res.json() as Promise<{ status: number; body: any; headers?: Record<string, string>; duration: number }>;
         },
         [proxyUrl],
     );

@@ -3,6 +3,8 @@ import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
+import { extractErrorSubtype } from '../../utils/errors.js';
+import { categorizeFinding } from '../../utils/findings.js';
 
 export type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
 
@@ -44,98 +46,6 @@ function formatTime(ts: number): string {
     return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
-function cleanErrorMessage(msg: string): string {
-    if (!msg) return 'Unknown Error';
-    
-    // Take only the first line of multi-line error messages/stacktraces
-    let firstLine = msg.split('\n')[0].trim();
-    
-    // Detect specific Postgres / Npgsql errors
-    if (firstLine.includes('Npgsql.PostgresException')) {
-        let part = firstLine.replace(/^Npgsql\.PostgresException\s*\([^)]*\):?/, '').trim();
-        // Strip leading error code if present, e.g. "22021:"
-        part = part.replace(/^\d+:\s*/, '').trim();
-        return `Postgres Error: ${part}`;
-    }
-    
-    // Detect unique constraint violations (e.g. Postgres duplicate key)
-    if (firstLine.includes('duplicate key value violates unique constraint')) {
-        const match = firstLine.match(/violates unique constraint "([^"]+)"/);
-        if (match) {
-            return `Unique Constraint Violation: ${match[1]}`;
-        }
-        return 'Unique Constraint Violation';
-    }
-
-    // Detect foreign key violations
-    if (firstLine.includes('violates foreign key constraint')) {
-        const match = firstLine.match(/violates foreign key constraint "([^"]+)"/);
-        if (match) {
-            return `Foreign Key Violation: ${match[1]}`;
-        }
-        return 'Foreign Key Violation';
-    }
-    
-    // Default truncation for long single-line error messages
-    if (firstLine.length > 80) {
-        return firstLine.substring(0, 77) + '...';
-    }
-    return firstLine;
-}
-
-function extractErrorSubtype(responsePreview: string | undefined): { title: string; key: string } | null {
-    if (!responsePreview) return null;
-    try {
-        const body = JSON.parse(responsePreview);
-        if (body && typeof body === 'object') {
-            // 1. Exception Type + Message (e.g. ContractValidation: InvalidToken)
-            if (body.exceptionType) {
-                const rawMsg = body.message || 'UnknownException';
-                const msg = cleanErrorMessage(rawMsg);
-                return {
-                    title: `${body.exceptionType}: ${msg}`,
-                    key: `${body.exceptionType.toLowerCase()}_${msg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-                };
-            }
-            // 2. Validation details (ASP.NET Core validation)
-            if (body.errors && typeof body.errors === 'object') {
-                const keys = Object.keys(body.errors);
-                if (keys.length > 0) {
-                    const firstKey = keys[0];
-                    return {
-                        title: `Validation Error: ${firstKey}`,
-                        key: `val_err_${firstKey.toLowerCase()}`,
-                    };
-                }
-            }
-            // 3. Simple message or error fields
-            if (body.message && typeof body.message === 'string') {
-                const msg = cleanErrorMessage(body.message);
-                return {
-                    title: msg,
-                    key: `msg_${msg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-                };
-            }
-            if (body.error && typeof body.error === 'string') {
-                const err = cleanErrorMessage(body.error);
-                return {
-                    title: err,
-                    key: `err_${err.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-                };
-            }
-            if (body.title && typeof body.title === 'string') {
-                const titleText = cleanErrorMessage(body.title);
-                return {
-                    title: titleText,
-                    key: `title_${titleText.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-                };
-            }
-        }
-    } catch {
-        // Not a JSON response
-    }
-    return null;
-}
 
 const PAGE_SIZE = 1000;
 
@@ -172,39 +82,10 @@ export function Inspector({
             if (row.analyzerFindings && row.analyzerFindings.length > 0) {
                 for (const f of row.analyzerFindings) {
                     placed = true;
-                    let categoryTitle = 'Other Finding';
-                    let groupKey = 'other';
-                    let color = 'var(--color-info)';
-
-                    if (f.ruleId === 'swazz/reflected-xss') {
-                        color = 'var(--color-error)';
-                        categoryTitle = 'Reflected XSS';
-                        groupKey = 'reflected_xss';
-                    } else if (f.ruleId === 'swazz/sqli-error' || f.ruleId === 'swazz/sql-error-leak') {
-                        color = 'var(--color-error)';
-                        const dbMatch = f.message?.match(/\(([^)]+)\)/);
-                        const dbName = dbMatch ? dbMatch[1] : 'Generic';
-                        categoryTitle = `SQLi Error: ${dbName}`;
-                        groupKey = `sqli_${dbName.toLowerCase()}`;
-                    } else if (f.ruleId === 'swazz/stack-trace' || f.ruleId === 'swazz/stack-trace-leak') {
-                        color = 'var(--color-warning)';
-                        const langMatch = f.message?.match(/\(([^)]+)\)/);
-                        const lang = langMatch ? langMatch[1] : 'Generic';
-                        categoryTitle = `Stack Trace Leak: ${lang}`;
-                        groupKey = `stack_${lang.toLowerCase()}`;
-                    } else if (f.ruleId === 'swazz/sensitive-data' || f.ruleId === 'swazz/sensitive-data-leak') {
-                        color = 'var(--color-warning)';
-                        const catMatch = f.message?.match(/\(([^)]+)\)/);
-                        const catName = catMatch ? catMatch[1] : 'Sensitive Data';
-                        categoryTitle = `Sensitive Data: ${catName}`;
-                        groupKey = `sensitive_${catName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
-                    } else {
-                        categoryTitle = f.message || 'Suspicious Anomaly';
-                        groupKey = `other_${f.ruleId.replace(/[^a-z0-9]+/g, '_')}`;
-                    }
+                    const { title, color, key: groupKey } = categorizeFinding(f, row.responsePreview);
 
                     if (!groups[groupKey]) {
-                        groups[groupKey] = { title: categoryTitle, color, items: [] };
+                        groups[groupKey] = { title, color, items: [] };
                     }
                     groups[groupKey].items.push({ result: row, finding: f });
                 }
@@ -258,6 +139,18 @@ export function Inspector({
 
     const toggleGroup = (key: string) => {
         setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const handleExpandAll = () => {
+        const newExpanded: Record<string, boolean> = {};
+        for (const g of groupedFindings) {
+            newExpanded[g.key] = true;
+        }
+        setExpandedGroups(newExpanded);
+    };
+
+    const handleCollapseAll = () => {
+        setExpandedGroups({});
     };
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
@@ -369,13 +262,33 @@ export function Inspector({
                         </button>
                     </div>
                 ) : findingsOnly ? (
-                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-warning)' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                            <line x1="12" y1="9" x2="12" y2="13" />
-                            <line x1="12" y1="17" x2="12.01" y2="17" />
-                        </svg>
-                        Detected Vulnerability Findings
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-warning)' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                            Detected Vulnerability Findings
+                        </div>
+                        {groupedFindings.length > 0 && (
+                            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                <button
+                                    onClick={handleExpandAll}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ padding: '2px 6px', height: 'auto', minHeight: 0, fontSize: '11px', color: 'var(--text-secondary)' }}
+                                >
+                                    Expand All
+                                </button>
+                                <button
+                                    onClick={handleCollapseAll}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ padding: '2px 6px', height: 'auto', minHeight: 0, fontSize: '11px', color: 'var(--text-secondary)' }}
+                                >
+                                    Collapse All
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="inspector-tabs">

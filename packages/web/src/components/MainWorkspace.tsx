@@ -175,7 +175,7 @@ export function MainWorkspace({
                                     <line x1="12" y1="9" x2="12" y2="13" />
                                     <line x1="12" y1="17" x2="12.01" y2="17" />
                                 </svg>
-                                Vulnerabilities
+                                Grouped Errors
                                 {findingsCount > 0 && (
                                     <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
                                 )}

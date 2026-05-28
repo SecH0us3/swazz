@@ -1628,6 +1628,38 @@ body.resizing .sidebar-resizer {
 
 .detail-copy-btn { margin-top: var(--space-2); }
 
+.detail-spacing-bottom {
+  margin-bottom: var(--space-6);
+}
+
+.detail-section-title-divider {
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--space-6);
+}
+
+.detail-headers-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: 12px;
+}
+
+.detail-header-row {
+  display: contents;
+}
+
+.detail-header-name {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.detail-header-value {
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
 /* ─── Profile Toggles ────────────────────────────────────── */
 
 .profile-toggles {
