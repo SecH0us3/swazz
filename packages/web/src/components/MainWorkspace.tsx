@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
@@ -70,6 +70,28 @@ export function MainWorkspace({
     }, [isAnalysisEnabled, activeTab]);
 
     const hasActivity = !!inspectorRunId || config.endpoints.length > 0;
+
+    const [findingsCount, setFindingsCount] = useState(0);
+
+    useEffect(() => {
+        if (!inspectorRunId || !isAnalysisEnabled) {
+            setFindingsCount(0);
+            return;
+        }
+
+        let active = true;
+        queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 1 })
+            .then(res => {
+                if (active) {
+                    setFindingsCount(res.total);
+                }
+            })
+            .catch(() => {});
+
+        return () => {
+            active = false;
+        };
+    }, [inspectorRunId, liveCount, isAnalysisEnabled, queryResults]);
 
     return (
         <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
@@ -154,6 +176,9 @@ export function MainWorkspace({
                                     <line x1="12" y1="17" x2="12.01" y2="17" />
                                 </svg>
                                 Vulnerabilities
+                                {findingsCount > 0 && (
+                                    <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
+                                )}
                             </button>
                         )}
                     </div>
