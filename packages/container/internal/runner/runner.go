@@ -587,23 +587,21 @@ func (r *Runner) executeRequest(
 			if buf.Len() > 0 {
 				rawBodyBytes = make([]byte, buf.Len())
 				copy(rawBodyBytes, buf.Bytes())
-				if resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody {
-					var parsed any
-					if json.Unmarshal(rawBodyBytes, &parsed) == nil {
-						respBody = parsed
-					} else {
-						respBody = string(rawBodyBytes)
-					}
+				var parsed any
+				if json.Unmarshal(rawBodyBytes, &parsed) == nil {
+					respBody = parsed
+				} else {
+					respBody = string(rawBodyBytes)
 				}
 			}
 			bufPool.Put(buf)
 		}
-		io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
+		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
 
 		responseSize := resp.ContentLength
 		if responseSize < 0 {
-			responseSize = int64(len(rawBodyBytes))
+			responseSize = int64(len(rawBodyBytes)) + discarded
 		}
 
 		result := &swagger.FuzzResult{

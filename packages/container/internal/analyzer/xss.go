@@ -46,7 +46,7 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	contentType := input.ResponseHeaders.Get("Content-Type")
 
 	isHTML := strings.Contains(strings.ToLower(contentType), "text/html")
-	isJSON := strings.Contains(contentType, "application/json") || (strings.HasPrefix(strings.TrimSpace(bodyStr), "{") && json.Valid(input.ResponseBody))
+	isJSON := strings.Contains(contentType, "application/json") || ((strings.HasPrefix(strings.TrimSpace(bodyStr), "{") || strings.HasPrefix(strings.TrimSpace(bodyStr), "[")) && json.Valid(input.ResponseBody))
 
 	if isJSON && !isHTML {
 		// Safe JSON context

@@ -59,7 +59,6 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 				Message:  fmt.Sprintf("Sensitive data/secret (%s) leaked in the response body.", sig.category),
 				Evidence: fmt.Sprintf("Leaked credential indicator: %s", redactedMatch),
 			})
-			break
 		}
 	}
 
