@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect } from 'react';
-import type { FuzzResult, SwazzConfig } from '../../types.js';
+import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 
 interface Props {
@@ -146,6 +146,7 @@ export function RequestDetail({
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
     const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
+    const [liveHeaders, setLiveHeaders] = useState<Record<string, string[]>>(result.responseHeaders || {});
     const [isReplaying, setIsReplaying] = useState(false);
 
     const copy = (text: string, label: string) => {
@@ -186,9 +187,19 @@ export function RequestDetail({
             });
             setLiveStatus(response.status);
             setLiveResponse(response.body);
+            if (response.headers) {
+                const formattedHeaders: Record<string, string[]> = {};
+                for (const [k, v] of Object.entries(response.headers)) {
+                    formattedHeaders[k] = Array.isArray(v) ? v : [v as string];
+                }
+                setLiveHeaders(formattedHeaders);
+            } else {
+                setLiveHeaders({});
+            }
         } catch (err) {
             setLiveStatus(0);
             setLiveResponse(err instanceof Error ? err.message : String(err));
+            setLiveHeaders({});
         } finally {
             setIsReplaying(false);
         }
@@ -244,6 +255,27 @@ export function RequestDetail({
                         <button className="btn btn-icon" onClick={onClose} aria-label="Close" title="Close (Esc)">✕</button>
                     </div>
                 </div>
+
+                {result.analyzerFindings && result.analyzerFindings.length > 0 && (
+                    <div className="analyzer-findings-alerts">
+                        {result.analyzerFindings.map((finding, idx) => (
+                            <div key={idx} className={`alert-banner alert-${finding.level}`}>
+                                <div className="alert-banner-header">
+                                    <span className={`alert-badge badge-${finding.level}`}>
+                                        {finding.level}
+                                    </span>
+                                    <span>Vulnerability: {finding.ruleId}</span>
+                                </div>
+                                <div className="alert-banner-message">{finding.message}</div>
+                                {finding.evidence && (
+                                    <div className="alert-banner-evidence">
+                                        {finding.evidence}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 <div className="modal-split">
                     <div className="modal-pane">
@@ -358,11 +390,27 @@ export function RequestDetail({
 
                     <div className="modal-pane">
                         <div className="detail-section-title">Response Body</div>
-                        <div className="detail-json-wrapper">
+                        <div className="detail-json-wrapper detail-spacing-bottom">
                             <pre className="detail-json">
                                 {renderHighlightedJson(responseBodyJson)}
                             </pre>
                         </div>
+
+                        {liveHeaders && Object.keys(liveHeaders).length > 0 && (
+                            <>
+                                <div className="detail-section-title detail-section-title-divider">Response Headers</div>
+                                <div className="detail-json-wrapper">
+                                    <div className="detail-headers-grid">
+                                        {Object.entries(liveHeaders).map(([key, values]) => (
+                                            <div key={key} className="detail-header-row">
+                                                <span className="detail-header-name">{key}:</span>
+                                                <span className="detail-header-value">{values.join(', ')}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

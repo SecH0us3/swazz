@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { RunStats } from '../types.js';
+import type { RunStats, AnalysisFinding } from '../types.js';
 import { useAppStore } from '../store/appStore.js';
 
 const VALUE_LIMIT = 80;
@@ -82,6 +82,9 @@ export interface ResultSummary {
     payloadPreview: string;
     responsePreview: string;
     error?: string;
+    responseSize?: number;
+    responseHeaders?: Record<string, string[]>;
+    analyzerFindings?: AnalysisFinding[];
 }
 
 export function toSummary(r: any): ResultSummary {
@@ -100,6 +103,9 @@ export function toSummary(r: any): ResultSummary {
         payloadPreview: r.payloadPreview ?? preview(r.payload),
         responsePreview: r.responsePreview ?? previewResponse(r.responseBody),
         error: r.error,
+        responseSize: r.responseSize || 0,
+        responseHeaders: r.responseHeaders || {},
+        analyzerFindings: r.analyzerFindings || [],
     };
 }
 
@@ -121,7 +127,7 @@ export function useRunner(proxyUrl: string) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(req),
             });
-            return res.json() as Promise<{ status: number; body: any; duration: number }>;
+            return res.json() as Promise<{ status: number; body: any; headers?: Record<string, string>; duration: number }>;
         },
         [proxyUrl],
     );

@@ -100,4 +100,49 @@ describe('useDb hook', () => {
         });
         expect(retrievedResults).toHaveLength(0);
     });
+
+    it('queries results filtering by findingsOnly', async () => {
+        const { result } = renderHook(() => useDb());
+
+        await waitFor(() => {
+            expect(result.current.db).not.toBeNull();
+        });
+
+        const mockRun = {
+            id: 'run_findings',
+            startedAt: 1000,
+            completedAt: 2000,
+            baseUrl: 'http://test.com',
+            stats: {} as any
+        };
+        const mockResults = [
+            { id: 'res_200_clean', status: 200, duration: 10, analyzerFindings: [] },
+            { id: 'res_200_xss', status: 200, duration: 12, analyzerFindings: [{ ruleId: 'swazz/reflected-xss', level: 'error' }] },
+            { id: 'res_500_sqli', status: 500, duration: 15, analyzerFindings: [] },
+            { id: 'res_404_ignored', status: 404, duration: 8, analyzerFindings: [] }
+        ] as any;
+
+        await act(async () => {
+            await result.current.saveRun(mockRun, mockResults);
+        });
+
+        let allResults: any = null;
+        let findingsOnlyResults: any = null;
+
+        await act(async () => {
+            allResults = await result.current.queryResults({ runId: 'run_findings', limit: 10 });
+            findingsOnlyResults = await result.current.queryResults({ runId: 'run_findings', limit: 10, findingsOnly: true });
+        });
+
+        expect(allResults.rows).toHaveLength(4);
+        
+        // Should only return:
+        // - res_200_xss (has analyzerFindings)
+        // - res_500_sqli (status >= 500)
+        // (res_200_clean has no findings, res_404_ignored is an ignored status)
+        expect(findingsOnlyResults.rows).toHaveLength(2);
+        const ids = findingsOnlyResults.rows.map((r: any) => r.id);
+        expect(ids).toContain('res_200_xss');
+        expect(ids).toContain('res_500_sqli');
+    });
 });

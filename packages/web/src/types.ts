@@ -34,6 +34,13 @@ export interface EndpointConfig {
 
 // ─── Settings ───────────────────────────────────────────
 
+export interface AnalysisFinding {
+    ruleId: string;
+    level: 'error' | 'warning' | 'note';
+    message: string;
+    evidence?: string;
+}
+
 export interface SwazzSettings {
     iterations_per_profile: number;
     concurrency: number;
@@ -43,6 +50,7 @@ export interface SwazzSettings {
     profiles: FuzzingProfile[];
     /** Controls which payload subcategories are active per profile. */
     payload_categories?: Record<FuzzingProfile, string[]>;
+    analyze_response_body?: boolean;
 }
 
 export interface PayloadCategoryDef {
@@ -61,6 +69,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     max_payload_size_bytes: 1048576, // 1MB
     delay_between_requests_ms: 0,
     profiles: ['RANDOM', 'BOUNDARY', 'MALICIOUS'],
+    analyze_response_body: true,
 };
 
 // ─── Full Config ────────────────────────────────────────
@@ -93,6 +102,9 @@ export interface FuzzResult {
     error?: string;
     timestamp: number;
     retries: number;          // how many 429 retries were needed
+    responseSize?: number;
+    responseHeaders?: Record<string, string[]>;
+    analyzerFindings?: AnalysisFinding[];
 }
 
 // ─── Live Stats ─────────────────────────────────────────

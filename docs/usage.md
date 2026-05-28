@@ -54,6 +54,10 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
 - **`wordlist_files`**: Key-value mapping of payload categories to custom `.txt` wordlists. For security, files must be placed within a `wordlists/` directory.
 - **`concurrency`**: Number of parallel requests to send.
 - **`fuzzProfiles`**: Which payload generators to run (e.g., boundaries, malicious payloads).
+- **`settings`**: Fuzzer runtime settings block, containing:
+  - **`analyze_response_body`**: (Boolean) If `true`, enables response body parsing to verify reflected XSS, SQL errors, stack traces, and sensitive data leakage. Default is `true`.
+  - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
+  - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
 
 ## GraphQL Schema Parsing & Fuzzing 🛡️
 

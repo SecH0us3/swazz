@@ -88,3 +88,41 @@ func TestClassifier_Truncation(t *testing.T) {
 		t.Errorf("Expected truncated body to contain truncation notice")
 	}
 }
+
+func TestClassifier_AnalyzerFindings(t *testing.T) {
+	cls := New(nil)
+
+	res := &swagger.FuzzResult{
+		Status:   200, // Normally ignored by status-code classifier
+		Endpoint: "/welcome",
+		Method:   "GET",
+		AnalyzerFindings: []swagger.AnalysisFinding{
+			{
+				RuleID:   "swazz/reflected-xss",
+				Level:    "error",
+				Message:  "Reflected XSS alert",
+				Evidence: "Evidence context",
+			},
+		},
+	}
+
+	findings := cls.ClassifyAll([]*swagger.FuzzResult{res})
+
+	if len(findings) != 1 {
+		t.Fatalf("Expected 1 finding from analyzer findings, got %d", len(findings))
+	}
+
+	finding := findings[0]
+	if finding.RuleID != "swazz/reflected-xss" {
+		t.Errorf("Expected rule ID 'swazz/reflected-xss', got '%s'", finding.RuleID)
+	}
+	if finding.Level != SeverityError {
+		t.Errorf("Expected level 'error', got '%s'", finding.Level)
+	}
+	if finding.Source != "response_body" {
+		t.Errorf("Expected source 'response_body', got '%s'", finding.Source)
+	}
+	if finding.Error != "Evidence context" {
+		t.Errorf("Expected error field to hold evidence, got '%s'", finding.Error)
+	}
+}

@@ -111,11 +111,7 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 				}
 			} else {
 				// Non-critical events (like progress stats) can be dropped if the client is too slow.
-				select {
-				case ch <- evt:
-				default:
-					// Drop event for this specific slow client
-				}
+				safeSendNonBlocking(ch, evt)
 			}
 		}
 	}
@@ -134,6 +130,23 @@ func safeSend(ch chan Event, evt Event, timeout time.Duration) (ok bool) {
 	case ch <- evt:
 		return true
 	case <-time.After(timeout):
+		return false
+	}
+}
+
+// safeSendNonBlocking attempts to write to a channel without blocking.
+// It safely recovers from panics if the channel is closed concurrently.
+func safeSendNonBlocking(ch chan Event, evt Event) (ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+		}
+	}()
+
+	select {
+	case ch <- evt:
+		return true
+	default:
 		return false
 	}
 }

@@ -33,6 +33,7 @@ type Finding struct {
 	ResponseBody any                    `json:"responseBody,omitempty"`
 	Error        string                 `json:"error,omitempty"`
 	Timestamp    int64                  `json:"timestamp"`
+	Source       string                 `json:"source"`
 }
 
 // RulesConfig configures how results are classified.
@@ -119,6 +120,7 @@ func (c *Classifier) Classify(result *swagger.FuzzResult) *Finding {
 		ResponseBody: result.ResponseBody,
 		Error:        result.Error,
 		Timestamp:    result.Timestamp,
+		Source:       "status_code",
 	}
 }
 
@@ -129,24 +131,51 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 	var findings []*Finding
 
 	for _, r := range results {
-		f := c.Classify(r)
-		if f == nil {
-			continue
+		// 1. Standard status-code finding
+		sf := c.Classify(r)
+		if sf != nil {
+			defectKey := fmt.Sprintf("%s::%s %s", sf.RuleID, sf.Method, sf.Endpoint)
+			count := defectCounts[defectKey]
+			if count < maxPerDefect {
+				// Truncate huge response bodies
+				if body, ok := sf.ResponseBody.(string); ok && len(body) > 50000 {
+					sf.ResponseBody = body[:50000] + "\n... [TRUNCATED BY SWAZZ]"
+				}
+				findings = append(findings, sf)
+				defectCounts[defectKey] = count + 1
+			}
 		}
 
-		defectKey := fmt.Sprintf("%s::%s %s", f.RuleID, f.Method, f.Endpoint)
-		count := defectCounts[defectKey]
-		if count >= maxPerDefect {
-			continue
-		}
+		// 2. Response body analyzer findings
+		for _, af := range r.AnalyzerFindings {
+			f := &Finding{
+				ID:           r.ID,
+				RuleID:       af.RuleID,
+				Level:        Severity(af.Level),
+				Endpoint:     r.Endpoint,
+				ResolvedPath: r.ResolvedPath,
+				Method:       r.Method,
+				Profile:      r.Profile,
+				Status:       r.Status,
+				Duration:     r.Duration,
+				Payload:      r.Payload,
+				ResponseBody: r.ResponseBody,
+				Error:        af.Evidence, // Store evidence matched fragment here
+				Timestamp:    r.Timestamp,
+				Source:       "response_body",
+			}
 
-		// Truncate huge response bodies
-		if body, ok := f.ResponseBody.(string); ok && len(body) > 50000 {
-			f.ResponseBody = body[:50000] + "\n... [TRUNCATED BY SWAZZ]"
+			defectKey := fmt.Sprintf("%s::%s %s", f.RuleID, f.Method, f.Endpoint)
+			count := defectCounts[defectKey]
+			if count < maxPerDefect {
+				// Truncate huge response bodies
+				if body, ok := f.ResponseBody.(string); ok && len(body) > 50000 {
+					f.ResponseBody = body[:50000] + "\n... [TRUNCATED BY SWAZZ]"
+				}
+				findings = append(findings, f)
+				defectCounts[defectKey] = count + 1
+			}
 		}
-
-		findings = append(findings, f)
-		defectCounts[defectKey] = count + 1
 	}
 
 	return findings

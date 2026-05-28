@@ -13,19 +13,19 @@ export default {
       // 1. SQL Injection
       const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE)\b|'|--)/i;
       if (sqliRegex.test(strValue)) {
-        throw new Error("Database query failed: Syntax error or access violation");
+        throw new Error("You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '" + strValue + "'");
       }
 
       // 2. XSS
       const xssRegex = /(<script|onload|onerror|iframe|javascript:|alert\()/i;
       if (xssRegex.test(strValue)) {
-        throw new Error("HTML Parser Error: Unexpected token '<' or unhandled script execution");
+        throw new Error("HTML Parser Error: Unexpected token '<'\n    at parseHTML (/usr/src/app/node_modules/htmlparser2/lib/Parser.js:12:34)\n    at Object.parse (/usr/src/app/node_modules/htmlparser2/lib/index.js:5:10)");
       }
 
       // 3. Path Traversal
       const traversalRegex = /(\.\.\/|\.\.\\|\/etc\/passwd|file:\/\/)/i;
       if (traversalRegex.test(strValue)) {
-        throw new Error("java.io.FileNotFoundException: Access denied to local file system resource");
+        throw new Error("java.io.FileNotFoundException: Access denied\n\tat java.io.FileInputStream.open0(Native Method)\n\tat java.io.FileInputStream.open(FileInputStream.java:195)");
       }
 
       // 4. Null byte / CRLF injection / HTTP smuggling
@@ -126,10 +126,72 @@ export default {
                   }
                 }
               }
+            },
+            "/welcome": {
+              get: {
+                summary: "Welcome page (HTML)",
+                parameters: [
+                  {
+                    name: "name",
+                    in: "query",
+                    schema: { type: "string" },
+                    description: "User's name"
+                  }
+                ],
+                responses: {
+                  "200": {
+                    description: "HTML output reflection",
+                    content: {
+                      "text/html": {
+                        schema: { type: "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "/status": {
+              get: {
+                summary: "System status info",
+                responses: {
+                  "200": {
+                    description: "Internal status containing secrets",
+                    content: {
+                      "application/json": {
+                        schema: {
+                          type: "object",
+                          properties: {
+                            status: { type: "string" },
+                            awsKey: { type: "string" },
+                            internalIP: { type: "string" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         };
         return new Response(JSON.stringify(swagger), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      if (method === "GET" && path === "/welcome") {
+        const name = url.searchParams.get("name") || "Guest";
+        return new Response(`<h1>Welcome ${name}!</h1>`, {
+          headers: { ...corsHeaders, "Content-Type": "text/html" }
+        });
+      }
+
+      if (method === "GET" && path === "/status") {
+        return new Response(JSON.stringify({
+          status: "healthy",
+          awsKey: "AKIAIOSFODNN7EXAMPLE",
+          internalIP: "192.168.1.15"
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
@@ -157,7 +219,7 @@ export default {
         checkAllVulnerabilities(body.password);
 
         if (body.username === "admin" && body.password === "secret") {
-          return new Response(JSON.stringify({ token: "fake-jwt-token" }), {
+          return new Response(JSON.stringify({ token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" }), {
             status: 200,
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });

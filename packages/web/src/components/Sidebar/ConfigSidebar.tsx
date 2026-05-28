@@ -163,6 +163,21 @@ export function ConfigSidebar({
                         </div>
                     )}
                 </div>
+
+                {/* Analyze Response Body */}
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center' }}>
+                    <label className="premium-checkbox-label">
+                        <input
+                            type="checkbox"
+                            className="premium-checkbox"
+                            checked={config.settings.analyze_response_body ?? true}
+                            onChange={() => onUpdateConfig({
+                                settings: { ...config.settings, analyze_response_body: !(config.settings.analyze_response_body ?? true) } as any,
+                            })}
+                        />
+                        <span>Analyze Response Body</span>
+                    </label>
+                </div>
             </Section>
 
             {/* Headers */}

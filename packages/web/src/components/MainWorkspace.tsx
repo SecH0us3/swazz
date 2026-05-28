@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
@@ -61,7 +61,37 @@ export function MainWorkspace({
         ? (historyStats?.totalRequests ?? 0)
         : liveCount;
 
+    const isAnalysisEnabled = config?.settings?.analyze_response_body !== false;
+
+    useEffect(() => {
+        if (!isAnalysisEnabled && activeTab === 'findings') {
+            useAppStore.setState({ activeTab: 'logs' });
+        }
+    }, [isAnalysisEnabled, activeTab]);
+
     const hasActivity = !!inspectorRunId || config.endpoints.length > 0;
+
+    const [findingsCount, setFindingsCount] = useState(0);
+
+    useEffect(() => {
+        if (!inspectorRunId || !isAnalysisEnabled) {
+            setFindingsCount(0);
+            return;
+        }
+
+        let active = true;
+        queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 1 })
+            .then(res => {
+                if (active) {
+                    setFindingsCount(res.total);
+                }
+            })
+            .catch(() => {});
+
+        return () => {
+            active = false;
+        };
+    }, [inspectorRunId, liveCount, isAnalysisEnabled, queryResults]);
 
     return (
         <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
@@ -135,9 +165,25 @@ export function MainWorkspace({
                                 <span className="tab-bar-count">{totalRequestsCount.toLocaleString()}</span>
                             )}
                         </button>
+                        {isAnalysisEnabled && (
+                            <button
+                                className={`tab-bar-btn ${activeTab === 'findings' ? 'active' : ''}`}
+                                onClick={() => useAppStore.setState({ activeTab: 'findings' })}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                    <line x1="12" y1="9" x2="12" y2="13" />
+                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
+                                Grouped Errors
+                                {findingsCount > 0 && (
+                                    <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
+                                )}
+                            </button>
+                        )}
                     </div>
 
-                    {activeTab === 'heatmap' ? (
+                    {activeTab === 'heatmap' && (
                         <Dashboard
                             stats={currentStats}
                             endpointKeys={endpointKeys}
@@ -149,7 +195,8 @@ export function MainWorkspace({
                             isRunning={isRunning}
                             onExportHTML={handleExportHTML}
                         />
-                    ) : (
+                    )}
+                    {activeTab === 'logs' && (
                         <Inspector
                             runId={inspectorRunId}
                             queryResults={queryResults}
@@ -158,6 +205,18 @@ export function MainWorkspace({
                             onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
                             onSelectResult={handleSelectResult}
                             onExport={handleExport}
+                        />
+                    )}
+                    {isAnalysisEnabled && activeTab === 'findings' && (
+                        <Inspector
+                            runId={inspectorRunId}
+                            queryResults={queryResults}
+                            liveCount={liveCount}
+                            heatmapFilter={heatmapFilter}
+                            onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
+                            onSelectResult={handleSelectResult}
+                            onExport={handleExport}
+                            findingsOnly={true}
                         />
                     )}
                 </div>

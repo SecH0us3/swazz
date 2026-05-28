@@ -138,9 +138,7 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config: " + err.Error()})
 		return
 	}
-
-	allowPrivate := os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") == "true"
-	if !allowPrivate {
+	if os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") != "true" {
 		config.Security.AllowPrivateIPs = false
 	}
 
