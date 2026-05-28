@@ -146,6 +146,7 @@ export function RequestDetail({
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
     const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
+    const [liveHeaders, setLiveHeaders] = useState<Record<string, string[]>>(result.responseHeaders || {});
     const [isReplaying, setIsReplaying] = useState(false);
 
     const copy = (text: string, label: string) => {
@@ -186,9 +187,19 @@ export function RequestDetail({
             });
             setLiveStatus(response.status);
             setLiveResponse(response.body);
+            if (response.headers) {
+                const formattedHeaders: Record<string, string[]> = {};
+                for (const [k, v] of Object.entries(response.headers)) {
+                    formattedHeaders[k] = [v as string];
+                }
+                setLiveHeaders(formattedHeaders);
+            } else {
+                setLiveHeaders({});
+            }
         } catch (err) {
             setLiveStatus(0);
             setLiveResponse(err instanceof Error ? err.message : String(err));
+            setLiveHeaders({});
         } finally {
             setIsReplaying(false);
         }
@@ -385,12 +396,12 @@ export function RequestDetail({
                             </pre>
                         </div>
 
-                        {result.responseHeaders && Object.keys(result.responseHeaders).length > 0 && (
+                        {liveHeaders && Object.keys(liveHeaders).length > 0 && (
                             <>
                                 <div className="detail-section-title" style={{ borderTop: '1px solid var(--border-default)', paddingTop: 'var(--space-6)' }}>Response Headers</div>
                                 <div className="detail-json-wrapper">
                                     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)', padding: '12px' }}>
-                                        {Object.entries(result.responseHeaders).map(([key, values]) => (
+                                        {Object.entries(liveHeaders).map(([key, values]) => (
                                             <div key={key} style={{ display: 'contents' }}>
                                                 <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{key}:</span>
                                                 <span style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{values.join(', ')}</span>
