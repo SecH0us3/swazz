@@ -7,17 +7,21 @@ import "math"
 var maliciousEncoding = []string{
 	"\x00",                         // Null byte
 	"\x00\x00\x00\x00",             // Multiple null bytes
-	"\r\n\r\n",                     // CRLF injection
-	"\r\n",                         // Carriage return + newline
-	"\t\b\f",                       // Control characters
-	"\u200B",                       // Zero-width space
-	"\u200E\u200F",                 // LTR/RTL marks
-	"\uFEFF",                       // BOM character
-	"\uFFFD",                       // Replacement character
-	"test\x00injected",             // Null byte in middle
-	"normal\r\nX-Injected: header", // Header injection
-	"%00%0a%0d",                    // URL-encoded control chars
-	"\u202E\u0041\u0042\u0043",     // Right-to-left override
+	"\r\n\r\n",                                 // CRLF injection
+	"\r\n",                                     // Carriage return + newline
+	"\t\b\f",                                   // Control characters
+	"\u200B",                                   // Zero-width space
+	"\u200E\u200F",                             // LTR/RTL marks
+	"\uFEFF",                                   // BOM character
+	"\uFFFD",                                   // Replacement character
+	"test\x00injected",                         // Null byte in middle
+	"normal\r\nX-Injected: header",             // Header injection
+	"normal\r\nSet-Cookie: sessionid=evil",     // Cookie injection via CRLF
+	"normal%0d%0aLocation:%20http://attacker.com", // Open redirect via CRLF
+	"test%u000d%u000aX-Injected: unicode",       // Microsoft IIS Unicode CRLF
+	"%E5%98%8A%E5%98%8Dcontent-type:text/html", // PayloadsAllTheThings UTF-8 CRLF bypass
+	"%00%0a%0d",                                // URL-encoded control chars
+	"\u202E\u0041\u0042\u0043",                 // Right-to-left override
 }
 
 // ─── SQL Injection payloads ─────────────────────────────

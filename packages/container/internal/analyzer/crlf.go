@@ -129,14 +129,33 @@ type injectedHeader struct {
 // extractInjectedHeaders parses CRLF payloads to find header name: value pairs.
 // It handles both raw CRLF (\r\n) and URL-encoded CRLF (%0d%0a) sequences.
 func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
+	// Normalize alternative/unicode CRLF representations to standard percent encoding or raw CRLF
+	normalizedPayload := payload
+	
+	// Normalize Microsoft IIS style %u000d / %u000a
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000d", "%0d")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000D", "%0D")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000a", "%0a")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000A", "%0A")
+	
+	// Normalize alternative UTF-8 CRLF representations from PayloadsAllTheThings
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%E5%98%8D", "%0D")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%e5%98%8d", "%0d")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%E5%98%8A", "%0A")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%e5%98%8a", "%0a")
+
+	// Also support Unicode character forms in case they are decoded as literal Unicode chars in payload
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "\u560d", "\r")
+	normalizedPayload = strings.ReplaceAll(normalizedPayload, "\u560a", "\n")
+
 	var results []injectedHeader
 
 	// Strategy 1: Split on raw CRLF sequences (\r\n, \r, \n)
-	results = append(results, a.parseHeadersFromLines(splitOnCRLF(payload))...)
+	results = append(results, a.parseHeadersFromLines(splitOnCRLF(normalizedPayload))...)
 
 	// Strategy 2a: Path-decode the payload and split on CRLF (preserves +)
-	decodedPath, err := url.PathUnescape(payload)
-	if err == nil && decodedPath != payload {
+	decodedPath, err := url.PathUnescape(normalizedPayload)
+	if err == nil && decodedPath != normalizedPayload {
 		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decodedPath))...)
 
 		// Try to decode it twice (for double URL-encoded payloads)
@@ -147,8 +166,8 @@ func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
 	}
 
 	// Strategy 2b: Query-decode the payload and split on CRLF (decodes + to space)
-	decodedQuery, err := url.QueryUnescape(payload)
-	if err == nil && decodedQuery != payload {
+	decodedQuery, err := url.QueryUnescape(normalizedPayload)
+	if err == nil && decodedQuery != normalizedPayload {
 		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decodedQuery))...)
 
 		// Try to decode it twice (for double URL-encoded payloads)

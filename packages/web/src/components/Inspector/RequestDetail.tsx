@@ -95,7 +95,6 @@ export function RequestDetail({
                 const messageLower = (finding.message || '').toLowerCase();
                 return evidenceLower.includes("— " + lowerKey + ":") || 
                        messageLower.includes("'" + lowerKey + ":") || 
-                       messageLower.includes(`cookie '${lowerKey}=`) || 
                        (lowerKey === 'set-cookie' && messageLower.includes('set-cookie'));
             }
             if (finding.ruleId === 'swazz/header-injection' && lowerKey === 'access-control-allow-origin') {
