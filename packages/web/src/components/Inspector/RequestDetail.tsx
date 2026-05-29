@@ -109,7 +109,7 @@ export function RequestDetail({
                 }
                 return true;
             }
-            if (finding.ruleId === 'swazz/header-injection' && lowerKey === 'access-control-allow-origin') {
+            if ((finding.ruleId === 'swazz/header-injection' || finding.ruleId === 'swazz/cors-misconfig') && lowerKey === 'access-control-allow-origin') {
                 if (value) {
                     const valLower = value.toLowerCase();
                     return (finding.evidence || '').toLowerCase().includes(valLower);

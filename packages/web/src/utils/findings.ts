@@ -53,6 +53,14 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         const catName = catMatch ? catMatch[1] : 'Sensitive Data';
         title = `Sensitive Data: ${catName}`;
         key = `sensitive_${slugify(catName)}`;
+    } else if (f.ruleId === 'swazz/crlf-injection') {
+        color = 'var(--color-error)';
+        title = 'CRLF / Header Injection';
+        key = 'crlf_injection';
+    } else if (f.ruleId === 'swazz/cors-misconfig' || f.ruleId === 'swazz/header-injection') {
+        color = 'var(--color-warning)';
+        title = 'CORS Misconfiguration';
+        key = 'cors_misconfig';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

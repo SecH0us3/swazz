@@ -352,6 +352,14 @@ func (r *Runner) fuzzEndpoint(
 				}
 			}
 
+			// Inject security-test headers for MALICIOUS profile.
+			// These test for server misconfigurations (Host injection, CORS, IP spoofing, JWT).
+			if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
+				for k, v := range secHeaders {
+					generatedHeaders[k] = v
+				}
+			}
+
 			result := r.executeRequest(
 				ctx,
 				r.config.BaseURL,
@@ -526,7 +534,11 @@ func (r *Runner) executeRequest(
 		}
 
 		for k, v := range mergedHeaders {
-			req.Header.Set(k, v)
+			if strings.EqualFold(k, "Host") {
+				req.Host = v
+			} else {
+				req.Header.Set(k, v)
+			}
 		}
 		if len(cookies) > 0 {
 			for k, v := range cookies {

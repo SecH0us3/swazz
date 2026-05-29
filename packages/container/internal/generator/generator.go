@@ -32,6 +32,9 @@ type Generator struct {
 	// Sequential counters: MALICIOUS
 	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx int
 
+	// Sequential counter: security header rotation
+	mSecHeaderIdx int
+
 	// cachedMaliciousStrings avoids allocations under high concurrency
 	cachedMaliciousStrings []any
 	// hasActiveMaliciousStrings tracks if any malicious string categories are enabled
@@ -165,6 +168,19 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > count {
 			count = len(payloads.MaliciousTypeConfusion)
 		}
+
+		// Security header categories contribute to iteration count
+		for _, def := range payloads.SecurityHeaderPayloads {
+			if !is(def.Category) {
+				continue
+			}
+			for _, values := range def.Headers {
+				if len(values) > count {
+					count = len(values)
+				}
+			}
+		}
+
 		return count
 	default:
 		return 0
@@ -417,4 +433,31 @@ func (g *Generator) fallbackRandom(propName string) any {
 		}
 	}
 	return payloads.RandomString(payloads.IntRange(3, 10))
+}
+
+// GenerateSecurityHeaders returns a map of header name → fuzz value for
+// security-critical HTTP headers not defined in the API spec.
+// Only active during MALICIOUS profile. Returns nil for other profiles.
+func (g *Generator) GenerateSecurityHeaders() map[string]string {
+	if g.profile != swagger.ProfileMalicious {
+		return nil
+	}
+
+	headers := make(map[string]string)
+	for _, def := range payloads.SecurityHeaderPayloads {
+		if !g.isCategoryEnabled(def.Category) {
+			continue
+		}
+		for headerName, values := range def.Headers {
+			if len(values) == 0 {
+				continue
+			}
+			headers[headerName] = seqPick(values, &g.mSecHeaderIdx)
+		}
+	}
+
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
 }

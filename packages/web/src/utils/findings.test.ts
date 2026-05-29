@@ -54,4 +54,38 @@ describe('findings utility', () => {
         expect(result.title).toBe('Null Reference Exception: Go');
         expect(result.key).toBe('null_pointer_go');
     });
+
+    it('should categorize swazz/crlf-injection rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/crlf-injection',
+            level: 'error',
+            message: 'CRLF injection in header'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('CRLF / Header Injection');
+        expect(result.key).toBe('crlf_injection');
+    });
+
+    it('should categorize swazz/cors-misconfig and swazz/header-injection rules directly', () => {
+        const findingCors: AnalysisFinding = {
+            ruleId: 'swazz/cors-misconfig',
+            level: 'warning',
+            message: 'CORS wildcard Origin'
+        };
+        const resultCors = categorizeFinding(findingCors);
+        expect(resultCors.color).toBe('var(--color-warning)');
+        expect(resultCors.title).toBe('CORS Misconfiguration');
+        expect(resultCors.key).toBe('cors_misconfig');
+
+        const findingHeader: AnalysisFinding = {
+            ruleId: 'swazz/header-injection',
+            level: 'warning',
+            message: 'CORS origin reflection'
+        };
+        const resultHeader = categorizeFinding(findingHeader);
+        expect(resultHeader.color).toBe('var(--color-warning)');
+        expect(resultHeader.title).toBe('CORS Misconfiguration');
+        expect(resultHeader.key).toBe('cors_misconfig');
+    });
 });
