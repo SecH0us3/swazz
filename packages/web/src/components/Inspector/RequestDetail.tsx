@@ -425,36 +425,17 @@ export function RequestDetail({
                                             return (
                                                 <div key={key} className="detail-header-row">
                                                     <span 
-                                                        className="detail-header-name" 
-                                                        style={injected ? { color: 'var(--color-error)', fontWeight: 'bold' } : undefined}
+                                                        className={`detail-header-name ${injected ? 'detail-header-name-injected' : ''}`}
                                                     >
                                                         {key}:
                                                         {injected && (
-                                                            <span 
-                                                                className="badge-error" 
-                                                                style={{ 
-                                                                    marginLeft: '8px', 
-                                                                    fontSize: '10px', 
-                                                                    padding: '2px 6px', 
-                                                                    borderRadius: '4px',
-                                                                    backgroundColor: 'var(--color-error)',
-                                                                    color: 'white',
-                                                                    fontWeight: 'bold'
-                                                                }}
-                                                            >
+                                                            <span className="detail-header-badge-injected">
                                                                 INJECTED
                                                             </span>
                                                         )}
                                                     </span>
                                                     <span 
-                                                        className="detail-header-value"
-                                                        style={injected ? { 
-                                                            color: 'var(--color-error)', 
-                                                            backgroundColor: 'rgba(239, 68, 68, 0.1)', 
-                                                            padding: '2px 6px', 
-                                                            borderRadius: '4px',
-                                                            border: '1px solid rgba(239, 68, 68, 0.2)'
-                                                        } : undefined}
+                                                        className={`detail-header-value ${injected ? 'detail-header-value-injected' : ''}`}
                                                     >
                                                         {values.join(', ')}
                                                     </span>

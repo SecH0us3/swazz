@@ -1660,6 +1660,29 @@ body.resizing .sidebar-resizer {
   word-break: break-all;
 }
 
+.detail-header-name-injected {
+  color: var(--color-error) !important;
+  font-weight: 700;
+}
+
+.detail-header-value-injected {
+  color: var(--color-error) !important;
+  background-color: rgba(239, 68, 68, 0.1);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.detail-header-badge-injected {
+  margin-left: 8px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-error);
+  color: white;
+  font-weight: bold;
+}
+
 .btn-show-all {
   padding: 2px 4px;
   height: auto;

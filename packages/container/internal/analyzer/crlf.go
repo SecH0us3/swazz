@@ -22,7 +22,7 @@ type CRLFAnalyzer struct {
 func NewCRLFAnalyzer() *CRLFAnalyzer {
 	return &CRLFAnalyzer{
 		// Match header lines: "Header-Name: value" (canonical HTTP header format)
-		headerInjectionRe: regexp.MustCompile(`(?i)^([A-Za-z][A-Za-z0-9\-]*)\s*:\s*(.+)$`),
+		headerInjectionRe: regexp.MustCompile(`(?i)^([A-Za-z0-9][A-Za-z0-9\-_]*)\s*:\s*(.+)$`),
 	}
 }
 
@@ -81,7 +81,16 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 
 			exactMatch := strings.EqualFold(trimmedRv, trimmedIv)
 			isSetCookie := strings.EqualFold(ih.name, "Set-Cookie")
-			substringMatch := (len(trimmedIv) >= 4 || isSetCookie) && strings.Contains(strings.ToLower(trimmedRv), strings.ToLower(trimmedIv))
+			var substringMatch bool
+			if isSetCookie {
+				parts := strings.Split(trimmedRv, ";")
+				if len(parts) > 0 {
+					cookiePart := strings.TrimSpace(parts[0])
+					substringMatch = strings.EqualFold(cookiePart, trimmedIv) || strings.HasPrefix(strings.ToLower(cookiePart), strings.ToLower(trimmedIv)+"=")
+				}
+			} else {
+				substringMatch = len(trimmedIv) >= 4 && strings.Contains(strings.ToLower(trimmedRv), strings.ToLower(trimmedIv))
+			}
 
 			if exactMatch || substringMatch {
 				ruleID := "swazz/crlf-injection"
@@ -194,9 +203,9 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 			}
 		}
 
-		// Generic check: if the ACAO value appears as a substring in the payload
+		// Generic check: if the payload appears as a substring in the ACAO header
 		// (the server reflected the Origin header verbatim)
-		if len(acaoLower) > 4 && acaoLower != "*" && strings.Contains(payloadLower, acaoLower) {
+		if len(payloadLower) > 4 && acaoLower != "*" && strings.Contains(acaoLower, payloadLower) {
 			return []swagger.AnalysisFinding{{
 				RuleID:   "swazz/header-injection",
 				Level:    "warning",

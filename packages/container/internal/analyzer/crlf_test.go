@@ -294,6 +294,34 @@ func TestCRLFAnalyzer(t *testing.T) {
 			profile:       swagger.ProfileMalicious,
 			expectedCount: 0,
 		},
+		{
+			name:          "Custom header with digit and underscore",
+			payload:       "test\r\n1_custom_header: yes",
+			response:      "",
+			headers:       http.Header{"1_custom_header": []string{"yes"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/crlf-injection",
+			expectedLevel: "error",
+		},
+		{
+			name:          "CORS reflection generic — ACAO contains payload",
+			payload:       "https://evil.com",
+			response:      "",
+			headers:       http.Header{"Access-Control-Allow-Origin": []string{"https://evil.com"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/header-injection",
+			expectedLevel: "warning",
+		},
+		{
+			name:          "CORS reflection generic — payload contains ACAO but no reflection (should not match)",
+			payload:       "https://trusted.example.com.evil.com",
+			response:      "",
+			headers:       http.Header{"Access-Control-Allow-Origin": []string{"https://trusted.example.com"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
