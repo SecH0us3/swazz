@@ -16,6 +16,12 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-error)';
         title = 'Reflected XSS';
         key = 'reflected_xss';
+    } else if (f.ruleId === 'swazz/null-pointer-exception') {
+        color = 'var(--color-error)';
+        const langMatch = f.message?.match(/\(([^)]+)\)/);
+        const lang = langMatch ? langMatch[1] : 'Generic';
+        title = `Null Reference Exception: ${lang}`;
+        key = `null_pointer_${slugify(lang)}`;
     } else if (f.ruleId === 'swazz/sql-error-leak') {
         color = 'var(--color-error)';
         const dbMatch = f.message?.match(/\(([^)]+)\)/);
@@ -28,10 +34,11 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         if (responsePreview) {
             const subType = extractErrorSubtype(responsePreview);
             if (subType) {
+                const isNPE = subType.key.includes('null_reference') || subType.key.includes('null_pointer');
                 return {
                     title: subType.title,
                     key: `stack_sub_${subType.key}`,
-                    color,
+                    color: isNPE ? 'var(--color-error)' : color,
                 };
             }
         }

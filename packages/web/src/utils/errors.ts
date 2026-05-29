@@ -70,11 +70,35 @@ export function cleanErrorMessage(msg: string): string {
     return firstLine;
 }
 
+const nullPointerRegexes = [
+    /System\.NullReferenceException/i,
+    /NullPointerException/i,
+    /nil pointer dereference/i,
+    /NoneType' object/i,
+    /Cannot read propert(y|ies) of (null|undefined)/i,
+    /Call to a member function .* on null/i,
+    /Attempt to read property .* on null/i,
+    /undefined method .* for nil:NilClass/i
+];
+
+export function isNullPointerException(text: string): boolean {
+    return nullPointerRegexes.some(r => r.test(text));
+}
+
 export function extractErrorSubtype(responsePreview: string | undefined): { title: string; key: string } | null {
     if (!responsePreview) return null;
+    
     try {
         const body = JSON.parse(responsePreview);
         if (body && typeof body === 'object') {
+            // Check for NPE in any top-level string values first to prevent false positives in raw text
+            const hasNPE = Object.values(body).some(v => typeof v === 'string' && isNullPointerException(v));
+            if (hasNPE) {
+                return {
+                    title: 'Null Reference Exception',
+                    key: 'null_reference_exception',
+                };
+            }
             // 1. Exception Type + Message (e.g. ContractValidation: InvalidToken)
             if (body.exceptionType) {
                 const rawMsg = body.message || 'UnknownException';
@@ -126,7 +150,13 @@ export function extractErrorSubtype(responsePreview: string | undefined): { titl
             }
         }
     } catch {
-        // Not a JSON response
+        // Not a JSON response, fall back to checking the raw text
+        if (isNullPointerException(responsePreview)) {
+            return {
+                title: 'Null Reference Exception',
+                key: 'null_reference_exception',
+            };
+        }
     }
     return null;
 }

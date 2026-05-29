@@ -51,8 +51,24 @@ describe('errors utility', () => {
             });
             const result = extractErrorSubtype(preview);
             expect(result).not.toBeNull();
-            expect(result?.title).toBe('NullReferenceException: Object reference not set to an instance of an object.');
-            expect(result?.key).toBe('nullreferenceexception_object_reference_not_set_to_an_instance_of_an_object_');
+            expect(result?.title).toBe('Null Reference Exception');
+            expect(result?.key).toBe('null_reference_exception');
+        });
+
+        it('should detect Java NullPointerException', () => {
+            const preview = 'java.lang.NullPointerException: Cannot invoke "String.length()" because "s" is null';
+            const result = extractErrorSubtype(preview);
+            expect(result).not.toBeNull();
+            expect(result?.title).toBe('Null Reference Exception');
+            expect(result?.key).toBe('null_reference_exception');
+        });
+
+        it('should detect Go nil pointer dereference', () => {
+            const preview = 'panic: runtime error: invalid memory address or nil pointer dereference';
+            const result = extractErrorSubtype(preview);
+            expect(result).not.toBeNull();
+            expect(result?.title).toBe('Null Reference Exception');
+            expect(result?.key).toBe('null_reference_exception');
         });
 
         it('should extract error subtype for generic apierror wrapping HttpRequestException', () => {
