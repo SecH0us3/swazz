@@ -13,7 +13,13 @@ type stackSignature struct {
 	pattern  *regexp.Regexp
 }
 
+type nullPointerSignature struct {
+	language string
+	pattern  *regexp.Regexp
+}
+
 var stackSignatures []stackSignature
+var nullPointerSignatures []nullPointerSignature
 
 func init() {
 	signatures := []struct {
@@ -34,6 +40,26 @@ func init() {
 			pattern:  regexp.MustCompile(sig.pattern),
 		})
 	}
+
+	npeSignatures := []struct {
+		language string
+		pattern  string
+	}{
+		{".NET (C#)", `(?i)System\.NullReferenceException`},
+		{"Java", `(?i)java\.lang\.NullPointerException|NullPointerException|Cannot invoke \".+\" because \".+\" is null`},
+		{"Go", `(?i)nil pointer dereference`},
+		{"Python", `(?i)AttributeError: 'NoneType' object|TypeError: 'NoneType' object`},
+		{"NodeJS", `(?i)Cannot read propert(y|ies) of (null|undefined)`},
+		{"PHP", `(?i)Call to a member function .+\(\) on null|Attempt to read property .+\s+on null|member function on null`},
+		{"Ruby", `(?i)undefined method .* for nil:NilClass`},
+	}
+
+	for _, sig := range npeSignatures {
+		nullPointerSignatures = append(nullPointerSignatures, nullPointerSignature{
+			language: sig.language,
+			pattern:  regexp.MustCompile(sig.pattern),
+		})
+	}
 }
 
 func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -43,6 +69,36 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	var findings []swagger.AnalysisFinding
 
+	// 1. Check for Null Reference / Pointer Exceptions first (higher priority/severity)
+	for _, sig := range nullPointerSignatures {
+		loc := sig.pattern.FindIndex(input.ResponseBody)
+		if loc != nil {
+			matchText := string(input.ResponseBody[loc[0]:loc[1]])
+
+			start := loc[0] - 20
+			if start < 0 {
+				start = 0
+			}
+			end := loc[1] + 100
+			if end > len(input.ResponseBody) {
+				end = len(input.ResponseBody)
+			}
+			contextSnippet := string(input.ResponseBody[start:end])
+			if len(contextSnippet) > 150 {
+				contextSnippet = contextSnippet[:150]
+			}
+
+			findings = append(findings, swagger.AnalysisFinding{
+				RuleID:   "swazz/null-pointer-exception",
+				Level:    "error",
+				Message:  fmt.Sprintf("Null Reference / Pointer Exception (%s) detected in the response body.", sig.language),
+				Evidence: fmt.Sprintf("Match: '%s' | Snippet: ...%s...", matchText, contextSnippet),
+			})
+			return findings // Return immediately so it is classified as Null Pointer Exception instead of generic stack trace
+		}
+	}
+
+	// 2. Generic language stack traces
 	for _, sig := range stackSignatures {
 		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
@@ -74,3 +130,4 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	return findings
 }
+

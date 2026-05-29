@@ -70,8 +70,31 @@ export function cleanErrorMessage(msg: string): string {
     return firstLine;
 }
 
+const nullPointerRegexes = [
+    /System\.NullReferenceException/i,
+    /NullPointerException/i,
+    /nil pointer dereference/i,
+    /NoneType' object/i,
+    /Cannot read propert(y|ies) of (null|undefined)/i,
+    /Call to a member function .* on null/i,
+    /Attempt to read property .* on null/i,
+    /undefined method .* for nil:NilClass/i
+];
+
+export function isNullPointerException(text: string): boolean {
+    return nullPointerRegexes.some(r => r.test(text));
+}
+
 export function extractErrorSubtype(responsePreview: string | undefined): { title: string; key: string } | null {
     if (!responsePreview) return null;
+    
+    if (isNullPointerException(responsePreview)) {
+        return {
+            title: 'Null Reference Exception',
+            key: 'null_reference_exception',
+        };
+    }
+
     try {
         const body = JSON.parse(responsePreview);
         if (body && typeof body === 'object') {

@@ -27,7 +27,7 @@ describe('findings utility', () => {
         expect(result.key).toBe('stack_.net');
     });
 
-    it('should sub-categorize stack-trace-leak finding using responsePreview if available', () => {
+    it('should sub-categorize stack-trace-leak finding using responsePreview and detect Null Reference Exception with error severity', () => {
         const finding: AnalysisFinding = {
             ruleId: 'swazz/stack-trace-leak',
             level: 'warning',
@@ -38,8 +38,20 @@ describe('findings utility', () => {
             message: 'System.NullReferenceException: Object reference not set to an instance of an object.\n   at Bank.Cards.API...'
         });
         const result = categorizeFinding(finding, preview);
-        expect(result.color).toBe('var(--color-warning)');
-        expect(result.title).toBe('NullReferenceException: Object reference not set to an instance of an object.');
-        expect(result.key).toBe('stack_sub_nullreferenceexception_object_reference_not_set_to_an_instance_of_an_object_');
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('Null Reference Exception');
+        expect(result.key).toBe('stack_sub_null_reference_exception');
+    });
+
+    it('should categorize swazz/null-pointer-exception rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/null-pointer-exception',
+            level: 'error',
+            message: 'Null Reference / Pointer Exception (Go) detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('Null Reference Exception: Go');
+        expect(result.key).toBe('null_pointer_go');
     });
 });
