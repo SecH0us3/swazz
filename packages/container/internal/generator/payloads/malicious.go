@@ -19,7 +19,7 @@ var maliciousEncoding = []string{
 	"normal\r\nSet-Cookie: sessionid=evil",     // Cookie injection via CRLF
 	"normal%0d%0aLocation:%20http://attacker.com", // Open redirect via CRLF
 	"test%u000d%u000aX-Injected: unicode",       // Microsoft IIS Unicode CRLF
-	"%E5%98%8D%E5%98%8Acontent-type:text/html", // PayloadsAllTheThings UTF-8 CRLF bypass
+	"%E5%98%8D%E5%98%8AX-CRLF-Bypass:yes",      // PayloadsAllTheThings UTF-8 CRLF bypass
 	"%00%0a%0d",                                // URL-encoded control chars
 	"\u202E\u0041\u0042\u0043",                 // Right-to-left override
 }
