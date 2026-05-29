@@ -344,6 +344,34 @@ func (r *Runner) fuzzEndpoint(
 			seenHashes[payloadHash] = true
 		}
 
+		// Generate fuzzed/safe headers sequentially in the main thread to prevent concurrency data races
+		generatedHeaders := make(map[string]string)
+		if len(endpoint.HeaderParams) > 0 {
+			var headerGen *generator.Generator
+			if isSecHeaderIter {
+				headerGen = safeGen
+			} else {
+				headerGen = gen
+			}
+			headerSchema := &swagger.SchemaProperty{
+				Type:       "object",
+				Properties: endpoint.HeaderParams,
+			}
+			headerObj := headerGen.BuildObject(headerSchema)
+			for k, v := range headerObj {
+				generatedHeaders[k] = fmt.Sprintf("%v", v)
+			}
+		}
+
+		// Inject custom security-test headers if this is a header fuzzing iteration
+		if isSecHeaderIter {
+			if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
+				for k, v := range secHeaders {
+					generatedHeaders[k] = v
+				}
+			}
+		}
+
 		r.pauseMu.Lock()
 		for r.isPaused.Load() && !r.shouldStop.Load() {
 			r.pauseCond.Wait()
@@ -356,49 +384,13 @@ func (r *Runner) fuzzEndpoint(
 		sem <- struct{}{}
 		wg.Add(1)
 
-		go func(it int, p any, qp map[string]any) {
+		go func(it int, p any, qp map[string]any, gh map[string]string) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
 
-			isSecHeaderIter := false
-			if profile == swagger.ProfileMalicious {
-				bodyIters := gen.BodyIterations()
-				if it >= bodyIters {
-					isSecHeaderIter = true
-				}
-			}
-
-			// Choose generator for spec-defined headers
-			var headerGen *generator.Generator
-			if isSecHeaderIter {
-				headerGen = safeGen
-			} else {
-				headerGen = gen
-			}
-
 			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
-			generatedHeaders := make(map[string]string)
-			if len(endpoint.HeaderParams) > 0 {
-				headerSchema := &swagger.SchemaProperty{
-					Type:       "object",
-					Properties: endpoint.HeaderParams,
-				}
-				headerObj := headerGen.BuildObject(headerSchema)
-				for k, v := range headerObj {
-					generatedHeaders[k] = fmt.Sprintf("%v", v)
-				}
-			}
-
-			// ONLY inject custom security headers during security header iterations
-			if isSecHeaderIter {
-				if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
-					for k, v := range secHeaders {
-						generatedHeaders[k] = v
-					}
-				}
-			}
 
 			result := r.executeRequest(
 				ctx,
@@ -411,7 +403,7 @@ func (r *Runner) fuzzEndpoint(
 				p,
 				profile,
 				qp,
-				generatedHeaders,
+				gh,
 				endpoint.ContentType,
 			)
 
@@ -423,7 +415,7 @@ func (r *Runner) fuzzEndpoint(
 			}
 			// Broadcast individual result immediately (lock-free MPSCQueue).
 			r.Broadcast(Event{Type: EventResult, Data: result})
-		}(i, payload, queryParams)
+		}(i, payload, queryParams, generatedHeaders)
 
 		if delay > 0 {
 			time.Sleep(delay)

@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"swazz-engine/internal/swagger"
 )
@@ -48,8 +49,23 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 
 	// Check 2: Reflected attacker-controlled origin
 	acaoLower := strings.ToLower(acao)
+	var host string
+	if u, err := url.Parse(acaoLower); err == nil && u.Host != "" {
+		host = u.Hostname()
+	} else {
+		host = acaoLower
+		// Strip protocol scheme manually if url.Parse missed it due to lack of //
+		if idx := strings.Index(host, "://"); idx != -1 {
+			host = host[idx+3:]
+		}
+		// Strip port if present
+		if idx := strings.Index(host, ":"); idx != -1 {
+			host = host[:idx]
+		}
+	}
+
 	for _, origin := range suspiciousCORSOrigins {
-		if strings.Contains(acaoLower, origin) {
+		if host == origin || strings.HasSuffix(host, "."+origin) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:   "swazz/cors-misconfig",
 				Level:    "warning",
