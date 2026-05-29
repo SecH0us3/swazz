@@ -122,6 +122,7 @@ type FuzzResult struct {
 	Retries          int               `json:"retries"`
 	ResponseSize     int64             `json:"responseSize"`
 	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
+	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }
 
@@ -145,6 +146,7 @@ type FuzzResultSSE struct {
 	ResponseSize     int64             `json:"responseSize"`
 	HasHeaderInjection bool            `json:"hasHeaderInjection"`
 	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
+	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }
 

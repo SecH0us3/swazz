@@ -104,6 +104,7 @@ export interface FuzzResult {
     retries: number;          // how many 429 retries were needed
     responseSize?: number;
     responseHeaders?: Record<string, string[]>;
+    requestHeaders?: Record<string, string>;
     analyzerFindings?: AnalysisFinding[];
 }
 

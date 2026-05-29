@@ -120,6 +120,25 @@ export function RequestDetail({
         });
     };
 
+    const renderRequestHeaders = () => {
+        if (!result.requestHeaders || Object.keys(result.requestHeaders).length === 0) return null;
+        return (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+                <div className="detail-section-title">Request Headers</div>
+                <div className="detail-json-wrapper" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                    <div className="detail-headers-grid">
+                        {Object.entries(result.requestHeaders).map(([key, val]) => (
+                            <div key={key} className="detail-header-row">
+                                <span className="detail-header-name">{key}:</span>
+                                <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{val}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = formatValue(result.payload);
 
@@ -357,6 +376,7 @@ export function RequestDetail({
                                         {result.resolvedPath || result.endpoint}
                                     </div>
                                 </div>
+                                {renderRequestHeaders()}
 
                                 {hasQueryDiff && (
                                     <div className="detail-query-diff-section">
@@ -397,6 +417,7 @@ export function RequestDetail({
                                         onChange={(e) => setEditedUrl(e.target.value)}
                                     />
                                 </div>
+                                {renderRequestHeaders()}
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0 }}>
                                     <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

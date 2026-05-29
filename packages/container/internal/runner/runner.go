@@ -530,6 +530,7 @@ func (r *Runner) executeRequest(
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
+				RequestHeaders: mergedHeaders,
 			}
 		}
 
@@ -570,6 +571,7 @@ func (r *Runner) executeRequest(
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				Method: method, Profile: profile, Status: 0, Duration: duration,
 				Payload: payload, PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+				RequestHeaders: mergedHeaders,
 			}
 		}
 
@@ -586,6 +588,7 @@ func (r *Runner) executeRequest(
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 					Method: method, Profile: profile, Status: 429, Duration: duration,
 					Payload: payload, PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+					RequestHeaders: mergedHeaders,
 				}
 			}
 		}
@@ -629,6 +632,7 @@ func (r *Runner) executeRequest(
 			ResponseBody:    respBody,
 			ResponseSize:    responseSize,
 			ResponseHeaders: resp.Header,
+			RequestHeaders:  mergedHeaders,
 			Timestamp:       time.Now().UnixMilli(),
 			Retries:         attempt,
 		}
