@@ -154,7 +154,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Dashboard:** In [StatsBar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Dashboard/StatsBar.tsx), add an "Avg Response Time" metric sourced from `RunStats`.
     - **Tests:** Use `httptest.Server` with artificial `time.Sleep()` to simulate vulnerable endpoints. Test edge cases: legitimate slow endpoints, network jitter tolerance.
 
-- [ ] **Task 26:** Implement Header Injection and CRLF Detection via response header analysis.
+- [x] **Task 26:** Implement Header Injection and CRLF Detection via response header analysis.
   - **Design Goal:** Verify whether CRLF injection payloads successfully inject headers into the HTTP response. The 13 encoding payloads in `payloads.MaliciousEncoding` ([malicious.go](file:///Users/alex/src/swazz/packages/container/internal/generator/payloads/malicious.go) L7-21) already include CRLF sequences (`\r\n`, `%0d%0a`, null bytes) — but response headers are never inspected.
   - **Implementation Details:**
     - **Runner change:** In `executeRequest()` ([runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) L424-603), capture `resp.Header` (the `http.Header` map) and pass it through the analyzer pipeline via `AnalysisInput.ResponseHeaders`. Currently, response headers are completely discarded after reading the body.

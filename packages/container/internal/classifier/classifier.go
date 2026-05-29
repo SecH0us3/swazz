@@ -148,6 +148,10 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 
 		// 2. Response body analyzer findings
 		for _, af := range r.AnalyzerFindings {
+			source := "response_body"
+			if strings.HasPrefix(af.RuleID, "swazz/crlf-") || strings.HasPrefix(af.RuleID, "swazz/header-") {
+				source = "response_headers"
+			}
 			f := &Finding{
 				ID:           r.ID,
 				RuleID:       af.RuleID,
@@ -162,7 +166,7 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 				ResponseBody: r.ResponseBody,
 				Error:        af.Evidence, // Store evidence matched fragment here
 				Timestamp:    r.Timestamp,
-				Source:       "response_body",
+				Source:       source,
 			}
 
 			defectKey := fmt.Sprintf("%s::%s %s", f.RuleID, f.Method, f.Endpoint)
