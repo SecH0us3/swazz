@@ -68,7 +68,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Modify [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) and [stats.go](file:///Users/alex/src/swazz/packages/container/internal/runner/stats.go) to remove immediate calls to `r.mu.Lock()` from request completion hooks.
     - Implement a buffered stats channel `statsChan chan *swagger.FuzzResult`. Workers will send results asynchronously.
-    - Run an internal background goroutine to consume results from `statsChan`, accumulate statistics locally in-memory, and publish aggregated updates to the UI/SSE emitter at a fixed interval - [ ] **Task 33:** Cache `getActiveMaliciousStrings()` result in generator constructor.
+    - Run an internal background goroutine to consume results from `statsChan`, accumulate statistics locally in-memory, and publish aggregated updates to the UI/SSE emitter at a fixed interval - [x] **Task 33:** Cache `getActiveMaliciousStrings()` result in generator constructor.
   - **Design Goal:** Eliminate redundant slice allocations on every payload generation call under high concurrency.
   - **Implementation Details:**
     - In [generator.go](file:///Users/alex/src/swazz/packages/container/internal/generator/generator.go), the function `getActiveMaliciousStrings()` (L317-336) rebuilds a `[]any` slice from `payloads.MaliciousEncoding`, `payloads.MaliciousSQLi`, `payloads.MaliciousXSS`, `payloads.MaliciousPathTraversal` on **every call**. Under MALICIOUS profile with high concurrency, this causes thousands of unnecessary allocations.

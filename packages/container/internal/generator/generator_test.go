@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 )
 
@@ -182,3 +183,38 @@ func TestGenerate_DictionaryArray(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_MaliciousCategoryFiltering(t *testing.T) {
+	settings := swagger.Settings{
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
+		},
+	}
+	
+	g := New(nil, swagger.ProfileMalicious, settings)
+	
+	// Verify that cachedMaliciousStrings only contains payloads from payloads.MaliciousSQLi
+	// and nothing from other categories (e.g. XSS alert tags)
+	for _, val := range g.cachedMaliciousStrings {
+		strVal, ok := val.(string)
+		if !ok {
+			continue
+		}
+		if strings.Contains(strVal, "alert(1)") || strings.Contains(strVal, "<script") {
+			t.Errorf("Found XSS payload %q when only SQLi category was enabled", strVal)
+		}
+	}
+}
+
+func BenchmarkGenerateStringMalicious(b *testing.B) {
+	schema := &swagger.SchemaProperty{
+		Type: "string",
+	}
+	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = g.Generate("test", schema)
+	}
+}
+
+

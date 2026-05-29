@@ -21,6 +21,11 @@ type Generator struct {
 
 	// Sequential counters: MALICIOUS
 	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx int
+
+	// cachedMaliciousStrings avoids allocations under high concurrency
+	cachedMaliciousStrings []any
+	// hasActiveMaliciousStrings tracks if any malicious string categories are enabled
+	hasActiveMaliciousStrings bool
 }
 
 // New creates a new Generator.
@@ -40,11 +45,17 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		}
 	}
 
-	return &Generator{
+	g := &Generator{
 		dictionaries:     norm,
 		profile:          profile,
 		activeCategories: active,
 	}
+	g.cachedMaliciousStrings = g.getActiveMaliciousStrings()
+	g.hasActiveMaliciousStrings = g.isCategoryEnabled(payloads.CatMaliciousSQLi) ||
+		g.isCategoryEnabled(payloads.CatMaliciousXSS) ||
+		g.isCategoryEnabled(payloads.CatMaliciousPathTraversal) ||
+		g.isCategoryEnabled(payloads.CatMaliciousEncoding)
+	return g
 }
 
 func (g *Generator) isCategoryEnabled(id string) bool {
@@ -286,28 +297,8 @@ func (g *Generator) generateString(format, propName string) any {
 			return seqPick(payloads.BoundaryStrings, &g.bStrIdx)
 		}
 	case swagger.ProfileMalicious:
-		// Pick from enabled malicious categories
-		var pools [][]any
-		if g.isCategoryEnabled(payloads.CatMaliciousSQLi) {
-			pools = append(pools, payloads.MaliciousSQLi)
-		}
-		if g.isCategoryEnabled(payloads.CatMaliciousXSS) {
-			pools = append(pools, payloads.MaliciousXSS)
-		}
-		if g.isCategoryEnabled(payloads.CatMaliciousPathTraversal) {
-			pools = append(pools, payloads.MaliciousPathTraversal)
-		}
-		if g.isCategoryEnabled(payloads.CatMaliciousEncoding) {
-			pools = append(pools, payloads.MaliciousEncoding)
-		}
-
-		if len(pools) > 0 {
-			// Flatten or pick a pool? To keep seqPick working consistently,
-			// we should probably have a single filtered slice for the whole run.
-			// But for simplicity, we pick a random enabled pool and then seqPick from it.
-			// However, seqPick needs a stable counter.
-			// Let's just use the AllMaliciousStrings and filter it in New().
-			return seqPick(g.getActiveMaliciousStrings(), &g.mStrIdx)
+		if g.hasActiveMaliciousStrings {
+			return seqPick(g.cachedMaliciousStrings, &g.mStrIdx)
 		}
 	}
 
