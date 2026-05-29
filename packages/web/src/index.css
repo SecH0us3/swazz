@@ -1673,6 +1673,10 @@ body.resizing .sidebar-resizer {
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
+.detail-header-value span + span {
+  margin-left: 4px;
+}
+
 .detail-header-badge-injected {
   margin-left: 8px;
   font-size: 10px;

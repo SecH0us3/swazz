@@ -456,7 +456,6 @@ export function RequestDetail({
                                                                 <span 
                                                                     key={idx}
                                                                     className={injected ? 'detail-header-value-injected' : ''}
-                                                                    style={idx > 0 ? { marginLeft: '4px' } : undefined}
                                                                 >
                                                                     {val}{idx < values.length - 1 ? ',' : ''}
                                                                 </span>
