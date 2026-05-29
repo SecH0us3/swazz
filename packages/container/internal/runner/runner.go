@@ -241,7 +241,14 @@ func (r *Runner) fuzzEndpoint(
 		effectiveIterations = minNeeded
 	}
 	if !hasFields(&endpoint) {
-		effectiveIterations = 1
+		if profile == swagger.ProfileMalicious {
+			effectiveIterations = minNeeded
+			if effectiveIterations < 1 {
+				effectiveIterations = 1
+			}
+		} else {
+			effectiveIterations = 1
+		}
 	}
 
 	defaultMaxPayloadSize := settings.MaxPayloadSizeBytes
@@ -268,6 +275,17 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
+		// Determine if this is a security header fuzzing iteration.
+		// During header fuzzing, we send valid/safe body payloads to bypass
+		// application structure checks and isolate header-level vulnerabilities.
+		isSecHeaderIter := false
+		if profile == swagger.ProfileMalicious {
+			bodyIters := gen.BodyIterations()
+			if i >= bodyIters {
+				isSecHeaderIter = true
+			}
+		}
+
 		var payload any
 		var queryParams map[string]any
 		var payloadHash uint32 = payloads.HashStr("empty")
@@ -275,7 +293,12 @@ func (r *Runner) fuzzEndpoint(
 
 		if hasFields(&endpoint) {
 			for retries := 0; retries < 10; retries++ {
-				generated := gen.BuildObject(&endpoint.Schema)
+				var generated map[string]any
+				if isSecHeaderIter {
+					generated = safeGen.BuildObject(&endpoint.Schema)
+				} else {
+					generated = gen.BuildObject(&endpoint.Schema)
+				}
 
 				buf := bufPool.Get().(*bytes.Buffer)
 				buf.Reset()
@@ -321,6 +344,34 @@ func (r *Runner) fuzzEndpoint(
 			seenHashes[payloadHash] = true
 		}
 
+		// Generate fuzzed/safe headers sequentially in the main thread to prevent concurrency data races
+		generatedHeaders := make(map[string]string)
+		if len(endpoint.HeaderParams) > 0 {
+			var headerGen *generator.Generator
+			if isSecHeaderIter {
+				headerGen = safeGen
+			} else {
+				headerGen = gen
+			}
+			headerSchema := &swagger.SchemaProperty{
+				Type:       "object",
+				Properties: endpoint.HeaderParams,
+			}
+			headerObj := headerGen.BuildObject(headerSchema)
+			for k, v := range headerObj {
+				generatedHeaders[k] = fmt.Sprintf("%v", v)
+			}
+		}
+
+		// Inject custom security-test headers if this is a header fuzzing iteration
+		if isSecHeaderIter {
+			if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
+				for k, v := range secHeaders {
+					generatedHeaders[k] = v
+				}
+			}
+		}
+
 		r.pauseMu.Lock()
 		for r.isPaused.Load() && !r.shouldStop.Load() {
 			r.pauseCond.Wait()
@@ -333,24 +384,13 @@ func (r *Runner) fuzzEndpoint(
 		sem <- struct{}{}
 		wg.Add(1)
 
-		go func(it int, p any, qp map[string]any) {
+		go func(it int, p any, qp map[string]any, gh map[string]string) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
 
 			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
-			generatedHeaders := make(map[string]string)
-			if len(endpoint.HeaderParams) > 0 {
-				headerSchema := &swagger.SchemaProperty{
-					Type:       "object",
-					Properties: endpoint.HeaderParams,
-				}
-				headerObj := gen.BuildObject(headerSchema)
-				for k, v := range headerObj {
-					generatedHeaders[k] = fmt.Sprintf("%v", v)
-				}
-			}
 
 			result := r.executeRequest(
 				ctx,
@@ -363,7 +403,7 @@ func (r *Runner) fuzzEndpoint(
 				p,
 				profile,
 				qp,
-				generatedHeaders,
+				gh,
 				endpoint.ContentType,
 			)
 
@@ -375,7 +415,7 @@ func (r *Runner) fuzzEndpoint(
 			}
 			// Broadcast individual result immediately (lock-free MPSCQueue).
 			r.Broadcast(Event{Type: EventResult, Data: result})
-		}(i, payload, queryParams)
+		}(i, payload, queryParams, generatedHeaders)
 
 		if delay > 0 {
 			time.Sleep(delay)
@@ -522,11 +562,16 @@ func (r *Runner) executeRequest(
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: payloadSize,
 				Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
+				RequestHeaders: mergedHeaders,
 			}
 		}
 
 		for k, v := range mergedHeaders {
-			req.Header.Set(k, v)
+			if strings.EqualFold(k, "Host") {
+				req.Host = v
+			} else {
+				req.Header.Set(k, v)
+			}
 		}
 		if len(cookies) > 0 {
 			for k, v := range cookies {
@@ -558,6 +603,7 @@ func (r *Runner) executeRequest(
 				ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 				Method: method, Profile: profile, Status: 0, Duration: duration,
 				Payload: payload, PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+				RequestHeaders: mergedHeaders,
 			}
 		}
 
@@ -574,6 +620,7 @@ func (r *Runner) executeRequest(
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 					Method: method, Profile: profile, Status: 429, Duration: duration,
 					Payload: payload, PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+					RequestHeaders: mergedHeaders,
 				}
 			}
 		}
@@ -617,6 +664,7 @@ func (r *Runner) executeRequest(
 			ResponseBody:    respBody,
 			ResponseSize:    responseSize,
 			ResponseHeaders: resp.Header,
+			RequestHeaders:  mergedHeaders,
 			Timestamp:       time.Now().UnixMilli(),
 			Retries:         attempt,
 		}

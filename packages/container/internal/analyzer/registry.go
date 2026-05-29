@@ -16,6 +16,7 @@ func NewRegistry() *AnalyzerRegistry {
 			&StackTraceAnalyzer{},
 			&SensitiveAnalyzer{},
 			NewCRLFAnalyzer(),
+			&CORSAnalyzer{},
 		},
 	}
 }

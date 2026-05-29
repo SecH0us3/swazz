@@ -85,6 +85,7 @@ export function RequestDetail({
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
+    const [subTab, setSubTab] = useState<'body' | 'query' | 'headers'>('body');
 
 
 
@@ -109,7 +110,7 @@ export function RequestDetail({
                 }
                 return true;
             }
-            if (finding.ruleId === 'swazz/header-injection' && lowerKey === 'access-control-allow-origin') {
+            if ((finding.ruleId === 'swazz/header-injection' || finding.ruleId === 'swazz/cors-misconfig') && lowerKey === 'access-control-allow-origin') {
                 if (value) {
                     const valLower = value.toLowerCase();
                     return (finding.evidence || '').toLowerCase().includes(valLower);
@@ -118,6 +119,25 @@ export function RequestDetail({
             }
             return false;
         });
+    };
+
+    const renderRequestHeaders = () => {
+        if (!result.requestHeaders || Object.keys(result.requestHeaders).length === 0) return null;
+        return (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+                <div className="detail-section-title">Request Headers</div>
+                <div className="detail-json-wrapper" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                    <div className="detail-headers-grid">
+                        {Object.entries(result.requestHeaders).map(([key, val]) => (
+                            <div key={key} className="detail-header-row">
+                                <span className="detail-header-name">{key}:</span>
+                                <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{val}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
@@ -177,6 +197,18 @@ export function RequestDetail({
         }
     }
     const hasQueryDiff = Object.keys(fuzzedQueryParams).length > 0 || Object.keys(templateQueryParams).length > 0;
+
+    useEffect(() => {
+        const hasBody = result.payload !== undefined && result.payload !== null;
+        const hasHeaders = !!result.requestHeaders && Object.keys(result.requestHeaders).length > 0;
+        if (hasBody) {
+            setSubTab('body');
+        } else if (hasQueryDiff) {
+            setSubTab('query');
+        } else if (hasHeaders) {
+            setSubTab('headers');
+        }
+    }, [result, hasQueryDiff]);
 
     const [liveStatus, setLiveStatus] = useState<number>(result.status);
     const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
@@ -332,7 +364,7 @@ export function RequestDetail({
                         </div>
 
                         {viewMode === 'diff' ? (
-                            <div className="detail-diff-container">
+                            <div className="detail-diff-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', flex: 1, overflow: 'hidden' }}>
                                 <div className="diff-legend">
                                     <span style={{ fontWeight: 500, marginRight: '4px' }}>Diff Legend:</span>
                                     <span className="diff-legend-item">
@@ -358,33 +390,72 @@ export function RequestDetail({
                                     </div>
                                 </div>
 
-                                {hasQueryDiff && (
-                                    <div className="detail-query-diff-section">
-                                        <div className="detail-section-title">Query Parameters Diff</div>
-                                        <div className="detail-json-wrapper detail-diff-json-wrapper">
-                                            <pre className="detail-json detail-diff-json-pre">
-                                                {renderJsonDiff(fuzzedQueryParams, templateQueryParams, result.profile === 'MALICIOUS')}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                )}
+                                {(() => {
+                                    const availableTabs = [
+                                        { id: 'body', label: 'Request Body Diff', visible: result.payload !== undefined && result.payload !== null },
+                                        { id: 'query', label: 'Query Parameters Diff', visible: hasQueryDiff },
+                                        { id: 'headers', label: 'Request Headers', visible: !!result.requestHeaders && Object.keys(result.requestHeaders).length > 0 },
+                                    ].filter(t => t.visible);
 
-                                {result.payload !== undefined && result.payload !== null && (
-                                    <div className="detail-body-diff-section">
-                                        <div className="detail-section-title">Request Body Diff</div>
-                                        <div className="detail-json-wrapper detail-diff-json-wrapper">
-                                            <pre className="detail-json detail-diff-json-pre">
-                                                {isJson ? (
-                                                    renderJsonDiff(parsedFuzzedBody, parsedTemplateBody, result.profile === 'MALICIOUS')
-                                                ) : (
-                                                    <span className={result.profile === 'MALICIOUS' ? 'diff-mutated-malicious' : 'diff-mutated-boundary'}>
-                                                        {String(result.payload)}
-                                                    </span>
+                                    if (availableTabs.length === 0) return null;
+
+                                    return (
+                                        <>
+                                            <div className="detail-toggle-group" style={{ margin: 'var(--space-2) 0', display: 'flex', gap: 'var(--space-2)' }}>
+                                                {availableTabs.map(t => (
+                                                    <button
+                                                        key={t.id}
+                                                        className={`btn btn-sm detail-toggle-btn ${subTab === t.id ? 'btn-primary' : 'btn-ghost'}`}
+                                                        onClick={() => setSubTab(t.id as any)}
+                                                    >
+                                                        {t.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <div style={{ flex: 1, overflowY: 'auto' }}>
+                                                {subTab === 'body' && result.payload !== undefined && result.payload !== null && (
+                                                    <div className="detail-body-diff-section">
+                                                        <div className="detail-json-wrapper detail-diff-json-wrapper">
+                                                            <pre className="detail-json detail-diff-json-pre">
+                                                                {isJson ? (
+                                                                    renderJsonDiff(parsedFuzzedBody, parsedTemplateBody, result.profile === 'MALICIOUS')
+                                                                ) : (
+                                                                    <span className={result.profile === 'MALICIOUS' ? 'diff-mutated-malicious' : 'diff-mutated-boundary'}>
+                                                                        {String(result.payload)}
+                                                                    </span>
+                                                                )}
+                                                            </pre>
+                                                        </div>
+                                                    </div>
                                                 )}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                )}
+
+                                                {subTab === 'query' && hasQueryDiff && (
+                                                    <div className="detail-query-diff-section">
+                                                        <div className="detail-json-wrapper detail-diff-json-wrapper">
+                                                            <pre className="detail-json detail-diff-json-pre">
+                                                                {renderJsonDiff(fuzzedQueryParams, templateQueryParams, result.profile === 'MALICIOUS')}
+                                                            </pre>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {subTab === 'headers' && result.requestHeaders && Object.keys(result.requestHeaders).length > 0 && (
+                                                    <div className="detail-json-wrapper">
+                                                        <div className="detail-headers-grid">
+                                                            {Object.entries(result.requestHeaders).map(([key, val]) => (
+                                                                <div key={key} className="detail-header-row">
+                                                                    <span className="detail-header-name">{key}:</span>
+                                                                    <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{val}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, overflow: 'hidden' }}>
@@ -397,6 +468,7 @@ export function RequestDetail({
                                         onChange={(e) => setEditedUrl(e.target.value)}
                                     />
                                 </div>
+                                {renderRequestHeaders()}
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0 }}>
                                     <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

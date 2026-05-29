@@ -147,6 +147,7 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		ResponseSize:       r.ResponseSize,
 		HasHeaderInjection: hasHeaderInjection,
 		ResponseHeaders:    sseHeaders,
+		RequestHeaders:     r.RequestHeaders,
 		AnalyzerFindings:   r.AnalyzerFindings,
 	}
 }

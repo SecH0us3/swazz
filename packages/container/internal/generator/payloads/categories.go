@@ -25,7 +25,11 @@ const (
 	CatMaliciousNumbers       = "malicious_numbers"
 	CatMaliciousDates         = "malicious_dates"
 	CatMaliciousBooleans      = "malicious_booleans"
-	CatMaliciousTypeConfusion = "malicious_type_confusion"
+	CatMaliciousTypeConfusion  = "malicious_type_confusion"
+	CatHostInjection          = "malicious_host_injection"
+	CatCORSMisconfig          = "malicious_cors_misconfig"
+	CatIPSpoofing             = "malicious_ip_spoofing"
+	CatJWTManipulation        = "malicious_jwt_manipulation"
 )
 
 // Random category IDs (single bucket for all random generators)
@@ -84,6 +88,10 @@ var MaliciousCategories = []Category{
 	{ID: CatMaliciousDates, Label: "Date Abuse", Description: "Invalid dates, far-future, negative years, non-date strings", Items: MaliciousDates},
 	{ID: CatMaliciousBooleans, Label: "Boolean Abuse", Description: "String coercions, null, empty, truthy/falsy edge cases", Items: MaliciousBooleans},
 	{ID: CatMaliciousTypeConfusion, Label: "Type Confusion", Description: "Wrong types: nil, arrays, objects injected where scalars expected", Items: MaliciousTypeConfusion},
+	{ID: CatHostInjection, Label: "Host Injection", Description: "Host header manipulation for SSRF, virtual host bypass", Items: toAny(HostInjection)},
+	{ID: CatCORSMisconfig, Label: "CORS Misconfiguration", Description: "Origin header fuzzing for CORS bypass detection", Items: toAny(CORSOrigins)},
+	{ID: CatIPSpoofing, Label: "IP Spoofing", Description: "X-Forwarded-For, X-Real-IP injection for access control bypass", Items: toAny(IPSpoofing)},
+	{ID: CatJWTManipulation, Label: "JWT Manipulation", Description: "Authorization header fuzzing: alg:none, invalid tokens", Items: toAny(JWTManipulation)},
 }
 
 // RandomCategories lists all random categories.

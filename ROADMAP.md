@@ -217,7 +217,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Config:** Add `BOLATesting bool` to `Settings` (L71-82), default `false`.
     - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "BOLA / IDOR Testing" toggle with an expandable section for defining two auth identities (each with auth sequence steps, headers, cookies). In the [Heatmap](file:///Users/alex/src/swazz/packages/web/src/components/Dashboard/Heatmap.tsx), BOLA findings should appear with a distinct color (e.g., purple) and a dedicated profile label `BOLA` to distinguish from fuzz results.
 
-- [ ] **Task 29:** Implement Custom Security Header Fuzzing beyond the API specification.
+- [x] **Task 29:** Implement Custom Security Header Fuzzing beyond the API specification.
   - **Design Goal:** Test for common server-side misconfigurations by fuzzing security-critical HTTP headers not defined in the API spec. Currently, `executeRequest()` in [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) (L440-470) only applies headers from `config.GlobalHeaders` and generated header params from `EndpointConfig.HeaderParams` (parsed in [parser.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/parser.go) L60-85). There is no mechanism to inject arbitrary security-test headers.
   - **Implementation Details:**
     - **New payload file:** Create `packages/container/internal/generator/payloads/headers.go`:
