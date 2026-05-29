@@ -36,7 +36,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Refactor [App.tsx](file:///Users/alex/src/swazz/packages/web/src/App.tsx) to move live session state (`logs`, `heatmapStats`, `activeTab`, `liveCount`, `isRunning`, `isPaused`) out of the root element into a Zustand store or optimized React Context.
     - Implement selector-based rendering so that fast-updating values (such as logs or request counters) only trigger re-renders in their respective sub-components rather than the entire workspace layout (sidebar, header, dictionaries, etc.).
-- [/] **Task 21:** Add visual mutation highlighting (request diff-view) to the request Inspector.
+- [x] **Task 21:** Add visual mutation highlighting (request diff-view) to the request Inspector.
   - **Design Goal:** Allow developers and security auditors to instantly spot exactly what parameters, headers, or request body keys were modified by the generator during a specific fuzz iteration.
   - **Implementation Details:**
     - In `RequestDetail.tsx`, render a visual diff view comparing the original API request schema/template against the generated fuzzed request payload.
