@@ -130,12 +130,12 @@ func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
 	results = append(results, a.parseHeadersFromLines(splitOnCRLF(payload))...)
 
 	// Strategy 2: URL-decode the payload and split on CRLF
-	decoded, err := url.QueryUnescape(payload)
+	decoded, err := url.PathUnescape(payload)
 	if err == nil && decoded != payload {
 		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decoded))...)
 
 		// Strategy 3: Try to decode it twice (for double URL-encoded payloads)
-		doubleDecoded, err2 := url.QueryUnescape(decoded)
+		doubleDecoded, err2 := url.PathUnescape(decoded)
 		if err2 == nil && doubleDecoded != decoded {
 			results = append(results, a.parseHeadersFromLines(splitOnCRLF(doubleDecoded))...)
 		}
@@ -201,17 +201,6 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 					Evidence: fmt.Sprintf("Access-Control-Allow-Origin: %s (payload contained '%s')", acao, origin),
 				}}
 			}
-		}
-
-		// Generic check: if the payload appears as a substring in the ACAO header
-		// (the server reflected the Origin header verbatim)
-		if len(payloadLower) > 4 && acaoLower != "*" && strings.Contains(acaoLower, payloadLower) {
-			return []swagger.AnalysisFinding{{
-				RuleID:   "swazz/header-injection",
-				Level:    "warning",
-				Message:  fmt.Sprintf("CORS reflection: Access-Control-Allow-Origin '%s' appears to be reflected from the request payload.", acao),
-				Evidence: fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
-			}}
 		}
 	}
 

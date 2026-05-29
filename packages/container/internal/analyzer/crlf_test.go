@@ -277,14 +277,12 @@ func TestCRLFAnalyzer(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
-			name:          "CORS generic reflection — custom origin reflected",
+			name:          "CORS generic reflection — custom origin reflected (should not match to avoid false positives)",
 			payload:       "https://myapp.example.org",
 			response:      "",
 			headers:       http.Header{"Access-Control-Allow-Origin": []string{"https://myapp.example.org"}},
 			profile:       swagger.ProfileMalicious,
-			expectedCount: 1,
-			expectedRule:  "swazz/header-injection",
-			expectedLevel: "warning",
+			expectedCount: 0,
 		},
 		{
 			name:          "CORS no reflection — different origin",
