@@ -120,6 +120,27 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 	return findings
 }
 
+var payloadNormalizer = strings.NewReplacer(
+	"%u000d", "%0d",
+	"%u000D", "%0D",
+	"%u000a", "%0a",
+	"%u000A", "%0A",
+	"%E5%98%8D", "%0D",
+	"%e5%98%8d", "%0d",
+	"%E5%98%8A", "%0A",
+	"%e5%98%8a", "%0a",
+	"\u560d", "\r",
+	"\u560a", "\n",
+)
+
+var suspiciousOrigins = []string{
+	"evil.com",
+	"attacker.com",
+	"null",
+}
+
+var crlfReplacer = strings.NewReplacer("\r\n", "\n", "\r", "\n")
+
 // injectedHeader represents a header name/value pair extracted from a CRLF payload.
 type injectedHeader struct {
 	name  string
@@ -130,23 +151,7 @@ type injectedHeader struct {
 // It handles both raw CRLF (\r\n) and URL-encoded CRLF (%0d%0a) sequences.
 func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
 	// Normalize alternative/unicode CRLF representations to standard percent encoding or raw CRLF
-	normalizedPayload := payload
-	
-	// Normalize Microsoft IIS style %u000d / %u000a
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000d", "%0d")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000D", "%0D")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000a", "%0a")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%u000A", "%0A")
-	
-	// Normalize alternative UTF-8 CRLF representations from PayloadsAllTheThings
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%E5%98%8D", "%0D")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%e5%98%8d", "%0d")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%E5%98%8A", "%0A")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "%e5%98%8a", "%0a")
-
-	// Also support Unicode character forms in case they are decoded as literal Unicode chars in payload
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "\u560d", "\r")
-	normalizedPayload = strings.ReplaceAll(normalizedPayload, "\u560a", "\n")
+	normalizedPayload := payloadNormalizer.Replace(payload)
 
 	var results []injectedHeader
 
@@ -209,13 +214,6 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 		return nil
 	}
 
-	// Known suspicious origins that may appear in payloads
-	suspiciousOrigins := []string{
-		"evil.com",
-		"attacker.com",
-		"null",
-	}
-
 	payloadLower := strings.ToLower(payload)
 
 	for _, acao := range acaoValues {
@@ -248,8 +246,7 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 // value — only lines after CRLF injections are of interest.
 func splitOnCRLF(s string) []string {
 	// Normalize line endings to standard \n (LF)
-	normalized := strings.ReplaceAll(s, "\r\n", "\n")
-	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized := crlfReplacer.Replace(s)
 
 	parts := strings.Split(normalized, "\n")
 	if len(parts) <= 1 {
