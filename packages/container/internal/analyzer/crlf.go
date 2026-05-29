@@ -78,6 +78,9 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 		}
 
 		trimmedIv := strings.TrimSpace(ih.value)
+		if trimmedIv == "" {
+			continue
+		}
 		lowerIv := strings.ToLower(trimmedIv)
 		isSetCookie := strings.EqualFold(ih.name, "Set-Cookie")
 
