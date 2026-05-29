@@ -7,6 +7,7 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"swazz-engine/internal/generator"
@@ -116,23 +117,37 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 	if len(resolvedPath) > 200 {
 		resolvedPath = resolvedPath[:200] + "…"
 	}
+	hasHeaderInjection := false
+	for _, f := range r.AnalyzerFindings {
+		if f.RuleID == "swazz/crlf-injection" || f.RuleID == "swazz/header-injection" {
+			hasHeaderInjection = true
+			break
+		}
+	}
+
+	var sseHeaders http.Header
+	if hasHeaderInjection && r.ResponseHeaders != nil {
+		sseHeaders = r.ResponseHeaders.Clone()
+	}
+
 	return &swagger.FuzzResultSSE{
-		ID:              r.ID,
-		Endpoint:        r.Endpoint,
-		ResolvedPath:    resolvedPath,
-		Method:          r.Method,
-		Profile:         r.Profile,
-		Status:          r.Status,
-		Duration:        r.Duration,
-		PayloadSize:     r.PayloadSize,
-		PayloadPreview:  previewAny(r.Payload, 200),
-		ResponsePreview: previewAny(r.ResponseBody, 1024),
-		Error:           r.Error,
-		Timestamp:       r.Timestamp,
-		Retries:         r.Retries,
-		ResponseSize:     r.ResponseSize,
-		ResponseHeaders:  r.ResponseHeaders,
-		AnalyzerFindings: r.AnalyzerFindings,
+		ID:                 r.ID,
+		Endpoint:           r.Endpoint,
+		ResolvedPath:       resolvedPath,
+		Method:             r.Method,
+		Profile:            r.Profile,
+		Status:             r.Status,
+		Duration:           r.Duration,
+		PayloadSize:        r.PayloadSize,
+		PayloadPreview:     previewAny(r.Payload, 200),
+		ResponsePreview:    previewAny(r.ResponseBody, 1024),
+		Error:              r.Error,
+		Timestamp:          r.Timestamp,
+		Retries:            r.Retries,
+		ResponseSize:       r.ResponseSize,
+		HasHeaderInjection: hasHeaderInjection,
+		ResponseHeaders:    sseHeaders,
+		AnalyzerFindings:   r.AnalyzerFindings,
 	}
 }
 

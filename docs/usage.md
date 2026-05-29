@@ -55,7 +55,13 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
 - **`concurrency`**: Number of parallel requests to send.
 - **`fuzzProfiles`**: Which payload generators to run (e.g., boundaries, malicious payloads).
 - **`settings`**: Fuzzer runtime settings block, containing:
-  - **`analyze_response_body`**: (Boolean) If `true`, enables response body parsing to verify reflected XSS, SQL errors, stack traces, and sensitive data leakage. Default is `true`.
+  - **`analyze_response_body`**: (Boolean) If `true`, enables response body and response header parsing. Swazz will automatically inspect:
+    - **Reflected XSS**: raw script and tag reflections.
+    - **SQL Injection**: database error signature leaks.
+    - **Stack Traces**: information disclosure in server exceptions.
+    - **Sensitive Data**: API keys, credentials, JWTs, and internal IPs.
+    - **CRLF & Header Injection**: reflections of HTTP headers, unauthorized `Set-Cookie` injections, and CORS origin reflections (`Access-Control-Allow-Origin`).
+    Default is `true`.
   - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
 

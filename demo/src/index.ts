@@ -171,11 +171,97 @@ export default {
                   }
                 }
               }
+            },
+            "/headers": {
+              get: {
+                summary: "Reflects custom query params into response headers to simulate CRLF vulnerabilities",
+                parameters: [
+                  {
+                    name: "custom_header",
+                    in: "query",
+                    schema: { type: "string" },
+                    description: "Header name to inject"
+                  },
+                  {
+                    name: "custom_value",
+                    in: "query",
+                    schema: { type: "string" },
+                    description: "Header value to inject"
+                  }
+                ],
+                responses: {
+                  "200": {
+                    description: "Reflected headers response"
+                  }
+                }
+              }
             }
           }
         };
         return new Response(JSON.stringify(swagger), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      if (method === "GET" && path === "/headers") {
+        const customHeader = url.searchParams.get("custom_header");
+        const customValue = url.searchParams.get("custom_value");
+        const origin = request.headers.get("Origin");
+        const responseHeaders: Record<string, string> = {
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Content-Type": "text/plain"
+        };
+
+        if (origin) {
+          responseHeaders["Access-Control-Allow-Origin"] = origin;
+        } else {
+          responseHeaders["Access-Control-Allow-Origin"] = "*";
+        }
+
+        const addHeaderWithCRLF = (name: string, value: string) => {
+          const rawLine = `${name}: ${value}`;
+          const normalized = rawLine.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          const parts = normalized.split("\n");
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (line) {
+              const colonIdx = line.indexOf(":");
+              if (colonIdx !== -1) {
+                const hName = line.substring(0, colonIdx).trim();
+                const hVal = line.substring(colonIdx + 1).trim();
+                if (hName.toLowerCase() !== "content-length" && hName.toLowerCase() !== "transfer-encoding") {
+                  responseHeaders[hName] = hVal;
+                }
+              }
+            }
+          }
+        };
+
+        let hName = "X-Reflected";
+        let hVal = "default-value";
+
+        if (customHeader) {
+          try {
+            hName = decodeURIComponent(customHeader);
+          } catch (e) {
+            hName = customHeader;
+          }
+        }
+
+        if (customValue) {
+          try {
+            hVal = decodeURIComponent(customValue);
+          } catch (e) {
+            hVal = customValue;
+          }
+        }
+
+        addHeaderWithCRLF(hName, hVal);
+
+        return new Response("OK", {
+          headers: responseHeaders
         });
       }
 

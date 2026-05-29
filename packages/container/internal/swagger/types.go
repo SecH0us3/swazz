@@ -143,6 +143,7 @@ type FuzzResultSSE struct {
 	Timestamp       int64             `json:"timestamp"`
 	Retries         int               `json:"retries"`
 	ResponseSize     int64             `json:"responseSize"`
+	HasHeaderInjection bool            `json:"hasHeaderInjection"`
 	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 }

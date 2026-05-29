@@ -86,6 +86,40 @@ export function RequestDetail({
     const [copied, setCopied] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
 
+
+
+    const isInjectedHeader = (key: string, value?: string) => {
+        if (!result.analyzerFindings) return false;
+        const lowerKey = key.toLowerCase();
+        return result.analyzerFindings.some(finding => {
+            if (finding.ruleId === 'swazz/crlf-injection') {
+                const evidenceLower = (finding.evidence || '').toLowerCase();
+                const messageLower = (finding.message || '').toLowerCase();
+                const isKeyMatch = evidenceLower.includes("— " + lowerKey + ":") || 
+                                   messageLower.includes("'" + lowerKey + ":") || 
+                                   (lowerKey === 'set-cookie' && messageLower.includes('set-cookie'));
+                if (!isKeyMatch) return false;
+                if (value) {
+                    const valLower = value.toLowerCase();
+                    if (lowerKey === 'set-cookie') {
+                        const cookiePart = valLower.split(';')[0].trim();
+                        return evidenceLower.includes(cookiePart) || messageLower.includes(cookiePart);
+                    }
+                    return evidenceLower.includes(valLower) || messageLower.includes(valLower);
+                }
+                return true;
+            }
+            if (finding.ruleId === 'swazz/header-injection' && lowerKey === 'access-control-allow-origin') {
+                if (value) {
+                    const valLower = value.toLowerCase();
+                    return (finding.evidence || '').toLowerCase().includes(valLower);
+                }
+                return true;
+            }
+            return false;
+        });
+    };
+
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = formatValue(result.payload);
 
@@ -401,12 +435,36 @@ export function RequestDetail({
                                 <div className="detail-section-title detail-section-title-divider">Response Headers</div>
                                 <div className="detail-json-wrapper">
                                     <div className="detail-headers-grid">
-                                        {Object.entries(liveHeaders).map(([key, values]) => (
-                                            <div key={key} className="detail-header-row">
-                                                <span className="detail-header-name">{key}:</span>
-                                                <span className="detail-header-value">{values.join(', ')}</span>
-                                            </div>
-                                        ))}
+                                        {Object.entries(liveHeaders).map(([key, values]) => {
+                                            const hasAnyInjection = isInjectedHeader(key);
+                                            return ( 
+                                                <div key={key} className="detail-header-row">
+                                                    <span 
+                                                        className={`detail-header-name ${hasAnyInjection ? 'detail-header-name-injected' : ''}`}
+                                                    >
+                                                        {key}:
+                                                        {hasAnyInjection && (
+                                                            <span className="detail-header-badge-injected">
+                                                                INJECTED
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                    <span className="detail-header-value">
+                                                        {values.map((val, idx) => {
+                                                            const injected = isInjectedHeader(key, val);
+                                                            return (
+                                                                <span 
+                                                                    key={idx}
+                                                                    className={injected ? 'detail-header-value-injected' : ''}
+                                                                >
+                                                                    {val}{idx < values.length - 1 ? ',' : ''}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </>

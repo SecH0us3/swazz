@@ -8,7 +8,7 @@
     "packages/edge"
   ],
   "scripts": {
-    "dev:backend": "cd packages/container && air serve",
+    "dev:backend": "cd packages/container && SWAZZ_ALLOW_PRIVATE_IPS=true air serve",
     "dev:frontend": "npm run dev --workspace=packages/web",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "npm run build --workspace=packages/web",

@@ -126,3 +126,44 @@ func TestClassifier_AnalyzerFindings(t *testing.T) {
 		t.Errorf("Expected error field to hold evidence, got '%s'", finding.Error)
 	}
 }
+
+func TestClassifier_AnalyzerFindings_CRLFSource(t *testing.T) {
+	cls := New(nil)
+
+	tests := []struct {
+		name           string
+		ruleID         string
+		expectedSource string
+	}{
+		{"CRLF injection uses response_headers source", "swazz/crlf-injection", "response_headers"},
+		{"Header injection uses response_headers source", "swazz/header-injection", "response_headers"},
+		{"XSS uses response_body source", "swazz/reflected-xss", "response_body"},
+		{"SQLi uses response_body source", "swazz/sql-error-leak", "response_body"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &swagger.FuzzResult{
+				Status:   200,
+				Endpoint: "/api/test",
+				Method:   "POST",
+				AnalyzerFindings: []swagger.AnalysisFinding{
+					{
+						RuleID:   tt.ruleID,
+						Level:    "error",
+						Message:  "Test finding",
+						Evidence: "Test evidence",
+					},
+				},
+			}
+
+			findings := cls.ClassifyAll([]*swagger.FuzzResult{res})
+			if len(findings) != 1 {
+				t.Fatalf("Expected 1 finding, got %d", len(findings))
+			}
+			if findings[0].Source != tt.expectedSource {
+				t.Errorf("Expected source %q for ruleID %q, got %q", tt.expectedSource, tt.ruleID, findings[0].Source)
+			}
+		})
+	}
+}
