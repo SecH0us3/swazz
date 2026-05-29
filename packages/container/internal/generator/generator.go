@@ -3,6 +3,7 @@ package generator
 import (
 	"math/rand/v2"
 	"strings"
+	"sync"
 
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
@@ -33,7 +34,8 @@ type Generator struct {
 	mStrIdx, mNumIdx, mDateIdx, mBoolIdx, mTypeIdx, mUUIDIdx int
 
 	// Sequential counter: security header rotation
-	mSecHeaderIdx int
+	mu             sync.Mutex
+	mSecHeaderIdxs map[string]int
 
 	// cachedMaliciousStrings avoids allocations under high concurrency
 	cachedMaliciousStrings []any
@@ -442,6 +444,13 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 		return nil
 	}
 
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.mSecHeaderIdxs == nil {
+		g.mSecHeaderIdxs = make(map[string]int)
+	}
+
 	headers := make(map[string]string)
 	for _, def := range payloads.SecurityHeaderPayloads {
 		if !g.isCategoryEnabled(def.Category) {
@@ -451,7 +460,9 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 			if len(values) == 0 {
 				continue
 			}
-			headers[headerName] = seqPick(values, &g.mSecHeaderIdx)
+			idx := g.mSecHeaderIdxs[headerName]
+			headers[headerName] = values[idx%len(values)]
+			g.mSecHeaderIdxs[headerName] = idx + 1
 		}
 	}
 
