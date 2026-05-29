@@ -129,15 +129,27 @@ func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
 	// Strategy 1: Split on raw CRLF sequences (\r\n, \r, \n)
 	results = append(results, a.parseHeadersFromLines(splitOnCRLF(payload))...)
 
-	// Strategy 2: URL-decode the payload and split on CRLF
-	decoded, err := url.PathUnescape(payload)
-	if err == nil && decoded != payload {
-		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decoded))...)
+	// Strategy 2a: Path-decode the payload and split on CRLF (preserves +)
+	decodedPath, err := url.PathUnescape(payload)
+	if err == nil && decodedPath != payload {
+		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decodedPath))...)
 
-		// Strategy 3: Try to decode it twice (for double URL-encoded payloads)
-		doubleDecoded, err2 := url.PathUnescape(decoded)
-		if err2 == nil && doubleDecoded != decoded {
-			results = append(results, a.parseHeadersFromLines(splitOnCRLF(doubleDecoded))...)
+		// Try to decode it twice (for double URL-encoded payloads)
+		doubleDecodedPath, err2 := url.PathUnescape(decodedPath)
+		if err2 == nil && doubleDecodedPath != decodedPath {
+			results = append(results, a.parseHeadersFromLines(splitOnCRLF(doubleDecodedPath))...)
+		}
+	}
+
+	// Strategy 2b: Query-decode the payload and split on CRLF (decodes + to space)
+	decodedQuery, err := url.QueryUnescape(payload)
+	if err == nil && decodedQuery != payload {
+		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decodedQuery))...)
+
+		// Try to decode it twice (for double URL-encoded payloads)
+		doubleDecodedQuery, err2 := url.QueryUnescape(decodedQuery)
+		if err2 == nil && doubleDecodedQuery != decodedQuery {
+			results = append(results, a.parseHeadersFromLines(splitOnCRLF(doubleDecodedQuery))...)
 		}
 	}
 

@@ -369,6 +369,7 @@ func TestCRLFAnalyzer_ExtractInjectedHeaders(t *testing.T) {
 		{"Set-Cookie injection", "test\r\nSet-Cookie: evil=true", 1},
 		{"Double URL-encoded (decoded)", "test%250d%250aX-Injected: value", 1},
 		{"Raw CR single header", "test\rX-Injected: value", 1},
+		{"URL-encoded query CRLF with space as plus", "test%0d%0aX-Injected:+value+with+spaces", 2},
 	}
 
 	for _, tt := range tests {
