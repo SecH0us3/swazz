@@ -93,8 +93,8 @@ export function RequestDetail({
             if (finding.ruleId === 'swazz/crlf-injection') {
                 const evidenceLower = (finding.evidence || '').toLowerCase();
                 const messageLower = (finding.message || '').toLowerCase();
-                return evidenceLower.includes(`${lowerKey}:`) || 
-                       messageLower.includes(`'${lowerKey}:`) || 
+                return evidenceLower.includes("— " + lowerKey + ":") || 
+                       messageLower.includes("'" + lowerKey + ":") || 
                        messageLower.includes(`cookie '${lowerKey}=`) || 
                        (lowerKey === 'set-cookie' && messageLower.includes('set-cookie'));
             }

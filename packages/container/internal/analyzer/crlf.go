@@ -29,6 +29,9 @@ func NewCRLFAnalyzer() *CRLFAnalyzer {
 // Analyze checks whether CRLF injection payloads successfully injected
 // headers into the HTTP response. It implements the ResponseAnalyzer interface.
 func (a *CRLFAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if input == nil {
+		return nil
+	}
 	if input.Profile != swagger.ProfileMalicious {
 		return nil
 	}
@@ -83,10 +86,12 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 			isSetCookie := strings.EqualFold(ih.name, "Set-Cookie")
 			var substringMatch bool
 			if isSetCookie {
-				parts := strings.Split(trimmedRv, ";")
-				if len(parts) > 0 {
-					cookiePart := strings.TrimSpace(parts[0])
-					substringMatch = strings.EqualFold(cookiePart, trimmedIv) || strings.HasPrefix(strings.ToLower(cookiePart), strings.ToLower(trimmedIv)+"=")
+				partsRv := strings.Split(trimmedRv, ";")
+				partsIv := strings.Split(trimmedIv, ";")
+				if len(partsRv) > 0 && len(partsIv) > 0 {
+					cookiePartRv := strings.TrimSpace(partsRv[0])
+					cookiePartIv := strings.TrimSpace(partsIv[0])
+					substringMatch = strings.EqualFold(cookiePartRv, cookiePartIv) || strings.HasPrefix(strings.ToLower(cookiePartRv), strings.ToLower(cookiePartIv)+"=")
 				}
 			} else {
 				substringMatch = len(trimmedIv) >= 4 && strings.Contains(strings.ToLower(trimmedRv), strings.ToLower(trimmedIv))
