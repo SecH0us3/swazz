@@ -378,6 +378,16 @@ func TestCRLFAnalyzer(t *testing.T) {
 			expectedRule:  "swazz/header-injection",
 			expectedLevel: "warning",
 		},
+		{
+			name:          "CORS reflection with leading/trailing spaces in ACAO (should match)",
+			payload:       "https://evil.com",
+			response:      "",
+			headers:       http.Header{"Access-Control-Allow-Origin": []string{"  https://sub.evil.com  "}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/header-injection",
+			expectedLevel: "warning",
+		},
 	}
 
 	for _, tt := range tests {

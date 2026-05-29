@@ -219,7 +219,8 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 	payloadLower := strings.ToLower(payload)
 
 	for _, acao := range acaoValues {
-		acaoLower := strings.ToLower(strings.TrimSpace(acao))
+		trimmedAcao := strings.TrimSpace(acao)
+		acaoLower := strings.ToLower(trimmedAcao)
 
 		// Check if ACAO reflects a suspicious origin that was in the payload
 		for _, origin := range suspiciousOrigins {
@@ -227,7 +228,7 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 			if origin == "null" {
 				match = payloadLower == "null" && acaoLower == "null"
 			} else if strings.Contains(payloadLower, origin) {
-				if u, err := url.Parse(acao); err == nil && u.Host != "" {
+				if u, err := url.Parse(trimmedAcao); err == nil && u.Host != "" {
 					hostname := strings.ToLower(u.Hostname())
 					match = hostname == origin || strings.HasSuffix(hostname, "."+origin)
 				} else {
