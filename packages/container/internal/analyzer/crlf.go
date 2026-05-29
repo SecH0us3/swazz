@@ -224,8 +224,13 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 			var match bool
 			if origin == "null" {
 				match = payloadLower == "null" && acaoLower == "null"
-			} else {
-				match = strings.Contains(payloadLower, origin) && strings.Contains(acaoLower, origin)
+			} else if strings.Contains(payloadLower, origin) {
+				if u, err := url.Parse(acao); err == nil && u.Host != "" {
+					hostname := strings.ToLower(u.Hostname())
+					match = hostname == origin || strings.HasSuffix(hostname, "."+origin)
+				} else {
+					match = acaoLower == origin || strings.HasSuffix(acaoLower, "."+origin)
+				}
 			}
 			if match {
 				return []swagger.AnalysisFinding{{

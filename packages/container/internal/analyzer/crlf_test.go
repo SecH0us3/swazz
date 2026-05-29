@@ -360,6 +360,24 @@ func TestCRLFAnalyzer(t *testing.T) {
 			profile:       swagger.ProfileMalicious,
 			expectedCount: 0,
 		},
+		{
+			name:          "CORS reflection false positive — ACAO is trusted subdomain containing malicious domain suffix (should not match)",
+			payload:       "https://evil.com",
+			response:      "",
+			headers:       http.Header{"Access-Control-Allow-Origin": []string{"https://evil.com.example.com"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "CORS reflection subdomain of malicious domain (should match)",
+			payload:       "https://evil.com",
+			response:      "",
+			headers:       http.Header{"Access-Control-Allow-Origin": []string{"https://sub.evil.com"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/header-injection",
+			expectedLevel: "warning",
+		},
 	}
 
 	for _, tt := range tests {
