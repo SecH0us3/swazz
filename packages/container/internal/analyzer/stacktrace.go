@@ -45,7 +45,7 @@ func init() {
 		language string
 		pattern  string
 	}{
-		{".NET (C#)", `(?i)System\.NullReferenceException`},
+		{".NET", `(?i)System\.NullReferenceException`},
 		{"Java", `(?i)java\.lang\.NullPointerException|NullPointerException|Cannot invoke \".+\" because \".+\" is null`},
 		{"Go", `(?i)nil pointer dereference`},
 		{"Python", `(?i)AttributeError: 'NoneType' object|TypeError: 'NoneType' object`},

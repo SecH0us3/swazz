@@ -21,7 +21,7 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         const langMatch = f.message?.match(/\(([^)]+)\)/);
         const lang = langMatch ? langMatch[1] : 'Generic';
         title = `Null Reference Exception: ${lang}`;
-        key = `null_pointer_${lang.toLowerCase()}`;
+        key = `null_pointer_${slugify(lang)}`;
     } else if (f.ruleId === 'swazz/sql-error-leak') {
         color = 'var(--color-error)';
         const dbMatch = f.message?.match(/\(([^)]+)\)/);
