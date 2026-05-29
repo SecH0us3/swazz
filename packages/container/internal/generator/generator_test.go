@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 )
 
@@ -182,3 +183,43 @@ func TestGenerate_DictionaryArray(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_MaliciousCategoryFiltering(t *testing.T) {
+	settings := swagger.Settings{
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
+		},
+	}
+	
+	g := New(nil, swagger.ProfileMalicious, settings)
+	
+	// Verify that cachedMaliciousStrings matches payloads.MaliciousSQLi exactly
+	if len(g.cachedMaliciousStrings) != len(payloads.MaliciousSQLi) {
+		t.Errorf("Expected cachedMaliciousStrings to have length %d, got %d", len(payloads.MaliciousSQLi), len(g.cachedMaliciousStrings))
+	}
+	
+	sqliSet := make(map[any]bool)
+	for _, val := range payloads.MaliciousSQLi {
+		sqliSet[val] = true
+	}
+	
+	for _, val := range g.cachedMaliciousStrings {
+		if !sqliSet[val] {
+			t.Errorf("Found unexpected payload %v in cachedMaliciousStrings when only SQLi category was enabled", val)
+		}
+	}
+}
+
+
+func BenchmarkGenerateStringMalicious(b *testing.B) {
+	schema := &swagger.SchemaProperty{
+		Type: "string",
+	}
+	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = g.Generate("test", schema)
+	}
+}
+
+
