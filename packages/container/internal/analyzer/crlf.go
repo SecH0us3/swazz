@@ -77,13 +77,15 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 			continue
 		}
 
+		trimmedIv := strings.TrimSpace(ih.value)
+		lowerIv := strings.ToLower(trimmedIv)
+		isSetCookie := strings.EqualFold(ih.name, "Set-Cookie")
+
 		// Check if any response value matches (or contains) the injected value
 		for _, rv := range responseValues {
 			trimmedRv := strings.TrimSpace(rv)
-			trimmedIv := strings.TrimSpace(ih.value)
 
 			exactMatch := strings.EqualFold(trimmedRv, trimmedIv)
-			isSetCookie := strings.EqualFold(ih.name, "Set-Cookie")
 			var substringMatch bool
 			if isSetCookie {
 				partsRv := strings.Split(trimmedRv, ";")
@@ -94,7 +96,7 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 					substringMatch = strings.EqualFold(cookiePartRv, cookiePartIv) || strings.HasPrefix(strings.ToLower(cookiePartRv), strings.ToLower(cookiePartIv)+"=")
 				}
 			} else {
-				substringMatch = len(trimmedIv) >= 4 && strings.Contains(strings.ToLower(trimmedRv), strings.ToLower(trimmedIv))
+				substringMatch = len(trimmedIv) >= 4 && strings.Contains(strings.ToLower(trimmedRv), lowerIv)
 			}
 
 			if exactMatch || substringMatch {
