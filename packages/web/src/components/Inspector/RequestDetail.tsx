@@ -86,6 +86,25 @@ export function RequestDetail({
     const [copied, setCopied] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
 
+    const isInjectedHeader = (key: string, values: string[]) => {
+        if (!result.analyzerFindings) return false;
+        const lowerKey = key.toLowerCase();
+        return result.analyzerFindings.some(finding => {
+            if (finding.ruleId === 'swazz/crlf-injection') {
+                const evidenceLower = (finding.evidence || '').toLowerCase();
+                const messageLower = (finding.message || '').toLowerCase();
+                return evidenceLower.includes(`${lowerKey}:`) || 
+                       messageLower.includes(`'${lowerKey}:`) || 
+                       messageLower.includes(`cookie '${lowerKey}=`) || 
+                       (lowerKey === 'set-cookie' && messageLower.includes('set-cookie'));
+            }
+            if (finding.ruleId === 'swazz/header-injection' && lowerKey === 'access-control-allow-origin') {
+                return true;
+            }
+            return false;
+        });
+    };
+
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = formatValue(result.payload);
 
@@ -401,12 +420,47 @@ export function RequestDetail({
                                 <div className="detail-section-title detail-section-title-divider">Response Headers</div>
                                 <div className="detail-json-wrapper">
                                     <div className="detail-headers-grid">
-                                        {Object.entries(liveHeaders).map(([key, values]) => (
-                                            <div key={key} className="detail-header-row">
-                                                <span className="detail-header-name">{key}:</span>
-                                                <span className="detail-header-value">{values.join(', ')}</span>
-                                            </div>
-                                        ))}
+                                        {Object.entries(liveHeaders).map(([key, values]) => {
+                                            const injected = isInjectedHeader(key, values);
+                                            return (
+                                                <div key={key} className="detail-header-row">
+                                                    <span 
+                                                        className="detail-header-name" 
+                                                        style={injected ? { color: 'var(--color-error)', fontWeight: 'bold' } : undefined}
+                                                    >
+                                                        {key}:
+                                                        {injected && (
+                                                            <span 
+                                                                className="badge-error" 
+                                                                style={{ 
+                                                                    marginLeft: '8px', 
+                                                                    fontSize: '10px', 
+                                                                    padding: '2px 6px', 
+                                                                    borderRadius: '4px',
+                                                                    backgroundColor: 'var(--color-error)',
+                                                                    color: 'white',
+                                                                    fontWeight: 'bold'
+                                                                }}
+                                                            >
+                                                                INJECTED
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                    <span 
+                                                        className="detail-header-value"
+                                                        style={injected ? { 
+                                                            color: 'var(--color-error)', 
+                                                            backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                                                            padding: '2px 6px', 
+                                                            borderRadius: '4px',
+                                                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                                                        } : undefined}
+                                                    >
+                                                        {values.join(', ')}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </>

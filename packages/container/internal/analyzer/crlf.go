@@ -76,9 +76,14 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 
 		// Check if any response value matches (or contains) the injected value
 		for _, rv := range responseValues {
-			if strings.EqualFold(strings.TrimSpace(rv), strings.TrimSpace(ih.value)) ||
-				strings.Contains(strings.ToLower(rv), strings.ToLower(strings.TrimSpace(ih.value))) {
+			trimmedRv := strings.TrimSpace(rv)
+			trimmedIv := strings.TrimSpace(ih.value)
 
+			exactMatch := strings.EqualFold(trimmedRv, trimmedIv)
+			isSetCookie := strings.EqualFold(ih.name, "Set-Cookie")
+			substringMatch := (len(trimmedIv) >= 4 || isSetCookie) && strings.Contains(strings.ToLower(trimmedRv), strings.ToLower(trimmedIv))
+
+			if exactMatch || substringMatch {
 				ruleID := "swazz/crlf-injection"
 				message := fmt.Sprintf("CRLF header injection confirmed: header '%s: %s' was injected into the HTTP response.", ih.name, ih.value)
 
@@ -173,7 +178,13 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 
 		// Check if ACAO reflects a suspicious origin that was in the payload
 		for _, origin := range suspiciousOrigins {
-			if strings.Contains(payloadLower, origin) && strings.Contains(acaoLower, origin) {
+			var match bool
+			if origin == "null" {
+				match = payloadLower == "null" && acaoLower == "null"
+			} else {
+				match = strings.Contains(payloadLower, origin) && strings.Contains(acaoLower, origin)
+			}
+			if match {
 				return []swagger.AnalysisFinding{{
 					RuleID:   "swazz/header-injection",
 					Level:    "warning",
