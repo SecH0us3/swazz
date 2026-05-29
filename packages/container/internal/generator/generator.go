@@ -140,48 +140,47 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		return max
 
 	case swagger.ProfileMalicious:
-		var all []any
+		bodyCount := 0
+		var maliciousBody []any
 		if is(payloads.CatMaliciousEncoding) {
-			all = append(all, payloads.MaliciousEncoding...)
+			maliciousBody = append(maliciousBody, payloads.MaliciousEncoding...)
 		}
 		if is(payloads.CatMaliciousSQLi) {
-			all = append(all, payloads.MaliciousSQLi...)
+			maliciousBody = append(maliciousBody, payloads.MaliciousSQLi...)
 		}
 		if is(payloads.CatMaliciousXSS) {
-			all = append(all, payloads.MaliciousXSS...)
+			maliciousBody = append(maliciousBody, payloads.MaliciousXSS...)
 		}
 		if is(payloads.CatMaliciousPathTraversal) {
-			all = append(all, payloads.MaliciousPathTraversal...)
+			maliciousBody = append(maliciousBody, payloads.MaliciousPathTraversal...)
 		}
-		// Plus other categories that are picked randomly but could be sequential if we wanted
-		// For now, AllMaliciousStrings is the main driver.
-		count := len(all)
-		if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > count {
-			count = len(payloads.MaliciousNumbers)
+		bodyCount = len(maliciousBody)
+		if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
+			bodyCount = len(payloads.MaliciousNumbers)
 		}
-		if is(payloads.CatMaliciousDates) && len(payloads.MaliciousDates) > count {
-			count = len(payloads.MaliciousDates)
+		if is(payloads.CatMaliciousDates) && len(payloads.MaliciousDates) > bodyCount {
+			bodyCount = len(payloads.MaliciousDates)
 		}
-		if is(payloads.CatMaliciousBooleans) && len(payloads.MaliciousBooleans) > count {
-			count = len(payloads.MaliciousBooleans)
+		if is(payloads.CatMaliciousBooleans) && len(payloads.MaliciousBooleans) > bodyCount {
+			bodyCount = len(payloads.MaliciousBooleans)
 		}
-		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > count {
-			count = len(payloads.MaliciousTypeConfusion)
+		if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
+			bodyCount = len(payloads.MaliciousTypeConfusion)
 		}
 
-		// Security header categories contribute to iteration count
+		secHeaderCount := 0
 		for _, def := range payloads.SecurityHeaderPayloads {
 			if !is(def.Category) {
 				continue
 			}
 			for _, values := range def.Headers {
-				if len(values) > count {
-					count = len(values)
+				if len(values) > secHeaderCount {
+					secHeaderCount = len(values)
 				}
 			}
 		}
 
-		return count
+		return bodyCount + secHeaderCount
 	default:
 		return 0
 	}
@@ -460,4 +459,60 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 		return nil
 	}
 	return headers
+}
+
+// BodyIterations returns the number of iterations needed for body fuzzing.
+func (g *Generator) BodyIterations() int {
+	if g.profile != swagger.ProfileMalicious {
+		return 0
+	}
+	is := g.isCategoryEnabled
+	bodyCount := 0
+	var maliciousBody []any
+	if is(payloads.CatMaliciousEncoding) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousEncoding...)
+	}
+	if is(payloads.CatMaliciousSQLi) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousSQLi...)
+	}
+	if is(payloads.CatMaliciousXSS) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousXSS...)
+	}
+	if is(payloads.CatMaliciousPathTraversal) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousPathTraversal...)
+	}
+	bodyCount = len(maliciousBody)
+	if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
+		bodyCount = len(payloads.MaliciousNumbers)
+	}
+	if is(payloads.CatMaliciousDates) && len(payloads.MaliciousDates) > bodyCount {
+		bodyCount = len(payloads.MaliciousDates)
+	}
+	if is(payloads.CatMaliciousBooleans) && len(payloads.MaliciousBooleans) > bodyCount {
+		bodyCount = len(payloads.MaliciousBooleans)
+	}
+	if is(payloads.CatMaliciousTypeConfusion) && len(payloads.MaliciousTypeConfusion) > bodyCount {
+		bodyCount = len(payloads.MaliciousTypeConfusion)
+	}
+	return bodyCount
+}
+
+// SecurityHeaderIterations returns the number of iterations needed for security header fuzzing.
+func (g *Generator) SecurityHeaderIterations() int {
+	if g.profile != swagger.ProfileMalicious {
+		return 0
+	}
+	secHeaderCount := 0
+	is := g.isCategoryEnabled
+	for _, def := range payloads.SecurityHeaderPayloads {
+		if !is(def.Category) {
+			continue
+		}
+		for _, values := range def.Headers {
+			if len(values) > secHeaderCount {
+				secHeaderCount = len(values)
+			}
+		}
+	}
+	return secHeaderCount
 }

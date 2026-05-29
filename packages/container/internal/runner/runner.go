@@ -241,7 +241,14 @@ func (r *Runner) fuzzEndpoint(
 		effectiveIterations = minNeeded
 	}
 	if !hasFields(&endpoint) {
-		effectiveIterations = 1
+		if profile == swagger.ProfileMalicious {
+			effectiveIterations = minNeeded
+			if effectiveIterations < 1 {
+				effectiveIterations = 1
+			}
+		} else {
+			effectiveIterations = 1
+		}
 	}
 
 	defaultMaxPayloadSize := settings.MaxPayloadSizeBytes
@@ -268,6 +275,17 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
+		// Determine if this is a security header fuzzing iteration.
+		// During header fuzzing, we send valid/safe body payloads to bypass
+		// application structure checks and isolate header-level vulnerabilities.
+		isSecHeaderIter := false
+		if profile == swagger.ProfileMalicious {
+			bodyIters := gen.BodyIterations()
+			if i >= bodyIters {
+				isSecHeaderIter = true
+			}
+		}
+
 		var payload any
 		var queryParams map[string]any
 		var payloadHash uint32 = payloads.HashStr("empty")
@@ -275,7 +293,12 @@ func (r *Runner) fuzzEndpoint(
 
 		if hasFields(&endpoint) {
 			for retries := 0; retries < 10; retries++ {
-				generated := gen.BuildObject(&endpoint.Schema)
+				var generated map[string]any
+				if isSecHeaderIter {
+					generated = safeGen.BuildObject(&endpoint.Schema)
+				} else {
+					generated = gen.BuildObject(&endpoint.Schema)
+				}
 
 				buf := bufPool.Get().(*bytes.Buffer)
 				buf.Reset()
@@ -339,6 +362,22 @@ func (r *Runner) fuzzEndpoint(
 				wg.Done()
 			}()
 
+			isSecHeaderIter := false
+			if profile == swagger.ProfileMalicious {
+				bodyIters := gen.BodyIterations()
+				if it >= bodyIters {
+					isSecHeaderIter = true
+				}
+			}
+
+			// Choose generator for spec-defined headers
+			var headerGen *generator.Generator
+			if isSecHeaderIter {
+				headerGen = safeGen
+			} else {
+				headerGen = gen
+			}
+
 			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
 			generatedHeaders := make(map[string]string)
 			if len(endpoint.HeaderParams) > 0 {
@@ -346,17 +385,18 @@ func (r *Runner) fuzzEndpoint(
 					Type:       "object",
 					Properties: endpoint.HeaderParams,
 				}
-				headerObj := gen.BuildObject(headerSchema)
+				headerObj := headerGen.BuildObject(headerSchema)
 				for k, v := range headerObj {
 					generatedHeaders[k] = fmt.Sprintf("%v", v)
 				}
 			}
 
-			// Inject security-test headers for MALICIOUS profile.
-			// These test for server misconfigurations (Host injection, CORS, IP spoofing, JWT).
-			if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
-				for k, v := range secHeaders {
-					generatedHeaders[k] = v
+			// ONLY inject custom security headers during security header iterations
+			if isSecHeaderIter {
+				if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
+					for k, v := range secHeaders {
+						generatedHeaders[k] = v
+					}
 				}
 			}
 
