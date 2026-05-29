@@ -8,6 +8,16 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
+var maliciousStringCategories = []struct {
+	category string
+	slice    []any
+}{
+	{payloads.CatMaliciousEncoding, payloads.MaliciousEncoding},
+	{payloads.CatMaliciousSQLi, payloads.MaliciousSQLi},
+	{payloads.CatMaliciousXSS, payloads.MaliciousXSS},
+	{payloads.CatMaliciousPathTraversal, payloads.MaliciousPathTraversal},
+}
+
 // Generator produces fuzz payloads based on JSON Schema and a fuzzing profile.
 type Generator struct {
 	dictionaries map[string][]any
@@ -50,11 +60,7 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		profile:          profile,
 		activeCategories: active,
 	}
-	g.cachedMaliciousStrings = g.getActiveMaliciousStrings()
-	g.hasActiveMaliciousStrings = g.isCategoryEnabled(payloads.CatMaliciousSQLi) ||
-		g.isCategoryEnabled(payloads.CatMaliciousXSS) ||
-		g.isCategoryEnabled(payloads.CatMaliciousPathTraversal) ||
-		g.isCategoryEnabled(payloads.CatMaliciousEncoding)
+	g.cachedMaliciousStrings, g.hasActiveMaliciousStrings = g.getActiveMaliciousStrings()
 	return g
 }
 
@@ -305,25 +311,19 @@ func (g *Generator) generateString(format, propName string) any {
 	return g.fallbackRandom(propName)
 }
 
-func (g *Generator) getActiveMaliciousStrings() []any {
-	// Ideally cached in New()
+func (g *Generator) getActiveMaliciousStrings() ([]any, bool) {
 	var all []any
-	if g.isCategoryEnabled(payloads.CatMaliciousEncoding) {
-		all = append(all, payloads.MaliciousEncoding...)
-	}
-	if g.isCategoryEnabled(payloads.CatMaliciousSQLi) {
-		all = append(all, payloads.MaliciousSQLi...)
-	}
-	if g.isCategoryEnabled(payloads.CatMaliciousXSS) {
-		all = append(all, payloads.MaliciousXSS...)
-	}
-	if g.isCategoryEnabled(payloads.CatMaliciousPathTraversal) {
-		all = append(all, payloads.MaliciousPathTraversal...)
+	hasAny := false
+	for _, item := range maliciousStringCategories {
+		if g.isCategoryEnabled(item.category) {
+			all = append(all, item.slice...)
+			hasAny = true
+		}
 	}
 	if len(all) == 0 {
-		return []any{payloads.Word()} // Fallback
+		return []any{payloads.Word()}, false
 	}
-	return all
+	return all, hasAny
 }
 
 func (g *Generator) generateNumber(typ string) any {

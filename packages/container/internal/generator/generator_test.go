@@ -193,18 +193,23 @@ func TestGenerate_MaliciousCategoryFiltering(t *testing.T) {
 	
 	g := New(nil, swagger.ProfileMalicious, settings)
 	
-	// Verify that cachedMaliciousStrings only contains payloads from payloads.MaliciousSQLi
-	// and nothing from other categories (e.g. XSS alert tags)
+	// Verify that cachedMaliciousStrings matches payloads.MaliciousSQLi exactly
+	if len(g.cachedMaliciousStrings) != len(payloads.MaliciousSQLi) {
+		t.Errorf("Expected cachedMaliciousStrings to have length %d, got %d", len(payloads.MaliciousSQLi), len(g.cachedMaliciousStrings))
+	}
+	
+	sqliSet := make(map[any]bool)
+	for _, val := range payloads.MaliciousSQLi {
+		sqliSet[val] = true
+	}
+	
 	for _, val := range g.cachedMaliciousStrings {
-		strVal, ok := val.(string)
-		if !ok {
-			continue
-		}
-		if strings.Contains(strVal, "alert(1)") || strings.Contains(strVal, "<script") {
-			t.Errorf("Found XSS payload %q when only SQLi category was enabled", strVal)
+		if !sqliSet[val] {
+			t.Errorf("Found unexpected payload %v in cachedMaliciousStrings when only SQLi category was enabled", val)
 		}
 	}
 }
+
 
 func BenchmarkGenerateStringMalicious(b *testing.B) {
 	schema := &swagger.SchemaProperty{
