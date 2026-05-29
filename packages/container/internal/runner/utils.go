@@ -126,8 +126,8 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 	}
 
 	var sseHeaders http.Header
-	if hasHeaderInjection {
-		sseHeaders = r.ResponseHeaders
+	if hasHeaderInjection && r.ResponseHeaders != nil {
+		sseHeaders = r.ResponseHeaders.Clone()
 	}
 
 	return &swagger.FuzzResultSSE{
