@@ -112,13 +112,19 @@ type injectedHeader struct {
 func (a *CRLFAnalyzer) extractInjectedHeaders(payload string) []injectedHeader {
 	var results []injectedHeader
 
-	// Strategy 1: Split on raw CRLF sequences (\r\n)
+	// Strategy 1: Split on raw CRLF sequences (\r\n, \r, \n)
 	results = append(results, a.parseHeadersFromLines(splitOnCRLF(payload))...)
 
 	// Strategy 2: URL-decode the payload and split on CRLF
 	decoded, err := url.QueryUnescape(payload)
 	if err == nil && decoded != payload {
 		results = append(results, a.parseHeadersFromLines(splitOnCRLF(decoded))...)
+
+		// Strategy 3: Try to decode it twice (for double URL-encoded payloads)
+		doubleDecoded, err2 := url.QueryUnescape(decoded)
+		if err2 == nil && doubleDecoded != decoded {
+			results = append(results, a.parseHeadersFromLines(splitOnCRLF(doubleDecoded))...)
+		}
 	}
 
 	return deduplicateHeaders(results)
@@ -196,11 +202,11 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 // The first segment (before the first CRLF) is excluded since it's the original
 // value — only lines after CRLF injections are of interest.
 func splitOnCRLF(s string) []string {
-	// Split on \r\n first, then \r, then \n
-	parts := strings.Split(s, "\r\n")
-	if len(parts) <= 1 {
-		parts = strings.Split(s, "\n")
-	}
+	// Normalize line endings to standard \n (LF)
+	normalized := strings.ReplaceAll(s, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+
+	parts := strings.Split(normalized, "\n")
 	if len(parts) <= 1 {
 		return nil
 	}

@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"swazz-engine/internal/swagger"
 	"testing"
 )
@@ -42,6 +43,26 @@ func TestCRLFAnalyzer(t *testing.T) {
 		{
 			name:          "URL-encoded CRLF header injection",
 			payload:       "test%0d%0aX-Injected: yes",
+			response:      "",
+			headers:       http.Header{"X-Injected": []string{"yes"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/crlf-injection",
+			expectedLevel: "error",
+		},
+		{
+			name:          "CRLF header injection detected — raw CR only",
+			payload:       "normal\rX-Injected: header",
+			response:      "",
+			headers:       http.Header{"X-Injected": []string{"header"}},
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/crlf-injection",
+			expectedLevel: "error",
+		},
+		{
+			name:          "Double URL-encoded CRLF header injection",
+			payload:       "test%250d%250aX-Injected: yes",
 			response:      "",
 			headers:       http.Header{"X-Injected": []string{"yes"}},
 			profile:       swagger.ProfileMalicious,
@@ -274,7 +295,8 @@ func TestCRLFAnalyzer_ExtractInjectedHeaders(t *testing.T) {
 		{"CRLF without header format", "\r\n\r\n", 0},
 		{"Empty string", "", 0},
 		{"Set-Cookie injection", "test\r\nSet-Cookie: evil=true", 1},
-		{"Double URL-encoded (not decoded)", "test%250d%250aX-Injected: value", 0}, // double-encoded should NOT match
+		{"Double URL-encoded (decoded)", "test%250d%250aX-Injected: value", 1},
+		{"Raw CR single header", "test\rX-Injected: value", 1},
 	}
 
 	for _, tt := range tests {
@@ -297,6 +319,7 @@ func TestCRLFAnalyzer_SplitOnCRLF(t *testing.T) {
 		{"Multiple CRLF", "before\r\nmid\r\nafter", 2},
 		{"No CRLF", "no crlf here", 0},
 		{"LF only", "before\nafter", 1},
+		{"CR only", "before\rafter", 1},
 		{"Empty", "", 0},
 	}
 
@@ -309,3 +332,54 @@ func TestCRLFAnalyzer_SplitOnCRLF(t *testing.T) {
 		})
 	}
 }
+
+func TestCRLFAnalyzer_Integration(t *testing.T) {
+	// Start a mock vulnerable HTTP server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}))
+	defer server.Close()
+
+	// Make a request with a suspicious Origin header
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", server.URL, nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	suspiciousOrigin := "https://attacker.com"
+	req.Header.Set("Origin", suspiciousOrigin)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("failed to execute request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Run CRLFAnalyzer on the actual HTTP response
+	analyzer := NewCRLFAnalyzer()
+	input := &AnalysisInput{
+		SentPayload:     suspiciousOrigin, // simulating the fuzzer injecting the origin
+		ResponseHeaders: resp.Header,
+		Profile:         swagger.ProfileMalicious,
+	}
+
+	findings := analyzer.Analyze(input)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding from CORS origin reflection, got %d", len(findings))
+	}
+
+	finding := findings[0]
+	if finding.RuleID != "swazz/header-injection" {
+		t.Errorf("expected rule ID 'swazz/header-injection', got '%s'", finding.RuleID)
+	}
+	if finding.Level != "warning" {
+		t.Errorf("expected warning level, got '%s'", finding.Level)
+	}
+}
+
