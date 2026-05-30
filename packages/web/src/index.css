@@ -2898,6 +2898,13 @@ button:focus-visible {
   text-align: center;
 }
 
+.sidebar-analyze-body-container {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ─── Grouped Findings UI ────────────────────────────────── */
 .findings-group-container {
   display: flex;

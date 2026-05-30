@@ -165,7 +165,7 @@ export function ConfigSidebar({
                 </div>
 
                 {/* Analyze Response Body */}
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="sidebar-analyze-body-container">
                     <label className="premium-checkbox-label">
                         <input
                             type="checkbox"

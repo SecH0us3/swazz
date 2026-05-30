@@ -747,7 +747,10 @@ func (b *EndpointSizeBaseline) getMedian() int64 {
 
 func (r *Runner) recordSizeBaseline(method, path string, size int64) {
 	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
-	val, _ := r.sizeBaselines.LoadOrStore(key, &EndpointSizeBaseline{})
+	val, ok := r.sizeBaselines.Load(key)
+	if !ok {
+		val, _ = r.sizeBaselines.LoadOrStore(key, &EndpointSizeBaseline{})
+	}
 	baseline := val.(*EndpointSizeBaseline)
 	baseline.addSize(size)
 }
