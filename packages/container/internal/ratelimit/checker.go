@@ -55,6 +55,15 @@ func Check(
 		}
 	}
 
+	// Enforce Host and Scheme from baseURL to prevent SSRF
+	if parsedURL, err := url.Parse(rawURL); err == nil {
+		if baseParsed, err2 := url.Parse(baseURL); err2 == nil {
+			parsedURL.Host = baseParsed.Host
+			parsedURL.Scheme = baseParsed.Scheme
+			rawURL = parsedURL.String()
+		}
+	}
+
 	// Prepare Headers
 	isBody := !strings.EqualFold(method, "GET") && !strings.EqualFold(method, "HEAD") && !strings.EqualFold(method, "OPTIONS") && !strings.EqualFold(method, "DELETE")
 	effectiveCT := contentType
