@@ -88,4 +88,16 @@ describe('findings utility', () => {
         expect(resultHeader.title).toBe('CORS Misconfiguration');
         expect(resultHeader.key).toBe('cors_misconfig');
     });
+
+    it('should categorize swazz/response-size-anomaly rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/response-size-anomaly',
+            level: 'warning',
+            message: 'Response size is significantly larger'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-warning)');
+        expect(result.title).toBe('Response Size Anomaly');
+        expect(result.key).toBe('response_size_anomaly');
+    });
 });
