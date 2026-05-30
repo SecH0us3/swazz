@@ -179,14 +179,13 @@ export function ConfigSidebar({
                     </label>
 
                     {(config.settings.analyze_response_body ?? true) && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingLeft: 20 }}>
+                        <div className="sidebar-sub-setting">
                             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Size Anomaly Multiplier</span>
                             <input
-                                className="input"
+                                className="input sidebar-sub-setting-input"
                                 type="number"
                                 step="0.1"
                                 min={1}
-                                style={{ width: 64, flexShrink: 0, textAlign: 'center' }}
                                 value={config.settings.response_size_anomaly_multiplier ?? 5.0}
                                 onChange={(e) => onUpdateConfig({
                                     settings: { ...config.settings, response_size_anomaly_multiplier: parseFloat(e.target.value) || 5.0 } as any,

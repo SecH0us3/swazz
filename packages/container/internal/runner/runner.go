@@ -74,7 +74,7 @@ type Runner struct {
 	pauseCond *sync.Cond
 
 	analyzer *analyzer.AnalyzerRegistry
-	sizeBaselines sync.Map
+	sizeBaselines *sync.Map
 }
 
 // New creates a new Runner.
@@ -93,7 +93,8 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		doneCh:     make(chan struct{}),
 		statsChan:  make(chan statsMsg, 4096),
 		statsDone:  make(chan struct{}),
-		analyzer:   analyzer.NewRegistry(),
+		analyzer:      analyzer.NewRegistry(),
+		sizeBaselines: &sync.Map{},
 	}
 	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
@@ -130,7 +131,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.statsDone = make(chan struct{})
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
-	r.sizeBaselines = sync.Map{}
+	r.sizeBaselines = &sync.Map{}
 
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
@@ -708,30 +709,39 @@ type EndpointSizeBaseline struct {
 	mu         sync.Mutex
 	sizes      []int64
 	medianSize int64
+	calculated bool
 }
 
 func (b *EndpointSizeBaseline) addSize(size int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.sizes = append(b.sizes, size)
-
-	temp := make([]int64, len(b.sizes))
-	copy(temp, b.sizes)
-	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
-
-	n := len(temp)
-	if n == 0 {
-		b.medianSize = 0
-	} else if n%2 == 1 {
-		b.medianSize = temp[n/2]
-	} else {
-		b.medianSize = (temp[n/2-1] + temp[n/2]) / 2
-	}
+	b.calculated = false
 }
 
 func (b *EndpointSizeBaseline) getMedian() int64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.calculated {
+		return b.medianSize
+	}
+	n := len(b.sizes)
+	if n == 0 {
+		b.medianSize = 0
+		b.calculated = true
+		return 0
+	}
+
+	temp := make([]int64, n)
+	copy(temp, b.sizes)
+	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
+
+	if n%2 == 1 {
+		b.medianSize = temp[n/2]
+	} else {
+		b.medianSize = (temp[n/2-1] + temp[n/2]) / 2
+	}
+	b.calculated = true
 	return b.medianSize
 }
 
