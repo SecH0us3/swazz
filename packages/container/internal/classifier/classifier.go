@@ -151,6 +151,8 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 			source := "response_body"
 			if strings.HasPrefix(af.RuleID, "swazz/crlf-") || strings.HasPrefix(af.RuleID, "swazz/header-") {
 				source = "response_headers"
+			} else if af.RuleID == "swazz/no-rate-limit" || af.RuleID == "swazz/rate-limit-active" {
+				source = "rate_limiting"
 			}
 			f := &Finding{
 				ID:           r.ID,

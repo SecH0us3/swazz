@@ -71,17 +71,19 @@ type AuthStep struct {
 
 // Settings controls the fuzzing run behavior.
 type Settings struct {
-	IterationsPerProfile          int              `json:"iterations_per_profile"`
-	Concurrency                   int              `json:"concurrency"`
-	TimeoutMs                     int              `json:"timeout_ms"`
-	MaxPayloadSizeBytes           int              `json:"max_payload_size_bytes"`
-	DelayBetweenRequestMs         int              `json:"delay_between_requests_ms"`
-	Debug                         bool             `json:"debug,omitempty"`
-	Profiles                      []FuzzingProfile `json:"profiles"`
+	IterationsPerProfile          int                         `json:"iterations_per_profile"`
+	Concurrency                   int                         `json:"concurrency"`
+	TimeoutMs                     int                         `json:"timeout_ms"`
+	MaxPayloadSizeBytes           int                         `json:"max_payload_size_bytes"`
+	DelayBetweenRequestMs         int                         `json:"delay_between_requests_ms"`
+	Debug                         bool                        `json:"debug,omitempty"`
+	Profiles                      []FuzzingProfile            `json:"profiles"`
 	PayloadCategories             map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
-	AnalyzeResponseBody           bool                      `json:"analyze_response_body"`
-	ResponseSizeAnomalyMultiplier float64                   `json:"response_size_anomaly_multiplier"`
-	OOBServerURL                  string                    `json:"oob_server_url,omitempty"`
+	AnalyzeResponseBody           bool                        `json:"analyze_response_body"`
+	ResponseSizeAnomalyMultiplier float64                     `json:"response_size_anomaly_multiplier"`
+	OOBServerURL                  string                      `json:"oob_server_url,omitempty"`
+	RateLimitCheck                bool                        `json:"rate_limit_check"`
+	RateLimitBurstSize            int                         `json:"rate_limit_burst_size"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -95,6 +97,8 @@ func DefaultSettings() Settings {
 		Profiles:                      []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
 		AnalyzeResponseBody:           true,
 		ResponseSizeAnomalyMultiplier: 5.0,
+		RateLimitCheck:                false,
+		RateLimitBurstSize:            50,
 	}
 }
 
