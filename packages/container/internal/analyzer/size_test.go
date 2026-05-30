@@ -34,6 +34,13 @@ func TestSizeAnalyzer(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
+			name:          "Baseline size < 100 - no anomaly",
+			profile:       swagger.ProfileMalicious,
+			baselineSize:  99,
+			responseSize:  1000,
+			expectedCount: 0,
+		},
+		{
 			name:           "Size below threshold (default multiplier 5.0) - no anomaly",
 			profile:        swagger.ProfileMalicious,
 			baselineSize:   100,
@@ -95,4 +102,11 @@ func TestSizeAnalyzer(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("nil input - no panic", func(t *testing.T) {
+		findings := a.Analyze(nil)
+		if findings != nil {
+			t.Fatalf("expected nil findings, got %v", findings)
+		}
+	})
 }

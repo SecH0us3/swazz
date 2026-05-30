@@ -10,10 +10,13 @@ type SizeAnalyzer struct{}
 
 // Analyze checks if the response size is significantly larger than the baseline median size during MALICIOUS profile runs.
 func (a *SizeAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if input == nil {
+		return nil
+	}
 	if input.Profile != swagger.ProfileMalicious {
 		return nil
 	}
-	if input.BaselineSize <= 0 {
+	if input.BaselineSize < 100 {
 		return nil
 	}
 	multiplier := input.SizeMultiplier

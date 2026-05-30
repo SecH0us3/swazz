@@ -186,9 +186,9 @@ export function ConfigSidebar({
                                 type="number"
                                 step="0.1"
                                 min={1}
-                                value={config.settings.response_size_anomaly_multiplier ?? 5.0}
+                                value={config.settings.response_size_anomaly_multiplier ?? ''}
                                 onChange={(e) => onUpdateConfig({
-                                    settings: { ...config.settings, response_size_anomaly_multiplier: parseFloat(e.target.value) || 5.0 } as any,
+                                    settings: { ...config.settings, response_size_anomaly_multiplier: e.target.value === '' ? undefined : parseFloat(e.target.value) } as any,
                                 })}
                             />
                         </div>
