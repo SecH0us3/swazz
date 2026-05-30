@@ -3,7 +3,6 @@ import type { RunStats } from '../../types.js';
 interface Props {
     stats: RunStats;
     isRunning: boolean;
-    onExportHTML: () => void;
 }
 
 function StatNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
@@ -40,7 +39,7 @@ function get5xx(stats: RunStats): number {
         .reduce((sum, [, c]) => sum + c, 0);
 }
 
-export function StatsBar({ stats, isRunning, onExportHTML }: Props) {
+export function StatsBar({ stats, isRunning }: Props) {
     const count2xx = get2xx(stats);
     const count4xx = get4xx(stats);
     const count5xx = get5xx(stats);
@@ -98,23 +97,6 @@ export function StatsBar({ stats, isRunning, onExportHTML }: Props) {
                 <div className="stat-card stat-max-response">
                     <span className="stat-label">Max Response</span>
                     <span className="stat-value">{formatBytes(stats.maxResponseSize || 0)}</span>
-                </div>
-
-                <div className="stat-divider" />
-
-                {/* Export Button */}
-                <div className="stat-card stat-export" style={{ justifyContent: 'center' }}>
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-light)' }}
-                        onClick={onExportHTML}
-                        title="Generate and download a visual HTML report"
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        HTML Report
-                    </button>
                 </div>
             </div>
 
