@@ -319,3 +319,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a visual "Features" section to `README.md` with an image carousel or table layout.
 
     - Add a visual "Features" section to `README.md`.
+
+- [ ] **Task 37:** Implement Out-of-Band (OOB) Interaction Verification Server (Interactsh-like)
+  - **Design Goal:** Detect blind vulnerabilities (like Blind SSRF, Blind SQLi, or RCE) by generating a unique interaction URL (e.g., `http://<host>/oob/<uuid>`) and tracking incoming HTTP requests hitting that endpoint to confirm vulnerability execution.
+  - **Implementation Details:**
+    - **Engine/Backend Endpoint:** Extend the Gin web server in `packages/container/api/` (or standard runner) to listen for OOB interaction requests on a specific path prefix like `/oob/:uuid`.
+    - **UUID Generator & Tracker:** Build a lightweight storage/map in the backend engine to register active fuzz sessions and correlate generated UUID strings with target parameters.
+    - **Payload injection:** Extend the generator in `packages/container/internal/generator/` to dynamically insert the OOB URL (with UUID) into payloads (e.g., injection lists, headers like `X-Forwarded-For`).
+    - **Finding Trigger:** When `/oob/:uuid` is accessed, look up the UUID to identify the source session/request, construct an `AnalysisFinding` representing OOB Interaction, and push/broadcast the finding to the dashboard real-time.
+
