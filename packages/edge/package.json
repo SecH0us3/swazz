@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@cloudflare/containers": "^0.3.4"
+    "@cloudflare/containers": "^0.3.5"
   },
   "scripts": {
     "deploy": "wrangler deploy",
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.9",
+    "@cloudflare/vitest-pool-workers": "^0.16.10",
     "@cloudflare/workers-types": "^4.20260529.1",
     "@vitest/snapshot": "^4.1.7",
     "pretty-format": "^30.4.1",
