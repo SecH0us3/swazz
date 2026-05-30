@@ -85,7 +85,9 @@ func (g *Generator) isCategoryEnabled(id string) bool {
 	return g.activeCategories[id]
 }
 
-func seqPick[T any](arr []T, counter *int) T {
+func seqPick[T any](mu sync.Locker, arr []T, counter *int) T {
+	mu.Lock()
+	defer mu.Unlock()
 	if len(arr) == 0 {
 		var zero T
 		return zero
@@ -273,7 +275,7 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 
 func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 	if g.profile == swagger.ProfileBoundary && g.isCategoryEnabled(payloads.CatBoundaryArrays) {
-		size := seqPick(payloads.BoundaryArraySizes, &g.bArrIdx).(int)
+		size := seqPick(&g.mu, payloads.BoundaryArraySizes, &g.bArrIdx).(int)
 		// Cap complex object arrays to prevent OOM
 		if itemSchema != nil && itemSchema.Type == "object" {
 			if size > 50 {
@@ -289,7 +291,7 @@ func (g *Generator) generateByProfile(typ, format, propName string) any {
 	// MALICIOUS: Type confusion check
 	if g.profile == swagger.ProfileMalicious && g.isCategoryEnabled(payloads.CatMaliciousTypeConfusion) {
 		if rand.Float64() < 0.05 { // #nosec G404 -- non-security randomness for fuzzer
-			return seqPick(payloads.MaliciousTypeConfusion, &g.mTypeIdx)
+			return seqPick(&g.mu, payloads.MaliciousTypeConfusion, &g.mTypeIdx)
 		}
 	}
 
@@ -329,11 +331,11 @@ func (g *Generator) generateString(format, propName string) any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryStrings) {
-			return seqPick(payloads.BoundaryStrings, &g.bStrIdx)
+			return seqPick(&g.mu, payloads.BoundaryStrings, &g.bStrIdx)
 		}
 	case swagger.ProfileMalicious:
 		if g.hasActiveMaliciousStrings {
-			val := seqPick(g.cachedMaliciousStrings, &g.mStrIdx)
+			val := seqPick(&g.mu, g.cachedMaliciousStrings, &g.mStrIdx)
 			if strVal, ok := val.(string); ok && strings.Contains(strVal, "{{OOB_URL}}") {
 				u := uuid.New().String()
 				url := g.oobURL(u)
@@ -377,19 +379,19 @@ func (g *Generator) generateNumber(typ string) any {
 	case swagger.ProfileBoundary:
 		if typ == "integer" {
 			if g.isCategoryEnabled(payloads.CatBoundaryIntegers) {
-				return seqPick(payloads.BoundaryIntegers, &g.bIntIdx)
+				return seqPick(&g.mu, payloads.BoundaryIntegers, &g.bIntIdx)
 			}
 		} else {
 			if g.isCategoryEnabled(payloads.CatBoundaryNumbers) {
 				// Merged integers + numbers for float types
 				merged := append([]any{}, payloads.BoundaryIntegers...)
 				merged = append(merged, payloads.BoundaryNumbers...)
-				return seqPick(merged, &g.bNumIdx)
+				return seqPick(&g.mu, merged, &g.bNumIdx)
 			}
 		}
 	case swagger.ProfileMalicious:
 		if g.isCategoryEnabled(payloads.CatMaliciousNumbers) {
-			return seqPick(payloads.MaliciousNumbers, &g.mNumIdx)
+			return seqPick(&g.mu, payloads.MaliciousNumbers, &g.mNumIdx)
 		}
 	}
 
@@ -404,11 +406,11 @@ func (g *Generator) generateBoolean() any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryBooleans) {
-			return seqPick(payloads.BoundaryBooleans, &g.bBoolIdx)
+			return seqPick(&g.mu, payloads.BoundaryBooleans, &g.bBoolIdx)
 		}
 	case swagger.ProfileMalicious:
 		if g.isCategoryEnabled(payloads.CatMaliciousBooleans) {
-			return seqPick(payloads.MaliciousBooleans, &g.mBoolIdx)
+			return seqPick(&g.mu, payloads.MaliciousBooleans, &g.mBoolIdx)
 		}
 	}
 	return rand.Float64() < 0.5 // #nosec G404 -- non-security randomness for fuzzer
@@ -418,11 +420,11 @@ func (g *Generator) generateDate() any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryDates) {
-			return seqPick(payloads.BoundaryDates, &g.bDateIdx)
+			return seqPick(&g.mu, payloads.BoundaryDates, &g.bDateIdx)
 		}
 	case swagger.ProfileMalicious:
 		if g.isCategoryEnabled(payloads.CatMaliciousDates) {
-			return seqPick(payloads.MaliciousDates, &g.mDateIdx)
+			return seqPick(&g.mu, payloads.MaliciousDates, &g.mDateIdx)
 		}
 	}
 	return payloads.RandomDate().Format("2006-01-02T15:04:05.000Z")
@@ -433,13 +435,13 @@ func (g *Generator) generateUUID() any {
 	case swagger.ProfileMalicious:
 		// Use boundary UUIDs occasionally for "malicious" uuid testing
 		if rand.Float64() < 0.1 { // #nosec G404 -- non-security randomness for fuzzer
-			return seqPick(payloads.BoundaryUUIDs, &g.mUUIDIdx)
+			return seqPick(&g.mu, payloads.BoundaryUUIDs, &g.mUUIDIdx)
 		}
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryUUIDs) {
 			// Occasionally test boundary UUIDs
 			if rand.Float64() < 0.2 { // #nosec G404 -- non-security randomness for fuzzer
-				return seqPick(payloads.BoundaryUUIDs, &g.bUUIDIdx)
+				return seqPick(&g.mu, payloads.BoundaryUUIDs, &g.bUUIDIdx)
 			}
 		}
 	}

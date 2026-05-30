@@ -85,7 +85,7 @@ export function renderJsonDiff(
             if (typeof val === 'string' && uuid && val.includes(uuid)) {
                 try {
                     const escapedUuid = uuid.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                    const regex = new RegExp(`(https?:\\/\\/[^\\s"'<>]*?${escapedUuid}|https?%3A%2F%2F[^\\s"'<>]*?${escapedUuid})`, 'gi');
+                    const regex = new RegExp(`(https?:\\/\\/[^\\s"'<>]*?${escapedUuid}|https?%3A%2F%2F[^\\s"'<>]*?${escapedUuid})`, 'i');
                     const parts = valueString.split(regex);
                     if (parts.length > 1) {
                         return createElement(
@@ -96,14 +96,7 @@ export function renderJsonDiff(
                                     'span',
                                     {
                                         key: i,
-                                        style: {
-                                            backgroundColor: 'rgba(255, 0, 0, 0.25)',
-                                            border: '1px dashed var(--color-error)',
-                                            borderRadius: '3px',
-                                            padding: '1px 3px',
-                                            fontWeight: 'bold',
-                                            color: 'var(--color-error)'
-                                        }
+                                        className: 'oob-badge-diff'
                                     },
                                     part
                                 ) : part

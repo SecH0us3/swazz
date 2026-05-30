@@ -89,16 +89,16 @@ function highlightOobPayload(text: string, uuid?: string): ReactNode {
     }
     try {
         const escapedUuid = uuid.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const regex = new RegExp(`(https?:\\/\\/[^\\s"'<>]*?${escapedUuid}|https?%3A%2F%2F[^\\s"'<>]*?${escapedUuid})`, 'gi');
+        const regex = new RegExp(`(https?:\\/\\/[^\\s"'<>]*?${escapedUuid}|https?%3A%2F%2F[^\\s"'<>]*?${escapedUuid})`, 'i');
         const parts = text.split(regex);
         if (parts.length <= 1) {
-            const uuidRegex = new RegExp(`(${escapedUuid})`, 'gi');
+            const uuidRegex = new RegExp(`(${escapedUuid})`, 'i');
             const subparts = text.split(uuidRegex);
             return (
                 <>
                     {subparts.map((part, i) => 
                         part.toLowerCase() === uuid.toLowerCase() ? (
-                            <span key={i} className="diff-mutated-malicious font-bold" style={{ padding: '0 4px', borderRadius: '4px' }}>
+                            <span key={i} className="diff-mutated-malicious font-bold oob-badge-inline">
                                 {part}
                             </span>
                         ) : part
@@ -110,7 +110,7 @@ function highlightOobPayload(text: string, uuid?: string): ReactNode {
             <>
                 {parts.map((part, i) => 
                     regex.test(part) ? (
-                        <span key={i} className="diff-mutated-malicious font-bold" style={{ padding: '2px 6px', borderRadius: '4px', border: '1px dashed var(--color-error)' }}>
+                        <span key={i} className="diff-mutated-malicious font-bold oob-badge-dashed">
                             {part}
                         </span>
                     ) : part

@@ -1549,6 +1549,26 @@ body.resizing .sidebar-resizer {
   font-weight: 500;
 }
 
+.oob-badge-inline {
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.oob-badge-dashed {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px dashed var(--color-error);
+}
+
+.oob-badge-diff {
+  background-color: rgba(255, 0, 0, 0.25);
+  border: 1px dashed var(--color-error);
+  border-radius: 3px;
+  padding: 1px 3px;
+  font-weight: bold;
+  color: var(--color-error);
+}
+
 .diff-deleted-key {
   color: var(--text-disabled);
   text-decoration: line-through;

@@ -60,7 +60,8 @@ export default {
           const res = await fetch(match[1]);
           console.log("[DEMO API] OOB fetch SUCCESS, status:", res.status);
         } catch(err) {
-          console.log("[DEMO API] OOB fetch FAILED:", err.message);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.log("[DEMO API] OOB fetch FAILED:", errMsg);
         }
       }
     };
