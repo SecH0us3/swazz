@@ -169,8 +169,9 @@ func (r *Runner) Start(ctx context.Context) error {
 	concurrency := r.config.Settings.Concurrency
 	if concurrency <= 0 {
 		concurrency = 5
-	} else if concurrency > 1000 {
-		concurrency = 1000
+	}
+	if concurrency > 1000 {
+		return fmt.Errorf("concurrency limit exceeded (max 1000)")
 	}
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -351,10 +352,12 @@ func (r *Runner) fuzzEndpoint(
 	concurrency := settings.Concurrency
 	if concurrency <= 0 {
 		concurrency = 5
-	} else if concurrency > 1000 {
-		concurrency = 1000
+	}
+	if concurrency > 1000 {
+		return
 	}
 	sem := make(chan struct{}, concurrency)
+
 	enableDedup := profile == swagger.ProfileRandom
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
