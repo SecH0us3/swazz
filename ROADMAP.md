@@ -42,7 +42,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - In `RequestDetail.tsx`, render a visual diff view comparing the original API request schema/template against the generated fuzzed request payload.
     - Highlight mutated query values in yellow, added structure keys in green, and injected payloads/vulnerability inputs in red.
     - Add a toggle switch in the Inspector pane to flip between "Raw Fuzzed Request" and "Mutation Diff".
-- [/] **Task 36:** Relocate target input (`header-target-input`) into the `header-top-row` (centered) if screen width allows.
+- [x] **Task 36:** Relocate target input (`header-target-input`) into the `header-top-row` (centered) if screen width allows.
   - **Design Goal:** Improve dashboard space utilization by reducing the header height on desktop while keeping the interface mobile-friendly.
   - **Implementation Details:**
     - Use CSS media queries or responsive flex layouts to align the target input centered inside `header-top-row` on desktop.
@@ -289,7 +289,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Web UI:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), if there's a file upload feature, accept `.yaml` and `.yml` extensions alongside `.json`.
     - **Tests:** Create `packages/container/internal/swagger/yaml_test.go` with YAML fixtures. Add YAML variants of existing `parser_test.go` test cases. Test edge cases: YAML anchors, multi-document YAML (should reject), YAML with comments.
 
-- [ ] **Task 31:** Add Rate Limiting Detection and analysis.
+- [x] **Task 31:** Add Rate Limiting Detection and analysis.
   - **Design Goal:** Identify API endpoints that lack rate limiting — a common security misconfiguration that enables brute-force, credential stuffing, and resource exhaustion attacks. The runner already handles `429` responses with exponential backoff (3 retries, 2s/4s/6s + jitter, see `executeRequest()` in [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) L540-570), but there's no proactive check for *absence* of rate limiting.
   - **Implementation Details:**
     - **New package:** Create `packages/container/internal/ratelimit/`:

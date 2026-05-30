@@ -52,6 +52,8 @@ export interface SwazzSettings {
     payload_categories?: Record<FuzzingProfile, string[]>;
     analyze_response_body?: boolean;
     response_size_anomaly_multiplier?: number;
+    rate_limit_check?: boolean;
+    rate_limit_burst_size?: number;
 }
 
 export interface PayloadCategoryDef {
@@ -72,6 +74,8 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     profiles: ['RANDOM', 'BOUNDARY', 'MALICIOUS'],
     analyze_response_body: true,
     response_size_anomaly_multiplier: 5.0,
+    rate_limit_check: false,
+    rate_limit_burst_size: 50,
 };
 
 // ─── Full Config ────────────────────────────────────────

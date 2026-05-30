@@ -65,6 +65,14 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-warning)';
         title = 'Response Size Anomaly';
         key = 'response_size_anomaly';
+    } else if (f.ruleId === 'swazz/no-rate-limit') {
+        color = 'var(--color-warning)';
+        title = 'Missing Rate Limiting';
+        key = 'no_rate_limit';
+    } else if (f.ruleId === 'swazz/rate-limit-active') {
+        color = 'var(--color-info)';
+        title = 'Rate Limiting Enforced';
+        key = 'rate_limit_active';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

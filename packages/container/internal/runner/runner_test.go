@@ -414,3 +414,76 @@ func TestExecuteRequest_VulnerabilityAnalysis(t *testing.T) {
 		t.Errorf("Expected 'swazz/sql-error-leak' finding, got findings: %+v", res.AnalyzerFindings)
 	}
 }
+
+func TestRunner_RateLimitPhase(t *testing.T) {
+	// A server that returns 200 OK for all requests
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/ratelimit-test",
+				Method: "GET",
+			},
+		},
+		Settings: swagger.Settings{
+			RateLimitCheck:     true,
+			RateLimitBurstSize: 5,
+			TimeoutMs:          1000,
+			Concurrency:        2,
+			Profiles:           []swagger.FuzzingProfile{swagger.ProfileRandom},
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	r := newTestRunner(server.Client(), cfg)
+	defer r.Close()
+
+	resultsCh := r.Subscribe()
+
+	go func() {
+		err := r.Start(context.Background())
+		if err != nil {
+			t.Errorf("Start failed: %v", err)
+		}
+	}()
+
+	foundNoRateLimitFinding := false
+	timeout := time.After(2 * time.Second)
+
+loop:
+	for {
+		select {
+		case evt, ok := <-resultsCh:
+			if !ok {
+				break loop
+			}
+			if evt.Type == EventResult {
+				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
+					for _, af := range res.AnalyzerFindings {
+						if af.RuleID == "swazz/no-rate-limit" {
+							foundNoRateLimitFinding = true
+						}
+					}
+				}
+			}
+			if evt.Type == EventComplete {
+				break loop
+			}
+		case <-timeout:
+			t.Fatal("Test timed out waiting for events")
+		}
+	}
+
+	if !foundNoRateLimitFinding {
+		t.Error("Expected to find 'swazz/no-rate-limit' finding, but got none")
+	}
+}
+

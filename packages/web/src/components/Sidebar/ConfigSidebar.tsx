@@ -206,6 +206,50 @@ export function ConfigSidebar({
                         </div>
                     )}
                 </div>
+
+                {/* Rate Limit Detection */}
+                <div className="sidebar-rate-limit-container">
+                    <label className="premium-checkbox-label">
+                        <input
+                            type="checkbox"
+                            className="premium-checkbox"
+                            checked={config.settings.rate_limit_check ?? false}
+                            onChange={() => onUpdateConfig({
+                                settings: { ...config.settings, rate_limit_check: !(config.settings.rate_limit_check ?? false) } as any,
+                            })}
+                        />
+                        <span>Rate Limit Detection</span>
+                    </label>
+
+                    {(config.settings.rate_limit_check ?? false) && (
+                        <div className="sidebar-rate-limit-fields">
+                            <div className="sidebar-sub-setting">
+                                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Burst Size</span>
+                                <input
+                                    className="input sidebar-sub-setting-input"
+                                    type="number"
+                                    min={1}
+                                    max={1000}
+                                    value={config.settings.rate_limit_burst_size ?? 50}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 1;
+                                        onUpdateConfig({
+                                            settings: { ...config.settings, rate_limit_burst_size: val } as any,
+                                        });
+                                    }}
+                                />
+                            </div>
+                            <div className="sidebar-rate-limit-warning">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: 1 }}>
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                                <span>Warning: Enabling rate-limit testing sends a rapid burst of concurrent requests to each API endpoint. This might trigger security blocks, web application firewalls (WAFs), or active rate-limiting bans.</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </Section>
 
             {/* Headers */}
