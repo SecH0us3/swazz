@@ -165,60 +165,79 @@ func (r *Runner) Start(ctx context.Context) error {
 		fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
 			len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
 	}
+
+	concurrency := r.config.Settings.Concurrency
+	if concurrency <= 0 {
+		concurrency = 5
+	}
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
 	for _, endpoint := range r.config.Endpoints {
 		if r.stopped() {
 			break
 		}
 		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
 		if _, ok := r.sizeBaselines.Load(key); !ok {
-			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-			var payload any
-			var qp map[string]any
-			var gh map[string]string
-			if hasFields(&endpoint) {
-				generated := safeGen.BuildObject(&endpoint.Schema)
-				isBody := !isNoBodyMethod(endpoint.Method)
-				if isBody {
-					payload = generated
-				} else {
-					qp = generated
-				}
-				if len(endpoint.HeaderParams) > 0 {
-					gh = make(map[string]string)
-					headerSchema := &swagger.SchemaProperty{
-						Type:       "object",
-						Properties: endpoint.HeaderParams,
+			sem <- struct{}{}
+			wg.Add(1)
+
+			go func(ep swagger.EndpointConfig) {
+				defer func() {
+					<-sem
+					wg.Done()
+				}()
+
+				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+				var payload any
+				var qp map[string]any
+				var gh map[string]string
+				if hasFields(&ep) {
+					generated := safeGen.BuildObject(&ep.Schema)
+					isBody := !isNoBodyMethod(ep.Method)
+					if isBody {
+						payload = generated
+					} else {
+						qp = generated
 					}
-					headerObj := safeGen.BuildObject(headerSchema)
-					for k, v := range headerObj {
-						gh[k] = fmt.Sprintf("%v", v)
+					if len(ep.HeaderParams) > 0 {
+						gh = make(map[string]string)
+						headerSchema := &swagger.SchemaProperty{
+							Type:       "object",
+							Properties: ep.HeaderParams,
+						}
+						headerObj := safeGen.BuildObject(headerSchema)
+						for k, v := range headerObj {
+							gh[k] = fmt.Sprintf("%v", v)
+						}
 					}
 				}
-			}
-			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
-			result := r.executeRequest(
-				ctx,
-				r.config.BaseURL,
-				resolvedPath,
-				endpoint.Path,
-				endpoint.Method,
-				r.config.GlobalHeaders,
-				r.config.Cookies,
-				payload,
-				swagger.ProfileRandom,
-				qp,
-				gh,
-				endpoint.ContentType,
-			)
-			if r.config.Settings.Debug {
-				fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
-					endpoint.Method, endpoint.Path, result.Status, result.ResponseSize, result.Error)
-			}
-			if result.Status >= 200 && result.Status < 300 {
-				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
-			}
+				resolvedPath := fillPathParams(ep.Path, ep.PathParams, safeGen)
+				result := r.executeRequest(
+					ctx,
+					r.config.BaseURL,
+					resolvedPath,
+					ep.Path,
+					ep.Method,
+					r.config.GlobalHeaders,
+					r.config.Cookies,
+					payload,
+					swagger.ProfileRandom,
+					qp,
+					gh,
+					ep.ContentType,
+				)
+				if r.config.Settings.Debug {
+					fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
+						ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
+				}
+				if result.Status >= 200 && result.Status < 300 {
+					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
+				}
+			}(endpoint)
 		}
 	}
+	wg.Wait()
 
 	for profileIdx, profile := range profiles {
 		if r.stopped() {

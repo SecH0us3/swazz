@@ -187,9 +187,21 @@ export function ConfigSidebar({
                                 step="0.1"
                                 min={1}
                                 value={config.settings.response_size_anomaly_multiplier ?? ''}
-                                onChange={(e) => onUpdateConfig({
-                                    settings: { ...config.settings, response_size_anomaly_multiplier: e.target.value === '' ? undefined : parseFloat(e.target.value) } as any,
-                                })}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                        onUpdateConfig({
+                                            settings: { ...config.settings, response_size_anomaly_multiplier: undefined } as any,
+                                        });
+                                    } else {
+                                        const parsed = parseFloat(val);
+                                        if (!isNaN(parsed)) {
+                                            onUpdateConfig({
+                                                settings: { ...config.settings, response_size_anomaly_multiplier: parsed } as any,
+                                            });
+                                        }
+                                    }
+                                }}
                             />
                         </div>
                     )}
