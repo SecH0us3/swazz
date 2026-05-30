@@ -320,7 +320,16 @@ export default {
           ? baselineUsers.filter(u => u.name.includes(search) || u.email.includes(search))
           : baselineUsers;
 
-        return new Response(JSON.stringify(filtered), {
+        const responseObj = {
+          users: filtered,
+          status: "success",
+          count: filtered.length,
+          info: filtered.length > 0 
+            ? "Users fetched successfully from the local database partition." 
+            : "No users matched the search criteria. Please refine your query parameters or contact your system administrator."
+        };
+
+        return new Response(JSON.stringify(responseObj), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
