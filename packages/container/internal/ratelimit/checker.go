@@ -101,7 +101,8 @@ func Check(
 	}
 
 	var wg sync.WaitGroup
-	statusCodes := make([]int, burstSize)
+	statusCodes := make([]int, 1000)
+	statusCodes = statusCodes[:burstSize]
 	var retryAfterVal string
 	var retryAfterMu sync.Mutex
 
