@@ -251,6 +251,22 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **CORS analyzer** (part of Task 26's `crlf.go` or a new `cors.go`): After sending an `Origin: https://evil.com` header, check if `Access-Control-Allow-Origin` in the response matches `https://evil.com` or is `*` → Rule ID: `swazz/cors-misconfig`, Level: `warning`.
     - **Tests:** Table-driven tests in `headers_test.go` and `cors_test.go`. Use `httptest.Server` that reflects `Origin` to validate CORS detection.
 
+- [ ] **Task 34:** Expand Backend Stack Error Recognition and Document Grouped Errors.
+  - **Design Goal:** Improve detection and classification of server crashes, database errors, and stack traces across various backend stacks (Go, Python, Java/Spring, .NET, Node.js, PHP, Ruby) in both the Go analyzer and the Web Dashboard's "Grouped Errors" view.
+  - **Implementation Details:**
+    - **Go Analyzer updates:** Extend `packages/container/internal/analyzer/stacktrace.go` and `sqli.go` to match more framework-specific patterns (e.g. Django, Rails, Laravel, NestJS, FastAPI, Express, Spring Boot) and database errors (e.g. PostgreSQL, SQLite, MSSQL, MySQL, Oracle).
+    - **List of Grouped Error Categories:** Document the main classification rules that map findings to Grouped Errors in the Web UI:
+      - `swazz/reflected-xss` -> "Reflected XSS" (Error)
+      - `swazz/null-pointer-exception` -> "Null Reference Exception: [Language]" (Error)
+      - `swazz/sql-error-leak` -> "SQLi Error: [Database]" (Error)
+      - `swazz/stack-trace-leak` -> "Stack Trace Leak: [Language]" (Warning)
+      - `swazz/sensitive-data-leak` -> "Sensitive Data: [Category]" (Warning)
+      - `swazz/crlf-injection` -> "CRLF / Header Injection" (Error)
+      - `swazz/cors-misconfig` or `swazz/header-injection` -> "CORS Misconfiguration" (Warning)
+      - `swazz/response-size-anomaly` -> "Response Size Anomaly" (Warning)
+    - **Dashboard Sync:** Ensure the React frontend's `categorizeFinding` in [findings.ts](file:///Users/alex/src/swazz/packages/web/src/utils/findings.ts) and `extractErrorSubtype` in [errors.ts](file:///Users/alex/src/swazz/packages/web/src/utils/errors.ts) correctly recognize the extended language/framework formats sent by the backend.
+    - **Tests:** Add unit tests in `stacktrace_test.go` and `sqli_test.go` with sample responses from Rails, Django, Laravel, NestJS, and Spring Boot to verify correct language detection.
+
 ## 📦 Compatibility & Quality
 
 - [ ] **Task 30:** Add YAML OpenAPI spec support.
@@ -287,7 +303,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "Rate Limit Detection" toggle with burst size input. In the heatmap, rate limit findings should show as a distinct icon/color.
     - **Safety:** Include a warning in the UI that enabling this feature sends a burst of requests and may trigger real rate limiters or WAFs.
 
-- [ ] **Task 32:** Add missing unit tests for output formatters and expand test coverage.
+- [x] **Task 32:** Add missing unit tests for output formatters and expand test coverage.
   - **Design Goal:** Ensure output reliability. Currently, only [sarif_test.go](file:///Users/alex/src/swazz/packages/container/internal/output/sarif_test.go) (6.8KB) exists. The [html.go](file:///Users/alex/src/swazz/packages/container/internal/output/html.go) (318 lines with embedded CSS/JS) and [json.go](file:///Users/alex/src/swazz/packages/container/internal/output/json.go) (58 lines) have zero test coverage.
   - **Implementation Details:**
     - **`html_test.go`:** Create `packages/container/internal/output/html_test.go`:
