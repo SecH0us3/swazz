@@ -17,7 +17,7 @@
     "deploy:all": "concurrently \"npm run deploy:api\" \"npm run deploy:web\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.0",
     "jsdom": "^29.1.1",
     "wrangler": "^4.94.0"
   },
