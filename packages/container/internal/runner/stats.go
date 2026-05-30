@@ -122,6 +122,11 @@ func accumulateResult(stats *swagger.RunStats, result *swagger.FuzzResult) {
 		stats.EndpointCounts[epKey] = make(map[int]int64)
 	}
 	stats.EndpointCounts[epKey][status]++
+
+	stats.TotalResponseBytes += result.ResponseSize
+	if result.ResponseSize > stats.MaxResponseSize {
+		stats.MaxResponseSize = result.ResponseSize
+	}
 }
 
 func newEmptyStats() swagger.RunStats {

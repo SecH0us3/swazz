@@ -284,6 +284,8 @@ export function useDb() {
             startTime: timestamp,
             isRunning: false,
             progress: { completedEndpoints: 0, totalEndpoints: 0, currentEndpoint: '', currentProfile: '' },
+            totalResponseBytes: data.summary?.totalResponseBytes || 0,
+            maxResponseSize: data.summary?.maxResponseSize || 0,
         };
 
         let baseUrl = 'CLI Import';

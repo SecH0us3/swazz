@@ -165,7 +165,7 @@ export function ConfigSidebar({
                 </div>
 
                 {/* Analyze Response Body */}
-                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center' }}>
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <label className="premium-checkbox-label">
                         <input
                             type="checkbox"
@@ -177,6 +177,23 @@ export function ConfigSidebar({
                         />
                         <span>Analyze Response Body</span>
                     </label>
+
+                    {(config.settings.analyze_response_body ?? true) && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingLeft: 20 }}>
+                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Size Anomaly Multiplier</span>
+                            <input
+                                className="input"
+                                type="number"
+                                step="0.1"
+                                min={1}
+                                style={{ width: 64, flexShrink: 0, textAlign: 'center' }}
+                                value={config.settings.response_size_anomaly_multiplier ?? 5.0}
+                                onChange={(e) => onUpdateConfig({
+                                    settings: { ...config.settings, response_size_anomaly_multiplier: parseFloat(e.target.value) || 5.0 } as any,
+                                })}
+                            />
+                        </div>
+                    )}
                 </div>
             </Section>
 

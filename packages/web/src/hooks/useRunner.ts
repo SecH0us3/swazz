@@ -82,7 +82,7 @@ export interface ResultSummary {
     payloadPreview: string;
     responsePreview: string;
     error?: string;
-    responseSize?: number;
+    responseSize: number;
     responseHeaders?: Record<string, string[]>;
     requestHeaders?: Record<string, string>;
     hasHeaderInjection?: boolean;

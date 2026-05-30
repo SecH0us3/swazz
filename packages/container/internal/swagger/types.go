@@ -71,29 +71,29 @@ type AuthStep struct {
 
 // Settings controls the fuzzing run behavior.
 type Settings struct {
-	IterationsPerProfile  int              `json:"iterations_per_profile"`
-	Concurrency           int              `json:"concurrency"`
-	TimeoutMs             int              `json:"timeout_ms"`
-	MaxPayloadSizeBytes   int              `json:"max_payload_size_bytes"`
-	DelayBetweenRequestMs int              `json:"delay_between_requests_ms"`
-	Debug                 bool             `json:"debug,omitempty"`
-	Profiles              []FuzzingProfile `json:"profiles"`
-	// PayloadCategories controls which payload subcategories are active per profile.
-	// If nil or empty for a profile, all categories are enabled (backward compatible).
-	PayloadCategories map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
-	AnalyzeResponseBody bool                      `json:"analyze_response_body"`
+	IterationsPerProfile          int              `json:"iterations_per_profile"`
+	Concurrency                   int              `json:"concurrency"`
+	TimeoutMs                     int              `json:"timeout_ms"`
+	MaxPayloadSizeBytes           int              `json:"max_payload_size_bytes"`
+	DelayBetweenRequestMs         int              `json:"delay_between_requests_ms"`
+	Debug                         bool             `json:"debug,omitempty"`
+	Profiles                      []FuzzingProfile `json:"profiles"`
+	PayloadCategories             map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
+	AnalyzeResponseBody           bool                      `json:"analyze_response_body"`
+	ResponseSizeAnomalyMultiplier float64                   `json:"response_size_anomaly_multiplier"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
 func DefaultSettings() Settings {
 	return Settings{
-		IterationsPerProfile:  20,
-		Concurrency:           5,
-		TimeoutMs:             10000,
-		MaxPayloadSizeBytes:   134217728, // 128MB (to allow large boundary strings)
-		DelayBetweenRequestMs: 0,
-		Profiles:              []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
-		AnalyzeResponseBody:   true,
+		IterationsPerProfile:          20,
+		Concurrency:                   5,
+		TimeoutMs:                     10000,
+		MaxPayloadSizeBytes:           134217728, // 128MB (to allow large boundary strings)
+		DelayBetweenRequestMs:         0,
+		Profiles:                      []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
+		AnalyzeResponseBody:           true,
+		ResponseSizeAnomalyMultiplier: 5.0,
 	}
 }
 
@@ -152,16 +152,18 @@ type FuzzResultSSE struct {
 
 // RunStats tracks live statistics during a fuzzing run.
 type RunStats struct {
-	TotalRequests   int64                            `json:"totalRequests"`
-	TotalPlanned    int64                            `json:"totalPlanned"`
-	RequestsPerSec  float64                          `json:"requestsPerSecond"`
-	StatusCounts    map[int]int64                    `json:"statusCounts"`
-	StatusByProfile map[FuzzingProfile]map[int]int64 `json:"statusByProfile"`
-	ProfileCounts   map[FuzzingProfile]int64         `json:"profileCounts"`
-	EndpointCounts  map[string]map[int]int64         `json:"endpointCounts"`
-	StartTime       int64                            `json:"startTime"`
-	IsRunning       bool                             `json:"isRunning"`
-	Progress        Progress                         `json:"progress"`
+	TotalRequests      int64                            `json:"totalRequests"`
+	TotalPlanned       int64                            `json:"totalPlanned"`
+	RequestsPerSec     float64                          `json:"requestsPerSecond"`
+	StatusCounts       map[int]int64                    `json:"statusCounts"`
+	StatusByProfile    map[FuzzingProfile]map[int]int64 `json:"statusByProfile"`
+	ProfileCounts      map[FuzzingProfile]int64         `json:"profileCounts"`
+	EndpointCounts     map[string]map[int]int64         `json:"endpointCounts"`
+	StartTime          int64                            `json:"startTime"`
+	IsRunning          bool                             `json:"isRunning"`
+	Progress           Progress                         `json:"progress"`
+	TotalResponseBytes int64                            `json:"totalResponseBytes"`
+	MaxResponseSize    int64                            `json:"maxResponseSize"`
 }
 
 // Progress tracks endpoint-level completion.

@@ -14,6 +14,14 @@ function StatNumber({ value, decimals = 0 }: { value: number; decimals?: number 
     );
 }
 
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 function get2xx(stats: RunStats): number {
     return Object.entries(stats.statusCounts)
         .filter(([s]) => Number(s) >= 200 && Number(s) < 300)
@@ -76,6 +84,20 @@ export function StatsBar({ stats, isRunning, onExportHTML }: Props) {
                 <div className={`stat-card stat-5xx ${count5xx > 0 ? 'has-errors' : ''}`}>
                     <span className="stat-label">{count5xx > 0 ? '5xx CRASHES' : '5xx Errors'}</span>
                     <StatNumber value={count5xx} />
+                </div>
+                <div className="stat-divider" />
+
+                {/* Data Received */}
+                <div className="stat-card stat-data-received">
+                    <span className="stat-label">Data Received</span>
+                    <span className="stat-value">{formatBytes(stats.totalResponseBytes || 0)}</span>
+                </div>
+                <div className="stat-divider" />
+
+                {/* Max Response Size */}
+                <div className="stat-card stat-max-response">
+                    <span className="stat-label">Max Response</span>
+                    <span className="stat-value">{formatBytes(stats.maxResponseSize || 0)}</span>
                 </div>
 
                 <div className="stat-divider" />

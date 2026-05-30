@@ -17,6 +17,7 @@ const mockResults: ResultSummary[] = [
         retries: 0,
         payloadPreview: '',
         responsePreview: '',
+        responseSize: 0,
     },
     {
         id: '2',
@@ -31,6 +32,7 @@ const mockResults: ResultSummary[] = [
         retries: 0,
         payloadPreview: '{}',
         responsePreview: 'Unauthorized',
+        responseSize: 12,
     },
     {
         id: '3',
@@ -45,6 +47,7 @@ const mockResults: ResultSummary[] = [
         retries: 0,
         payloadPreview: '',
         responsePreview: 'Internal Server Error',
+        responseSize: 21,
     }
 ];
 

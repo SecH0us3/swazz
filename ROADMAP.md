@@ -166,7 +166,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
       - Rule IDs: `swazz/crlf-injection` (Level: `error`) for confirmed header injection, `swazz/header-injection` (Level: `warning`) for suspicious reflection.
     - **Tests:** Use `httptest.Server` that intentionally reflects CRLF sequences. Test with Go's `net/http` server which has built-in CRLF protections (to ensure false positive rate is low), and a raw TCP-based test server for true positive validation.
 
-- [ ] **Task 27:** Implement Response Size Anomaly Detection for data exfiltration indicators.
+- [x] **Task 27:** Implement Response Size Anomaly Detection for data exfiltration indicators.
   - **Design Goal:** Detect potential data leakage by flagging responses significantly larger than the endpoint's baseline response size. An SQL injection that triggers a full table dump, for example, will produce a response orders of magnitude larger than normal.
   - **Implementation Details:**
     - **FuzzResult extension:** Add `ResponseSize int64` to `FuzzResult` in [types.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/types.go) (L98-112). Populate from `resp.ContentLength` or actual bytes read in `executeRequest()` ([runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go)). For `FuzzResultSSE` (L117-131), add `ResponseSize int64` field — it's a small scalar, safe for SSE bandwidth.

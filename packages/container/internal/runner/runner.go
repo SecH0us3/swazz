@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,6 +74,7 @@ type Runner struct {
 	pauseCond *sync.Cond
 
 	analyzer *analyzer.AnalyzerRegistry
+	sizeBaselines sync.Map
 }
 
 // New creates a new Runner.
@@ -128,6 +130,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.statsDone = make(chan struct{})
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
+	r.sizeBaselines = sync.Map{}
 
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
@@ -407,6 +410,10 @@ func (r *Runner) fuzzEndpoint(
 				endpoint.ContentType,
 			)
 
+			if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
+				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
+			}
+
 			// Send result to aggregator (buffered, non-blocking under normal load).
 			r.statsChan <- statsMsg{
 				result:           result,
@@ -669,7 +676,15 @@ func (r *Runner) executeRequest(
 			Retries:         attempt,
 		}
 
-		if r.config.Settings.AnalyzeResponseBody && len(rawBodyBytes) > 0 {
+		if r.config.Settings.AnalyzeResponseBody {
+			var baselineSize int64
+			if profile == swagger.ProfileMalicious {
+				baselineSize = r.getSizeBaselineMedian(method, originalPath)
+			}
+			multiplier := r.config.Settings.ResponseSizeAnomalyMultiplier
+			if multiplier <= 0 {
+				multiplier = 5.0
+			}
 			input := &analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,
@@ -678,6 +693,9 @@ func (r *Runner) executeRequest(
 				Profile:         profile,
 				Endpoint:        originalPath,
 				Method:          method,
+				ResponseSize:    responseSize,
+				BaselineSize:    baselineSize,
+				SizeMultiplier:  multiplier,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
 		}
@@ -685,3 +703,51 @@ func (r *Runner) executeRequest(
 		return result
 	}
 }
+
+type EndpointSizeBaseline struct {
+	mu         sync.Mutex
+	sizes      []int64
+	medianSize int64
+}
+
+func (b *EndpointSizeBaseline) addSize(size int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sizes = append(b.sizes, size)
+
+	temp := make([]int64, len(b.sizes))
+	copy(temp, b.sizes)
+	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
+
+	n := len(temp)
+	if n == 0 {
+		b.medianSize = 0
+	} else if n%2 == 1 {
+		b.medianSize = temp[n/2]
+	} else {
+		b.medianSize = (temp[n/2-1] + temp[n/2]) / 2
+	}
+}
+
+func (b *EndpointSizeBaseline) getMedian() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.medianSize
+}
+
+func (r *Runner) recordSizeBaseline(method, path string, size int64) {
+	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+	val, _ := r.sizeBaselines.LoadOrStore(key, &EndpointSizeBaseline{})
+	baseline := val.(*EndpointSizeBaseline)
+	baseline.addSize(size)
+}
+
+func (r *Runner) getSizeBaselineMedian(method, path string) int64 {
+	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+	val, ok := r.sizeBaselines.Load(key)
+	if !ok {
+		return 0
+	}
+	return val.(*EndpointSizeBaseline).getMedian()
+}
+

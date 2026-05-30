@@ -51,6 +51,7 @@ export interface SwazzSettings {
     /** Controls which payload subcategories are active per profile. */
     payload_categories?: Record<FuzzingProfile, string[]>;
     analyze_response_body?: boolean;
+    response_size_anomaly_multiplier?: number;
 }
 
 export interface PayloadCategoryDef {
@@ -70,6 +71,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     delay_between_requests_ms: 0,
     profiles: ['RANDOM', 'BOUNDARY', 'MALICIOUS'],
     analyze_response_body: true,
+    response_size_anomaly_multiplier: 5.0,
 };
 
 // ─── Full Config ────────────────────────────────────────
@@ -119,6 +121,8 @@ export interface RunStats {
     endpointCounts: Record<string, Record<number, number>>;
     startTime: number;
     isRunning: boolean;
+    totalResponseBytes: number;
+    maxResponseSize: number;
     /** Progress tracking */
     progress: {
         completedEndpoints: number;
