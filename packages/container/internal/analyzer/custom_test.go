@@ -20,7 +20,7 @@ func TestCustomAnalyzer(t *testing.T) {
 		},
 	}
 
-	a := &CustomAnalyzer{}
+	a := NewCustomAnalyzer()
 
 	t.Run("Match custom pattern", func(t *testing.T) {
 		input := &AnalysisInput{
@@ -55,7 +55,7 @@ func TestCustomAnalyzer(t *testing.T) {
 }
 
 func TestDefaultCustomRules(t *testing.T) {
-	a := &CustomAnalyzer{}
+	a := NewCustomAnalyzer()
 
 	t.Run("Match LFI pattern", func(t *testing.T) {
 		input := &AnalysisInput{

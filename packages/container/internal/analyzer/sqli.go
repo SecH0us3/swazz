@@ -25,7 +25,7 @@ func init() {
 		{"SQLite", `(?i)(SQLITE_ERROR|near ".*": syntax error|sqlite3\.OperationalError)`},
 		{"MSSQL", `(?i)(Unclosed quotation mark|Microsoft OLE DB|ODBC SQL Server Driver|SQLServerException)`},
 		{"Oracle", `(?i)(ORA-\d{5}|quoted string not properly terminated)`},
-		{"Generic", `(?i)(SQLSTATE\[\w+\]|java\.sql\.SQLException|System\.Data\.SqlClient|sql: no rows in result set)`},
+		{"Generic", `(?i)(SQLSTATE\[\w+\]|java\.sql\.SQLException|System\.Data\.SqlClient)`},
 	}
 
 	for _, sig := range signatures {

@@ -42,23 +42,27 @@ type compiledCustomRule struct {
 	pattern *regexp.Regexp
 }
 
-func (a *CustomAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	if len(input.ResponseBody) == 0 {
-		return nil
-	}
-
-	// Compile on demand once
-	if len(a.compiled) == 0 && len(CustomRules) > 0 {
-		a.compiled = make([]compiledCustomRule, 0, len(CustomRules))
+// NewCustomAnalyzer compiles the active CustomRules list and returns an initialized CustomAnalyzer.
+func NewCustomAnalyzer() *CustomAnalyzer {
+	analyzer := &CustomAnalyzer{}
+	if len(CustomRules) > 0 {
+		analyzer.compiled = make([]compiledCustomRule, 0, len(CustomRules))
 		for _, r := range CustomRules {
 			re, err := regexp.Compile(r.Pattern)
 			if err == nil {
-				a.compiled = append(a.compiled, compiledCustomRule{
+				analyzer.compiled = append(analyzer.compiled, compiledCustomRule{
 					rule:    r,
 					pattern: re,
 				})
 			}
 		}
+	}
+	return analyzer
+}
+
+func (a *CustomAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if len(input.ResponseBody) == 0 {
+		return nil
 	}
 
 	var findings []swagger.AnalysisFinding

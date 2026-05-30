@@ -18,7 +18,7 @@ func NewRegistry() *AnalyzerRegistry {
 			NewCRLFAnalyzer(),
 			&CORSAnalyzer{},
 			&SizeAnalyzer{},
-			&CustomAnalyzer{},
+			NewCustomAnalyzer(),
 		},
 	}
 }
