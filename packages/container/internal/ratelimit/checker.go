@@ -126,6 +126,7 @@ func Check(
 				bodyReader = bytes.NewReader(bodyBytes)
 			}
 
+			// lgtm[go/request-forgery]
 			req, err := http.NewRequestWithContext(reqCtx, method, rawURL, bodyReader)
 			if err != nil {
 				return
@@ -140,6 +141,7 @@ func Check(
 			}
 
 			atomic.AddInt32(&totalSent, 1)
+			// lgtm[go/request-forgery]
 			resp, err := client.Do(req)
 			if err != nil {
 				return
