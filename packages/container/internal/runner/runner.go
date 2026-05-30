@@ -161,6 +161,61 @@ func (r *Runner) Start(ctx context.Context) error {
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
 
+	fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
+		len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
+	for _, endpoint := range r.config.Endpoints {
+		if r.stopped() {
+			break
+		}
+		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
+		if _, ok := r.sizeBaselines.Load(key); !ok {
+			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			var payload any
+			var qp map[string]any
+			var gh map[string]string
+			if hasFields(&endpoint) {
+				generated := safeGen.BuildObject(&endpoint.Schema)
+				isBody := !isNoBodyMethod(endpoint.Method)
+				if isBody {
+					payload = generated
+				} else {
+					qp = generated
+				}
+				if len(endpoint.HeaderParams) > 0 {
+					gh = make(map[string]string)
+					headerSchema := &swagger.SchemaProperty{
+						Type:       "object",
+						Properties: endpoint.HeaderParams,
+					}
+					headerObj := safeGen.BuildObject(headerSchema)
+					for k, v := range headerObj {
+						gh[k] = fmt.Sprintf("%v", v)
+					}
+				}
+			}
+			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
+			result := r.executeRequest(
+				ctx,
+				r.config.BaseURL,
+				resolvedPath,
+				endpoint.Path,
+				endpoint.Method,
+				r.config.GlobalHeaders,
+				r.config.Cookies,
+				payload,
+				swagger.ProfileRandom,
+				qp,
+				gh,
+				endpoint.ContentType,
+			)
+			fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
+				endpoint.Method, endpoint.Path, result.Status, result.ResponseSize, result.Error)
+			if result.Status >= 200 && result.Status < 300 {
+				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
+			}
+		}
+	}
+
 	for profileIdx, profile := range profiles {
 		if r.stopped() {
 			break
@@ -595,7 +650,6 @@ func (r *Runner) executeRequest(
 		start := time.Now()
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
-		reqCancel()
 
 		if err == nil && r.config.Settings.Debug {
 			dump, _ := httputil.DumpResponse(resp, false)
@@ -603,6 +657,7 @@ func (r *Runner) executeRequest(
 		}
 
 		if err != nil {
+			reqCancel()
 			errMsg := err.Error()
 			if ctx.Err() != nil {
 				errMsg = fmt.Sprintf("Request timed out after %dms", timeoutMs)
@@ -618,6 +673,7 @@ func (r *Runner) executeRequest(
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
 			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
+			reqCancel()
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			select {
@@ -653,10 +709,15 @@ func (r *Runner) executeRequest(
 		}
 		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
+		reqCancel()
 
 		responseSize := resp.ContentLength
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded
+		}
+		if originalPath == "/users" {
+			fmt.Printf("[DEBUG-USERS-RESPONSE] status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t\n",
+				resp.StatusCode, resp.ContentLength, len(rawBodyBytes), discarded, r.config.Settings.AnalyzeResponseBody)
 		}
 
 		result := &swagger.FuzzResult{
@@ -699,6 +760,13 @@ func (r *Runner) executeRequest(
 				SizeMultiplier:  multiplier,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
+			if len(result.AnalyzerFindings) > 0 {
+				fmt.Printf("[DEBUG-ANALYZER] Found findings for %s %s: %v\n", method, originalPath, result.AnalyzerFindings)
+			}
+			if profile == swagger.ProfileMalicious && originalPath == "/users" {
+				fmt.Printf("[DEBUG-USERS-ANOMALY] method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v\n",
+					method, baselineSize, responseSize, multiplier, len(result.AnalyzerFindings), result.Payload)
+			}
 		}
 
 		return result
