@@ -131,6 +131,26 @@ Comprehensive documentation, including installation guides, usage instructions, 
 
 ---
 
+## 🧩 Adding Custom Error Detectors
+
+New developers can easily add custom finding categories and error signature rules to the scanner. Custom detectors are defined as regex patterns in a single central registry in the backend engine:
+- Edit the [custom.go](file:///Users/alex/src/swazz/packages/container/internal/analyzer/custom.go) file.
+- Append a new `CustomRule` to the `CustomRules` slice in that file:
+  ```go
+  var CustomRules = []CustomRule{
+      {
+          RuleID:  "swazz/custom-token-leak",
+          Level:   "warning", // "error", "warning", "note"
+          Name:    "Custom Token Leak",
+          Pattern: `(?i)custom-api-token-[a-f0-9]{32}`,
+          Message: "A custom API token leak has been detected in the response body.",
+      },
+  }
+  ```
+The engine automatically runs these rules against all HTTP responses and routes findings to the dashboard and exported reports.
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

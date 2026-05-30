@@ -26,12 +26,13 @@ func init() {
 		language string
 		pattern  string
 	}{
-		{"Java", `(?m)(at\s+java\.|at\s+sun\.|at\s+org\.springframework\.|.+\.java:\d+\))`},
-		{"Python", `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+)`},
+		{"Java", `(?m)(at\s+java\.|at\s+sun\.|at\s+org\.springframework\.|.+\.java:\d+\)|org\.apache\.catalina|at\s+spring\.)`},
+		{"Python", `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+|django\.core\.|flask/app\.py)`},
 		{"Go", `(?m)(goroutine\s+\d+\s+\[|panic:|runtime\s+error:)`},
-		{"NodeJS", `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/)`},
+		{"NodeJS", `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/|@nestjs/core|express/lib/router)`},
 		{".NET", `(?m)(at\s+System\..+\sin\s.+:\w+\s\d+|System\.\w+Exception:|Server\s+Error\s+in\s+)`},
-		{"PHP", `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/)`},
+		{"PHP", `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/|Laravel\\Framework|Illuminate\\Routing)`},
+		{"Ruby", `(?m)(actionpack|active_record|action_controller|bin/rails|/gems/|at\s+.+\.rb:\d+)`},
 	}
 
 	for _, sig := range signatures {

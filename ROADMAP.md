@@ -251,7 +251,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **CORS analyzer** (part of Task 26's `crlf.go` or a new `cors.go`): After sending an `Origin: https://evil.com` header, check if `Access-Control-Allow-Origin` in the response matches `https://evil.com` or is `*` → Rule ID: `swazz/cors-misconfig`, Level: `warning`.
     - **Tests:** Table-driven tests in `headers_test.go` and `cors_test.go`. Use `httptest.Server` that reflects `Origin` to validate CORS detection.
 
-- [ ] **Task 34:** Expand Backend Stack Error Recognition and Document Grouped Errors.
+- [x] **Task 34:** Expand Backend Stack Error Recognition and Document Grouped Errors.
   - **Design Goal:** Improve detection and classification of server crashes, database errors, and stack traces across various backend stacks (Go, Python, Java/Spring, .NET, Node.js, PHP, Ruby) in both the Go analyzer and the Web Dashboard's "Grouped Errors" view.
   - **Implementation Details:**
     - **Go Analyzer updates:** Extend `packages/container/internal/analyzer/stacktrace.go` and `sqli.go` to match more framework-specific patterns (e.g. Django, Rails, Laravel, NestJS, FastAPI, Express, Spring Boot) and database errors (e.g. PostgreSQL, SQLite, MSSQL, MySQL, Oracle).
