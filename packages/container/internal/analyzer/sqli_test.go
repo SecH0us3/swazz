@@ -33,6 +33,24 @@ func TestSQLiAnalyzer(t *testing.T) {
 			contains:      "SQLITE_ERROR",
 		},
 		{
+			name:          "PostgreSQL npgsql syntax error match",
+			response:      "Npgsql.PostgresException (0x80004005): 42601: syntax error at or near \"UNION\"",
+			expectedCount: 1,
+			contains:      "Npgsql.Postgres",
+		},
+		{
+			name:          "PostgreSQL Ruby PG syntax error match",
+			response:      "PG::SyntaxError: ERROR: syntax error at or near \"UNION\"",
+			expectedCount: 1,
+			contains:      "PG::SyntaxError",
+		},
+		{
+			name:          "SQLite operational error match",
+			response:      "sqlite3.OperationalError: near \"UNION\": syntax error",
+			expectedCount: 1,
+			contains:      "sqlite3.OperationalError",
+		},
+		{
 			name:          "No match on regular response",
 			response:      `{"status":"ok","users":[{"id":1,"name":"Alice"}]}`,
 			expectedCount: 0,

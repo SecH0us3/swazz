@@ -20,12 +20,12 @@ func init() {
 		name    string
 		pattern string
 	}{
-		{"MySQL", `(?i)(You have an error in your SQL syntax|mysql_fetch|MySQLSyntaxErrorException)`},
-		{"PostgreSQL", `(?i)(ERROR:\s+syntax error at or near|pg_query|PSQLException)`},
-		{"SQLite", `(?i)(SQLITE_ERROR|near ".*": syntax error)`},
-		{"MSSQL", `(?i)(Unclosed quotation mark|Microsoft OLE DB|ODBC SQL Server Driver)`},
+		{"MySQL", `(?i)(You have an error in your SQL syntax|mysql_fetch|MySQLSyntaxErrorException|com\.mysql\.jdbc|mysql\.connector)`},
+		{"PostgreSQL", `(?i)(ERROR:\s+syntax error at or near|pg_query|PSQLException|PG::SyntaxError|npgsql\.postgres)`},
+		{"SQLite", `(?i)(SQLITE_ERROR|near ".*": syntax error|sqlite3\.OperationalError)`},
+		{"MSSQL", `(?i)(Unclosed quotation mark|Microsoft OLE DB|ODBC SQL Server Driver|SQLServerException)`},
 		{"Oracle", `(?i)(ORA-\d{5}|quoted string not properly terminated)`},
-		{"Generic", `(?i)(SQLSTATE\[\w+\]|java\.sql\.SQLException|System\.Data\.SqlClient)`},
+		{"Generic", `(?i)(SQLSTATE\[\w+\]|java\.sql\.SQLException|System\.Data\.SqlClient|sql: no rows in result set)`},
 	}
 
 	for _, sig := range signatures {
