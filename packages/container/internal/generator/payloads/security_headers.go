@@ -41,4 +41,10 @@ var SecurityHeaderPayloads = []SecurityHeaderDef{
 		"X-Original-URL":  IPSpoofing,
 	}},
 	{Category: CatJWTManipulation, Headers: map[string][]string{"Authorization": JWTManipulation}},
+	{Category: CatOOBInteraction, Headers: map[string][]string{
+		"Referer":         {"{{OOB_URL}}"},
+		"X-Forwarded-For": {"{{OOB_URL}}"},
+		"Contact":         {"<{{OOB_URL}}>"},
+		"X-Wap-Profile":   {"{{OOB_URL}}"},
+	}},
 }

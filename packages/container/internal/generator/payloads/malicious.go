@@ -68,6 +68,15 @@ var maliciousPathTraversal = []string{
 	"file:///etc/passwd",
 }
 
+// ─── OOB Interaction Payloads ───────────────────────────
+
+var maliciousOOB = []string{
+	"{{OOB_URL}}",
+	"curl {{OOB_URL}}",
+	"wget {{OOB_URL}}",
+	"<script src=\"{{OOB_URL}}\"></script>",
+}
+
 // ─── Type confusion values ──────────────────────────────
 
 var MaliciousTypeConfusion = []any{

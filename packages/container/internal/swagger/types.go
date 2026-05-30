@@ -81,6 +81,7 @@ type Settings struct {
 	PayloadCategories             map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
 	AnalyzeResponseBody           bool                      `json:"analyze_response_body"`
 	ResponseSizeAnomalyMultiplier float64                   `json:"response_size_anomaly_multiplier"`
+	OOBServerURL                  string                    `json:"oob_server_url,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -102,6 +103,15 @@ type AnalysisFinding struct {
 	Level    string `json:"level"` // "error", "warning", "note"
 	Message  string `json:"message"`
 	Evidence string `json:"evidence,omitempty"`
+}
+
+type RequestLog struct {
+	Method       string            `json:"method"`
+	URL          string            `json:"url"`
+	Headers      map[string]string `json:"headers"`
+	Body         string            `json:"body"`
+	OriginalPath string            `json:"originalPath"`
+	ResolvedPath string            `json:"resolvedPath"`
 }
 
 // FuzzResult represents the outcome of a single fuzz request.

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -22,11 +23,14 @@ import (
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 
 	"github.com/google/uuid"
 )
+
+var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
 
 const (
 	maxRetriesOn429  = 3
@@ -133,6 +137,9 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.latestStats.Store(&empty)
 	r.sizeBaselines = &sync.Map{}
 
+	// Clear the global OOB store to prevent memory leaks from stale UUIDs of previous runs
+	oob.GlobalStore.Clear()
+
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	r.lifecycleMu.Unlock()
@@ -192,6 +199,7 @@ func (r *Runner) Start(ctx context.Context) error {
 				}()
 
 				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+				safeGen.Endpoint = ep.Method + " " + ep.Path
 				var payload any
 				var qp map[string]any
 				var gh map[string]string
@@ -256,6 +264,9 @@ func (r *Runner) Start(ctx context.Context) error {
 
 			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			endpointStr := endpoint.Method + " " + endpoint.Path
+			gen.Endpoint = endpointStr
+			safeGen.Endpoint = endpointStr
 
 			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
 		}
@@ -679,6 +690,34 @@ func (r *Runner) executeRequest(
 		if r.config.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
 			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(dump))
+		}
+
+		// Look for OOB payloads to register the actual request details
+		if profile == swagger.ProfileMalicious {
+			if dump, err := httputil.DumpRequestOut(req, true); err == nil {
+				reqStr := string(dump)
+				matches := uuidRegex.FindAllString(reqStr, -1)
+				if len(matches) > 0 {
+					reqLog := &swagger.RequestLog{
+						Method:       method,
+						URL:          rawURL,
+						Headers:      mergedHeaders,
+						OriginalPath: originalPath,
+						ResolvedPath: req.URL.RequestURI(),
+					}
+					var body string
+					if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
+						body = parts[1]
+					} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
+						body = parts[1]
+					}
+					reqLog.Body = body
+
+					for _, uuidMatch := range matches {
+						oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
+					}
+				}
+			}
 		}
 
 		start := time.Now()

@@ -5,7 +5,7 @@ export default {
     const method = request.method;
 
     // Helper to simulate various vulnerability errors based on inputs
-    const checkAllVulnerabilities = (input: any) => {
+    const checkAllVulnerabilities = async (input: any) => {
       if (input === undefined || input === null) return;
 
       const strValue = typeof input === "object" ? JSON.stringify(input) : String(input);
@@ -49,6 +49,20 @@ export default {
       // 6. Type confusion (sending empty objects/arrays where a string is expected)
       if (typeof input === "object") {
         throw new Error("NullPointerException: Cannot cast complex object to primitive string");
+      }
+
+      // 7. SSRF / Command Injection simulating an OOB callback
+      const oobRegex = /(http:\/\/[^\s"'<>]+api\/oob\/[a-zA-Z0-9-]+)/i;
+      const match = strValue.match(oobRegex);
+      if (match) {
+        console.log("[DEMO API] DETECTED OOB URL:", match[1]);
+        try {
+          const res = await fetch(match[1]);
+          console.log("[DEMO API] OOB fetch SUCCESS, status:", res.status);
+        } catch(err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.log("[DEMO API] OOB fetch FAILED:", errMsg);
+        }
       }
     };
 
@@ -294,7 +308,7 @@ export default {
         ];
 
         if (search) {
-          checkAllVulnerabilities(search);
+          await checkAllVulnerabilities(search);
         }
 
         // Simulate database leakage on SQL Injection payloads
@@ -343,8 +357,8 @@ export default {
           return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
         }
         
-        checkAllVulnerabilities(body.username);
-        checkAllVulnerabilities(body.password);
+        await checkAllVulnerabilities(body.username);
+        await checkAllVulnerabilities(body.password);
 
         if (body.username === "admin" && body.password === "secret") {
           return new Response(JSON.stringify({ token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" }), {

@@ -30,6 +30,7 @@ const (
 	CatCORSMisconfig          = "malicious_cors_misconfig"
 	CatIPSpoofing             = "malicious_ip_spoofing"
 	CatJWTManipulation        = "malicious_jwt_manipulation"
+	CatOOBInteraction         = "malicious_oob_interaction"
 )
 
 // Random category IDs (single bucket for all random generators)
@@ -47,6 +48,7 @@ var (
 	MaliciousXSS           = toAny(maliciousXSS)
 	MaliciousPathTraversal = toAny(maliciousPathTraversal)
 	MaliciousEncoding      = toAny(maliciousEncoding)
+	MaliciousOOB           = toAny(maliciousOOB)
 )
 
 func toAny[T any](in []T) []any {
@@ -92,6 +94,7 @@ var MaliciousCategories = []Category{
 	{ID: CatCORSMisconfig, Label: "CORS Misconfiguration", Description: "Origin header fuzzing for CORS bypass detection", Items: toAny(CORSOrigins)},
 	{ID: CatIPSpoofing, Label: "IP Spoofing", Description: "X-Forwarded-For, X-Real-IP injection for access control bypass", Items: toAny(IPSpoofing)},
 	{ID: CatJWTManipulation, Label: "JWT Manipulation", Description: "Authorization header fuzzing: alg:none, invalid tokens", Items: toAny(JWTManipulation)},
+	{ID: CatOOBInteraction, Label: "OOB Interaction", Description: "Injects unique URLs to detect blind SSRF, XSS, and command injection", Items: MaliciousOOB},
 }
 
 // RandomCategories lists all random categories.

@@ -58,10 +58,19 @@ function joinUrl(base?: string, path?: string): string {
 
 function formatValue(val: any): string {
     if (val === undefined || val === null) return '';
-    if (typeof val === 'string') {
+    let valToFormat = val;
+    if (typeof valToFormat === 'string') {
+        const trimmed = valToFormat.trim();
+        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+            try {
+                valToFormat = JSON.parse(trimmed);
+            } catch { /* ignore */ }
+        }
+    }
+
+    if (typeof valToFormat === 'string') {
         try {
-            // Check if it looks like JSON before trying to parse
-            const trimmed = val.trim();
+            const trimmed = valToFormat.trim();
             if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
                 const parsed = JSON.parse(trimmed);
                 return JSON.stringify(parsed, null, 2);
@@ -69,9 +78,48 @@ function formatValue(val: any): string {
         } catch {
             // Not valid JSON or failed to parse
         }
-        return val;
+        return valToFormat;
     }
-    return JSON.stringify(val, null, 2);
+    return JSON.stringify(valToFormat, null, 2);
+}
+
+function highlightOobPayload(text: string, uuid?: string): ReactNode {
+    if (!uuid || !text || !text.includes(uuid)) {
+        return text;
+    }
+    try {
+        const escapedUuid = uuid.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(`(https?:\\/\\/[^\\s"'<>]*?${escapedUuid}|https?%3A%2F%2F[^\\s"'<>]*?${escapedUuid})`, 'i');
+        const parts = text.split(regex);
+        if (parts.length <= 1) {
+            const uuidRegex = new RegExp(`(${escapedUuid})`, 'i');
+            const subparts = text.split(uuidRegex);
+            return (
+                <>
+                    {subparts.map((part, i) => 
+                        part.toLowerCase() === uuid.toLowerCase() ? (
+                            <span key={i} className="diff-mutated-malicious font-bold oob-badge-inline">
+                                {part}
+                            </span>
+                        ) : part
+                    )}
+                </>
+            );
+        }
+        return (
+            <>
+                {parts.map((part, i) => 
+                    regex.test(part) ? (
+                        <span key={i} className="diff-mutated-malicious font-bold oob-badge-dashed">
+                            {part}
+                        </span>
+                    ) : part
+                )}
+            </>
+        );
+    } catch {
+        return text;
+    }
 }
 
 export function RequestDetail({
@@ -131,7 +179,7 @@ export function RequestDetail({
                         {Object.entries(result.requestHeaders).map(([key, val]) => (
                             <div key={key} className="detail-header-row">
                                 <span className="detail-header-name">{key}:</span>
-                                <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{val}</span>
+                                <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{highlightOobPayload(val, result.id)}</span>
                             </div>
                         ))}
                     </div>
@@ -160,23 +208,33 @@ export function RequestDetail({
     let isJson = false;
 
     if (result.payload !== undefined && result.payload !== null) {
-        if (typeof result.payload === 'string') {
-            const trimmed = result.payload.trim();
+        let payloadToParse = result.payload;
+        if (typeof payloadToParse === 'string') {
+            const trimmed = payloadToParse.trim();
+            if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+                try {
+                    payloadToParse = JSON.parse(trimmed);
+                } catch { /* ignore */ }
+            }
+        }
+
+        if (typeof payloadToParse === 'string') {
+            const trimmed = payloadToParse.trim();
             if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
                 try {
                     parsedFuzzedBody = JSON.parse(trimmed);
                     isJson = true;
                 } catch {
-                    parsedFuzzedBody = result.payload;
+                    parsedFuzzedBody = payloadToParse;
                 }
             } else {
-                parsedFuzzedBody = result.payload;
+                parsedFuzzedBody = payloadToParse;
             }
-        } else if (typeof result.payload === 'object') {
-            parsedFuzzedBody = result.payload;
+        } else if (typeof payloadToParse === 'object') {
+            parsedFuzzedBody = payloadToParse;
             isJson = true;
         } else {
-            parsedFuzzedBody = result.payload;
+            parsedFuzzedBody = payloadToParse;
         }
     }
 
@@ -386,7 +444,7 @@ export function RequestDetail({
                                 <div>
                                     <div className="detail-section-title">Request URL</div>
                                     <div className="detail-url-display">
-                                        {result.resolvedPath || result.endpoint}
+                                        {highlightOobPayload(result.resolvedPath || result.endpoint, result.id)}
                                     </div>
                                 </div>
 
@@ -419,11 +477,15 @@ export function RequestDetail({
                                                         <div className="detail-json-wrapper detail-diff-json-wrapper">
                                                             <pre className="detail-json detail-diff-json-pre">
                                                                 {isJson ? (
-                                                                    renderJsonDiff(parsedFuzzedBody, parsedTemplateBody, result.profile === 'MALICIOUS')
+                                                                    renderJsonDiff(parsedFuzzedBody, parsedTemplateBody, result.profile === 'MALICIOUS', 0, result.id)
                                                                 ) : (
-                                                                    <span className={result.profile === 'MALICIOUS' ? 'diff-mutated-malicious' : 'diff-mutated-boundary'}>
-                                                                        {String(result.payload)}
-                                                                    </span>
+                                                                    result.id && String(result.payload).includes(result.id) ? (
+                                                                        highlightOobPayload(String(result.payload), result.id)
+                                                                    ) : (
+                                                                        <span className={result.profile === 'MALICIOUS' ? 'diff-mutated-malicious' : 'diff-mutated-boundary'}>
+                                                                            {String(result.payload)}
+                                                                        </span>
+                                                                    )
                                                                 )}
                                                             </pre>
                                                         </div>
@@ -434,7 +496,7 @@ export function RequestDetail({
                                                     <div className="detail-query-diff-section">
                                                         <div className="detail-json-wrapper detail-diff-json-wrapper">
                                                             <pre className="detail-json detail-diff-json-pre">
-                                                                {renderJsonDiff(fuzzedQueryParams, templateQueryParams, result.profile === 'MALICIOUS')}
+                                                                {renderJsonDiff(fuzzedQueryParams, templateQueryParams, result.profile === 'MALICIOUS', 0, result.id)}
                                                             </pre>
                                                         </div>
                                                     </div>
@@ -446,7 +508,7 @@ export function RequestDetail({
                                                             {Object.entries(result.requestHeaders).map(([key, val]) => (
                                                                 <div key={key} className="detail-header-row">
                                                                     <span className="detail-header-name">{key}:</span>
-                                                                    <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{val}</span>
+                                                                    <span className="detail-header-value" style={{ wordBreak: 'break-all' }}>{highlightOobPayload(val, result.id)}</span>
                                                                 </div>
                                                             ))}
                                                         </div>

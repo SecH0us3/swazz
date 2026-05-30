@@ -349,6 +349,7 @@ func runServer() {
 		apiGroup.POST("/proxy", handler.Proxy)
 		apiGroup.GET("/report", handler.GetReport)
 		apiGroup.GET("/payload-catalog", handler.GetPayloadCatalog)
+		apiGroup.Any("/oob/:uuid", handler.HandleOOB)
 	}
 
 	port := os.Getenv("PORT")
