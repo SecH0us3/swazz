@@ -35,6 +35,9 @@ func Check(
 	if burstSize <= 0 {
 		burstSize = 50
 	}
+	if burstSize > 1000 {
+		burstSize = 1000
+	}
 	if timeoutMs <= 0 {
 		timeoutMs = 10000
 	}
