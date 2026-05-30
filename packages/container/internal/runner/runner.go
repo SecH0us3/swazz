@@ -135,6 +135,9 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.latestStats.Store(&empty)
 	r.sizeBaselines = &sync.Map{}
 
+	// Clear the global OOB store to prevent memory leaks from stale UUIDs of previous runs
+	oob.GlobalStore.Clear()
+
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	r.lifecycleMu.Unlock()
@@ -194,6 +197,7 @@ func (r *Runner) Start(ctx context.Context) error {
 				}()
 
 				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+				safeGen.Endpoint = ep.Method + " " + ep.Path
 				var payload any
 				var qp map[string]any
 				var gh map[string]string
@@ -258,6 +262,9 @@ func (r *Runner) Start(ctx context.Context) error {
 
 			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			endpointStr := endpoint.Method + " " + endpoint.Path
+			gen.Endpoint = endpointStr
+			safeGen.Endpoint = endpointStr
 
 			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
 		}

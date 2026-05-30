@@ -42,9 +42,9 @@ var SecurityHeaderPayloads = []SecurityHeaderDef{
 	}},
 	{Category: CatJWTManipulation, Headers: map[string][]string{"Authorization": JWTManipulation}},
 	{Category: CatOOBInteraction, Headers: map[string][]string{
-		"Referer":         {"http://{{OOB_URL}}"},
+		"Referer":         {"{{OOB_URL}}"},
 		"X-Forwarded-For": {"{{OOB_URL}}"},
-		"Contact":         {"<http://{{OOB_URL}}>"},
-		"X-Wap-Profile":   {"http://{{OOB_URL}}"},
+		"Contact":         {"<{{OOB_URL}}>"},
+		"X-Wap-Profile":   {"{{OOB_URL}}"},
 	}},
 }

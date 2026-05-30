@@ -47,5 +47,11 @@ func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {
 	return ctx, ok
 }
 
+func (s *Store) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m = make(map[string]*OOBContext)
+}
+
 // GlobalStore is a singleton for tracking OOB interactions across the application
 var GlobalStore = NewStore()

