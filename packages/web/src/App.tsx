@@ -122,7 +122,7 @@ export default function App() {
                         updateConfig({ base_url: trimmed });
                     }
                 }}
-                onStart={() => handleStart()}
+                onStart={(cleanUrl) => handleStart(undefined, cleanUrl)}
                 onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
                 onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
                 onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}

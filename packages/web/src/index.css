@@ -934,6 +934,17 @@ body.resizing .sidebar-resizer {
   animation: pulse-error 2s infinite;
 }
 
+.stat-card.stat-data-received,
+.stat-card.stat-max-response {
+  border-top-color: rgba(255,255,255,0.12);
+}
+
+.stat-card.stat-data-received .stat-value,
+.stat-card.stat-max-response .stat-value {
+  font-size: var(--font-size-xl);
+  white-space: nowrap;
+}
+
 .stat-value.pop {
   animation: count-pop 280ms var(--ease-spring);
 }
@@ -2882,6 +2893,27 @@ button:focus-visible {
   border-left: 1.5px solid #ffffff;
   border-bottom: 1.5px solid #ffffff;
   transform: rotate(-45deg) translate(0.5px, -1px);
+}
+
+.sidebar-sub-setting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: 20px;
+}
+
+.sidebar-sub-setting-input {
+  width: 64px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.sidebar-analyze-body-container {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* ─── Grouped Findings UI ────────────────────────────────── */

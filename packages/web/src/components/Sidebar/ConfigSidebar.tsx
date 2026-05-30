@@ -165,7 +165,7 @@ export function ConfigSidebar({
                 </div>
 
                 {/* Analyze Response Body */}
-                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center' }}>
+                <div className="sidebar-analyze-body-container">
                     <label className="premium-checkbox-label">
                         <input
                             type="checkbox"
@@ -177,6 +177,34 @@ export function ConfigSidebar({
                         />
                         <span>Analyze Response Body</span>
                     </label>
+
+                    {(config.settings.analyze_response_body ?? true) && (
+                        <div className="sidebar-sub-setting">
+                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Size Anomaly Multiplier</span>
+                            <input
+                                className="input sidebar-sub-setting-input"
+                                type="number"
+                                step="0.1"
+                                min={1}
+                                value={config.settings.response_size_anomaly_multiplier ?? ''}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                        onUpdateConfig({
+                                            settings: { ...config.settings, response_size_anomaly_multiplier: undefined } as any,
+                                        });
+                                    } else {
+                                        const parsed = parseFloat(val);
+                                        if (!isNaN(parsed)) {
+                                            onUpdateConfig({
+                                                settings: { ...config.settings, response_size_anomaly_multiplier: parsed } as any,
+                                            });
+                                        }
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
                 </div>
             </Section>
 

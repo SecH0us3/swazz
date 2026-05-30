@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,6 +74,7 @@ type Runner struct {
 	pauseCond *sync.Cond
 
 	analyzer *analyzer.AnalyzerRegistry
+	sizeBaselines *sync.Map
 }
 
 // New creates a new Runner.
@@ -91,7 +93,8 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		doneCh:     make(chan struct{}),
 		statsChan:  make(chan statsMsg, 4096),
 		statsDone:  make(chan struct{}),
-		analyzer:   analyzer.NewRegistry(),
+		analyzer:      analyzer.NewRegistry(),
+		sizeBaselines: &sync.Map{},
 	}
 	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
@@ -128,6 +131,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.statsDone = make(chan struct{})
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
+	r.sizeBaselines = &sync.Map{}
 
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
@@ -156,6 +160,87 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
+
+	if r.config.Settings.Debug {
+		fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
+			len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
+	}
+
+	concurrency := r.config.Settings.Concurrency
+	if concurrency <= 0 {
+		concurrency = 5
+	}
+	if concurrency > 1000 {
+		return fmt.Errorf("concurrency limit exceeded (max 1000)")
+	}
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for _, endpoint := range r.config.Endpoints {
+		if r.stopped() {
+			break
+		}
+		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
+		if _, ok := r.sizeBaselines.Load(key); !ok {
+			sem <- struct{}{}
+			wg.Add(1)
+
+			go func(ep swagger.EndpointConfig) {
+				defer func() {
+					<-sem
+					wg.Done()
+				}()
+
+				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+				var payload any
+				var qp map[string]any
+				var gh map[string]string
+				if hasFields(&ep) {
+					generated := safeGen.BuildObject(&ep.Schema)
+					isBody := !isNoBodyMethod(ep.Method)
+					if isBody {
+						payload = generated
+					} else {
+						qp = generated
+					}
+					if len(ep.HeaderParams) > 0 {
+						gh = make(map[string]string)
+						headerSchema := &swagger.SchemaProperty{
+							Type:       "object",
+							Properties: ep.HeaderParams,
+						}
+						headerObj := safeGen.BuildObject(headerSchema)
+						for k, v := range headerObj {
+							gh[k] = fmt.Sprintf("%v", v)
+						}
+					}
+				}
+				resolvedPath := fillPathParams(ep.Path, ep.PathParams, safeGen)
+				result := r.executeRequest(
+					ctx,
+					r.config.BaseURL,
+					resolvedPath,
+					ep.Path,
+					ep.Method,
+					r.config.GlobalHeaders,
+					r.config.Cookies,
+					payload,
+					swagger.ProfileRandom,
+					qp,
+					gh,
+					ep.ContentType,
+				)
+				if r.config.Settings.Debug {
+					fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
+						ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
+				}
+				if result.Status >= 200 && result.Status < 300 {
+					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
+				}
+			}(endpoint)
+		}
+	}
+	wg.Wait()
 
 	for profileIdx, profile := range profiles {
 		if r.stopped() {
@@ -264,7 +349,15 @@ func (r *Runner) fuzzEndpoint(
 	}
 
 	isBodyMethod := !isNoBodyMethod(endpoint.Method)
-	sem := make(chan struct{}, settings.Concurrency)
+	concurrency := settings.Concurrency
+	if concurrency <= 0 {
+		concurrency = 5
+	}
+	if concurrency > 1000 {
+		return
+	}
+	sem := make(chan struct{}, concurrency)
+
 	enableDedup := profile == swagger.ProfileRandom
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
@@ -406,6 +499,10 @@ func (r *Runner) fuzzEndpoint(
 				gh,
 				endpoint.ContentType,
 			)
+
+			if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
+				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
+			}
 
 			// Send result to aggregator (buffered, non-blocking under normal load).
 			r.statsChan <- statsMsg{
@@ -587,7 +684,6 @@ func (r *Runner) executeRequest(
 		start := time.Now()
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
-		reqCancel()
 
 		if err == nil && r.config.Settings.Debug {
 			dump, _ := httputil.DumpResponse(resp, false)
@@ -595,6 +691,7 @@ func (r *Runner) executeRequest(
 		}
 
 		if err != nil {
+			reqCancel()
 			errMsg := err.Error()
 			if ctx.Err() != nil {
 				errMsg = fmt.Sprintf("Request timed out after %dms", timeoutMs)
@@ -610,6 +707,7 @@ func (r *Runner) executeRequest(
 		// Handle 429 with backoff
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
 			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
+			reqCancel()
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			select {
@@ -645,10 +743,15 @@ func (r *Runner) executeRequest(
 		}
 		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
+		reqCancel()
 
 		responseSize := resp.ContentLength
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded
+		}
+		if r.config.Settings.Debug && originalPath == "/users" {
+			fmt.Printf("[DEBUG-USERS-RESPONSE] status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t\n",
+				resp.StatusCode, resp.ContentLength, len(rawBodyBytes), discarded, r.config.Settings.AnalyzeResponseBody)
 		}
 
 		result := &swagger.FuzzResult{
@@ -669,7 +772,15 @@ func (r *Runner) executeRequest(
 			Retries:         attempt,
 		}
 
-		if r.config.Settings.AnalyzeResponseBody && len(rawBodyBytes) > 0 {
+		if r.config.Settings.AnalyzeResponseBody {
+			var baselineSize int64
+			if profile == swagger.ProfileMalicious {
+				baselineSize = r.getSizeBaselineMedian(method, originalPath)
+			}
+			multiplier := r.config.Settings.ResponseSizeAnomalyMultiplier
+			if multiplier <= 0 {
+				multiplier = 5.0
+			}
 			input := &analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,
@@ -678,10 +789,80 @@ func (r *Runner) executeRequest(
 				Profile:         profile,
 				Endpoint:        originalPath,
 				Method:          method,
+				ResponseSize:    responseSize,
+				BaselineSize:    baselineSize,
+				SizeMultiplier:  multiplier,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
+			if r.config.Settings.Debug && len(result.AnalyzerFindings) > 0 {
+				fmt.Printf("[DEBUG-ANALYZER] Found findings for %s %s: %v\n", method, originalPath, result.AnalyzerFindings)
+			}
+			if r.config.Settings.Debug && profile == swagger.ProfileMalicious && originalPath == "/users" {
+				fmt.Printf("[DEBUG-USERS-ANOMALY] method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v\n",
+					method, baselineSize, responseSize, multiplier, len(result.AnalyzerFindings), result.Payload)
+			}
 		}
 
 		return result
 	}
 }
+
+type EndpointSizeBaseline struct {
+	mu         sync.Mutex
+	sizes      []int64
+	medianSize int64
+	calculated bool
+}
+
+func (b *EndpointSizeBaseline) addSize(size int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sizes = append(b.sizes, size)
+	b.calculated = false
+}
+
+func (b *EndpointSizeBaseline) getMedian() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.calculated {
+		return b.medianSize
+	}
+	n := len(b.sizes)
+	if n == 0 {
+		b.medianSize = 0
+		b.calculated = true
+		return 0
+	}
+
+	temp := make([]int64, n)
+	copy(temp, b.sizes)
+	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
+
+	if n%2 == 1 {
+		b.medianSize = temp[n/2]
+	} else {
+		b.medianSize = (temp[n/2-1] + temp[n/2]) / 2
+	}
+	b.calculated = true
+	return b.medianSize
+}
+
+func (r *Runner) recordSizeBaseline(method, path string, size int64) {
+	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+	val, ok := r.sizeBaselines.Load(key)
+	if !ok {
+		val, _ = r.sizeBaselines.LoadOrStore(key, &EndpointSizeBaseline{})
+	}
+	baseline := val.(*EndpointSizeBaseline)
+	baseline.addSize(size)
+}
+
+func (r *Runner) getSizeBaselineMedian(method, path string) int64 {
+	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+	val, ok := r.sizeBaselines.Load(key)
+	if !ok {
+		return 0
+	}
+	return val.(*EndpointSizeBaseline).getMedian()
+}
+

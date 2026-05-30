@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 interface Props {
     baseUrl: string;
     onChangeBaseUrl?: (url: string) => void;
-    onStart: () => void;
+    onStart: (cleanUrl?: string) => void;
     onStop: () => void;
     onPause: () => void;
     onResume: () => void;
@@ -48,21 +48,34 @@ export function Header({
             setLocalUrl('');
             return;
         }
-        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
-            cleanUrl = `https://${cleanUrl}`;
-        }
         
         try {
             const u = new URL(cleanUrl);
             cleanUrl = u.origin;
         } catch {
-            // partial url
+            // Not a full URL, leave as is
         }
 
         setLocalUrl(cleanUrl);
         if (onChangeBaseUrl && cleanUrl !== baseUrl) {
             onChangeBaseUrl(cleanUrl);
         }
+    };
+
+    const handleStartClick = () => {
+        let cleanUrl = localUrl.trim();
+        if (cleanUrl) {
+            try {
+                const u = new URL(cleanUrl);
+                cleanUrl = u.origin;
+            } catch {
+                // Not a full URL, leave as is
+            }
+        }
+        if (onChangeBaseUrl) {
+            onChangeBaseUrl(cleanUrl);
+        }
+        onStart(cleanUrl);
     };
 
     return (
@@ -129,7 +142,7 @@ export function Header({
                     {/* Actions */}
                     <div className="header-actions">
                         {!isBusy ? (
-                            <button className="btn btn-primary" id="btn-start" onClick={onStart}>
+                            <button className="btn btn-primary" id="btn-start" onClick={handleStartClick}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                                     <polygon points="5,3 19,12 5,21"/>
                                 </svg>

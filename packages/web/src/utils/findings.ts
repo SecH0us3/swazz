@@ -61,6 +61,10 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-warning)';
         title = 'CORS Misconfiguration';
         key = 'cors_misconfig';
+    } else if (f.ruleId === 'swazz/response-size-anomaly') {
+        color = 'var(--color-warning)';
+        title = 'Response Size Anomaly';
+        key = 'response_size_anomaly';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

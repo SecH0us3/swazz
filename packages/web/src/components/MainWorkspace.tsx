@@ -181,6 +181,17 @@ export function MainWorkspace({
                                 )}
                             </button>
                         )}
+                        <button
+                            className="tab-bar-btn"
+                            style={{ color: 'var(--accent-light)' }}
+                            onClick={handleExportHTML}
+                            title="Generate and download a visual HTML report"
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            HTML Report
+                        </button>
                     </div>
 
                     {activeTab === 'heatmap' && (
@@ -193,7 +204,6 @@ export function MainWorkspace({
                                 if (filter) useAppStore.setState({ activeTab: 'logs' });
                             }}
                             isRunning={isRunning}
-                            onExportHTML={handleExportHTML}
                         />
                     )}
                     {activeTab === 'logs' && (

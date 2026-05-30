@@ -14,6 +14,9 @@ type AnalysisInput struct {
 	Profile         swagger.FuzzingProfile
 	Endpoint        string
 	Method          string
+	ResponseSize    int64
+	BaselineSize    int64
+	SizeMultiplier  float64
 }
 
 // ResponseAnalyzer is the interface implemented by each specific vulnerability scanner.

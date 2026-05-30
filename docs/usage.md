@@ -61,7 +61,9 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
     - **Stack Traces**: information disclosure in server exceptions.
     - **Sensitive Data**: API keys, credentials, JWTs, and internal IPs.
     - **CRLF & Header Injection**: reflections of HTTP headers, unauthorized `Set-Cookie` injections, and CORS origin reflections (`Access-Control-Allow-Origin`).
+    - **Response Size Anomalies**: responses significantly larger than the endpoint baseline size, indicating potential data exfiltration.
     Default is `true`.
+  - **`response_size_anomaly_multiplier`**: (Float) The ratio multiplier above baseline response size required to trigger a `swazz/response-size-anomaly` warning (e.g., `5.0` for 5x larger than baseline). Default is `5.0`.
   - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
 
