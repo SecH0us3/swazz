@@ -293,6 +293,10 @@ export default {
           { id: 5, name: "diana", email: "diana@company.local", role: "Product Manager" }
         ];
 
+        if (search) {
+          checkAllVulnerabilities(search);
+        }
+
         // Simulate database leakage on SQL Injection payloads
         const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE)\b|'|--)/i;
         if (search && sqliRegex.test(search)) {
@@ -312,9 +316,6 @@ export default {
           });
         }
 
-        if (search) {
-          checkAllVulnerabilities(search);
-        }
 
         const filtered = search
           ? baselineUsers.filter(u => u.name.includes(search) || u.email.includes(search))

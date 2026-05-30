@@ -48,15 +48,12 @@ export function Header({
             setLocalUrl('');
             return;
         }
-        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
-            cleanUrl = `https://${cleanUrl}`;
-        }
         
         try {
             const u = new URL(cleanUrl);
             cleanUrl = u.origin;
         } catch {
-            // partial url
+            // Not a full URL, leave as is
         }
 
         setLocalUrl(cleanUrl);
@@ -68,14 +65,11 @@ export function Header({
     const handleStartClick = () => {
         let cleanUrl = localUrl.trim();
         if (cleanUrl) {
-            if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
-                cleanUrl = `https://${cleanUrl}`;
-            }
             try {
                 const u = new URL(cleanUrl);
                 cleanUrl = u.origin;
             } catch {
-                // partial url
+                // Not a full URL, leave as is
             }
         }
         if (onChangeBaseUrl) {

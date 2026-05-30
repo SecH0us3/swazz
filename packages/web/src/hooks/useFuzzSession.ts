@@ -78,14 +78,11 @@ export function useFuzzSession({
         if (finalBaseUrl) {
             let cleanUrl = finalBaseUrl.trim();
             if (cleanUrl) {
-                if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
-                    cleanUrl = `https://${cleanUrl}`;
-                }
                 try {
                     const u = new URL(cleanUrl);
                     cleanUrl = u.origin;
                 } catch {
-                    // partial url
+                    // Not a full URL, leave as is
                 }
                 finalBaseUrl = cleanUrl;
                 if (cleanUrl !== config.base_url) {

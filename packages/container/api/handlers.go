@@ -140,8 +140,6 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 	}
 	if os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") == "true" {
 		config.Security.AllowPrivateIPs = true
-	} else {
-		config.Security.AllowPrivateIPs = false
 	}
 
 	// Apply defaults
@@ -176,6 +174,14 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 	r := h.runner
 	h.mu.Unlock()
 
+	// Perform authentication sequence synchronously using the request context
+	if err := r.RunAuthSequence(c.Request.Context()); err != nil {
+		fmt.Printf("Authentication sequence failed: %v\n", err)
+		r.Unsubscribe(resultsCh)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("Authentication sequence failed: %v", err)})
+		return
+	}
+
 	// Start in background
 	go func() {
 		// Collect results from the subscription
@@ -191,13 +197,6 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 			}
 		}()
 
-		if err := r.RunAuthSequence(context.Background()); err != nil {
-			fmt.Printf("Authentication sequence failed: %v\n", err)
-			r.Broadcast(runner.Event{Type: runner.EventError, Data: fmt.Sprintf("Authentication sequence failed: %v", err)})
-			r.Unsubscribe(resultsCh)
-			return
-		}
-
 		if err := r.Start(context.Background()); err != nil {
 			fmt.Printf("Fuzzer run failed: %v\n", err)
 			r.Broadcast(runner.Event{Type: runner.EventError, Data: fmt.Sprintf("Fuzzer run failed: %v", err)})
@@ -206,6 +205,7 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{"status": "started"})
+
 }
 
 // ─── POST /api/fuzz/stop ────────────────────────────────

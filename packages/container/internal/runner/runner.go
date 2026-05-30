@@ -161,8 +161,10 @@ func (r *Runner) Start(ctx context.Context) error {
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
 
-	fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
-		len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
+	if r.config.Settings.Debug {
+		fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
+			len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
+	}
 	for _, endpoint := range r.config.Endpoints {
 		if r.stopped() {
 			break
@@ -208,8 +210,10 @@ func (r *Runner) Start(ctx context.Context) error {
 				gh,
 				endpoint.ContentType,
 			)
-			fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
-				endpoint.Method, endpoint.Path, result.Status, result.ResponseSize, result.Error)
+			if r.config.Settings.Debug {
+				fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
+					endpoint.Method, endpoint.Path, result.Status, result.ResponseSize, result.Error)
+			}
 			if result.Status >= 200 && result.Status < 300 {
 				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
 			}
@@ -715,7 +719,7 @@ func (r *Runner) executeRequest(
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded
 		}
-		if originalPath == "/users" {
+		if r.config.Settings.Debug && originalPath == "/users" {
 			fmt.Printf("[DEBUG-USERS-RESPONSE] status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t\n",
 				resp.StatusCode, resp.ContentLength, len(rawBodyBytes), discarded, r.config.Settings.AnalyzeResponseBody)
 		}
@@ -760,10 +764,10 @@ func (r *Runner) executeRequest(
 				SizeMultiplier:  multiplier,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
-			if len(result.AnalyzerFindings) > 0 {
+			if r.config.Settings.Debug && len(result.AnalyzerFindings) > 0 {
 				fmt.Printf("[DEBUG-ANALYZER] Found findings for %s %s: %v\n", method, originalPath, result.AnalyzerFindings)
 			}
-			if profile == swagger.ProfileMalicious && originalPath == "/users" {
+			if r.config.Settings.Debug && profile == swagger.ProfileMalicious && originalPath == "/users" {
 				fmt.Printf("[DEBUG-USERS-ANOMALY] method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v\n",
 					method, baselineSize, responseSize, multiplier, len(result.AnalyzerFindings), result.Payload)
 			}
