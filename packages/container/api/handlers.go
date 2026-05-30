@@ -540,12 +540,28 @@ func (h *Handler) HandleOOB(c *gin.Context) {
 		result := &swagger.FuzzResult{
 			ID:               uuidStr,
 			Endpoint:         ctx.Endpoint,
-			Method:           c.Request.Method,
+			Method:           c.Request.Method, // Fallback method
 			Profile:          swagger.ProfileMalicious,
 			Status:           http.StatusOK,
 			Payload:          ctx.Payload,
 			Timestamp:        time.Now().UnixMilli(),
 			AnalyzerFindings: []swagger.AnalysisFinding{finding},
+		}
+
+		if ctx.Request != nil {
+			if ctx.Request.OriginalPath != "" {
+				result.Endpoint = ctx.Request.OriginalPath
+			} else {
+				result.Endpoint = ctx.Request.URL
+			}
+			if ctx.Request.ResolvedPath != "" {
+				result.ResolvedPath = ctx.Request.ResolvedPath
+			} else {
+				result.ResolvedPath = ctx.Request.URL
+			}
+			result.Method = ctx.Request.Method
+			result.RequestHeaders = ctx.Request.Headers
+			result.Payload = ctx.Request.Body
 		}
 		
 		h.results = append(h.results, result)

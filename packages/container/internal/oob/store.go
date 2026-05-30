@@ -2,12 +2,14 @@ package oob
 
 import (
 	"sync"
+	"swazz-engine/internal/swagger"
 )
 
 type OOBContext struct {
 	SessionID string
 	Endpoint  string
 	Payload   any
+	Request   *swagger.RequestLog
 }
 
 type Store struct {
@@ -25,6 +27,14 @@ func (s *Store) RegisterUUID(uuid string, ctx *OOBContext) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m[uuid] = ctx
+}
+
+func (s *Store) UpdateRequest(uuid string, req *swagger.RequestLog) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.m[uuid]; ok {
+		ctx.Request = req
+	}
 }
 
 func (s *Store) GetAndRemoveUUID(uuid string) (*OOBContext, bool) {

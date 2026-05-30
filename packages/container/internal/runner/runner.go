@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 
@@ -679,6 +681,33 @@ func (r *Runner) executeRequest(
 		if r.config.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
 			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(dump))
+		}
+
+		// Look for OOB payloads to register the actual request details
+		if dump, err := httputil.DumpRequestOut(req, true); err == nil {
+			reqStr := string(dump)
+			re := regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
+			matches := re.FindAllString(reqStr, -1)
+			if len(matches) > 0 {
+				reqLog := &swagger.RequestLog{
+					Method:       method,
+					URL:          rawURL,
+					Headers:      mergedHeaders,
+					OriginalPath: originalPath,
+					ResolvedPath: req.URL.RequestURI(),
+				}
+				var body string
+				if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
+					body = parts[1]
+				} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
+					body = parts[1]
+				}
+				reqLog.Body = body
+
+				for _, uuidMatch := range matches {
+					oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
+				}
+			}
 		}
 
 		start := time.Now()

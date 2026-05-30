@@ -105,6 +105,15 @@ type AnalysisFinding struct {
 	Evidence string `json:"evidence,omitempty"`
 }
 
+type RequestLog struct {
+	Method       string            `json:"method"`
+	URL          string            `json:"url"`
+	Headers      map[string]string `json:"headers"`
+	Body         string            `json:"body"`
+	OriginalPath string            `json:"originalPath"`
+	ResolvedPath string            `json:"resolvedPath"`
+}
+
 // FuzzResult represents the outcome of a single fuzz request.
 // Used internally and in the report output — may contain large payload data.
 type FuzzResult struct {

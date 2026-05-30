@@ -64,7 +64,8 @@ export function renderJsonDiff(
     fuzzed: any,
     template: any,
     isMalicious: boolean,
-    depth: number = 0
+    depth: number = 0,
+    uuid?: string
 ): ReactNode {
     const indent = '  '.repeat(depth);
 
@@ -81,6 +82,36 @@ export function renderJsonDiff(
         const valueString = JSON.stringify(val);
 
         if (isMutated) {
+            if (typeof val === 'string' && uuid && val.includes(uuid)) {
+                try {
+                    const escapedUuid = uuid.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                    const regex = new RegExp(`(https?:\\/\\/[^\\s"'<>]*?${escapedUuid}|https?%3A%2F%2F[^\\s"'<>]*?${escapedUuid})`, 'gi');
+                    const parts = valueString.split(regex);
+                    if (parts.length > 1) {
+                        return createElement(
+                            'span',
+                            { className: isMalicious ? 'diff-mutated-malicious' : 'diff-mutated-boundary' },
+                            ...parts.map((part, i) => 
+                                regex.test(part) ? createElement(
+                                    'span',
+                                    {
+                                        key: i,
+                                        style: {
+                                            backgroundColor: 'rgba(255, 0, 0, 0.25)',
+                                            border: '1px dashed var(--color-error)',
+                                            borderRadius: '3px',
+                                            padding: '1px 3px',
+                                            fontWeight: 'bold',
+                                            color: 'var(--color-error)'
+                                        }
+                                    },
+                                    part
+                                ) : part
+                            )
+                        );
+                    }
+                } catch { /* ignore */ }
+            }
             return createElement(
                 'span',
                 {
@@ -128,7 +159,7 @@ export function renderJsonDiff(
         fuzzed.forEach((item, idx) => {
             const tempItem = idx < template.length ? template[idx] : template[0];
             arrayNodes.push(indent + '  ');
-            arrayNodes.push(renderJsonDiff(item, tempItem, isMalicious, depth + 1));
+            arrayNodes.push(renderJsonDiff(item, tempItem, isMalicious, depth + 1, uuid));
             if (idx < fuzzed.length - 1) {
                 arrayNodes.push(',\n');
             } else {
@@ -184,7 +215,9 @@ export function renderJsonDiff(
                     },
                     `${indent}  `,
                     createElement('span', { className: 'diff-added-key-name' }, `"${key}"`),
-                    `: ${JSON.stringify(fuzzed[key])}${idx < allKeys.length - 1 ? ',' : ''}`
+                    `: `,
+                    renderPrimitiveValue(fuzzed[key], true),
+                    idx < allKeys.length - 1 ? ',' : ''
                 )
             );
             // Append line break separately to keep markup clean
@@ -203,7 +236,7 @@ export function renderJsonDiff(
                 `${indent}  `,
                 createElement('span', { className: 'diff-key-name' }, `"${key}"`),
                 ': ',
-                renderJsonDiff(valFuzzed, valTemplate, isMalicious, depth + 1),
+                renderJsonDiff(valFuzzed, valTemplate, isMalicious, depth + 1, uuid),
                 comma
             )
         );

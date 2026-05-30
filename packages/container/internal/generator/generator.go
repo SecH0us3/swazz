@@ -164,6 +164,9 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		if is(payloads.CatMaliciousPathTraversal) {
 			maliciousBody = append(maliciousBody, payloads.MaliciousPathTraversal...)
 		}
+		if is(payloads.CatOOBInteraction) {
+			maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
+		}
 		bodyCount = len(maliciousBody)
 		if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
 			bodyCount = len(payloads.MaliciousNumbers)
