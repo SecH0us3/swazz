@@ -21,6 +21,7 @@ import (
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/oob"
 
 	"github.com/gin-gonic/gin"
 )
@@ -509,4 +510,47 @@ func (h *Handler) GetPayloadCatalog(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, catalog)
+}
+
+// ─── ANY /api/oob/:uuid ────────────────────────────────
+
+func (h *Handler) HandleOOB(c *gin.Context) {
+	uuidStr := c.Param("uuid")
+	
+	ctx, ok := oob.GlobalStore.GetAndRemoveUUID(uuidStr)
+	if !ok {
+		// Not found or already processed
+		c.JSON(http.StatusOK, gin.H{"status": "ignored"})
+		return
+	}
+
+	finding := swagger.AnalysisFinding{
+		RuleID:   "swazz/oob-interaction",
+		Level:    "error",
+		Message:  "Out-of-Band Interaction Detected",
+		Evidence: fmt.Sprintf("Received %s request from %s for payload: %v", c.Request.Method, c.ClientIP(), ctx.Payload),
+	}
+
+	// Try to broadcast the finding
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
+	if h.runner != nil && h.runner.IsRunning() {
+		// Wrap it in a pseudo FuzzResult
+		result := &swagger.FuzzResult{
+			ID:               uuidStr,
+			Endpoint:         ctx.Endpoint,
+			Method:           c.Request.Method,
+			Profile:          swagger.ProfileMalicious,
+			Status:           http.StatusOK,
+			Payload:          ctx.Payload,
+			Timestamp:        time.Now().UnixMilli(),
+			AnalyzerFindings: []swagger.AnalysisFinding{finding},
+		}
+		
+		h.results = append(h.results, result)
+		h.runner.Broadcast(runner.Event{Type: runner.EventResult, Data: result})
+	}
+	
+	c.JSON(http.StatusOK, gin.H{"status": "processed"})
 }

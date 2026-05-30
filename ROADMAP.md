@@ -320,7 +320,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
     - Add a visual "Features" section to `README.md`.
 
-- [ ] **Task 37:** Implement Out-of-Band (OOB) Interaction Verification Server (Interactsh-like)
+- [x] **Task 37:** Implement Out-of-Band (OOB) Interaction Verification Server (Interactsh-like)
   - **Design Goal:** Detect blind vulnerabilities (like Blind SSRF, Blind SQLi, or RCE) by generating a unique interaction URL (e.g., `http://<host>/oob/<uuid>`) and tracking incoming HTTP requests hitting that endpoint to confirm vulnerability execution.
   - **Implementation Details:**
     - **Engine/Backend Endpoint:** Extend the Gin web server in `packages/container/api/` (or standard runner) to listen for OOB interaction requests on a specific path prefix like `/oob/:uuid`.

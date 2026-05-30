@@ -81,6 +81,7 @@ type Settings struct {
 	PayloadCategories             map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
 	AnalyzeResponseBody           bool                      `json:"analyze_response_body"`
 	ResponseSizeAnomalyMultiplier float64                   `json:"response_size_anomaly_multiplier"`
+	OOBServerURL                  string                    `json:"oob_server_url,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
