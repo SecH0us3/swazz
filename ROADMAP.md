@@ -303,7 +303,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "Rate Limit Detection" toggle with burst size input. In the heatmap, rate limit findings should show as a distinct icon/color.
     - **Safety:** Include a warning in the UI that enabling this feature sends a burst of requests and may trigger real rate limiters or WAFs.
 
-- [/] **Task 32:** Add missing unit tests for output formatters and expand test coverage.
+- [x] **Task 32:** Add missing unit tests for output formatters and expand test coverage.
   - **Design Goal:** Ensure output reliability. Currently, only [sarif_test.go](file:///Users/alex/src/swazz/packages/container/internal/output/sarif_test.go) (6.8KB) exists. The [html.go](file:///Users/alex/src/swazz/packages/container/internal/output/html.go) (318 lines with embedded CSS/JS) and [json.go](file:///Users/alex/src/swazz/packages/container/internal/output/json.go) (58 lines) have zero test coverage.
   - **Implementation Details:**
     - **`html_test.go`:** Create `packages/container/internal/output/html_test.go`:
