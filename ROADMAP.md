@@ -42,7 +42,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - In `RequestDetail.tsx`, render a visual diff view comparing the original API request schema/template against the generated fuzzed request payload.
     - Highlight mutated query values in yellow, added structure keys in green, and injected payloads/vulnerability inputs in red.
     - Add a toggle switch in the Inspector pane to flip between "Raw Fuzzed Request" and "Mutation Diff".
-- [ ] **Task 36:** Relocate target input (`header-target-input`) into the `header-top-row` (centered) if screen width allows.
+- [/] **Task 36:** Relocate target input (`header-target-input`) into the `header-top-row` (centered) if screen width allows.
   - **Design Goal:** Improve dashboard space utilization by reducing the header height on desktop while keeping the interface mobile-friendly.
   - **Implementation Details:**
     - Use CSS media queries or responsive flex layouts to align the target input centered inside `header-top-row` on desktop.
