@@ -20,7 +20,7 @@ func TestCheck_NoRateLimit(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	finding, sent, count429 := Check(
+	finding, statusCodes := Check(
 		ctx,
 		server.Client(),
 		server.URL,
@@ -43,6 +43,15 @@ func TestCheck_NoRateLimit(t *testing.T) {
 	}
 	if finding.Level != classifier.SeverityWarning {
 		t.Errorf("expected warning severity, got %v", finding.Level)
+	}
+	var sent, count429 int
+	for _, code := range statusCodes {
+		if code != 0 {
+			sent++
+		}
+		if code == http.StatusTooManyRequests {
+			count429++
+		}
 	}
 	if sent != 10 {
 		t.Errorf("expected 10 sent requests, got %d", sent)
@@ -67,7 +76,7 @@ func TestCheck_RateLimitActive(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	finding, sent, count429 := Check(
+	finding, statusCodes := Check(
 		ctx,
 		server.Client(),
 		server.URL,
@@ -91,6 +100,15 @@ func TestCheck_RateLimitActive(t *testing.T) {
 	if finding.Level != classifier.SeverityNote {
 		t.Errorf("expected Note severity, got %v", finding.Level)
 	}
+	var sent, count429 int
+	for _, code := range statusCodes {
+		if code != 0 {
+			sent++
+		}
+		if code == http.StatusTooManyRequests {
+			count429++
+		}
+	}
 	if sent != 10 {
 		t.Errorf("expected 10 sent requests, got %d", sent)
 	}
@@ -110,7 +128,7 @@ func TestCheck_ContextCancelled(t *testing.T) {
 	// Cancel immediately
 	cancel()
 
-	finding, sent, count429 := Check(
+	finding, statusCodes := Check(
 		ctx,
 		server.Client(),
 		server.URL,
@@ -125,6 +143,15 @@ func TestCheck_ContextCancelled(t *testing.T) {
 		1000,
 	)
 
+	var sent, count429 int
+	for _, code := range statusCodes {
+		if code != 0 {
+			sent++
+		}
+		if code == http.StatusTooManyRequests {
+			count429++
+		}
+	}
 	// Since context was cancelled, no requests should be sent.
 	if sent != 0 {
 		t.Errorf("expected 0 sent requests under cancelled context, got %d", sent)

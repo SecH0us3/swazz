@@ -208,7 +208,7 @@ export function ConfigSidebar({
                 </div>
 
                 {/* Rate Limit Detection */}
-                <div className="sidebar-analyze-body-container" style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+                <div className="sidebar-rate-limit-container">
                     <label className="premium-checkbox-label">
                         <input
                             type="checkbox"
@@ -222,8 +222,8 @@ export function ConfigSidebar({
                     </label>
 
                     {(config.settings.rate_limit_check ?? false) && (
-                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div className="sidebar-sub-setting" style={{ paddingLeft: 0 }}>
+                        <div className="sidebar-rate-limit-fields">
+                            <div className="sidebar-sub-setting">
                                 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Burst Size</span>
                                 <input
                                     className="input sidebar-sub-setting-input"
@@ -239,7 +239,7 @@ export function ConfigSidebar({
                                     }}
                                 />
                             </div>
-                            <div className="warning-box" style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.15)', padding: '6px 8px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: '1.3' }}>
+                            <div className="sidebar-rate-limit-warning">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: 1 }}>
                                     <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                                     <line x1="12" y1="9" x2="12" y2="13"/>

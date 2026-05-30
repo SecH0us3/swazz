@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"swazz-engine/internal/classifier"
@@ -32,7 +31,7 @@ func Check(
 	contentType string,
 	burstSize int,
 	timeoutMs int,
-) (*classifier.Finding, int, int) {
+) (*classifier.Finding, []int) {
 	if burstSize <= 0 {
 		burstSize = 50
 	}
@@ -99,9 +98,7 @@ func Check(
 	}
 
 	var wg sync.WaitGroup
-	var totalSent int32
-	var total429s int32
-	var first429At int32 // sequence index (1-based)
+	statusCodes := make([]int, burstSize)
 	var retryAfterVal string
 	var retryAfterMu sync.Mutex
 
@@ -140,7 +137,6 @@ func Check(
 				}
 			}
 
-			atomic.AddInt32(&totalSent, 1)
 			// lgtm[go/request-forgery]
 			resp, err := client.Do(req)
 			if err != nil {
@@ -149,20 +145,9 @@ func Check(
 			defer resp.Body.Close()
 			_, _ = io.Copy(io.Discard, resp.Body)
 
+			statusCodes[seq-1] = resp.StatusCode
+
 			if resp.StatusCode == http.StatusTooManyRequests { // 429
-				atomic.AddInt32(&total429s, 1)
-
-				// Track first 429 (using CAS for thread safety)
-				for {
-					currFirst := atomic.LoadInt32(&first429At)
-					if currFirst != 0 && currFirst <= int32(seq) {
-						break
-					}
-					if atomic.CompareAndSwapInt32(&first429At, currFirst, int32(seq)) {
-						break
-					}
-				}
-
 				if ra := resp.Header.Get("Retry-After"); ra != "" {
 					retryAfterMu.Lock()
 					if retryAfterVal == "" {
@@ -177,9 +162,18 @@ func Check(
 	wg.Wait()
 	duration := time.Since(startTime)
 
-	sentCount := int(atomic.LoadInt32(&totalSent))
-	count429 := int(atomic.LoadInt32(&total429s))
-	first429 := int(atomic.LoadInt32(&first429At))
+	var sentCount, count429, first429 int
+	for idx, code := range statusCodes {
+		if code != 0 {
+			sentCount++
+		}
+		if code == http.StatusTooManyRequests {
+			count429++
+			if first429 == 0 {
+				first429 = idx + 1
+			}
+		}
+	}
 
 	// If zero 429 responses were received, it means rate limiting is NOT enforced.
 	if count429 == 0 && sentCount > 0 {
@@ -198,7 +192,7 @@ func Check(
 			Source:       "rate_limiting",
 			Timestamp:    time.Now().UnixMilli(),
 		}
-		return finding, sentCount, count429
+		return finding, statusCodes
 	}
 
 	// If rate limiting is active, report it as an informational Note finding.
@@ -222,8 +216,8 @@ func Check(
 			Source:       "rate_limiting",
 			Timestamp:    time.Now().UnixMilli(),
 		}
-		return finding, sentCount, count429
+		return finding, statusCodes
 	}
 
-	return nil, sentCount, count429
+	return nil, statusCodes
 }

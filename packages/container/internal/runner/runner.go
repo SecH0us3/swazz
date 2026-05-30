@@ -971,7 +971,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		}
 		r.configMu.RUnlock()
 
-		finding, sent, count429 := ratelimit.Check(
+		finding, statusCodes := ratelimit.Check(
 			ctx,
 			r.client,
 			r.config.BaseURL,
@@ -987,10 +987,9 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		)
 
 		// Record the burst results in stats
-		for i := 0; i < sent; i++ {
-			status := 200
-			if i < count429 {
-				status = 429
+		for i, status := range statusCodes {
+			if status == 0 {
+				continue
 			}
 			r.statsChan <- statsMsg{
 				result: &swagger.FuzzResult{
@@ -1003,7 +1002,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 					Timestamp:    time.Now().UnixMilli(),
 				},
 				currentIteration: i + 1,
-				totalIterations:  sent,
+				totalIterations:  len(statusCodes),
 			}
 		}
 
