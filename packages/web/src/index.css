@@ -417,7 +417,7 @@ body.resizing .sidebar-resizer {
   padding: 8px 14px;
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 480px;
+  max-width: 800px;
   margin: 0 auto;
   transition:
     border-color var(--duration-fast),
