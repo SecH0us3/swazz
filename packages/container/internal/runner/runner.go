@@ -30,6 +30,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
+
 const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
@@ -691,28 +693,29 @@ func (r *Runner) executeRequest(
 		}
 
 		// Look for OOB payloads to register the actual request details
-		if dump, err := httputil.DumpRequestOut(req, true); err == nil {
-			reqStr := string(dump)
-			re := regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
-			matches := re.FindAllString(reqStr, -1)
-			if len(matches) > 0 {
-				reqLog := &swagger.RequestLog{
-					Method:       method,
-					URL:          rawURL,
-					Headers:      mergedHeaders,
-					OriginalPath: originalPath,
-					ResolvedPath: req.URL.RequestURI(),
-				}
-				var body string
-				if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
-					body = parts[1]
-				} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
-					body = parts[1]
-				}
-				reqLog.Body = body
+		if profile == swagger.ProfileMalicious {
+			if dump, err := httputil.DumpRequestOut(req, true); err == nil {
+				reqStr := string(dump)
+				matches := uuidRegex.FindAllString(reqStr, -1)
+				if len(matches) > 0 {
+					reqLog := &swagger.RequestLog{
+						Method:       method,
+						URL:          rawURL,
+						Headers:      mergedHeaders,
+						OriginalPath: originalPath,
+						ResolvedPath: req.URL.RequestURI(),
+					}
+					var body string
+					if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 {
+						body = parts[1]
+					} else if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 {
+						body = parts[1]
+					}
+					reqLog.Body = body
 
-				for _, uuidMatch := range matches {
-					oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
+					for _, uuidMatch := range matches {
+						oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
+					}
 				}
 			}
 		}
