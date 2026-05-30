@@ -284,10 +284,42 @@ export default {
 
       if (method === "GET" && path === "/users") {
         const search = url.searchParams.get("search");
-        checkAllVulnerabilities(search);
 
-        const users = ["admin", "alice", "bob"];
-        const filtered = search ? users.filter(u => u.includes(search)) : users;
+        const baselineUsers = [
+          { id: 1, name: "admin", email: "admin@company.local", role: "Super Administrator" },
+          { id: 2, name: "alice", email: "alice@company.local", role: "Compliance Officer" },
+          { id: 3, name: "bob", email: "bob@company.local", role: "Database Engineer" },
+          { id: 4, name: "charlie", email: "charlie@company.local", role: "Security Auditor" },
+          { id: 5, name: "diana", email: "diana@company.local", role: "Product Manager" }
+        ];
+
+        // Simulate database leakage on SQL Injection payloads
+        const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE)\b|'|--)/i;
+        if (search && sqliRegex.test(search)) {
+          const leakedUsers = [];
+          for (let i = 1; i <= 200; i++) {
+            leakedUsers.push({
+              id: i,
+              name: `user_${i}`,
+              email: `user_${i}@leaked-db.local`,
+              role: "Regular Employee",
+              bio: "This is a detailed bio for the employee to pad the response size and simulate exfiltration of user records.",
+              passwordHash: "$2b$12$LeakedHashValuePlaceholderForTestingPurposesOnly"
+            });
+          }
+          return new Response(JSON.stringify(leakedUsers), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        if (search) {
+          checkAllVulnerabilities(search);
+        }
+
+        const filtered = search
+          ? baselineUsers.filter(u => u.name.includes(search) || u.email.includes(search))
+          : baselineUsers;
+
         return new Response(JSON.stringify(filtered), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
