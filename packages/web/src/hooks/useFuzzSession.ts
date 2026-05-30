@@ -64,7 +64,7 @@ export function useFuzzSession({
         return null;
     }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
 
-    const handleStart = async (overrideUrls?: string[]) => {
+    const handleStart = async (overrideUrls?: string[], overrideBaseUrl?: string) => {
         const swaggerUrls: string[] = overrideUrls || config._swagger_urls || [];
 
         if (swaggerUrls.length === 0 && config.endpoints.length === 0) {
@@ -73,7 +73,26 @@ export function useFuzzSession({
         }
 
         let finalEndpoints = config.endpoints;
-        let finalBaseUrl = config.base_url;
+        let finalBaseUrl = overrideBaseUrl || config.base_url;
+
+        if (finalBaseUrl) {
+            let cleanUrl = finalBaseUrl.trim();
+            if (cleanUrl) {
+                if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
+                    cleanUrl = `https://${cleanUrl}`;
+                }
+                try {
+                    const u = new URL(cleanUrl);
+                    cleanUrl = u.origin;
+                } catch {
+                    // partial url
+                }
+                finalBaseUrl = cleanUrl;
+                if (cleanUrl !== config.base_url) {
+                    updateConfig({ base_url: cleanUrl });
+                }
+            }
+        }
 
         if (overrideUrls || (swaggerUrls.length > 0 && config.endpoints.length === 0)) {
             const loaded = await loadEndpoints(swaggerUrls);
