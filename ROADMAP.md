@@ -408,3 +408,10 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Insert a `console.log` with styled CSS output in the main entry point of the React app (e.g., `main.tsx` or `App.tsx`).
     - The message should invite developers to check out the GitHub repository, mentioning explicitly that "suggesting an idea is also participation" ("предложить идею - тоже участие").
 
+- [ ] **Task 45:** Optimize UI Performance.
+  - **Design Goal:** Ensure the React Web Dashboard remains highly responsive even during high-concurrency fuzzing runs with thousands of events per second.
+  - **Implementation Details:**
+    - Profile React component renders to identify unnecessary re-renders in the Inspector, Heatmap, and Log views.
+    - Implement `React.memo`, `useMemo`, and `useCallback` strategically to prevent costly re-renders of list items and grid cells.
+    - Explore windowing/virtualization for the real-time request logs or long findings lists.
+
