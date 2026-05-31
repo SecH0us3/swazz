@@ -155,6 +155,7 @@ export interface RunStats {
     isRunning: boolean;
     totalResponseBytes: number;
     maxResponseSize: number;
+    totalDurationMs: number;
     /** Progress tracking */
     progress: {
         completedEndpoints: number;

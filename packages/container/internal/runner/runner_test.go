@@ -596,3 +596,112 @@ func TestToSSE_OWASPCategoryMapping(t *testing.T) {
 
 
 
+
+func TestExecuteRequest_PassesBaselineTimeMs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Simulate a delay so input.Duration > BaselineTimeMs
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		Settings: swagger.Settings{
+			AnalyzeResponseBody:    true,
+			TimeoutMs:              2000,
+			TimeAnomalyThresholdMs: 50, // Small threshold for testing
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	r := newTestRunner(server.Client(), cfg)
+	defer r.Close()
+
+	// Seed the time baseline to something very small (e.g. 5ms)
+	r.recordTimeBaseline("GET", "/test", 5)
+
+	// Send a payload that matches Time-Based SQLi
+	payload := "SELECT * FROM users WHERE id=1 AND SLEEP(5)"
+
+	res := r.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "GET",
+		nil, nil, payload, swagger.ProfileMalicious, nil, nil, "",
+	)
+
+	if res == nil {
+		t.Fatal("Expected FuzzResult, got nil")
+	}
+
+	foundTimeSQLi := false
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/time-based-sqli" {
+			foundTimeSQLi = true
+		}
+	}
+
+	if !foundTimeSQLi {
+		t.Errorf("Expected 'swazz/time-based-sqli' finding, got findings: %+v", res.AnalyzerFindings)
+	}
+}
+
+func TestEndpointTimeBaseline(t *testing.T) {
+	baseline := &EndpointTimeBaseline{}
+
+	if baseline.getMedian() != 0 {
+		t.Errorf("Expected 0 median for empty baseline, got %d", baseline.getMedian())
+	}
+	// Call again to hit the b.calculated = true for n == 0
+	if baseline.getMedian() != 0 {
+		t.Errorf("Expected 0 median for empty baseline, got %d", baseline.getMedian())
+	}
+
+	baseline.addTime(100)
+	if baseline.getMedian() != 100 {
+		t.Errorf("Expected 100 median for single element, got %d", baseline.getMedian())
+	}
+	// Call again to hit the b.calculated = true
+	if baseline.getMedian() != 100 {
+		t.Errorf("Expected 100 median for single element, got %d", baseline.getMedian())
+	}
+
+	baseline.addTime(200)
+	baseline.addTime(300)
+	if baseline.getMedian() != 200 {
+		t.Errorf("Expected 200 median for 100,200,300, got %d", baseline.getMedian())
+	}
+
+	baseline.addTime(400)
+	// 100, 200, 300, 400. Median is (200+300)/2 = 250
+	if baseline.getMedian() != 250 {
+		t.Errorf("Expected 250 median for 100,200,300,400, got %d", baseline.getMedian())
+	}
+}
+
+func TestRunner_TimeBaseline(t *testing.T) {
+	r := &Runner{
+		timeBaselines: &sync.Map{},
+	}
+	
+	median := r.getTimeBaselineMedian("GET", "/test")
+	if median != 0 {
+		t.Errorf("Expected 0 median for empty baseline, got %d", median)
+	}
+
+	r.recordTimeBaseline("GET", "/test", 100)
+	r.recordTimeBaseline("GET", "/test", 200)
+	r.recordTimeBaseline("GET", "/test", 300)
+
+	median = r.getTimeBaselineMedian("GET", "/test")
+	if median != 200 {
+		t.Errorf("Expected 200 median, got %d", median)
+	}
+	
+	median = r.getTimeBaselineMedian("get", "/test")
+	if median != 200 {
+		t.Errorf("Expected 200 median for lowercase method, got %d", median)
+	}
+}

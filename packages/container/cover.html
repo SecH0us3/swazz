@@ -1,0 +1,2979 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>runner: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">swazz-engine/internal/runner/auth.go (75.2%)</option>
+				
+				<option value="file1">swazz-engine/internal/runner/bola.go (44.9%)</option>
+				
+				<option value="file2">swazz-engine/internal/runner/events.go (77.8%)</option>
+				
+				<option value="file3">swazz-engine/internal/runner/mpsc.go (100.0%)</option>
+				
+				<option value="file4">swazz-engine/internal/runner/runner.go (71.4%)</option>
+				
+				<option value="file5">swazz-engine/internal/runner/stats.go (94.1%)</option>
+				
+				<option value="file6">swazz-engine/internal/runner/utils.go (47.3%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// auth.go: Handles authentication sequences and variable management.
+// It provides functionality to run multi-step authentication flows, substitute
+// variables in requests, and extract values from responses.
+
+package runner
+
+import (
+        "bytes"
+        "context"
+        "encoding/json"
+        "fmt"
+        "io"
+        "net/http"
+        "net/http/httputil"
+        "strconv"
+        "strings"
+        "time"
+
+        "swazz-engine/internal/swagger"
+)
+
+
+func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.AuthStep, initialHeaders map[string]string, initialCookies map[string]string) (map[string]string, map[string]string, error) <span class="cov8" title="1">{
+        cfg := r.config
+        headers := make(map[string]string)
+        cookies := make(map[string]string)
+        for k, v := range initialHeaders </span><span class="cov8" title="1">{
+                headers[k] = v
+        }</span>
+        <span class="cov8" title="1">for k, v := range initialCookies </span><span class="cov0" title="0">{
+                cookies[k] = v
+        }</span>
+
+        <span class="cov8" title="1">if len(sequence) == 0 </span><span class="cov0" title="0">{
+                return headers, cookies, nil
+        }</span>
+
+        <span class="cov8" title="1">fmt.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
+
+        reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+        defer reqCancel()
+
+        for i, step := range sequence </span><span class="cov8" title="1">{
+                fullURL := r.subVars(step.URL)
+                if !strings.HasPrefix(fullURL, "http://") &amp;&amp; !strings.HasPrefix(fullURL, "https://") </span><span class="cov8" title="1">{
+                        fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
+                }</span>
+
+                <span class="cov8" title="1">var bodyReader io.Reader
+                if step.Body != nil </span><span class="cov8" title="1">{
+                        r.configMu.RLock()
+                        subBody := r.substituteInObject(step.Body)
+                        r.configMu.RUnlock()
+                        b, err := json.Marshal(subBody)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, nil, fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
+                        }</span>
+                        <span class="cov8" title="1">bodyReader = bytes.NewReader(b)</span>
+                }
+
+                <span class="cov8" title="1">req, err := http.NewRequestWithContext(reqCtx, step.Method, fullURL, bodyReader)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, nil, fmt.Errorf("auth step %d: failed to create request: %w", i+1, err)
+                }</span>
+
+                <span class="cov8" title="1">if step.Body != nil </span><span class="cov8" title="1">{
+                        req.Header.Set("Content-Type", "application/json")
+                }</span>
+
+                <span class="cov8" title="1">r.configMu.RLock()
+                for k, v := range step.Headers </span><span class="cov0" title="0">{
+                        req.Header.Set(k, r.subVarsLocked(v))
+                }</span>
+                // Apply accumulated headers and cookies for this sequence
+                <span class="cov8" title="1">if len(headers) &gt; 0 </span><span class="cov8" title="1">{
+                        for k, v := range headers </span><span class="cov8" title="1">{
+                                req.Header.Set(k, v)
+                        }</span>
+                }
+                <span class="cov8" title="1">if len(cookies) &gt; 0 </span><span class="cov8" title="1">{
+                        for k, v := range cookies </span><span class="cov8" title="1">{
+                                req.AddCookie(&amp;http.Cookie{Name: k, Value: v})
+                        }</span>
+                }
+                <span class="cov8" title="1">r.configMu.RUnlock()
+
+                if cfg.Settings.Debug </span><span class="cov0" title="0">{
+                        dump, _ := httputil.DumpRequestOut(req, true)
+                        fmt.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+                }</span>
+
+                <span class="cov8" title="1">resp, err := r.client.Do(req)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, nil, fmt.Errorf("auth step %d: request failed: %w", i+1, err)
+                }</span>
+
+                <span class="cov8" title="1">if cfg.Settings.Debug </span><span class="cov0" title="0">{
+                        dump, _ := httputil.DumpResponse(resp, false)
+                        fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
+                }</span>
+
+                <span class="cov8" title="1">fmt.Printf("  Step %d: %s %s -&gt; %d\n", i+1, step.Method, fullURL, resp.StatusCode)
+
+                body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+                io.Copy(io.Discard, resp.Body)
+                resp.Body.Close()
+
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, nil, fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)
+                }</span>
+
+                <span class="cov8" title="1">if resp.StatusCode &gt;= 400 </span><span class="cov8" title="1">{
+                        errBody := string(body)
+                        if len(errBody) &gt; 1024 </span><span class="cov0" title="0">{
+                                errBody = errBody[:1024]
+                        }</span>
+                        <span class="cov8" title="1">return nil, nil, fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)</span>
+                }
+
+                // Collect cookies
+                <span class="cov8" title="1">for _, cookie := range resp.Cookies() </span><span class="cov8" title="1">{
+                        shouldSave := true
+                        if len(step.ExtractCookies) &gt; 0 </span><span class="cov8" title="1">{
+                                shouldSave = false
+                                for _, name := range step.ExtractCookies </span><span class="cov8" title="1">{
+                                        if name == cookie.Name </span><span class="cov8" title="1">{
+                                                shouldSave = true
+                                                break</span>
+                                        }
+                                }
+                        }
+
+                        <span class="cov8" title="1">if shouldSave </span><span class="cov8" title="1">{
+                                cookies[cookie.Name] = cookie.Value
+                                fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
+                        }</span>
+                }
+
+                // Extract JSON fields &amp; Variables
+                <span class="cov8" title="1">if len(step.ExtractJSON) &gt; 0 || len(step.ExtractVariables) &gt; 0 </span><span class="cov8" title="1">{
+                        var parsed map[string]any
+                        if err := json.Unmarshal(body, &amp;parsed); err != nil </span><span class="cov0" title="0">{
+                                if len(step.ExtractJSON) &gt; 0 || len(step.ExtractVariables) &gt; 0 </span><span class="cov0" title="0">{
+                                        return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
+                                }</span>
+                                <span class="cov0" title="0">fmt.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)</span>
+                        } else<span class="cov8" title="1"> {
+                                r.configMu.Lock()
+                                if cfg.Variables == nil </span><span class="cov8" title="1">{
+                                        cfg.Variables = make(map[string]any)
+                                }</span>
+
+                                <span class="cov8" title="1">for jsonKey, headerName := range step.ExtractJSON </span><span class="cov8" title="1">{
+                                        val := extractJSONPath(parsed, jsonKey)
+                                        if val != nil </span><span class="cov8" title="1">{
+                                                strVal := fmt.Sprintf("%v", val)
+                                                headers[headerName] = strVal
+                                                fmt.Printf("    [Auth] Extracted %s -&gt; Header %s\n", jsonKey, headerName)
+                                        }</span>
+                                }
+
+                                <span class="cov8" title="1">varsUpdated := false
+                                for jsonKey, varName := range step.ExtractVariables </span><span class="cov8" title="1">{
+                                        val := extractJSONPath(parsed, jsonKey)
+                                        if val != nil </span><span class="cov8" title="1">{
+                                                cfg.Variables[varName] = val
+                                                fmt.Printf("    [Auth] Extracted %s -&gt; Variable {{%s}}\n", jsonKey, varName)
+                                                varsUpdated = true
+                                        }</span>
+                                }
+                                <span class="cov8" title="1">r.configMu.Unlock()
+
+                                if varsUpdated </span><span class="cov8" title="1">{
+                                        r.updateReplacer()
+                                }</span>
+                        }
+                }
+        }
+
+        <span class="cov8" title="1">fmt.Println("Authentication sequence complete.")
+        return headers, cookies, nil</span>
+}
+
+func (r *Runner) RunAuthSequence(ctx context.Context) error <span class="cov8" title="1">{
+        if len(r.config.AuthSequence) == 0 </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">headers, cookies, err := r.ExecuteAuthSequence(ctx, r.config.AuthSequence, r.config.GlobalHeaders, r.config.Cookies)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">r.configMu.Lock()
+        r.config.GlobalHeaders = headers
+        r.config.Cookies = cookies
+        r.configMu.Unlock()
+        return nil</span>
+}
+
+// extractJSONPath allows retrieving a nested value from a JSON map using dot notation (e.g., "data.token" or "data.users[0].id").
+func extractJSONPath(data map[string]any, path string) any <span class="cov8" title="1">{
+        parts := strings.Split(path, ".")
+        var current any = data
+        for i, part := range parts </span><span class="cov8" title="1">{
+                var key = part
+                var arrIdx = -1
+                if start := strings.IndexByte(part, '['); start &gt;= 0 </span><span class="cov0" title="0">{
+                        if end := strings.IndexByte(part, ']'); end &gt; start </span><span class="cov0" title="0">{
+                                if idx, err := strconv.Atoi(part[start+1 : end]); err == nil </span><span class="cov0" title="0">{
+                                        arrIdx = idx
+                                        key = part[:start]
+                                }</span>
+                        }
+                }
+
+                <span class="cov8" title="1">if m, ok := current.(map[string]any); ok </span><span class="cov8" title="1">{
+                        current = m[key]
+                }</span> else<span class="cov0" title="0"> {
+                        return nil
+                }</span>
+
+                <span class="cov8" title="1">if current != nil &amp;&amp; arrIdx &gt;= 0 </span><span class="cov0" title="0">{
+                        if arr, ok := current.([]any); ok &amp;&amp; arrIdx &lt; len(arr) </span><span class="cov0" title="0">{
+                                current = arr[arrIdx]
+                        }</span> else<span class="cov0" title="0"> {
+                                return nil
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if current == nil </span><span class="cov0" title="0">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">if i == len(parts)-1 </span><span class="cov8" title="1">{
+                        return current
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+// substituteInObject deeply substitutes string variables inside maps/slices.
+// Must be called while holding configMu.RLock.
+func (r *Runner) substituteInObject(v any) any <span class="cov8" title="1">{
+        switch val := v.(type) </span>{
+        case string:<span class="cov0" title="0">
+                return r.subVarsLocked(val)</span>
+        case map[string]any:<span class="cov0" title="0">
+                res := make(map[string]any)
+                for k, v := range val </span><span class="cov0" title="0">{
+                        res[k] = r.substituteInObject(v)
+                }</span>
+                <span class="cov0" title="0">return res</span>
+        case []any:<span class="cov0" title="0">
+                res := make([]any, len(val))
+                for i, v := range val </span><span class="cov0" title="0">{
+                        res[i] = r.substituteInObject(v)
+                }</span>
+                <span class="cov0" title="0">return res</span>
+        default:<span class="cov8" title="1">
+                return v</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package runner
+
+import (
+        "context"
+        "fmt"
+        "strconv"
+        "strings"
+        "sync"
+
+        "swazz-engine/internal/generator"
+        "swazz-engine/internal/swagger"
+)
+
+func formatIdentityName(name string) string <span class="cov8" title="1">{
+        if strings.EqualFold(name, "userb") </span><span class="cov8" title="1">{
+                return "User B"
+        }</span>
+        <span class="cov0" title="0">return name</span>
+}
+
+func getPathPrefix(originalPath string) string <span class="cov8" title="1">{
+        idx := strings.IndexByte(originalPath, '{')
+        if idx != -1 </span><span class="cov0" title="0">{
+                return strings.TrimRight(originalPath[:idx], "/")
+        }</span>
+        <span class="cov8" title="1">return originalPath</span>
+}
+
+func arePrefixesRelated(p1, p2 string) bool <span class="cov0" title="0">{
+        p1Parts := strings.Split(strings.Trim(p1, "/"), "/")
+        p2Parts := strings.Split(strings.Trim(p2, "/"), "/")
+        
+        minLen := len(p1Parts)
+        if len(p2Parts) &lt; minLen </span><span class="cov0" title="0">{
+                minLen = len(p2Parts)
+        }</span>
+        <span class="cov0" title="0">if minLen == 0 </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov0" title="0">matchLen := 2
+        if minLen &lt; matchLen </span><span class="cov0" title="0">{
+                matchLen = minLen
+        }</span>
+        <span class="cov0" title="0">for i := 0; i &lt; matchLen; i++ </span><span class="cov0" title="0">{
+                if p1Parts[i] != p2Parts[i] </span><span class="cov0" title="0">{
+                        return false
+                }</span>
+        }
+        <span class="cov0" title="0">return true</span>
+}
+
+func harvestIDs(data any, ids map[string]bool) <span class="cov8" title="1">{
+        if m, ok := data.(map[string]any); ok </span><span class="cov8" title="1">{
+                for k, v := range m </span><span class="cov8" title="1">{
+                        kLower := strings.ToLower(k)
+                        if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "_id") || strings.HasSuffix(kLower, "id") </span><span class="cov8" title="1">{
+                                switch val := v.(type) </span>{
+                                case string:<span class="cov8" title="1">
+                                        if val != "" </span><span class="cov8" title="1">{
+                                                ids[val] = true
+                                        }</span>
+                                case float64:<span class="cov0" title="0">
+                                        ids[strconv.FormatFloat(val, 'f', -1, 64)] = true</span>
+                                case int:<span class="cov0" title="0">
+                                        ids[strconv.Itoa(val)] = true</span>
+                                case int64:<span class="cov0" title="0">
+                                        ids[strconv.FormatInt(val, 10)] = true</span>
+                                }
+                        }
+                        <span class="cov8" title="1">harvestIDs(v, ids)</span>
+                }
+        } else<span class="cov8" title="1"> if arr, ok := data.([]any); ok </span><span class="cov8" title="1">{
+                for _, item := range arr </span><span class="cov8" title="1">{
+                        harvestIDs(item, ids)
+                }</span>
+        }
+}
+
+func substituteIDsInPayload(data any, paramName string, harvestedID string) any <span class="cov0" title="0">{
+        if m, ok := data.(map[string]any); ok </span><span class="cov0" title="0">{
+                newMap := make(map[string]any, len(m))
+                for k, v := range m </span><span class="cov0" title="0">{
+                        kLower := strings.ToLower(k)
+                        if kLower == strings.ToLower(paramName) || kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "_id") || strings.HasSuffix(kLower, "id") </span><span class="cov0" title="0">{
+                                if _, isStr := v.(string); isStr </span><span class="cov0" title="0">{
+                                        newMap[k] = harvestedID
+                                }</span> else<span class="cov0" title="0"> if _, isNum := v.(float64); isNum </span><span class="cov0" title="0">{
+                                        if val, err := strconv.ParseFloat(harvestedID, 64); err == nil </span><span class="cov0" title="0">{
+                                                newMap[k] = val
+                                        }</span> else<span class="cov0" title="0"> {
+                                                newMap[k] = v
+                                        }</span>
+                                } else<span class="cov0" title="0"> if _, isInt := v.(int); isInt </span><span class="cov0" title="0">{
+                                        if val, err := strconv.Atoi(harvestedID); err == nil </span><span class="cov0" title="0">{
+                                                newMap[k] = val
+                                        }</span> else<span class="cov0" title="0"> {
+                                                newMap[k] = v
+                                        }</span>
+                                } else<span class="cov0" title="0"> if _, isInt64 := v.(int64); isInt64 </span><span class="cov0" title="0">{
+                                        if val, err := strconv.ParseInt(harvestedID, 10, 64); err == nil </span><span class="cov0" title="0">{
+                                                newMap[k] = val
+                                        }</span> else<span class="cov0" title="0"> {
+                                                newMap[k] = v
+                                        }</span>
+                                } else<span class="cov0" title="0"> {
+                                        newMap[k] = substituteIDsInPayload(v, paramName, harvestedID)
+                                }</span>
+                        } else<span class="cov0" title="0"> {
+                                newMap[k] = substituteIDsInPayload(v, paramName, harvestedID)
+                        }</span>
+                }
+                <span class="cov0" title="0">return newMap</span>
+        } else<span class="cov0" title="0"> if arr, ok := data.([]any); ok </span><span class="cov0" title="0">{
+                newArr := make([]any, len(arr))
+                for i, v := range arr </span><span class="cov0" title="0">{
+                        newArr[i] = substituteIDsInPayload(v, paramName, harvestedID)
+                }</span>
+                <span class="cov0" title="0">return newArr</span>
+        }
+        <span class="cov0" title="0">return data</span>
+}
+
+func extractJSONPathExtended(data any, path string) any <span class="cov8" title="1">{
+        path = strings.TrimPrefix(path, "$")
+        path = strings.TrimPrefix(path, ".")
+        if path == "" </span><span class="cov0" title="0">{
+                return data
+        }</span>
+
+        <span class="cov8" title="1">parts := strings.Split(path, ".")
+        var current any = data
+
+        for i, part := range parts </span><span class="cov8" title="1">{
+                if current == nil </span><span class="cov0" title="0">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">var key = part
+                var arrIdx = -1
+
+                if start := strings.IndexByte(part, '['); start &gt;= 0 </span><span class="cov8" title="1">{
+                        if end := strings.IndexByte(part, ']'); end &gt; start </span><span class="cov8" title="1">{
+                                if idx, err := strconv.Atoi(part[start+1 : end]); err == nil </span><span class="cov8" title="1">{
+                                        arrIdx = idx
+                                        key = part[:start]
+                                }</span>
+                        }
+                }
+
+                <span class="cov8" title="1">if key != "" </span><span class="cov8" title="1">{
+                        if m, ok := current.(map[string]any); ok </span><span class="cov8" title="1">{
+                                current = m[key]
+                        }</span> else<span class="cov0" title="0"> {
+                                return nil
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if current != nil &amp;&amp; arrIdx &gt;= 0 </span><span class="cov8" title="1">{
+                        if arr, ok := current.([]any); ok &amp;&amp; arrIdx &lt; len(arr) </span><span class="cov8" title="1">{
+                                current = arr[arrIdx]
+                        }</span> else<span class="cov0" title="0"> {
+                                return nil
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if current == nil </span><span class="cov0" title="0">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">if i == len(parts)-1 </span><span class="cov8" title="1">{
+                        return current
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (r *Runner) findEndpointConfig(path, method string) (swagger.EndpointConfig, bool) <span class="cov8" title="1">{
+        r.configMu.RLock()
+        defer r.configMu.RUnlock()
+        for _, ep := range r.config.Endpoints </span><span class="cov8" title="1">{
+                if ep.Path == path &amp;&amp; strings.EqualFold(ep.Method, method) </span><span class="cov8" title="1">{
+                        return ep, true
+                }</span>
+        }
+        <span class="cov8" title="1">return swagger.EndpointConfig{}, false</span>
+}
+
+func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int, respBody any) <span class="cov8" title="1">{
+        if respStatus &lt; 200 || respStatus &gt;= 300 || respBody == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">ep, found := r.findEndpointConfig(originalPath, method)
+        if !found </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        // 1. Explicit mapping
+        <span class="cov8" title="1">if len(ep.ExtractVariables) &gt; 0 </span><span class="cov8" title="1">{
+                r.configMu.Lock()
+                if r.config.Variables == nil </span><span class="cov8" title="1">{
+                        r.config.Variables = make(map[string]any)
+                }</span>
+                <span class="cov8" title="1">varsUpdated := false
+                for jsonPath, varName := range ep.ExtractVariables </span><span class="cov8" title="1">{
+                        val := extractJSONPathExtended(respBody, jsonPath)
+                        if val != nil </span><span class="cov8" title="1">{
+                                r.config.Variables[varName] = val
+                                varsUpdated = true
+                                if r.config.Settings.Debug </span><span class="cov0" title="0">{
+                                        fmt.Printf("[BOLA] Extracted variable %s = %v from response of %s %s\n", varName, val, method, originalPath)
+                                }</span>
+                        }
+                }
+                <span class="cov8" title="1">r.configMu.Unlock()
+                if varsUpdated </span><span class="cov8" title="1">{
+                        r.updateReplacer()
+                }</span>
+        }
+
+        // 2. Heuristic Harvesting
+        <span class="cov8" title="1">prefix := getPathPrefix(originalPath)
+        harvested := make(map[string]bool)
+        harvestIDs(respBody, harvested)
+        if len(harvested) &gt; 0 </span><span class="cov8" title="1">{
+                actualSlice := []string{}
+                for id := range harvested </span><span class="cov8" title="1">{
+                        actualSlice = append(actualSlice, id)
+                        r.idSources.Store(id, fmt.Sprintf("%s %s", method, originalPath))
+                }</span>
+                <span class="cov8" title="1">r.resultsMu.Lock()
+                if val, ok := r.harvestedIDs.Load(prefix); ok </span><span class="cov0" title="0">{
+                        existing := val.([]string)
+                        uniqueMap := make(map[string]bool)
+                        for _, id := range existing </span><span class="cov0" title="0">{
+                                uniqueMap[id] = true
+                        }</span>
+                        <span class="cov0" title="0">for _, id := range actualSlice </span><span class="cov0" title="0">{
+                                uniqueMap[id] = true
+                        }</span>
+                        <span class="cov0" title="0">merged := []string{}
+                        for id := range uniqueMap </span><span class="cov0" title="0">{
+                                merged = append(merged, id)
+                        }</span>
+                        <span class="cov0" title="0">r.harvestedIDs.Store(prefix, merged)</span>
+                } else<span class="cov8" title="1"> {
+                        r.harvestedIDs.Store(prefix, actualSlice)
+                }</span>
+                <span class="cov8" title="1">r.resultsMu.Unlock()
+                if r.config.Settings.Debug </span><span class="cov0" title="0">{
+                        fmt.Printf("[BOLA] Harvested IDs for prefix %s: %v\n", prefix, actualSlice)
+                }</span>
+        }
+}
+
+func extractParamsFromPath(originalPath, resolvedPath string) map[string]string <span class="cov0" title="0">{
+        params := make(map[string]string)
+        origParts := strings.Split(strings.Trim(originalPath, "/"), "/")
+        resolParts := strings.Split(strings.Trim(resolvedPath, "/"), "/")
+        if len(origParts) != len(resolParts) </span><span class="cov0" title="0">{
+                return params
+        }</span>
+        <span class="cov0" title="0">for i, part := range origParts </span><span class="cov0" title="0">{
+                if strings.HasPrefix(part, "{") &amp;&amp; strings.HasSuffix(part, "}") </span><span class="cov0" title="0">{
+                        paramName := part[1 : len(part)-1]
+                        params[paramName] = resolParts[i]
+                }</span>
+        }
+        <span class="cov0" title="0">return params</span>
+}
+
+func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) []*swagger.FuzzResult <span class="cov8" title="1">{
+        if !r.config.Settings.BOLATesting </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">concurrency := r.config.Settings.Concurrency
+        if concurrency &lt;= 0 </span><span class="cov8" title="1">{
+                concurrency = 5
+        }</span>
+        <span class="cov8" title="1">if concurrency &gt; 1000 </span><span class="cov0" title="0">{
+                fmt.Printf("BOLA: Concurrency limit exceeded (max 1000)\n")
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">fmt.Println("Running Access Control &amp; BOLA/IDOR testing phase...")
+
+        // 1. Authenticate user identities (Identity B)
+        identityHeaders := make(map[string]map[string]string)
+        identityCookies := make(map[string]map[string]string)
+        for idName, identity := range r.config.AuthIdentities </span><span class="cov8" title="1">{
+                h, c, err := r.ExecuteAuthSequence(ctx, identity.AuthSequence, identity.Headers, identity.Cookies)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Printf("BOLA: Failed to authenticate identity %s: %v\n", idName, err)
+                        continue</span>
+                }
+                <span class="cov8" title="1">identityHeaders[idName] = h
+                identityCookies[idName] = c</span>
+        }
+
+        // 2. Identify candidates (successful 2xx requests)
+        <span class="cov8" title="1">var candidates []*swagger.FuzzResult
+        hasSuccessCandidate := make(map[string]bool)
+        for _, res := range results </span><span class="cov8" title="1">{
+                if res.Status &gt;= 200 &amp;&amp; res.Status &lt; 300 </span><span class="cov8" title="1">{
+                        candidates = append(candidates, res)
+                        hasSuccessCandidate[strings.ToUpper(res.Method) + " " + res.Endpoint] = true
+                }</span>
+        }
+
+        // For endpoints that don't have a successful candidate, try to construct one
+        <span class="cov8" title="1">safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+        
+        var candMu sync.Mutex
+        var candWg sync.WaitGroup
+        candSem := make(chan struct{}, concurrency)
+
+        for _, ep := range r.config.Endpoints </span><span class="cov8" title="1">{
+                key := strings.ToUpper(ep.Method) + " " + ep.Path
+                if hasSuccessCandidate[key] </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                
+                <span class="cov0" title="0">candWg.Add(1)
+                candSem &lt;- struct{}{}
+                
+                go func(ep swagger.EndpointConfig) </span><span class="cov0" title="0">{
+                key := strings.ToUpper(ep.Method) + " " + ep.Path
+                if hasSuccessCandidate[key] </span><span class="cov0" title="0">{
+                        &lt;-candSem
+                        candWg.Done()
+                        return
+                }</span>
+
+                <span class="cov0" title="0">var harvested []string
+                hasPathParams := strings.Contains(ep.Path, "{")
+
+                // We want to try finding a valid candidate by trying harvested IDs
+                uniqueIDs := make(map[string]bool)
+                r.harvestedIDs.Range(func(k, value any) bool </span><span class="cov0" title="0">{
+                        vSlice := value.([]string)
+                        for _, id := range vSlice </span><span class="cov0" title="0">{
+                                uniqueIDs[id] = true
+                        }</span>
+                        <span class="cov0" title="0">return true</span>
+                })
+                <span class="cov0" title="0">for id := range uniqueIDs </span><span class="cov0" title="0">{
+                        harvested = append(harvested, id)
+                }</span>
+
+                // First, generate baseline payload
+                <span class="cov0" title="0">var generated map[string]any
+                if len(ep.Schema.Properties) &gt; 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" </span><span class="cov0" title="0">{
+                        generated = safeGen.BuildObject(&amp;ep.Schema)
+                }</span>
+
+                <span class="cov0" title="0">var paramName string
+                if hasPathParams </span><span class="cov0" title="0">{
+                        origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+                        for _, part := range origParts </span><span class="cov0" title="0">{
+                                if strings.HasPrefix(part, "{") &amp;&amp; strings.HasSuffix(part, "}") </span><span class="cov0" title="0">{
+                                        paramName = part[1 : len(part)-1]
+                                        break</span>
+                                }
+                        }
+                } else<span class="cov0" title="0"> if generated != nil </span><span class="cov0" title="0">{
+                        for k := range generated </span><span class="cov0" title="0">{
+                                kLower := strings.ToLower(k)
+                                if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") </span><span class="cov0" title="0">{
+                                        paramName = k
+                                        break</span>
+                                }
+                        }
+                }
+
+                <span class="cov0" title="0">limit := len(harvested)
+                if limit &gt; 25 </span><span class="cov0" title="0">{
+                        limit = 25 // brute force up to 25 harvested IDs
+                }</span>
+                <span class="cov0" title="0">if limit == 0 </span><span class="cov0" title="0">{
+                        limit = 1 // try at least once (with random/empty ID)
+                }</span>
+
+                <span class="cov0" title="0">var successRes *swagger.FuzzResult
+
+                for i := 0; i &lt; limit; i++ </span><span class="cov0" title="0">{
+                        resolvedPath := ep.Path
+                        if hasPathParams &amp;&amp; len(harvested) &gt; 0 </span><span class="cov0" title="0">{
+                                origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+                                resolParts := make([]string, len(origParts))
+                                copy(resolParts, origParts)
+                                for idx, part := range origParts </span><span class="cov0" title="0">{
+                                        if strings.HasPrefix(part, "{") &amp;&amp; strings.HasSuffix(part, "}") </span><span class="cov0" title="0">{
+                                                kLower := strings.ToLower(part[1 : len(part)-1])
+                                                if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") </span><span class="cov0" title="0">{
+                                                        resolParts[idx] = harvested[i]
+                                                }</span>
+                                        }
+                                }
+                                <span class="cov0" title="0">resolvedPath = "/" + strings.Join(resolParts, "/")</span>
+                        } else<span class="cov0" title="0"> if hasPathParams </span><span class="cov0" title="0">{
+                                // No harvested IDs available, try with a safe generated value
+                                origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+                                resolParts := make([]string, len(origParts))
+                                copy(resolParts, origParts)
+                                for idx, part := range origParts </span><span class="cov0" title="0">{
+                                        if strings.HasPrefix(part, "{") &amp;&amp; strings.HasSuffix(part, "}") </span><span class="cov0" title="0">{
+                                                kLower := strings.ToLower(part[1 : len(part)-1])
+                                                if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") </span><span class="cov0" title="0">{
+                                                        resolParts[idx] = "1"
+                                                }</span>
+                                        }
+                                }
+                                <span class="cov0" title="0">resolvedPath = "/" + strings.Join(resolParts, "/")</span>
+                        } else<span class="cov0" title="0"> if ep.Example != nil </span><span class="cov0" title="0">{
+                                resolvedPath = ep.Path
+                        }</span>
+
+                        <span class="cov0" title="0">var payload any
+                        var queryParams map[string]any
+                        
+                        if generated != nil </span><span class="cov0" title="0">{
+                                genCopy := make(map[string]any)
+                                for k, v := range generated </span><span class="cov0" title="0">{
+                                        genCopy[k] = v
+                                }</span>
+                                <span class="cov0" title="0">if paramName != "" &amp;&amp; len(harvested) &gt; 0 &amp;&amp; i &lt; len(harvested) </span><span class="cov0" title="0">{
+                                        substituted := substituteIDsInPayload(genCopy, paramName, harvested[i])
+                                        if m, ok := substituted.(map[string]any); ok </span><span class="cov0" title="0">{
+                                                genCopy = m
+                                        }</span>
+                                }
+                                <span class="cov0" title="0">if isNoBodyMethod(ep.Method) </span><span class="cov0" title="0">{
+                                        queryParams = genCopy
+                                }</span> else<span class="cov0" title="0"> {
+                                        payload = genCopy
+                                }</span>
+                        } else<span class="cov0" title="0"> if ep.Example != nil </span><span class="cov0" title="0">{
+                                if isNoBodyMethod(ep.Method) </span><span class="cov0" title="0">{
+                                        if m, ok := ep.Example.(map[string]any); ok </span><span class="cov0" title="0">{
+                                                queryParams = m
+                                        }</span>
+                                } else<span class="cov0" title="0"> {
+                                        payload = ep.Example
+                                }</span>
+                        }
+
+                        // Generate security headers if any
+                        <span class="cov0" title="0">generatedHeaders := make(map[string]string)
+                        if secHeaders := safeGen.GenerateSecurityHeaders(); secHeaders != nil </span><span class="cov0" title="0">{
+                                for k, v := range secHeaders </span><span class="cov0" title="0">{
+                                        generatedHeaders[k] = v
+                                }</span>
+                        }
+
+                        // Build final headers
+                        <span class="cov0" title="0">headers := make(map[string]string)
+                        for k, v := range r.config.GlobalHeaders </span><span class="cov0" title="0">{
+                                headers[k] = v
+                        }</span>
+                        <span class="cov0" title="0">for k, v := range generatedHeaders </span><span class="cov0" title="0">{
+                                headers[k] = v
+                        }</span>
+
+                        // Execute request under User A (Primary)
+                        <span class="cov0" title="0">resUserA := r.executeRequest(
+                                ctx,
+                                r.config.BaseURL,
+                                resolvedPath,
+                                ep.Path,
+                                ep.Method,
+                                headers,
+                                r.config.Cookies,
+                                payload,
+                                swagger.FuzzingProfile("BOLA"),
+                                queryParams,
+                                nil,
+                                ep.ContentType,
+                        )
+
+                        if resUserA.Status &gt;= 200 &amp;&amp; resUserA.Status &lt; 300 </span><span class="cov0" title="0">{
+                                successRes = resUserA
+                                break</span>
+                        }
+                        <span class="cov0" title="0">if successRes == nil </span><span class="cov0" title="0">{
+                                successRes = resUserA
+                        }</span>
+                }
+
+                <span class="cov0" title="0">if successRes != nil </span><span class="cov0" title="0">{
+                        successRes.Identity = "User A" // explicitly mark as User A
+                        candMu.Lock()
+                        candidates = append(candidates, successRes)
+                        candMu.Unlock()
+
+                        // Broadcast event so it shows up in Request Logs under User A
+                        r.Broadcast(Event{
+                                Type: EventResult,
+                                Data: successRes,
+                        })
+                }</span>
+                
+                <span class="cov0" title="0">&lt;-candSem
+                candWg.Done()</span>
+        }(ep)
+        }
+        <span class="cov8" title="1">candWg.Wait()
+
+        var bolaResults []*swagger.FuzzResult
+        var bolaMu sync.Mutex
+        var bolaWg sync.WaitGroup
+        bolaSem := make(chan struct{}, concurrency)
+
+        // 3. Replay requests
+        for _, cand := range candidates </span><span class="cov8" title="1">{
+                bolaWg.Add(1)
+                bolaSem &lt;- struct{}{}
+                
+                go func(cand *swagger.FuzzResult) </span><span class="cov8" title="1">{
+                ep, found := r.findEndpointConfig(cand.Endpoint, cand.Method)
+                if !found </span><span class="cov0" title="0">{
+                        &lt;-bolaSem
+                        bolaWg.Done()
+                        return
+                }</span>
+
+                <span class="cov8" title="1">hasPathParams := strings.Contains(cand.Endpoint, "{")
+
+                // Replay for each harvested ID (or use candidate's resolved path if none harvested or static)
+                pathsToTest := []string{cand.ResolvedPath}
+                pathToID := make(map[string]string)
+                pathToID[cand.ResolvedPath] = ""
+
+                var paramName string
+                if hasPathParams </span><span class="cov8" title="1">{
+                        origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+                        for _, part := range origParts </span><span class="cov8" title="1">{
+                                if strings.HasPrefix(part, "{") &amp;&amp; strings.HasSuffix(part, "}") </span><span class="cov8" title="1">{
+                                        paramName = part[1 : len(part)-1]
+                                        break</span>
+                                }
+                        }
+                } else<span class="cov0" title="0"> {
+                        if m, ok := cand.Payload.(map[string]any); ok </span><span class="cov0" title="0">{
+                                for k := range m </span><span class="cov0" title="0">{
+                                        kLower := strings.ToLower(k)
+                                        if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") </span><span class="cov0" title="0">{
+                                                paramName = k
+                                                break</span>
+                                        }
+                                }
+                        }
+                }
+
+                <span class="cov8" title="1">if paramName != "" </span><span class="cov8" title="1">{
+                        uniqueIDs := make(map[string]bool)
+                        r.harvestedIDs.Range(func(key, value any) bool </span><span class="cov0" title="0">{
+                                vSlice := value.([]string)
+                                for _, id := range vSlice </span><span class="cov0" title="0">{
+                                        uniqueIDs[id] = true
+                                }</span>
+                                <span class="cov0" title="0">return true</span>
+                        })
+
+                        <span class="cov8" title="1">var harvested []string
+                        for id := range uniqueIDs </span><span class="cov0" title="0">{
+                                harvested = append(harvested, id)
+                        }</span>
+
+                        <span class="cov8" title="1">if len(harvested) &gt; 0 </span><span class="cov0" title="0">{
+                                limit := len(harvested)
+                                if limit &gt; 25 </span><span class="cov0" title="0">{
+                                        limit = 25
+                                }</span>
+                                <span class="cov0" title="0">for i := 0; i &lt; limit; i++ </span><span class="cov0" title="0">{
+                                        newResolvedPath := cand.ResolvedPath
+                                        if hasPathParams </span><span class="cov0" title="0">{
+                                                origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+                                                resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
+                                                if len(origParts) == len(resolParts) </span><span class="cov0" title="0">{
+                                                        for idx, part := range origParts </span><span class="cov0" title="0">{
+                                                                if strings.HasPrefix(part, "{") &amp;&amp; strings.HasSuffix(part, "}") </span><span class="cov0" title="0">{
+                                                                        kLower := strings.ToLower(part[1 : len(part)-1])
+                                                                        if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") </span><span class="cov0" title="0">{
+                                                                                resolParts[idx] = harvested[i]
+                                                                        }</span>
+                                                                }
+                                                        }
+                                                        <span class="cov0" title="0">newResolvedPath = "/" + strings.Join(resolParts, "/")</span>
+                                                }
+                                        }
+
+                                        <span class="cov0" title="0">foundDuplicate := false
+                                        for _, p := range pathsToTest </span><span class="cov0" title="0">{
+                                                if p == newResolvedPath &amp;&amp; pathToID[p] == harvested[i] </span><span class="cov0" title="0">{
+                                                        foundDuplicate = true
+                                                        break</span>
+                                                }
+                                        }
+                                        <span class="cov0" title="0">if !foundDuplicate </span><span class="cov0" title="0">{
+                                                pathsToTest = append(pathsToTest, newResolvedPath)
+                                                pathToID[newResolvedPath] = harvested[i]
+                                        }</span>
+                                }
+                        }
+                }
+
+                <span class="cov8" title="1">confirmedIdentities := make(map[string]bool)
+
+                for _, resolvedPath := range pathsToTest </span><span class="cov8" title="1">{
+                        // Check if we have already confirmed bypass for all identities and anonymous
+                        allDone := true
+                        for idName := range identityHeaders </span><span class="cov8" title="1">{
+                                if !confirmedIdentities[idName] </span><span class="cov8" title="1">{
+                                        allDone = false
+                                        break</span>
+                                }
+                        }
+                        <span class="cov8" title="1">if !confirmedIdentities["Anonymous"] </span><span class="cov8" title="1">{
+                                allDone = false
+                        }</span>
+                        <span class="cov8" title="1">if allDone </span><span class="cov0" title="0">{
+                                break</span>
+                        }
+
+                        // Determine request payload and query params (substituting current path ID if needed)
+                        <span class="cov8" title="1">var qp map[string]any
+                        var pl any
+                        targetID := pathToID[resolvedPath]
+
+                        if isNoBodyMethod(cand.Method) </span><span class="cov8" title="1">{
+                                if m, ok := cand.Payload.(map[string]any); ok </span><span class="cov0" title="0">{
+                                        if targetID != "" &amp;&amp; paramName != "" </span><span class="cov0" title="0">{
+                                                substituted := substituteIDsInPayload(m, paramName, targetID)
+                                                if subMap, ok := substituted.(map[string]any); ok </span><span class="cov0" title="0">{
+                                                        qp = subMap
+                                                }</span> else<span class="cov0" title="0"> {
+                                                        qp = m
+                                                }</span>
+                                        } else<span class="cov0" title="0"> {
+                                                qp = m
+                                        }</span>
+                                }
+                        } else<span class="cov0" title="0"> {
+                                if targetID != "" &amp;&amp; paramName != "" &amp;&amp; cand.Payload != nil </span><span class="cov0" title="0">{
+                                        pl = substituteIDsInPayload(cand.Payload, paramName, targetID)
+                                }</span> else<span class="cov0" title="0"> {
+                                        pl = cand.Payload
+                                }</span>
+                        }
+
+                        // Replay for each identity B (Always run to check for Tenant Bypass)
+                        <span class="cov8" title="1">for idName, headers := range identityHeaders </span><span class="cov8" title="1">{
+                                if confirmedIdentities[idName] </span><span class="cov0" title="0">{
+                                        continue</span>
+                                }
+                                <span class="cov8" title="1">cookies := identityCookies[idName]
+
+                                // Execute request
+                                res := r.executeRequest(
+                                        ctx,
+                                        r.config.BaseURL,
+                                        resolvedPath,
+                                        cand.Endpoint,
+                                        cand.Method,
+                                        headers,
+                                        cookies,
+                                        pl,
+                                        swagger.FuzzingProfile("BOLA"),
+                                        qp,
+                                        nil,
+                                        ep.ContentType,
+                                )
+
+                                // If success, check for BOLA or Tenant Bypass
+                                if res.Status &gt;= 200 &amp;&amp; res.Status &lt; 300 </span><span class="cov8" title="1">{
+                                        formattedName := formatIdentityName(idName)
+                                        res.Identity = formattedName
+                                        confirmedIdentities[idName] = true
+                                        
+                                        if targetID != "" || paramName != "" </span><span class="cov8" title="1">{
+                                                minedFrom := "Unknown"
+                                                if targetID != "" </span><span class="cov0" title="0">{
+                                                        if src, ok := r.idSources.Load(targetID); ok </span><span class="cov0" title="0">{
+                                                                minedFrom = src.(string)
+                                                        }</span>
+                                                }
+                                                <span class="cov8" title="1">finding := swagger.AnalysisFinding{
+                                                        RuleID:   "swazz/bola-idor",
+                                                        Level:    "error",
+                                                        Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", formattedName),
+                                                        Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d, ID %s mined from: %s", formattedName, cand.Method, resolvedPath, res.Status, targetID, minedFrom),
+                                                }
+                                                res.AnalyzerFindings = append(res.AnalyzerFindings, finding)</span>
+                                        } else<span class="cov0" title="0"> {
+                                                finding := swagger.AnalysisFinding{
+                                                        RuleID:   "swazz/tenant-isolation-bypass",
+                                                        Level:    "warning",
+                                                        Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", formattedName),
+                                                        Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", formattedName, cand.Method, resolvedPath, res.Status),
+                                                }
+                                                res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+                                        }</span>
+                                        <span class="cov8" title="1">bolaMu.Lock()
+                                        bolaResults = append(bolaResults, res)
+                                        bolaMu.Unlock()
+                                        
+                                        // Broadcast event
+                                        r.Broadcast(Event{
+                                                Type: EventResult,
+                                                Data: res,
+                                        })</span>
+                                }
+                        }
+
+                        // 4. Anonymous access check
+                        <span class="cov8" title="1">if !confirmedIdentities["Anonymous"] </span><span class="cov8" title="1">{
+                                anonHeaders := make(map[string]string)
+                                anonCookies := make(map[string]string)
+
+                                // Determine auth keys to drop
+                                dropHeaders := r.config.Settings.AuthHeaders
+                                if len(dropHeaders) == 0 </span><span class="cov8" title="1">{
+                                        dropHeaders = []string{"Authorization", "X-API-Key"}
+                                }</span>
+                                <span class="cov8" title="1">dropCookies := r.config.Settings.AuthCookies
+                                if len(dropCookies) == 0 </span><span class="cov8" title="1">{
+                                        dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
+                                }</span>
+
+                                // Copy global headers except those to drop
+                                <span class="cov8" title="1">for k, v := range r.config.GlobalHeaders </span><span class="cov8" title="1">{
+                                        shouldDrop := false
+                                        for _, drop := range dropHeaders </span><span class="cov8" title="1">{
+                                                if strings.EqualFold(k, drop) </span><span class="cov8" title="1">{
+                                                        shouldDrop = true
+                                                        break</span>
+                                                }
+                                        }
+                                        <span class="cov8" title="1">if !shouldDrop </span><span class="cov0" title="0">{
+                                                anonHeaders[k] = v
+                                        }</span>
+                                }
+
+                                // Copy cookies except those to drop
+                                <span class="cov8" title="1">for k, v := range r.config.Cookies </span><span class="cov0" title="0">{
+                                        shouldDrop := false
+                                        for _, drop := range dropCookies </span><span class="cov0" title="0">{
+                                                if strings.EqualFold(k, drop) </span><span class="cov0" title="0">{
+                                                        shouldDrop = true
+                                                        break</span>
+                                                }
+                                        }
+                                        <span class="cov0" title="0">if !shouldDrop </span><span class="cov0" title="0">{
+                                                anonCookies[k] = v
+                                        }</span>
+                                }
+
+                                <span class="cov8" title="1">resAnon := r.executeRequest(
+                                        ctx,
+                                        r.config.BaseURL,
+                                        resolvedPath,
+                                        cand.Endpoint,
+                                        cand.Method,
+                                        anonHeaders,
+                                        anonCookies,
+                                        pl,
+                                        swagger.FuzzingProfile("BOLA"),
+                                        qp,
+                                        nil,
+                                        ep.ContentType,
+                                )
+
+                                if resAnon.Status &gt;= 200 &amp;&amp; resAnon.Status &lt; 300 </span><span class="cov8" title="1">{
+                                        resAnon.Identity = "Anonymous"
+                                        confirmedIdentities["Anonymous"] = true
+                                        
+                                        minedFrom := "Unknown"
+                                        if targetID != "" </span><span class="cov0" title="0">{
+                                                if src, ok := r.idSources.Load(targetID); ok </span><span class="cov0" title="0">{
+                                                        minedFrom = src.(string)
+                                                }</span>
+                                        }
+                                        
+                                        <span class="cov8" title="1">evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d", cand.Method, resolvedPath, resAnon.Status)
+                                        if targetID != "" </span><span class="cov0" title="0">{
+                                                evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom)
+                                        }</span>
+                                        
+                                        <span class="cov8" title="1">finding := swagger.AnalysisFinding{
+                                                RuleID:   "swazz/unauthorized-access",
+                                                Level:    "error",
+                                                Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
+                                                Evidence: evidenceStr,
+                                        }
+                                        bolaMu.Lock()
+                                        resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
+                                        bolaResults = append(bolaResults, resAnon)
+                                        bolaMu.Unlock()
+
+                                        // Broadcast event
+                                        r.Broadcast(Event{
+                                                Type: EventResult,
+                                                Data: resAnon,
+                                        })</span>
+                                }
+                        }
+                }
+                
+                <span class="cov8" title="1">&lt;-bolaSem
+                bolaWg.Done()</span>
+        }(cand)
+        }
+        <span class="cov8" title="1">bolaWg.Wait()
+
+        fmt.Printf("Access Control phase complete. Found %d findings.\n", len(bolaResults))
+        return bolaResults</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// events.go: Manages the real-time event system for progress reporting.
+// It handles SSE (Server-Sent Events) subscribers, message broadcasting,
+// and ensures critical events are delivered to the dashboard.
+
+package runner
+
+import (
+        "bytes"
+        "encoding/json"
+        "fmt"
+        "sync"
+        "time"
+)
+
+// Event types for SSE streaming.
+const (
+        EventResult   = "result"
+        EventProgress = "progress"
+        EventComplete = "complete"
+        EventError    = "error"
+)
+
+// Event represents a streaming event sent to subscribers.
+type Event struct {
+        Type string `json:"type"`
+        Data any    `json:"data"`
+}
+
+var bufPool = sync.Pool{
+        New: func() any <span class="cov8" title="1">{
+                return new(bytes.Buffer)
+        }</span>,
+}
+
+// JSON serializes the event data.
+func (e *Event) JSON() string <span class="cov0" title="0">{
+        b, err := json.Marshal(e.Data)
+        if err != nil </span><span class="cov0" title="0">{
+                fmt.Printf("[ERROR] Failed to marshal event data for type %s: %v\n", e.Type, err)
+                return `{"error": "failed to marshal event data on server"}`
+        }</span>
+        <span class="cov0" title="0">return string(b)</span>
+}
+
+// Subscribe returns a channel for receiving live events.
+func (r *Runner) Subscribe() chan Event <span class="cov8" title="1">{
+        ch := make(chan Event, 512)
+        r.subsMu.Lock()
+        r.subs[ch] = struct{}{}
+        r.subsMu.Unlock()
+        return ch
+}</span>
+
+// Unsubscribe removes a subscriber channel safely, avoiding double-close panic.
+func (r *Runner) Unsubscribe(ch chan Event) <span class="cov8" title="1">{
+        r.subsMu.Lock()
+        _, exists := r.subs[ch]
+        if exists </span><span class="cov8" title="1">{
+                delete(r.subs, ch)
+                close(ch)
+        }</span>
+        <span class="cov8" title="1">r.subsMu.Unlock()</span>
+}
+
+func (r *Runner) Broadcast(evt Event) <span class="cov8" title="1">{
+        r.eventQueue.Push(evt)
+}</span>
+
+func (r *Runner) broadcastLoop() <span class="cov8" title="1">{
+        stalledSubs := make(map[chan Event]bool)
+
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case &lt;-r.doneCh:<span class="cov8" title="1">
+                        // Drain remaining events before exiting
+                        r.processEvents(r.eventQueue.PopAll(), stalledSubs)
+                        return</span>
+                case &lt;-r.eventQueue.WaitChan():<span class="cov8" title="1">
+                        r.processEvents(r.eventQueue.PopAll(), stalledSubs)</span>
+                }
+        }
+}
+
+func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool) <span class="cov8" title="1">{
+        if nodes == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">r.subsMu.RLock()
+        subs := make([]chan Event, 0, len(r.subs))
+        for ch := range r.subs </span><span class="cov8" title="1">{
+                subs = append(subs, ch)
+        }</span>
+        <span class="cov8" title="1">r.subsMu.RUnlock()
+
+        for nodes != nil </span><span class="cov8" title="1">{
+                evt := nodes.Value
+                nodes = nodes.Next
+
+                for _, ch := range subs </span><span class="cov8" title="1">{
+                        if stalledSubs[ch] </span><span class="cov0" title="0">{
+                                continue</span>
+                        }
+
+                        <span class="cov8" title="1">if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError </span><span class="cov8" title="1">{
+                                // Critical events MUST be delivered, but with a timeout to prevent OOM
+                                // if a client stalls indefinitely.
+                                if !safeSend(ch, evt, 5*time.Second) </span><span class="cov0" title="0">{
+                                        stalledSubs[ch] = true
+                                        r.Unsubscribe(ch)
+                                }</span>
+                        } else<span class="cov8" title="1"> {
+                                // Non-critical events (like progress stats) can be dropped if the client is too slow.
+                                safeSendNonBlocking(ch, evt)
+                        }</span>
+                }
+        }
+}
+
+// safeSend attempts to write to a channel with a timeout.
+// It safely recovers from panics if the channel is closed concurrently.
+func safeSend(ch chan Event, evt Event, timeout time.Duration) (ok bool) <span class="cov8" title="1">{
+        defer func() </span><span class="cov8" title="1">{
+                if r := recover(); r != nil </span><span class="cov0" title="0">{
+                        ok = false
+                }</span>
+        }()
+
+        <span class="cov8" title="1">select </span>{
+        case ch &lt;- evt:<span class="cov8" title="1">
+                return true</span>
+        case &lt;-time.After(timeout):<span class="cov0" title="0">
+                return false</span>
+        }
+}
+
+// safeSendNonBlocking attempts to write to a channel without blocking.
+// It safely recovers from panics if the channel is closed concurrently.
+func safeSendNonBlocking(ch chan Event, evt Event) (ok bool) <span class="cov8" title="1">{
+        defer func() </span><span class="cov8" title="1">{
+                if r := recover(); r != nil </span><span class="cov0" title="0">{
+                        ok = false
+                }</span>
+        }()
+
+        <span class="cov8" title="1">select </span>{
+        case ch &lt;- evt:<span class="cov8" title="1">
+                return true</span>
+        default:<span class="cov0" title="0">
+                return false</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package runner
+
+import "sync/atomic"
+
+// EventNode represents a node in the lock-free MPSC queue.
+type EventNode struct {
+        Value Event
+        Next  *EventNode
+}
+
+// MPSCQueue is a lock-free multi-producer single-consumer queue.
+// It uses an atomic stack for lock-free pushes and reverses the list for FIFO popping.
+type MPSCQueue struct {
+        head   atomic.Pointer[EventNode]
+        notify chan struct{}
+}
+
+// NewMPSCQueue initializes a new lock-free queue.
+func NewMPSCQueue() *MPSCQueue <span class="cov8" title="1">{
+        return &amp;MPSCQueue{
+                notify: make(chan struct{}, 1),
+        }
+}</span>
+
+// Push adds an event to the queue lock-free. (Called by 1000s of fuzzer goroutines)
+func (q *MPSCQueue) Push(val Event) <span class="cov8" title="1">{
+        node := &amp;EventNode{Value: val}
+        for </span><span class="cov8" title="1">{
+                head := q.head.Load()
+                node.Next = head
+                if q.head.CompareAndSwap(head, node) </span><span class="cov8" title="1">{
+                        // If the queue was empty, notify the consumer.
+                        if head == nil </span><span class="cov8" title="1">{
+                                select </span>{
+                                case q.notify &lt;- struct{}{}:<span class="cov8" title="1"></span>
+                                default:<span class="cov0" title="0"></span>
+                                }
+                        }
+                        <span class="cov8" title="1">return</span>
+                }
+        }
+}
+
+// PopAll retrieves all pending events in FIFO order. (Called by the single broadcast loop)
+func (q *MPSCQueue) PopAll() *EventNode <span class="cov8" title="1">{
+        head := q.head.Swap(nil)
+        if head == nil </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        // Reverse the stack to convert LIFO to FIFO
+        <span class="cov8" title="1">var prev *EventNode
+        curr := head
+        for curr != nil </span><span class="cov8" title="1">{
+                next := curr.Next
+                curr.Next = prev
+                prev = curr
+                curr = next
+        }</span>
+
+        <span class="cov8" title="1">return prev</span> // prev is now the oldest event (first to be processed)
+}
+
+// WaitChan returns a channel to block the consumer until items arrive.
+func (q *MPSCQueue) WaitChan() &lt;-chan struct{} <span class="cov8" title="1">{
+        return q.notify
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// runner.go: Core execution engine for the swazz fuzzer.
+// It orchestrates the fuzzing process across endpoints, profiles, and iterations,
+// managing concurrency and the request-response lifecycle.
+
+package runner
+
+import (
+        "bytes"
+        "context"
+        "encoding/json"
+        "fmt"
+        "io"
+        "math/rand/v2"
+        "net/http"
+        "net/http/httputil"
+        "net/url"
+        "regexp"
+        "sort"
+        "strings"
+        "sync"
+        "sync/atomic"
+        "time"
+
+        "swazz-engine/internal/analyzer"
+        "swazz-engine/internal/generator"
+        "swazz-engine/internal/generator/payloads"
+        "swazz-engine/internal/oob"
+        "swazz-engine/internal/ratelimit"
+        "swazz-engine/internal/security"
+        "swazz-engine/internal/swagger"
+
+        "github.com/google/uuid"
+)
+
+var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
+
+const (
+        maxRetriesOn429  = 3
+        defaultBackoffMs = 2000
+)
+
+// Runner orchestrates fuzzing runs across endpoints × profiles × iterations.
+type Runner struct {
+        config *swagger.Config
+        client *http.Client
+
+        // Control-flow flags — atomic, zero-lock reads from hot path.
+        isRunning  atomic.Bool
+        isPaused   atomic.Bool
+        shouldStop atomic.Bool
+
+        // Lifecycle guard — only for Start/Stop/Close state transitions.
+        lifecycleMu sync.Mutex
+        cancel      context.CancelFunc
+
+        // Stats aggregation — channel-based, owned by statsAggregator goroutine.
+        statsChan   chan statsMsg
+        latestStats atomic.Pointer[swagger.RunStats]
+        statsDone   chan struct{}
+
+        // Progress metadata — written by main loop (single writer), read by aggregator.
+        currentEndpoint    atomic.Value // string
+        currentProfile     atomic.Value // string
+        completedEndpoints atomic.Int32
+        totalEndpoints     atomic.Int32
+        totalPlanned       atomic.Int64
+
+        // SSE subscribers
+        subsMu sync.RWMutex
+        subs   map[chan Event]struct{}
+
+        eventQueue *MPSCQueue
+        doneCh     chan struct{}
+
+        configMu    sync.RWMutex
+        varReplacer *strings.Replacer
+
+        // Pause/resume — separate mutex, not on hot path.
+        pauseMu   sync.Mutex
+        pauseCond *sync.Cond
+
+        analyzer *analyzer.AnalyzerRegistry
+        sizeBaselines *sync.Map
+        timeBaselines *sync.Map
+        harvestedIDs sync.Map // maps path prefix string -&gt; []string
+        idSources    sync.Map // maps ID string -&gt; source string
+        resultsMu sync.Mutex
+        allResults []*swagger.FuzzResult
+}
+
+// New creates a new Runner.
+func New(config *swagger.Config, client *http.Client) *Runner <span class="cov8" title="1">{
+        if client == nil </span><span class="cov8" title="1">{
+                client = &amp;http.Client{
+                        Timeout: 30 * time.Second,
+                }
+        }</span>
+        <span class="cov8" title="1">client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
+        r := &amp;Runner{
+                config:     config,
+                client:     client,
+                subs:       make(map[chan Event]struct{}),
+                eventQueue: NewMPSCQueue(),
+                doneCh:     make(chan struct{}),
+                statsChan:  make(chan statsMsg, 4096),
+                statsDone:  make(chan struct{}),
+                analyzer:      analyzer.NewRegistry(),
+                sizeBaselines: &amp;sync.Map{},
+                timeBaselines: &amp;sync.Map{},
+        }
+        r.pauseCond = sync.NewCond(&amp;r.pauseMu)
+        r.updateReplacer()
+        // Publish initial empty stats snapshot.
+        empty := newEmptyStats()
+        r.latestStats.Store(&amp;empty)
+        go r.broadcastLoop()
+        return r</span>
+}
+
+// Close stops the background broadcast loop and cleans up resources.
+func (r *Runner) Close() <span class="cov8" title="1">{
+        r.lifecycleMu.Lock()
+        if r.cancel != nil </span><span class="cov8" title="1">{
+                r.cancel()
+        }</span>
+        <span class="cov8" title="1">r.lifecycleMu.Unlock()
+        close(r.doneCh)</span>
+}
+
+// Start begins the fuzzing run. Blocks until complete or stopped.
+func (r *Runner) Start(ctx context.Context) error <span class="cov8" title="1">{
+        r.lifecycleMu.Lock()
+        if r.isRunning.Load() </span><span class="cov0" title="0">{
+                r.lifecycleMu.Unlock()
+                return fmt.Errorf("already running")
+        }</span>
+        <span class="cov8" title="1">r.isRunning.Store(true)
+        r.isPaused.Store(false)
+        r.shouldStop.Store(false)
+
+        // Re-create stats channel (may have been closed by a previous run).
+        r.statsChan = make(chan statsMsg, 4096)
+        r.statsDone = make(chan struct{})
+        empty := newEmptyStats()
+        r.latestStats.Store(&amp;empty)
+        r.sizeBaselines = &amp;sync.Map{}
+
+        // Clear the global OOB store to prevent memory leaks from stale UUIDs of previous runs
+        oob.GlobalStore.Clear()
+
+        ctx, cancel := context.WithCancel(ctx)
+        r.cancel = cancel
+        r.lifecycleMu.Unlock()
+
+        // Launch the stats aggregator goroutine.
+        go r.statsAggregator()
+
+        r.resultsMu.Lock()
+        r.allResults = nil
+        r.resultsMu.Unlock()
+
+        defer func() </span><span class="cov8" title="1">{
+                cancel()
+
+                // Close the stats channel to signal aggregator shutdown,
+                // then wait for it to drain and publish the final snapshot.
+                close(r.statsChan)
+                &lt;-r.statsDone
+
+                r.isRunning.Store(false)
+                // Publish final snapshot with IsRunning=false.
+                final := r.GetStats()
+                final.IsRunning = false
+                final.Progress.CurrentEndpoint = ""
+                final.Progress.CurrentProfile = ""
+                r.latestStats.Store(&amp;final)
+                r.Broadcast(Event{Type: EventComplete, Data: final})
+        }</span>()
+
+        <span class="cov8" title="1">profiles := r.getOrderedProfiles()
+        r.calculateTotalPlanned(profiles)
+
+        if r.config.Settings.Debug </span><span class="cov0" title="0">{
+                fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
+                        len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
+        }</span>
+
+        <span class="cov8" title="1">concurrency := r.config.Settings.Concurrency
+        if concurrency &lt;= 0 </span><span class="cov0" title="0">{
+                concurrency = 5
+        }</span>
+        <span class="cov8" title="1">if concurrency &gt; 1000 </span><span class="cov0" title="0">{
+                return fmt.Errorf("concurrency limit exceeded (max 1000)")
+        }</span>
+        <span class="cov8" title="1">sem := make(chan struct{}, concurrency)
+        var wg sync.WaitGroup
+
+        for _, endpoint := range r.config.Endpoints </span><span class="cov8" title="1">{
+                if r.stopped() </span><span class="cov0" title="0">{
+                        break</span>
+                }
+                <span class="cov8" title="1">key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
+                if _, ok := r.sizeBaselines.Load(key); !ok </span><span class="cov8" title="1">{
+                        sem &lt;- struct{}{}
+                        wg.Add(1)
+
+                        go func(ep swagger.EndpointConfig) </span><span class="cov8" title="1">{
+                                defer func() </span><span class="cov8" title="1">{
+                                        &lt;-sem
+                                        wg.Done()
+                                }</span>()
+
+                                <span class="cov8" title="1">safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+                                safeGen.Endpoint = ep.Method + " " + ep.Path
+                                var payload any
+                                var qp map[string]any
+                                var gh map[string]string
+                                if ep.Example != nil </span><span class="cov0" title="0">{
+                                        isBody := !isNoBodyMethod(ep.Method)
+                                        if isBody </span><span class="cov0" title="0">{
+                                                payload = ep.Example
+                                        }</span> else<span class="cov0" title="0"> {
+                                                if m, ok := ep.Example.(map[string]any); ok </span><span class="cov0" title="0">{
+                                                        qp = m
+                                                }</span>
+                                        }
+                                        <span class="cov0" title="0">if len(ep.HeaderParams) &gt; 0 </span><span class="cov0" title="0">{
+                                                gh = make(map[string]string)
+                                                headerSchema := &amp;swagger.SchemaProperty{
+                                                        Type:       "object",
+                                                        Properties: ep.HeaderParams,
+                                                }
+                                                headerObj := safeGen.BuildObject(headerSchema)
+                                                for k, v := range headerObj </span><span class="cov0" title="0">{
+                                                        gh[k] = fmt.Sprintf("%v", v)
+                                                }</span>
+                                        }
+                                } else<span class="cov8" title="1"> if hasFields(&amp;ep) </span><span class="cov8" title="1">{
+                                        generated := safeGen.BuildObject(&amp;ep.Schema)
+                                        isBody := !isNoBodyMethod(ep.Method)
+                                        if isBody </span><span class="cov8" title="1">{
+                                                payload = generated
+                                        }</span> else<span class="cov0" title="0"> {
+                                                qp = generated
+                                        }</span>
+                                        <span class="cov8" title="1">if len(ep.HeaderParams) &gt; 0 </span><span class="cov0" title="0">{
+                                                gh = make(map[string]string)
+                                                headerSchema := &amp;swagger.SchemaProperty{
+                                                        Type:       "object",
+                                                        Properties: ep.HeaderParams,
+                                                }
+                                                headerObj := safeGen.BuildObject(headerSchema)
+                                                for k, v := range headerObj </span><span class="cov0" title="0">{
+                                                        gh[k] = fmt.Sprintf("%v", v)
+                                                }</span>
+                                        }
+                                }
+                                <span class="cov8" title="1">resolvedPath := fillPathParams(ep.Path, ep.PathParams, safeGen)
+                                result := r.executeRequest(
+                                        ctx,
+                                        r.config.BaseURL,
+                                        resolvedPath,
+                                        ep.Path,
+                                        ep.Method,
+                                        r.config.GlobalHeaders,
+                                        r.config.Cookies,
+                                        payload,
+                                        swagger.ProfileRandom,
+                                        qp,
+                                        gh,
+                                        ep.ContentType,
+                                )
+                                if r.config.Settings.Debug </span><span class="cov0" title="0">{
+                                        fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
+                                                ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
+                                }</span>
+                                <span class="cov8" title="1">if result.Status &gt;= 200 &amp;&amp; result.Status &lt; 300 </span><span class="cov8" title="1">{
+                                        r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
+                                        r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
+                                }</span>
+                        }(endpoint)
+                }
+        }
+        <span class="cov8" title="1">wg.Wait()
+
+        for profileIdx, profile := range profiles </span><span class="cov8" title="1">{
+                if r.stopped() </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov8" title="1">r.currentProfile.Store(string(profile))
+
+                for epIdx, endpoint := range r.config.Endpoints </span><span class="cov8" title="1">{
+                        if r.stopped() </span><span class="cov0" title="0">{
+                                break</span>
+                        }
+
+                        <span class="cov8" title="1">gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
+                        safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+                        endpointStr := endpoint.Method + " " + endpoint.Path
+                        gen.Endpoint = endpointStr
+                        safeGen.Endpoint = endpointStr
+
+                        r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)</span>
+                }
+        }
+
+        <span class="cov8" title="1">r.resultsMu.Lock()
+        candidates := make([]*swagger.FuzzResult, len(r.allResults))
+        copy(candidates, r.allResults)
+        r.resultsMu.Unlock()
+
+        bolaResults := r.bolaPhase(ctx, candidates)
+        for _, res := range bolaResults </span><span class="cov0" title="0">{
+                r.statsChan &lt;- statsMsg{
+                        result:           res,
+                        currentIteration: 1,
+                        totalIterations:  1,
+                }
+        }</span>
+
+        <span class="cov8" title="1">r.rateLimitPhase(ctx)
+
+        return nil</span>
+}
+
+func (r *Runner) getOrderedProfiles() []swagger.FuzzingProfile <span class="cov8" title="1">{
+        settings := r.config.Settings
+        var lightProfiles, heavyList []swagger.FuzzingProfile
+        for _, p := range settings.Profiles </span><span class="cov8" title="1">{
+                if p == swagger.ProfileBoundary </span><span class="cov0" title="0">{
+                        heavyList = append(heavyList, p)
+                }</span> else<span class="cov8" title="1"> {
+                        lightProfiles = append(lightProfiles, p)
+                }</span>
+        }
+        <span class="cov8" title="1">return append(lightProfiles, heavyList...)</span>
+}
+
+func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) <span class="cov8" title="1">{
+        settings := r.config.Settings
+        endpoints := r.config.Endpoints
+        iterations := settings.IterationsPerProfile
+
+        var totalPlanned int64
+        for _, ep := range endpoints </span><span class="cov8" title="1">{
+                hasF := hasFields(&amp;ep)
+                for _, p := range profiles </span><span class="cov8" title="1">{
+                        minNeeded := generator.MinIterationsNeeded(p, settings)
+                        baseIter := iterations
+                        if minNeeded &gt; baseIter </span><span class="cov0" title="0">{
+                                baseIter = minNeeded
+                        }</span>
+                        <span class="cov8" title="1">if !hasF </span><span class="cov8" title="1">{
+                                baseIter = 1
+                        }</span>
+                        <span class="cov8" title="1">totalPlanned += int64(baseIter)</span>
+                }
+        }
+        <span class="cov8" title="1">r.totalPlanned.Store(totalPlanned)
+        r.totalEndpoints.Store(int32(len(endpoints) * len(profiles)))</span>
+}
+
+func (r *Runner) fuzzEndpoint(
+        ctx context.Context,
+        profileIdx int,
+        profile swagger.FuzzingProfile,
+        epIdx int,
+        endpoint swagger.EndpointConfig,
+        gen *generator.Generator,
+        safeGen *generator.Generator,
+) <span class="cov8" title="1">{
+        settings := r.config.Settings
+        endpoints := r.config.Endpoints
+        epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
+
+        r.currentEndpoint.Store(epKey)
+        r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx))
+
+        r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
+        iterations := settings.IterationsPerProfile
+        minNeeded := generator.MinIterationsNeeded(profile, settings)
+        effectiveIterations := iterations
+        if minNeeded &gt; effectiveIterations </span><span class="cov0" title="0">{
+                effectiveIterations = minNeeded
+        }</span>
+        <span class="cov8" title="1">if !hasFields(&amp;endpoint) </span><span class="cov8" title="1">{
+                if profile == swagger.ProfileMalicious </span><span class="cov0" title="0">{
+                        effectiveIterations = minNeeded
+                        if effectiveIterations &lt; 1 </span><span class="cov0" title="0">{
+                                effectiveIterations = 1
+                        }</span>
+                } else<span class="cov8" title="1"> {
+                        effectiveIterations = 1
+                }</span>
+        }
+
+        <span class="cov8" title="1">defaultMaxPayloadSize := settings.MaxPayloadSizeBytes
+        if defaultMaxPayloadSize &lt;= 0 </span><span class="cov8" title="1">{
+                defaultMaxPayloadSize = 1048576 // 1MB default
+        }</span>
+
+        <span class="cov8" title="1">currentMaxPayloadSize := defaultMaxPayloadSize
+        if profile == swagger.ProfileBoundary </span><span class="cov0" title="0">{
+                if currentMaxPayloadSize &lt; 536870912 </span><span class="cov0" title="0">{
+                        currentMaxPayloadSize = 536870912
+                }</span>
+        }
+
+        <span class="cov8" title="1">isBodyMethod := !isNoBodyMethod(endpoint.Method)
+        concurrency := settings.Concurrency
+        if concurrency &lt;= 0 </span><span class="cov0" title="0">{
+                concurrency = 5
+        }</span>
+        <span class="cov8" title="1">if concurrency &gt; 1000 </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov8" title="1">sem := make(chan struct{}, concurrency)
+
+        enableDedup := profile == swagger.ProfileRandom
+        var wg sync.WaitGroup
+        seenHashes := make(map[uint32]bool)
+        delay := time.Duration(settings.DelayBetweenRequestMs) * time.Millisecond
+
+        for i := 0; i &lt; effectiveIterations; i++ </span><span class="cov8" title="1">{
+                if r.stopped() </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                // Determine if this is a security header fuzzing iteration.
+                // During header fuzzing, we send valid/safe body payloads to bypass
+                // application structure checks and isolate header-level vulnerabilities.
+                <span class="cov8" title="1">isSecHeaderIter := false
+                if profile == swagger.ProfileMalicious </span><span class="cov0" title="0">{
+                        bodyIters := gen.BodyIterations()
+                        if i &gt;= bodyIters </span><span class="cov0" title="0">{
+                                isSecHeaderIter = true
+                        }</span>
+                }
+
+                <span class="cov8" title="1">var payload any
+                var queryParams map[string]any
+                var payloadHash uint32 = payloads.HashStr("empty")
+                isDuplicate := false
+
+                if hasFields(&amp;endpoint) </span><span class="cov8" title="1">{
+                        for retries := 0; retries &lt; 10; retries++ </span><span class="cov8" title="1">{
+                                var generated map[string]any
+                                if profile == swagger.ProfileRandom &amp;&amp; isBodyMethod &amp;&amp; rand.Float64() &lt; 0.15 </span><span class="cov8" title="1">{
+                                        // In RANDOM profile, there is a 15% chance to send an empty object `{}`
+                                        // as the request body to test API robustness.
+                                        generated = map[string]any{}
+                                }</span> else<span class="cov8" title="1"> if isSecHeaderIter </span><span class="cov0" title="0">{
+                                        generated = safeGen.BuildObject(&amp;endpoint.Schema)
+                                }</span> else<span class="cov8" title="1"> {
+                                        generated = gen.BuildObject(&amp;endpoint.Schema)
+                                }</span>
+
+                                <span class="cov8" title="1">buf := bufPool.Get().(*bytes.Buffer)
+                                buf.Reset()
+                                err := json.NewEncoder(buf).Encode(generated)
+
+                                if err != nil || buf.Len() &gt; currentMaxPayloadSize </span><span class="cov0" title="0">{
+                                        bufPool.Put(buf)
+                                        isDuplicate = true
+                                        continue</span>
+                                }
+
+                                <span class="cov8" title="1">if isBodyMethod </span><span class="cov8" title="1">{
+                                        payload = generated
+                                }</span> else<span class="cov0" title="0"> {
+                                        queryParams = generated
+                                }</span>
+                                <span class="cov8" title="1">payloadStr := strings.TrimSuffix(buf.String(), "\n")
+                                payloadHash = payloads.HashStr(payloadStr)
+                                bufPool.Put(buf)
+
+                                if enableDedup </span><span class="cov8" title="1">{
+                                        if !seenHashes[payloadHash] </span><span class="cov8" title="1">{
+                                                isDuplicate = false
+                                                break</span>
+                                        }
+                                        <span class="cov8" title="1">isDuplicate = true</span>
+                                } else<span class="cov0" title="0"> {
+                                        isDuplicate = false
+                                        break</span>
+                                }
+                        }
+                } else<span class="cov8" title="1"> {
+                        if enableDedup </span><span class="cov8" title="1">{
+                                isDuplicate = seenHashes[payloadHash]
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if isDuplicate </span><span class="cov8" title="1">{
+                        r.totalPlanned.Add(-1)
+                        continue</span>
+                }
+                <span class="cov8" title="1">if enableDedup </span><span class="cov8" title="1">{
+                        seenHashes[payloadHash] = true
+                }</span>
+
+                // Generate fuzzed/safe headers sequentially in the main thread to prevent concurrency data races
+                <span class="cov8" title="1">generatedHeaders := make(map[string]string)
+                if len(endpoint.HeaderParams) &gt; 0 </span><span class="cov0" title="0">{
+                        var headerGen *generator.Generator
+                        if isSecHeaderIter </span><span class="cov0" title="0">{
+                                headerGen = safeGen
+                        }</span> else<span class="cov0" title="0"> {
+                                headerGen = gen
+                        }</span>
+                        <span class="cov0" title="0">headerSchema := &amp;swagger.SchemaProperty{
+                                Type:       "object",
+                                Properties: endpoint.HeaderParams,
+                        }
+                        headerObj := headerGen.BuildObject(headerSchema)
+                        for k, v := range headerObj </span><span class="cov0" title="0">{
+                                generatedHeaders[k] = fmt.Sprintf("%v", v)
+                        }</span>
+                }
+
+                // Inject custom security-test headers if this is a header fuzzing iteration
+                <span class="cov8" title="1">if isSecHeaderIter </span><span class="cov0" title="0">{
+                        if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil </span><span class="cov0" title="0">{
+                                for k, v := range secHeaders </span><span class="cov0" title="0">{
+                                        generatedHeaders[k] = v
+                                }</span>
+                        }
+                }
+
+                <span class="cov8" title="1">r.pauseMu.Lock()
+                for r.isPaused.Load() &amp;&amp; !r.shouldStop.Load() </span><span class="cov8" title="1">{
+                        r.pauseCond.Wait()
+                }</span>
+                <span class="cov8" title="1">r.pauseMu.Unlock()
+                if r.shouldStop.Load() </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov8" title="1">sem &lt;- struct{}{}
+                wg.Add(1)
+
+                go func(it int, p any, qp map[string]any, gh map[string]string) </span><span class="cov8" title="1">{
+                        defer func() </span><span class="cov8" title="1">{
+                                &lt;-sem
+                                wg.Done()
+                        }</span>()
+
+                        <span class="cov8" title="1">resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
+
+                        result := r.executeRequest(
+                                ctx,
+                                r.config.BaseURL,
+                                resolvedPath,
+                                endpoint.Path,
+                                endpoint.Method,
+                                r.config.GlobalHeaders,
+                                r.config.Cookies,
+                                p,
+                                profile,
+                                qp,
+                                gh,
+                                endpoint.ContentType,
+                        )
+
+                        if profile == swagger.ProfileRandom &amp;&amp; result.Status &gt;= 200 &amp;&amp; result.Status &lt; 300 </span><span class="cov8" title="1">{
+                                r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
+                                r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
+                        }</span>
+
+                        // Send result to aggregator (buffered, non-blocking under normal load).
+                        <span class="cov8" title="1">r.statsChan &lt;- statsMsg{
+                                result:           result,
+                                currentIteration: it + 1,
+                                totalIterations:  effectiveIterations,
+                        }
+                        // Broadcast individual result immediately (lock-free MPSCQueue).
+                        r.Broadcast(Event{Type: EventResult, Data: result})
+
+                        if result.Status &gt;= 200 &amp;&amp; result.Status &lt; 300 </span><span class="cov8" title="1">{
+                                r.resultsMu.Lock()
+                                r.allResults = append(r.allResults, result)
+                                r.resultsMu.Unlock()
+                        }</span>
+                }(i, payload, queryParams, generatedHeaders)
+
+                <span class="cov8" title="1">if delay &gt; 0 </span><span class="cov0" title="0">{
+                        time.Sleep(delay)
+                }</span>
+        }
+
+        <span class="cov8" title="1">wg.Wait()
+
+        r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx + 1))
+        r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})</span>
+}
+
+// Stop signals the runner to stop.
+func (r *Runner) Stop() <span class="cov0" title="0">{
+        r.shouldStop.Store(true)
+        r.isPaused.Store(false)
+        r.lifecycleMu.Lock()
+        if r.cancel != nil </span><span class="cov0" title="0">{
+                r.cancel()
+        }</span>
+        <span class="cov0" title="0">r.lifecycleMu.Unlock()
+        // Wake any goroutines waiting on pauseCond.
+        r.pauseCond.Broadcast()</span>
+}
+
+// Pause pauses the runner.
+func (r *Runner) Pause() <span class="cov8" title="1">{
+        if r.isRunning.Load() </span><span class="cov8" title="1">{
+                r.isPaused.Store(true)
+        }</span>
+}
+
+// Resume resumes a paused runner.
+func (r *Runner) Resume() <span class="cov8" title="1">{
+        r.isPaused.Store(false)
+        r.pauseCond.Broadcast()
+}</span>
+
+// IsRunning returns whether the runner is active.
+func (r *Runner) IsRunning() bool <span class="cov8" title="1">{
+        return r.isRunning.Load()
+}</span>
+
+// ─── Private ────────────────────────────────────────────
+
+func (r *Runner) stopped() bool <span class="cov8" title="1">{ return r.shouldStop.Load() }</span>
+
+func (r *Runner) paused() bool <span class="cov0" title="0">{ return r.isPaused.Load() }</span>
+
+func (r *Runner) executeRequest(
+        ctx context.Context,
+        baseURL, resolvedPath, originalPath, method string,
+        headers, cookies map[string]string,
+        payload any,
+        profile swagger.FuzzingProfile,
+        queryParams map[string]any,
+        generatedHeaders map[string]string,
+        contentType string,
+) *swagger.FuzzResult <span class="cov8" title="1">{
+        // Merge headers: generatedHeaders &lt; global headers
+        isBody := !isNoBodyMethod(method)
+        mergedHeaders := make(map[string]string)
+        for k, v := range generatedHeaders </span><span class="cov0" title="0">{
+                mergedHeaders[k] = v
+        }</span>
+
+        <span class="cov8" title="1">r.configMu.RLock()
+        for k, v := range headers </span><span class="cov8" title="1">{
+                // Apply variable substitution to global headers too
+                mergedHeaders[k] = r.subVarsLocked(v)
+        }</span>
+
+        <span class="cov8" title="1">effectiveCT := contentType
+        if effectiveCT == "" </span><span class="cov8" title="1">{
+                effectiveCT = "application/json"
+        }</span>
+        <span class="cov8" title="1">hasContentType := false
+        for k := range mergedHeaders </span><span class="cov8" title="1">{
+                if strings.EqualFold(k, "content-type") </span><span class="cov0" title="0">{
+                        hasContentType = true
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">if isBody &amp;&amp; payload != nil &amp;&amp; !hasContentType </span><span class="cov8" title="1">{
+                mergedHeaders["Content-Type"] = effectiveCT
+        }</span>
+
+        <span class="cov8" title="1">rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
+        rawURL = r.subVarsLocked(rawURL)
+
+        if len(queryParams) &gt; 0 </span><span class="cov8" title="1">{
+                if parsedURL, err := url.Parse(rawURL); err == nil </span><span class="cov8" title="1">{
+                        query := parsedURL.Query()
+                        for k, v := range queryParams </span><span class="cov8" title="1">{
+                                query.Set(k, fmt.Sprintf("%v", v))
+                        }</span>
+                        <span class="cov8" title="1">parsedURL.RawQuery = query.Encode()
+                        rawURL = parsedURL.String()</span>
+                }
+        }
+
+        <span class="cov8" title="1">timeoutMs := r.config.Settings.TimeoutMs
+        r.configMu.RUnlock()
+        if timeoutMs &lt;= 0 </span><span class="cov8" title="1">{
+                timeoutMs = 10000
+        }</span>
+
+        <span class="cov8" title="1">for attempt := 0; ; attempt++ </span><span class="cov8" title="1">{
+                payloadSize := 0
+                reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+
+                var bodyReader io.Reader
+                if isBody &amp;&amp; payload != nil </span><span class="cov8" title="1">{
+                        if strings.Contains(effectiveCT, "x-www-form-urlencoded") </span><span class="cov0" title="0">{
+                                if m, ok := payload.(map[string]any); ok </span><span class="cov0" title="0">{
+                                        vals := url.Values{}
+                                        for k, v := range m </span><span class="cov0" title="0">{
+                                                vals.Set(k, fmt.Sprintf("%v", v))
+                                        }</span>
+                                        <span class="cov0" title="0">bodyReader = strings.NewReader(vals.Encode())
+                                        payloadSize = len(vals.Encode())</span>
+                                }
+                        }
+                        <span class="cov8" title="1">if bodyReader == nil &amp;&amp; strings.Contains(effectiveCT, "xml") </span><span class="cov0" title="0">{
+                                if m, ok := payload.(map[string]any); ok </span><span class="cov0" title="0">{
+                                        xmlContent, _ := generator.ToXML(m, "request")
+                                        soapBody, _ := generator.WrapInSOAP(xmlContent)
+                                        bodyReader = strings.NewReader(soapBody)
+                                        payloadSize = len(soapBody)
+                                }</span>
+                        }
+
+                        <span class="cov8" title="1">if bodyReader == nil </span><span class="cov8" title="1">{
+                                b, _ := json.Marshal(payload)
+                                bodyReader = strings.NewReader(string(b))
+                                payloadSize = len(b)
+                        }</span>
+                }
+
+                <span class="cov8" title="1">req, err := http.NewRequestWithContext(reqCtx, method, rawURL, bodyReader)
+                if err != nil </span><span class="cov8" title="1">{
+                        reqCancel()
+                        return &amp;swagger.FuzzResult{
+                                ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+                                Method: method, Profile: profile, Status: 0, Payload: payload, PayloadSize: payloadSize,
+                                Error: err.Error(), Timestamp: time.Now().UnixMilli(), Retries: attempt,
+                                RequestHeaders: mergedHeaders,
+                        }
+                }</span>
+
+                <span class="cov8" title="1">for k, v := range mergedHeaders </span><span class="cov8" title="1">{
+                        if strings.EqualFold(k, "Host") </span><span class="cov0" title="0">{
+                                req.Host = v
+                        }</span> else<span class="cov8" title="1"> {
+                                req.Header.Set(k, v)
+                        }</span>
+                }
+                <span class="cov8" title="1">if len(cookies) &gt; 0 </span><span class="cov0" title="0">{
+                        for k, v := range cookies </span><span class="cov0" title="0">{
+                                req.AddCookie(&amp;http.Cookie{Name: k, Value: v})
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if r.config.Settings.Debug </span><span class="cov0" title="0">{
+                        dump, _ := httputil.DumpRequestOut(req, true)
+                        fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(dump))
+                }</span>
+
+                // Look for OOB payloads to register the actual request details
+                <span class="cov8" title="1">if profile == swagger.ProfileMalicious </span><span class="cov8" title="1">{
+                        if dump, err := httputil.DumpRequestOut(req, true); err == nil </span><span class="cov8" title="1">{
+                                reqStr := string(dump)
+                                matches := uuidRegex.FindAllString(reqStr, -1)
+                                if len(matches) &gt; 0 </span><span class="cov0" title="0">{
+                                        reqLog := &amp;swagger.RequestLog{
+                                                Method:       method,
+                                                URL:          rawURL,
+                                                Headers:      mergedHeaders,
+                                                OriginalPath: originalPath,
+                                                ResolvedPath: req.URL.RequestURI(),
+                                        }
+                                        var body string
+                                        if parts := strings.SplitN(reqStr, "\r\n\r\n", 2); len(parts) == 2 </span><span class="cov0" title="0">{
+                                                body = parts[1]
+                                        }</span> else<span class="cov0" title="0"> if parts := strings.SplitN(reqStr, "\n\n", 2); len(parts) == 2 </span><span class="cov0" title="0">{
+                                                body = parts[1]
+                                        }</span>
+                                        <span class="cov0" title="0">reqLog.Body = body
+
+                                        for _, uuidMatch := range matches </span><span class="cov0" title="0">{
+                                                oob.GlobalStore.UpdateRequest(uuidMatch, reqLog)
+                                        }</span>
+                                }
+                        }
+                }
+
+                <span class="cov8" title="1">start := time.Now()
+                resp, err := r.client.Do(req)
+                duration := time.Since(start).Milliseconds()
+
+                if err == nil &amp;&amp; r.config.Settings.Debug </span><span class="cov0" title="0">{
+                        dump, _ := httputil.DumpResponse(resp, false)
+                        fmt.Printf("\n--- [DEBUG] Fuzz Response ---\n%s\n-----------------------------\n", string(dump))
+                }</span>
+
+                <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                        reqCancel()
+                        errMsg := err.Error()
+                        if ctx.Err() != nil </span><span class="cov0" title="0">{
+                                errMsg = fmt.Sprintf("Request timed out after %dms", timeoutMs)
+                        }</span>
+                        <span class="cov0" title="0">return &amp;swagger.FuzzResult{
+                                ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+                                Method: method, Profile: profile, Status: 0, Duration: duration,
+                                Payload: payload, PayloadSize: payloadSize, Error: errMsg, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+                                RequestHeaders: mergedHeaders,
+                        }</span>
+                }
+
+                // Handle 429 with backoff
+                <span class="cov8" title="1">if resp.StatusCode == 429 &amp;&amp; attempt &lt; maxRetriesOn429 </span><span class="cov0" title="0">{
+                        resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
+                        reqCancel()
+                        backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
+                        jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
+                        select </span>{
+                        case &lt;-time.After(backoff + jitter):<span class="cov0" title="0">
+                                continue</span>
+                        case &lt;-ctx.Done():<span class="cov0" title="0">
+                                return &amp;swagger.FuzzResult{
+                                        ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
+                                        Method: method, Profile: profile, Status: 429, Duration: duration,
+                                        Payload: payload, PayloadSize: payloadSize, Timestamp: time.Now().UnixMilli(), Retries: attempt,
+                                        RequestHeaders: mergedHeaders,
+                                }</span>
+                        }
+                }
+
+                <span class="cov8" title="1">var respBody any
+                var rawBodyBytes []byte
+                if resp.StatusCode &gt;= 400 || r.config.Settings.AnalyzeResponseBody </span><span class="cov8" title="1">{
+                        buf := bufPool.Get().(*bytes.Buffer)
+                        buf.Reset()
+                        io.Copy(buf, io.LimitReader(resp.Body, 51200)) // #nosec G104 -- error intentionally ignored; buf.Len() check handles empty reads
+                        if buf.Len() &gt; 0 </span><span class="cov8" title="1">{
+                                rawBodyBytes = make([]byte, buf.Len())
+                                copy(rawBodyBytes, buf.Bytes())
+                                var parsed any
+                                if json.Unmarshal(rawBodyBytes, &amp;parsed) == nil </span><span class="cov8" title="1">{
+                                        respBody = parsed
+                                }</span> else<span class="cov8" title="1"> {
+                                        respBody = string(rawBodyBytes)
+                                }</span>
+                        }
+                        <span class="cov8" title="1">bufPool.Put(buf)</span>
+                }
+                <span class="cov8" title="1">discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
+                resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
+                reqCancel()
+
+                responseSize := resp.ContentLength
+                if responseSize &lt; 0 </span><span class="cov0" title="0">{
+                        responseSize = int64(len(rawBodyBytes)) + discarded
+                }</span>
+                <span class="cov8" title="1">if r.config.Settings.Debug &amp;&amp; originalPath == "/users" </span><span class="cov0" title="0">{
+                        fmt.Printf("[DEBUG-USERS-RESPONSE] status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t\n",
+                                resp.StatusCode, resp.ContentLength, len(rawBodyBytes), discarded, r.config.Settings.AnalyzeResponseBody)
+                }</span>
+
+                <span class="cov8" title="1">result := &amp;swagger.FuzzResult{
+                        ID:              uuid.New().String(),
+                        Endpoint:        originalPath,
+                        ResolvedPath:    resolvedPath,
+                        Method:          method,
+                        Profile:         profile,
+                        Status:          resp.StatusCode,
+                        Duration:        duration,
+                        Payload:         mergePayload(payload, queryParams),
+                        PayloadSize:     payloadSize,
+                        ResponseBody:    respBody,
+                        ResponseSize:    responseSize,
+                        ResponseHeaders: resp.Header,
+                        RequestHeaders:  mergedHeaders,
+                        Timestamp:       time.Now().UnixMilli(),
+                }
+
+                if profile != swagger.FuzzingProfile("BOLA") </span><span class="cov8" title="1">{
+                        r.harvestFromResponse(originalPath, method, resp.StatusCode, respBody)
+                }</span>
+
+                <span class="cov8" title="1">if r.config.Settings.AnalyzeResponseBody </span><span class="cov8" title="1">{
+                        var baselineSize int64
+                        if profile == swagger.ProfileMalicious </span><span class="cov8" title="1">{
+                                baselineSize = r.getSizeBaselineMedian(method, originalPath)
+                        }</span>
+                        <span class="cov8" title="1">multiplier := r.config.Settings.ResponseSizeAnomalyMultiplier
+                        if multiplier &lt;= 0 </span><span class="cov8" title="1">{
+                                multiplier = 5.0
+                        }</span>
+                        <span class="cov8" title="1">baselineTime := r.getTimeBaselineMedian(method, originalPath)
+                        input := &amp;analyzer.AnalysisInput{
+                                SentPayload:     result.Payload,
+                                ResponseBody:    rawBodyBytes,
+                                ResponseHeaders: resp.Header,
+                                Duration:        duration,
+                                Profile:         profile,
+                                Endpoint:        originalPath,
+                                Method:          method,
+                                ResponseSize:    responseSize,
+                                BaselineSize:    baselineSize,
+                                SizeMultiplier:  multiplier,
+                                BaselineTimeMs:  baselineTime,
+                                TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
+                        }
+                        result.AnalyzerFindings = r.analyzer.Analyze(input)
+                        if r.config.Settings.Debug &amp;&amp; len(result.AnalyzerFindings) &gt; 0 </span><span class="cov0" title="0">{
+                                fmt.Printf("[DEBUG-ANALYZER] Found findings for %s %s: %v\n", method, originalPath, result.AnalyzerFindings)
+                        }</span>
+                        <span class="cov8" title="1">if r.config.Settings.Debug &amp;&amp; profile == swagger.ProfileMalicious &amp;&amp; originalPath == "/users" </span><span class="cov0" title="0">{
+                                fmt.Printf("[DEBUG-USERS-ANOMALY] method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v\n",
+                                        method, baselineSize, responseSize, multiplier, len(result.AnalyzerFindings), result.Payload)
+                        }</span>
+                }
+
+                <span class="cov8" title="1">return result</span>
+        }
+}
+
+type EndpointSizeBaseline struct {
+        mu         sync.Mutex
+        sizes      []int64
+        medianSize int64
+        calculated bool
+}
+
+func (b *EndpointSizeBaseline) addSize(size int64) <span class="cov8" title="1">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+        b.sizes = append(b.sizes, size)
+        b.calculated = false
+}</span>
+
+func (b *EndpointSizeBaseline) getMedian() int64 <span class="cov0" title="0">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+        if b.calculated </span><span class="cov0" title="0">{
+                return b.medianSize
+        }</span>
+        <span class="cov0" title="0">n := len(b.sizes)
+        if n == 0 </span><span class="cov0" title="0">{
+                b.medianSize = 0
+                b.calculated = true
+                return 0
+        }</span>
+
+        <span class="cov0" title="0">temp := make([]int64, n)
+        copy(temp, b.sizes)
+        sort.Slice(temp, func(i, j int) bool </span><span class="cov0" title="0">{ return temp[i] &lt; temp[j] }</span>)
+
+        <span class="cov0" title="0">if n%2 == 1 </span><span class="cov0" title="0">{
+                b.medianSize = temp[n/2]
+        }</span> else<span class="cov0" title="0"> {
+                b.medianSize = (temp[n/2-1] + temp[n/2]) / 2
+        }</span>
+        <span class="cov0" title="0">b.calculated = true
+        return b.medianSize</span>
+}
+
+func (r *Runner) recordSizeBaseline(method, path string, size int64) <span class="cov8" title="1">{
+        key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+        val, ok := r.sizeBaselines.Load(key)
+        if !ok </span><span class="cov8" title="1">{
+                val, _ = r.sizeBaselines.LoadOrStore(key, &amp;EndpointSizeBaseline{})
+        }</span>
+        <span class="cov8" title="1">baseline := val.(*EndpointSizeBaseline)
+        baseline.addSize(size)</span>
+}
+
+func (r *Runner) getSizeBaselineMedian(method, path string) int64 <span class="cov8" title="1">{
+        key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+        val, ok := r.sizeBaselines.Load(key)
+        if !ok </span><span class="cov8" title="1">{
+                return 0
+        }</span>
+        <span class="cov0" title="0">return val.(*EndpointSizeBaseline).getMedian()</span>
+}
+
+func (r *Runner) rateLimitPhase(ctx context.Context) <span class="cov8" title="1">{
+        r.configMu.RLock()
+        checkEnabled := r.config.Settings.RateLimitCheck
+        burstSize := r.config.Settings.RateLimitBurstSize
+        timeoutMs := r.config.Settings.TimeoutMs
+        r.configMu.RUnlock()
+
+        if !checkEnabled </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">r.currentProfile.Store("RATE-LIMIT")
+
+        for _, endpoint := range r.config.Endpoints </span><span class="cov8" title="1">{
+                if r.stopped() </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov8" title="1">epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
+                r.currentEndpoint.Store(epKey)
+                r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
+                safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+                safeGen.Endpoint = endpoint.Method + " " + endpoint.Path
+
+                var payload any
+                var queryParams map[string]any
+                var generatedHeaders map[string]string
+
+                if hasFields(&amp;endpoint) </span><span class="cov0" title="0">{
+                        generated := safeGen.BuildObject(&amp;endpoint.Schema)
+                        isBody := !isNoBodyMethod(endpoint.Method)
+                        if isBody </span><span class="cov0" title="0">{
+                                payload = generated
+                        }</span> else<span class="cov0" title="0"> {
+                                queryParams = generated
+                        }</span>
+                        <span class="cov0" title="0">if len(endpoint.HeaderParams) &gt; 0 </span><span class="cov0" title="0">{
+                                generatedHeaders = make(map[string]string)
+                                headerSchema := &amp;swagger.SchemaProperty{
+                                        Type:       "object",
+                                        Properties: endpoint.HeaderParams,
+                                }
+                                headerObj := safeGen.BuildObject(headerSchema)
+                                for k, v := range headerObj </span><span class="cov0" title="0">{
+                                        generatedHeaders[k] = fmt.Sprintf("%v", v)
+                                }</span>
+                        }
+                }
+
+                <span class="cov8" title="1">resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
+
+                // Merge headers: generatedHeaders &lt; global headers
+                mergedHeaders := make(map[string]string)
+                for k, v := range generatedHeaders </span><span class="cov0" title="0">{
+                        mergedHeaders[k] = v
+                }</span>
+                <span class="cov8" title="1">r.configMu.RLock()
+                for k, v := range r.config.GlobalHeaders </span><span class="cov0" title="0">{
+                        mergedHeaders[k] = r.subVarsLocked(v)
+                }</span>
+                <span class="cov8" title="1">r.configMu.RUnlock()
+
+                finding, statusCodes := ratelimit.Check(
+                        ctx,
+                        r.client,
+                        r.config.BaseURL,
+                        resolvedPath,
+                        endpoint.Path,
+                        endpoint.Method,
+                        mergedHeaders,
+                        payload,
+                        queryParams,
+                        endpoint.ContentType,
+                        burstSize,
+                        timeoutMs,
+                )
+
+                // Record the burst results in stats
+                for i, status := range statusCodes </span><span class="cov8" title="1">{
+                        if status == 0 </span><span class="cov0" title="0">{
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">r.statsChan &lt;- statsMsg{
+                                result: &amp;swagger.FuzzResult{
+                                        ID:           uuid.New().String(),
+                                        Endpoint:     endpoint.Path,
+                                        ResolvedPath: resolvedPath,
+                                        Method:       endpoint.Method,
+                                        Profile:      swagger.FuzzingProfile("RATE-LIMIT"),
+                                        Status:       status,
+                                        Timestamp:    time.Now().UnixMilli(),
+                                },
+                                currentIteration: i + 1,
+                                totalIterations:  len(statusCodes),
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if finding != nil </span><span class="cov8" title="1">{
+                        evidenceStr := fmt.Sprintf("%v", finding.ResponseBody)
+                        result := &amp;swagger.FuzzResult{
+                                ID:           uuid.New().String(),
+                                Endpoint:     endpoint.Path,
+                                ResolvedPath: resolvedPath,
+                                Method:       endpoint.Method,
+                                Profile:      swagger.FuzzingProfile("RATE-LIMIT"),
+                                Status:       finding.Status,
+                                Duration:     finding.Duration,
+                                Payload:      nil,
+                                Timestamp:    finding.Timestamp,
+                                ResponseBody: evidenceStr,
+                                AnalyzerFindings: []swagger.AnalysisFinding{
+                                        {
+                                                RuleID:   finding.RuleID,
+                                                Level:    string(finding.Level),
+                                                Message:  evidenceStr,
+                                                Evidence: evidenceStr,
+                                        },
+                                },
+                        }
+                        r.Broadcast(Event{Type: EventResult, Data: result})
+                }</span>
+        }
+}
+
+
+
+type EndpointTimeBaseline struct {
+        mu         sync.Mutex
+        times      []int64
+        medianTime int64
+        calculated bool
+}
+
+func (b *EndpointTimeBaseline) addTime(t int64) <span class="cov8" title="1">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+        b.times = append(b.times, t)
+        b.calculated = false
+}</span>
+
+func (b *EndpointTimeBaseline) getMedian() int64 <span class="cov8" title="1">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+        if b.calculated </span><span class="cov0" title="0">{
+                return b.medianTime
+        }</span>
+        <span class="cov8" title="1">n := len(b.times)
+        if n == 0 </span><span class="cov0" title="0">{
+                b.medianTime = 0
+                b.calculated = true
+                return 0
+        }</span>
+
+        <span class="cov8" title="1">temp := make([]int64, n)
+        copy(temp, b.times)
+        sort.Slice(temp, func(i, j int) bool </span><span class="cov0" title="0">{ return temp[i] &lt; temp[j] }</span>)
+
+        <span class="cov8" title="1">if n%2 == 1 </span><span class="cov8" title="1">{
+                b.medianTime = temp[n/2]
+        }</span> else<span class="cov0" title="0"> {
+                b.medianTime = (temp[n/2-1] + temp[n/2]) / 2
+        }</span>
+        <span class="cov8" title="1">b.calculated = true
+        return b.medianTime</span>
+}
+
+func (r *Runner) recordTimeBaseline(method, path string, t int64) <span class="cov8" title="1">{
+        key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+        val, ok := r.timeBaselines.Load(key)
+        if !ok </span><span class="cov8" title="1">{
+                val, _ = r.timeBaselines.LoadOrStore(key, &amp;EndpointTimeBaseline{})
+        }</span>
+        <span class="cov8" title="1">baseline := val.(*EndpointTimeBaseline)
+        baseline.addTime(t)</span>
+}
+
+func (r *Runner) getTimeBaselineMedian(method, path string) int64 <span class="cov8" title="1">{
+        key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+        val, ok := r.timeBaselines.Load(key)
+        if !ok </span><span class="cov8" title="1">{
+                return 0
+        }</span>
+        <span class="cov8" title="1">return val.(*EndpointTimeBaseline).getMedian()</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">// stats.go: Aggregates and tracks metrics for the fuzzing session.
+// Uses a dedicated aggregator goroutine that owns stats data exclusively,
+// eliminating mutex contention from the worker hot path. Workers send
+// results via a buffered channel; the aggregator publishes immutable
+// snapshots through atomic.Pointer at a fixed 150ms interval.
+
+package runner
+
+import (
+        "fmt"
+        "strings"
+        "swazz-engine/internal/swagger"
+        "time"
+)
+
+// statsMsg is sent from worker goroutines to the stats aggregator.
+type statsMsg struct {
+        result           *swagger.FuzzResult
+        currentIteration int
+        totalIterations  int
+}
+
+// GetStats returns an immutable snapshot of current stats (lock-free).
+func (r *Runner) GetStats() swagger.RunStats <span class="cov8" title="1">{
+        p := r.latestStats.Load()
+        if p == nil </span><span class="cov0" title="0">{
+                return newEmptyStats()
+        }</span>
+        <span class="cov8" title="1">return *p</span>
+}
+
+// statsAggregator runs as a single background goroutine that owns all
+// mutable stats data. It consumes results from statsChan, accumulates
+// them without any locks, and publishes snapshots at a fixed interval.
+func (r *Runner) statsAggregator() <span class="cov8" title="1">{
+        defer close(r.statsDone)
+
+        ticker := time.NewTicker(150 * time.Millisecond)
+        defer ticker.Stop()
+
+        stats := newEmptyStats()
+        stats.IsRunning = true
+        var latestIteration, latestTotalIterations int
+        dirty := false
+
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case msg, ok := &lt;-r.statsChan:<span class="cov8" title="1">
+                        if !ok </span><span class="cov8" title="1">{
+                                // Channel closed — publish final snapshot and exit
+                                r.publishSnapshot(&amp;stats, latestIteration, latestTotalIterations)
+                                return
+                        }</span>
+                        <span class="cov8" title="1">accumulateResult(&amp;stats, msg.result)
+                        if msg.currentIteration &gt; latestIteration </span><span class="cov8" title="1">{
+                                latestIteration = msg.currentIteration
+                        }</span>
+                        <span class="cov8" title="1">if msg.totalIterations &gt; latestTotalIterations </span><span class="cov8" title="1">{
+                                latestTotalIterations = msg.totalIterations
+                        }</span>
+                        <span class="cov8" title="1">dirty = true</span>
+
+                case &lt;-ticker.C:<span class="cov8" title="1">
+                        if dirty </span><span class="cov8" title="1">{
+                                r.publishSnapshot(&amp;stats, latestIteration, latestTotalIterations)
+                                dirty = false
+                        }</span>
+                }
+        }
+}
+
+// publishSnapshot builds an immutable stats snapshot, stores it atomically,
+// and broadcasts an EventProgress to all SSE subscribers.
+func (r *Runner) publishSnapshot(stats *swagger.RunStats, iteration, totalIterations int) <span class="cov8" title="1">{
+        snap := *stats // shallow copy
+        snap.StatusCounts = copyMapIntInt64(stats.StatusCounts)
+        snap.StatusByProfile = copyMapStatusByProfile(stats.StatusByProfile)
+        snap.ProfileCounts = copyMapProfileInt64(stats.ProfileCounts)
+        snap.EndpointCounts = copyMapEndpoint(stats.EndpointCounts)
+
+        // Merge atomic progress values set by the main loop
+        snap.TotalPlanned = r.totalPlanned.Load()
+        if ep, ok := r.currentEndpoint.Load().(string); ok </span><span class="cov8" title="1">{
+                snap.Progress.CurrentEndpoint = ep
+        }</span>
+        <span class="cov8" title="1">if pr, ok := r.currentProfile.Load().(string); ok </span><span class="cov8" title="1">{
+                snap.Progress.CurrentProfile = pr
+        }</span>
+        <span class="cov8" title="1">snap.Progress.CompletedEndpoints = int(r.completedEndpoints.Load())
+        snap.Progress.TotalEndpoints = int(r.totalEndpoints.Load())
+        snap.Progress.CurrentIteration = iteration
+        snap.Progress.TotalIterations = totalIterations
+
+        // Calculate RPS
+        elapsed := float64(time.Now().UnixMilli()-snap.StartTime) / 1000.0
+        if elapsed &gt; 0 </span><span class="cov8" title="1">{
+                snap.RequestsPerSec = float64(int(float64(snap.TotalRequests)/elapsed*10)) / 10
+        }</span>
+
+        <span class="cov8" title="1">r.latestStats.Store(&amp;snap)
+        r.Broadcast(Event{Type: EventProgress, Data: snap})</span>
+}
+
+// accumulateResult integrates a single fuzz result into the running stats.
+// Called exclusively by the statsAggregator goroutine — no locks needed.
+func accumulateResult(stats *swagger.RunStats, result *swagger.FuzzResult) <span class="cov8" title="1">{
+        stats.TotalRequests++
+        stats.IsRunning = true
+        stats.TotalDurationMs += result.Duration
+
+        status := result.Status
+        stats.StatusCounts[status]++
+
+        if stats.StatusByProfile[result.Profile] == nil </span><span class="cov8" title="1">{
+                stats.StatusByProfile[result.Profile] = make(map[int]int64)
+        }</span>
+        <span class="cov8" title="1">stats.StatusByProfile[result.Profile][status]++
+
+        stats.ProfileCounts[result.Profile]++
+
+        epKey := fmt.Sprintf("%s %s", strings.ToUpper(result.Method), result.Endpoint)
+        if stats.EndpointCounts[epKey] == nil </span><span class="cov8" title="1">{
+                stats.EndpointCounts[epKey] = make(map[int]int64)
+        }</span>
+        <span class="cov8" title="1">stats.EndpointCounts[epKey][status]++
+
+        stats.TotalResponseBytes += result.ResponseSize
+        if result.ResponseSize &gt; stats.MaxResponseSize </span><span class="cov8" title="1">{
+                stats.MaxResponseSize = result.ResponseSize
+        }</span>
+}
+
+func newEmptyStats() swagger.RunStats <span class="cov8" title="1">{
+        return swagger.RunStats{
+                StatusCounts:    make(map[int]int64),
+                StatusByProfile: make(map[swagger.FuzzingProfile]map[int]int64),
+                ProfileCounts:   make(map[swagger.FuzzingProfile]int64),
+                EndpointCounts:  make(map[string]map[int]int64),
+                StartTime:       time.Now().UnixMilli(),
+        }
+}</span>
+
+func copyMapIntInt64(src map[int]int64) map[int]int64 <span class="cov8" title="1">{
+        if src == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">dst := make(map[int]int64, len(src))
+        for k, v := range src </span><span class="cov8" title="1">{
+                dst[k] = v
+        }</span>
+        <span class="cov8" title="1">return dst</span>
+}
+
+func copyMapProfileInt64(src map[swagger.FuzzingProfile]int64) map[swagger.FuzzingProfile]int64 <span class="cov8" title="1">{
+        if src == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">dst := make(map[swagger.FuzzingProfile]int64, len(src))
+        for k, v := range src </span><span class="cov8" title="1">{
+                dst[k] = v
+        }</span>
+        <span class="cov8" title="1">return dst</span>
+}
+
+func copyMapEndpoint(src map[string]map[int]int64) map[string]map[int]int64 <span class="cov8" title="1">{
+        if src == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">dst := make(map[string]map[int]int64, len(src))
+        for k, v := range src </span><span class="cov8" title="1">{
+                dst[k] = copyMapIntInt64(v)
+        }</span>
+        <span class="cov8" title="1">return dst</span>
+}
+
+func copyMapStatusByProfile(src map[swagger.FuzzingProfile]map[int]int64) map[swagger.FuzzingProfile]map[int]int64 <span class="cov8" title="1">{
+        if src == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">dst := make(map[swagger.FuzzingProfile]map[int]int64, len(src))
+        for k, v := range src </span><span class="cov8" title="1">{
+                dst[k] = copyMapIntInt64(v)
+        }</span>
+        <span class="cov8" title="1">return dst</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">// utils.go: General helper functions for the runner package.
+// Includes path parameter handling, value truncation for previews,
+// and payload merging logic.
+
+package runner
+
+import (
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "net/url"
+        "strings"
+        "swazz-engine/internal/classifier"
+        "swazz-engine/internal/generator"
+        "swazz-engine/internal/swagger"
+)
+
+func (r *Runner) updateReplacer() <span class="cov8" title="1">{
+        r.configMu.RLock()
+        vars := r.config.Variables
+        r.configMu.RUnlock()
+
+        args := make([]string, 0, len(vars)*2)
+        for k, v := range vars </span><span class="cov8" title="1">{
+                args = append(args, "{{"+k+"}}", fmt.Sprintf("%v", v))
+        }</span>
+
+        <span class="cov8" title="1">r.configMu.Lock()
+        defer r.configMu.Unlock()
+        if len(args) &gt; 0 </span><span class="cov8" title="1">{
+                r.varReplacer = strings.NewReplacer(args...)
+        }</span> else<span class="cov8" title="1"> {
+                r.varReplacer = nil
+        }</span>
+}
+
+func (r *Runner) subVars(input string) string <span class="cov8" title="1">{
+        r.configMu.RLock()
+        defer r.configMu.RUnlock()
+        return r.subVarsLocked(input)
+}</span>
+
+func (r *Runner) subVarsLocked(input string) string <span class="cov8" title="1">{
+        if r.varReplacer != nil </span><span class="cov8" title="1">{
+                return r.varReplacer.Replace(input)
+        }</span>
+        <span class="cov8" title="1">return input</span>
+}
+
+func hasFields(ep *swagger.EndpointConfig) bool <span class="cov8" title="1">{
+        return (ep.Schema.Properties != nil &amp;&amp; len(ep.Schema.Properties) &gt; 0) ||
+                (ep.PathParams != nil &amp;&amp; len(ep.PathParams) &gt; 0) ||
+                (ep.HeaderParams != nil &amp;&amp; len(ep.HeaderParams) &gt; 0)
+}</span>
+
+func isNoBodyMethod(method string) bool <span class="cov8" title="1">{
+        m := strings.ToUpper(method)
+        return m == "GET" || m == "HEAD" || m == "OPTIONS"
+}</span>
+
+func fillPathParams(path string, pathParams map[string]*swagger.SchemaProperty, gen *generator.Generator) string <span class="cov8" title="1">{
+        if len(pathParams) == 0 &amp;&amp; !strings.Contains(path, "{") </span><span class="cov8" title="1">{
+                return path
+        }</span>
+
+        <span class="cov0" title="0">result := path
+        for name, schema := range pathParams </span><span class="cov0" title="0">{
+                placeholder := "{" + name + "}"
+                if strings.Contains(result, placeholder) </span><span class="cov0" title="0">{
+                        val := capPathParam(gen.Generate(name, schema))
+                        result = strings.ReplaceAll(result, placeholder, url.PathEscape(val))
+                }</span>
+        }
+
+        // Handle any remaining {param} not in pathParams
+        <span class="cov0" title="0">for </span><span class="cov0" title="0">{
+                start := strings.IndexByte(result, '{')
+                if start &lt; 0 </span><span class="cov0" title="0">{
+                        break</span>
+                }
+                <span class="cov0" title="0">end := strings.IndexByte(result[start:], '}')
+                if end &lt; 0 </span><span class="cov0" title="0">{
+                        break</span>
+                }
+                <span class="cov0" title="0">fallbackSchema := &amp;swagger.SchemaProperty{Type: "string"}
+                val := capPathParam(gen.Generate("id", fallbackSchema))
+                result = result[:start] + url.PathEscape(val) + result[start+end+1:]</span>
+        }
+
+        <span class="cov0" title="0">return result</span>
+}
+
+// capPathParam ensures a path parameter value is safe to embed in a URL segment.
+// Practical limit: ~256 chars — beyond that the value doesn't add testing value
+// and breaks URL parsers / logging infrastructure.
+func capPathParam(v any) string <span class="cov0" title="0">{
+        s := fmt.Sprintf("%v", v)
+        const maxPathParamLen = 256
+        if len(s) &gt; maxPathParamLen </span><span class="cov0" title="0">{
+                return s[:maxPathParamLen]
+        }</span>
+        <span class="cov0" title="0">return s</span>
+}
+
+func mergePayload(payload any, queryParams map[string]any) any <span class="cov8" title="1">{
+        if payload != nil </span><span class="cov8" title="1">{
+                return payload
+        }</span>
+        <span class="cov8" title="1">return queryParams</span>
+}
+
+// ToSSE converts a full FuzzResult into the lightweight FuzzResultSSE for SSE broadcast.
+// Raw payload and responseBody are replaced by short preview strings (≤200 chars).
+// ResolvedPath is capped to 200 chars to avoid megabyte URLs in the UI.
+// This is the ONLY place payload content is summarised — it never reaches the browser as raw data.
+func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE <span class="cov8" title="1">{
+        resolvedPath := r.ResolvedPath
+        if len(resolvedPath) &gt; 200 </span><span class="cov0" title="0">{
+                resolvedPath = resolvedPath[:200] + "…"
+        }</span>
+        <span class="cov8" title="1">hasHeaderInjection := false
+        for _, f := range r.AnalyzerFindings </span><span class="cov8" title="1">{
+                if f.RuleID == "swazz/crlf-injection" || f.RuleID == "swazz/header-injection" </span><span class="cov0" title="0">{
+                        hasHeaderInjection = true
+                        break</span>
+                }
+        }
+
+        <span class="cov8" title="1">var sseHeaders http.Header
+        if hasHeaderInjection &amp;&amp; r.ResponseHeaders != nil </span><span class="cov0" title="0">{
+                sseHeaders = r.ResponseHeaders.Clone()
+        }</span>
+
+        // Map OWASPCategory for a safe copy of AnalyzerFindings
+        <span class="cov8" title="1">var findingsCopy []swagger.AnalysisFinding
+        if r.AnalyzerFindings != nil </span><span class="cov8" title="1">{
+                findingsCopy = make([]swagger.AnalysisFinding, len(r.AnalyzerFindings))
+                for i, f := range r.AnalyzerFindings </span><span class="cov8" title="1">{
+                        f.OWASPCategory = classifier.OWASPCategories(f.RuleID)
+                        findingsCopy[i] = f
+                }</span>
+        }
+
+        // Determine overall OWASPCategory for the FuzzResult without mutating r
+        <span class="cov8" title="1">ruleID := classifier.RuleIDForResult(r)
+        overallCategory := classifier.OWASPCategories(ruleID)
+
+        return &amp;swagger.FuzzResultSSE{
+                ID:                 r.ID,
+                Endpoint:           r.Endpoint,
+                ResolvedPath:       resolvedPath,
+                Method:             r.Method,
+                Profile:            r.Profile,
+                Status:             r.Status,
+                Duration:           r.Duration,
+                PayloadSize:        r.PayloadSize,
+                PayloadPreview:     previewAny(r.Payload, 200),
+                ResponsePreview:    previewAny(r.ResponseBody, 1024),
+                Error:              r.Error,
+                Timestamp:          r.Timestamp,
+                Retries:            r.Retries,
+                ResponseSize:       r.ResponseSize,
+                HasHeaderInjection: hasHeaderInjection,
+                ResponseHeaders:    sseHeaders,
+                RequestHeaders:     r.RequestHeaders,
+                AnalyzerFindings:   findingsCopy,
+                Identity:           r.Identity,
+                OWASPCategory:      overallCategory,
+        }</span>
+}
+
+// previewAny serialises any value into a short human-readable string.
+// Instead of linear truncation, it recursively processes objects and arrays
+// to keep all fields visible while capping long strings and large arrays.
+func previewAny(v any, maxLen int) string <span class="cov8" title="1">{
+        if v == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov0" title="0">truncated := truncateValue(v, maxLen)
+        b, _ := json.Marshal(truncated)
+        return string(b)</span>
+}
+
+func truncateValue(v any, maxLen int) any <span class="cov0" title="0">{
+        switch val := v.(type) </span>{
+        case string:<span class="cov0" title="0">
+                if len(val) &gt; maxLen </span><span class="cov0" title="0">{
+                        return fmt.Sprintf("%s... [truncated %d chars]", val[:maxLen], len(val)-maxLen)
+                }</span>
+                <span class="cov0" title="0">return val</span>
+        case map[string]any:<span class="cov0" title="0">
+                res := make(map[string]any)
+                for k, v := range val </span><span class="cov0" title="0">{
+                        res[k] = truncateValue(v, maxLen)
+                }</span>
+                <span class="cov0" title="0">return res</span>
+        case []any:<span class="cov0" title="0">
+                if len(val) &lt;= 2 </span><span class="cov0" title="0">{
+                        res := make([]any, len(val))
+                        for i, v := range val </span><span class="cov0" title="0">{
+                                res[i] = truncateValue(v, maxLen)
+                        }</span>
+                        <span class="cov0" title="0">return res</span>
+                }
+                // Truncate long arrays to 2 elements + a count note
+                <span class="cov0" title="0">res := make([]any, 0, 3)
+                res = append(res, truncateValue(val[0], maxLen))
+                res = append(res, truncateValue(val[1], maxLen))
+                res = append(res, fmt.Sprintf("... and %d more elements", len(val)-2))
+                return res</span>
+        default:<span class="cov0" title="0">
+                return v</span>
+        }
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

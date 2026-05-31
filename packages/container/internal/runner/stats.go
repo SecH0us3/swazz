@@ -106,6 +106,7 @@ func (r *Runner) publishSnapshot(stats *swagger.RunStats, iteration, totalIterat
 func accumulateResult(stats *swagger.RunStats, result *swagger.FuzzResult) {
 	stats.TotalRequests++
 	stats.IsRunning = true
+	stats.TotalDurationMs += result.Duration
 
 	status := result.Status
 	stats.StatusCounts[status]++
