@@ -121,6 +121,16 @@ func levenshteinDistance(r1, r2 []rune) int {
 	len1 := len(r1)
 	len2 := len(r2)
 
+	// Hard cap lengths to prevent potential integer overflow / memory exhaustion
+	if len1 > 5000 {
+		r1 = r1[:5000]
+		len1 = 5000
+	}
+	if len2 > 5000 {
+		r2 = r2[:5000]
+		len2 = 5000
+	}
+
 	if len1 == 0 {
 		return len2
 	}
