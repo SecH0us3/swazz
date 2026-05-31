@@ -132,7 +132,8 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 			AllowPrivateIPs: true,
 		},
 		Settings: swagger.Settings{
-			BOLATesting: true,
+			BOLATesting:         true,
+			AnalyzeResponseBody: true,
 		},
 		AuthIdentities: map[string]swagger.AuthIdentity{
 			"userB": {
@@ -169,7 +170,9 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 			Method:       "GET",
 			Status:       200,
 			Payload:      nil,
-		}	}
+			ResponseBody: `{"id": "goods-101", "secret": "user1-private-data"}`,
+		},
+	}
 
 	bolaResults := r.bolaPhase(context.Background(), results)
 
@@ -221,8 +224,9 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 			AllowPrivateIPs: true,
 		},
 		Settings: swagger.Settings{
-			BOLATesting: true,
-			AuthHeaders: []string{"Authorization"},
+			BOLATesting:         true,
+			AuthHeaders:         []string{"Authorization"},
+			AnalyzeResponseBody: true,
 		},
 		GlobalHeaders: map[string]string{
 			"Authorization": "Bearer user1-token",
@@ -245,6 +249,7 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 			Method:       "GET",
 			Status:       200,
 			Payload:      nil,
+			ResponseBody: `{"id": "goods-999", "public": "visible-to-everyone-even-anonymous"}`,
 		},
 	}
 
@@ -263,4 +268,117 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 	if finding.RuleID != "swazz/unauthorized-access" {
 		t.Errorf("Expected rule ID 'swazz/unauthorized-access', got '%s'", finding.RuleID)
 	}
+}
+
+func TestBOLA_SimilarityFiltering(t *testing.T) {
+	// 1. Test case: Low similarity (should NOT be flagged)
+	t.Run("Low similarity response should be filtered out", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			// Return completely different structure (e.g. error page or login redirect)
+			w.Write([]byte(`{"error": "Unauthorized Access", "code": 401, "success": false}`))
+		}))
+		defer server.Close()
+
+		cfg := &swagger.Config{
+			BaseURL: server.URL,
+			Security: swagger.SecurityConfig{
+				AllowPrivateIPs: true,
+			},
+			Settings: swagger.Settings{
+				BOLATesting:             true,
+				AnalyzeResponseBody:     true,
+				BOLASimilarityThreshold: 0.85,
+			},
+			Endpoints: []swagger.EndpointConfig{
+				{
+					Path:   "/api/items/{id}",
+					Method: "GET",
+				},
+			},
+		}
+
+		r := New(cfg, nil)
+
+		// Candidate with baseline body
+		results := []*swagger.FuzzResult{
+			{
+				ID:           "test-id",
+				Endpoint:     "/api/items/{id}",
+				ResolvedPath: "/api/items/item-123",
+				Method:       "GET",
+				Status:       200,
+				ResponseBody: map[string]any{
+					"id":          "item-123",
+					"name":        "Golden Ring",
+					"description": "A very expensive item",
+					"owner":       "User A",
+				},
+			},
+		}
+
+		bolaResults := r.bolaPhase(context.Background(), results)
+
+		// Anonymous check runs, replayed GET returns the unauthorized JSON.
+		// Since it has low similarity to candidate, it should NOT be flagged.
+		if len(bolaResults) != 0 {
+			t.Fatalf("Expected 0 BOLA findings due to low similarity, got %d: %+v", len(bolaResults), bolaResults[0])
+		}
+	})
+
+	// 2. Test case: High similarity (should BE flagged)
+	t.Run("High similarity response should be flagged", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			// Return structurally identical JSON, just different values (BOLA!)
+			w.Write([]byte(`{"id": "item-123", "name": "Golden Ring", "description": "A very expensive item", "owner": "User B"}`))
+		}))
+		defer server.Close()
+
+		cfg := &swagger.Config{
+			BaseURL: server.URL,
+			Security: swagger.SecurityConfig{
+				AllowPrivateIPs: true,
+			},
+			Settings: swagger.Settings{
+				BOLATesting:             true,
+				AnalyzeResponseBody:     true,
+				BOLASimilarityThreshold: 0.85,
+			},
+			Endpoints: []swagger.EndpointConfig{
+				{
+					Path:   "/api/items/{id}",
+					Method: "GET",
+				},
+			},
+		}
+
+		r := New(cfg, nil)
+
+		results := []*swagger.FuzzResult{
+			{
+				ID:           "test-id",
+				Endpoint:     "/api/items/{id}",
+				ResolvedPath: "/api/items/item-123",
+				Method:       "GET",
+				Status:       200,
+				ResponseBody: map[string]any{
+					"id":          "item-123",
+					"name":        "Golden Ring",
+					"description": "A very expensive item",
+					"owner":       "User A",
+				},
+			},
+		}
+
+		bolaResults := r.bolaPhase(context.Background(), results)
+
+		// Anonymous check runs, replayed GET returns high-similarity JSON.
+		// It should be flagged.
+		if len(bolaResults) != 1 {
+			t.Fatalf("Expected 1 BOLA finding due to high similarity, got %d", len(bolaResults))
+		}
+	})
 }

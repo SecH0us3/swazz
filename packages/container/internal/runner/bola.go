@@ -2,11 +2,13 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
+	"swazz-engine/internal/bola"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
@@ -672,42 +674,53 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 				// If success, check for BOLA or Tenant Bypass
 				if res.Status >= 200 && res.Status < 300 {
-					formattedName := formatIdentityName(idName)
-					res.Identity = formattedName
-					confirmedIdentities[idName] = true
-					
-					if targetID != "" || paramName != "" {
-						minedFrom := "Unknown"
-						if targetID != "" {
-							if src, ok := r.idSources.Load(targetID); ok {
-								minedFrom = src.(string)
-							}
-						}
-						finding := swagger.AnalysisFinding{
-							RuleID:   "swazz/bola-idor",
-							Level:    "error",
-							Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", formattedName),
-							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d, ID %s mined from: %s", formattedName, cand.Method, resolvedPath, res.Status, targetID, minedFrom),
-						}
-						res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
-					} else {
-						finding := swagger.AnalysisFinding{
-							RuleID:   "swazz/tenant-isolation-bypass",
-							Level:    "warning",
-							Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", formattedName),
-							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", formattedName, cand.Method, resolvedPath, res.Status),
-						}
-						res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+					bodyCand := responseBodyToBytes(cand.ResponseBody)
+					bodyRes := responseBodyToBytes(res.ResponseBody)
+					sim := bola.CheckSimilarity(bodyCand, bodyRes)
+
+					threshold := r.config.Settings.BOLASimilarityThreshold
+					if threshold <= 0 {
+						threshold = 0.85
 					}
-					bolaMu.Lock()
-					bolaResults = append(bolaResults, res)
-					bolaMu.Unlock()
-					
-					// Broadcast event
-					r.Broadcast(Event{
-						Type: EventResult,
-						Data: res,
-					})
+
+					if sim >= threshold {
+						formattedName := formatIdentityName(idName)
+						res.Identity = formattedName
+						confirmedIdentities[idName] = true
+						
+						if targetID != "" || paramName != "" {
+							minedFrom := "Unknown"
+							if targetID != "" {
+								if src, ok := r.idSources.Load(targetID); ok {
+									minedFrom = src.(string)
+								}
+							}
+							finding := swagger.AnalysisFinding{
+								RuleID:   "swazz/bola-idor",
+								Level:    "error",
+								Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", formattedName),
+								Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", formattedName, cand.Method, resolvedPath, res.Status, targetID, minedFrom, sim),
+							}
+							res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+						} else {
+							finding := swagger.AnalysisFinding{
+								RuleID:   "swazz/tenant-isolation-bypass",
+								Level:    "warning",
+								Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", formattedName),
+								Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d (Similarity: %.2f)", formattedName, cand.Method, resolvedPath, res.Status, sim),
+							}
+							res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+						}
+						bolaMu.Lock()
+						bolaResults = append(bolaResults, res)
+						bolaMu.Unlock()
+						
+						// Broadcast event
+						r.Broadcast(Event{
+							Type: EventResult,
+							Data: res,
+						})
+					}
 				}
 			}
 
@@ -770,37 +783,48 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				)
 
 				if resAnon.Status >= 200 && resAnon.Status < 300 {
-					resAnon.Identity = "Anonymous"
-					confirmedIdentities["Anonymous"] = true
-					
-					minedFrom := "Unknown"
-					if targetID != "" {
-						if src, ok := r.idSources.Load(targetID); ok {
-							minedFrom = src.(string)
-						}
-					}
-					
-					evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d", cand.Method, resolvedPath, resAnon.Status)
-					if targetID != "" {
-						evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom)
-					}
-					
-					finding := swagger.AnalysisFinding{
-						RuleID:   "swazz/unauthorized-access",
-						Level:    "error",
-						Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
-						Evidence: evidenceStr,
-					}
-					bolaMu.Lock()
-					resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
-					bolaResults = append(bolaResults, resAnon)
-					bolaMu.Unlock()
+					bodyCand := responseBodyToBytes(cand.ResponseBody)
+					bodyAnon := responseBodyToBytes(resAnon.ResponseBody)
+					sim := bola.CheckSimilarity(bodyCand, bodyAnon)
 
-					// Broadcast event
-					r.Broadcast(Event{
-						Type: EventResult,
-						Data: resAnon,
-					})
+					threshold := r.config.Settings.BOLASimilarityThreshold
+					if threshold <= 0 {
+						threshold = 0.85
+					}
+
+					if sim >= threshold {
+						resAnon.Identity = "Anonymous"
+						confirmedIdentities["Anonymous"] = true
+						
+						minedFrom := "Unknown"
+						if targetID != "" {
+							if src, ok := r.idSources.Load(targetID); ok {
+								minedFrom = src.(string)
+							}
+						}
+						
+						evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, sim)
+						if targetID != "" {
+							evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom, sim)
+						}
+						
+						finding := swagger.AnalysisFinding{
+							RuleID:   "swazz/unauthorized-access",
+							Level:    "error",
+							Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
+							Evidence: evidenceStr,
+						}
+						bolaMu.Lock()
+						resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
+						bolaResults = append(bolaResults, resAnon)
+						bolaMu.Unlock()
+
+						// Broadcast event
+						r.Broadcast(Event{
+							Type: EventResult,
+							Data: resAnon,
+						})
+					}
 				}
 			}
 		}
@@ -813,4 +837,22 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 	fmt.Printf("Access Control phase complete. Found %d findings.\n", len(bolaResults))
 	return bolaResults
+}
+
+func responseBodyToBytes(body any) []byte {
+	if body == nil {
+		return nil
+	}
+	switch v := body.(type) {
+	case []byte:
+		return v
+	case string:
+		return []byte(v)
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		return b
+	}
 }
