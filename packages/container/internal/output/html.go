@@ -286,11 +286,14 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
             .payload-block pre { background: #f8fafc; color: black; border: 1px solid #ccc; white-space: pre-wrap; word-wrap: break-word; }
             .stat-card { border-color: #ccc; }
         }
+        .noscript-warning {
+            background: var(--warning); color: #000; padding: 1rem; border-radius: 0.5rem; margin: 1rem auto; max-width: 1000px; font-weight: bold; text-align: center;
+        }
     </style>
 </head>
 <body>
     <noscript>
-        <div style="background: var(--warning); color: #000; padding: 1rem; border-radius: 0.5rem; margin: 1rem auto; max-width: 1000px; font-weight: bold; text-align: center;">
+        <div class="noscript-warning">
             ⚠️ JavaScript is disabled. Filters and interactive features are unavailable, but all raw findings are displayed below.
         </div>
     </noscript>

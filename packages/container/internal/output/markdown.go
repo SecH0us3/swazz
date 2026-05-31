@@ -103,8 +103,9 @@ func previewString(v any, maxLen int) string {
 		return ""
 	}
 	s := fmt.Sprintf("%v", v)
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		return string(runes[:maxLen]) + "..."
 	}
 	return s
 }
