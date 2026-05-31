@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
 
@@ -214,9 +215,118 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 	// 2. Identify candidates (successful 2xx requests on endpoints with path params)
 	var candidates []*swagger.FuzzResult
+	hasSuccessCandidate := make(map[string]bool)
 	for _, res := range results {
 		if res.Status >= 200 && res.Status < 300 && strings.Contains(res.Endpoint, "{") {
 			candidates = append(candidates, res)
+			hasSuccessCandidate[strings.ToUpper(res.Method) + " " + res.Endpoint] = true
+		}
+	}
+
+	// For endpoints that don't have a successful candidate, try to construct one using harvested IDs
+	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+	for _, ep := range r.config.Endpoints {
+		if !strings.Contains(ep.Path, "{") {
+			continue
+		}
+		key := strings.ToUpper(ep.Method) + " " + ep.Path
+		if hasSuccessCandidate[key] {
+			continue
+		}
+
+		// Check if we have any harvested IDs for this prefix
+		prefix := getPathPrefix(ep.Path)
+		var harvested []string
+		uniqueIDs := make(map[string]bool)
+		r.harvestedIDs.Range(func(k, value any) bool {
+			kStr := k.(string)
+			vSlice := value.([]string)
+			if arePrefixesRelated(kStr, prefix) {
+				for _, id := range vSlice {
+					uniqueIDs[id] = true
+				}
+			}
+			return true
+		})
+		for id := range uniqueIDs {
+			harvested = append(harvested, id)
+		}
+
+		if len(harvested) == 0 {
+			continue
+		}
+
+		// Try the first harvested ID to see if we can get a successful 2xx request under User A (Primary)
+		origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+		resolParts := make([]string, len(origParts))
+		copy(resolParts, origParts)
+		for idx, part := range origParts {
+			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+				paramName := part[1 : len(part)-1]
+				kLower := strings.ToLower(paramName)
+				if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+					resolParts[idx] = harvested[0]
+				}
+			}
+		}
+		resolvedPath := "/" + strings.Join(resolParts, "/")
+
+		// Generate baseline payload / query params using safeGen
+		var generated map[string]any
+		if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
+			generated = safeGen.BuildObject(&ep.Schema)
+		}
+
+		var payload any
+		var queryParams map[string]any
+		if isNoBodyMethod(ep.Method) {
+			queryParams = generated
+		} else {
+			payload = generated
+		}
+
+		// Merge security headers if any
+		generatedHeaders := make(map[string]string)
+		if secHeaders := safeGen.GenerateSecurityHeaders(); secHeaders != nil {
+			for k, v := range secHeaders {
+				generatedHeaders[k] = v
+			}
+		}
+
+		// Build final headers (merging generated headers with config global headers)
+		headers := make(map[string]string)
+		for k, v := range r.config.GlobalHeaders {
+			headers[k] = v
+		}
+		for k, v := range generatedHeaders {
+			headers[k] = v
+		}
+
+		// Execute request under User A (Primary)
+		resUserA := r.executeRequest(
+			ctx,
+			r.config.BaseURL,
+			resolvedPath,
+			ep.Path,
+			ep.Method,
+			headers,
+			r.config.Cookies,
+			payload,
+			swagger.FuzzingProfile("BOLA"),
+			queryParams,
+			nil,
+			ep.ContentType,
+		)
+
+		if resUserA.Status >= 200 && resUserA.Status < 300 {
+			resUserA.Identity = "User A" // explicitly mark as User A
+			candidates = append(candidates, resUserA)
+
+			// Broadcast event so it shows up in Request Logs under User A
+			r.Broadcast(Event{
+				Type: EventResult,
+				Data: resUserA,
+			})
 		}
 	}
 
