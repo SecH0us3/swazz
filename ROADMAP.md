@@ -390,7 +390,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Dashboard UI:** Add a new tab or chart in the Dashboard (next to "Grouped Errors") showing the distribution of findings by OWASP category.
     - **Reports:** Update the JSON and HTML formatters to group findings by OWASP category as a high-level executive summary.
 
-- [ ] **Task 42:** Move Grouped Errors Count Badges to the Left.
+- [x] **Task 42:** Move Grouped Errors Count Badges to the Left.
   - **Design Goal:** Place the color-coded severity/count badge (circle) in the "Grouped Errors" accordion headers to the left of the group title text, providing cleaner visual alignment.
   - **Implementation Details:**
     - Adjust [Inspector.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Inspector/Inspector.tsx) layout inside `findings-group-title-row` so that the count badge renders before the title text.
