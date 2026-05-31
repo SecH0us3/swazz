@@ -40,6 +40,7 @@ export interface AnalysisFinding {
     level: 'error' | 'warning' | 'note';
     message: string;
     evidence?: string;
+    owaspCategory?: string[];
 }
 
 export interface SwazzSettings {
@@ -138,6 +139,7 @@ export interface FuzzResult {
     requestHeaders?: Record<string, string>;
     analyzerFindings?: AnalysisFinding[];
     identity?: string;
+    owaspCategory?: string[];
 }
 
 // ─── Live Stats ─────────────────────────────────────────

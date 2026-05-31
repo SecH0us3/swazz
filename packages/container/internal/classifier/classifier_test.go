@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -165,5 +166,42 @@ func TestClassifier_AnalyzerFindings_CRLFSource(t *testing.T) {
 				t.Errorf("Expected source %q for ruleID %q, got %q", tt.expectedSource, tt.ruleID, findings[0].Source)
 			}
 		})
+	}
+}
+
+func TestClassifier_OWASPCategory(t *testing.T) {
+	cls := New(nil)
+
+	// Test case 1: Standard status code error finding
+	res := &swagger.FuzzResult{Status: 500}
+	finding := cls.Classify(res)
+	if finding == nil {
+		t.Fatal("Expected finding for status 500")
+	}
+	expectedOWASP := []string{"API8:2023 Security Misconfiguration"}
+	if !reflect.DeepEqual(finding.OWASPCategory, expectedOWASP) {
+		t.Errorf("Expected OWASPCategory %v, got %v", expectedOWASP, finding.OWASPCategory)
+	}
+
+	// Test case 2: Response body analyzer finding
+	resAnalyzer := &swagger.FuzzResult{
+		Status:   200,
+		Endpoint: "/welcome",
+		Method:   "GET",
+		AnalyzerFindings: []swagger.AnalysisFinding{
+			{
+				RuleID:   "swazz/bola-idor",
+				Level:    "error",
+				Message:  "BOLA detected",
+			},
+		},
+	}
+	findings := cls.ClassifyAll([]*swagger.FuzzResult{resAnalyzer})
+	if len(findings) != 1 {
+		t.Fatalf("Expected 1 finding, got %d", len(findings))
+	}
+	expectedAnalyzerOWASP := []string{"API1:2023 Broken Object Level Authorization"}
+	if !reflect.DeepEqual(findings[0].OWASPCategory, expectedAnalyzerOWASP) {
+		t.Errorf("Expected OWASPCategory %v, got %v", expectedAnalyzerOWASP, findings[0].OWASPCategory)
 	}
 }

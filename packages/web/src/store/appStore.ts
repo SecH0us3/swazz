@@ -3,7 +3,7 @@ import type { FuzzResult, RunStats } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 
 export interface UISlice {
-    activeTab: 'heatmap' | 'logs' | 'findings';
+    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp';
     isSidebarOpen: boolean;
     isConfigOpen: boolean;
     isSidebarHiddenDesktop: boolean;

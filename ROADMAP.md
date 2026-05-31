@@ -377,7 +377,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
-- [ ] **Task 41:** Add OWASP API Security Top 10 (2023) Categorization.
+- [x] **Task 41:** Add OWASP API Security Top 10 (2023) Categorization.
   - **Design Goal:** Group and tag findings in the HTML/JSON reports and Web Dashboard using the industry-standard OWASP API Security Top 10 (2023) categories, making the tool much more useful for compliance and formal security audits.
   - **Implementation Details:**
     - **Mapping Engine:** Create a mapping utility in `packages/container/internal/classifier/owasp.go` that maps internal Rule IDs to OWASP categories. For example:
@@ -395,4 +395,23 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Adjust [Inspector.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Inspector/Inspector.tsx) layout inside `findings-group-title-row` so that the count badge renders before the title text.
     - Update spacing and margins in [index.css](file:///Users/alex/src/swazz/packages/web/src/index.css) to ensure proper margins between chevron, badge, and title.
+
+- [ ] **Task 43:** Redesign the "Welcome to Swazz API Fuzzer" Empty State.
+  - **Design Goal:** Transform the initial empty state screen into a more promotional and engaging landing view.
+  - **Implementation Details:**
+    - Replace the basic welcome text with an embedded promotional or tutorial video showcasing the fuzzer in action.
+    - Add a clear Call-to-Action (CTA) link pointing to the official documentation (`docs/usage.md` or similar) below the video.
+
+- [ ] **Task 44:** Add Developer Console Invitation.
+  - **Design Goal:** Engage with developers exploring the dashboard's DevTools by rendering a styled console message inviting them to contribute.
+  - **Implementation Details:**
+    - Insert a `console.log` with styled CSS output in the main entry point of the React app (e.g., `main.tsx` or `App.tsx`).
+    - The message should invite developers to check out the GitHub repository, mentioning explicitly that "suggesting an idea is also participation" ("предложить идею - тоже участие").
+
+- [ ] **Task 45:** Optimize UI Performance.
+  - **Design Goal:** Ensure the React Web Dashboard remains highly responsive even during high-concurrency fuzzing runs with thousands of events per second.
+  - **Implementation Details:**
+    - Profile React component renders to identify unnecessary re-renders in the Inspector, Heatmap, and Log views.
+    - Implement `React.memo`, `useMemo`, and `useCallback` strategically to prevent costly re-renders of list items and grid cells.
+    - Explore windowing/virtualization for the real-time request logs or long findings lists.
 

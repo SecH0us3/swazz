@@ -13,10 +13,11 @@
 
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
+- **🛡️ Compliance Mapping**: Automatically map all discovered vulnerabilities to the **OWASP API Security Top 10 (2023)** standard in reports and the Web Dashboard.
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
 - **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
-- **🌐 Web Dashboard**: Real-time Heatmap and Request Inspector for deep-dive analysis.
+- **🌐 Web Dashboard**: Real-time Heatmap, Request Inspector, and OWASP Compliance dashboard for deep-dive analysis.
 
 ---
 
