@@ -97,8 +97,8 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     rate_limit_check: false,
     rate_limit_burst_size: 50,
     bola_testing: false,
-    auth_headers: [],
-    auth_cookies: [],
+    auth_headers: ['Authorization', 'X-API-Key'],
+    auth_cookies: ['session', 'token', 'jwt', 'sid', 'JSESSIONID', 'PHPSESSID'],
 };
 
 // ─── Full Config ────────────────────────────────────────

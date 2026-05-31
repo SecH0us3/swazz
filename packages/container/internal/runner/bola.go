@@ -11,6 +11,13 @@ import (
 	"swazz-engine/internal/swagger"
 )
 
+func formatIdentityName(name string) string {
+	if strings.EqualFold(name, "userb") {
+		return "User B"
+	}
+	return name
+}
+
 func getPathPrefix(originalPath string) string {
 	idx := strings.IndexByte(originalPath, '{')
 	if idx != -1 {
@@ -23,11 +30,23 @@ func arePrefixesRelated(p1, p2 string) bool {
 	p1Parts := strings.Split(strings.Trim(p1, "/"), "/")
 	p2Parts := strings.Split(strings.Trim(p2, "/"), "/")
 	
-	if len(p1Parts) < 2 || len(p2Parts) < 2 {
-		return strings.HasPrefix(p1, p2) || strings.HasPrefix(p2, p1)
+	minLen := len(p1Parts)
+	if len(p2Parts) < minLen {
+		minLen = len(p2Parts)
 	}
-	
-	return p1Parts[0] == p2Parts[0] && p1Parts[1] == p2Parts[1]
+	if minLen == 0 {
+		return false
+	}
+	matchLen := 2
+	if minLen < matchLen {
+		matchLen = minLen
+	}
+	for i := 0; i < matchLen; i++ {
+		if p1Parts[i] != p2Parts[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func harvestIDs(data any, ids map[string]bool) {
@@ -35,10 +54,17 @@ func harvestIDs(data any, ids map[string]bool) {
 		for k, v := range m {
 			kLower := strings.ToLower(k)
 			if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "_id") || strings.HasSuffix(kLower, "id") {
-				if s, ok := v.(string); ok && s != "" {
-					ids[s] = true
-				} else if f, ok := v.(float64); ok {
-					ids[strconv.FormatFloat(f, 'f', -1, 64)] = true
+				switch val := v.(type) {
+				case string:
+					if val != "" {
+						ids[val] = true
+					}
+				case float64:
+					ids[strconv.FormatFloat(val, 'f', -1, 64)] = true
+				case int:
+					ids[strconv.Itoa(val)] = true
+				case int64:
+					ids[strconv.FormatInt(val, 10)] = true
 				}
 			}
 			harvestIDs(v, ids)
@@ -186,7 +212,9 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 		actualSlice := []string{}
 		for id := range harvested {
 			actualSlice = append(actualSlice, id)
+			r.idSources.Store(id, fmt.Sprintf("%s %s", method, originalPath))
 		}
+		r.resultsMu.Lock()
 		if val, ok := r.harvestedIDs.Load(prefix); ok {
 			existing := val.([]string)
 			uniqueMap := make(map[string]bool)
@@ -204,6 +232,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 		} else {
 			r.harvestedIDs.Store(prefix, actualSlice)
 		}
+		r.resultsMu.Unlock()
 		if r.config.Settings.Debug {
 			fmt.Printf("[BOLA] Harvested IDs for prefix %s: %v\n", prefix, actualSlice)
 		}
@@ -259,12 +288,16 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	// For endpoints that don't have a successful candidate, try to construct one
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
 	
+	concurrency := r.config.Settings.Concurrency
+	if concurrency <= 0 {
+		concurrency = 5
+	} else if concurrency > 1000 {
+		concurrency = 1000
+	}
+
 	var candMu sync.Mutex
 	var candWg sync.WaitGroup
-	candSem := make(chan struct{}, r.config.Settings.Concurrency)
-	if r.config.Settings.Concurrency == 0 {
-		candSem = make(chan struct{}, 5)
-	}
+	candSem := make(chan struct{}, concurrency)
 
 	for _, ep := range r.config.Endpoints {
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
@@ -425,6 +458,9 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				successRes = resUserA
 				break
 			}
+			if successRes == nil {
+				successRes = resUserA
+			}
 		}
 
 		if successRes != nil {
@@ -449,10 +485,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	var bolaResults []*swagger.FuzzResult
 	var bolaMu sync.Mutex
 	var bolaWg sync.WaitGroup
-	bolaSem := make(chan struct{}, r.config.Settings.Concurrency)
-	if r.config.Settings.Concurrency == 0 {
-		bolaSem = make(chan struct{}, 5)
-	}
+	bolaSem := make(chan struct{}, concurrency)
 
 	// 3. Replay requests
 	for _, cand := range candidates {
@@ -546,7 +579,24 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			}
 		}
 
+		confirmedIdentities := make(map[string]bool)
+
 		for _, resolvedPath := range pathsToTest {
+			// Check if we have already confirmed bypass for all identities and anonymous
+			allDone := true
+			for idName := range identityHeaders {
+				if !confirmedIdentities[idName] {
+					allDone = false
+					break
+				}
+			}
+			if !confirmedIdentities["Anonymous"] {
+				allDone = false
+			}
+			if allDone {
+				break
+			}
+
 			// Determine request payload and query params (substituting current path ID if needed)
 			var qp map[string]any
 			var pl any
@@ -575,6 +625,9 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 			// Replay for each identity B (Always run to check for Tenant Bypass)
 			for idName, headers := range identityHeaders {
+				if confirmedIdentities[idName] {
+					continue
+				}
 				cookies := identityCookies[idName]
 
 				// Execute request
@@ -595,22 +648,30 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 				// If success, check for BOLA or Tenant Bypass
 				if res.Status >= 200 && res.Status < 300 {
-					res.Identity = idName
+					formattedName := formatIdentityName(idName)
+					res.Identity = formattedName
+					confirmedIdentities[idName] = true
 					
 					if targetID != "" || paramName != "" {
+						minedFrom := "Unknown"
+						if targetID != "" {
+							if src, ok := r.idSources.Load(targetID); ok {
+								minedFrom = src.(string)
+							}
+						}
 						finding := swagger.AnalysisFinding{
 							RuleID:   "swazz/bola-idor",
 							Level:    "error",
-							Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", idName),
-							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", idName, cand.Method, resolvedPath, res.Status),
+							Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", formattedName),
+							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d, ID %s mined from: %s", formattedName, cand.Method, resolvedPath, res.Status, targetID, minedFrom),
 						}
 						res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
 					} else {
 						finding := swagger.AnalysisFinding{
 							RuleID:   "swazz/tenant-isolation-bypass",
 							Level:    "warning",
-							Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", idName),
-							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", idName, cand.Method, resolvedPath, res.Status),
+							Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", formattedName),
+							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", formattedName, cand.Method, resolvedPath, res.Status),
 						}
 						res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
 					}
@@ -627,82 +688,96 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			}
 
 			// 4. Anonymous access check
-			anonHeaders := make(map[string]string)
-			anonCookies := make(map[string]string)
+			if !confirmedIdentities["Anonymous"] {
+				anonHeaders := make(map[string]string)
+				anonCookies := make(map[string]string)
 
-			// Determine auth keys to drop
-			dropHeaders := r.config.Settings.AuthHeaders
-			if len(dropHeaders) == 0 {
-				dropHeaders = []string{"Authorization", "X-API-Key"}
-			}
-			dropCookies := r.config.Settings.AuthCookies
-			if len(dropCookies) == 0 {
-				dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
-			}
+				// Determine auth keys to drop
+				dropHeaders := r.config.Settings.AuthHeaders
+				if len(dropHeaders) == 0 {
+					dropHeaders = []string{"Authorization", "X-API-Key"}
+				}
+				dropCookies := r.config.Settings.AuthCookies
+				if len(dropCookies) == 0 {
+					dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
+				}
 
-			// Copy global headers except those to drop
-			for k, v := range r.config.GlobalHeaders {
-				shouldDrop := false
-				for _, drop := range dropHeaders {
-					if strings.EqualFold(k, drop) {
-						shouldDrop = true
-						break
+				// Copy global headers except those to drop
+				for k, v := range r.config.GlobalHeaders {
+					shouldDrop := false
+					for _, drop := range dropHeaders {
+						if strings.EqualFold(k, drop) {
+							shouldDrop = true
+							break
+						}
+					}
+					if !shouldDrop {
+						anonHeaders[k] = v
 					}
 				}
-				if !shouldDrop {
-					anonHeaders[k] = v
-				}
-			}
 
-			// Copy cookies except those to drop
-			for k, v := range r.config.Cookies {
-				shouldDrop := false
-				for _, drop := range dropCookies {
-					if strings.EqualFold(k, drop) {
-						shouldDrop = true
-						break
+				// Copy cookies except those to drop
+				for k, v := range r.config.Cookies {
+					shouldDrop := false
+					for _, drop := range dropCookies {
+						if strings.EqualFold(k, drop) {
+							shouldDrop = true
+							break
+						}
+					}
+					if !shouldDrop {
+						anonCookies[k] = v
 					}
 				}
-				if !shouldDrop {
-					anonCookies[k] = v
+
+				resAnon := r.executeRequest(
+					ctx,
+					r.config.BaseURL,
+					resolvedPath,
+					cand.Endpoint,
+					cand.Method,
+					anonHeaders,
+					anonCookies,
+					pl,
+					swagger.FuzzingProfile("BOLA"),
+					qp,
+					nil,
+					ep.ContentType,
+				)
+
+				if resAnon.Status >= 200 && resAnon.Status < 300 {
+					resAnon.Identity = "Anonymous"
+					confirmedIdentities["Anonymous"] = true
+					
+					minedFrom := "Unknown"
+					if targetID != "" {
+						if src, ok := r.idSources.Load(targetID); ok {
+							minedFrom = src.(string)
+						}
+					}
+					
+					evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d", cand.Method, resolvedPath, resAnon.Status)
+					if targetID != "" {
+						evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom)
+					}
+					
+					finding := swagger.AnalysisFinding{
+						RuleID:   "swazz/unauthorized-access",
+						Level:    "error",
+						Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
+						Evidence: evidenceStr,
+					}
+					bolaMu.Lock()
+					resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
+					bolaResults = append(bolaResults, resAnon)
+					bolaMu.Unlock()
+
+					// Broadcast event
+					r.Broadcast(Event{
+						Type: EventResult,
+						Data: resAnon,
+					})
 				}
-			}
-
-
-
-			resAnon := r.executeRequest(
-				ctx,
-				r.config.BaseURL,
-				resolvedPath,
-				cand.Endpoint,
-				cand.Method,
-				anonHeaders,
-				anonCookies,
-				pl,
-				swagger.FuzzingProfile("BOLA"),
-				qp,
-				nil,
-				ep.ContentType,
-			)
-
-			if resAnon.Status >= 200 && resAnon.Status < 300 {
-				resAnon.Identity = "Anonymous"
-				finding := swagger.AnalysisFinding{
-					RuleID:   "swazz/unauthorized-access",
-					Level:    "error",
-					Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
-					Evidence: fmt.Sprintf("Endpoint: %s %s, Status: %d", cand.Method, resolvedPath, resAnon.Status),
-				}
-				bolaMu.Lock()
-				resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
-				bolaResults = append(bolaResults, resAnon)
-				bolaMu.Unlock()
-
-				// Broadcast event
-				r.Broadcast(Event{
-					Type: EventResult,
-					Data: resAnon,
-				})
 			}
 		}
 		

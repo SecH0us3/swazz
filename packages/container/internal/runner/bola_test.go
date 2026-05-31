@@ -191,8 +191,8 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 		t.Errorf("Expected finding level 'error', got '%s'", finding.Level)
 	}
 
-	if !strings.Contains(finding.Evidence, "Identity: userB") {
-		t.Errorf("Expected evidence to contain identity userB, got '%s'", finding.Evidence)
+	if !strings.Contains(finding.Evidence, "Identity: User B") {
+		t.Errorf("Expected evidence to contain identity User B, got '%s'", finding.Evidence)
 	}
 }
 

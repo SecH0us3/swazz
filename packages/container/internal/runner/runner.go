@@ -82,6 +82,7 @@ type Runner struct {
 	analyzer *analyzer.AnalyzerRegistry
 	sizeBaselines *sync.Map
 	harvestedIDs sync.Map // maps path prefix string -> []string
+	idSources    sync.Map // maps ID string -> source string
 	resultsMu sync.Mutex
 	allResults []*swagger.FuzzResult
 }
