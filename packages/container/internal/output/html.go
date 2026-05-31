@@ -79,6 +79,52 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 		}
 	}
 
+	// Count findings by OWASP category
+	owaspCounts := make(map[string]int)
+	for _, f := range findings {
+		if len(f.OWASPCategory) > 0 {
+			for _, cat := range f.OWASPCategory {
+				owaspCounts[cat]++
+			}
+		} else {
+			owaspCounts["Unmapped / Other"]++
+		}
+	}
+
+	owaspCategories := []string{
+		"API1:2023 Broken Object Level Authorization",
+		"API2:2023 Broken Authentication",
+		"API3:2023 Broken Object Property Level Authorization",
+		"API4:2023 Unrestricted Resource Consumption",
+		"API5:2023 Broken Function Level Authorization",
+		"API6:2023 Unrestricted Access to Sensitive Business Flows",
+		"API7:2023 Server-Side Request Forgery",
+		"API8:2023 Security Misconfiguration",
+		"API9:2023 Improper Inventory Management",
+		"API10:2023 Unsafe Consumption of APIs",
+	}
+
+	var owaspGrid strings.Builder
+	for _, cat := range owaspCategories {
+		count := owaspCounts[cat]
+		cardClass := "no-findings"
+		if count > 0 {
+			cardClass = "has-findings"
+		}
+		owaspGrid.WriteString(fmt.Sprintf(`
+            <div class="owasp-card %s">
+                <span class="owasp-name">%s</span>
+                <span class="owasp-count">%d</span>
+            </div>`, cardClass, html.EscapeString(cat), count))
+	}
+	if unmappedCount := owaspCounts["Unmapped / Other"]; unmappedCount > 0 {
+		owaspGrid.WriteString(fmt.Sprintf(`
+            <div class="owasp-card has-findings">
+                <span class="owasp-name">Unmapped / Other Findings</span>
+                <span class="owasp-count">%d</span>
+            </div>`, unmappedCount))
+	}
+
 	// Group findings by endpoint
 	groups := make(map[string][]*classifier.Finding)
 	groupOrder := make([]string, 0)
@@ -202,6 +248,15 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
         .stat-card { background: var(--card); padding: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border); text-align: center; }
         .stat-value { font-size: 1.5rem; font-weight: bold; display: block; }
         .stat-label { font-size: 0.875rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+        .owasp-section { margin-bottom: 3rem; }
+        .owasp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+        .owasp-card { background: var(--card); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+        .owasp-card.has-findings { border-color: var(--error); }
+        .owasp-card.no-findings { opacity: 0.65; }
+        .owasp-name { font-size: 0.875rem; font-weight: 500; }
+        .owasp-count { font-size: 1.125rem; font-weight: bold; padding: 0.25rem 0.75rem; border-radius: 9999px; }
+        .owasp-card.has-findings .owasp-count { background: rgba(239, 68, 68, 0.2); color: var(--error); }
+        .owasp-card.no-findings .owasp-count { background: #475569; color: var(--fg); }
         .finding-group { background: var(--card); margin-bottom: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border); overflow: hidden; }
         .finding-group h3 { margin: 0; padding: 1rem 1.5rem; background: #273549; font-size: 1.125rem; display: flex; align-items: center; gap: 0.75rem; }
         .method { color: var(--primary); font-family: monospace; }
@@ -237,6 +292,13 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
             <div class="stat-card"><span class="stat-value">%d</span><span class="stat-label">Endpoints</span></div>
         </div>
 
+        <h2>OWASP API Security Top 10 (2023) Summary</h2>
+        <div class="owasp-section">
+            <div class="owasp-grid">
+                %s
+            </div>
+        </div>
+
         <div class="filters">
             <input type="text" id="endpointFilter" placeholder="Filter by endpoint path...">
             <select id="statusFilter">
@@ -257,7 +319,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
     </script>
 </body>
 </html>`,
-		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, statusOptions.String(), profileOptions.String(), findingsContent)
+		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, owaspGrid.String(), statusOptions.String(), profileOptions.String(), findingsContent)
 	return strings.ReplaceAll(tmpl, placeholder, reportJS)
 }
 

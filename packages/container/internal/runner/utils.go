@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
 )
@@ -130,6 +131,15 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		sseHeaders = r.ResponseHeaders.Clone()
 	}
 
+	// Map OWASPCategory for each finding in r.AnalyzerFindings
+	for i := range r.AnalyzerFindings {
+		r.AnalyzerFindings[i].OWASPCategory = classifier.OWASPCategories(r.AnalyzerFindings[i].RuleID)
+	}
+
+	// Determine overall OWASPCategory for the FuzzResult
+	ruleID := classifier.RuleIDForResult(r)
+	r.OWASPCategory = classifier.OWASPCategories(ruleID)
+
 	return &swagger.FuzzResultSSE{
 		ID:                 r.ID,
 		Endpoint:           r.Endpoint,
@@ -150,6 +160,7 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		RequestHeaders:     r.RequestHeaders,
 		AnalyzerFindings:   r.AnalyzerFindings,
 		Identity:           r.Identity,
+		OWASPCategory:      r.OWASPCategory,
 	}
 }
 

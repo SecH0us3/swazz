@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
+import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -64,7 +65,7 @@ export function MainWorkspace({
     const isAnalysisEnabled = config?.settings?.analyze_response_body !== false;
 
     useEffect(() => {
-        if (!isAnalysisEnabled && activeTab === 'findings') {
+        if (!isAnalysisEnabled && (activeTab === 'findings' || activeTab === 'owasp')) {
             useAppStore.setState({ activeTab: 'logs' });
         }
     }, [isAnalysisEnabled, activeTab]);
@@ -181,6 +182,20 @@ export function MainWorkspace({
                                 )}
                             </button>
                         )}
+                        {isAnalysisEnabled && (
+                            <button
+                                className={`tab-bar-btn ${activeTab === 'owasp' ? 'active' : ''}`}
+                                onClick={() => useAppStore.setState({ activeTab: 'owasp' })}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                </svg>
+                                OWASP Top 10
+                                {findingsCount > 0 && (
+                                    <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
+                                )}
+                            </button>
+                        )}
                         <button
                             className="tab-bar-btn"
                             style={{ color: 'var(--accent-light)' }}
@@ -229,6 +244,14 @@ export function MainWorkspace({
                             onExport={handleExport}
                             findingsOnly={true}
                             config={config}
+                        />
+                    )}
+                    {isAnalysisEnabled && activeTab === 'owasp' && (
+                        <OWASPTop10
+                            runId={inspectorRunId}
+                            queryResults={queryResults}
+                            liveCount={liveCount}
+                            onSelectResult={handleSelectResult}
                         />
                     )}
                 </div>

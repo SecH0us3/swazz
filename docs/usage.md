@@ -132,7 +132,7 @@ Swazz enforces SSRF protection by verifying resolved host IP addresses before ma
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:
 - **JSON**: Detailed machine-readable output.
-- **HTML**: A static report of the findings.
+- **HTML**: A static report of the findings, featuring an executive summary that groups all findings by their corresponding **OWASP API Security Top 10 (2023)** categories.
 - **SARIF**: For integration into GitHub Advanced Security and other SAST/DAST tools.
 
 [← Back to Installation](./installation.html) | [Next: Architecture →](./architecture.html)

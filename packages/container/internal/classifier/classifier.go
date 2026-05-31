@@ -34,6 +34,7 @@ type Finding struct {
 	Error        string                 `json:"error,omitempty"`
 	Timestamp    int64                  `json:"timestamp"`
 	Source       string                 `json:"source"`
+	OWASPCategory []string               `json:"owaspCategory,omitempty"`
 }
 
 // RulesConfig configures how results are classified.
@@ -106,21 +107,23 @@ func (c *Classifier) Classify(result *swagger.FuzzResult) *Finding {
 		return nil
 	}
 
+	ruleID := RuleIDForResult(result)
 	return &Finding{
-		ID:           result.ID,
-		RuleID:       ruleIDForResult(result),
-		Level:        level,
-		Endpoint:     result.Endpoint,
-		ResolvedPath: result.ResolvedPath,
-		Method:       result.Method,
-		Profile:      result.Profile,
-		Status:       result.Status,
-		Duration:     result.Duration,
-		Payload:      result.Payload,
-		ResponseBody: result.ResponseBody,
-		Error:        result.Error,
-		Timestamp:    result.Timestamp,
-		Source:       "status_code",
+		ID:            result.ID,
+		RuleID:        ruleID,
+		Level:         level,
+		Endpoint:      result.Endpoint,
+		ResolvedPath:  result.ResolvedPath,
+		Method:        result.Method,
+		Profile:       result.Profile,
+		Status:        result.Status,
+		Duration:      result.Duration,
+		Payload:       result.Payload,
+		ResponseBody:  result.ResponseBody,
+		Error:         result.Error,
+		Timestamp:     result.Timestamp,
+		Source:        "status_code",
+		OWASPCategory: OWASPCategories(ruleID),
 	}
 }
 
@@ -169,8 +172,9 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 				Payload:      r.Payload,
 				ResponseBody: r.ResponseBody,
 				Error:        af.Evidence, // Store evidence matched fragment here
-				Timestamp:    r.Timestamp,
-				Source:       source,
+				Timestamp:     r.Timestamp,
+				Source:        source,
+				OWASPCategory: OWASPCategories(af.RuleID),
 			}
 
 			defectKey := fmt.Sprintf("%s::%s %s", f.RuleID, f.Method, f.Endpoint)
@@ -223,7 +227,8 @@ func (c *Classifier) resolveLevel(result *swagger.FuzzResult) Severity {
 	return SeverityError
 }
 
-func ruleIDForResult(result *swagger.FuzzResult) string {
+// RuleIDForResult returns the default rule ID for a fuzz result based on its HTTP status code or error.
+func RuleIDForResult(result *swagger.FuzzResult) string {
 	if result.Status == 0 {
 		if strings.Contains(result.Error, "timed out") {
 			return "swazz/timeout"

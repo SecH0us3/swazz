@@ -377,7 +377,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
-- [ ] **Task 41:** Add OWASP API Security Top 10 (2023) Categorization.
+- [x] **Task 41:** Add OWASP API Security Top 10 (2023) Categorization.
   - **Design Goal:** Group and tag findings in the HTML/JSON reports and Web Dashboard using the industry-standard OWASP API Security Top 10 (2023) categories, making the tool much more useful for compliance and formal security audits.
   - **Implementation Details:**
     - **Mapping Engine:** Create a mapping utility in `packages/container/internal/classifier/owasp.go` that maps internal Rule IDs to OWASP categories. For example:

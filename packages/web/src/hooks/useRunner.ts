@@ -88,6 +88,7 @@ export interface ResultSummary {
     hasHeaderInjection?: boolean;
     analyzerFindings?: AnalysisFinding[];
     identity?: string;
+    owaspCategory?: string[];
 }
 
 export function toSummary(r: any): ResultSummary {
@@ -112,6 +113,7 @@ export function toSummary(r: any): ResultSummary {
         hasHeaderInjection: !!r.hasHeaderInjection,
         analyzerFindings: r.analyzerFindings || [],
         identity: r.identity,
+        owaspCategory: r.owaspCategory || [],
     };
 }
 

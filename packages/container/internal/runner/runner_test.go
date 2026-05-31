@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -559,5 +560,39 @@ func TestExecuteRequest_EmptyBodyRandom(t *testing.T) {
 		t.Errorf("Expected at least one request to send a normal populated body, got: %v", bodies)
 	}
 }
+
+func TestToSSE_OWASPCategoryMapping(t *testing.T) {
+	res := &swagger.FuzzResult{
+		Status:       500,
+		Endpoint:     "/api/test",
+		ResolvedPath: "/api/test",
+		Method:       "GET",
+		AnalyzerFindings: []swagger.AnalysisFinding{
+			{
+				RuleID:  "swazz/bola-idor",
+				Level:   "error",
+				Message: "BOLA detected",
+			},
+		},
+	}
+
+	sse := ToSSE(res)
+
+	// Verify parent result OWASPCategory mapping
+	expectedResultOWASP := []string{"API8:2023 Security Misconfiguration"}
+	if !reflect.DeepEqual(sse.OWASPCategory, expectedResultOWASP) {
+		t.Errorf("Expected result OWASPCategory %v, got %v", expectedResultOWASP, sse.OWASPCategory)
+	}
+
+	// Verify child analyzer finding OWASPCategory mapping
+	if len(sse.AnalyzerFindings) != 1 {
+		t.Fatalf("Expected 1 analyzer finding, got %d", len(sse.AnalyzerFindings))
+	}
+	expectedFindingOWASP := []string{"API1:2023 Broken Object Level Authorization"}
+	if !reflect.DeepEqual(sse.AnalyzerFindings[0].OWASPCategory, expectedFindingOWASP) {
+		t.Errorf("Expected analyzer finding OWASPCategory %v, got %v", expectedFindingOWASP, sse.AnalyzerFindings[0].OWASPCategory)
+	}
+}
+
 
 

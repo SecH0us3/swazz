@@ -120,10 +120,11 @@ func DefaultSettings() Settings {
 }
 
 type AnalysisFinding struct {
-	RuleID   string `json:"ruleId"`
-	Level    string `json:"level"` // "error", "warning", "note"
-	Message  string `json:"message"`
-	Evidence string `json:"evidence,omitempty"`
+	RuleID        string   `json:"ruleId"`
+	Level         string   `json:"level"` // "error", "warning", "note"
+	Message       string   `json:"message"`
+	Evidence      string   `json:"evidence,omitempty"`
+	OWASPCategory []string `json:"owaspCategory,omitempty"`
 }
 
 type RequestLog struct {
@@ -156,6 +157,7 @@ type FuzzResult struct {
 	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 	Identity         string            `json:"identity,omitempty"`
+	OWASPCategory    []string          `json:"owaspCategory,omitempty"`
 }
 
 // FuzzResultSSE is the lightweight version sent over SSE to the browser.
@@ -181,6 +183,7 @@ type FuzzResultSSE struct {
 	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 	Identity         string            `json:"identity,omitempty"`
+	OWASPCategory    []string          `json:"owaspCategory,omitempty"`
 }
 
 // RunStats tracks live statistics during a fuzzing run.
