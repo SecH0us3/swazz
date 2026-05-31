@@ -346,3 +346,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Payload injection:** Extend the generator in `packages/container/internal/generator/` to dynamically insert the OOB URL (with UUID) into payloads (e.g., injection lists, headers like `X-Forwarded-For`).
     - **Finding Trigger:** When `/oob/:uuid` is accessed, look up the UUID to identify the source session/request, construct an `AnalysisFinding` representing OOB Interaction, and push/broadcast the finding to the dashboard real-time.
 
+- [ ] **Task 38:** Implement Response Content Similarity & Structure Analysis for BOLA/Bypass Testing.
+  - **Design Goal:** Eliminate false positives during BOLA/Bypass testing by comparing response bodies (structural schema and content similarity) between User A's baseline request and User B/Anonymous replay requests, instead of relying solely on `2xx` HTTP status codes.
+  - **Implementation Details:**
+    - **Analysis Engine:** Create a similarity checker in `packages/container/internal/bola/similarity.go`. Compare JSON keys, array sizes, and text similarity (Levenshtein distance or token intersection) between baseline and replay response bodies.
+    - **Vulnerability Confirmation:** Flag BOLA only if the replayed response (User B/Anonymous) shares high structural and value similarity (e.g. >85%) with User A's baseline response. Ignore `2xx` replays that return empty collections, general error frames, or are structurally distinct.
+    - **Config:** Add `bola_similarity_threshold` (default `0.85`) under `Settings`.
+
+
