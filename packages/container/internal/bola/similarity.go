@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"unicode"
 )
 
@@ -138,7 +139,12 @@ func levenshteinDistance(r1, r2 []rune) int {
 		return len1
 	}
 
-	column := make([]int, len1+1)
+	if len1 > math.MaxInt - 1 {
+		return len2
+	}
+	columnLen := len1 + 1
+
+	column := make([]int, columnLen)
 	for y := 1; y <= len1; y++ {
 		column[y] = y
 	}
