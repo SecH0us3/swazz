@@ -80,6 +80,9 @@ type Runner struct {
 
 	analyzer *analyzer.AnalyzerRegistry
 	sizeBaselines *sync.Map
+	harvestedIDs sync.Map // maps path prefix string -> []string
+	resultsMu sync.Mutex
+	allResults []*swagger.FuzzResult
 }
 
 // New creates a new Runner.
@@ -147,6 +150,10 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	// Launch the stats aggregator goroutine.
 	go r.statsAggregator()
+
+	r.resultsMu.Lock()
+	r.allResults = nil
+	r.resultsMu.Unlock()
 
 	defer func() {
 		cancel()
@@ -270,6 +277,20 @@ func (r *Runner) Start(ctx context.Context) error {
 			safeGen.Endpoint = endpointStr
 
 			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
+		}
+	}
+
+	r.resultsMu.Lock()
+	candidates := make([]*swagger.FuzzResult, len(r.allResults))
+	copy(candidates, r.allResults)
+	r.resultsMu.Unlock()
+
+	bolaResults := r.bolaPhase(ctx, candidates)
+	for _, res := range bolaResults {
+		r.statsChan <- statsMsg{
+			result:           res,
+			currentIteration: 1,
+			totalIterations:  1,
 		}
 	}
 
@@ -526,6 +547,12 @@ func (r *Runner) fuzzEndpoint(
 			}
 			// Broadcast individual result immediately (lock-free MPSCQueue).
 			r.Broadcast(Event{Type: EventResult, Data: result})
+
+			if result.Status >= 200 && result.Status < 300 {
+				r.resultsMu.Lock()
+				r.allResults = append(r.allResults, result)
+				r.resultsMu.Unlock()
+			}
 		}(i, payload, queryParams, generatedHeaders)
 
 		if delay > 0 {
@@ -811,7 +838,10 @@ func (r *Runner) executeRequest(
 			ResponseHeaders: resp.Header,
 			RequestHeaders:  mergedHeaders,
 			Timestamp:       time.Now().UnixMilli(),
-			Retries:         attempt,
+		}
+
+		if profile != swagger.FuzzingProfile("BOLA") {
+			r.harvestFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {

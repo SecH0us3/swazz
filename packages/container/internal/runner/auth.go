@@ -15,20 +15,32 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"swazz-engine/internal/swagger"
 )
 
-func (r *Runner) RunAuthSequence(ctx context.Context) error {
+
+func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.AuthStep, initialHeaders map[string]string, initialCookies map[string]string) (map[string]string, map[string]string, error) {
 	cfg := r.config
-	if len(cfg.AuthSequence) == 0 {
-		return nil
+	headers := make(map[string]string)
+	cookies := make(map[string]string)
+	for k, v := range initialHeaders {
+		headers[k] = v
+	}
+	for k, v := range initialCookies {
+		cookies[k] = v
 	}
 
-	fmt.Printf("Running authentication sequence (%d steps)...\n", len(cfg.AuthSequence))
+	if len(sequence) == 0 {
+		return headers, cookies, nil
+	}
+
+	fmt.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
 
 	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
 
-	for i, step := range cfg.AuthSequence {
+	for i, step := range sequence {
 		fullURL := r.subVars(step.URL)
 		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
 			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
@@ -41,14 +53,14 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			r.configMu.RUnlock()
 			b, err := json.Marshal(subBody)
 			if err != nil {
-				return fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
+				return nil, nil, fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
 			}
 			bodyReader = bytes.NewReader(b)
 		}
 
 		req, err := http.NewRequestWithContext(reqCtx, step.Method, fullURL, bodyReader)
 		if err != nil {
-			return fmt.Errorf("auth step %d: failed to create request: %w", i+1, err)
+			return nil, nil, fmt.Errorf("auth step %d: failed to create request: %w", i+1, err)
 		}
 
 		if step.Body != nil {
@@ -59,14 +71,14 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		for k, v := range step.Headers {
 			req.Header.Set(k, r.subVarsLocked(v))
 		}
-		// Apply currently collected headers and cookies
-		if len(cfg.GlobalHeaders) > 0 {
-			for k, v := range cfg.GlobalHeaders {
+		// Apply accumulated headers and cookies for this sequence
+		if len(headers) > 0 {
+			for k, v := range headers {
 				req.Header.Set(k, v)
 			}
 		}
-		if len(cfg.Cookies) > 0 {
-			for k, v := range cfg.Cookies {
+		if len(cookies) > 0 {
+			for k, v := range cookies {
 				req.AddCookie(&http.Cookie{Name: k, Value: v})
 			}
 		}
@@ -79,7 +91,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 
 		resp, err := r.client.Do(req)
 		if err != nil {
-			return fmt.Errorf("auth step %d: request failed: %w", i+1, err)
+			return nil, nil, fmt.Errorf("auth step %d: request failed: %w", i+1, err)
 		}
 
 		if cfg.Settings.Debug {
@@ -90,11 +102,11 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
-		io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse, error irrelevant
-		resp.Body.Close()              // #nosec G104 -- close error irrelevant after body drained
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 
 		if err != nil {
-			return fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)
+			return nil, nil, fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)
 		}
 
 		if resp.StatusCode >= 400 {
@@ -102,7 +114,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			if len(errBody) > 1024 {
 				errBody = errBody[:1024]
 			}
-			return fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)
+			return nil, nil, fmt.Errorf("auth step %d failed with status %d: %s", i+1, resp.StatusCode, errBody)
 		}
 
 		// Collect cookies
@@ -119,29 +131,21 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 			}
 
 			if shouldSave {
-				r.configMu.Lock()
-				if cfg.Cookies == nil {
-					cfg.Cookies = make(map[string]string)
-				}
-				cfg.Cookies[cookie.Name] = cookie.Value
-				r.configMu.Unlock()
+				cookies[cookie.Name] = cookie.Value
 				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
 			}
 		}
 
-		// Extract JSON fields
+		// Extract JSON fields & Variables
 		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 			var parsed map[string]any
 			if err := json.Unmarshal(body, &parsed); err != nil {
 				if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
-					return fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
+					return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
 				}
 				fmt.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)
 			} else {
 				r.configMu.Lock()
-				if cfg.GlobalHeaders == nil {
-					cfg.GlobalHeaders = make(map[string]string)
-				}
 				if cfg.Variables == nil {
 					cfg.Variables = make(map[string]any)
 				}
@@ -150,7 +154,7 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
 						strVal := fmt.Sprintf("%v", val)
-						cfg.GlobalHeaders[headerName] = strVal
+						headers[headerName] = strVal
 						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 					}
 				}
@@ -174,6 +178,21 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 	}
 
 	fmt.Println("Authentication sequence complete.")
+	return headers, cookies, nil
+}
+
+func (r *Runner) RunAuthSequence(ctx context.Context) error {
+	if len(r.config.AuthSequence) == 0 {
+		return nil
+	}
+	headers, cookies, err := r.ExecuteAuthSequence(ctx, r.config.AuthSequence, r.config.GlobalHeaders, r.config.Cookies)
+	if err != nil {
+		return err
+	}
+	r.configMu.Lock()
+	r.config.GlobalHeaders = headers
+	r.config.Cookies = cookies
+	r.configMu.Unlock()
 	return nil
 }
 

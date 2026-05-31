@@ -187,8 +187,8 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🔐 Authorization & Access Control Testing
 
-- [ ] **Task 28:** Implement BOLA/IDOR (Broken Object-Level Authorization) testing with multi-identity support.
-  - **Design Goal:** Detect OWASP API Security #1 vulnerability. The existing [auth.go](file:///Users/alex/src/swazz/packages/container/internal/runner/auth.go) already supports multi-step auth sequences with cookie extraction (`ExtractCookies` L108-130), JSON field extraction (`ExtractJSON` L132-173), and template variable substitution (`substituteInObject` L222-241). This task extends that system to support **two concurrent identities**.
+- [x] **Task 28:** Implement BOLA/IDOR (Broken Object-Level Authorization) testing with multi-identity support.
+  - **Design Goal:** Detect OWASP API Security #1 vulnerability. The existing [auth.go](file:///Users/alex/src/swazz/packages/container/internal/runner/auth.go) already supports multi-step auth sequences with cookie extraction (`ExtractCookies` L108-130), JSON field extraction (`ExtractJSON` L132-173), and template variable substitution (`substituteInObject` L222-241). This task extends that system to support **two concurrent identities** and reliable ID harvesting/correlation to prevent false negatives.
   - **Implementation Details:**
     - **Config extension:** In [types.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/types.go), add to `Config` (L38-50):
       ```go
@@ -202,25 +202,27 @@ This roadmap tracks planned features, documentation improvements, and architectu
           Cookies      map[string]string `json:"cookies,omitempty"`
       }
       ```
-      Example config:
-      ```json
-      {
-        "auth_identities": {
-          "admin": {"auth_sequence": [{"method": "POST", "url": "/auth/login", "body": {"user": "admin", "pass": "admin123"}, "extract_json": {"data.token": "Authorization"}}]},
-          "user":  {"auth_sequence": [{"method": "POST", "url": "/auth/login", "body": {"user": "viewer", "pass": "viewer123"}, "extract_json": {"data.token": "Authorization"}}]}
-        },
-        "settings": {"bola_testing": true}
-      }
+      Also allow explicit variable extraction/parameters mapping on endpoints:
+      ```go
+      // In EndpointConfig:
+      ExtractVariables map[string]string `json:"extract_variables,omitempty"` // JSONPath -> Variable name
+      ParamsMapping    map[string]string `json:"params_mapping,omitempty"`    // URL Param -> Variable name
       ```
+    - **ID Harvesting & Correlation (Two Approaches):**
+      1. **Heuristic Harvesting:** During the main fuzz run under User A, inspect successful `200 OK` JSON responses. Walk the JSON tree and harvest values matching ID patterns (e.g. `id`, `uuid`, `*_id`). Store these IDs mapped to the endpoint's path prefix (e.g., `/api/goods`). When BOLA testing an endpoint like `POST /api/goods/{id}` under User B, look up harvested IDs for `/api/goods` prefix and replay the request substituting `{id}` with the harvested value.
+      2. **Explicit Mapping:** If `extract_variables` and `params_mapping` are configured, extract parameters from User A's responses using the configured JSONPath keys and save them as named variables. Then, substitute them in User B's replay requests according to `params_mapping`.
     - **New package:** Create `packages/container/internal/bola/`:
       - `bola.go` — `BOLATester` struct. After the main fuzz run completes (triggered from the `EventComplete` handler), collect all `FuzzResult`s with `Status >= 200 && Status < 300` from endpoints that contain path parameters (regex match `\{[^}]+\}` in `EndpointConfig.Path`). For each such result:
         1. Execute auth sequence for identity B (reusing `RunAuthSequence()` from [auth.go](file:///Users/alex/src/swazz/packages/container/internal/runner/auth.go) L20-178 — refactor to accept an `AuthIdentity` parameter instead of reading from `r.config.AuthSequence` directly).
-        2. Replay the exact same request (same URL, same body) but with identity B's headers/cookies.
-        3. If the response status is still `2xx` → emit `classifier.Finding{RuleID: "swazz/bola-idor", Level: SeverityError}`.
+        2. Replay the exact same request (same URL, same body) but with identity B's headers/cookies. If the response status is still `2xx` → emit `classifier.Finding{RuleID: "swazz/bola-idor", Level: SeverityError}`.
+        3. **Anonymous access check:** Replay the exact same request but drop only the **authentication credentials** (the specific headers/cookies defined in `AuthHeaders`/`AuthCookies` settings, plus those dynamically extracted during the `AuthSequence`). This ensures structural headers like `Content-Type` are kept to prevent server-side format errors, while actual credentials are removed. If the response status is still `2xx` → emit `classifier.Finding{RuleID: "swazz/unauthorized-access", Level: SeverityError}`.
       - `bola_test.go` — Use `httptest.Server` with two user contexts, one endpoint that correctly returns 403 and one that doesn't enforce authz.
     - **Runner integration:** In [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go), add a `bolaPhase()` method called after the main run loop completes (after all profile iterations finish at ~L390). Results from BOLA testing are broadcast via the same `Event{Type: EventResult}` mechanism and appended to `handler.results` for report inclusion.
-    - **Config:** Add `BOLATesting bool` to `Settings` (L71-82), default `false`.
-    - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "BOLA / IDOR Testing" toggle with an expandable section for defining two auth identities (each with auth sequence steps, headers, cookies). In the [Heatmap](file:///Users/alex/src/swazz/packages/web/src/components/Dashboard/Heatmap.tsx), BOLA findings should appear with a distinct color (e.g., purple) and a dedicated profile label `BOLA` to distinguish from fuzz results.
+    - **Config:** Add to `Settings` (L71-82):
+      - `BOLATesting bool` (default `false`)
+      - `AuthHeaders []string` (default `["Authorization", "X-API-Key"]`) - headers to drop during anonymous checks.
+      - `AuthCookies []string` (default `["session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"]`) - cookies to drop during anonymous checks.
+    - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "BOLA / IDOR Testing" toggle with an expandable section for defining two auth identities (each with auth sequence steps, headers, cookies), plus list inputs for specifying custom authentication header/cookie names to drop during anonymous checks. In the [Heatmap](file:///Users/alex/src/swazz/packages/web/src/components/Dashboard/Heatmap.tsx), BOLA and unauthorized access findings should appear with distinct colors/labels to distinguish from fuzz results.
 
 - [x] **Task 29:** Implement Custom Security Header Fuzzing beyond the API specification.
   - **Design Goal:** Test for common server-side misconfigurations by fuzzing security-critical HTTP headers not defined in the API spec. Currently, `executeRequest()` in [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) (L440-470) only applies headers from `config.GlobalHeaders` and generated header params from `EndpointConfig.HeaderParams` (parsed in [parser.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/parser.go) L60-85). There is no mechanism to inject arbitrary security-test headers.

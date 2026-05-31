@@ -23,12 +23,14 @@ type SchemaProperty struct {
 
 // EndpointConfig describes a single API endpoint extracted from the spec.
 type EndpointConfig struct {
-	Path         string                     `json:"path"`
-	Method       string                     `json:"method"`
-	Schema       SchemaProperty             `json:"schema"`
-	PathParams   map[string]*SchemaProperty `json:"pathParams,omitempty"`
-	HeaderParams map[string]*SchemaProperty `json:"headerParams,omitempty"`
-	ContentType  string                     `json:"contentType,omitempty"`
+	Path             string                     `json:"path"`
+	Method           string                     `json:"method"`
+	Schema           SchemaProperty             `json:"schema"`
+	PathParams       map[string]*SchemaProperty `json:"pathParams,omitempty"`
+	HeaderParams     map[string]*SchemaProperty `json:"headerParams,omitempty"`
+	ContentType      string                     `json:"contentType,omitempty"`
+	ExtractVariables map[string]string          `json:"extract_variables,omitempty"` // map JSON path to variable name
+	ParamsMapping    map[string]string          `json:"params_mapping,omitempty"`    // map path param name to variable name
 }
 
 // SecurityConfig holds configuration for engine security policies.
@@ -38,17 +40,18 @@ type SecurityConfig struct {
 
 // Config holds the full fuzzing configuration.
 type Config struct {
-	BaseURL       string            `json:"base_url"`
-	GlobalHeaders map[string]string `json:"global_headers"`
-	Cookies       map[string]string `json:"cookies"`
-	Dictionaries  map[string][]any  `json:"dictionaries"`
-	WordlistFiles map[string]string `json:"wordlist_files,omitempty"`
-	Settings      Settings          `json:"settings"`
-	Endpoints     []EndpointConfig  `json:"endpoints"`
-	Rules         *RulesConfig      `json:"rules,omitempty"`
-	AuthSequence  []AuthStep        `json:"auth_sequence,omitempty"`
-	Variables     map[string]any    `json:"variables,omitempty"`
-	Security      SecurityConfig    `json:"security,omitempty"`
+	BaseURL        string                  `json:"base_url"`
+	GlobalHeaders  map[string]string       `json:"global_headers"`
+	Cookies        map[string]string       `json:"cookies"`
+	Dictionaries   map[string][]any        `json:"dictionaries"`
+	WordlistFiles  map[string]string       `json:"wordlist_files,omitempty"`
+	Settings       Settings                `json:"settings"`
+	Endpoints      []EndpointConfig        `json:"endpoints"`
+	Rules          *RulesConfig            `json:"rules,omitempty"`
+	AuthSequence   []AuthStep              `json:"auth_sequence,omitempty"`
+	AuthIdentities map[string]AuthIdentity `json:"auth_identities,omitempty"`
+	Variables      map[string]any          `json:"variables,omitempty"`
+	Security       SecurityConfig          `json:"security,omitempty"`
 }
 
 // RulesConfig configures how results are classified.
@@ -69,6 +72,13 @@ type AuthStep struct {
 	ExtractVariables map[string]string `json:"extract_variables,omitempty"` // Map JSON field name to template variable name
 }
 
+// AuthIdentity represents an authentication context (like User B).
+type AuthIdentity struct {
+	AuthSequence []AuthStep        `json:"auth_sequence"`
+	Headers      map[string]string `json:"headers,omitempty"`
+	Cookies      map[string]string `json:"cookies,omitempty"`
+}
+
 // Settings controls the fuzzing run behavior.
 type Settings struct {
 	IterationsPerProfile          int                         `json:"iterations_per_profile"`
@@ -84,6 +94,9 @@ type Settings struct {
 	OOBServerURL                  string                      `json:"oob_server_url,omitempty"`
 	RateLimitCheck                bool                        `json:"rate_limit_check"`
 	RateLimitBurstSize            int                         `json:"rate_limit_burst_size"`
+	BOLATesting                   bool                        `json:"bola_testing"`
+	AuthHeaders                   []string                    `json:"auth_headers,omitempty"`
+	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -99,6 +112,9 @@ func DefaultSettings() Settings {
 		ResponseSizeAnomalyMultiplier: 5.0,
 		RateLimitCheck:                false,
 		RateLimitBurstSize:            50,
+		BOLATesting:                   false,
+		AuthHeaders:                   []string{"Authorization", "X-API-Key"},
+		AuthCookies:                   []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"},
 	}
 }
 

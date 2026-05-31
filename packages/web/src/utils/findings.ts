@@ -73,6 +73,14 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-info)';
         title = 'Rate Limiting Enforced';
         key = 'rate_limit_active';
+    } else if (f.ruleId === 'swazz/bola-idor') {
+        color = 'var(--color-error)';
+        title = 'BOLA / IDOR Vulnerability';
+        key = 'bola_idor';
+    } else if (f.ruleId === 'swazz/unauthorized-access') {
+        color = 'var(--color-error)';
+        title = 'Unauthenticated Access Bypass';
+        key = 'unauthorized_access';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

@@ -209,6 +209,70 @@ export default {
                   }
                 }
               }
+            },
+            "/api/goods": {
+              get: {
+                summary: "Get a list of goods",
+                responses: {
+                  "200": {
+                    description: "List of goods"
+                  }
+                }
+              }
+            },
+            "/api/goods/{id}": {
+              get: {
+                summary: "Get a goods item by ID (vulnerable to BOLA)",
+                parameters: [
+                  {
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "string" }
+                  }
+                ],
+                responses: {
+                  "200": {
+                    description: "Goods detail"
+                  }
+                }
+              }
+            },
+            "/api/public-goods/{id}": {
+              get: {
+                summary: "Get a public goods item by ID (vulnerable to Anonymous)",
+                parameters: [
+                  {
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "string" }
+                  }
+                ],
+                responses: {
+                  "200": {
+                    description: "Public goods detail"
+                  }
+                }
+              }
+            },
+            "/api/secure-goods/{id}": {
+              get: {
+                summary: "Get a secure goods item by ID (secure)",
+                parameters: [
+                  {
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    schema: { type: "string" }
+                  }
+                ],
+                responses: {
+                  "200": {
+                    description: "Secure goods detail"
+                  }
+                }
+              }
             }
           }
         };
@@ -366,7 +430,75 @@ export default {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         }
+        if (body.username === "user1" && body.password === "pass1") {
+          return new Response(JSON.stringify({ token: "Bearer user1-token" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        if (body.username === "user2" && body.password === "pass2") {
+          return new Response(JSON.stringify({ token: "Bearer user2-token" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
         return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+      }
+
+      if (path === "/api/goods" && method === "GET") {
+        const auth = request.headers.get("Authorization");
+        if (!auth) {
+          return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+        }
+        if (auth === "Bearer user1-token") {
+          return new Response(JSON.stringify({
+            goods: [{ id: "goods-101", name: "User 1 Secret Files", owner: "user1" }]
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (auth === "Bearer user2-token") {
+          return new Response(JSON.stringify({
+            goods: [{ id: "goods-202", name: "User 2 Public Files", owner: "user2" }]
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        return new Response("Forbidden", { status: 403, headers: corsHeaders });
+      }
+
+      if (path.startsWith("/api/goods/") && method === "GET") {
+        const auth = request.headers.get("Authorization");
+        if (!auth) {
+          return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+        }
+        const id = path.substring("/api/goods/".length);
+        return new Response(JSON.stringify({
+          id: id,
+          name: "Vulnerable Goods Item " + id,
+          secret_info: "this_is_private_data_leaked_via_idor"
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (path.startsWith("/api/public-goods/") && method === "GET") {
+        const id = path.substring("/api/public-goods/".length);
+        return new Response(JSON.stringify({
+          id: id,
+          name: "Public Goods Item " + id,
+          public_info: "everyone_can_see_this"
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (path.startsWith("/api/secure-goods/") && method === "GET") {
+        const auth = request.headers.get("Authorization");
+        if (!auth) {
+          return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+        }
+        const id = path.substring("/api/secure-goods/".length);
+        if (id === "goods-101" && auth !== "Bearer user1-token") {
+          return new Response("Forbidden", { status: 403, headers: corsHeaders });
+        }
+        return new Response(JSON.stringify({
+          id: id,
+          name: "Secure Goods Item " + id,
+          owner: id === "goods-101" ? "user1" : "other"
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       if (path === "/graphql") {
