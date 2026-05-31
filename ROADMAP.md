@@ -415,3 +415,18 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement `React.memo`, `useMemo`, and `useCallback` strategically to prevent costly re-renders of list items and grid cells.
     - Explore windowing/virtualization for the real-time request logs or long findings lists.
 
+- [/] **Task 46:** Implement Keyboard Shortcuts & Help Menu.
+  - **Design Goal:** Improve accessibility and productivity by allowing developers to control the fuzzer and navigate the dashboard via custom keyboard shortcuts.
+  - **Implementation Details:**
+    - Listen to global `keydown` events.
+    - Shortcuts:
+      - `Shift + ?` / `?` ➔ Show/hide keyboard shortcuts help modal.
+      - `Cmd + Enter` (macOS) / `Ctrl + Enter` (Windows/Linux) ➔ Trigger/Run Fuzzer.
+      - `Cmd + Shift + X` (macOS) / `Ctrl + Shift + X` (Windows/Linux) ➔ Stop active fuzzing session.
+      - `Cmd + Shift + P` / `Ctrl + Shift + P` ➔ Pause/Resume fuzzing session.
+      - `1`, `2`, `3`, `4` keys ➔ Switch between tabs (`1` = Heatmap, `2` = Request Logs, `3` = Grouped Errors, `4` = OWASP Top 10).
+      - `Escape` ➔ Close any active modals, config panel, or request details view.
+      - `Alt + L` / `Option + L` ➔ Toggle left sidebar.
+      - `Alt + C` / `Option + C` ➔ Toggle configuration/right sidebar.
+
+

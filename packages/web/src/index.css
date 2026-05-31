@@ -3323,3 +3323,43 @@ button:focus-visible {
   flex-shrink: 0;
   margin-top: 1px;
 }
+
+/* ─── Keyboard Shortcuts (kbd) styling ─── */
+kbd {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-hover);
+  border-bottom: 2px solid var(--border-hover);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.hotkeys-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-4) var(--space-8);
+  align-items: center;
+  padding: var(--space-2) 0;
+}
+
+.hotkeys-row {
+  display: contents;
+}
+
+.hotkeys-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.hotkeys-keys {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}

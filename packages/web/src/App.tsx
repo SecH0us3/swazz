@@ -18,6 +18,7 @@ import { useTheme } from './hooks/useTheme.js';
 import { MainWorkspace } from './components/MainWorkspace.js';
 import { useAppStore } from './store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
+import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
@@ -32,7 +33,8 @@ export default function App() {
         isSidebarOpen,
         isConfigOpen,
         isSidebarHiddenDesktop,
-        isConfigHiddenDesktop
+        isConfigHiddenDesktop,
+        isHotkeysHelpOpen
     } = useAppStore(useShallow(state => ({
         activeTab: state.activeTab,
         selectedResult: state.selectedResult,
@@ -40,6 +42,7 @@ export default function App() {
         isConfigOpen: state.isConfigOpen,
         isSidebarHiddenDesktop: state.isSidebarHiddenDesktop,
         isConfigHiddenDesktop: state.isConfigHiddenDesktop,
+        isHotkeysHelpOpen: state.isHotkeysHelpOpen,
     })));
 
     const {
@@ -80,13 +83,117 @@ export default function App() {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && activeTab === 'logs' && !selectedResult) {
+            const activeTag = document.activeElement?.tagName.toLowerCase();
+            const isInputActive = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.hasAttribute('contenteditable');
+
+            const mod = e.metaKey || e.ctrlKey;
+            const shift = e.shiftKey;
+            const alt = e.altKey;
+
+            if (isInputActive && !mod && !alt) {
+                return;
+            }
+
+            // Global Escape key
+            if (e.key === 'Escape') {
+                if (selectedResult) {
+                    useAppStore.setState({ selectedResult: null });
+                } else if (useAppStore.getState().isHotkeysHelpOpen) {
+                    useAppStore.setState({ isHotkeysHelpOpen: false });
+                } else if (activeTab === 'logs') {
+                    useAppStore.setState({ activeTab: 'heatmap' });
+                } else {
+                    useAppStore.setState({
+                        isSidebarOpen: false,
+                        isConfigOpen: false,
+                        isSidebarHiddenDesktop: true,
+                        isConfigHiddenDesktop: true,
+                    });
+                }
+                return;
+            }
+
+            // Shift + ? / ? key
+            if (e.key === '?' || (e.key === '/' && shift)) {
+                e.preventDefault();
+                useAppStore.setState(state => ({ isHotkeysHelpOpen: !state.isHotkeysHelpOpen }));
+                return;
+            }
+
+            // Tab keys 1, 2, 3, 4
+            if (e.key === '1') {
+                e.preventDefault();
                 useAppStore.setState({ activeTab: 'heatmap' });
+                return;
+            }
+            if (e.key === '2') {
+                e.preventDefault();
+                useAppStore.setState({ activeTab: 'logs' });
+                return;
+            }
+            if (e.key === '3') {
+                e.preventDefault();
+                useAppStore.setState({ activeTab: 'findings' });
+                return;
+            }
+            if (e.key === '4') {
+                e.preventDefault();
+                useAppStore.setState({ activeTab: 'owasp' });
+                return;
+            }
+
+            // Run: Mod + Enter
+            if (mod && e.key === 'Enter') {
+                e.preventDefault();
+                handleStart();
+                return;
+            }
+
+            // Pause / Resume: Mod + Shift + P
+            if (mod && shift && e.key.toLowerCase() === 'p') {
+                e.preventDefault();
+                const running = useAppStore.getState().isRunning;
+                const paused = useAppStore.getState().isPaused;
+                if (running) {
+                    if (paused) {
+                        resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'));
+                    } else {
+                        pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'));
+                    }
+                }
+                return;
+            }
+
+            // Stop: Mod + Shift + X
+            if (mod && shift && e.key.toLowerCase() === 'x') {
+                e.preventDefault();
+                stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'));
+                return;
+            }
+
+            // Sidebar toggles: Alt + L, Alt + C
+            if (alt && e.code === 'KeyL') {
+                e.preventDefault();
+                if (window.innerWidth <= 768) {
+                    useAppStore.setState(state => ({ isSidebarOpen: !state.isSidebarOpen }));
+                } else {
+                    useAppStore.setState(state => ({ isSidebarHiddenDesktop: !state.isSidebarHiddenDesktop }));
+                }
+                return;
+            }
+            if (alt && e.code === 'KeyC') {
+                e.preventDefault();
+                if (window.innerWidth <= 768) {
+                    useAppStore.setState(state => ({ isConfigOpen: !state.isConfigOpen }));
+                } else {
+                    useAppStore.setState(state => ({ isConfigHiddenDesktop: !state.isConfigHiddenDesktop }));
+                }
+                return;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeTab, selectedResult]);
+    }, [activeTab, selectedResult, handleStart, stop, pause, resume, showToast]);
 
     const handleSelectResult = (row: ResultSummary) => {
         useAppStore.setState({ selectedResult: {
@@ -196,6 +303,12 @@ export default function App() {
                     globalHeaders={config.global_headers}
                     globalCookies={config.cookies}
                     config={config}
+                />
+            )}
+
+            {isHotkeysHelpOpen && (
+                <HotkeysHelpModal
+                    onClose={() => useAppStore.setState({ isHotkeysHelpOpen: false })}
                 />
             )}
 
