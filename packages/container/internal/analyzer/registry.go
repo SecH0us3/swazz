@@ -19,6 +19,7 @@ func NewRegistry() *AnalyzerRegistry {
 			&CORSAnalyzer{},
 			&SizeAnalyzer{},
 			NewCustomAnalyzer(),
+			&TimingAnalyzer{},
 		},
 	}
 }

@@ -81,6 +81,14 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-error)';
         title = 'Unauthenticated Access Bypass';
         key = 'unauthorized_access';
+    } else if (f.ruleId === 'swazz/time-based-sqli') {
+        color = 'var(--color-error)';
+        title = 'Time-Based SQLi';
+        key = 'time_based_sqli';
+    } else if (f.ruleId === 'swazz/time-based-cmdi') {
+        color = 'var(--color-error)';
+        title = 'Time-Based Cmd Injection';
+        key = 'time_based_cmdi';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

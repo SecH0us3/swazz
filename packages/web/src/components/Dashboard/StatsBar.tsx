@@ -48,6 +48,10 @@ export function StatsBar({ stats, isRunning }: Props) {
     const pct = totalEndpoints > 0 ? Math.round((completedEndpoints / totalEndpoints) * 100) : 0;
     const showProgress = isRunning && totalEndpoints > 0;
 
+    const avgResponseTime = stats.totalRequests > 0 
+        ? stats.totalDurationMs / stats.totalRequests 
+        : 0;
+
     return (
         <div className="stats-bar card">
             <div className="stats-bar-row">
@@ -83,6 +87,13 @@ export function StatsBar({ stats, isRunning }: Props) {
                 <div className={`stat-card stat-5xx ${count5xx > 0 ? 'has-errors' : ''}`}>
                     <span className="stat-label">{count5xx > 0 ? '5xx CRASHES' : '5xx Errors'}</span>
                     <StatNumber value={count5xx} />
+                </div>
+                <div className="stat-divider" />
+
+                {/* Avg Response Time */}
+                <div className="stat-card stat-avg-response">
+                    <span className="stat-label">Avg Response</span>
+                    <span className="stat-value">{Math.round(avgResponseTime)} ms</span>
                 </div>
                 <div className="stat-divider" />
 

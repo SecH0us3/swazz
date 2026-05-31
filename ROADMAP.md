@@ -144,7 +144,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Config:** In [types.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/types.go) `Settings` struct (L71-82), add `AnalyzeResponseBody bool` (default `true` in `DefaultSettings()` L85-94). Wire through to the runner constructor.
     - **Tests:** Create `packages/container/internal/analyzer/xss_test.go`, `sqli_test.go`, `stacktrace_test.go`, `sensitive_test.go` — each with table-driven tests covering true positive, true negative, and edge cases (e.g., properly HTML-escaped XSS, SQL keywords in legitimate data).
 
-- [ ] **Task 25:** Implement Time-Based Injection Detection for blind SQLi and command injection.
+- [x] **Task 25:** Implement Time-Based Injection Detection for blind SQLi and command injection.
   - **Design Goal:** Detect blind SQL injection and OS command injection by measuring response time anomalies when time-delay payloads are sent. The 12 SQLi payloads in `payloads.MaliciousSQLi` ([malicious.go](file:///Users/alex/src/swazz/packages/container/internal/generator/payloads/malicious.go) L25-38) already include `' OR SLEEP(5)--`, `'; WAITFOR DELAY '0:0:5'--` — but the runner ignores timing. *(Depends on: Task 24 analyzer architecture)*
   - **Implementation Details:**
     - **Baseline collection:** In the [Runner](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) struct (L35-73), add a `baselines sync.Map` mapping `endpointKey (method+path)` → `*EndpointBaseline{medianMs int64, sampleCount int}`. During RANDOM profile execution (which runs first by default per `DefaultSettings().Profiles` order), collect response durations. After ≥5 samples, compute a rolling median and store it.

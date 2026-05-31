@@ -100,4 +100,28 @@ describe('findings utility', () => {
         expect(result.title).toBe('Response Size Anomaly');
         expect(result.key).toBe('response_size_anomaly');
     });
+
+    it('should categorize swazz/time-based-sqli rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/time-based-sqli',
+            level: 'error',
+            message: 'Time-Based SQLi detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('Time-Based SQLi');
+        expect(result.key).toBe('time_based_sqli');
+    });
+
+    it('should categorize swazz/time-based-cmdi rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/time-based-cmdi',
+            level: 'error',
+            message: 'Time-Based Cmd Injection detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('Time-Based Cmd Injection');
+        expect(result.key).toBe('time_based_cmdi');
+    });
 });

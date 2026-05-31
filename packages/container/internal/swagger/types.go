@@ -92,6 +92,7 @@ type Settings struct {
 	PayloadCategories             map[FuzzingProfile][]string `json:"payload_categories,omitempty"`
 	AnalyzeResponseBody           bool                        `json:"analyze_response_body"`
 	ResponseSizeAnomalyMultiplier float64                     `json:"response_size_anomaly_multiplier"`
+	TimeAnomalyThresholdMs        int                         `json:"time_anomaly_threshold_ms"`
 	OOBServerURL                  string                      `json:"oob_server_url,omitempty"`
 	RateLimitCheck                bool                        `json:"rate_limit_check"`
 	RateLimitBurstSize            int                         `json:"rate_limit_burst_size"`
@@ -111,6 +112,7 @@ func DefaultSettings() Settings {
 		Profiles:                      []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
 		AnalyzeResponseBody:           true,
 		ResponseSizeAnomalyMultiplier: 5.0,
+		TimeAnomalyThresholdMs:        4000,
 		RateLimitCheck:                false,
 		RateLimitBurstSize:            50,
 		BOLATesting:                   false,
@@ -200,6 +202,7 @@ type RunStats struct {
 	Progress           Progress                         `json:"progress"`
 	TotalResponseBytes int64                            `json:"totalResponseBytes"`
 	MaxResponseSize    int64                            `json:"maxResponseSize"`
+	TotalDurationMs    int64                            `json:"totalDurationMs"`
 }
 
 // Progress tracks endpoint-level completion.

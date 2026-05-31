@@ -297,6 +297,7 @@ export function useDb() {
             progress: { completedEndpoints: 0, totalEndpoints: 0, currentEndpoint: '', currentProfile: '' },
             totalResponseBytes: data.summary?.totalResponseBytes || 0,
             maxResponseSize: data.summary?.maxResponseSize || 0,
+            totalDurationMs: data.summary?.totalDurationMs || 0,
         };
 
         let baseUrl = 'CLI Import';

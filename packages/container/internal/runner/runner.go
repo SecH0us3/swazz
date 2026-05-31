@@ -81,6 +81,7 @@ type Runner struct {
 
 	analyzer *analyzer.AnalyzerRegistry
 	sizeBaselines *sync.Map
+	timeBaselines *sync.Map
 	harvestedIDs sync.Map // maps path prefix string -> []string
 	idSources    sync.Map // maps ID string -> source string
 	resultsMu sync.Mutex
@@ -105,6 +106,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		statsDone:  make(chan struct{}),
 		analyzer:      analyzer.NewRegistry(),
 		sizeBaselines: &sync.Map{},
+		timeBaselines: &sync.Map{},
 	}
 	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
@@ -142,6 +144,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
 	r.sizeBaselines = &sync.Map{}
+	r.timeBaselines = &sync.Map{}
 
 	// Clear the global OOB store to prevent memory leaks from stale UUIDs of previous runs
 	oob.GlobalStore.Clear()
@@ -274,6 +277,7 @@ func (r *Runner) Start(ctx context.Context) error {
 				}
 				if result.Status >= 200 && result.Status < 300 {
 					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
+					r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 				}
 			}(endpoint)
 		}
@@ -563,6 +567,7 @@ func (r *Runner) fuzzEndpoint(
 
 			if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
 				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)
+				r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 			}
 
 			// Send result to aggregator (buffered, non-blocking under normal load).
@@ -879,6 +884,7 @@ func (r *Runner) executeRequest(
 			if multiplier <= 0 {
 				multiplier = 5.0
 			}
+			baselineTime := r.getTimeBaselineMedian(method, originalPath)
 			input := &analyzer.AnalysisInput{
 				SentPayload:     result.Payload,
 				ResponseBody:    rawBodyBytes,
@@ -890,6 +896,8 @@ func (r *Runner) executeRequest(
 				ResponseSize:    responseSize,
 				BaselineSize:    baselineSize,
 				SizeMultiplier:  multiplier,
+				BaselineTimeMs:  baselineTime,
+				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
 			if r.config.Settings.Debug && len(result.AnalyzerFindings) > 0 {
@@ -1090,3 +1098,62 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 }
 
 
+
+type EndpointTimeBaseline struct {
+	mu         sync.Mutex
+	times      []int64
+	medianTime int64
+	calculated bool
+}
+
+func (b *EndpointTimeBaseline) addTime(t int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.times = append(b.times, t)
+	b.calculated = false
+}
+
+func (b *EndpointTimeBaseline) getMedian() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.calculated {
+		return b.medianTime
+	}
+	n := len(b.times)
+	if n == 0 {
+		b.medianTime = 0
+		b.calculated = true
+		return 0
+	}
+
+	temp := make([]int64, n)
+	copy(temp, b.times)
+	sort.Slice(temp, func(i, j int) bool { return temp[i] < temp[j] })
+
+	if n%2 == 1 {
+		b.medianTime = temp[n/2]
+	} else {
+		b.medianTime = (temp[n/2-1] + temp[n/2]) / 2
+	}
+	b.calculated = true
+	return b.medianTime
+}
+
+func (r *Runner) recordTimeBaseline(method, path string, t int64) {
+	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+	val, ok := r.timeBaselines.Load(key)
+	if !ok {
+		val, _ = r.timeBaselines.LoadOrStore(key, &EndpointTimeBaseline{})
+	}
+	baseline := val.(*EndpointTimeBaseline)
+	baseline.addTime(t)
+}
+
+func (r *Runner) getTimeBaselineMedian(method, path string) int64 {
+	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+	val, ok := r.timeBaselines.Load(key)
+	if !ok {
+		return 0
+	}
+	return val.(*EndpointTimeBaseline).getMedian()
+}

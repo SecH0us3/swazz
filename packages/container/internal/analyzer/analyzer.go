@@ -17,6 +17,8 @@ type AnalysisInput struct {
 	ResponseSize    int64
 	BaselineSize    int64
 	SizeMultiplier  float64
+	BaselineTimeMs  int64
+	TimeThresholdMs int
 }
 
 // ResponseAnalyzer is the interface implemented by each specific vulnerability scanner.
