@@ -97,6 +97,7 @@ type Settings struct {
 	RateLimitCheck                bool                        `json:"rate_limit_check"`
 	RateLimitBurstSize            int                         `json:"rate_limit_burst_size"`
 	BOLATesting                   bool                        `json:"bola_testing"`
+	BOLASimilarityThreshold       float64                     `json:"bola_similarity_threshold"`
 	AuthHeaders                   []string                    `json:"auth_headers,omitempty"`
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
 }
@@ -116,6 +117,7 @@ func DefaultSettings() Settings {
 		RateLimitCheck:                false,
 		RateLimitBurstSize:            50,
 		BOLATesting:                   false,
+		BOLASimilarityThreshold:       0.85,
 		AuthHeaders:                   []string{"Authorization", "X-API-Key"},
 		AuthCookies:                   []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"},
 	}
