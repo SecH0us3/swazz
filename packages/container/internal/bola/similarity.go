@@ -21,6 +21,12 @@ func CheckSimilarity(bodyA, bodyB []byte) float64 {
 		return 0.0
 	}
 
+	// Safeguard: refuse to calculate similarity for extremely large payloads
+	// to prevent CPU exhaustion and integer overflow.
+	if len(bodyA) > 50000 || len(bodyB) > 50000 {
+		return 0.0
+	}
+
 	var valA, valB any
 	isJSONA := json.Unmarshal(bodyA, &valA) == nil
 	isJSONB := json.Unmarshal(bodyB, &valB) == nil
