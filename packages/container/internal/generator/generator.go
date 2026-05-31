@@ -229,6 +229,10 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 		return map[string]any{}
 	}
 
+	if g.profile == swagger.ProfileRandom && rand.Float64() < 0.1 { // #nosec G404
+		return map[string]any{}
+	}
+
 	payload := make(map[string]any, len(schema.Properties))
 
 	for key, propSchema := range schema.Properties {
