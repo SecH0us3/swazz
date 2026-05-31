@@ -117,9 +117,7 @@ func jaccardSimilarity(setA, setB map[string]struct{}) float64 {
 	return float64(intersection) / float64(union)
 }
 
-func levenshteinDistance(s1, s2 string) int {
-	r1 := []rune(s1)
-	r2 := []rune(s2)
+func levenshteinDistance(r1, r2 []rune) int {
 	len1 := len(r1)
 	len2 := len(r2)
 
@@ -144,7 +142,7 @@ func levenshteinDistance(s1, s2 string) int {
 			if r1[y-1] != r2[x-1] {
 				incr = 1
 			}
-			column[y] = min(column[y]+1, min(column[0]+1, lastkey+incr))
+			column[y] = min(column[y]+1, min(column[y-1]+1, lastkey+incr))
 			lastkey = oldkey
 		}
 	}
@@ -180,6 +178,6 @@ func normalizedLevenshtein(s1, s2 string) float64 {
 			maxLen = len(r2)
 		}
 	}
-	dist := levenshteinDistance(string(r1), string(r2))
+	dist := levenshteinDistance(r1, r2)
 	return 1.0 - (float64(dist) / float64(maxLen))
 }

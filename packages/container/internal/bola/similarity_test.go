@@ -79,3 +79,35 @@ func TestCheckSimilarity(t *testing.T) {
 		})
 	}
 }
+
+func TestLevenshteinDistance(t *testing.T) {
+	tests := []struct {
+		s1       string
+		s2       string
+		expected int
+	}{
+		{"", "", 0},
+		{"a", "", 1},
+		{"", "a", 1},
+		{"ab", "a", 1},
+		{"a", "ab", 1},
+		{"kitten", "sitting", 3},
+		{"rosettacode", "raisethysword", 8},
+	}
+
+	for _, tt := range tests {
+		res := levenshteinDistance([]rune(tt.s1), []rune(tt.s2))
+		if res != tt.expected {
+			t.Errorf("levenshteinDistance(%q, %q) = %d; expected %d", tt.s1, tt.s2, res, tt.expected)
+		}
+	}
+}
+
+func TestNormalizedLevenshtein(t *testing.T) {
+	sim := normalizedLevenshtein("kitten", "sitting")
+	expected := 1.0 - (3.0 / 7.0) // sitting has len 7, distance is 3
+	if sim < expected-0.0001 || sim > expected+0.0001 {
+		t.Errorf("normalizedLevenshtein(\"kitten\", \"sitting\") = %f; expected %f", sim, expected)
+	}
+}
+
