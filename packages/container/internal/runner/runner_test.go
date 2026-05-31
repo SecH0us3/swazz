@@ -2,8 +2,10 @@ package runner
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -486,4 +488,76 @@ loop:
 		t.Error("Expected to find 'swazz/no-rate-limit' finding, but got none")
 	}
 }
+
+func TestExecuteRequest_EmptyBodyRandom(t *testing.T) {
+	var bodies []string
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		bodyBytes, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(bodyBytes))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/test-post",
+				Method: "POST",
+				Schema: swagger.SchemaProperty{
+					Type: "object",
+					Properties: map[string]*swagger.SchemaProperty{
+						"id":   {Type: "integer"},
+						"name": {Type: "string"},
+					},
+					Required: []string{"id", "name"},
+				},
+			},
+		},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 60, // 60 iterations makes hitting 15% chance extremely likely
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+		},
+	}
+
+	r := newTestRunner(server.Client(), cfg)
+	defer r.Close()
+
+	err := r.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	hasEmptyBody := false
+	hasNonEmptyBody := false
+	for _, body := range bodies {
+		// Clean formatting differences if any (e.g. whitespace, newlines)
+		trimmed := strings.TrimSpace(body)
+		if trimmed == "{}" {
+			hasEmptyBody = true
+		} else if strings.Contains(trimmed, `"id"`) && strings.Contains(trimmed, `"name"`) {
+			hasNonEmptyBody = true
+		}
+	}
+
+	if !hasEmptyBody {
+		t.Errorf("Expected at least one request to send an empty body '{}' in random profile, got: %v", bodies)
+	}
+	if !hasNonEmptyBody {
+		t.Errorf("Expected at least one request to send a normal populated body, got: %v", bodies)
+	}
+}
+
 

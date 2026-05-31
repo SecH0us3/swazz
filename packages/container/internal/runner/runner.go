@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -442,7 +443,11 @@ func (r *Runner) fuzzEndpoint(
 		if hasFields(&endpoint) {
 			for retries := 0; retries < 10; retries++ {
 				var generated map[string]any
-				if isSecHeaderIter {
+				if profile == swagger.ProfileRandom && isBodyMethod && rand.Float64() < 0.15 {
+					// In RANDOM profile, there is a 15% chance to send an empty object `{}`
+					// as the request body to test API robustness.
+					generated = map[string]any{}
+				} else if isSecHeaderIter {
 					generated = safeGen.BuildObject(&endpoint.Schema)
 				} else {
 					generated = gen.BuildObject(&endpoint.Schema)
