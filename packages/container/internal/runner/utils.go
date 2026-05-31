@@ -131,14 +131,19 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		sseHeaders = r.ResponseHeaders.Clone()
 	}
 
-	// Map OWASPCategory for each finding in r.AnalyzerFindings
-	for i := range r.AnalyzerFindings {
-		r.AnalyzerFindings[i].OWASPCategory = classifier.OWASPCategories(r.AnalyzerFindings[i].RuleID)
+	// Map OWASPCategory for a safe copy of AnalyzerFindings
+	var findingsCopy []swagger.AnalysisFinding
+	if r.AnalyzerFindings != nil {
+		findingsCopy = make([]swagger.AnalysisFinding, len(r.AnalyzerFindings))
+		for i, f := range r.AnalyzerFindings {
+			f.OWASPCategory = classifier.OWASPCategories(f.RuleID)
+			findingsCopy[i] = f
+		}
 	}
 
-	// Determine overall OWASPCategory for the FuzzResult
+	// Determine overall OWASPCategory for the FuzzResult without mutating r
 	ruleID := classifier.RuleIDForResult(r)
-	r.OWASPCategory = classifier.OWASPCategories(ruleID)
+	overallCategory := classifier.OWASPCategories(ruleID)
 
 	return &swagger.FuzzResultSSE{
 		ID:                 r.ID,
@@ -158,9 +163,9 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		HasHeaderInjection: hasHeaderInjection,
 		ResponseHeaders:    sseHeaders,
 		RequestHeaders:     r.RequestHeaders,
-		AnalyzerFindings:   r.AnalyzerFindings,
+		AnalyzerFindings:   findingsCopy,
 		Identity:           r.Identity,
-		OWASPCategory:      r.OWASPCategory,
+		OWASPCategory:      overallCategory,
 	}
 }
 

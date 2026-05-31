@@ -76,21 +76,25 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
         }
 
         setIsLoading(true);
-        queryResults({
-            runId,
-            statusFilter: 'all',
-            search: '',
-            limit: 2000,
-            findingsOnly: true,
-            identityFilter: 'all',
-        })
-            .then(res => {
-                setRows(res.rows);
+        const timer = setTimeout(() => {
+            queryResults({
+                runId,
+                statusFilter: 'all',
+                search: '',
+                limit: 2000,
+                findingsOnly: true,
+                identityFilter: 'all',
             })
-            .catch(() => {})
-            .finally(() => {
-                setIsLoading(false);
-            });
+                .then(res => {
+                    setRows(res.rows);
+                })
+                .catch(() => {})
+                .finally(() => {
+                    setIsLoading(false);
+                });
+        }, 1000); // Debounce database queries by 1 second to prevent UI freezing during active runs
+
+        return () => clearTimeout(timer);
     }, [runId, queryResults, liveCount]);
 
     const groupedData = useMemo(() => {
@@ -131,12 +135,7 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
             }
 
             if (!placed) {
-                const isError = row.status >= 500 || 
-                                (row.status === 0 && row.error) ||
-                                (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status));
-                if (isError || (row.analyzerFindings && row.analyzerFindings.length > 0)) {
-                    groups['Unmapped / Other'].push({ result: row });
-                }
+                groups['Unmapped / Other'].push({ result: row });
             }
         }
 
@@ -266,14 +265,7 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
                                                                 >
                                                                     {result.method}
                                                                 </span>
-                                                                <div
-                                                                    style={{
-                                                                        display: 'flex',
-                                                                        flexDirection: 'column',
-                                                                        gap: '2px',
-                                                                        minWidth: 0,
-                                                                    }}
-                                                                >
+                                                                <div className="owasp-finding-info">
                                                                     <span className="owasp-finding-path">{displayPath}</span>
                                                                     <span className="owasp-finding-desc">{displayDesc}</span>
                                                                 </div>
