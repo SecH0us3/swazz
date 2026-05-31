@@ -268,16 +268,13 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		hasPathParams := strings.Contains(ep.Path, "{")
 
 		if hasPathParams {
-			// Check if we have any harvested IDs for this prefix
-			prefix := getPathPrefix(ep.Path)
+			// Check if we have any harvested IDs
 			uniqueIDs := make(map[string]bool)
 			r.harvestedIDs.Range(func(k, value any) bool {
-				kStr := k.(string)
 				vSlice := value.([]string)
-				if arePrefixesRelated(kStr, prefix) {
-					for _, id := range vSlice {
-						uniqueIDs[id] = true
-					}
+				// Bypassed prefix matching: try all harvested IDs across all paths
+				for _, id := range vSlice {
+					uniqueIDs[id] = true
 				}
 				return true
 			})
@@ -414,15 +411,12 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		pathToID[cand.ResolvedPath] = ""
 
 		if hasPathParams {
-			prefix := getPathPrefix(cand.Endpoint)
 			uniqueIDs := make(map[string]bool)
 			r.harvestedIDs.Range(func(key, value any) bool {
-				kStr := key.(string)
 				vSlice := value.([]string)
-				if arePrefixesRelated(kStr, prefix) {
-					for _, id := range vSlice {
-						uniqueIDs[id] = true
-					}
+				// Bypassed prefix matching: try all harvested IDs across all paths
+				for _, id := range vSlice {
+					uniqueIDs[id] = true
 				}
 				return true
 			})
