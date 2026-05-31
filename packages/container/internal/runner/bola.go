@@ -17,6 +17,17 @@ func getPathPrefix(originalPath string) string {
 	return originalPath
 }
 
+func arePrefixesRelated(p1, p2 string) bool {
+	p1Parts := strings.Split(strings.Trim(p1, "/"), "/")
+	p2Parts := strings.Split(strings.Trim(p2, "/"), "/")
+	
+	if len(p1Parts) < 2 || len(p2Parts) < 2 {
+		return strings.HasPrefix(p1, p2) || strings.HasPrefix(p2, p1)
+	}
+	
+	return p1Parts[0] == p2Parts[0] && p1Parts[1] == p2Parts[1]
+}
+
 func harvestIDs(data any, ids map[string]bool) {
 	if m, ok := data.(map[string]any); ok {
 		for k, v := range m {
@@ -226,8 +237,24 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		// Replay for each harvested ID (or use candidate's resolved path if none harvested)
 		pathsToTest := []string{cand.ResolvedPath}
 		prefix := getPathPrefix(cand.Endpoint)
-		if val, ok := r.harvestedIDs.Load(prefix); ok {
-			harvested := val.([]string)
+		uniqueIDs := make(map[string]bool)
+		r.harvestedIDs.Range(func(key, value any) bool {
+			kStr := key.(string)
+			vSlice := value.([]string)
+			if arePrefixesRelated(kStr, prefix) {
+				for _, id := range vSlice {
+					uniqueIDs[id] = true
+				}
+			}
+			return true
+		})
+
+		var harvested []string
+		for id := range uniqueIDs {
+			harvested = append(harvested, id)
+		}
+
+		if len(harvested) > 0 {
 			limit := len(harvested)
 			if limit > 3 {
 				limit = 3
@@ -294,6 +321,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 				// If success, we have BOLA!
 				if res.Status >= 200 && res.Status < 300 {
+					res.Identity = idName
 					finding := swagger.AnalysisFinding{
 						RuleID:   "swazz/bola-idor",
 						Level:    "error",
@@ -379,6 +407,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			)
 
 			if resAnon.Status >= 200 && resAnon.Status < 300 {
+				resAnon.Identity = "Anonymous"
 				finding := swagger.AnalysisFinding{
 					RuleID:   "swazz/unauthorized-access",
 					Level:    "error",

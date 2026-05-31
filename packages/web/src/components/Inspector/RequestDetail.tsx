@@ -135,6 +135,8 @@ export function RequestDetail({
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
     const [subTab, setSubTab] = useState<'body' | 'query' | 'headers'>('body');
 
+    const isMultiIdentity = config?.settings?.bola_testing || Object.keys(config?.auth_identities || {}).length > 0;
+
 
 
     const isInjectedHeader = (key: string, value?: string) => {
@@ -364,10 +366,30 @@ export function RequestDetail({
                                 </span>
                                 <span style={{ color:'var(--text-primary)', fontWeight:600 }}>{result.endpoint}</span>
                             </div>
-                            <div style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>
-                                Profile: <span style={{ color:'var(--text-secondary)' }}>{result.profile}</span>
+                            <div style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <span>Profile: <strong style={{ color:'var(--text-secondary)', fontWeight: 500 }}>{result.profile}</strong></span>
+                                {isMultiIdentity && (
+                                    <>
+                                        <span style={{ color: 'var(--text-disabled)' }}>·</span>
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            Identity: 
+                                            <strong style={{ 
+                                                color: result.identity === 'Anonymous' ? 'var(--color-warning)' : 'var(--accent-light)',
+                                                fontWeight: 600,
+                                                background: result.identity === 'Anonymous' ? 'var(--color-warning-bg)' : 'var(--accent-subtle)',
+                                                padding: '1px 6px',
+                                                borderRadius: '3px',
+                                                border: `1px solid ${result.identity === 'Anonymous' ? 'var(--color-warning)' : 'var(--accent)'}`,
+                                                fontSize: '10px',
+                                                textTransform: 'uppercase'
+                                            }}>
+                                                {result.identity || 'User A'}
+                                            </strong>
+                                        </span>
+                                    </>
+                                )}
                                 { (result.payload === undefined && result.responseBody === undefined) && (
-                                    <span style={{ color:'var(--accent-light)', marginLeft:8 }}>· Loading full data...</span>
+                                    <span style={{ color:'var(--accent-light)', marginLeft:2 }}>· Loading full data...</span>
                                 )}
                             </div>
                         </div>

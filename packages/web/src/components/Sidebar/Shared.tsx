@@ -57,11 +57,15 @@ export function KVEditor({
     onChange,
     keyPlaceholder = 'Key',
     valuePlaceholder = 'Value',
+    authKeys,
+    onToggleAuthKey,
 }: {
     entries: Record<string, string>;
     onChange: (entries: Record<string, string>) => void;
     keyPlaceholder?: string;
     valuePlaceholder?: string;
+    authKeys?: string[];
+    onToggleAuthKey?: (key: string) => void;
 }) {
     const pairs = Object.entries(entries);
 
@@ -84,25 +88,50 @@ export function KVEditor({
 
     return (
         <div className="kv-editor">
-            {pairs.map(([key, value], i) => (
-                <div key={i} className="kv-row">
-                    <input
-                        className="input"
-                        value={key}
-                        placeholder={keyPlaceholder}
-                        aria-label={keyPlaceholder}
-                        onChange={(e) => update(key, e.target.value, value)}
-                    />
-                    <input
-                        className="input"
-                        value={value}
-                        placeholder={valuePlaceholder}
-                        aria-label={valuePlaceholder}
-                        onChange={(e) => update(key, key, e.target.value)}
-                    />
-                    <button className="kv-delete" onClick={() => remove(key)} title="Delete" aria-label={`Delete ${key || 'entry'}`}>✕</button>
-                </div>
-            ))}
+            {pairs.map(([key, value], i) => {
+                const isAuth = authKeys && authKeys.some(x => x.toLowerCase() === key.toLowerCase());
+                return (
+                    <div key={i} className="kv-row" style={authKeys ? { gridTemplateColumns: '1fr 1fr 24px 22px' } : undefined}>
+                        <input
+                            className="input"
+                            value={key}
+                            placeholder={keyPlaceholder}
+                            aria-label={keyPlaceholder}
+                            onChange={(e) => update(key, e.target.value, value)}
+                        />
+                        <input
+                            className="input"
+                            value={value}
+                            placeholder={valuePlaceholder}
+                            aria-label={valuePlaceholder}
+                            onChange={(e) => update(key, key, e.target.value)}
+                        />
+                        {authKeys && onToggleAuthKey && (
+                            <button
+                                className={`kv-auth-toggle ${isAuth ? 'is-auth' : ''}`}
+                                onClick={() => onToggleAuthKey(key)}
+                                title={isAuth ? "Auth Token: drops for Anonymous scan and switches for User B BOLA scan." : "Mark as Auth Token (session/cookie/header)"}
+                                type="button"
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '13px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: isAuth ? 1 : 0.35,
+                                    transition: 'opacity var(--duration-fast)',
+                                    padding: 0
+                                }}
+                            >
+                                {isAuth ? '🔒' : '🔓'}
+                            </button>
+                        )}
+                        <button className="kv-delete" onClick={() => remove(key)} title="Delete" aria-label={`Delete ${key || 'entry'}`}>✕</button>
+                    </div>
+                );
+            })}
             <button className="kv-add" onClick={add}>+ Add {keyPlaceholder}</button>
         </div>
     );

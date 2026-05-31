@@ -154,6 +154,7 @@ type FuzzResult struct {
 	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
 	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
+	Identity         string            `json:"identity,omitempty"`
 }
 
 // FuzzResultSSE is the lightweight version sent over SSE to the browser.
@@ -178,6 +179,7 @@ type FuzzResultSSE struct {
 	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
 	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
+	Identity         string            `json:"identity,omitempty"`
 }
 
 // RunStats tracks live statistics during a fuzzing run.

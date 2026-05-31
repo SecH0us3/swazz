@@ -87,6 +87,7 @@ export interface ResultSummary {
     requestHeaders?: Record<string, string>;
     hasHeaderInjection?: boolean;
     analyzerFindings?: AnalysisFinding[];
+    identity?: string;
 }
 
 export function toSummary(r: any): ResultSummary {
@@ -110,6 +111,7 @@ export function toSummary(r: any): ResultSummary {
         requestHeaders: r.requestHeaders || {},
         hasHeaderInjection: !!r.hasHeaderInjection,
         analyzerFindings: r.analyzerFindings || [],
+        identity: r.identity,
     };
 }
 
