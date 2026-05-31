@@ -49,6 +49,38 @@ func harvestIDs(data any, ids map[string]bool) {
 	}
 }
 
+func substituteIDsInPayload(data any, paramName string, harvestedID string) any {
+	if m, ok := data.(map[string]any); ok {
+		newMap := make(map[string]any, len(m))
+		for k, v := range m {
+			kLower := strings.ToLower(k)
+			if kLower == strings.ToLower(paramName) || kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "_id") || strings.HasSuffix(kLower, "id") {
+				if _, isStr := v.(string); isStr {
+					newMap[k] = harvestedID
+				} else if _, isNum := v.(float64); isNum {
+					if val, err := strconv.ParseFloat(harvestedID, 64); err == nil {
+						newMap[k] = val
+					} else {
+						newMap[k] = v
+					}
+				} else {
+					newMap[k] = substituteIDsInPayload(v, paramName, harvestedID)
+				}
+			} else {
+				newMap[k] = substituteIDsInPayload(v, paramName, harvestedID)
+			}
+		}
+		return newMap
+	} else if arr, ok := data.([]any); ok {
+		newArr := make([]any, len(arr))
+		for i, v := range arr {
+			newArr[i] = substituteIDsInPayload(v, paramName, harvestedID)
+		}
+		return newArr
+	}
+	return data
+}
+
 func extractJSONPathExtended(data any, path string) any {
 	path = strings.TrimPrefix(path, "$")
 	path = strings.TrimPrefix(path, ".")
@@ -232,12 +264,12 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		}
 
 		var resolvedPath string
+		var harvested []string
 		hasPathParams := strings.Contains(ep.Path, "{")
 
 		if hasPathParams {
 			// Check if we have any harvested IDs for this prefix
 			prefix := getPathPrefix(ep.Path)
-			var harvested []string
 			uniqueIDs := make(map[string]bool)
 			r.harvestedIDs.Range(func(k, value any) bool {
 				kStr := k.(string)
@@ -296,6 +328,22 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			var generated map[string]any
 			if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
 				generated = safeGen.BuildObject(&ep.Schema)
+			}
+			if len(harvested) > 0 {
+				paramName := ""
+				origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+				for _, part := range origParts {
+					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+						paramName = part[1 : len(part)-1]
+						break
+					}
+				}
+				if generated != nil {
+					substituted := substituteIDsInPayload(generated, paramName, harvested[0])
+					if m, ok := substituted.(map[string]any); ok {
+						generated = m
+					}
+				}
 			}
 			if isNoBodyMethod(ep.Method) {
 				queryParams = generated
@@ -362,6 +410,8 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 		// Replay for each harvested ID (or use candidate's resolved path if none harvested or static)
 		pathsToTest := []string{cand.ResolvedPath}
+		pathToID := make(map[string]string)
+		pathToID[cand.ResolvedPath] = ""
 
 		if hasPathParams {
 			prefix := getPathPrefix(cand.Endpoint)
@@ -391,9 +441,10 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 					origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
 					resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
 					if len(origParts) == len(resolParts) {
+						var paramName string
 						for idx, part := range origParts {
 							if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-								paramName := part[1 : len(part)-1]
+								paramName = part[1 : len(part)-1]
 								kLower := strings.ToLower(paramName)
 								if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
 									resolParts[idx] = harvested[i]
@@ -410,6 +461,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 						}
 						if !foundDuplicate {
 							pathsToTest = append(pathsToTest, newResolvedPath)
+							pathToID[newResolvedPath] = harvested[i]
 						}
 					}
 				}
@@ -417,21 +469,48 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		}
 
 		for _, resolvedPath := range pathsToTest {
+			// Determine request payload and query params (substituting current path ID if needed)
+			var qp map[string]any
+			var pl any
+			targetID := pathToID[resolvedPath]
+
+			// Get the parameter name to substitute in body
+			paramName := ""
+			if hasPathParams {
+				origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+				for _, part := range origParts {
+					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+						paramName = part[1 : len(part)-1]
+						break
+					}
+				}
+			}
+
+			if isNoBodyMethod(cand.Method) {
+				if m, ok := cand.Payload.(map[string]any); ok {
+					if targetID != "" {
+						substituted := substituteIDsInPayload(m, paramName, targetID)
+						if subMap, ok := substituted.(map[string]any); ok {
+							qp = subMap
+						} else {
+							qp = m
+						}
+					} else {
+						qp = m
+					}
+				}
+			} else {
+				if targetID != "" && cand.Payload != nil {
+					pl = substituteIDsInPayload(cand.Payload, paramName, targetID)
+				} else {
+					pl = cand.Payload
+				}
+			}
+
 			// Replay for each identity B (only if it has path params, i.e., BOLA IDOR check)
 			if hasPathParams {
 				for idName, headers := range identityHeaders {
 					cookies := identityCookies[idName]
-
-					// Prepare request setup
-					var qp map[string]any
-					var pl any
-					if isNoBodyMethod(cand.Method) {
-						if m, ok := cand.Payload.(map[string]any); ok {
-							qp = m
-						}
-					} else {
-						pl = cand.Payload
-					}
 
 					// Execute request
 					res := r.executeRequest(
@@ -512,15 +591,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				}
 			}
 
-			var qp map[string]any
-			var pl any
-			if isNoBodyMethod(cand.Method) {
-				if m, ok := cand.Payload.(map[string]any); ok {
-					qp = m
-				}
-			} else {
-				pl = cand.Payload
-			}
+
 
 			resAnon := r.executeRequest(
 				ctx,
