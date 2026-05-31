@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
@@ -257,10 +258,27 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 	// For endpoints that don't have a successful candidate, try to construct one
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+	
+	var candMu sync.Mutex
+	var candWg sync.WaitGroup
+	candSem := make(chan struct{}, r.config.Settings.Concurrency)
+	if r.config.Settings.Concurrency == 0 {
+		candSem = make(chan struct{}, 5)
+	}
+
 	for _, ep := range r.config.Endpoints {
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
 		if hasSuccessCandidate[key] {
 			continue
+		}
+		
+		candWg.Add(1)
+		candSem <- struct{}{}
+		
+		go func(ep swagger.EndpointConfig) {
+		key := strings.ToUpper(ep.Method) + " " + ep.Path
+		if hasSuccessCandidate[key] {
+			return
 		}
 
 		var harvested []string
@@ -411,7 +429,9 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 		if successRes != nil {
 			successRes.Identity = "User A" // explicitly mark as User A
+			candMu.Lock()
 			candidates = append(candidates, successRes)
+			candMu.Unlock()
 
 			// Broadcast event so it shows up in Request Logs under User A
 			r.Broadcast(Event{
@@ -419,15 +439,30 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				Data: successRes,
 			})
 		}
+		
+		<-candSem
+		candWg.Done()
+	}(ep)
 	}
+	candWg.Wait()
 
 	var bolaResults []*swagger.FuzzResult
+	var bolaMu sync.Mutex
+	var bolaWg sync.WaitGroup
+	bolaSem := make(chan struct{}, r.config.Settings.Concurrency)
+	if r.config.Settings.Concurrency == 0 {
+		bolaSem = make(chan struct{}, 5)
+	}
 
 	// 3. Replay requests
 	for _, cand := range candidates {
+		bolaWg.Add(1)
+		bolaSem <- struct{}{}
+		
+		go func(cand *swagger.FuzzResult) {
 		ep, found := r.findEndpointConfig(cand.Endpoint, cand.Method)
 		if !found {
-			continue
+			return
 		}
 
 		hasPathParams := strings.Contains(cand.Endpoint, "{")
@@ -579,7 +614,9 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 						}
 						res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
 					}
+					bolaMu.Lock()
 					bolaResults = append(bolaResults, res)
+					bolaMu.Unlock()
 					
 					// Broadcast event
 					r.Broadcast(Event{
@@ -656,8 +693,10 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 					Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
 					Evidence: fmt.Sprintf("Endpoint: %s %s, Status: %d", cand.Method, resolvedPath, resAnon.Status),
 				}
+				bolaMu.Lock()
 				resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
 				bolaResults = append(bolaResults, resAnon)
+				bolaMu.Unlock()
 
 				// Broadcast event
 				r.Broadcast(Event{
@@ -666,7 +705,12 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				})
 			}
 		}
+		
+		<-bolaSem
+		bolaWg.Done()
+	}(cand)
 	}
+	bolaWg.Wait()
 
 	fmt.Printf("Access Control phase complete. Found %d findings.\n", len(bolaResults))
 	return bolaResults

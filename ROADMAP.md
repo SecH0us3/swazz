@@ -376,3 +376,16 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
+
+- [ ] **Task 41:** Add OWASP API Security Top 10 (2023) Categorization.
+  - **Design Goal:** Group and tag findings in the HTML/JSON reports and Web Dashboard using the industry-standard OWASP API Security Top 10 (2023) categories, making the tool much more useful for compliance and formal security audits.
+  - **Implementation Details:**
+    - **Mapping Engine:** Create a mapping utility in `packages/container/internal/classifier/owasp.go` that maps internal Rule IDs to OWASP categories. For example:
+      - `swazz/bola-idor`, `swazz/tenant-isolation-bypass` ➔ **API1:2023 Broken Object Level Authorization**
+      - `swazz/unauthorized-access` ➔ **API2:2023 Broken Authentication** / **API5:2023 Broken Function Level Authorization**
+      - `swazz/sensitive-data-leak`, `swazz/stack-trace-leak` ➔ **API3:2023 Broken Object Property Level Authorization** (or **API7:2023 Security Misconfiguration**)
+      - `swazz/no-rate-limit` ➔ **API4:2023 Unrestricted Resource Consumption**
+      - `swazz/cors-misconfig`, `swazz/crlf-injection` ➔ **API7:2023 Security Misconfiguration**
+    - **Finding Extension:** Add an `OWASP_Category` string slice to the `AnalysisFinding` and `FuzzResult` structures.
+    - **Dashboard UI:** Add a new tab or chart in the Dashboard (next to "Grouped Errors") showing the distribution of findings by OWASP category.
+    - **Reports:** Update the JSON and HTML formatters to group findings by OWASP category as a high-level executive summary.
