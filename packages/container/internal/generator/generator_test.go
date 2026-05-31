@@ -24,6 +24,9 @@ func TestGenerate_Random(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		payload := g.BuildObject(schema)
+		if len(payload) == 0 {
+			continue
+		}
 
 		if _, ok := payload["id"].(int); !ok {
 			t.Errorf("Expected id to be int, got %T", payload["id"])

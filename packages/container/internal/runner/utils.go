@@ -149,6 +149,7 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		ResponseHeaders:    sseHeaders,
 		RequestHeaders:     r.RequestHeaders,
 		AnalyzerFindings:   r.AnalyzerFindings,
+		Identity:           r.Identity,
 	}
 }
 

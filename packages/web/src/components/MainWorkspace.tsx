@@ -215,6 +215,7 @@ export function MainWorkspace({
                             onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
                             onSelectResult={handleSelectResult}
                             onExport={handleExport}
+                            config={config}
                         />
                     )}
                     {isAnalysisEnabled && activeTab === 'findings' && (
@@ -227,6 +228,7 @@ export function MainWorkspace({
                             onSelectResult={handleSelectResult}
                             onExport={handleExport}
                             findingsOnly={true}
+                            config={config}
                         />
                     )}
                 </div>

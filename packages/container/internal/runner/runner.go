@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -80,6 +81,10 @@ type Runner struct {
 
 	analyzer *analyzer.AnalyzerRegistry
 	sizeBaselines *sync.Map
+	harvestedIDs sync.Map // maps path prefix string -> []string
+	idSources    sync.Map // maps ID string -> source string
+	resultsMu sync.Mutex
+	allResults []*swagger.FuzzResult
 }
 
 // New creates a new Runner.
@@ -148,6 +153,10 @@ func (r *Runner) Start(ctx context.Context) error {
 	// Launch the stats aggregator goroutine.
 	go r.statsAggregator()
 
+	r.resultsMu.Lock()
+	r.allResults = nil
+	r.resultsMu.Unlock()
+
 	defer func() {
 		cancel()
 
@@ -204,7 +213,27 @@ func (r *Runner) Start(ctx context.Context) error {
 				var payload any
 				var qp map[string]any
 				var gh map[string]string
-				if hasFields(&ep) {
+				if ep.Example != nil {
+					isBody := !isNoBodyMethod(ep.Method)
+					if isBody {
+						payload = ep.Example
+					} else {
+						if m, ok := ep.Example.(map[string]any); ok {
+							qp = m
+						}
+					}
+					if len(ep.HeaderParams) > 0 {
+						gh = make(map[string]string)
+						headerSchema := &swagger.SchemaProperty{
+							Type:       "object",
+							Properties: ep.HeaderParams,
+						}
+						headerObj := safeGen.BuildObject(headerSchema)
+						for k, v := range headerObj {
+							gh[k] = fmt.Sprintf("%v", v)
+						}
+					}
+				} else if hasFields(&ep) {
 					generated := safeGen.BuildObject(&ep.Schema)
 					isBody := !isNoBodyMethod(ep.Method)
 					if isBody {
@@ -270,6 +299,20 @@ func (r *Runner) Start(ctx context.Context) error {
 			safeGen.Endpoint = endpointStr
 
 			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
+		}
+	}
+
+	r.resultsMu.Lock()
+	candidates := make([]*swagger.FuzzResult, len(r.allResults))
+	copy(candidates, r.allResults)
+	r.resultsMu.Unlock()
+
+	bolaResults := r.bolaPhase(ctx, candidates)
+	for _, res := range bolaResults {
+		r.statsChan <- statsMsg{
+			result:           res,
+			currentIteration: 1,
+			totalIterations:  1,
 		}
 	}
 
@@ -401,7 +444,11 @@ func (r *Runner) fuzzEndpoint(
 		if hasFields(&endpoint) {
 			for retries := 0; retries < 10; retries++ {
 				var generated map[string]any
-				if isSecHeaderIter {
+				if profile == swagger.ProfileRandom && isBodyMethod && rand.Float64() < 0.15 {
+					// In RANDOM profile, there is a 15% chance to send an empty object `{}`
+					// as the request body to test API robustness.
+					generated = map[string]any{}
+				} else if isSecHeaderIter {
 					generated = safeGen.BuildObject(&endpoint.Schema)
 				} else {
 					generated = gen.BuildObject(&endpoint.Schema)
@@ -526,6 +573,12 @@ func (r *Runner) fuzzEndpoint(
 			}
 			// Broadcast individual result immediately (lock-free MPSCQueue).
 			r.Broadcast(Event{Type: EventResult, Data: result})
+
+			if result.Status >= 200 && result.Status < 300 {
+				r.resultsMu.Lock()
+				r.allResults = append(r.allResults, result)
+				r.resultsMu.Unlock()
+			}
 		}(i, payload, queryParams, generatedHeaders)
 
 		if delay > 0 {
@@ -811,7 +864,10 @@ func (r *Runner) executeRequest(
 			ResponseHeaders: resp.Header,
 			RequestHeaders:  mergedHeaders,
 			Timestamp:       time.Now().UnixMilli(),
-			Retries:         attempt,
+		}
+
+		if profile != swagger.FuzzingProfile("BOLA") {
+			r.harvestFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {

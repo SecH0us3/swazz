@@ -366,20 +366,22 @@ func runServer() {
 // ─── CLI MODE ─────────────────────────────────────────────
 
 type CliConfig struct {
-	SwaggerURLs   []string               `json:"swagger_urls"`
-	BaseURL       string                 `json:"base_url"`
-	Headers       map[string]string      `json:"headers"`
-	Cookies       map[string]string      `json:"cookies"`
-	WordlistFiles map[string]string      `json:"wordlist_files"`
-	Dictionaries  map[string][]any       `json:"dictionaries"`
-	Settings      swagger.Settings       `json:"settings"`
-	Endpoints     *struct {
+	SwaggerURLs    []string                      `json:"swagger_urls"`
+	BaseURL        string                        `json:"base_url"`
+	Headers        map[string]string             `json:"headers"`
+	Cookies        map[string]string             `json:"cookies"`
+	WordlistFiles  map[string]string             `json:"wordlist_files"`
+	Dictionaries   map[string][]any              `json:"dictionaries"`
+	Settings       swagger.Settings              `json:"settings"`
+	Endpoints      *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
-	Rules        *swagger.RulesConfig   `json:"rules"`
-	AuthSequence []swagger.AuthStep     `json:"auth_sequence"`
-	Security     swagger.SecurityConfig `json:"security"`
+	Rules          *swagger.RulesConfig          `json:"rules"`
+	AuthSequence   []swagger.AuthStep            `json:"auth_sequence"`
+	AuthIdentities map[string]swagger.AuthIdentity `json:"auth_identities,omitempty"`
+	Variables      map[string]any                `json:"variables,omitempty"`
+	Security       swagger.SecurityConfig        `json:"security"`
 }
 
 func runCLI(args []string) {
@@ -510,16 +512,18 @@ func runCLI(args []string) {
 	}
 
 	runCfg := &swagger.Config{
-		BaseURL:       basePath,
-		GlobalHeaders: cliCfg.Headers,
-		Cookies:       cliCfg.Cookies,
-		WordlistFiles: cliCfg.WordlistFiles,
-		Dictionaries:  cliCfg.Dictionaries,
-		Settings:      cliCfg.Settings,
-		Endpoints:     allEndpoints,
-		Rules:         cliCfg.Rules,
-		AuthSequence:  cliCfg.AuthSequence,
-		Security:      cliCfg.Security,
+		BaseURL:        basePath,
+		GlobalHeaders:  cliCfg.Headers,
+		Cookies:        cliCfg.Cookies,
+		WordlistFiles:  cliCfg.WordlistFiles,
+		Dictionaries:   cliCfg.Dictionaries,
+		Settings:       cliCfg.Settings,
+		Endpoints:      allEndpoints,
+		Rules:          cliCfg.Rules,
+		AuthSequence:   cliCfg.AuthSequence,
+		AuthIdentities: cliCfg.AuthIdentities,
+		Variables:      cliCfg.Variables,
+		Security:       cliCfg.Security,
 	}
 
 	if err := swagger.LoadWordlists(runCfg); err != nil {

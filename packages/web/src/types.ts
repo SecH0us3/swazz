@@ -30,6 +30,7 @@ export interface EndpointConfig {
     headerParams?: Record<string, SchemaProperty>;
     /** Content-Type for the request body (e.g. 'application/x-www-form-urlencoded'). */
     contentType?: string;
+    example?: any;
 }
 
 // ─── Settings ───────────────────────────────────────────
@@ -54,6 +55,25 @@ export interface SwazzSettings {
     response_size_anomaly_multiplier?: number;
     rate_limit_check?: boolean;
     rate_limit_burst_size?: number;
+    bola_testing?: boolean;
+    auth_headers?: string[];
+    auth_cookies?: string[];
+}
+
+export interface AuthStep {
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    body: any;
+    extract_cookies?: string[];
+    extract_json?: Record<string, string>;
+    extract_variables?: Record<string, string>;
+}
+
+export interface AuthIdentity {
+    auth_sequence?: AuthStep[];
+    headers?: Record<string, string>;
+    cookies?: Record<string, string>;
 }
 
 export interface PayloadCategoryDef {
@@ -76,6 +96,9 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     response_size_anomaly_multiplier: 5.0,
     rate_limit_check: false,
     rate_limit_burst_size: 50,
+    bola_testing: false,
+    auth_headers: ['Authorization', 'X-API-Key'],
+    auth_cookies: ['session', 'token', 'jwt', 'sid', 'JSESSIONID', 'PHPSESSID'],
 };
 
 // ─── Full Config ────────────────────────────────────────
@@ -90,6 +113,8 @@ export interface SwazzConfig {
     disabled_endpoints?: string[];
     _swagger_urls?: string[];
     wordlist_files?: Record<string, string>;
+    auth_sequence?: AuthStep[];
+    auth_identities?: Record<string, AuthIdentity>;
 }
 
 // ─── Results ────────────────────────────────────────────
@@ -112,6 +137,7 @@ export interface FuzzResult {
     responseHeaders?: Record<string, string[]>;
     requestHeaders?: Record<string, string>;
     analyzerFindings?: AnalysisFinding[];
+    identity?: string;
 }
 
 // ─── Live Stats ─────────────────────────────────────────

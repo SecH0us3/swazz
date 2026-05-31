@@ -187,8 +187,8 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🔐 Authorization & Access Control Testing
 
-- [ ] **Task 28:** Implement BOLA/IDOR (Broken Object-Level Authorization) testing with multi-identity support.
-  - **Design Goal:** Detect OWASP API Security #1 vulnerability. The existing [auth.go](file:///Users/alex/src/swazz/packages/container/internal/runner/auth.go) already supports multi-step auth sequences with cookie extraction (`ExtractCookies` L108-130), JSON field extraction (`ExtractJSON` L132-173), and template variable substitution (`substituteInObject` L222-241). This task extends that system to support **two concurrent identities**.
+- [x] **Task 28:** Implement BOLA/IDOR (Broken Object-Level Authorization) testing with multi-identity support.
+  - **Design Goal:** Detect OWASP API Security #1 vulnerability. The existing [auth.go](file:///Users/alex/src/swazz/packages/container/internal/runner/auth.go) already supports multi-step auth sequences with cookie extraction (`ExtractCookies` L108-130), JSON field extraction (`ExtractJSON` L132-173), and template variable substitution (`substituteInObject` L222-241). This task extends that system to support **two concurrent identities** and reliable ID harvesting/correlation to prevent false negatives.
   - **Implementation Details:**
     - **Config extension:** In [types.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/types.go), add to `Config` (L38-50):
       ```go
@@ -202,25 +202,27 @@ This roadmap tracks planned features, documentation improvements, and architectu
           Cookies      map[string]string `json:"cookies,omitempty"`
       }
       ```
-      Example config:
-      ```json
-      {
-        "auth_identities": {
-          "admin": {"auth_sequence": [{"method": "POST", "url": "/auth/login", "body": {"user": "admin", "pass": "admin123"}, "extract_json": {"data.token": "Authorization"}}]},
-          "user":  {"auth_sequence": [{"method": "POST", "url": "/auth/login", "body": {"user": "viewer", "pass": "viewer123"}, "extract_json": {"data.token": "Authorization"}}]}
-        },
-        "settings": {"bola_testing": true}
-      }
+      Also allow explicit variable extraction/parameters mapping on endpoints:
+      ```go
+      // In EndpointConfig:
+      ExtractVariables map[string]string `json:"extract_variables,omitempty"` // JSONPath -> Variable name
+      ParamsMapping    map[string]string `json:"params_mapping,omitempty"`    // URL Param -> Variable name
       ```
+    - **ID Harvesting & Correlation (Two Approaches):**
+      1. **Heuristic Harvesting:** During the main fuzz run under User A, inspect successful `200 OK` JSON responses. Walk the JSON tree and harvest values matching ID patterns (e.g. `id`, `uuid`, `*_id`). Store these IDs mapped to the endpoint's path prefix (e.g., `/api/goods`). When BOLA testing an endpoint like `POST /api/goods/{id}` under User B, look up harvested IDs for `/api/goods` prefix and replay the request substituting `{id}` with the harvested value.
+      2. **Explicit Mapping:** If `extract_variables` and `params_mapping` are configured, extract parameters from User A's responses using the configured JSONPath keys and save them as named variables. Then, substitute them in User B's replay requests according to `params_mapping`.
     - **New package:** Create `packages/container/internal/bola/`:
       - `bola.go` — `BOLATester` struct. After the main fuzz run completes (triggered from the `EventComplete` handler), collect all `FuzzResult`s with `Status >= 200 && Status < 300` from endpoints that contain path parameters (regex match `\{[^}]+\}` in `EndpointConfig.Path`). For each such result:
         1. Execute auth sequence for identity B (reusing `RunAuthSequence()` from [auth.go](file:///Users/alex/src/swazz/packages/container/internal/runner/auth.go) L20-178 — refactor to accept an `AuthIdentity` parameter instead of reading from `r.config.AuthSequence` directly).
-        2. Replay the exact same request (same URL, same body) but with identity B's headers/cookies.
-        3. If the response status is still `2xx` → emit `classifier.Finding{RuleID: "swazz/bola-idor", Level: SeverityError}`.
+        2. Replay the exact same request (same URL, same body) but with identity B's headers/cookies. If the response status is still `2xx` → emit `classifier.Finding{RuleID: "swazz/bola-idor", Level: SeverityError}`.
+        3. **Anonymous access check:** Replay the exact same request but drop only the **authentication credentials** (the specific headers/cookies defined in `AuthHeaders`/`AuthCookies` settings, plus those dynamically extracted during the `AuthSequence`). This ensures structural headers like `Content-Type` are kept to prevent server-side format errors, while actual credentials are removed. If the response status is still `2xx` → emit `classifier.Finding{RuleID: "swazz/unauthorized-access", Level: SeverityError}`.
       - `bola_test.go` — Use `httptest.Server` with two user contexts, one endpoint that correctly returns 403 and one that doesn't enforce authz.
     - **Runner integration:** In [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go), add a `bolaPhase()` method called after the main run loop completes (after all profile iterations finish at ~L390). Results from BOLA testing are broadcast via the same `Event{Type: EventResult}` mechanism and appended to `handler.results` for report inclusion.
-    - **Config:** Add `BOLATesting bool` to `Settings` (L71-82), default `false`.
-    - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "BOLA / IDOR Testing" toggle with an expandable section for defining two auth identities (each with auth sequence steps, headers, cookies). In the [Heatmap](file:///Users/alex/src/swazz/packages/web/src/components/Dashboard/Heatmap.tsx), BOLA findings should appear with a distinct color (e.g., purple) and a dedicated profile label `BOLA` to distinguish from fuzz results.
+    - **Config:** Add to `Settings` (L71-82):
+      - `BOLATesting bool` (default `false`)
+      - `AuthHeaders []string` (default `["Authorization", "X-API-Key"]`) - headers to drop during anonymous checks.
+      - `AuthCookies []string` (default `["session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"]`) - cookies to drop during anonymous checks.
+    - **Dashboard:** In [ConfigSidebar.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Sidebar/ConfigSidebar.tsx), add a "BOLA / IDOR Testing" toggle with an expandable section for defining two auth identities (each with auth sequence steps, headers, cookies), plus list inputs for specifying custom authentication header/cookie names to drop during anonymous checks. In the [Heatmap](file:///Users/alex/src/swazz/packages/web/src/components/Dashboard/Heatmap.tsx), BOLA and unauthorized access findings should appear with distinct colors/labels to distinguish from fuzz results.
 
 - [x] **Task 29:** Implement Custom Security Header Fuzzing beyond the API specification.
   - **Design Goal:** Test for common server-side misconfigurations by fuzzing security-critical HTTP headers not defined in the API spec. Currently, `executeRequest()` in [runner.go](file:///Users/alex/src/swazz/packages/container/internal/runner/runner.go) (L440-470) only applies headers from `config.GlobalHeaders` and generated header params from `EndpointConfig.HeaderParams` (parsed in [parser.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/parser.go) L60-85). There is no mechanism to inject arbitrary security-test headers.
@@ -343,4 +345,54 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **UUID Generator & Tracker:** Build a lightweight storage/map in the backend engine to register active fuzz sessions and correlate generated UUID strings with target parameters.
     - **Payload injection:** Extend the generator in `packages/container/internal/generator/` to dynamically insert the OOB URL (with UUID) into payloads (e.g., injection lists, headers like `X-Forwarded-For`).
     - **Finding Trigger:** When `/oob/:uuid` is accessed, look up the UUID to identify the source session/request, construct an `AnalysisFinding` representing OOB Interaction, and push/broadcast the finding to the dashboard real-time.
+
+- [ ] **Task 38:** Implement Response Content Similarity & Structure Analysis for BOLA/Bypass Testing.
+  - **Design Goal:** Eliminate false positives during BOLA/Bypass testing by comparing response bodies (structural schema and content similarity) between User A's baseline request and User B/Anonymous replay requests, instead of relying solely on `2xx` HTTP status codes.
+  - **Implementation Details:**
+    - **Analysis Engine:** Create a similarity checker in `packages/container/internal/bola/similarity.go`. Compare JSON keys, array sizes, and text similarity (Levenshtein distance or token intersection) between baseline and replay response bodies.
+    - **Vulnerability Confirmation:** Flag BOLA only if the replayed response (User B/Anonymous) shares high structural and value similarity (e.g. >85%) with User A's baseline response. Ignore `2xx` replays that return empty collections, general error frames, or are structurally distinct.
+    - **Config:** Add `bola_similarity_threshold` (default `0.85`) under `Settings`.
+
+- [ ] **Task 39:** Implement Multi-Format Report Exports (Markdown, Print-Friendly HTML/PDF) and Graceful JS-Free Degredation.
+  - **Design Goal:** Ensure that security audit reports are fully readable and interactive under strict local security policies (such as browser sandboxing or strict CSP on the `file://` protocol) which block JavaScript execution.
+  - **Implementation Details:**
+    - **Markdown Exporter:** Implement a Markdown formatter in `packages/container/internal/output/markdown.go` (and map it in the frontend/CLI). Markdown has zero script dependencies and renders natively in code editors, GitHub, and markdown viewers.
+    - **Print Optimization:** Enhance [html.go](file:///Users/alex/src/swazz/packages/container/internal/output/html.go) styles with `@media print` rules, allowing the user to print or "Save to PDF" directly from the browser with page-break styling, hidden filter menus, and visible headers.
+    - **Graceful Degradation:** Ensure that the HTML report does not require JavaScript for core readability. All findings must load statically by default; show a warning in the filter bar if script execution is blocked.
+
+- [ ] **Task 40:** Upgrade the Interactive Configuration Wizard (TUI Mode, Auto-Continuation, and Advanced Settings).
+  - **Design Goal:** Provide a powerful interactive command-line experience to fully configure advanced fuzzing capabilities (BOLA, User B identities, Rate Limiting, Private IP SSRF protection, custom dictionaries, and endpoint filters) without manually editing JSON.
+  - **Implementation Details:**
+    - **Continuation by Default:** Modify `runWizard()` in [main.go](file:///Users/alex/src/swazz/packages/container/main.go#L82). When the wizard is executed, check if `swazz.config.json` already exists in the current directory (or is specified via `--config`). If it does, automatically parse it and prompt: `"Existing configuration found. Do you want to edit it or continue where you left off?"` instead of starting from scratch.
+    - **TUI Config Menu:** If editing an existing config or requested by the user, render an interactive Terminal User Interface (TUI) main menu using a Go TUI library (e.g. `github.com/charmbracelet/bubbletea` / `lipgloss` or `github.com/manifoldco/promptui`). The user can navigate options:
+      - 📝 Base Settings (Swagger URL, API Base URL)
+      - 🔐 Authentication & Multi-Identity (Login sequences, BOLA User B headers/cookies)
+      - 🛡 Security Policy (Toggle SSRF protection / Allow Private IPs)
+      - ⚙️ Fuzzing Controls (Concurrency, delay, profile selection, iterations, toggle rate limiting & burst sizes)
+      - 📁 File Paths (Custom dictionaries, wordlists, endpoint include/exclude filters)
+      - 💾 Save & Run Fuzzer
+    - **Validation:** Ensure input schemas are validated in real-time within the terminal prompts (e.g., verifying Swagger URL format, JSON body validity for auth steps, and valid numbers for concurrency).
+
+
+
+
+
+- [ ] **Task 41:** Add OWASP API Security Top 10 (2023) Categorization.
+  - **Design Goal:** Group and tag findings in the HTML/JSON reports and Web Dashboard using the industry-standard OWASP API Security Top 10 (2023) categories, making the tool much more useful for compliance and formal security audits.
+  - **Implementation Details:**
+    - **Mapping Engine:** Create a mapping utility in `packages/container/internal/classifier/owasp.go` that maps internal Rule IDs to OWASP categories. For example:
+      - `swazz/bola-idor`, `swazz/tenant-isolation-bypass` ➔ **API1:2023 Broken Object Level Authorization**
+      - `swazz/unauthorized-access` ➔ **API2:2023 Broken Authentication** / **API5:2023 Broken Function Level Authorization**
+      - `swazz/sensitive-data-leak`, `swazz/stack-trace-leak` ➔ **API3:2023 Broken Object Property Level Authorization** (or **API7:2023 Security Misconfiguration**)
+      - `swazz/no-rate-limit` ➔ **API4:2023 Unrestricted Resource Consumption**
+      - `swazz/cors-misconfig`, `swazz/crlf-injection` ➔ **API7:2023 Security Misconfiguration**
+    - **Finding Extension:** Add an `OWASP_Category` string slice to the `AnalysisFinding` and `FuzzResult` structures.
+    - **Dashboard UI:** Add a new tab or chart in the Dashboard (next to "Grouped Errors") showing the distribution of findings by OWASP category.
+    - **Reports:** Update the JSON and HTML formatters to group findings by OWASP category as a high-level executive summary.
+
+- [ ] **Task 42:** Move Grouped Errors Count Badges to the Left.
+  - **Design Goal:** Place the color-coded severity/count badge (circle) in the "Grouped Errors" accordion headers to the left of the group title text, providing cleaner visual alignment.
+  - **Implementation Details:**
+    - Adjust [Inspector.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Inspector/Inspector.tsx) layout inside `findings-group-title-row` so that the count badge renders before the title text.
+    - Update spacing and margins in [index.css](file:///Users/alex/src/swazz/packages/web/src/index.css) to ensure proper margins between chevron, badge, and title.
 

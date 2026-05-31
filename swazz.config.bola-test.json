@@ -1,0 +1,42 @@
+{
+  "swagger_urls": ["http://localhost:8787/swagger.json"],
+  "base_url": "http://localhost:8787",
+  "auth_sequence": [
+    {
+      "method": "POST",
+      "url": "/login",
+      "body": {
+        "username": "user1",
+        "password": "pass1"
+      },
+      "extract_json": {
+        "token": "Authorization"
+      }
+    }
+  ],
+  "auth_identities": {
+    "userB": {
+      "auth_sequence": [
+        {
+          "method": "POST",
+          "url": "/login",
+          "body": {
+            "username": "user2",
+            "password": "pass2"
+          },
+          "extract_json": {
+            "token": "Authorization"
+          }
+        }
+      ]
+    }
+  },
+  "settings": {
+    "iterations_per_profile": 1,
+    "concurrency": 1,
+    "profiles": ["RANDOM"],
+    "bola_testing": true,
+    "auth_headers": ["Authorization"],
+    "auth_cookies": ["session"]
+  }
+}

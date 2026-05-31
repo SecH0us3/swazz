@@ -102,6 +102,9 @@ func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
 			if bodyResult != nil && bodyResult.contentType != "" {
 				ep.ContentType = bodyResult.contentType
 			}
+			if bodyResult != nil && bodyResult.example != nil {
+				ep.Example = bodyResult.example
+			}
 
 			endpoints = append(endpoints, ep)
 		}
@@ -168,6 +171,7 @@ func normalizeBasePath(path string) string {
 type bodyResult struct {
 	schema      SchemaProperty
 	contentType string
+	example     any
 }
 
 // extractRequestSchema extracts the request body schema from an operation.
@@ -211,9 +215,39 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 						if ct == "*/*" {
 							ct = "application/json"
 						}
+						var example any
+						if ex, ok := m["example"]; ok {
+							example = ex
+						} else if exs, ok := m["examples"]; ok {
+							if examplesMap, ok := exs.(map[string]any); ok {
+								if val, ok := examplesMap[ct]; ok {
+									example = val
+								} else {
+									for _, exVal := range examplesMap {
+										if exMap, ok := exVal.(map[string]any); ok {
+											if val, ok := exMap["value"]; ok {
+												example = val
+												break
+											}
+										}
+									}
+								}
+							} else {
+								example = exs
+							}
+						} else {
+							if sm, ok := s.(map[string]any); ok {
+								if ex, ok := sm["example"]; ok {
+									example = ex
+								} else if df, ok := sm["default"]; ok {
+									example = df
+								}
+							}
+						}
 						return &bodyResult{
 							schema:      resolveSchema(s, spec, nil),
 							contentType: ct,
+							example:     example,
 						}
 					}
 				}
@@ -227,9 +261,24 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 			if pm, ok := p.(map[string]any); ok {
 				if pm["in"] == "body" {
 					if s, ok := pm["schema"]; ok {
+						var example any
+						if ex, ok := pm["example"]; ok {
+							example = ex
+						} else if xex, ok := pm["x-examples"]; ok {
+							example = xex
+						} else {
+							if sm, ok := s.(map[string]any); ok {
+								if ex, ok := sm["example"]; ok {
+									example = ex
+								} else if df, ok := sm["default"]; ok {
+									example = df
+								}
+							}
+						}
 						return &bodyResult{
 							schema:      resolveSchema(s, spec, nil),
 							contentType: "application/json",
+							example:     example,
 						}
 					}
 				}

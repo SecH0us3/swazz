@@ -3,7 +3,7 @@ import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
-import type { AnalysisFinding } from '../../types.js';
+import type { AnalysisFinding, SwazzConfig } from '../../types.js';
 import { extractErrorSubtype } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
 
@@ -19,6 +19,7 @@ interface Props {
     onSelectResult: (row: ResultSummary) => void;
     onExport: () => void;
     findingsOnly?: boolean;
+    config?: SwazzConfig;
 }
 
 function getStatusClass(status: number): string {
@@ -48,6 +49,17 @@ function formatTime(ts: number): string {
 }
 
 
+function formatIdentityName(name: string): string {
+    const lower = name.toLowerCase();
+    if (lower === 'user a') return 'User A (Primary)';
+    if (lower === 'user b') return 'User B';
+    if (lower === 'anonymous') return 'Anonymous';
+    if (name.length === 5 && lower.startsWith('user')) {
+        return 'User ' + name.charAt(4).toUpperCase();
+    }
+    return name;
+}
+
 const PAGE_SIZE = 1000;
 
 export function Inspector({
@@ -59,6 +71,7 @@ export function Inspector({
     onSelectResult,
     onExport,
     findingsOnly = false,
+    config,
 }: Props) {
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
@@ -67,6 +80,39 @@ export function Inspector({
     const [rows, setRows] = useState<ResultSummary[]>([]);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
     const [limit, setLimit] = useState(PAGE_SIZE);
+
+    const [identityFilter, setIdentityFilter] = useState<string>('all');
+    const [seenIdentities, setSeenIdentities] = useState<Set<string>>(new Set(['User A']));
+
+    // Reset identity filter and populate seen identities when run changes
+    useEffect(() => {
+        const initial = new Set<string>(['User A']);
+        if (config?.auth_identities) {
+            Object.keys(config.auth_identities).forEach(k => initial.add(k));
+        }
+        if (config?.settings?.bola_testing) {
+            initial.add('Anonymous');
+        }
+        setSeenIdentities(initial);
+        setIdentityFilter('all');
+    }, [runId, config]);
+
+    // Track identities from new rows loaded dynamically
+    useEffect(() => {
+        if (rows.length > 0) {
+            setSeenIdentities(prev => {
+                let changed = false;
+                const next = new Set(prev);
+                for (const r of rows) {
+                    if (r.identity && !next.has(r.identity)) {
+                        next.add(r.identity);
+                        changed = true;
+                    }
+                }
+                return changed ? next : prev;
+            });
+        }
+    }, [rows]);
 
     // Reset limit to PAGE_SIZE when runId changes
     useEffect(() => {
@@ -186,6 +232,7 @@ export function Inspector({
             sortDir: sortConfig.direction,
             limit,
             findingsOnly,
+            identityFilter,
         });
 
         // Apply heatmap filter client-side (small subset)
@@ -204,7 +251,7 @@ export function Inspector({
             setTotal(heatmapFilter ? displayed.length : newTotal);
             setIsLoading(false);
         }
-    }, [runId, filter, debouncedSearch, sortConfig, heatmapFilter, queryResults, findingsOnly, limit]);
+    }, [runId, filter, debouncedSearch, sortConfig, heatmapFilter, queryResults, findingsOnly, limit, identityFilter]);
 
     // Re-query when filters change
     useEffect(() => { loadResults(); }, [loadResults]);
@@ -336,6 +383,22 @@ export function Inspector({
                             >✕</button>
                         )}
                     </div>
+                    {seenIdentities.size > 1 && (
+                        <select
+                            className="input select-input"
+                            value={identityFilter}
+                            onChange={(e) => setIdentityFilter(e.target.value)}
+                            style={{ width: 'auto', minWidth: '130px', flexShrink: 0 }}
+                            aria-label="Filter by user"
+                        >
+                            <option value="all">All Users</option>
+                            {Array.from(seenIdentities).sort().map((idName) => (
+                                <option key={idName} value={idName}>
+                                    {formatIdentityName(idName)}
+                                </option>
+                            ))}
+                        </select>
+                    )}
                     {isLoading && (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
                     )}

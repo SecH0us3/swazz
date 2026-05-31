@@ -135,6 +135,8 @@ export function RequestDetail({
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
     const [subTab, setSubTab] = useState<'body' | 'query' | 'headers'>('body');
 
+    const isMultiIdentity = config?.settings?.bola_testing || Object.keys(config?.auth_identities || {}).length > 0;
+
 
 
     const isInjectedHeader = (key: string, value?: string) => {
@@ -353,21 +355,32 @@ export function RequestDetail({
             <div className="modal-overlay" onClick={onClose} />
             <div className="modal-content">
                 <div className="modal-header">
-                    <div style={{ display:'flex', alignItems:'center', gap:'var(--space-4)' }}>
+                    <div className="request-detail-header-meta">
                         <div className={`detail-status ${statusClass}`}>
                             {liveStatus || 'ERR'}
                         </div>
-                        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <div className="request-detail-header-info">
+                            <div className="request-detail-endpoint-row">
                                 <span className={`method method-${result.method.toLowerCase()}`} style={{ fontSize:'var(--font-size-md)' }}>
                                     {result.method}
                                 </span>
-                                <span style={{ color:'var(--text-primary)', fontWeight:600 }}>{result.endpoint}</span>
+                                <span className="request-detail-endpoint">{result.endpoint}</span>
                             </div>
-                            <div style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)' }}>
-                                Profile: <span style={{ color:'var(--text-secondary)' }}>{result.profile}</span>
+                            <div className="request-detail-meta-row">
+                                <span>Profile: <strong className="request-detail-profile-val">{result.profile}</strong></span>
+                                {isMultiIdentity && (
+                                    <>
+                                        <span className="request-detail-separator">·</span>
+                                        <span className="request-detail-identity-container">
+                                            Identity: 
+                                            <strong className={`request-detail-identity-badge ${result.identity === 'Anonymous' ? 'anonymous' : 'user-a'}`}>
+                                                {result.identity || 'User A'}
+                                            </strong>
+                                        </span>
+                                    </>
+                                )}
                                 { (result.payload === undefined && result.responseBody === undefined) && (
-                                    <span style={{ color:'var(--accent-light)', marginLeft:8 }}>· Loading full data...</span>
+                                    <span style={{ color:'var(--accent-light)', marginLeft:2 }}>· Loading full data...</span>
                                 )}
                             </div>
                         </div>

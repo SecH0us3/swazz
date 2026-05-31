@@ -34,6 +34,7 @@ export interface QueryOptions {
     limit?: number;
     offset?: number;
     findingsOnly?: boolean;
+    identityFilter?: string;
 }
 
 // ─── DB open ─────────────────────────────────────────────────
@@ -138,7 +139,7 @@ async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSumma
  * Returns a page of ResultSummary — does NOT load everything into memory.
  */
 export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promise<{ rows: ResultSummary[]; total: number }> {
-    const { runId, statusFilter = 'all', search = '', sortKey = 'timestamp', sortDir = 'desc', limit = 200, offset = 0 } = opts;
+    const { runId, statusFilter = 'all', search = '', sortKey = 'timestamp', sortDir = 'desc', limit = 200, offset = 0, identityFilter = 'all' } = opts;
 
     const tx = db.transaction('results', 'readonly');
     const index = tx.objectStore('results').index('runId');
@@ -147,6 +148,16 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
     );
 
     let list: ResultSummary[] = all.map(({ runId: _rid, ...r }) => r as ResultSummary);
+
+    // Filter by identity
+    if (identityFilter && identityFilter !== 'all') {
+        list = list.filter(r => {
+            if (identityFilter === 'User A') {
+                return !r.identity || r.identity.toLowerCase() === 'user a';
+            }
+            return r.identity?.toLowerCase() === identityFilter.toLowerCase();
+        });
+    }
 
     // Filter by status class
     if (statusFilter === '5xx') list = list.filter(r => r.status >= 500);
