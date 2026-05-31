@@ -30,6 +30,7 @@ export interface EndpointConfig {
     headerParams?: Record<string, SchemaProperty>;
     /** Content-Type for the request body (e.g. 'application/x-www-form-urlencoded'). */
     contentType?: string;
+    example?: any;
 }
 
 // ─── Settings ───────────────────────────────────────────

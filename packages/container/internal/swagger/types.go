@@ -31,6 +31,7 @@ type EndpointConfig struct {
 	ContentType      string                     `json:"contentType,omitempty"`
 	ExtractVariables map[string]string          `json:"extract_variables,omitempty"` // map JSON path to variable name
 	ParamsMapping    map[string]string          `json:"params_mapping,omitempty"`    // map path param name to variable name
+	Example          any                        `json:"example,omitempty"`
 }
 
 // SecurityConfig holds configuration for engine security policies.

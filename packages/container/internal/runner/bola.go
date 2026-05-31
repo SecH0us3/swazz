@@ -213,76 +213,95 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		identityCookies[idName] = c
 	}
 
-	// 2. Identify candidates (successful 2xx requests on endpoints with path params)
+	// 2. Identify candidates (successful 2xx requests)
 	var candidates []*swagger.FuzzResult
 	hasSuccessCandidate := make(map[string]bool)
 	for _, res := range results {
-		if res.Status >= 200 && res.Status < 300 && strings.Contains(res.Endpoint, "{") {
+		if res.Status >= 200 && res.Status < 300 {
 			candidates = append(candidates, res)
 			hasSuccessCandidate[strings.ToUpper(res.Method) + " " + res.Endpoint] = true
 		}
 	}
 
-	// For endpoints that don't have a successful candidate, try to construct one using harvested IDs
+	// For endpoints that don't have a successful candidate, try to construct one
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
 	for _, ep := range r.config.Endpoints {
-		if !strings.Contains(ep.Path, "{") {
-			continue
-		}
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
 		if hasSuccessCandidate[key] {
 			continue
 		}
 
-		// Check if we have any harvested IDs for this prefix
-		prefix := getPathPrefix(ep.Path)
-		var harvested []string
-		uniqueIDs := make(map[string]bool)
-		r.harvestedIDs.Range(func(k, value any) bool {
-			kStr := k.(string)
-			vSlice := value.([]string)
-			if arePrefixesRelated(kStr, prefix) {
-				for _, id := range vSlice {
-					uniqueIDs[id] = true
+		var resolvedPath string
+		hasPathParams := strings.Contains(ep.Path, "{")
+
+		if hasPathParams {
+			// Check if we have any harvested IDs for this prefix
+			prefix := getPathPrefix(ep.Path)
+			var harvested []string
+			uniqueIDs := make(map[string]bool)
+			r.harvestedIDs.Range(func(k, value any) bool {
+				kStr := k.(string)
+				vSlice := value.([]string)
+				if arePrefixesRelated(kStr, prefix) {
+					for _, id := range vSlice {
+						uniqueIDs[id] = true
+					}
+				}
+				return true
+			})
+			for id := range uniqueIDs {
+				harvested = append(harvested, id)
+			}
+
+			if len(harvested) == 0 {
+				continue
+			}
+
+			// Try the first harvested ID to see if we can get a successful 2xx request under User A (Primary)
+			origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+			resolParts := make([]string, len(origParts))
+			copy(resolParts, origParts)
+			for idx, part := range origParts {
+				if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+					paramName := part[1 : len(part)-1]
+					kLower := strings.ToLower(paramName)
+					if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+						resolParts[idx] = harvested[0]
+					}
 				}
 			}
-			return true
-		})
-		for id := range uniqueIDs {
-			harvested = append(harvested, id)
-		}
-
-		if len(harvested) == 0 {
-			continue
-		}
-
-		// Try the first harvested ID to see if we can get a successful 2xx request under User A (Primary)
-		origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
-		resolParts := make([]string, len(origParts))
-		copy(resolParts, origParts)
-		for idx, part := range origParts {
-			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-				paramName := part[1 : len(part)-1]
-				kLower := strings.ToLower(paramName)
-				if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-					resolParts[idx] = harvested[0]
-				}
+			resolvedPath = "/" + strings.Join(resolParts, "/")
+		} else {
+			// Static endpoint, but only construct baseline if an example is explicitly provided
+			if ep.Example == nil {
+				continue
 			}
-		}
-		resolvedPath := "/" + strings.Join(resolParts, "/")
-
-		// Generate baseline payload / query params using safeGen
-		var generated map[string]any
-		if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
-			generated = safeGen.BuildObject(&ep.Schema)
+			resolvedPath = ep.Path
 		}
 
+		// Generate baseline payload / query params using ep.Example or safeGen
 		var payload any
 		var queryParams map[string]any
-		if isNoBodyMethod(ep.Method) {
-			queryParams = generated
+
+		if ep.Example != nil {
+			isBody := !isNoBodyMethod(ep.Method)
+			if isBody {
+				payload = ep.Example
+			} else {
+				if m, ok := ep.Example.(map[string]any); ok {
+					queryParams = m
+				}
+			}
 		} else {
-			payload = generated
+			var generated map[string]any
+			if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
+				generated = safeGen.BuildObject(&ep.Schema)
+			}
+			if isNoBodyMethod(ep.Method) {
+				queryParams = generated
+			} else {
+				payload = generated
+			}
 		}
 
 		// Merge security headers if any
@@ -339,113 +358,115 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			continue
 		}
 
-		pathParams := extractParamsFromPath(cand.Endpoint, cand.ResolvedPath)
-		if len(pathParams) == 0 {
-			continue
-		}
+		hasPathParams := strings.Contains(cand.Endpoint, "{")
 
-		// Replay for each harvested ID (or use candidate's resolved path if none harvested)
+		// Replay for each harvested ID (or use candidate's resolved path if none harvested or static)
 		pathsToTest := []string{cand.ResolvedPath}
-		prefix := getPathPrefix(cand.Endpoint)
-		uniqueIDs := make(map[string]bool)
-		r.harvestedIDs.Range(func(key, value any) bool {
-			kStr := key.(string)
-			vSlice := value.([]string)
-			if arePrefixesRelated(kStr, prefix) {
-				for _, id := range vSlice {
-					uniqueIDs[id] = true
+
+		if hasPathParams {
+			prefix := getPathPrefix(cand.Endpoint)
+			uniqueIDs := make(map[string]bool)
+			r.harvestedIDs.Range(func(key, value any) bool {
+				kStr := key.(string)
+				vSlice := value.([]string)
+				if arePrefixesRelated(kStr, prefix) {
+					for _, id := range vSlice {
+						uniqueIDs[id] = true
+					}
 				}
-			}
-			return true
-		})
+				return true
+			})
 
-		var harvested []string
-		for id := range uniqueIDs {
-			harvested = append(harvested, id)
-		}
-
-		if len(harvested) > 0 {
-			limit := len(harvested)
-			if limit > 3 {
-				limit = 3
+			var harvested []string
+			for id := range uniqueIDs {
+				harvested = append(harvested, id)
 			}
-			for i := 0; i < limit; i++ {
-				origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
-				resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
-				if len(origParts) == len(resolParts) {
-					for idx, part := range origParts {
-						if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-							paramName := part[1 : len(part)-1]
-							kLower := strings.ToLower(paramName)
-							if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-								resolParts[idx] = harvested[i]
+
+			if len(harvested) > 0 {
+				limit := len(harvested)
+				if limit > 3 {
+					limit = 3
+				}
+				for i := 0; i < limit; i++ {
+					origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+					resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
+					if len(origParts) == len(resolParts) {
+						for idx, part := range origParts {
+							if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+								paramName := part[1 : len(part)-1]
+								kLower := strings.ToLower(paramName)
+								if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+									resolParts[idx] = harvested[i]
+								}
 							}
 						}
-					}
-					newResolvedPath := "/" + strings.Join(resolParts, "/")
-					foundDuplicate := false
-					for _, p := range pathsToTest {
-						if p == newResolvedPath {
-							foundDuplicate = true
-							break
+						newResolvedPath := "/" + strings.Join(resolParts, "/")
+						foundDuplicate := false
+						for _, p := range pathsToTest {
+							if p == newResolvedPath {
+								foundDuplicate = true
+								break
+							}
 						}
-					}
-					if !foundDuplicate {
-						pathsToTest = append(pathsToTest, newResolvedPath)
+						if !foundDuplicate {
+							pathsToTest = append(pathsToTest, newResolvedPath)
+						}
 					}
 				}
 			}
 		}
 
 		for _, resolvedPath := range pathsToTest {
-			// Replay for each identity B
-			for idName, headers := range identityHeaders {
-				cookies := identityCookies[idName]
+			// Replay for each identity B (only if it has path params, i.e., BOLA IDOR check)
+			if hasPathParams {
+				for idName, headers := range identityHeaders {
+					cookies := identityCookies[idName]
 
-				// Prepare request setup
-				var qp map[string]any
-				var pl any
-				if isNoBodyMethod(cand.Method) {
-					if m, ok := cand.Payload.(map[string]any); ok {
-						qp = m
+					// Prepare request setup
+					var qp map[string]any
+					var pl any
+					if isNoBodyMethod(cand.Method) {
+						if m, ok := cand.Payload.(map[string]any); ok {
+							qp = m
+						}
+					} else {
+						pl = cand.Payload
 					}
-				} else {
-					pl = cand.Payload
-				}
 
-				// Execute request
-				res := r.executeRequest(
-					ctx,
-					r.config.BaseURL,
-					resolvedPath,
-					cand.Endpoint,
-					cand.Method,
-					headers,
-					cookies,
-					pl,
-					swagger.FuzzingProfile("BOLA"),
-					qp,
-					nil,
-					ep.ContentType,
-				)
+					// Execute request
+					res := r.executeRequest(
+						ctx,
+						r.config.BaseURL,
+						resolvedPath,
+						cand.Endpoint,
+						cand.Method,
+						headers,
+						cookies,
+						pl,
+						swagger.FuzzingProfile("BOLA"),
+						qp,
+						nil,
+						ep.ContentType,
+					)
 
-				// If success, we have BOLA!
-				if res.Status >= 200 && res.Status < 300 {
-					res.Identity = idName
-					finding := swagger.AnalysisFinding{
-						RuleID:   "swazz/bola-idor",
-						Level:    "error",
-						Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", idName),
-						Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", idName, cand.Method, resolvedPath, res.Status),
+					// If success, we have BOLA!
+					if res.Status >= 200 && res.Status < 300 {
+						res.Identity = idName
+						finding := swagger.AnalysisFinding{
+							RuleID:   "swazz/bola-idor",
+							Level:    "error",
+							Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", idName),
+							Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d", idName, cand.Method, resolvedPath, res.Status),
+						}
+						res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+						bolaResults = append(bolaResults, res)
+
+						// Broadcast event
+						r.Broadcast(Event{
+							Type: EventResult,
+							Data: res,
+						})
 					}
-					res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
-					bolaResults = append(bolaResults, res)
-
-					// Broadcast event
-					r.Broadcast(Event{
-						Type: EventResult,
-						Data: res,
-					})
 				}
 			}
 

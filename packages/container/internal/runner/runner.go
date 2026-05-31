@@ -211,7 +211,27 @@ func (r *Runner) Start(ctx context.Context) error {
 				var payload any
 				var qp map[string]any
 				var gh map[string]string
-				if hasFields(&ep) {
+				if ep.Example != nil {
+					isBody := !isNoBodyMethod(ep.Method)
+					if isBody {
+						payload = ep.Example
+					} else {
+						if m, ok := ep.Example.(map[string]any); ok {
+							qp = m
+						}
+					}
+					if len(ep.HeaderParams) > 0 {
+						gh = make(map[string]string)
+						headerSchema := &swagger.SchemaProperty{
+							Type:       "object",
+							Properties: ep.HeaderParams,
+						}
+						headerObj := safeGen.BuildObject(headerSchema)
+						for k, v := range headerObj {
+							gh[k] = fmt.Sprintf("%v", v)
+						}
+					}
+				} else if hasFields(&ep) {
 					generated := safeGen.BuildObject(&ep.Schema)
 					isBody := !isNoBodyMethod(ep.Method)
 					if isBody {
