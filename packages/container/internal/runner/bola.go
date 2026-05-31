@@ -260,6 +260,15 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		return nil
 	}
 
+	concurrency := r.config.Settings.Concurrency
+	if concurrency <= 0 {
+		concurrency = 5
+	}
+	if concurrency > 1000 {
+		fmt.Printf("BOLA: Concurrency limit exceeded (max 1000)\n")
+		return nil
+	}
+
 	fmt.Println("Running Access Control & BOLA/IDOR testing phase...")
 
 	// 1. Authenticate user identities (Identity B)
@@ -288,13 +297,6 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	// For endpoints that don't have a successful candidate, try to construct one
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
 	
-	concurrency := r.config.Settings.Concurrency
-	if concurrency <= 0 {
-		concurrency = 5
-	} else if concurrency > 1000 {
-		concurrency = 1000
-	}
-
 	var candMu sync.Mutex
 	var candWg sync.WaitGroup
 	candSem := make(chan struct{}, concurrency)
