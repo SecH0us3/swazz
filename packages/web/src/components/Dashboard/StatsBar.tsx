@@ -49,7 +49,7 @@ export function StatsBar({ stats, isRunning }: Props) {
     const showProgress = isRunning && totalEndpoints > 0;
 
     const avgResponseTime = stats.totalRequests > 0 
-        ? stats.totalDurationMs / stats.totalRequests 
+        ? (stats.totalDurationMs || 0) / stats.totalRequests 
         : 0;
 
     return (

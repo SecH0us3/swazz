@@ -600,7 +600,7 @@ func TestToSSE_OWASPCategoryMapping(t *testing.T) {
 func TestExecuteRequest_PassesBaselineTimeMs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Simulate a delay so input.Duration > BaselineTimeMs
-		time.Sleep(60 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}))

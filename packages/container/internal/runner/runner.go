@@ -1141,10 +1141,7 @@ func (b *EndpointTimeBaseline) getMedian() int64 {
 
 func (r *Runner) recordTimeBaseline(method, path string, t int64) {
 	key := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
-	val, ok := r.timeBaselines.Load(key)
-	if !ok {
-		val, _ = r.timeBaselines.LoadOrStore(key, &EndpointTimeBaseline{})
-	}
+	val, _ := r.timeBaselines.LoadOrStore(key, &EndpointTimeBaseline{})
 	baseline := val.(*EndpointTimeBaseline)
 	baseline.addTime(t)
 }
