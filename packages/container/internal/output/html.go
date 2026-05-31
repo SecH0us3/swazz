@@ -277,9 +277,23 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
         .filters { display: flex; gap: 1rem; margin-bottom: 2rem; background: var(--card); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }
         .filters input, .filters select { flex: 1; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid var(--border); background: var(--bg); color: var(--fg); outline: none; }
         .filters input:focus, .filters select:focus { border-color: var(--primary); }
+        @media print {
+            body { background: white; color: black; }
+            .filters, .owasp-section { display: none; }
+            .finding-group { break-inside: avoid; border-color: #ccc; box-shadow: none; }
+            .finding-group h3 { background: #f8fafc; color: #0f172a; border-bottom: 1px solid #ccc; }
+            .finding-item { break-inside: avoid; }
+            .payload-block pre { background: #f8fafc; color: black; border: 1px solid #ccc; white-space: pre-wrap; word-wrap: break-word; }
+            .stat-card { border-color: #ccc; }
+        }
     </style>
 </head>
 <body>
+    <noscript>
+        <div style="background: var(--warning); color: #000; padding: 1rem; border-radius: 0.5rem; margin: 1rem auto; max-width: 1000px; font-weight: bold; text-align: center;">
+            ⚠️ JavaScript is disabled. Filters and interactive features are unavailable, but all raw findings are displayed below.
+        </div>
+    </noscript>
     <div class="container">
         <header>
             <h1>Swazz Scan Report</h1>

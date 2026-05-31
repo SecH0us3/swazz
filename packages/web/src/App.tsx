@@ -51,7 +51,7 @@ export default function App() {
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun } = useDb();
 
-    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML } = useRunHistory({
+    const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD } = useRunHistory({
         runs,
         queryResults,
         getRunResults,
@@ -169,6 +169,7 @@ export default function App() {
                     handleSelectResult={handleSelectResult}
                     handleExport={() => handleExport(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId, config.base_url)}
                     handleExportHTML={() => handleExportHTML(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
+                    handleExportMD={() => handleExportMD(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
                     queryResults={queryResults}
                 />
 

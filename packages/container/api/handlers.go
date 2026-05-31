@@ -467,12 +467,17 @@ func (h *Handler) GetReport(c *gin.Context) {
 		html := output.ToHTML(findings, stats)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 
+	case "md":
+		md := output.ToMarkdown(findings, stats, "0.1.0")
+		c.Header("Content-Disposition", "attachment; filename=\"swazz-report.md\"")
+		c.Data(http.StatusOK, "text/markdown; charset=utf-8", md)
+
 	case "json":
 		report := output.ToJSON(findings, stats, "0.1.0")
 		c.JSON(http.StatusOK, report)
 
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown format: %s. Use json, sarif, or html", format)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown format: %s. Use json, sarif, html, or md", format)})
 	}
 }
 

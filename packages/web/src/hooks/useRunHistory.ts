@@ -90,8 +90,30 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
         }
     };
 
+    const handleExportMD = async (runId: string | null) => {
+        if (!runId) {
+            showToast('No active run or selected history to export', 'error');
+            return;
+        }
+        showToast('Generating Markdown report…', 'info');
+        try {
+            const res = await fetch(`/api/report?format=md&runId=${runId}`);
+            if (!res.ok) throw new Error('Failed to generate report');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `swazz-report-${Date.now()}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Markdown downloaded', 'success');
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Export failed', 'error');
+        }
+    };
+
     return {
-        handleLoadRun, handleDeleteRun, handleExport, handleExportHTML,
+        handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD,
         queryResults,
     };
 }
