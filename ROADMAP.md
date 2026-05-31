@@ -353,7 +353,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Vulnerability Confirmation:** Flag BOLA only if the replayed response (User B/Anonymous) shares high structural and value similarity (e.g. >85%) with User A's baseline response. Ignore `2xx` replays that return empty collections, general error frames, or are structurally distinct.
     - **Config:** Add `bola_similarity_threshold` (default `0.85`) under `Settings`.
 
-- [ ] **Task 39:** Implement Multi-Format Report Exports (Markdown, Print-Friendly HTML/PDF) and Graceful JS-Free Degredation.
+- [x] **Task 39:** Implement Multi-Format Report Exports (Markdown, Print-Friendly HTML/PDF) and Graceful JS-Free Degredation.
   - **Design Goal:** Ensure that security audit reports are fully readable and interactive under strict local security policies (such as browser sandboxing or strict CSP on the `file://` protocol) which block JavaScript execution.
   - **Implementation Details:**
     - **Markdown Exporter:** Implement a Markdown formatter in `packages/container/internal/output/markdown.go` (and map it in the frontend/CLI). Markdown has zero script dependencies and renders natively in code editors, GitHub, and markdown viewers.
@@ -402,7 +402,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Replace the basic welcome text with an embedded promotional or tutorial video showcasing the fuzzer in action.
     - Add a clear Call-to-Action (CTA) link pointing to the official documentation (`docs/usage.md` or similar) below the video.
 
-- [ ] **Task 44:** Add Developer Console Invitation.
+- [x] **Task 44:** Add Developer Console Invitation.
   - **Design Goal:** Engage with developers exploring the dashboard's DevTools by rendering a styled console message inviting them to contribute.
   - **Implementation Details:**
     - Insert a `console.log` with styled CSS output in the main entry point of the React app (e.g., `main.tsx` or `App.tsx`).

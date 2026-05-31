@@ -15,6 +15,7 @@ interface MainWorkspaceProps {
     handleSelectResult: (r: ResultSummary) => void;
     handleExport: () => void;
     handleExportHTML: () => void;
+    handleExportMD: () => void;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
 }
 
@@ -24,6 +25,7 @@ export function MainWorkspace({
     handleSelectResult,
     handleExport,
     handleExportHTML,
+    handleExportMD,
     queryResults,
 }: MainWorkspaceProps) {
     const {
@@ -45,6 +47,8 @@ export function MainWorkspace({
         heatmapFilter: state.heatmapFilter,
         isRunning: state.isRunning
     })));
+
+    const [isExportHovered, setIsExportHovered] = useState(false);
 
     // Endpoint keys for heatmap — derive from stats or config
     const endpointKeys = useMemo(() => {
@@ -196,17 +200,63 @@ export function MainWorkspace({
                                 )}
                             </button>
                         )}
-                        <button
-                            className="tab-bar-btn"
-                            style={{ color: 'var(--accent-light)' }}
-                            onClick={handleExportHTML}
-                            title="Generate and download a visual HTML report"
+                        <div 
+                            style={{ position: 'relative', display: 'inline-block' }}
+                            onMouseEnter={() => setIsExportHovered(true)}
+                            onMouseLeave={() => setIsExportHovered(false)}
                         >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                            HTML Report
-                        </button>
+                            <button
+                                className="tab-bar-btn"
+                                style={{ color: 'var(--accent-light)' }}
+                                title="Download Reports"
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                Download
+                            </button>
+                            
+                            {isExportHovered && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: 0,
+                                    marginTop: '4px',
+                                    backgroundColor: 'var(--bg-elevated)',
+                                    minWidth: '150px',
+                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                    zIndex: 50,
+                                    borderRadius: 'var(--radius-md)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    padding: '4px',
+                                    border: '1px solid var(--border-default)'
+                                }}>
+                                    <button
+                                        className="tab-bar-btn"
+                                        style={{ justifyContent: 'flex-start', width: '100%', border: 'none', background: 'transparent', margin: 0, padding: '8px 12px' }}
+                                        onClick={handleExportHTML}
+                                        title="Generate and download a visual HTML report"
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                                        </svg>
+                                        HTML Report
+                                    </button>
+                                    <button
+                                        className="tab-bar-btn"
+                                        style={{ justifyContent: 'flex-start', width: '100%', border: 'none', background: 'transparent', margin: 0, padding: '8px 12px' }}
+                                        onClick={handleExportMD}
+                                        title="Generate and download a Markdown report"
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
+                                        </svg>
+                                        MD Report
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {activeTab === 'heatmap' && (
