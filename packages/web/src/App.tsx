@@ -90,17 +90,23 @@ export default function App() {
             const shift = e.shiftKey;
             const alt = e.altKey;
 
-            if (isInputActive && !mod && !alt) {
+            if (isInputActive && e.key !== 'Escape' && !mod && !alt) {
                 return;
             }
 
+            const state = useAppStore.getState();
+
             // Global Escape key
             if (e.key === 'Escape') {
-                if (selectedResult) {
-                    useAppStore.setState({ selectedResult: null });
-                } else if (useAppStore.getState().isHotkeysHelpOpen) {
+                if (isInputActive) {
+                    (document.activeElement as HTMLElement)?.blur();
+                    return;
+                }
+                if (state.isHotkeysHelpOpen) {
                     useAppStore.setState({ isHotkeysHelpOpen: false });
-                } else if (activeTab === 'logs') {
+                } else if (state.selectedResult) {
+                    useAppStore.setState({ selectedResult: null });
+                } else if (state.activeTab === 'logs') {
                     useAppStore.setState({ activeTab: 'heatmap' });
                 } else {
                     useAppStore.setState({
@@ -116,30 +122,32 @@ export default function App() {
             // Shift + ? / ? key
             if (e.key === '?' || (e.key === '/' && shift)) {
                 e.preventDefault();
-                useAppStore.setState(state => ({ isHotkeysHelpOpen: !state.isHotkeysHelpOpen }));
+                useAppStore.setState(s => ({ isHotkeysHelpOpen: !s.isHotkeysHelpOpen }));
                 return;
             }
 
-            // Tab keys 1, 2, 3, 4
-            if (e.key === '1') {
-                e.preventDefault();
-                useAppStore.setState({ activeTab: 'heatmap' });
-                return;
-            }
-            if (e.key === '2') {
-                e.preventDefault();
-                useAppStore.setState({ activeTab: 'logs' });
-                return;
-            }
-            if (e.key === '3') {
-                e.preventDefault();
-                useAppStore.setState({ activeTab: 'findings' });
-                return;
-            }
-            if (e.key === '4') {
-                e.preventDefault();
-                useAppStore.setState({ activeTab: 'owasp' });
-                return;
+            // Tab keys 1, 2, 3, 4 (only when no modifiers are pressed to avoid breaking browser tab switching)
+            if (!mod && !alt && !shift) {
+                if (e.key === '1') {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'heatmap' });
+                    return;
+                }
+                if (e.key === '2') {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'logs' });
+                    return;
+                }
+                if (e.key === '3') {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'findings' });
+                    return;
+                }
+                if (e.key === '4') {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'owasp' });
+                    return;
+                }
             }
 
             // Run: Mod + Enter
@@ -152,8 +160,8 @@ export default function App() {
             // Pause / Resume: Mod + Shift + P
             if (mod && shift && e.key.toLowerCase() === 'p') {
                 e.preventDefault();
-                const running = useAppStore.getState().isRunning;
-                const paused = useAppStore.getState().isPaused;
+                const running = state.isRunning;
+                const paused = state.isPaused;
                 if (running) {
                     if (paused) {
                         resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'));
@@ -175,25 +183,25 @@ export default function App() {
             if (alt && e.code === 'KeyL') {
                 e.preventDefault();
                 if (window.innerWidth <= 768) {
-                    useAppStore.setState(state => ({ isSidebarOpen: !state.isSidebarOpen }));
+                    useAppStore.setState(s => ({ isSidebarOpen: !s.isSidebarOpen }));
                 } else {
-                    useAppStore.setState(state => ({ isSidebarHiddenDesktop: !state.isSidebarHiddenDesktop }));
+                    useAppStore.setState(s => ({ isSidebarHiddenDesktop: !s.isSidebarHiddenDesktop }));
                 }
                 return;
             }
             if (alt && e.code === 'KeyC') {
                 e.preventDefault();
                 if (window.innerWidth <= 768) {
-                    useAppStore.setState(state => ({ isConfigOpen: !state.isConfigOpen }));
+                    useAppStore.setState(s => ({ isConfigOpen: !s.isConfigOpen }));
                 } else {
-                    useAppStore.setState(state => ({ isConfigHiddenDesktop: !state.isConfigHiddenDesktop }));
+                    useAppStore.setState(s => ({ isConfigHiddenDesktop: !s.isConfigHiddenDesktop }));
                 }
                 return;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeTab, selectedResult, handleStart, stop, pause, resume, showToast]);
+    }, [handleStart, stop, pause, resume, showToast]);
 
     const handleSelectResult = (row: ResultSummary) => {
         useAppStore.setState({ selectedResult: {

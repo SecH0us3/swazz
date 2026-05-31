@@ -19,7 +19,7 @@ export const HotkeysHelpModal: React.FC<HotkeysHelpModalProps> = ({ onClose }) =
                 <div className="hotkeys-row">
                     <span className="hotkeys-desc">Show/Hide Help Menu</span>
                     <div className="hotkeys-keys">
-                        <kbd>?</kbd> <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>or</span> <kbd>Shift</kbd> + <kbd>?</kbd>
+                        <kbd>?</kbd> <span className="hotkeys-or">or</span> <kbd>Shift</kbd> + <kbd>?</kbd>
                     </div>
                 </div>
 
@@ -72,7 +72,7 @@ export const HotkeysHelpModal: React.FC<HotkeysHelpModalProps> = ({ onClose }) =
                     </div>
                 </div>
             </div>
-            <div style={{ marginTop: 'var(--space-4)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', textAlign: 'center' }}>
+            <div className="hotkeys-note">
                 Note: Keyboard shortcuts are inactive when focus is in an input field.
             </div>
         </Modal>
