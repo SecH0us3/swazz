@@ -355,34 +355,25 @@ export function RequestDetail({
             <div className="modal-overlay" onClick={onClose} />
             <div className="modal-content">
                 <div className="modal-header">
-                    <div style={{ display:'flex', alignItems:'center', gap:'var(--space-4)' }}>
+                    <div className="request-detail-header-meta">
                         <div className={`detail-status ${statusClass}`}>
                             {liveStatus || 'ERR'}
                         </div>
-                        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <div className="request-detail-header-info">
+                            <div className="request-detail-endpoint-row">
                                 <span className={`method method-${result.method.toLowerCase()}`} style={{ fontSize:'var(--font-size-md)' }}>
                                     {result.method}
                                 </span>
-                                <span style={{ color:'var(--text-primary)', fontWeight:600 }}>{result.endpoint}</span>
+                                <span className="request-detail-endpoint">{result.endpoint}</span>
                             </div>
-                            <div style={{ fontSize:'var(--font-size-xs)', color:'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                <span>Profile: <strong style={{ color:'var(--text-secondary)', fontWeight: 500 }}>{result.profile}</strong></span>
+                            <div className="request-detail-meta-row">
+                                <span>Profile: <strong className="request-detail-profile-val">{result.profile}</strong></span>
                                 {isMultiIdentity && (
                                     <>
-                                        <span style={{ color: 'var(--text-disabled)' }}>·</span>
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        <span className="request-detail-separator">·</span>
+                                        <span className="request-detail-identity-container">
                                             Identity: 
-                                            <strong style={{ 
-                                                color: result.identity === 'Anonymous' ? 'var(--color-warning)' : 'var(--accent-light)',
-                                                fontWeight: 600,
-                                                background: result.identity === 'Anonymous' ? 'var(--color-warning-bg)' : 'var(--accent-subtle)',
-                                                padding: '1px 6px',
-                                                borderRadius: '3px',
-                                                border: `1px solid ${result.identity === 'Anonymous' ? 'var(--color-warning)' : 'var(--accent)'}`,
-                                                fontSize: '10px',
-                                                textTransform: 'uppercase'
-                                            }}>
+                                            <strong className={`request-detail-identity-badge ${result.identity === 'Anonymous' ? 'anonymous' : 'user-a'}`}>
                                                 {result.identity || 'User A'}
                                             </strong>
                                         </span>

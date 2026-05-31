@@ -90,6 +90,18 @@ func substituteIDsInPayload(data any, paramName string, harvestedID string) any 
 					} else {
 						newMap[k] = v
 					}
+				} else if _, isInt := v.(int); isInt {
+					if val, err := strconv.Atoi(harvestedID); err == nil {
+						newMap[k] = val
+					} else {
+						newMap[k] = v
+					}
+				} else if _, isInt64 := v.(int64); isInt64 {
+					if val, err := strconv.ParseInt(harvestedID, 10, 64); err == nil {
+						newMap[k] = val
+					} else {
+						newMap[k] = v
+					}
 				} else {
 					newMap[k] = substituteIDsInPayload(v, paramName, harvestedID)
 				}
@@ -313,6 +325,8 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		go func(ep swagger.EndpointConfig) {
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
 		if hasSuccessCandidate[key] {
+			<-candSem
+			candWg.Done()
 			return
 		}
 
@@ -375,7 +389,10 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				copy(resolParts, origParts)
 				for idx, part := range origParts {
 					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-						resolParts[idx] = harvested[i]
+						kLower := strings.ToLower(part[1 : len(part)-1])
+						if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+							resolParts[idx] = harvested[i]
+						}
 					}
 				}
 				resolvedPath = "/" + strings.Join(resolParts, "/")
@@ -386,7 +403,10 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				copy(resolParts, origParts)
 				for idx, part := range origParts {
 					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-						resolParts[idx] = "1"
+						kLower := strings.ToLower(part[1 : len(part)-1])
+						if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+							resolParts[idx] = "1"
+						}
 					}
 				}
 				resolvedPath = "/" + strings.Join(resolParts, "/")
@@ -497,6 +517,8 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		go func(cand *swagger.FuzzResult) {
 		ep, found := r.findEndpointConfig(cand.Endpoint, cand.Method)
 		if !found {
+			<-bolaSem
+			bolaWg.Done()
 			return
 		}
 

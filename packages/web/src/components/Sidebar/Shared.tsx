@@ -91,7 +91,7 @@ export function KVEditor({
             {pairs.map(([key, value], i) => {
                 const isAuth = authKeys && authKeys.some(x => x.toLowerCase() === key.toLowerCase());
                 return (
-                    <div key={i} className="kv-row" style={authKeys ? { gridTemplateColumns: '1fr 1fr 24px 22px' } : undefined}>
+                    <div key={i} className={`kv-row ${authKeys ? 'kv-row-auth' : ''}`}>
                         <input
                             className="input"
                             value={key}

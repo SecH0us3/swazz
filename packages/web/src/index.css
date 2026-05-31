@@ -1830,6 +1830,10 @@ body.resizing .sidebar-resizer {
   align-items: center;
 }
 
+.kv-row-auth {
+  grid-template-columns: 1fr 1fr 24px 22px;
+}
+
 .kv-row .input { padding: 5px 8px; }
 
 .kv-delete {
@@ -3245,6 +3249,75 @@ button:focus-visible {
   align-items: flex-start;
   margin-top: var(--space-2);
 }
+
+/* Request Detail Header layout classes */
+.request-detail-header-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.request-detail-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.request-detail-endpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.request-detail-endpoint {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.request-detail-meta-row {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.request-detail-profile-val {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.request-detail-separator {
+  color: var(--text-disabled);
+}
+
+.request-detail-identity-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.request-detail-identity-badge {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.request-detail-identity-badge.user-a {
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+}
+
+.request-detail-identity-badge.anonymous {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+}
+
 
 .bola-warning-box svg {
   flex-shrink: 0;

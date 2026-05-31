@@ -219,7 +219,22 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 						if ex, ok := m["example"]; ok {
 							example = ex
 						} else if exs, ok := m["examples"]; ok {
-							example = exs
+							if examplesMap, ok := exs.(map[string]any); ok {
+								if val, ok := examplesMap[ct]; ok {
+									example = val
+								} else {
+									for _, exVal := range examplesMap {
+										if exMap, ok := exVal.(map[string]any); ok {
+											if val, ok := exMap["value"]; ok {
+												example = val
+												break
+											}
+										}
+									}
+								}
+							} else {
+								example = exs
+							}
 						} else {
 							if sm, ok := s.(map[string]any); ok {
 								if ex, ok := sm["example"]; ok {
