@@ -452,10 +452,10 @@ export function Inspector({
                                 >
                                     <div className="findings-group-title-row">
                                         <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
-                                        <span className="findings-group-title">{group.title}</span>
                                         <span className="findings-group-count" style={{ background: group.color }}>
                                             {group.items.length}
                                         </span>
+                                        <span className="findings-group-title">{group.title}</span>
                                     </div>
                                 </div>
                                 {expandedGroups[group.key] && (
