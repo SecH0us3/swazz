@@ -360,7 +360,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Print Optimization:** Enhance [html.go](file:///Users/alex/src/swazz/packages/container/internal/output/html.go) styles with `@media print` rules, allowing the user to print or "Save to PDF" directly from the browser with page-break styling, hidden filter menus, and visible headers.
     - **Graceful Degradation:** Ensure that the HTML report does not require JavaScript for core readability. All findings must load statically by default; show a warning in the filter bar if script execution is blocked.
 
-- [ ] **Task 40:** Upgrade the Interactive Configuration Wizard (TUI Mode, Auto-Continuation, and Advanced Settings).
+- [x] **Task 40:** Upgrade the Interactive Configuration Wizard (TUI Mode, Auto-Continuation, and Advanced Settings).
   - **Design Goal:** Provide a powerful interactive command-line experience to fully configure advanced fuzzing capabilities (BOLA, User B identities, Rate Limiting, Private IP SSRF protection, custom dictionaries, and endpoint filters) without manually editing JSON.
   - **Implementation Details:**
     - **Continuation by Default:** Modify `runWizard()` in [main.go](file:///Users/alex/src/swazz/packages/container/main.go#L82). When the wizard is executed, check if `swazz.config.json` already exists in the current directory (or is specified via `--config`). If it does, automatically parse it and prompt: `"Existing configuration found. Do you want to edit it or continue where you left off?"` instead of starting from scratch.

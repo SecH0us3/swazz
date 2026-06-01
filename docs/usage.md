@@ -24,6 +24,19 @@ The Web UI is the easiest way to manage your fuzzer, inspect requests, and visua
 
 The CLI is ideal for CI/CD pipelines, headless testing, and automation workflows.
 
+### Interactive Configuration Wizard ⚡
+
+You can fully configure advanced settings (Base settings, Authentication & Multi-Identity, SSRF Security Policy, Concurrency, Rate Limiting, Custom Dictionaries, and Endpoint Filters) without manually editing JSON by running:
+
+```bash
+cd packages/container
+go run main.go wizard
+```
+
+- **Auto-Continuation**: If an existing `swazz.config.json` is found, the wizard will prompt you to edit the existing configuration or start a new one from scratch.
+- **Terminal User Interface (TUI)**: Navigate options interactively using keyboard arrow keys.
+- **Real-Time Input Validation**: The wizard verifies Swagger URL format, JSON bodies, custom wordlist existence, and concurrency settings in real-time.
+
 ### Basic Command
 
 ```bash
