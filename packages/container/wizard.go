@@ -14,6 +14,12 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
+// isPromptCanceled returns true when the user pressed Ctrl+C or Ctrl+D,
+// distinguishing a deliberate cancel from an unexpected I/O error.
+func isPromptCanceled(err error) bool {
+	return errors.Is(err, promptui.ErrInterrupt) || errors.Is(err, promptui.ErrEOF)
+}
+
 func runWizard() {
 	fmt.Println("\033[1;34m⚡ Welcome to the Upgraded SWAZZ Configuration Wizard! ⚡\033[0m")
 	fmt.Println("This wizard will help you configure advanced settings for the API fuzzer.")
@@ -172,6 +178,9 @@ func configureBaseSettings(config *CliConfig) {
 	}
 	swaggerStr, err := promptSwagger.Run()
 	if err != nil {
+		if isPromptCanceled(err) {
+			fmt.Println("\nCanceled — returning to menu.")
+		}
 		return
 	}
 
@@ -202,6 +211,9 @@ func configureBaseSettings(config *CliConfig) {
 	}
 	baseStr, err := promptBase.Run()
 	if err != nil {
+		if isPromptCanceled(err) {
+			fmt.Println("\nCanceled — returning to menu.")
+		}
 		return
 	}
 	config.BaseURL = strings.TrimSpace(baseStr)
@@ -830,7 +842,7 @@ func saveConfig(path string, config *CliConfig) bool {
 	f.Close()
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // best-effort cleanup
 		fmt.Printf("\033[31mFailed to replace config file: %v\033[0m\n", err)
 		return false
 	}
