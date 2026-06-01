@@ -1,5 +1,10 @@
 # ⚡️ swazz — Smart API Fuzzer
 
+
+<p align="center">
+  <img src="docs/assets/og-image.png" alt="Swazz API Fuzzer" width="800">
+</p>
+
 [![CI](https://github.com/SecH0us3/swazz/actions/workflows/ci.yml/badge.svg)](https://github.com/SecH0us3/swazz/actions)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

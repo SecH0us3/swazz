@@ -5,3 +5,5 @@ url: ""
 search_enabled: true
 plugins:
   - jekyll-seo-tag
+
+image: /assets/og-image.png
