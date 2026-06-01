@@ -108,6 +108,15 @@ export function Header({
                     </svg>
                 </a>
 
+                <button 
+                    className="header-docs-link header-hotkeys-btn" 
+                    title="Keyboard Shortcuts (?)" 
+                    onClick={() => useAppStore.setState({ isHotkeysHelpOpen: true })}
+                >
+                    <span>keys</span>
+                    <kbd className="header-hotkeys-kbd">?</kbd>
+                </button>
+
                 <div className="header-divider" />
 
                 {/* Running status pill */}
