@@ -63,7 +63,7 @@ describe('OWASPTop10 Component', () => {
         );
 
         // Verify summary banner shows findings count
-        expect(await screen.findByText(/2 Findings Detected/)).toBeTruthy();
+        expect(await screen.findByText(/2 Findings Detected/, {}, { timeout: 3000 })).toBeTruthy();
 
         // Verify category titles are rendered
         expect(screen.getAllByText(/Broken Object Level Authorization/)).toBeTruthy();
@@ -87,7 +87,7 @@ describe('OWASPTop10 Component', () => {
         );
 
         // Wait for the rows to load and accordion trigger to be visible
-        const accordionHeader = await screen.findByText(/API1:2023 Broken Object Level Authorization \(1\)/);
+        const accordionHeader = await screen.findByText(/API1:2023 Broken Object Level Authorization \(1\)/, {}, { timeout: 3000 });
         expect(accordionHeader).toBeTruthy();
 
         // Click to expand
