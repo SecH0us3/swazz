@@ -50,6 +50,19 @@ func runWizard() {
 					config = CliConfig{Settings: swagger.DefaultSettings()}
 				} else {
 					fmt.Println("\033[32mSuccessfully loaded existing configuration.\033[0m")
+					defaultSettings := swagger.DefaultSettings()
+					if config.Settings.Concurrency <= 0 {
+						config.Settings.Concurrency = defaultSettings.Concurrency
+					}
+					if config.Settings.IterationsPerProfile <= 0 {
+						config.Settings.IterationsPerProfile = defaultSettings.IterationsPerProfile
+					}
+					if config.Settings.TimeoutMs <= 0 {
+						config.Settings.TimeoutMs = defaultSettings.TimeoutMs
+					}
+					if len(config.Settings.Profiles) == 0 {
+						config.Settings.Profiles = defaultSettings.Profiles
+					}
 				}
 			}
 		} else {
@@ -134,6 +147,21 @@ func configureBaseSettings(config *CliConfig) {
 	valSwagger := func(input string) error {
 		if strings.TrimSpace(input) == "" {
 			return errors.New("Swagger URL cannot be empty")
+		}
+		for _, u := range strings.Split(input, ",") {
+			trimmed := strings.TrimSpace(u)
+			if trimmed == "" {
+				continue
+			}
+			if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+				if _, err := url.ParseRequestURI(trimmed); err != nil {
+					return fmt.Errorf("invalid URL format: %v", err)
+				}
+			} else {
+				if _, err := os.Stat(trimmed); err != nil {
+					return fmt.Errorf("local file does not exist or is inaccessible: %s", trimmed)
+				}
+			}
 		}
 		return nil
 	}
@@ -294,19 +322,23 @@ func configureAuthAndIdentity(config *CliConfig) {
 				userB.AuthSequence = configureAuthSteps(userB.AuthSequence)
 			} else if ubIdx == 1 {
 				promptK := promptui.Prompt{Label: "Header Name"}
-				k, _ := promptK.Run()
-				if k != "" {
+				k, err := promptK.Run()
+				if err == nil && k != "" {
 					promptV := promptui.Prompt{Label: "Header Value"}
-					v, _ := promptV.Run()
-					userB.Headers[k] = v
+					v, err := promptV.Run()
+					if err == nil {
+						userB.Headers[k] = v
+					}
 				}
 			} else if ubIdx == 2 {
 				promptK := promptui.Prompt{Label: "Cookie Name"}
-				k, _ := promptK.Run()
-				if k != "" {
+				k, err := promptK.Run()
+				if err == nil && k != "" {
 					promptV := promptui.Prompt{Label: "Cookie Value"}
-					v, _ := promptV.Run()
-					userB.Cookies[k] = v
+					v, err := promptV.Run()
+					if err == nil {
+						userB.Cookies[k] = v
+					}
 				}
 			}
 			config.AuthIdentities["user_b"] = userB
@@ -780,17 +812,26 @@ func configureFilePathsAndFilters(config *CliConfig) {
 }
 
 func saveConfig(path string, config *CliConfig) bool {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	tmpPath := path + ".tmp"
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		fmt.Printf("\033[31mFailed to open config file for writing: %v\033[0m\n", err)
+		fmt.Printf("\033[31mFailed to open temp config file for writing: %v\033[0m\n", err)
 		return false
 	}
-	defer f.Close()
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(config); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
 		fmt.Printf("\033[31mFailed to serialize configuration to JSON: %v\033[0m\n", err)
+		return false
+	}
+	f.Close()
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		fmt.Printf("\033[31mFailed to replace config file: %v\033[0m\n", err)
 		return false
 	}
 	return true
