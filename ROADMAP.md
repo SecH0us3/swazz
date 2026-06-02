@@ -430,3 +430,10 @@ This roadmap tracks planned features, documentation improvements, and architectu
       - `Alt + C` / `Option + C` ➔ Toggle configuration/right sidebar.
 
 
+
+- [ ] **Task 47:** Support Application Installation via Go, Homebrew, and APT.
+  - **Design Goal:** Simplify the installation process and improve accessibility for developers across different operating systems (macOS, Linux) by providing standard package manager support.
+  - **Implementation Details:**
+    - **Go Install:** Ensure the engine can be installed natively via `go install`.
+    - **Homebrew:** Create a Homebrew formula/tap to allow installation via `brew install swazz`.
+    - **APT:** Create Debian packages (`.deb`) and provide an APT repository for installation via `apt install swazz`.
