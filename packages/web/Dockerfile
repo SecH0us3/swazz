@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine@sha256:4f2010b0649da02999427672239424888204648704229988220037356075932a AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY packages/edge ./packages/edge
 # The vite config outputs to ../container/web/dist, so we need to copy it from there.
 RUN npm run build --workspace=packages/web
 
-FROM nginx:alpine
+FROM nginx:alpine@sha256:2112e979b65509f5e0b13afc8485c3b418f93a4a6b52fc262997bbda20e9aa22
 # Note the path: Vite outputs to ../container/web/dist relative to packages/web
 # which is /app/packages/container/web/dist from /app
 COPY --from=builder /app/packages/container/web/dist /usr/share/nginx/html
