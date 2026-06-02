@@ -435,5 +435,5 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Design Goal:** Simplify the installation process and improve accessibility for developers across different operating systems (macOS, Linux) by providing standard package manager support.
   - **Implementation Details:**
     - **Go Install:** Ensure the engine can be installed natively via go install (this may require renaming the packages/container directory to packages/swazz or packages/swazz-engine so the compiled binary is not named container).
-    - **Homebrew:** Create a Homebrew formula/tap to allow installation via `brew install swazz`.
-    - **APT:** Create Debian packages (`.deb`) and provide an APT repository for installation via `apt install swazz`.
+    - **Homebrew:** Create a Homebrew formula/tap to allow installation via brew install swazz (and standardize the binary name to swazz instead of swazz-engine).
+    - **APT:** Create Debian packages (.deb) and provide an APT repository for installation via apt install swazz (standardizing the binary name to swazz).
