@@ -3,7 +3,7 @@
 
 ## Swazz: Smart API Fuzzer ⚡️
 
-Welcome to the official documentation for **Swazz**! 
+Welcome to the official documentation for **Swazz**!
 
 Swazz is an advanced, high-performance Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (such as XSS, SQL injection, and boundary bypassing) by automatically parsing your Swagger/OpenAPI specifications.
 
@@ -73,7 +73,9 @@ Always use a specific commit hash. You must specify the hash of the new build yo
 ```bash
 # Replace <COMMIT_SHA> with the actual hash from the latest build/release:
 docker pull ghcr.io/sech0us3/swazz:<COMMIT_SHA>
+# The image exposes the backend service on container port 8080. Choose any host port you prefer:
 docker run -p 8080:8080 ghcr.io/sech0us3/swazz:<COMMIT_SHA>
+# If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
 ```
 
 #### CLI Mode (Backend Only)
@@ -107,7 +109,7 @@ Swazz provides two primary methods of operation: a feature-rich Web UI Dashboard
 
 The Web UI is the easiest way to manage your fuzzer, inspect requests, and visually analyze results.
 
-1. **Start the Web UI**  
+1. **Start the Web UI**
    Run `npm run dev` from the project root. This starts the React frontend and Go API.
 2. **Dashboard Features**
    - **Heatmap**: Visualizes the `Endpoint × Status Code` responses in real time. Perfect for quickly identifying anomalous 500 errors or unexpected 200s.

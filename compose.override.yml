@@ -1,0 +1,9 @@
+# Override for compose.yml - example to expose frontend on host port 8080
+# Use with: docker compose -f compose.yml -f compose.override.yml up --build
+services:
+  frontend:
+    ports:
+      - "8080:80"  # Host 8080 -> container 80 (frontend)
+
+# You can create your own override file (e.g., for CI or local testing) and set any host ports you need.
+# Alternatively, set FRONTEND_PORT / BACKEND_PORT in a .env file to change host port mappings.

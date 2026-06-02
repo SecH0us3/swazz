@@ -4,9 +4,9 @@ services:
       context: ./packages/container
       dockerfile: Dockerfile
     ports:
-      - "8081:8080"
+      - "${BACKEND_PORT:-8081}:8080"
     environment:
-      # Port for the backend server
+      # Port for the backend server (inside the container)
       - PORT=8080
       # Allow fuzzing against private IPs (localhost, 10.x.x.x, etc.)
       # Set to 'false' in production to prevent accessing internal networks
@@ -34,7 +34,7 @@ services:
       context: .
       dockerfile: packages/web/Dockerfile
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     restart: unless-stopped

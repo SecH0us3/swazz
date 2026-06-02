@@ -5,7 +5,7 @@ on:
     branches:
       - master
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
         # v6.4.0
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version: '1.26.3'
+          go-version: "1.26.3"
           cache-dependency-path: packages/container/go.sum
 
       - name: Build Binaries
@@ -74,9 +74,11 @@ jobs:
             A new Docker image has been built for this release. We never use the `latest` tag. To use this build, run:
 
             ```bash
-            docker pull ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
-            docker run -p 8080:8080 ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
-            ```
+                        docker pull ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
+                        # The image exposes the backend service on container port 8080. Choose any host port you prefer:
+                        docker run -p 8080:8080 ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
+                        # If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
+                        ```
           files: |
             packages/container/swazz-engine-linux-amd64
             packages/container/swazz-engine-darwin-amd64
@@ -91,7 +93,7 @@ jobs:
     if: needs.changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     env:
-      REPO_LC: ''
+      REPO_LC: ""
     steps:
       - name: Checkout
         # v6.0.2
@@ -136,12 +138,12 @@ jobs:
         # v0.36.0
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          image-ref: 'ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}'
-          format: 'table'
-          exit-code: '1'
+          image-ref: "ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}"
+          format: "table"
+          exit-code: "1"
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
 
       - name: Build and push
         # v7.1.0
@@ -169,8 +171,8 @@ jobs:
         # v6.4.0
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: '25.9.0'
-          cache: 'npm'
+          node-version: "25.9.0"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm install

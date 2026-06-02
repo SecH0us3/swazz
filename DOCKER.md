@@ -95,12 +95,34 @@ All Docker images are pinned to specific SHA-256 digests to ensure supply chain 
 To expose frontend on a different port:
 
 ```yaml
-# docker compose.override.yml
+# Option A: Temporary override file (compose.override.yml)
+# Use with: docker compose -f compose.yml -f compose.override.yml up --build
 services:
   frontend:
     ports:
-      - "8080:80"  # Access on http://localhost:8080
+      - "8080:80"  # Host 8080 -> container 80 (frontend)
 ```
+
+# Option B: Parameterized ports via .env
+The repository `compose.yml` supports parameterized host ports via environment variables. Defaults are:
+
+- FRONTEND_PORT=3000  # host port mapped to container port 80 (frontend)
+- BACKEND_PORT=8081   # host port mapped to container port 8080 (backend)
+
+To change host ports without an override file, copy `.env.example` to `.env` and set your desired values:
+
+```bash
+# Example (.env)
+FRONTEND_PORT=8080
+BACKEND_PORT=8081
+```
+
+Then run:
+
+```bash
+docker compose up --build
+```
+
 
 ### HTTPS/TLS
 
