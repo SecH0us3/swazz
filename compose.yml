@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: ./packages/container
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8081}:8080"
+    environment:
+      # Port for the backend server (inside the container)
+      - PORT=8080
+      # Allow fuzzing against private IPs (localhost, 10.x.x.x, etc.)
+      # Set to 'false' in production to prevent accessing internal networks
+      - SWAZZ_ALLOW_PRIVATE_IPS=${SWAZZ_ALLOW_PRIVATE_IPS:-true}
+      # CORS origin. Set to specific domain in production (e.g., https://example.com)
+      # DO NOT use wildcard '*' in production - allows any origin to make requests
+      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN:-http://localhost}
+    restart: unless-stopped
+    # Security: Run with read-only root filesystem (requires /tmp mount)
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run
+    # Security: Drop unnecessary capabilities
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    # Security: No privilege escalation
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

@@ -59,7 +59,9 @@ Always use a specific commit hash. You must specify the hash of the new build yo
 ```bash
 # Replace <COMMIT_SHA> with the actual hash from the latest build/release:
 docker pull ghcr.io/sech0us3/swazz:<COMMIT_SHA>
+# The image exposes the backend service on container port 8080. Choose any host port you prefer:
 docker run -p 8080:8080 ghcr.io/sech0us3/swazz:<COMMIT_SHA>
+# If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
 ```
 
 ### CLI Mode (Backend Only)
