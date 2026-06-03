@@ -244,7 +244,7 @@ jobs:
       - name: Build swazz-engine
         run: |
           cd packages/container
-          CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine .
 
       - name: Run Swazz fuzzer
         continue-on-error: true
@@ -277,7 +277,7 @@ swazz-fuzz:
   image: golang:1.26-alpine
   script:
     - cd packages/container
-    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
+    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine .
     - |
       ./swazz-engine start \
         --config ../../swazz.config.json \

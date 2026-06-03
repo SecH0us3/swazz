@@ -62,7 +62,7 @@ cd swazz
 
 # Build the engine
 cd packages/container
-go build -o swazz-engine main.go
+go build -o swazz-engine .
 ```
 
 ---
