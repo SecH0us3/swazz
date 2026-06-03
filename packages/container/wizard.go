@@ -12,6 +12,7 @@ import (
 	"swazz-engine/internal/swagger"
 
 	"github.com/manifoldco/promptui"
+	"golang.org/x/term"
 )
 
 // isPromptCanceled returns true when the user pressed Ctrl+C or Ctrl+D,
@@ -602,16 +603,120 @@ func configureFuzzingControls(config *CliConfig) {
 
 		switch index {
 		case 0:
-			promptC := promptui.Prompt{
-				Label:    "Concurrency (number of parallel worker routines)",
-				Default:  strconv.Itoa(config.Settings.Concurrency),
-				Validate: validateInt,
+			// Attempt to make terminal raw for interactive arrow adjustments
+			oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+			if err != nil {
+				// Fallback to standard promptui if raw mode is not supported (non-interactive or not a TTY)
+				promptC := promptui.Prompt{
+					Label:    "Concurrency (number of parallel worker routines)",
+					Default:  strconv.Itoa(config.Settings.Concurrency),
+					Validate: validateInt,
+				}
+				val, err := promptC.Run()
+				if err == nil {
+					iVal, _ := strconv.Atoi(val)
+					config.Settings.Concurrency = iVal
+				}
+				continue
 			}
-			val, err := promptC.Run()
-			if err == nil {
-				iVal, _ := strconv.Atoi(val)
-				config.Settings.Concurrency = iVal
+
+			restoreTerm := func() {
+				_ = term.Restore(int(os.Stdin.Fd()), oldState)
 			}
+			defer restoreTerm()
+
+			// Clean line drawing helper
+			printPrompt := func(val int, showError bool) {
+				if showError {
+					fmt.Printf("\r\033[KConcurrency: %d (must be a positive integer) [Up/Down to adjust, type digits, Enter to save]", val)
+				} else {
+					fmt.Printf("\r\033[KConcurrency: %d [Up/Down to adjust, type digits, Enter to save]", val)
+				}
+			}
+
+			currentVal := config.Settings.Concurrency
+			printPrompt(currentVal, false)
+
+			buf := make([]byte, 256)
+			done := false
+			showErr := false
+
+			for !done {
+				n, err := os.Stdin.Read(buf)
+				if err != nil {
+					break // Exit on EOF or read error
+				}
+				if n <= 0 {
+					continue
+				}
+
+				// Handle control keys when read as a single byte
+				if n == 1 {
+					b := buf[0]
+					if b == 3 || b == 4 { // Ctrl+C or Ctrl+D
+						restoreTerm()
+						fmt.Println()
+						os.Exit(0)
+					}
+					if b == 13 || b == 10 { // Enter key
+						if currentVal > 0 {
+							config.Settings.Concurrency = currentVal
+							done = true
+						} else {
+							showErr = true
+							printPrompt(currentVal, showErr)
+						}
+						continue
+					}
+					if b == 127 || b == 8 { // Backspace (DEL or BS)
+						s := strconv.Itoa(currentVal)
+						if len(s) > 1 {
+							s = s[:len(s)-1]
+							currentVal, _ = strconv.Atoi(s)
+						} else {
+							currentVal = 0
+						}
+						printPrompt(currentVal, showErr)
+						continue
+					}
+				}
+
+				// Handle arrow key escape sequences
+				if n >= 3 && buf[0] == 27 && buf[1] == 91 {
+					if buf[2] == 65 { // Up arrow
+						currentVal++
+						printPrompt(currentVal, showErr)
+						continue
+					} else if buf[2] == 66 { // Down arrow
+						if currentVal > 1 {
+							currentVal--
+						}
+						printPrompt(currentVal, showErr)
+						continue
+					}
+				}
+
+				// Parse any digits typed or pasted
+				var digits []byte
+				for i := 0; i < n; i++ {
+					if buf[i] >= '0' && buf[i] <= '9' {
+						digits = append(digits, buf[i])
+					}
+				}
+				if len(digits) > 0 {
+					if currentVal == 0 {
+						currentVal, _ = strconv.Atoi(string(digits))
+					} else {
+						newValStr := strconv.Itoa(currentVal) + string(digits)
+						if parsed, err := strconv.Atoi(newValStr); err == nil {
+							currentVal = parsed
+						}
+					}
+					printPrompt(currentVal, showErr)
+				}
+			}
+			restoreTerm()
+			fmt.Println()
 		case 1:
 			promptI := promptui.Prompt{
 				Label:    "Iterations per profile",
