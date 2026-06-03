@@ -1,13 +1,15 @@
 # === DOCKERFILE FOR CLI (AMD64 / Linux x64) ===
 
 # Stage 1: Build Go Application
-FROM --platform=linux/amd64 golang:alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS builder
+FROM golang:alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS builder
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # Security: Build with stripped symbols (-s -w) to reduce size and attack surface
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o swazz-engine .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o swazz-engine .
 
 # Stage 2: Minimal final image
 # Security: Using distroless image - no shell, no package manager, minimal attack surface
