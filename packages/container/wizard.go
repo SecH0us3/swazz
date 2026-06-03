@@ -12,6 +12,7 @@ import (
 	"swazz-engine/internal/swagger"
 
 	"github.com/manifoldco/promptui"
+	"golang.org/x/term"
 )
 
 // isPromptCanceled returns true when the user pressed Ctrl+C or Ctrl+D,
@@ -602,16 +603,69 @@ func configureFuzzingControls(config *CliConfig) {
 
 		switch index {
 		case 0:
-			promptC := promptui.Prompt{
-				Label:    "Concurrency (number of parallel worker routines)",
-				Default:  strconv.Itoa(config.Settings.Concurrency),
-				Validate: validateInt,
+			var concurrencyLoop func()
+			concurrencyLoop = func() {
+				fmt.Printf("\r\033[KConcurrency (number of parallel worker routines) [Up/Down arrow to adjust, Enter to save]: %d", config.Settings.Concurrency)
+
+				// Make the terminal raw
+				oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+				if err != nil {
+					return
+				}
+
+				b := make([]byte, 3)
+				for {
+					n, err := os.Stdin.Read(b)
+					if err != nil {
+						break
+					}
+					if n == 1 && (b[0] == 3 || b[0] == 4) { // Ctrl+C or Ctrl+D
+						term.Restore(int(os.Stdin.Fd()), oldState)
+						fmt.Printf("\r\n")
+						os.Exit(0)
+					}
+					if n == 1 && b[0] == 13 { // Enter
+						break
+					}
+
+					if n == 3 && b[0] == 27 && b[1] == 91 {
+						if b[2] == 65 { // Up
+							config.Settings.Concurrency++
+						} else if b[2] == 66 { // Down
+							if config.Settings.Concurrency > 1 {
+								config.Settings.Concurrency--
+							}
+						}
+						fmt.Printf("\r\033[KConcurrency (number of parallel worker routines) [Up/Down arrow to adjust, Enter to save]: %d", config.Settings.Concurrency)
+					} else if n == 1 && b[0] >= '0' && b[0] <= '9' {
+						c := string(b[0])
+						if config.Settings.Concurrency == 0 {
+							config.Settings.Concurrency, _ = strconv.Atoi(c)
+						} else {
+							c2 := strconv.Itoa(config.Settings.Concurrency) + c
+							config.Settings.Concurrency, _ = strconv.Atoi(c2)
+						}
+						fmt.Printf("\r\033[KConcurrency (number of parallel worker routines) [Up/Down arrow to adjust, Enter to save]: %d", config.Settings.Concurrency)
+					} else if n == 1 && b[0] == 127 { // Backspace
+						s := strconv.Itoa(config.Settings.Concurrency)
+						if len(s) > 1 {
+							s = s[:len(s)-1]
+							config.Settings.Concurrency, _ = strconv.Atoi(s)
+						} else {
+							config.Settings.Concurrency = 0
+						}
+						fmt.Printf("\r\033[KConcurrency (number of parallel worker routines) [Up/Down arrow to adjust, Enter to save]: %d", config.Settings.Concurrency)
+					}
+				}
+				term.Restore(int(os.Stdin.Fd()), oldState)
+				fmt.Printf("\r\n")
+
+				if config.Settings.Concurrency <= 0 {
+					fmt.Println("Value must be a valid positive integer.")
+					concurrencyLoop()
+				}
 			}
-			val, err := promptC.Run()
-			if err == nil {
-				iVal, _ := strconv.Atoi(val)
-				config.Settings.Concurrency = iVal
-			}
+			concurrencyLoop()
 		case 1:
 			promptI := promptui.Prompt{
 				Label:    "Iterations per profile",
