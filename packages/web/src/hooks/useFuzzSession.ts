@@ -40,9 +40,7 @@ export function useFuzzSession({
                     config.global_headers,
                     config.cookies,
                 );
-                for (const endpoint of endpoints) {
-                    allEndpoints.push(endpoint);
-                }
+                allEndpoints = allEndpoints.concat(endpoints);
                 if (!detectedBaseUrl && basePath) {
                     try {
                         const u = new URL(basePath);

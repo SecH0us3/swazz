@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
@@ -41,7 +40,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		return headers, cookies, nil
 	}
 
-	log.Printf("Running authentication sequence (%d steps)...", len(sequence))
+	fmt.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
 
 	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
@@ -83,7 +82,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				cfg.Variables[varName] = result
 				r.configMu.Unlock()
 
-				log.Printf("    [Auth] set_variables: {{%s}} = %q", varName, result)
+				fmt.Printf("    [Auth] set_variables: {{%s}} = %q\n", varName, result)
 			}
 
 			r.updateReplacer()
@@ -134,7 +133,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
-			log.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------", string(dump))
+			fmt.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
 		}
 
 		resp, err := r.client.Do(req)
@@ -144,10 +143,10 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpResponse(resp, false)
-			log.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------", string(dump))
+			fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
 		}
 
-		log.Printf("  Step %d: %s %s -> %d", i+1, step.Method, fullURL, resp.StatusCode)
+		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 		io.Copy(io.Discard, resp.Body)
@@ -180,7 +179,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 			if shouldSave {
 				cookies[cookie.Name] = cookie.Value
-				log.Printf("    [Auth] Saved cookie: %s", cookie.Name)
+				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
 			}
 		}
 
@@ -188,44 +187,41 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 			var parsed map[string]any
 			if err := json.Unmarshal(body, &parsed); err != nil {
-				if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
-					return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
-				}
-				log.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m", err)
-			} else {
-				r.configMu.Lock()
-				if cfg.Variables == nil {
-					cfg.Variables = make(map[string]any)
-				}
+				return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
+			}
 
-				for jsonKey, headerName := range step.ExtractJSON {
-					val := extractJSONPath(parsed, jsonKey)
-					if val != nil {
-						strVal := fmt.Sprintf("%v", val)
-						headers[headerName] = strVal
-						log.Printf("    [Auth] Extracted %s -> Header %s", jsonKey, headerName)
-					}
-				}
+			r.configMu.Lock()
+			if cfg.Variables == nil {
+				cfg.Variables = make(map[string]any)
+			}
 
-				varsUpdated := false
-				for jsonKey, varName := range step.ExtractVariables {
-					val := extractJSONPath(parsed, jsonKey)
-					if val != nil {
-						cfg.Variables[varName] = val
-						log.Printf("    [Auth] Extracted %s -> Variable {{%s}}", jsonKey, varName)
-						varsUpdated = true
-					}
+			for jsonKey, headerName := range step.ExtractJSON {
+				val := extractJSONPath(parsed, jsonKey)
+				if val != nil {
+					strVal := fmt.Sprintf("%v", val)
+					headers[headerName] = strVal
+					fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 				}
-				r.configMu.Unlock()
+			}
 
-				if varsUpdated {
-					r.updateReplacer()
+			varsUpdated := false
+			for jsonKey, varName := range step.ExtractVariables {
+				val := extractJSONPath(parsed, jsonKey)
+				if val != nil {
+					cfg.Variables[varName] = val
+					fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
+					varsUpdated = true
 				}
+			}
+			r.configMu.Unlock()
+
+			if varsUpdated {
+				r.updateReplacer()
 			}
 		}
 	}
 
-	log.Println("Authentication sequence complete.")
+	fmt.Println("Authentication sequence complete.")
 	return headers, cookies, nil
 }
 
