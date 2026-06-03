@@ -110,3 +110,4 @@ func TestNormalizedLevenshtein(t *testing.T) {
 		t.Errorf("normalizedLevenshtein(\"kitten\", \"sitting\") = %f; expected %f", sim, expected)
 	}
 }
+

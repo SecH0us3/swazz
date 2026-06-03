@@ -190,9 +190,9 @@ func TestClassifier_OWASPCategory(t *testing.T) {
 		Method:   "GET",
 		AnalyzerFindings: []swagger.AnalysisFinding{
 			{
-				RuleID:  "swazz/bola-idor",
-				Level:   "error",
-				Message: "BOLA detected",
+				RuleID:   "swazz/bola-idor",
+				Level:    "error",
+				Message:  "BOLA detected",
 			},
 		},
 	}

@@ -23,10 +23,10 @@ type Info struct {
 
 // Item can be a request or a folder/group of requests.
 type Item struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Request     *Request `json:"request,omitempty"`
-	Item        []Item   `json:"item,omitempty"` // Child items for nested folders
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Request     *Request  `json:"request,omitempty"`
+	Item        []Item    `json:"item,omitempty"` // Child items for nested folders
 }
 
 // Request contains details of an API request.

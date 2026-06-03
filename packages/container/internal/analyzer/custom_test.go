@@ -83,3 +83,4 @@ func TestDefaultCustomRules(t *testing.T) {
 		}
 	})
 }
+

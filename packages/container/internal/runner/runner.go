@@ -79,13 +79,13 @@ type Runner struct {
 	pauseMu   sync.Mutex
 	pauseCond *sync.Cond
 
-	analyzer      *analyzer.AnalyzerRegistry
+	analyzer *analyzer.AnalyzerRegistry
 	sizeBaselines *sync.Map
 	timeBaselines *sync.Map
-	harvestedIDs  sync.Map // maps path prefix string -> []string
-	idSources     sync.Map // maps ID string -> source string
-	resultsMu     sync.Mutex
-	allResults    []*swagger.FuzzResult
+	harvestedIDs sync.Map // maps path prefix string -> []string
+	idSources    sync.Map // maps ID string -> source string
+	resultsMu sync.Mutex
+	allResults []*swagger.FuzzResult
 }
 
 // New creates a new Runner.
@@ -97,13 +97,13 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 	r := &Runner{
-		config:        config,
-		client:        client,
-		subs:          make(map[chan Event]struct{}),
-		eventQueue:    NewMPSCQueue(),
-		doneCh:        make(chan struct{}),
-		statsChan:     make(chan statsMsg, 4096),
-		statsDone:     make(chan struct{}),
+		config:     config,
+		client:     client,
+		subs:       make(map[chan Event]struct{}),
+		eventQueue: NewMPSCQueue(),
+		doneCh:     make(chan struct{}),
+		statsChan:  make(chan statsMsg, 4096),
+		statsDone:  make(chan struct{}),
 		analyzer:      analyzer.NewRegistry(),
 		sizeBaselines: &sync.Map{},
 		timeBaselines: &sync.Map{},
@@ -842,7 +842,7 @@ func (r *Runner) executeRequest(
 			bufPool.Put(buf)
 		}
 		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
-		resp.Body.Close()                              // #nosec G104 -- close error irrelevant after body fully consumed
+		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
 		reqCancel()
 
 		responseSize := resp.ContentLength
@@ -1096,6 +1096,8 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		}
 	}
 }
+
+
 
 type EndpointTimeBaseline struct {
 	mu         sync.Mutex

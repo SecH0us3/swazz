@@ -42,7 +42,7 @@ func ToMarkdown(findings []*classifier.Finding, stats *swagger.RunStats, version
 	// Title & Summary
 	sb.WriteString(fmt.Sprintf("# 🛡️ Swazz API Fuzzer Report (v%s)\n\n", version))
 	sb.WriteString(fmt.Sprintf("**Generated At**: %s\n\n", time.Now().UTC().Format(time.RFC3339)))
-
+	
 	sb.WriteString("## 📊 Executive Summary\n\n")
 	sb.WriteString("| Metric | Value |\n")
 	sb.WriteString("| --- | --- |\n")

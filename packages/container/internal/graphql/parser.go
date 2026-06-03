@@ -87,10 +87,10 @@ type TypeRef struct {
 }
 
 type InputValue struct {
-	Name         string  `json:"name"`
-	Description  string  `json:"description"`
-	Type         TypeRef `json:"type"`
-	DefaultValue *string `json:"defaultValue"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Type         TypeRef  `json:"type"`
+	DefaultValue *string  `json:"defaultValue"`
 }
 
 type Field struct {

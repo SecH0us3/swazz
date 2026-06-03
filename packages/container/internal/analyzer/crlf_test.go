@@ -523,3 +523,4 @@ func TestCRLFAnalyzer_Integration(t *testing.T) {
 		t.Errorf("expected warning level, got '%s'", finding.Level)
 	}
 }
+

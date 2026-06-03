@@ -467,7 +467,7 @@ func TestParseGraphQLIntrospection_ComplexTypesAndSelectionDepth(t *testing.T) {
 
 	// 2. Verify selection set construction & depth limitation (depth limit is 2)
 	queryEnumVal := ep.Schema.Properties["query"].Enum[0].(string)
-
+	
 	// Expect selection: { items { id details { description } } }
 	if !strings.Contains(queryEnumVal, "description") {
 		t.Errorf("expected query to contain 'description' at depth 3, got '%s'", queryEnumVal)
@@ -683,3 +683,4 @@ func TestParseGraphQLIntrospection_RecursiveInputObject(t *testing.T) {
 		t.Errorf("expected leaf 'and' property type to be 'string' due to recursion limit, got %s", leafAndProp.Type)
 	}
 }
+

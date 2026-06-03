@@ -131,3 +131,4 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	return findings
 }
+

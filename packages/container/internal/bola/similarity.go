@@ -145,7 +145,7 @@ func levenshteinDistance(r1, r2 []rune) int {
 		return len1
 	}
 
-	if len1 > math.MaxInt-1 {
+	if len1 > math.MaxInt - 1 {
 		return len2
 	}
 	columnLen := len1 + 1

@@ -25,7 +25,7 @@ const (
 	CatMaliciousNumbers       = "malicious_numbers"
 	CatMaliciousDates         = "malicious_dates"
 	CatMaliciousBooleans      = "malicious_booleans"
-	CatMaliciousTypeConfusion = "malicious_type_confusion"
+	CatMaliciousTypeConfusion  = "malicious_type_confusion"
 	CatHostInjection          = "malicious_host_injection"
 	CatCORSMisconfig          = "malicious_cors_misconfig"
 	CatIPSpoofing             = "malicious_ip_spoofing"

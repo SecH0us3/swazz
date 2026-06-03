@@ -138,3 +138,4 @@ func TestStackTraceAnalyzer(t *testing.T) {
 		})
 	}
 }
+
