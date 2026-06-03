@@ -70,7 +70,7 @@ jobs:
       - name: Build swazz-engine
         run: |
           cd packages/container
-          CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine .
 
       # ── Optional: spin up your test server here ──────────────
       # - name: Start demo API
@@ -133,7 +133,7 @@ swazz-fuzz:
   image: golang:1.26.3-alpine@sha256:70dd6c2a4efd226a0b7cfb5ad289bf65d83626e542dbde55d491f24d45542a27
   script:
     - cd packages/container
-    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
+    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine .
     - |
       ./swazz-engine start \
         --config ../../swazz.config.json \
@@ -163,7 +163,7 @@ swazz-fuzz:
   image: golang:1.26.3-alpine@sha256:70dd6c2a4efd226a0b7cfb5ad289bf65d83626e542dbde55d491f24d45542a27
   script:
     - cd packages/container
-    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine main.go
+    - CGO_ENABLED=0 go build -ldflags="-s -w" -o swazz-engine .
     - |
       ./swazz-engine start \
         --config ../../swazz.config.json \
