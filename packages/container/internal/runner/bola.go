@@ -324,12 +324,13 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		r.limiter.Acquire()
 		
 		go func(ep swagger.EndpointConfig) {
-		key := strings.ToUpper(ep.Method) + " " + ep.Path
-		if hasSuccessCandidate[key] {
-			r.limiter.Release()
-			candWg.Done()
-			return
-		}
+			defer r.limiter.Release()
+			defer candWg.Done()
+
+			key := strings.ToUpper(ep.Method) + " " + ep.Path
+			if hasSuccessCandidate[key] {
+				return
+			}
 
 		var harvested []string
 		hasPathParams := strings.Contains(ep.Path, "{")
@@ -499,8 +500,6 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			})
 		}
 		
-		r.limiter.Release()
-		candWg.Done()
 	}(ep)
 	}
 	candWg.Wait()
@@ -515,12 +514,13 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		r.limiter.Acquire()
 		
 		go func(cand *swagger.FuzzResult) {
-		ep, found := r.findEndpointConfig(cand.Endpoint, cand.Method)
-		if !found {
-			r.limiter.Release()
-			bolaWg.Done()
-			return
-		}
+			defer r.limiter.Release()
+			defer bolaWg.Done()
+
+			ep, found := r.findEndpointConfig(cand.Endpoint, cand.Method)
+			if !found {
+				return
+			}
 
 		hasPathParams := strings.Contains(cand.Endpoint, "{")
 
@@ -827,8 +827,6 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			}
 		}
 		
-		r.limiter.Release()
-		bolaWg.Done()
 	}(cand)
 	}
 	bolaWg.Wait()

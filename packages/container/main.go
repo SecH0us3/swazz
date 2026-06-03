@@ -399,7 +399,7 @@ func runCLI(args []string) {
 						restoreTerm()
 						fmt.Println("\nStopping fuzzing run...")
 						r.Stop()
-						os.Exit(0)
+						return
 					}
 					if b == '+' || b == '=' {
 						c := r.GetConcurrency()
@@ -578,8 +578,8 @@ func printProgress(stats swagger.RunStats) {
 		fmt.Printf("\033[%dA", numLinesPrinted)
 	}
 
-	fmt.Printf("⚡ \033[1;34mSWAZZ ENGINE\033[0m running... (Press +/- or Arrows to adjust concurrency)\033[K\r\n")
-	fmt.Printf("🎯 \033[1mProgress:\033[0m [%d%%] %d/%d reqs | %.1f rps (concurrency: %d)\033[K\r\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec, stats.Concurrency)
+	fmt.Printf("⚡ \033[1;34mSWAZZ ENGINE\033[0m running...\033[K\r\n")
+	fmt.Printf("🎯 \033[1mProgress:\033[0m [%d%%] %d/%d reqs | %.1f rps (concurrency: %d [+/- or Arrows to change])\033[K\r\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec, stats.Concurrency)
 	fmt.Printf("🌐 \033[1mActive:\033[0m   %s\033[K\r\n", ep)
 
 	if len(sortedProfiles) == 0 {
