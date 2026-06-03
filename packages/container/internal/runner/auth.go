@@ -133,7 +133,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
-			fmt.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+			fmt.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
 		}
 
 		resp, err := r.client.Do(req)
@@ -187,39 +187,36 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 			var parsed map[string]any
 			if err := json.Unmarshal(body, &parsed); err != nil {
-				if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
-					return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
-				}
-				fmt.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)
-			} else {
-				r.configMu.Lock()
-				if cfg.Variables == nil {
-					cfg.Variables = make(map[string]any)
-				}
+				return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
+			}
 
-				for jsonKey, headerName := range step.ExtractJSON {
-					val := extractJSONPath(parsed, jsonKey)
-					if val != nil {
-						strVal := fmt.Sprintf("%v", val)
-						headers[headerName] = strVal
-						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
-					}
-				}
+			r.configMu.Lock()
+			if cfg.Variables == nil {
+				cfg.Variables = make(map[string]any)
+			}
 
-				varsUpdated := false
-				for jsonKey, varName := range step.ExtractVariables {
-					val := extractJSONPath(parsed, jsonKey)
-					if val != nil {
-						cfg.Variables[varName] = val
-						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
-						varsUpdated = true
-					}
+			for jsonKey, headerName := range step.ExtractJSON {
+				val := extractJSONPath(parsed, jsonKey)
+				if val != nil {
+					strVal := fmt.Sprintf("%v", val)
+					headers[headerName] = strVal
+					fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 				}
-				r.configMu.Unlock()
+			}
 
-				if varsUpdated {
-					r.updateReplacer()
+			varsUpdated := false
+			for jsonKey, varName := range step.ExtractVariables {
+				val := extractJSONPath(parsed, jsonKey)
+				if val != nil {
+					cfg.Variables[varName] = val
+					fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
+					varsUpdated = true
 				}
+			}
+			r.configMu.Unlock()
+
+			if varsUpdated {
+				r.updateReplacer()
 			}
 		}
 	}
