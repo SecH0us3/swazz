@@ -143,3 +143,74 @@ func TestParseSpec_Invalid(t *testing.T) {
 		t.Errorf("Expected error when parsing invalid json")
 	}
 }
+
+func TestDetermineBasePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		spec     map[string]any
+		expected string
+	}{
+		{
+			name: "OpenAPI 3.x valid server",
+			spec: map[string]any{
+				"openapi": "3.0.0",
+				"servers": []any{
+					map[string]any{
+						"url": "https://api.example.com/v1",
+					},
+				},
+			},
+			expected: "https://api.example.com/v1",
+		},
+		{
+			name: "OpenAPI 3.x no servers",
+			spec: map[string]any{
+				"openapi": "3.0.0",
+			},
+			expected: "",
+		},
+		{
+			name: "Swagger 2.0 full",
+			spec: map[string]any{
+				"swagger":  "2.0",
+				"schemes":  []any{"http"},
+				"host":     "api.example.com",
+				"basePath": "/v2",
+			},
+			expected: "http://api.example.com/v2",
+		},
+		{
+			name: "Swagger 2.0 default scheme",
+			spec: map[string]any{
+				"swagger":  "2.0",
+				"host":     "api.example.com",
+				"basePath": "/v2",
+			},
+			expected: "https://api.example.com/v2",
+		},
+		{
+			name: "Swagger 2.0 no host",
+			spec: map[string]any{
+				"swagger":  "2.0",
+				"basePath": "/v2",
+			},
+			expected: "/v2",
+		},
+		{
+			name: "Unknown spec",
+			spec: map[string]any{
+				"unknown": "1.0",
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := determineBasePath(tt.spec)
+			if actual != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, actual)
+			}
+		})
+	}
+}
