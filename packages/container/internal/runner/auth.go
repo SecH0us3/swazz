@@ -35,7 +35,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		return headers, cookies, nil
 	}
 
-	log.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
+	log.Printf("Running authentication sequence (%d steps)...", len(sequence))
 
 	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
