@@ -191,6 +191,9 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.limiter.SetTarget(r.config.Settings.Concurrency)
 	var wg sync.WaitGroup
 
+	r.currentProfile.Store("BASELINE")
+	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
 	for _, endpoint := range r.config.Endpoints {
 		if r.stopped() {
 			break
@@ -206,8 +209,12 @@ func (r *Runner) Start(ctx context.Context) error {
 					wg.Done()
 				}()
 
+				epKey := ep.Method + " " + ep.Path
+				r.currentEndpoint.Store(epKey)
+				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
 				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-				safeGen.Endpoint = ep.Method + " " + ep.Path
+				safeGen.Endpoint = epKey
 				var payload any
 				var qp map[string]any
 				var gh map[string]string
@@ -261,7 +268,7 @@ func (r *Runner) Start(ctx context.Context) error {
 					r.config.GlobalHeaders,
 					r.config.Cookies,
 					payload,
-					swagger.ProfileRandom,
+					swagger.FuzzingProfile("BASELINE"),
 					qp,
 					gh,
 					ep.ContentType,
@@ -274,7 +281,21 @@ func (r *Runner) Start(ctx context.Context) error {
 					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
 					r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 				}
+
+				// Send result to aggregator
+				r.statsChan <- statsMsg{
+					result:           result,
+					currentIteration: 1,
+					totalIterations:  1,
+				}
+				r.Broadcast(Event{Type: EventResult, Data: result})
+
+				r.completedEndpoints.Add(1)
+				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 			}(endpoint)
+		} else {
+			// Baseline already loaded (e.g. from tests or prior setup)
+			r.completedEndpoints.Add(1)
 		}
 	}
 	wg.Wait()
@@ -306,14 +327,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	copy(candidates, r.allResults)
 	r.resultsMu.Unlock()
 
-	bolaResults := r.bolaPhase(ctx, candidates)
-	for _, res := range bolaResults {
-		r.statsChan <- statsMsg{
-			result:           res,
-			currentIteration: 1,
-			totalIterations:  1,
-		}
-	}
+	_ = r.bolaPhase(ctx, candidates)
 
 	r.rateLimitPhase(ctx)
 
@@ -339,6 +353,11 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	iterations := settings.IterationsPerProfile
 
 	var totalPlanned int64
+
+	// 1. Baseline requests: 1 per endpoint
+	totalPlanned += int64(len(endpoints))
+
+	// 2. Fuzzing profiles requests
 	for _, ep := range endpoints {
 		hasF := hasFields(&ep)
 		for _, p := range profiles {
@@ -360,8 +379,30 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 			totalPlanned += int64(baseIter)
 		}
 	}
+
+	// 3. Rate Limit check requests
+	if settings.RateLimitCheck {
+		burstSize := settings.RateLimitBurstSize
+		if burstSize <= 0 {
+			burstSize = 50
+		}
+		if burstSize > 1000 {
+			burstSize = 1000
+		}
+		totalPlanned += int64(len(endpoints) * burstSize)
+	}
+
 	r.totalPlanned.Store(totalPlanned)
-	r.totalEndpoints.Store(int32(len(endpoints) * len(profiles)))
+
+	// Calculate totalEndpoints:
+	// - Baseline: len(endpoints)
+	// - Fuzzing: len(profiles) * len(endpoints)
+	// - Rate Limit: len(endpoints) if RateLimitCheck is true
+	totalEP := len(endpoints) + len(profiles)*len(endpoints)
+	if settings.RateLimitCheck {
+		totalEP += len(endpoints)
+	}
+	r.totalEndpoints.Store(int32(totalEP))
 }
 
 func (r *Runner) fuzzEndpoint(
@@ -378,7 +419,7 @@ func (r *Runner) fuzzEndpoint(
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
 
 	r.currentEndpoint.Store(epKey)
-	r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx))
+	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx))
 
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
@@ -586,7 +627,7 @@ func (r *Runner) fuzzEndpoint(
 
 	wg.Wait()
 
-	r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx + 1))
+	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx + 1))
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 
@@ -1045,9 +1086,6 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 
 		// Record the burst results in stats
 		for i, status := range statusCodes {
-			if status == 0 {
-				continue
-			}
 			r.statsChan <- statsMsg{
 				result: &swagger.FuzzResult{
 					ID:           uuid.New().String(),
@@ -1087,6 +1125,9 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 		}
+
+		r.completedEndpoints.Add(1)
+		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 	}
 }
 
