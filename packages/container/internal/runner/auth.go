@@ -86,7 +86,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
-			log.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+			log.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------", string(dump))
 		}
 
 		resp, err := r.client.Do(req)
