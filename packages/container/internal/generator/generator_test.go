@@ -95,7 +95,7 @@ func TestMaxDepth(t *testing.T) {
 	// Limit testing is not strictly enforced in BuildObject without a depth parameter,
 	// but the array maxes are. If we want to test array limits, we can do so here.
 	// We'll just verify the generator doesn't crash on standard deep objects.
-	g := New(nil, swagger.ProfileRandom, swagger.Settings{})
+	g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
 	payload := g.BuildObject(schema)
 
 	b, _ := json.Marshal(payload)
@@ -171,7 +171,7 @@ func TestGenerate_DictionaryArray(t *testing.T) {
 	dict := map[string][]any{
 		"usersIds": {"custom-uuid-1", "custom-uuid-2"},
 	}
-	g := New(dict, swagger.ProfileRandom, swagger.Settings{})
+	g := New(dict, swagger.ProfileBoundary, swagger.Settings{})
 
 	payload := g.BuildObject(schema)
 	usersIds, ok := payload["usersIds"].([]any)
