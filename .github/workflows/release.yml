@@ -63,6 +63,14 @@ jobs:
         run: |
           echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
+      - name: Calculate Docker Tag
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            echo "DOCKER_TAG=sha-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          else
+            echo "DOCKER_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
       - name: Create Release
         # v3.0.0
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
@@ -71,14 +79,14 @@ jobs:
           name: ${{ github.ref_name == 'master' && format('Commit {0}', github.sha) || github.ref_name }}
           body: |
             ## Docker Image
-            A new Docker image has been built for this release. We never use the `latest` tag. To use this build, run:
+            A new Docker image has been built for this release. You can find it on the [GitHub Container Registry](https://github.com/SecH0us3/swazz/pkgs/container/swazz). We never use the `latest` tag. To use this build, run:
 
             ```bash
-                        docker pull ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
-                        # The image exposes the backend service on container port 8080. Choose any host port you prefer:
-                        docker run -p 8080:8080 ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
-                        # If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
-                        ```
+            docker pull ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}
+            # The image exposes the backend service on container port 8080. Choose any host port you prefer:
+            docker run -p 8080:8080 ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}
+            # If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
+            ```
           files: |
             packages/container/swazz-engine-linux-amd64
             packages/container/swazz-engine-darwin-amd64
@@ -107,6 +115,14 @@ jobs:
         run: |
           echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
+      - name: Calculate Docker Tag
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            echo "DOCKER_TAG=sha-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          else
+            echo "DOCKER_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
       - name: Login to GitHub Container Registry
         # v4.2.0
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
@@ -124,7 +140,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=${{ env.DOCKER_TAG }}
 
       - name: Build and export to Docker
         # v7.1.0
@@ -132,13 +148,13 @@ jobs:
         with:
           context: packages/container
           load: true
-          tags: ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
+          tags: ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}
 
       - name: Run Trivy vulnerability scanner
         # v0.36.0
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          image-ref: "ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}"
+          image-ref: "ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}"
           format: "table"
           exit-code: "1"
           ignore-unfixed: true
