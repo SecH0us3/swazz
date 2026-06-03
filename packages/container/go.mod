@@ -8,6 +8,7 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/securego/gosec/v2 v2.26.1
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/term v0.42.0
 )
 
 require (

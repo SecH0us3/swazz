@@ -86,6 +86,7 @@ type Runner struct {
 	idSources    sync.Map // maps ID string -> source string
 	resultsMu sync.Mutex
 	allResults []*swagger.FuzzResult
+	limiter *ConcurrencyLimiter
 }
 
 // New creates a new Runner.
@@ -108,6 +109,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		sizeBaselines: &sync.Map{},
 		timeBaselines: &sync.Map{},
 	}
+	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
 	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
 	// Publish initial empty stats snapshot.
@@ -186,15 +188,11 @@ func (r *Runner) Start(ctx context.Context) error {
 			len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
 	}
 
-	concurrency := r.config.Settings.Concurrency
-	if concurrency <= 0 {
-		concurrency = 5
-	}
-	if concurrency > 1000 {
-		return fmt.Errorf("concurrency limit exceeded (max 1000)")
-	}
-	sem := make(chan struct{}, concurrency)
+	r.limiter.SetTarget(r.config.Settings.Concurrency)
 	var wg sync.WaitGroup
+
+	r.currentProfile.Store("BASELINE")
+	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 	for _, endpoint := range r.config.Endpoints {
 		if r.stopped() {
@@ -202,17 +200,21 @@ func (r *Runner) Start(ctx context.Context) error {
 		}
 		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
 		if _, ok := r.sizeBaselines.Load(key); !ok {
-			sem <- struct{}{}
+			r.limiter.Acquire()
 			wg.Add(1)
 
 			go func(ep swagger.EndpointConfig) {
 				defer func() {
-					<-sem
+					r.limiter.Release()
 					wg.Done()
 				}()
 
+				epKey := ep.Method + " " + ep.Path
+				r.currentEndpoint.Store(epKey)
+				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
 				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-				safeGen.Endpoint = ep.Method + " " + ep.Path
+				safeGen.Endpoint = epKey
 				var payload any
 				var qp map[string]any
 				var gh map[string]string
@@ -266,7 +268,7 @@ func (r *Runner) Start(ctx context.Context) error {
 					r.config.GlobalHeaders,
 					r.config.Cookies,
 					payload,
-					swagger.ProfileRandom,
+					swagger.FuzzingProfile("BASELINE"),
 					qp,
 					gh,
 					ep.ContentType,
@@ -279,7 +281,21 @@ func (r *Runner) Start(ctx context.Context) error {
 					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
 					r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 				}
+
+				// Send result to aggregator
+				r.statsChan <- statsMsg{
+					result:           result,
+					currentIteration: 1,
+					totalIterations:  1,
+				}
+				r.Broadcast(Event{Type: EventResult, Data: result})
+
+				r.completedEndpoints.Add(1)
+				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 			}(endpoint)
+		} else {
+			// Baseline already loaded (e.g. from tests or prior setup)
+			r.completedEndpoints.Add(1)
 		}
 	}
 	wg.Wait()
@@ -311,14 +327,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	copy(candidates, r.allResults)
 	r.resultsMu.Unlock()
 
-	bolaResults := r.bolaPhase(ctx, candidates)
-	for _, res := range bolaResults {
-		r.statsChan <- statsMsg{
-			result:           res,
-			currentIteration: 1,
-			totalIterations:  1,
-		}
-	}
+	_ = r.bolaPhase(ctx, candidates)
 
 	r.rateLimitPhase(ctx)
 
@@ -344,6 +353,11 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	iterations := settings.IterationsPerProfile
 
 	var totalPlanned int64
+
+	// 1. Baseline requests: 1 per endpoint
+	totalPlanned += int64(len(endpoints))
+
+	// 2. Fuzzing profiles requests
 	for _, ep := range endpoints {
 		hasF := hasFields(&ep)
 		for _, p := range profiles {
@@ -365,8 +379,30 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 			totalPlanned += int64(baseIter)
 		}
 	}
+
+	// 3. Rate Limit check requests
+	if settings.RateLimitCheck {
+		burstSize := settings.RateLimitBurstSize
+		if burstSize <= 0 {
+			burstSize = 50
+		}
+		if burstSize > 1000 {
+			burstSize = 1000
+		}
+		totalPlanned += int64(len(endpoints) * burstSize)
+	}
+
 	r.totalPlanned.Store(totalPlanned)
-	r.totalEndpoints.Store(int32(len(endpoints) * len(profiles)))
+
+	// Calculate totalEndpoints:
+	// - Baseline: len(endpoints)
+	// - Fuzzing: len(profiles) * len(endpoints)
+	// - Rate Limit: len(endpoints) if RateLimitCheck is true
+	totalEP := len(endpoints) + len(profiles)*len(endpoints)
+	if settings.RateLimitCheck {
+		totalEP += len(endpoints)
+	}
+	r.totalEndpoints.Store(int32(totalEP))
 }
 
 func (r *Runner) fuzzEndpoint(
@@ -383,7 +419,7 @@ func (r *Runner) fuzzEndpoint(
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
 
 	r.currentEndpoint.Store(epKey)
-	r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx))
+	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx))
 
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
@@ -417,15 +453,6 @@ func (r *Runner) fuzzEndpoint(
 	}
 
 	isBodyMethod := !isNoBodyMethod(endpoint.Method)
-	concurrency := settings.Concurrency
-	if concurrency <= 0 {
-		concurrency = 5
-	}
-	if concurrency > 1000 {
-		return
-	}
-	sem := make(chan struct{}, concurrency)
-
 	enableDedup := profile == swagger.ProfileRandom
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
@@ -546,12 +573,12 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
-		sem <- struct{}{}
+		r.limiter.Acquire()
 		wg.Add(1)
 
 		go func(it int, p any, qp map[string]any, gh map[string]string) {
 			defer func() {
-				<-sem
+				r.limiter.Release()
 				wg.Done()
 			}()
 
@@ -600,7 +627,7 @@ func (r *Runner) fuzzEndpoint(
 
 	wg.Wait()
 
-	r.completedEndpoints.Store(int32(profileIdx*len(endpoints) + epIdx + 1))
+	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx + 1))
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 
@@ -1059,9 +1086,6 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 
 		// Record the burst results in stats
 		for i, status := range statusCodes {
-			if status == 0 {
-				continue
-			}
 			r.statsChan <- statsMsg{
 				result: &swagger.FuzzResult{
 					ID:           uuid.New().String(),
@@ -1101,6 +1125,9 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 		}
+
+		r.completedEndpoints.Add(1)
+		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 	}
 }
 
@@ -1160,4 +1187,71 @@ func (r *Runner) getTimeBaselineMedian(method, path string) int64 {
 		return 0
 	}
 	return val.(*EndpointTimeBaseline).getMedian()
+}
+
+// ConcurrencyLimiter is a dynamic, thread-safe semaphore that allows
+// adjusting the worker limit on the fly.
+type ConcurrencyLimiter struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	target  int
+	current int
+}
+
+func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
+	if initial <= 0 {
+		initial = 5
+	}
+	if initial > 1000 {
+		initial = 1000
+	}
+	l := &ConcurrencyLimiter{target: initial}
+	l.cond = sync.NewCond(&l.mu)
+	return l
+}
+
+func (l *ConcurrencyLimiter) SetTarget(target int) {
+	l.mu.Lock()
+	if target <= 0 {
+		target = 1
+	}
+	if target > 1000 {
+		target = 1000
+	}
+	l.target = target
+	l.cond.Broadcast()
+	l.mu.Unlock()
+}
+
+func (l *ConcurrencyLimiter) GetTarget() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.target
+}
+
+func (l *ConcurrencyLimiter) Acquire() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for l.current >= l.target {
+		l.cond.Wait()
+	}
+	l.current++
+}
+
+func (l *ConcurrencyLimiter) Release() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.current--
+	l.cond.Signal()
+}
+
+func (r *Runner) GetConcurrency() int {
+	return r.limiter.GetTarget()
+}
+
+func (r *Runner) SetConcurrency(c int) {
+	r.configMu.Lock()
+	r.config.Settings.Concurrency = c
+	r.configMu.Unlock()
+	r.limiter.SetTarget(c)
 }

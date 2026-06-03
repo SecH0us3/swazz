@@ -196,6 +196,7 @@ type RunStats struct {
 	TotalRequests      int64                            `json:"totalRequests"`
 	TotalPlanned       int64                            `json:"totalPlanned"`
 	RequestsPerSec     float64                          `json:"requestsPerSecond"`
+	Concurrency        int                              `json:"concurrency"`
 	StatusCounts       map[int]int64                    `json:"statusCounts"`
 	StatusByProfile    map[FuzzingProfile]map[int]int64 `json:"statusByProfile"`
 	ProfileCounts      map[FuzzingProfile]int64         `json:"profileCounts"`
