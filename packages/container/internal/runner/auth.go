@@ -45,7 +45,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 	for i, step := range sequence {
 
 		if len(step.SetVariables) > 0 {
-			cache := make(map[string]string) // cache function calls for this step
+			cache := make(map[string]string) // кэш вызовов функций на этот шаг
 
 			r.configMu.Lock()
 			if cfg.Variables == nil {
@@ -303,9 +303,9 @@ func (r *Runner) substituteInObject(v any) any {
 	}
 }
 
-// exprNode represents an AST node for an expression in set_variables.
-// If Args == nil, it's a variable reference.
-// If Args != nil (including empty slice), it's a function call.
+// exprNode — узел AST выражения из set_variables.
+// Если Args == nil — это ссылка на переменную (varRef).
+// Если Args != nil (включая пустой срез) — вызов функции (funcCall).
 type exprNode struct {
 	name string
 	args []*exprNode
@@ -420,12 +420,12 @@ func looksLikeFuncCall(s string) bool {
 	return false
 }
 
-// evalExpr evaluates an AST node and returns a string result.
-// cache - function results within a single evaluateSetVariables call,
-// ensures that uuid() with the same cacheKey returns the same value.
+// evalExpr вычисляет AST-узел и возвращает строковый результат.
+// cache — результаты функций в рамках одного вызова evaluateSetVariables,
+// гарантирует что uuid() с одинаковым cacheKey вернёт одно значение.
 func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, error) {
 	if node.args == nil {
-		// varRef: read from cfg.Variables
+		// varRef: читаем из cfg.Variables
 		r.configMu.RLock()
 		val := r.config.Variables[node.name]
 		r.configMu.RUnlock()
@@ -435,13 +435,13 @@ func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, erro
 		return fmt.Sprintf("%v", val), nil
 	}
 
-	// funcCall: check cache
+	// funcCall: проверяем кэш
 	cacheKey := node.cacheKey()
 	if v, ok := cache[cacheKey]; ok {
 		return v, nil
 	}
 
-	// Evaluate arguments recursively
+	// Вычисляем аргументы рекурсивно
 	args := make([]string, len(node.args))
 	for i, a := range node.args {
 		v, err := r.evalExpr(a, cache)
@@ -459,7 +459,7 @@ func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, erro
 	return result, nil
 }
 
-// cacheKey builds a unique cache key based on name and arguments.
+// cacheKey строит уникальный ключ для кэша на основе имени и аргументов.
 func (n *exprNode) cacheKey() string {
 	if len(n.args) == 0 {
 		return n.name + "()"
@@ -495,7 +495,9 @@ func (r *Runner) callBuiltin(name string, args []string) (string, error) {
 	}
 }
 
-// solvePoW finds a nonce such that hex(SHA256(challenge+nonce)) starts with 'difficulty' zeroes.
+// solvePoW ищет nonce такой, что hex(SHA256(challenge+nonce)) начинается с difficulty нулей.
+// Перебор: nonce = "0", "1", "2", ...
+// Лимит: 10 000 000 итераций (difficulty ≤ 6 — секунды, difficulty > 6 → error).
 func solvePoW(challenge string, difficulty int) (string, error) {
 	if difficulty < 0 {
 		return "", fmt.Errorf("solvePoW: difficulty must be >= 0, got %d", difficulty)
