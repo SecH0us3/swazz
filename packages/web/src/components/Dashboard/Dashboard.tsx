@@ -19,17 +19,22 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                     <div className="empty-state-icon">⚡</div>
                     <div className="empty-state-text" style={{ maxWidth: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ textAlign: 'center' }}>
-                            <div className="empty-state-title" style={{ fontSize: '18px', fontWeight: 600 }}>Welcome to Swazz API Fuzzer</div>
-                            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                                <button 
-                                    className="btn btn-primary" 
-                                    onClick={() => {
-                                        document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
-                                    }}>
-                                    Try Petstore Demo
-                                </button>
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>https://petstore.swagger.io/v2/swagger.json</p>
+                            <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden', borderRadius: '4px', marginBottom: '16px' }}>
+                                <iframe
+                                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                                    src=""
+                                    title="Swazz API Fuzzer Tutorial"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                ></iframe>
                             </div>
+                            <a href="https://SecH0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                📚 Read Official Documentation
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    <polyline points="12 5 19 12 12 19"></polyline>
+                                </svg>
+                            </a>
                         </div>
                         
                         <div style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
