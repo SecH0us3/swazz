@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
@@ -18,7 +19,6 @@ import (
 
 	"swazz-engine/internal/swagger"
 )
-
 
 func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.AuthStep, initialHeaders map[string]string, initialCookies map[string]string) (map[string]string, map[string]string, error) {
 	cfg := r.config
@@ -35,7 +35,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		return headers, cookies, nil
 	}
 
-	fmt.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
+	log.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
 
 	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
@@ -86,7 +86,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpRequestOut(req, true)
-			fmt.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+			log.Printf("\n--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
 		}
 
 		resp, err := r.client.Do(req)
@@ -96,10 +96,10 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 		if cfg.Settings.Debug {
 			dump, _ := httputil.DumpResponse(resp, false)
-			fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
+			log.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
 		}
 
-		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
+		log.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 		io.Copy(io.Discard, resp.Body)
@@ -132,7 +132,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 			if shouldSave {
 				cookies[cookie.Name] = cookie.Value
-				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
+				log.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
 			}
 		}
 
@@ -143,7 +143,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				if len(step.ExtractJSON) > 0 || len(step.ExtractVariables) > 0 {
 					return nil, nil, fmt.Errorf("auth step %d: failed to parse JSON response for value extraction: %w", i+1, err)
 				}
-				fmt.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)
+				log.Printf("    \033[33m[Auth] Warning: Failed to parse response JSON: %v\033[0m\n", err)
 			} else {
 				r.configMu.Lock()
 				if cfg.Variables == nil {
@@ -155,7 +155,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 					if val != nil {
 						strVal := fmt.Sprintf("%v", val)
 						headers[headerName] = strVal
-						fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
+						log.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
 					}
 				}
 
@@ -164,7 +164,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 					val := extractJSONPath(parsed, jsonKey)
 					if val != nil {
 						cfg.Variables[varName] = val
-						fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
+						log.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
 						varsUpdated = true
 					}
 				}
@@ -177,7 +177,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		}
 	}
 
-	fmt.Println("Authentication sequence complete.")
+	log.Println("Authentication sequence complete.")
 	return headers, cookies, nil
 }
 
