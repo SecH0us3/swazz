@@ -612,32 +612,7 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 			fmt.Printf("    notes:    %d\n", notes)
 		}
 
-		byEndpoint := make(map[string][]*classifier.Finding)
-		for _, f := range findings {
-			k := f.Method + " " + f.Endpoint
-			byEndpoint[k] = append(byEndpoint[k], f)
-		}
 
-		fmt.Println()
-		for ep, epFindings := range byEndpoint {
-			fmt.Printf("    %s:\n", ep)
-			byStatus := make(map[int][]*classifier.Finding)
-			for _, f := range epFindings {
-				byStatus[f.Status] = append(byStatus[f.Status], f)
-			}
-			for status, sf := range byStatus {
-				profilesMap := make(map[string]bool)
-				for _, f := range sf {
-					profilesMap[string(f.Profile)] = true
-				}
-				var profiles []string
-				for p := range profilesMap {
-					profiles = append(profiles, p)
-				}
-				level := sf[0].Level
-				fmt.Printf("      HTTP %03d (%s) x%d [%s]\n", status, level, len(sf), strings.Join(profiles, ","))
-			}
-		}
 	}
 	fmt.Println("\n" + sep)
 }
