@@ -427,3 +427,151 @@ func TestDeterministicFunctionCacheHit(t *testing.T) {
 	_, cached := cache["solvePoW(challenge(),difficulty())"]
 	assert.True(t, cached, "expected solvePoW result in cache")
 }
+
+func TestBuiltinFunctions(t *testing.T) {
+	cfg := &swagger.Config{
+		Variables: make(map[string]any),
+	}
+	r := New(cfg, nil)
+
+	call := func(name string, args ...string) (string, error) {
+		return r.callBuiltin(name, args)
+	}
+
+	// ── sha256 ──
+	t.Run("sha256", func(t *testing.T) {
+		got, err := call("sha256", "hello")
+		require.NoError(t, err)
+		// SHA256("hello") is well-known
+		assert.Equal(t, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", got)
+	})
+
+	t.Run("sha256/empty", func(t *testing.T) {
+		got, err := call("sha256", "")
+		require.NoError(t, err)
+		assert.Len(t, got, 64) // hex-encoded 32 bytes
+	})
+
+	// ── hmacSHA256 ──
+	t.Run("hmacSHA256", func(t *testing.T) {
+		got, err := call("hmacSHA256", "message", "secret")
+		require.NoError(t, err)
+		assert.Len(t, got, 64) // hex-encoded 32 bytes
+		assert.NotEqual(t, got, "") // non-empty
+	})
+
+	t.Run("hmacSHA256/wrong_args", func(t *testing.T) {
+		_, err := call("hmacSHA256", "only_one")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "takes 2 arguments")
+	})
+
+	// ── base64 ──
+	t.Run("base64", func(t *testing.T) {
+		got, err := call("base64", "hello world")
+		require.NoError(t, err)
+		assert.Equal(t, "aGVsbG8gd29ybGQ=", got)
+	})
+
+	// ── hex ──
+	t.Run("hex", func(t *testing.T) {
+		got, err := call("hex", "AB")
+		require.NoError(t, err)
+		assert.Equal(t, "4142", got)
+	})
+
+	// ── concat ──
+	t.Run("concat/two", func(t *testing.T) {
+		got, err := call("concat", "foo", "bar")
+		require.NoError(t, err)
+		assert.Equal(t, "foobar", got)
+	})
+
+	t.Run("concat/three", func(t *testing.T) {
+		got, err := call("concat", "a", "b", "c")
+		require.NoError(t, err)
+		assert.Equal(t, "abc", got)
+	})
+
+	t.Run("concat/empty", func(t *testing.T) {
+		got, err := call("concat")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
+
+	// ── upper / lower ──
+	t.Run("upper", func(t *testing.T) {
+		got, err := call("upper", "hello")
+		require.NoError(t, err)
+		assert.Equal(t, "HELLO", got)
+	})
+
+	t.Run("lower", func(t *testing.T) {
+		got, err := call("lower", "HELLO")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", got)
+	})
+
+	// ── trim ──
+	t.Run("trim", func(t *testing.T) {
+		got, err := call("trim", "  hello  ")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", got)
+	})
+
+	t.Run("trim/tabs", func(t *testing.T) {
+		got, err := call("trim", "\t\n value \n\t")
+		require.NoError(t, err)
+		assert.Equal(t, "value", got)
+	})
+
+	// ── substring ──
+	t.Run("substring/normal", func(t *testing.T) {
+		got, err := call("substring", "abcdef", "1", "4")
+		require.NoError(t, err)
+		assert.Equal(t, "bcd", got)
+	})
+
+	t.Run("substring/clamped", func(t *testing.T) {
+		got, err := call("substring", "abc", "0", "100")
+		require.NoError(t, err)
+		assert.Equal(t, "abc", got) // end clamped to len
+	})
+
+	t.Run("substring/empty_range", func(t *testing.T) {
+		got, err := call("substring", "abc", "3", "3")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
+
+	t.Run("substring/bad_start", func(t *testing.T) {
+		_, err := call("substring", "abc", "x", "2")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "start must be integer")
+	})
+
+	// ── jsonPath ──
+	t.Run("jsonPath/simple", func(t *testing.T) {
+		got, err := call("jsonPath", `{"name":"alex"}`, "name")
+		require.NoError(t, err)
+		assert.Equal(t, "alex", got)
+	})
+
+	t.Run("jsonPath/nested", func(t *testing.T) {
+		got, err := call("jsonPath", `{"data":{"token":"abc123"}}`, "data.token")
+		require.NoError(t, err)
+		assert.Equal(t, "abc123", got)
+	})
+
+	t.Run("jsonPath/missing", func(t *testing.T) {
+		_, err := call("jsonPath", `{"name":"alex"}`, "missing")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("jsonPath/invalid_json", func(t *testing.T) {
+		_, err := call("jsonPath", `not json`, "key")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid JSON")
+	})
+}

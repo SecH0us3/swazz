@@ -7,16 +7,20 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"swazz-engine/internal/swagger"
 )
@@ -486,11 +490,117 @@ func (n *exprNode) cacheKey() string {
 
 func (r *Runner) callBuiltin(name string, args []string) (string, error) {
 	switch name {
+
+	// ── Generation ──────────────────────────────────────────────
+
 	case "uuid":
 		if len(args) != 0 {
 			return "", fmt.Errorf("uuid() takes 0 arguments, got %d", len(args))
 		}
 		return uuid.New().String(), nil
+
+	// ── Crypto ──────────────────────────────────────────────────
+
+	case "sha256":
+		if len(args) != 1 {
+			return "", fmt.Errorf("sha256() takes 1 argument, got %d", len(args))
+		}
+		h := sha256.Sum256([]byte(args[0]))
+		return hex.EncodeToString(h[:]), nil
+
+	case "hmacSHA256":
+		if len(args) != 2 {
+			return "", fmt.Errorf("hmacSHA256() takes 2 arguments (message, key), got %d", len(args))
+		}
+		mac := hmac.New(sha256.New, []byte(args[1]))
+		mac.Write([]byte(args[0]))
+		return hex.EncodeToString(mac.Sum(nil)), nil
+
+	// ── Encoding ────────────────────────────────────────────────
+
+	case "base64":
+		if len(args) != 1 {
+			return "", fmt.Errorf("base64() takes 1 argument, got %d", len(args))
+		}
+		return base64.StdEncoding.EncodeToString([]byte(args[0])), nil
+
+	case "hex":
+		if len(args) != 1 {
+			return "", fmt.Errorf("hex() takes 1 argument, got %d", len(args))
+		}
+		return hex.EncodeToString([]byte(args[0])), nil
+
+	// ── String manipulation ─────────────────────────────────────
+
+	case "concat":
+		if len(args) == 0 {
+			return "", nil
+		}
+		var b strings.Builder
+		for _, a := range args {
+			b.WriteString(a)
+		}
+		return b.String(), nil
+
+	case "upper":
+		if len(args) != 1 {
+			return "", fmt.Errorf("upper() takes 1 argument, got %d", len(args))
+		}
+		return strings.ToUpper(args[0]), nil
+
+	case "lower":
+		if len(args) != 1 {
+			return "", fmt.Errorf("lower() takes 1 argument, got %d", len(args))
+		}
+		return strings.ToLower(args[0]), nil
+
+	case "trim":
+		if len(args) != 1 {
+			return "", fmt.Errorf("trim() takes 1 argument, got %d", len(args))
+		}
+		return strings.TrimSpace(args[0]), nil
+
+	case "substring":
+		if len(args) != 3 {
+			return "", fmt.Errorf("substring() takes 3 arguments (value, start, end), got %d", len(args))
+		}
+		start, err := strconv.Atoi(args[1])
+		if err != nil {
+			return "", fmt.Errorf("substring(): start must be integer, got %q", args[1])
+		}
+		end, err := strconv.Atoi(args[2])
+		if err != nil {
+			return "", fmt.Errorf("substring(): end must be integer, got %q", args[2])
+		}
+		s := args[0]
+		if start < 0 {
+			start = 0
+		}
+		if end > len(s) {
+			end = len(s)
+		}
+		if start >= end {
+			return "", nil
+		}
+		return s[start:end], nil
+
+	// ── JSON ────────────────────────────────────────────────────
+
+	case "jsonPath":
+		if len(args) != 2 {
+			return "", fmt.Errorf("jsonPath() takes 2 arguments (jsonString, path), got %d", len(args))
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(args[0]), &parsed); err != nil {
+			return "", fmt.Errorf("jsonPath(): invalid JSON: %w", err)
+		}
+		val := extractJSONPath(parsed, args[1])
+		if val == nil {
+			return "", fmt.Errorf("jsonPath(): path %q not found", args[1])
+		}
+		return fmt.Sprintf("%v", val), nil
+
+	// ── Legacy / PoW ────────────────────────────────────────────
 
 	case "solvePoW":
 		if len(args) != 2 {
