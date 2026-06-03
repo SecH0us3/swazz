@@ -80,6 +80,73 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
   - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
 
+## Authentication Sequences & Variable Evaluation 🔐
+
+Swazz supports complex, multi-step authentication sequences (`auth_sequence` in the configuration file). This is extremely useful for APIs that require logging in, acquiring tokens or session IDs, solving Proof-of-Work (PoW) challenges, or computing cryptographically signed headers before fuzzing.
+
+### Configuration Fields in `auth_sequence`
+
+Each step in `auth_sequence` can define the following fields:
+*   `method`: HTTP method (e.g., `"GET"`, `"POST"`, `"PUT"`).
+*   `url`: The request URL (absolute or relative to `base_url`).
+*   `headers`: Headers to include in this step's request.
+*   `body`: Request body data (JSON or string).
+*   `extract_cookies`: Array of cookie names to extract from the response and save globally.
+*   `extract_json`: Key-value mapping of response JSON fields (using dot-notation, e.g., `data.token`) to Global Header names.
+*   `extract_variables`: Key-value mapping of response JSON fields to template variable names.
+*   `set_variables`: Key-value mapping of template variable names to expressions utilizing built-in functions.
+
+### Template Substitution & Variables
+
+Variables extracted via `extract_variables` or computed via `set_variables` are stored in the global variable space. You can reference them in subsequent steps or any request by wrapping the variable name in double curly braces: `{{variable_name}}`.
+
+```json
+  "auth_sequence": [
+    {
+      "method": "POST",
+      "url": "/api/challenge",
+      "extract_variables": {
+        "challenge_id": "raw_challenge"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/solve",
+      "set_variables": {
+        "solved_nonce": "solvePoW({{raw_challenge}}, 4)"
+      },
+      "body": {
+        "solution": "{{solved_nonce}}"
+      }
+    }
+  ]
+```
+
+### Built-in Template Functions
+
+You can use a rich set of built-in functions inside `set_variables` to generate or manipulate values:
+
+| Function | Description | Example / Output |
+| :--- | :--- | :--- |
+| **Generation** | | |
+| `uuid()` | Generates a new random UUID v4 string (non-deterministic). | `uuid()` |
+| **String Manipulation** | | |
+| `concat(a, b, ...)` | Concatenates any number of string arguments. | `concat("Bearer ", {{token}})` |
+| `upper(v)` | Converts the string to uppercase. | `upper("secret")` &rarr; `"SECRET"` |
+| `lower(v)` | Converts the string to lowercase. | `lower("SECRET")` &rarr; `"secret"` |
+| `trim(v)` | Trims leading and trailing whitespace. | `trim("  data  ")` &rarr; `"data"` |
+| `substring(v, start, end)` | Clamps bounds and extracts a 0-indexed substring from `start` (inclusive) to `end` (exclusive). | `substring("abcdef", 1, 4)` &rarr; `"bcd"` |
+| **Crypto** | | |
+| `sha256(v)` | Computes the SHA256 hash of the input string and returns it as a lowercase hex string. | `sha256("hello")` &rarr; `"2cf24dba..."` |
+| `hmacSHA256(msg, key)` | Computes the HMAC-SHA256 signature of `msg` using `key` and returns it as a lowercase hex string. | `hmacSHA256("message", "secret")` |
+| **Encoding** | | |
+| `base64(v)` | Encodes the input string to standard Base64. | `base64("hello world")` &rarr; `"aGVsbG8gd29ybGQ="` |
+| `hex(v)` | Encodes the input string to its hexadecimal representation. | `hex("AB")` &rarr; `"4142"` |
+| **JSON** | | |
+| `jsonPath(jsonStr, path)` | Parses `jsonStr` and extracts a value using dot-notation (e.g. `data.token`). | `jsonPath({{response_body}}, "data.token")` |
+| **Legacy & Proof-of-Work** | | |
+| `solvePoW(challenge, difficulty)` | Solves a Proof-of-Work challenge by finding an integer nonce such that the SHA256 hash of the concatenated `challenge + nonce` (hex encoded) starts with `difficulty` number of zero nibbles. | `solvePoW("challenge_token", 4)` |
+
 ## GraphQL Schema Parsing & Fuzzing 🛡️
 
 Swazz supports fuzzing APIs that use GraphQL. It achieves this by retrieving the GraphQL schema via Introspection, mapping individual queries and mutations to virtual HTTP POST endpoints, and fuzzing their variables.
