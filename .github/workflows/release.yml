@@ -37,7 +37,7 @@ jobs:
   release-binaries:
     name: Build and Release Binaries
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/')
+    if: needs.changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -106,7 +106,7 @@ jobs:
   docker-release:
     name: Build and Push Docker Image
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/')
+    if: needs.changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       REPO_LC: ""
@@ -224,7 +224,7 @@ jobs:
     needs: [changes, docker-release]
     if: |
       always() && github.ref == 'refs/heads/master' &&
-      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true') &&
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch') &&
       (needs.docker-release.result == 'success' || needs.docker-release.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
