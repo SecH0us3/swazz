@@ -7,7 +7,7 @@ import (
 
 func TestToXML(t *testing.T) {
 	data := map[string]any{
-		"name": "test",
+		"name":  "test",
 		"items": []any{1, 2},
 		"details": map[string]any{
 			"id": 123,

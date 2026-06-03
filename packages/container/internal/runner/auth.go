@@ -7,8 +7,11 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -18,7 +21,6 @@ import (
 
 	"swazz-engine/internal/swagger"
 )
-
 
 func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.AuthStep, initialHeaders map[string]string, initialCookies map[string]string) (map[string]string, map[string]string, error) {
 	cfg := r.config
@@ -41,6 +43,48 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 	defer reqCancel()
 
 	for i, step := range sequence {
+
+		if len(step.SetVariables) > 0 {
+			cache := make(map[string]string) // cache function calls for this step
+
+			r.configMu.Lock()
+			if cfg.Variables == nil {
+				cfg.Variables = make(map[string]any)
+			}
+			r.configMu.Unlock()
+
+			for varName, expr := range step.SetVariables {
+				var result string
+				var err error
+
+				expr = strings.TrimSpace(expr)
+				if looksLikeFuncCall(expr) {
+					node, parseErr := parseExpression(expr)
+					if parseErr != nil {
+						return nil, nil, fmt.Errorf("auth step %d: set_variables[%q]: parse error: %w",
+							i+1, varName, parseErr)
+					}
+					result, err = r.evalExpr(node, cache)
+					if err != nil {
+						return nil, nil, fmt.Errorf("auth step %d: set_variables[%q]: eval error: %w",
+							i+1, varName, err)
+					}
+				} else {
+					r.configMu.RLock()
+					result = r.subVarsLocked(expr)
+					r.configMu.RUnlock()
+				}
+
+				r.configMu.Lock()
+				cfg.Variables[varName] = result
+				r.configMu.Unlock()
+
+				fmt.Printf("    [Auth] set_variables: {{%s}} = %q\n", varName, result)
+			}
+
+			r.updateReplacer()
+		}
+
 		fullURL := r.subVars(step.URL)
 		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
 			fullURL = strings.TrimRight(cfg.BaseURL, "/") + "/" + strings.TrimLeft(fullURL, "/")
@@ -257,4 +301,217 @@ func (r *Runner) substituteInObject(v any) any {
 	default:
 		return v
 	}
+}
+
+// exprNode represents an AST node for an expression in set_variables.
+// If Args == nil, it's a variable reference.
+// If Args != nil (including empty slice), it's a function call.
+type exprNode struct {
+	name string
+	args []*exprNode
+}
+
+type exprParser struct {
+	src string
+	pos int
+}
+
+func parseExpression(src string) (*exprNode, error) {
+	p := &exprParser{src: strings.TrimSpace(src)}
+	node, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	p.skipWS()
+	if p.pos != len(p.src) {
+		return nil, fmt.Errorf("unexpected input at pos %d: %q", p.pos, p.src[p.pos:])
+	}
+	return node, nil
+}
+
+func (p *exprParser) peek() byte {
+	if p.pos < len(p.src) {
+		return p.src[p.pos]
+	}
+	return 0
+}
+
+func (p *exprParser) consume() byte {
+	b := p.peek()
+	p.pos++
+	return b
+}
+
+func (p *exprParser) skipWS() {
+	for p.pos < len(p.src) && (p.src[p.pos] == ' ' || p.src[p.pos] == '	') {
+		p.pos++
+	}
+}
+
+func (p *exprParser) readIdent() string {
+	start := p.pos
+	for p.pos < len(p.src) {
+		c := p.src[p.pos]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_' {
+			p.pos++
+		} else {
+			break
+		}
+	}
+	return p.src[start:p.pos]
+}
+
+func (p *exprParser) parseExpr() (*exprNode, error) {
+	p.skipWS()
+	name := p.readIdent()
+	if name == "" {
+		return nil, fmt.Errorf("expected identifier at pos %d", p.pos)
+	}
+	p.skipWS()
+	if p.peek() != '(' {
+		return &exprNode{name: name}, nil // varRef
+	}
+	p.consume() // '('
+	args, err := p.parseArgList()
+	if err != nil {
+		return nil, err
+	}
+	p.skipWS()
+	if p.consume() != ')' {
+		return nil, fmt.Errorf("expected ')' at pos %d", p.pos)
+	}
+	return &exprNode{name: name, args: args}, nil
+}
+
+func (p *exprParser) parseArgList() ([]*exprNode, error) {
+	args := make([]*exprNode, 0)
+	p.skipWS()
+	if p.peek() == ')' {
+		return args, nil // пустой список
+	}
+	for {
+		arg, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, arg)
+		p.skipWS()
+		if p.peek() == ',' {
+			p.consume()
+		} else {
+			break
+		}
+	}
+	return args, nil
+}
+
+func looksLikeFuncCall(s string) bool {
+	s = strings.TrimSpace(s)
+	for i, c := range s {
+		if c == '(' {
+			return i > 0
+		}
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_') {
+			return false
+		}
+	}
+	return false
+}
+
+// evalExpr evaluates an AST node and returns a string result.
+// cache - function results within a single evaluateSetVariables call,
+// ensures that uuid() with the same cacheKey returns the same value.
+func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, error) {
+	if node.args == nil {
+		// varRef: read from cfg.Variables
+		r.configMu.RLock()
+		val := r.config.Variables[node.name]
+		r.configMu.RUnlock()
+		if val == nil {
+			return "", fmt.Errorf("undefined variable %q", node.name)
+		}
+		return fmt.Sprintf("%v", val), nil
+	}
+
+	// funcCall: check cache
+	cacheKey := node.cacheKey()
+	if v, ok := cache[cacheKey]; ok {
+		return v, nil
+	}
+
+	// Evaluate arguments recursively
+	args := make([]string, len(node.args))
+	for i, a := range node.args {
+		v, err := r.evalExpr(a, cache)
+		if err != nil {
+			return "", fmt.Errorf("in arg %d of %s(): %w", i+1, node.name, err)
+		}
+		args[i] = v
+	}
+
+	result, err := r.callBuiltin(node.name, args)
+	if err != nil {
+		return "", err
+	}
+	cache[cacheKey] = result
+	return result, nil
+}
+
+// cacheKey builds a unique cache key based on name and arguments.
+func (n *exprNode) cacheKey() string {
+	if len(n.args) == 0 {
+		return n.name + "()"
+	}
+	parts := make([]string, len(n.args))
+	for i, a := range n.args {
+		parts[i] = a.cacheKey()
+	}
+	return n.name + "(" + strings.Join(parts, ",") + ")"
+}
+
+func (r *Runner) callBuiltin(name string, args []string) (string, error) {
+	switch name {
+	case "uuid":
+		if len(args) != 0 {
+			return "", fmt.Errorf("uuid() takes 0 arguments, got %d", len(args))
+		}
+		return uuid.New().String(), nil
+
+	case "solvePoW":
+		if len(args) != 2 {
+			return "", fmt.Errorf("solvePoW() takes 2 arguments (challenge, difficulty), got %d", len(args))
+		}
+		challenge := args[0]
+		difficulty, err := strconv.Atoi(args[1])
+		if err != nil {
+			return "", fmt.Errorf("solvePoW(): difficulty must be integer, got %q", args[1])
+		}
+		return solvePoW(challenge, difficulty)
+
+	default:
+		return "", fmt.Errorf("unknown function %q", name)
+	}
+}
+
+// solvePoW finds a nonce such that hex(SHA256(challenge+nonce)) starts with 'difficulty' zeroes.
+func solvePoW(challenge string, difficulty int) (string, error) {
+	if difficulty < 0 {
+		return "", fmt.Errorf("solvePoW: difficulty must be >= 0, got %d", difficulty)
+	}
+	if difficulty == 0 {
+		return "0", nil
+	}
+	prefix := strings.Repeat("0", difficulty)
+	h := sha256.New()
+	for nonce := 0; nonce < 10_000_000; nonce++ {
+		nonceStr := strconv.Itoa(nonce)
+		h.Reset()
+		h.Write([]byte(challenge + nonceStr))
+		if strings.HasPrefix(hex.EncodeToString(h.Sum(nil)), prefix) {
+			return nonceStr, nil
+		}
+	}
+	return "", fmt.Errorf("solvePoW: nonce not found in 10M iterations (difficulty=%d)", difficulty)
 }

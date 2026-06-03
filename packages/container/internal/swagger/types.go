@@ -71,6 +71,7 @@ type AuthStep struct {
 	ExtractCookies   []string          `json:"extract_cookies,omitempty"`   // If empty, all cookies are saved
 	ExtractJSON      map[string]string `json:"extract_json,omitempty"`      // Map JSON field name (or simple path) to Global Header name
 	ExtractVariables map[string]string `json:"extract_variables,omitempty"` // Map JSON field name to template variable name
+	SetVariables     map[string]string `json:"set_variables,omitempty"`     // Map variable name to expression
 }
 
 // AuthIdentity represents an authentication context (like User B).
@@ -168,26 +169,26 @@ type FuzzResult struct {
 // Payload and ResponseBody are replaced with short preview strings (≤200 chars).
 // This prevents the browser from ever receiving megabyte-sized JSON strings.
 type FuzzResultSSE struct {
-	ID              string            `json:"id"`
-	Endpoint        string            `json:"endpoint"`
-	ResolvedPath    string            `json:"resolvedPath"`
-	Method          string            `json:"method"`
-	Profile         FuzzingProfile    `json:"profile"`
-	Status          int               `json:"status"`
-	Duration        int64             `json:"duration"`
-	PayloadSize     int               `json:"payloadSize"`
-	PayloadPreview  string            `json:"payloadPreview,omitempty"`
-	ResponsePreview string            `json:"responsePreview,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	Timestamp       int64             `json:"timestamp"`
-	Retries         int               `json:"retries"`
-	ResponseSize     int64             `json:"responseSize"`
-	HasHeaderInjection bool            `json:"hasHeaderInjection"`
-	ResponseHeaders  http.Header       `json:"responseHeaders,omitempty"`
-	RequestHeaders   map[string]string `json:"requestHeaders,omitempty"`
-	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
-	Identity         string            `json:"identity,omitempty"`
-	OWASPCategory    []string          `json:"owaspCategory,omitempty"`
+	ID                 string            `json:"id"`
+	Endpoint           string            `json:"endpoint"`
+	ResolvedPath       string            `json:"resolvedPath"`
+	Method             string            `json:"method"`
+	Profile            FuzzingProfile    `json:"profile"`
+	Status             int               `json:"status"`
+	Duration           int64             `json:"duration"`
+	PayloadSize        int               `json:"payloadSize"`
+	PayloadPreview     string            `json:"payloadPreview,omitempty"`
+	ResponsePreview    string            `json:"responsePreview,omitempty"`
+	Error              string            `json:"error,omitempty"`
+	Timestamp          int64             `json:"timestamp"`
+	Retries            int               `json:"retries"`
+	ResponseSize       int64             `json:"responseSize"`
+	HasHeaderInjection bool              `json:"hasHeaderInjection"`
+	ResponseHeaders    http.Header       `json:"responseHeaders,omitempty"`
+	RequestHeaders     map[string]string `json:"requestHeaders,omitempty"`
+	AnalyzerFindings   []AnalysisFinding `json:"analyzerFindings,omitempty"`
+	Identity           string            `json:"identity,omitempty"`
+	OWASPCategory      []string          `json:"owaspCategory,omitempty"`
 }
 
 // RunStats tracks live statistics during a fuzzing run.

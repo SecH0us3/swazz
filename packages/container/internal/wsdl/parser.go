@@ -22,10 +22,10 @@ type Types struct {
 }
 
 type Schema struct {
-	XMLName         xml.Name         `xml:"schema"`
-	TargetNamespace string           `xml:"targetNamespace,attr"`
-	Elements        []Element        `xml:"element"`
-	ComplexTypes    []ComplexType    `xml:"complexType"`
+	XMLName         xml.Name      `xml:"schema"`
+	TargetNamespace string        `xml:"targetNamespace,attr"`
+	Elements        []Element     `xml:"element"`
+	ComplexTypes    []ComplexType `xml:"complexType"`
 }
 
 type Element struct {

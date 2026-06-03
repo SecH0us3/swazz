@@ -2,9 +2,16 @@ package runner
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strings"
 	"swazz-engine/internal/swagger"
 	"testing"
 )
@@ -117,5 +124,244 @@ func TestRunAuthSequenceFailures(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("Expected error for 500 status code, got nil")
+	}
+}
+
+func TestParseExpression(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantErr bool
+		check   func(t *testing.T, n *exprNode)
+	}{
+		{
+			input: "uuid()",
+			check: func(t *testing.T, n *exprNode) {
+				require.Equal(t, "uuid", n.name)
+				require.NotNil(t, n.args)
+				require.Len(t, n.args, 0)
+			},
+		},
+		{
+			input: "solvePoW(serverChallenge, proofDifficulty)",
+			check: func(t *testing.T, n *exprNode) {
+				require.Equal(t, "solvePoW", n.name)
+				require.Len(t, n.args, 2)
+				require.Equal(t, "serverChallenge", n.args[0].name)
+				require.Nil(t, n.args[0].args)
+				require.Equal(t, "proofDifficulty", n.args[1].name)
+			},
+		},
+		{
+			input: "f(g(a), b)",
+			check: func(t *testing.T, n *exprNode) {
+				require.Equal(t, "f", n.name)
+				require.Len(t, n.args, 2)
+				require.Equal(t, "g", n.args[0].name)
+				require.Len(t, n.args[0].args, 1)
+				require.Equal(t, "a", n.args[0].args[0].name)
+			},
+		},
+		{input: "()", wantErr: true},
+		{input: "f(", wantErr: true},
+		{input: "f(a,)", wantErr: true},
+		{input: "", wantErr: true},
+		{input: "f() extra", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			node, err := parseExpression(tc.input)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			tc.check(t, node)
+		})
+	}
+}
+
+func TestLooksLikeFuncCall(t *testing.T) {
+	require.True(t, looksLikeFuncCall("uuid()"))
+	require.True(t, looksLikeFuncCall("solvePoW(a, b)"))
+	require.True(t, looksLikeFuncCall("  f(x)"))
+	require.False(t, looksLikeFuncCall("{{operationId}}"))
+	require.False(t, looksLikeFuncCall("literal string"))
+	require.False(t, looksLikeFuncCall("staging"))
+	require.False(t, looksLikeFuncCall(""))
+}
+
+func TestSolvePoW(t *testing.T) {
+	challenge := "ABCD1234ABCD1234ABCD1234ABCD1234"
+	nonce, err := solvePoW(challenge, 2)
+	require.NoError(t, err)
+
+	h := sha256.Sum256([]byte(challenge + nonce))
+	assert.True(t, strings.HasPrefix(hex.EncodeToString(h[:]), "00"),
+		"hash should start with 00, got %s", hex.EncodeToString(h[:]))
+}
+
+func TestSolvePoWDifficultyZero(t *testing.T) {
+	nonce, err := solvePoW("ANYTHING", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "0", nonce)
+}
+
+func TestSolvePoWNegativeDifficulty(t *testing.T) {
+	_, err := solvePoW("X", -1)
+	require.Error(t, err)
+}
+
+func TestRunAuthSequenceSetVariables(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/auth/token" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"operationId": "op-test-1",
+				"challengeData": map[string]any{
+					"challenge":       "ABCD1234ABCD1234ABCD1234ABCD1234",
+					"proofDifficulty": 2,
+				},
+			})
+			return
+		}
+		if r.URL.Path == "/api/auth/challenge" {
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if body["operationId"] != "op-test-1" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+
+			// Verify encryptedKey is UUID
+			uuidRegex := regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+			if !uuidRegex.MatchString(body["encryptedKey"]) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Verify PoW challenge
+			nonce := body["challenge"]
+			h := sha256.Sum256([]byte("ABCD1234ABCD1234ABCD1234ABCD1234" + nonce))
+			if !strings.HasPrefix(hex.EncodeToString(h[:]), "00") {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"twoFactorPublicKey": "pub-key-xyz",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Method: "POST",
+				URL:    "/api/auth/token",
+				ExtractVariables: map[string]string{
+					"operationId":                   "operationId",
+					"challengeData.challenge":       "serverChallenge",
+					"challengeData.proofDifficulty": "proofDifficulty",
+				},
+			},
+			{
+				Method: "POST",
+				URL:    "/api/auth/challenge",
+				SetVariables: map[string]string{
+					"encryptedKey": "uuid()",
+					"powAnswer":    "solvePoW(serverChallenge, proofDifficulty)",
+					"opIdCopy":     "{{operationId}}",
+					"literalStr":   "staging",
+				},
+				Body: map[string]any{
+					"operationId":  "{{operationId}}",
+					"challenge":    "{{powAnswer}}",
+					"encryptedKey": "{{encryptedKey}}",
+				},
+				ExtractVariables: map[string]string{
+					"twoFactorPublicKey": "twoFactorPublicKey",
+				},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	err := r.RunAuthSequence(context.Background())
+	require.NoError(t, err)
+
+	uuidRegex := regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+
+	assert.Equal(t, "pub-key-xyz", cfg.Variables["twoFactorPublicKey"])
+	assert.Regexp(t, uuidRegex, cfg.Variables["encryptedKey"])
+	assert.NotRegexp(t, uuidRegex, cfg.Variables["powAnswer"])
+	assert.Equal(t, "op-test-1", cfg.Variables["opIdCopy"])
+	assert.Equal(t, "staging", cfg.Variables["literalStr"])
+
+	// Verify nonce manually again here just in case
+	nonce := fmt.Sprintf("%v", cfg.Variables["powAnswer"])
+	h := sha256.Sum256([]byte("ABCD1234ABCD1234ABCD1234ABCD1234" + nonce))
+	assert.True(t, strings.HasPrefix(hex.EncodeToString(h[:]), "00"))
+}
+
+func TestSetVariablesErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		setVariables map[string]string
+		wantErrMsg   string
+	}{
+		{
+			name:         "UnknownFunction",
+			setVariables: map[string]string{"x": "unknownFunc()"},
+			wantErrMsg:   "unknown function \"unknownFunc\"",
+		},
+		{
+			name:         "UndefinedVariable",
+			setVariables: map[string]string{"x": "solvePoW(missingVar, proofDifficulty)"},
+			wantErrMsg:   "undefined variable \"missingVar\"",
+		},
+		{
+			name:         "ParseError",
+			setVariables: map[string]string{"x": "uuid("},
+			wantErrMsg:   "parse error",
+		},
+		{
+			name:         "WrongArgCount",
+			setVariables: map[string]string{"x": "solvePoW(onlyOneArg)"},
+			wantErrMsg:   "solvePoW() takes 2 arguments (challenge, difficulty), got 1",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &swagger.Config{
+				Variables: map[string]any{
+					"proofDifficulty": "2",
+					"onlyOneArg":      "1",
+				},
+				AuthSequence: []swagger.AuthStep{
+					{
+						Method:       "GET",
+						URL:          "http://localhost",
+						SetVariables: tc.setVariables,
+					},
+				},
+			}
+			r := New(cfg, nil)
+			err := r.RunAuthSequence(context.Background())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErrMsg)
+		})
 	}
 }

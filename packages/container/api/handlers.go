@@ -1,27 +1,27 @@
 package api
 
 import (
-	"swazz-engine/internal/wsdl"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"os"
+	"strings"
+	"swazz-engine/internal/wsdl"
 	"sync"
 	"time"
 
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/oob"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
-	"swazz-engine/internal/oob"
 
 	"github.com/gin-gonic/gin"
 )
@@ -39,7 +39,7 @@ type Handler struct {
 func NewHandler() *Handler {
 	allowPrivate := os.Getenv("SWAZZ_ALLOW_PRIVATE_IPS") == "true"
 	return &Handler{
-		httpClient: security.NewSSRFProtectedClient(30 * time.Second, allowPrivate),
+		httpClient: security.NewSSRFProtectedClient(30*time.Second, allowPrivate),
 	}
 }
 
@@ -521,7 +521,7 @@ func (h *Handler) GetPayloadCatalog(c *gin.Context) {
 
 func (h *Handler) HandleOOB(c *gin.Context) {
 	uuidStr := c.Param("uuid")
-	
+
 	ctx, ok := oob.GlobalStore.GetAndRemoveUUID(uuidStr)
 	if !ok {
 		// Not found or already processed
@@ -539,7 +539,7 @@ func (h *Handler) HandleOOB(c *gin.Context) {
 	// Try to broadcast the finding
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.runner != nil && h.runner.IsRunning() {
 		// Wrap it in a pseudo FuzzResult
 		result := &swagger.FuzzResult{
@@ -568,10 +568,10 @@ func (h *Handler) HandleOOB(c *gin.Context) {
 			result.RequestHeaders = ctx.Request.Headers
 			result.Payload = ctx.Request.Body
 		}
-		
+
 		h.results = append(h.results, result)
 		h.runner.Broadcast(runner.Event{Type: runner.EventResult, Data: result})
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{"status": "processed"})
 }
