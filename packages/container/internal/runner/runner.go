@@ -1158,6 +1158,12 @@ type ConcurrencyLimiter struct {
 }
 
 func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
+	if initial <= 0 {
+		initial = 5
+	}
+	if initial > 1000 {
+		initial = 1000
+	}
 	l := &ConcurrencyLimiter{target: initial}
 	l.cond = sync.NewCond(&l.mu)
 	return l

@@ -282,6 +282,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		fmt.Printf("BOLA: Concurrency limit exceeded (max 1000)\n")
 		return nil
 	}
+	r.limiter.SetTarget(concurrency)
 
 	fmt.Println("Running Access Control & BOLA/IDOR testing phase...")
 
