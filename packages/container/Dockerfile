@@ -1,7 +1,7 @@
 # === DOCKERFILE FOR CLOUDFLARE CONTAINERS (AMD64 / Linux x64) ===
 
 # Stage 1: Build Go Application
-FROM golang:alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS builder
+FROM --platform=$BUILDPLATFORM golang:alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /app
