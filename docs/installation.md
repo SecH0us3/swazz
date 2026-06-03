@@ -52,7 +52,7 @@ npm run dev
 
 ### Docker (Recommended for Production)
 
-We publish the Swazz engine Docker container to the GitHub Container Registry (`ghcr.io/sech0us3/swazz`). For security reasons and reproducibility, we **never use the `latest` tag**.
+We publish the Swazz engine Docker container to the GitHub Container Registry ([ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)). For security reasons and reproducibility, we **never use the `latest` tag**.
 
 Always use a specific commit hash. You must specify the hash of the new build you want to use. You can find these hashes in our [Release notes](https://github.com/SecH0us3/swazz/releases) or commit history.
 
