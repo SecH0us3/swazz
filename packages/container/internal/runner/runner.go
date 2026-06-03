@@ -353,7 +353,14 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 				baseIter = minNeeded
 			}
 			if !hasF {
-				baseIter = 1
+				if p == swagger.ProfileMalicious {
+					baseIter = minNeeded
+					if baseIter < 1 {
+						baseIter = 1
+					}
+				} else {
+					baseIter = 1
+				}
 			}
 			totalPlanned += int64(baseIter)
 		}

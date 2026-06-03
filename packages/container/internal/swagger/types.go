@@ -71,6 +71,7 @@ type AuthStep struct {
 	ExtractCookies   []string          `json:"extract_cookies,omitempty"`   // If empty, all cookies are saved
 	ExtractJSON      map[string]string `json:"extract_json,omitempty"`      // Map JSON field name (or simple path) to Global Header name
 	ExtractVariables map[string]string `json:"extract_variables,omitempty"` // Map JSON field name to template variable name
+	SetVariables     map[string]string `json:"set_variables,omitempty"`     // Map variable name to expression
 }
 
 // AuthIdentity represents an authentication context (like User B).
