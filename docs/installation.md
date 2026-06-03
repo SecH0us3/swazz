@@ -52,17 +52,27 @@ npm run dev
 
 ### Docker (Recommended for Production)
 
-We publish the Swazz engine Docker container to the GitHub Container Registry ([ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)). For security reasons and reproducibility, we **never use the `latest` tag**.
+We publish two Docker images to the GitHub Container Registry:
+- **API Server & Web Dashboard**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)
+- **Headless CLI Fuzzer**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 
-Always use a specific commit hash. You must specify the hash of the new build you want to use. You can find these hashes in our [Release notes](https://github.com/SecH0us3/swazz/releases) or commit history.
+For security reasons and to guarantee reproducibility, we **never use the `latest` tag**. Always use a specific commit SHA (replace `<COMMIT_SHA>` with the actual hash from our [Releases](https://github.com/SecH0us3/swazz/releases)).
 
+#### Running the API Server (Web Dashboard)
 ```bash
-# Replace <COMMIT_SHA> with the actual hash from the latest build/release:
 docker pull ghcr.io/sech0us3/swazz:<COMMIT_SHA>
 # The image exposes the backend service on container port 8080. Choose any host port you prefer:
 docker run -p 8080:8080 ghcr.io/sech0us3/swazz:<COMMIT_SHA>
-# If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
 ```
+
+#### Running the Headless CLI
+```bash
+docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
+# Run fuzzing directly (mount your config file using a volume):
+docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config /app/swazz.config.json
+```
+
+If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
 
 ### CLI Mode (Backend Only)
 
