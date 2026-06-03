@@ -313,7 +313,6 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	
 	var candMu sync.Mutex
 	var candWg sync.WaitGroup
-	candSem := make(chan struct{}, concurrency)
 
 	for _, ep := range r.config.Endpoints {
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
@@ -322,12 +321,12 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		}
 		
 		candWg.Add(1)
-		candSem <- struct{}{}
+		r.limiter.Acquire()
 		
 		go func(ep swagger.EndpointConfig) {
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
 		if hasSuccessCandidate[key] {
-			<-candSem
+			r.limiter.Release()
 			candWg.Done()
 			return
 		}
@@ -500,7 +499,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			})
 		}
 		
-		<-candSem
+		r.limiter.Release()
 		candWg.Done()
 	}(ep)
 	}
@@ -509,17 +508,16 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	var bolaResults []*swagger.FuzzResult
 	var bolaMu sync.Mutex
 	var bolaWg sync.WaitGroup
-	bolaSem := make(chan struct{}, concurrency)
 
 	// 3. Replay requests
 	for _, cand := range candidates {
 		bolaWg.Add(1)
-		bolaSem <- struct{}{}
+		r.limiter.Acquire()
 		
 		go func(cand *swagger.FuzzResult) {
 		ep, found := r.findEndpointConfig(cand.Endpoint, cand.Method)
 		if !found {
-			<-bolaSem
+			r.limiter.Release()
 			bolaWg.Done()
 			return
 		}
@@ -829,7 +827,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			}
 		}
 		
-		<-bolaSem
+		r.limiter.Release()
 		bolaWg.Done()
 	}(cand)
 	}

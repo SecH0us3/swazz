@@ -86,6 +86,7 @@ type Runner struct {
 	idSources    sync.Map // maps ID string -> source string
 	resultsMu sync.Mutex
 	allResults []*swagger.FuzzResult
+	limiter *ConcurrencyLimiter
 }
 
 // New creates a new Runner.
@@ -108,6 +109,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		sizeBaselines: &sync.Map{},
 		timeBaselines: &sync.Map{},
 	}
+	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
 	r.pauseCond = sync.NewCond(&r.pauseMu)
 	r.updateReplacer()
 	// Publish initial empty stats snapshot.
@@ -186,14 +188,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
 	}
 
-	concurrency := r.config.Settings.Concurrency
-	if concurrency <= 0 {
-		concurrency = 5
-	}
-	if concurrency > 1000 {
-		return fmt.Errorf("concurrency limit exceeded (max 1000)")
-	}
-	sem := make(chan struct{}, concurrency)
+	r.limiter.SetTarget(r.config.Settings.Concurrency)
 	var wg sync.WaitGroup
 
 	for _, endpoint := range r.config.Endpoints {
@@ -202,12 +197,12 @@ func (r *Runner) Start(ctx context.Context) error {
 		}
 		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
 		if _, ok := r.sizeBaselines.Load(key); !ok {
-			sem <- struct{}{}
+			r.limiter.Acquire()
 			wg.Add(1)
 
 			go func(ep swagger.EndpointConfig) {
 				defer func() {
-					<-sem
+					r.limiter.Release()
 					wg.Done()
 				}()
 
@@ -417,15 +412,6 @@ func (r *Runner) fuzzEndpoint(
 	}
 
 	isBodyMethod := !isNoBodyMethod(endpoint.Method)
-	concurrency := settings.Concurrency
-	if concurrency <= 0 {
-		concurrency = 5
-	}
-	if concurrency > 1000 {
-		return
-	}
-	sem := make(chan struct{}, concurrency)
-
 	enableDedup := profile == swagger.ProfileRandom
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
@@ -546,12 +532,12 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
-		sem <- struct{}{}
+		r.limiter.Acquire()
 		wg.Add(1)
 
 		go func(it int, p any, qp map[string]any, gh map[string]string) {
 			defer func() {
-				<-sem
+				r.limiter.Release()
 				wg.Done()
 			}()
 
@@ -1160,4 +1146,65 @@ func (r *Runner) getTimeBaselineMedian(method, path string) int64 {
 		return 0
 	}
 	return val.(*EndpointTimeBaseline).getMedian()
+}
+
+// ConcurrencyLimiter is a dynamic, thread-safe semaphore that allows
+// adjusting the worker limit on the fly.
+type ConcurrencyLimiter struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	target  int
+	current int
+}
+
+func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
+	l := &ConcurrencyLimiter{target: initial}
+	l.cond = sync.NewCond(&l.mu)
+	return l
+}
+
+func (l *ConcurrencyLimiter) SetTarget(target int) {
+	l.mu.Lock()
+	if target <= 0 {
+		target = 1
+	}
+	if target > 1000 {
+		target = 1000
+	}
+	l.target = target
+	l.cond.Broadcast()
+	l.mu.Unlock()
+}
+
+func (l *ConcurrencyLimiter) GetTarget() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.target
+}
+
+func (l *ConcurrencyLimiter) Acquire() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for l.current >= l.target {
+		l.cond.Wait()
+	}
+	l.current++
+}
+
+func (l *ConcurrencyLimiter) Release() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.current--
+	l.cond.Signal()
+}
+
+func (r *Runner) GetConcurrency() int {
+	return r.limiter.GetTarget()
+}
+
+func (r *Runner) SetConcurrency(c int) {
+	r.configMu.Lock()
+	r.config.Settings.Concurrency = c
+	r.configMu.Unlock()
+	r.limiter.SetTarget(c)
 }

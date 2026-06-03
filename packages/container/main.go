@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
+
 	"swazz-engine/api"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
@@ -368,11 +370,69 @@ func runCLI(args []string) {
 		}
 	}()
 
+	var oldState *term.State
+	isRaw := false
+	if state, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
+		oldState = state
+		isRaw = true
+	}
+
+	restoreTerm := func() {
+		if isRaw && oldState != nil {
+			_ = term.Restore(int(os.Stdin.Fd()), oldState)
+			isRaw = false
+		}
+	}
+	defer restoreTerm()
+
+	if isRaw {
+		go func() {
+			buf := make([]byte, 3)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if err != nil {
+					break
+				}
+				if n == 1 {
+					b := buf[0]
+					if b == 3 || b == 4 { // Ctrl+C or Ctrl+D
+						restoreTerm()
+						fmt.Println("\nStopping fuzzing run...")
+						r.Stop()
+						os.Exit(0)
+					}
+					if b == '+' || b == '=' {
+						c := r.GetConcurrency()
+						r.SetConcurrency(c + 1)
+					}
+					if b == '-' || b == '_' {
+						c := r.GetConcurrency()
+						if c > 1 {
+							r.SetConcurrency(c - 1)
+						}
+					}
+				} else if n >= 3 && buf[0] == 27 && buf[1] == 91 {
+					if buf[2] == 65 { // Up arrow
+						c := r.GetConcurrency()
+						r.SetConcurrency(c + 1)
+					} else if buf[2] == 66 { // Down arrow
+						c := r.GetConcurrency()
+						if c > 1 {
+							r.SetConcurrency(c - 1)
+						}
+					}
+				}
+			}
+		}()
+	}
+
 	fmt.Printf("Starting fuzz run on %d endpoints across %d profiles...\n", len(allEndpoints), len(cliCfg.Settings.Profiles))
 	if err := r.Start(ctx); err != nil {
+		restoreTerm()
 		log.Fatalf("Run failed: %v", err)
 	}
 
+	restoreTerm()
 	r.Unsubscribe(resultsCh)
 	fmt.Println("\nRun complete.")
 
@@ -518,12 +578,12 @@ func printProgress(stats swagger.RunStats) {
 		fmt.Printf("\033[%dA", numLinesPrinted)
 	}
 
-	fmt.Printf("⚡ \033[1;34mSWAZZ ENGINE\033[0m running...\033[K\n")
-	fmt.Printf("🎯 \033[1mProgress:\033[0m [%d%%] %d/%d reqs | %.1f rps\033[K\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec)
-	fmt.Printf("🌐 \033[1mActive:\033[0m   %s\033[K\n", ep)
+	fmt.Printf("⚡ \033[1;34mSWAZZ ENGINE\033[0m running... (Press +/- or Arrows to adjust concurrency)\033[K\r\n")
+	fmt.Printf("🎯 \033[1mProgress:\033[0m [%d%%] %d/%d reqs | %.1f rps (concurrency: %d)\033[K\r\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec, stats.Concurrency)
+	fmt.Printf("🌐 \033[1mActive:\033[0m   %s\033[K\r\n", ep)
 
 	if len(sortedProfiles) == 0 {
-		fmt.Printf("📊 \033[1mStatus:\033[0m   waiting...\033[K\n")
+		fmt.Printf("📊 \033[1mStatus:\033[0m   waiting...\033[K\r\n")
 	} else {
 		for _, p := range sortedProfiles {
 			var parts []string
@@ -554,7 +614,7 @@ func printProgress(stats swagger.RunStats) {
 			if len(statusStr) > 200 { // Increased limit because of more ANSI characters
 				statusStr = statusStr[:197] + "..."
 			}
-			fmt.Printf("📊 \033[1mStatus [%-10s]:\033[0m %s\033[K\n", p, statusStr)
+			fmt.Printf("📊 \033[1mStatus [%-10s]:\033[0m %s\033[K\r\n", p, statusStr)
 		}
 	}
 

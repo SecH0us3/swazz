@@ -80,6 +80,7 @@ func (r *Runner) publishSnapshot(stats *swagger.RunStats, iteration, totalIterat
 
 	// Merge atomic progress values set by the main loop
 	snap.TotalPlanned = r.totalPlanned.Load()
+	snap.Concurrency = r.GetConcurrency()
 	if ep, ok := r.currentEndpoint.Load().(string); ok {
 		snap.Progress.CurrentEndpoint = ep
 	}
