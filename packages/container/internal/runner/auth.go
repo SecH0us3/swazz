@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -338,7 +337,9 @@ func (p *exprParser) peek() byte {
 
 func (p *exprParser) consume() byte {
 	b := p.peek()
-	p.pos++
+	if p.pos < len(p.src) {
+		p.pos++
+	}
 	return b
 }
 
@@ -420,9 +421,16 @@ func looksLikeFuncCall(s string) bool {
 	return false
 }
 
+// nondeterministicBuiltins lists functions whose output changes between calls
+// even with identical arguments (e.g. uuid()). These must NOT be cached.
+var nondeterministicBuiltins = map[string]bool{
+	"uuid": true,
+}
+
 // evalExpr вычисляет AST-узел и возвращает строковый результат.
-// cache — результаты функций в рамках одного вызова evaluateSetVariables,
-// гарантирует что uuid() с одинаковым cacheKey вернёт одно значение.
+// cache — результаты детерминированных функций в рамках одного шага,
+// гарантирует что solvePoW(x, y) с одинаковыми аргументами не вычисляется дважды.
+// Non-deterministic functions (uuid) are never cached.
 func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, error) {
 	if node.args == nil {
 		// varRef: читаем из cfg.Variables
@@ -435,10 +443,13 @@ func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, erro
 		return fmt.Sprintf("%v", val), nil
 	}
 
-	// funcCall: проверяем кэш
+	// funcCall: check cache for deterministic functions only
 	cacheKey := node.cacheKey()
-	if v, ok := cache[cacheKey]; ok {
-		return v, nil
+	canCache := !nondeterministicBuiltins[node.name]
+	if canCache {
+		if v, ok := cache[cacheKey]; ok {
+			return v, nil
+		}
 	}
 
 	// Вычисляем аргументы рекурсивно
@@ -455,7 +466,9 @@ func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	cache[cacheKey] = result
+	if canCache {
+		cache[cacheKey] = result
+	}
 	return result, nil
 }
 
@@ -496,8 +509,8 @@ func (r *Runner) callBuiltin(name string, args []string) (string, error) {
 }
 
 // solvePoW ищет nonce такой, что hex(SHA256(challenge+nonce)) начинается с difficulty нулей.
-// Перебор: nonce = "0", "1", "2", ...
-// Лимит: 10 000 000 итераций (difficulty ≤ 6 — секунды, difficulty > 6 → error).
+// Zero-allocation hot loop: all buffers are pre-allocated, comparison is done on raw bytes.
+// Лимит: 10 000 000 итераций.
 func solvePoW(challenge string, difficulty int) (string, error) {
 	if difficulty < 0 {
 		return "", fmt.Errorf("solvePoW: difficulty must be >= 0, got %d", difficulty)
@@ -505,14 +518,38 @@ func solvePoW(challenge string, difficulty int) (string, error) {
 	if difficulty == 0 {
 		return "0", nil
 	}
-	prefix := strings.Repeat("0", difficulty)
+	if difficulty > 64 {
+		return "", fmt.Errorf("solvePoW: difficulty %d exceeds maximum SHA256 hex length of 64", difficulty)
+	}
+
+	challengeBytes := []byte(challenge)
 	h := sha256.New()
+	var hashBuf [sha256.Size]byte
+	var nonceBuf [20]byte // enough for strconv.AppendInt of any int64
+
 	for nonce := 0; nonce < 10_000_000; nonce++ {
-		nonceStr := strconv.Itoa(nonce)
 		h.Reset()
-		h.Write([]byte(challenge + nonceStr))
-		if strings.HasPrefix(hex.EncodeToString(h.Sum(nil)), prefix) {
-			return nonceStr, nil
+		h.Write(challengeBytes)
+		nonceBytes := strconv.AppendInt(nonceBuf[:0], int64(nonce), 10)
+		h.Write(nonceBytes)
+		hash := h.Sum(hashBuf[:0])
+
+		// Check leading zero nibbles directly on raw hash bytes
+		numZeroBytes := difficulty / 2
+		matched := true
+		for i := 0; i < numZeroBytes; i++ {
+			if hash[i] != 0 {
+				matched = false
+				break
+			}
+		}
+		if matched && difficulty%2 != 0 {
+			if hash[numZeroBytes]>>4 != 0 {
+				matched = false
+			}
+		}
+		if matched {
+			return string(nonceBytes), nil
 		}
 	}
 	return "", fmt.Errorf("solvePoW: nonce not found in 10M iterations (difficulty=%d)", difficulty)

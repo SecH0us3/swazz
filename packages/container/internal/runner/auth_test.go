@@ -365,3 +365,65 @@ func TestSetVariablesErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestUUIDProducesDifferentValues verifies that two uuid() calls in the same
+// set_variables step produce DIFFERENT UUIDs (regression test for caching bug).
+func TestUUIDProducesDifferentValues(t *testing.T) {
+	cfg := &swagger.Config{
+		Variables: make(map[string]any),
+	}
+	r := New(cfg, nil)
+
+	cache := make(map[string]string)
+	nodeA := &exprNode{name: "uuid", args: []*exprNode{}}
+	nodeB := &exprNode{name: "uuid", args: []*exprNode{}}
+
+	valA, err := r.evalExpr(nodeA, cache)
+	require.NoError(t, err)
+	valB, err := r.evalExpr(nodeB, cache)
+	require.NoError(t, err)
+
+	uuidRegex := regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+	assert.Regexp(t, uuidRegex, valA)
+	assert.Regexp(t, uuidRegex, valB)
+	assert.NotEqual(t, valA, valB, "two uuid() calls must produce different values")
+}
+
+// TestSolvePoWDifficultyTooHigh verifies the fast-fail guard for difficulty > 64.
+func TestSolvePoWDifficultyTooHigh(t *testing.T) {
+	_, err := solvePoW("ANYTHING", 65)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds maximum SHA256 hex length of 64")
+}
+
+// TestDeterministicFunctionCacheHit verifies that a deterministic function
+// with the same args is only computed once (cache hit on second call).
+func TestDeterministicFunctionCacheHit(t *testing.T) {
+	cfg := &swagger.Config{
+		Variables: map[string]any{
+			"challenge":  "ABCD1234ABCD1234ABCD1234ABCD1234",
+			"difficulty": "2",
+		},
+	}
+	r := New(cfg, nil)
+
+	cache := make(map[string]string)
+	node := &exprNode{
+		name: "solvePoW",
+		args: []*exprNode{
+			{name: "challenge"},
+			{name: "difficulty"},
+		},
+	}
+
+	val1, err := r.evalExpr(node, cache)
+	require.NoError(t, err)
+
+	val2, err := r.evalExpr(node, cache)
+	require.NoError(t, err)
+
+	assert.Equal(t, val1, val2, "deterministic function with same args must return cached result")
+	// cacheKey for varRef nodes uses name+"()", so full key includes that
+	_, cached := cache["solvePoW(challenge(),difficulty())"]
+	assert.True(t, cached, "expected solvePoW result in cache")
+}
