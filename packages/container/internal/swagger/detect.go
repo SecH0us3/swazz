@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -86,33 +85,8 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 		if resp.StatusCode == http.StatusOK {
 			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 			if err == nil {
-				// Detect if it is YAML spec
-				isYAMLDetect := false
-				if resp != nil {
-					ct := strings.ToLower(resp.Header.Get("Content-Type"))
-					if strings.Contains(ct, "application/yaml") ||
-						strings.Contains(ct, "application/x-yaml") ||
-						strings.Contains(ct, "text/yaml") ||
-						strings.Contains(ct, "text/x-yaml") {
-						isYAMLDetect = true
-					}
-				}
-				if !isYAMLDetect {
-					if parsedURL, parseErr := url.Parse(urlStr); parseErr == nil {
-						path := strings.ToLower(parsedURL.Path)
-						if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
-							isYAMLDetect = true
-						}
-					}
-				}
-				if !isYAMLDetect {
-					isYAMLDetect = IsYAML(body)
-				}
-
-				if isYAMLDetect {
-					if converted, convErr := ConvertYAMLToJSON(body); convErr == nil {
-						body = converted
-					}
+				if converted, convErr := ConvertYAMLToJSON(body); convErr == nil {
+					body = converted
 				}
 
 				if IsValidSpec(body) || IsWSDL(body) || IsPostman(body) {
