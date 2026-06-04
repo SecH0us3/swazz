@@ -71,8 +71,8 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                     </div>
                                     <pre className="welcome-pre">
                                         <code>
-                                            docker pull ghcr.io/sech0us3/swazz:sha-ade4df2{'\n'}
-                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:sha-ade4df2
+                                            docker pull ghcr.io/sech0us3/swazz:&lt;TAG&gt;{'\n'}
+                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:&lt;TAG&gt;
                                         </code>
                                     </pre>
                                 </div>
@@ -82,8 +82,8 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                     </div>
                                     <pre className="welcome-pre">
                                         <code>
-                                            docker pull ghcr.io/sech0us3/swazz-cli:sha-ade4df2{'\n'}
-                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:sha-ade4df2 --config /app/swazz.config.json .
+                                            docker pull ghcr.io/sech0us3/swazz-cli:&lt;TAG&gt;{'\n'}
+                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:&lt;TAG&gt; --config /app/swazz.config.json .
                                         </code>
                                     </pre>
                                 </div>
@@ -103,7 +103,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                             📖 Read the Usage & Configuration Guide →
                         </a>
                         <p className="welcome-footer-tip">
-                            Tip: To learn how to configure authentication pipelines, custom injection wordlists, or rule filters, refer to the documentation.
+                            Tip: Replace &lt;TAG&gt; with the target version (e.g., v1.0.0) or short commit SHA (e.g., sha-ade4df2). For details on setting up auth pipelines, custom wordlists, or rule filters, check the guide.
                         </p>
                     </div>
 
