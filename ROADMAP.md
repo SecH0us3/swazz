@@ -441,7 +441,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**
   - **Design Goal:** Enable target discovery by dynamically crawling web applications from a starting URL without relying solely on static API specifications.
   - **Implementation Details:**
-    - Parse HTML responses for anchor tags (`<a>`), forms (`<form>`), and buttons.
+    - Parse HTML responses for anchor tags, forms, link/script tags, and check common discovery files like robots.txt and sitemap.xml.
     - Implement a concurrent, recursive crawler in Go with rate-limiting, depth-limits, and domain scoping to build a dynamic Sitemap.
     - Feed discovered URLs and form inputs into the fuzzing execution pipeline.
 
@@ -454,6 +454,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 50: Expand Active Scanning Rules (Path Traversal, OS Command Injection, SSTI, XXE)**
   - **Design Goal:** Extend the vulnerabilities coverage of the core scanner beyond API-specific vulnerabilities to general web application flaws.
   - **Implementation Details:**
-    - Implement a Path Traversal (LFI/RFI) analyzer injecting directory traversal payloads and verifying response indicators.
+    - Implement a Path Traversal and File Inclusion (LFI/RFI) analyzer injecting traversal/inclusion payloads and verifying response indicators.
     - Implement an OS Command Injection analyzer injecting shell payloads and checking for out-of-band interactions or timing delays.
     - Implement Server-Side Template Injection (SSTI) and XML External Entity (XXE) analyzers with dedicated payloads and detectors.
