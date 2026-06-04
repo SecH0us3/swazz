@@ -101,4 +101,61 @@ describe('OWASPTop10 Component', () => {
         fireEvent.click(pathSpan.closest('.owasp-finding-row')!);
         expect(selectSpy).toHaveBeenCalledWith(mockFindings[1]);
     });
+
+    it('limits category findings to 50 items and shows more on button click', async () => {
+        const largeFindingsList = Array.from({ length: 60 }, (_, i) => ({
+            id: `id-${i}`,
+            timestamp: Date.now() - i * 1000,
+            method: 'GET',
+            endpoint: `/users/${i}`,
+            resolvedPath: `/users/${i}`,
+            status: 500,
+            profile: 'RANDOM' as const,
+            duration: 10,
+            payloadSize: 0,
+            retries: 0,
+            payloadPreview: '',
+            responsePreview: 'Internal Server Error',
+            responseSize: 100,
+            owaspCategory: ['API8:2023 Security Misconfiguration'],
+        }));
+
+        mockQueryResults.mockResolvedValue({
+            rows: largeFindingsList,
+            total: 60,
+        });
+
+        render(
+            <OWASPTop10
+                runId="run-123"
+                queryResults={mockQueryResults}
+                onSelectResult={() => {}}
+            />
+        );
+
+        // Wait for the rows to load and accordion trigger to be visible
+        const accordionHeader = await screen.findByText(/API8:2023 Security Misconfiguration \(60\)/, {}, { timeout: 3000 });
+        expect(accordionHeader).toBeTruthy();
+
+        // Click to expand
+        fireEvent.click(accordionHeader);
+
+        // First 50 items should be rendered
+        expect(await screen.findByText('/users/0')).toBeTruthy();
+        expect(screen.getByText('/users/49')).toBeTruthy();
+        expect(screen.queryByText('/users/50')).toBeNull();
+
+        // "Show More (+10)" button should be rendered
+        const showMoreBtn = screen.getByRole('button', { name: /Show More \(\+10\)/i });
+        expect(showMoreBtn).toBeTruthy();
+
+        // Click "Show More"
+        fireEvent.click(showMoreBtn);
+
+        // Now item 50 should be visible
+        expect(await screen.findByText('/users/50')).toBeTruthy();
+        expect(screen.getByText('/users/59')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Show More/i })).toBeNull();
+    });
 });
+
