@@ -465,7 +465,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Build integration with Cloudflare Workers/Pages utilizing Cloudflare API tokens to trigger scans directly from browser.
     - Implement a runner registration system (e.g. WebSocket connection or long polling) allowing external runners to register, authenticate, and pull scan jobs from the central coordinator.
 
-- [/] **Task 52: Standardize Configuration Schema & Optimize Web Config Export**
+- [x] **Task 52: Standardize Configuration Schema & Optimize Web Config Export**
   - **Design Goal:** Resolve configuration mismatch bugs by unifying CLI and Web schemas, and optimize the dashboard's exported config size by refining endpoint inclusion rules.
   - **Implementation Details:**
     - Verify and align schemas between CLI configurations and the Web dashboard settings to ensure complete compatibility (1:1 conversion).
