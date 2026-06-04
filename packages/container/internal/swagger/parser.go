@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+// ParseRawSpec checks if the data is YAML, converts it to JSON if needed, and delegates to ParseSpec.
+func ParseRawSpec(data []byte) (*ParseResult, error) {
+	if IsYAML(data) {
+		converted, err := ConvertYAMLToJSON(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert YAML spec to JSON: %w", err)
+		}
+		data = converted
+	}
+	return ParseSpec(json.RawMessage(data))
+}
+
 // ParseSpec parses a Swagger/OpenAPI JSON spec into a ParseResult.
 // Supports both OpenAPI 3.x and Swagger 2.0.
 func ParseSpec(raw json.RawMessage) (*ParseResult, error) {

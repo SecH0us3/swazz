@@ -204,7 +204,6 @@ func TestDetermineBasePath(t *testing.T) {
 			expected: "",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			actual := determineBasePath(tt.spec)
@@ -214,3 +213,92 @@ func TestDetermineBasePath(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRawSpec(t *testing.T) {
+	t.Run("Valid YAML OpenAPI Spec", func(t *testing.T) {
+		yamlSpec := `
+openapi: 3.0.0
+info:
+  title: Test YAML API
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+paths:
+  /ping:
+    get:
+      summary: Ping the server
+`
+		result, err := ParseRawSpec([]byte(yamlSpec))
+		if err != nil {
+			t.Fatalf("Failed to parse YAML spec: %v", err)
+		}
+
+		if result.BasePath != "https://api.example.com/v1" {
+			t.Errorf("Expected BasePath 'https://api.example.com/v1', got '%s'", result.BasePath)
+		}
+
+		if len(result.Endpoints) != 1 {
+			t.Fatalf("Expected 1 endpoint, got %d", len(result.Endpoints))
+		}
+
+		if result.Endpoints[0].Path != "/ping" || result.Endpoints[0].Method != "GET" {
+			t.Errorf("Expected GET /ping")
+		}
+	})
+
+	t.Run("Valid JSON OpenAPI Spec", func(t *testing.T) {
+		jsonSpec := `
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test JSON API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {"url": "https://api.example.com/v2"}
+  ],
+  "paths": {
+    "/ping": {
+      "get": {
+        "summary": "Ping the server"
+      }
+    }
+  }
+}
+`
+		result, err := ParseRawSpec([]byte(jsonSpec))
+		if err != nil {
+			t.Fatalf("Failed to parse JSON spec: %v", err)
+		}
+
+		if result.BasePath != "https://api.example.com/v2" {
+			t.Errorf("Expected BasePath 'https://api.example.com/v2', got '%s'", result.BasePath)
+		}
+
+		if len(result.Endpoints) != 1 {
+			t.Fatalf("Expected 1 endpoint, got %d", len(result.Endpoints))
+		}
+	})
+
+	t.Run("Invalid YAML Spec", func(t *testing.T) {
+		invalidYaml := `
+foo: bar: baz
+`
+		_, err := ParseRawSpec([]byte(invalidYaml))
+		if err == nil {
+			t.Error("expected error for invalid YAML, got nil")
+		}
+	})
+
+	t.Run("Invalid JSON Spec", func(t *testing.T) {
+		invalidJson := `
+{ "invalid": "json",
+`
+		_, err := ParseRawSpec([]byte(invalidJson))
+		if err == nil {
+			t.Error("expected error for invalid JSON, got nil")
+		}
+	})
+}
+
+

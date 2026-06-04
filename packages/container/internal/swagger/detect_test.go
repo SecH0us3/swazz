@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -203,6 +204,61 @@ func TestFetchRemoteSpec(t *testing.T) {
 		}
 		if !IsValidSpec(res) {
 			t.Error("expected valid spec in result")
+		}
+	})
+
+	t.Run("GET returns valid YAML OpenAPI spec (different MIME types)", func(t *testing.T) {
+		mimeTypes := []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"}
+		for _, mt := range mimeTypes {
+			t.Run("MIME type: "+mt, func(t *testing.T) {
+				getHandler = func(w http.ResponseWriter, r *http.Request) {
+					// Verify custom headers are passed
+					if r.Header.Get("X-Custom-Req-Header") != "ReqValue" {
+						t.Errorf("expected X-Custom-Req-Header to be 'ReqValue'")
+					}
+					// Verify Accept header contains application/yaml
+					accept := r.Header.Get("Accept")
+					if !strings.Contains(accept, "application/yaml") {
+						t.Errorf("expected Accept header to contain application/yaml, got %s", accept)
+					}
+					w.Header().Set("Content-Type", mt)
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("openapi: 3.0.0\npaths: {}"))
+				}
+				postHandler = nil
+
+				res, err := FetchRemoteSpec(ctx, client, server.URL, map[string]string{"X-Custom-Req-Header": "ReqValue"}, "introspection")
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !IsValidSpec(res) {
+					t.Error("expected valid spec in result after YAML-to-JSON conversion")
+				}
+			})
+		}
+	})
+
+	t.Run("GET returns valid YAML OpenAPI spec by extension", func(t *testing.T) {
+		getHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("openapi: 3.0.0\npaths: {}"))
+		}
+		postHandler = nil
+
+		res, err := FetchRemoteSpec(ctx, client, server.URL+"/spec.yaml", nil, "introspection")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !IsValidSpec(res) {
+			t.Error("expected valid spec in result after YAML-to-JSON conversion")
+		}
+
+		resYml, err := FetchRemoteSpec(ctx, client, server.URL+"/spec.yml", nil, "introspection")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !IsValidSpec(resYml) {
+			t.Error("expected valid spec in result after YAML-to-JSON conversion for .yml")
 		}
 	})
 

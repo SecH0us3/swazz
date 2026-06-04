@@ -63,7 +63,7 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
 ```
 
 - **`targetUrl`**: The base URL of the API you are testing.
-- **`openapiSpec`**: Path or URL to the OpenAPI/Swagger specification.
+- **`openapiSpec`**: Path or URL to the OpenAPI/Swagger specification. Both JSON (`.json`) and YAML (`.yaml`/`.yml`) formats are fully supported.
 - **`wordlist_files`**: Key-value mapping of payload categories to custom `.txt` wordlists. For security, files must be placed within a `wordlists/` directory.
 - **`concurrency`**: Number of parallel requests to send.
 - **`fuzzProfiles`**: Which payload generators to run (e.g., boundaries, malicious payloads).

@@ -271,7 +271,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 📦 Compatibility & Quality
 
-- [ ] **Task 30:** Add YAML OpenAPI spec support.
+- [x] **Task 30:** Add YAML OpenAPI spec support.
   - **Design Goal:** Support the most common OpenAPI specification format. Currently, [parser.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/parser.go) `ParseSpec()` (L11-114) accepts only `json.RawMessage`. The function immediately unmarshals into `map[string]any` via `json.Unmarshal` (L14). Meanwhile, [detect.go](file:///Users/alex/src/swazz/packages/container/internal/swagger/detect.go) `FetchRemoteSpec()` (L68) and `IsValidSpec()` (L15) also work exclusively with `json.RawMessage`. The majority of real-world API specs (Swagger Hub, GitHub repos) are authored in YAML.
   - **Implementation Details:**
     - **Dependency:** `go get gopkg.in/yaml.v3` in `packages/container/`.
