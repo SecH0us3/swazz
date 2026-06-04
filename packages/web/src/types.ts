@@ -59,6 +59,10 @@ export interface SwazzSettings {
     bola_testing?: boolean;
     auth_headers?: string[];
     auth_cookies?: string[];
+    bola_similarity_threshold?: number;
+    time_anomaly_threshold_ms?: number;
+    oob_server_url?: string;
+    debug?: boolean;
 }
 
 export interface AuthStep {
@@ -100,6 +104,10 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     bola_testing: false,
     auth_headers: ['Authorization', 'X-API-Key'],
     auth_cookies: ['session', 'token', 'jwt', 'sid', 'JSESSIONID', 'PHPSESSID'],
+    bola_similarity_threshold: 0.85,
+    time_anomaly_threshold_ms: 4000,
+    oob_server_url: '',
+    debug: false,
 };
 
 // ─── Full Config ────────────────────────────────────────
@@ -116,6 +124,9 @@ export interface SwazzConfig {
     wordlist_files?: Record<string, string>;
     auth_sequence?: AuthStep[];
     auth_identities?: Record<string, AuthIdentity>;
+    security?: {
+        allow_private_ips: boolean;
+    };
 }
 
 // ─── Results ────────────────────────────────────────────

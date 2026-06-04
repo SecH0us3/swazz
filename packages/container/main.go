@@ -187,22 +187,35 @@ func runServer() {
 // ─── CLI MODE ─────────────────────────────────────────────
 
 type CliConfig struct {
-	SwaggerURLs    []string                      `json:"swagger_urls"`
-	BaseURL        string                        `json:"base_url"`
-	Headers        map[string]string             `json:"headers"`
-	Cookies        map[string]string             `json:"cookies"`
-	WordlistFiles  map[string]string             `json:"wordlist_files"`
-	Dictionaries   map[string][]any              `json:"dictionaries"`
-	Settings       swagger.Settings              `json:"settings"`
-	Endpoints      *struct {
+	SwaggerURLs      []string                      `json:"swagger_urls"`
+	SwaggerURLsAlias []string                      `json:"_swagger_urls"`
+	BaseURL          string                        `json:"base_url"`
+	Headers          map[string]string             `json:"headers"`
+	GlobalHeaders    map[string]string             `json:"global_headers"`
+	Cookies          map[string]string             `json:"cookies"`
+	WordlistFiles    map[string]string             `json:"wordlist_files"`
+	Dictionaries     map[string][]any              `json:"dictionaries"`
+	Settings         swagger.Settings              `json:"settings"`
+	Endpoints        *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
-	Rules          *swagger.RulesConfig          `json:"rules"`
-	AuthSequence   []swagger.AuthStep            `json:"auth_sequence"`
+	DisabledEndpoints []string                     `json:"disabled_endpoints"`
+	Rules            *swagger.RulesConfig          `json:"rules"`
+	AuthSequence     []swagger.AuthStep            `json:"auth_sequence"`
 	AuthIdentities map[string]swagger.AuthIdentity `json:"auth_identities,omitempty"`
 	Variables      map[string]any                `json:"variables,omitempty"`
 	Security       swagger.SecurityConfig        `json:"security"`
+}
+
+func (c *CliConfig) Validate() error {
+	if err := c.Settings.Validate(); err != nil {
+		return err
+	}
+	if err := swagger.ValidateBaseURL(c.BaseURL); err != nil {
+		return err
+	}
+	return nil
 }
 
 func runCLI(args []string) {
@@ -210,8 +223,8 @@ func runCLI(args []string) {
 	configPath := flags.String("config", "swazz.config.json", "Path to config file")
 	sarifOut := flags.String("sarif", "", "Path to save SARIF output")
 	jsonOut := flags.String("json", "", "Path to save JSON output")
-	htmlOut := flags.String("html", "", "Path to save HTML output")
-	failOnError := flags.Bool("fail-on-error", false, "Exit with code 1 if error level findings exist")
+	htmlOut := flags.String("html", "", "Path to save HTML report")
+	failOnError := flags.Bool("fail-on-error", false, "Exit with code 1 if any 'error' level findings exist")
 	allowPrivateIps := flags.Bool("allow-private-ips", true, "Allow requests to private IP addresses (default: true for CLI mode)")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 
@@ -248,6 +261,59 @@ func runCLI(args []string) {
 
 	if *debugMode {
 		cliCfg.Settings.Debug = true
+	}
+
+	// Standardize compatibility aliases and merge them:
+	if len(cliCfg.GlobalHeaders) > 0 {
+		if cliCfg.Headers == nil {
+			cliCfg.Headers = make(map[string]string)
+		}
+		for k, v := range cliCfg.GlobalHeaders {
+			if _, exists := cliCfg.Headers[k]; !exists {
+				cliCfg.Headers[k] = v
+			}
+		}
+	}
+
+	if len(cliCfg.SwaggerURLsAlias) > 0 {
+		for _, urlStr := range cliCfg.SwaggerURLsAlias {
+			found := false
+			for _, existing := range cliCfg.SwaggerURLs {
+				if existing == urlStr {
+					found = true
+					break
+				}
+			}
+			if !found {
+				cliCfg.SwaggerURLs = append(cliCfg.SwaggerURLs, urlStr)
+			}
+		}
+	}
+
+	if len(cliCfg.DisabledEndpoints) > 0 {
+		if cliCfg.Endpoints == nil {
+			cliCfg.Endpoints = &struct {
+				Include []string `json:"include"`
+				Exclude []string `json:"exclude"`
+			}{}
+		}
+		for _, ep := range cliCfg.DisabledEndpoints {
+			found := false
+			for _, existing := range cliCfg.Endpoints.Exclude {
+				if existing == ep {
+					found = true
+					break
+				}
+			}
+			if !found {
+				cliCfg.Endpoints.Exclude = append(cliCfg.Endpoints.Exclude, ep)
+			}
+		}
+	}
+
+	// Validate the configuration schema
+	if err := cliCfg.Validate(); err != nil {
+		log.Fatalf("Configuration validation failed: %v", err)
 	}
 
 	if len(cliCfg.SwaggerURLs) == 0 {

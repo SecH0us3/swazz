@@ -151,6 +151,11 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 		config.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
+	if err := config.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "malformed configuration: " + err.Error()})
+		return
+	}
+
 	if err := swagger.LoadWordlists(&config); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to load custom wordlists: " + err.Error()})
 		return

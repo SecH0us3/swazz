@@ -17,14 +17,100 @@ const DEFAULT_CONFIG: SwazzConfig = {
     endpoints: [],
     disabled_endpoints: [],
     _swagger_urls: [],
+    security: { allow_private_ips: false },
 };
+
+export function validateConfig(config: any): void {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        throw new Error('Config must be a JSON object');
+    }
+    if (config.base_url !== undefined && typeof config.base_url !== 'string') {
+        throw new Error('base_url must be a string');
+    }
+    if (config.global_headers !== undefined && (typeof config.global_headers !== 'object' || config.global_headers === null)) {
+        throw new Error('global_headers must be an object');
+    }
+    if (config.cookies !== undefined && (typeof config.cookies !== 'object' || config.cookies === null)) {
+        throw new Error('cookies must be an object');
+    }
+    if (config.dictionaries !== undefined && (typeof config.dictionaries !== 'object' || config.dictionaries === null)) {
+        throw new Error('dictionaries must be an object');
+    }
+    if (config.settings !== undefined) {
+        if (typeof config.settings !== 'object' || config.settings === null) {
+            throw new Error('settings must be an object');
+        }
+        const s = config.settings;
+        if (s.iterations_per_profile !== undefined && typeof s.iterations_per_profile !== 'number') {
+            throw new Error('settings.iterations_per_profile must be a number');
+        }
+        if (s.concurrency !== undefined && typeof s.concurrency !== 'number') {
+            throw new Error('settings.concurrency must be a number');
+        }
+        if (s.timeout_ms !== undefined && typeof s.timeout_ms !== 'number') {
+            throw new Error('settings.timeout_ms must be a number');
+        }
+        if (s.max_payload_size_bytes !== undefined && typeof s.max_payload_size_bytes !== 'number') {
+            throw new Error('settings.max_payload_size_bytes must be a number');
+        }
+        if (s.delay_between_requests_ms !== undefined && typeof s.delay_between_requests_ms !== 'number') {
+            throw new Error('settings.delay_between_requests_ms must be a number');
+        }
+        if (s.profiles !== undefined && !Array.isArray(s.profiles)) {
+            throw new Error('settings.profiles must be an array');
+        }
+        if (s.bola_similarity_threshold !== undefined && typeof s.bola_similarity_threshold !== 'number') {
+            throw new Error('settings.bola_similarity_threshold must be a number');
+        }
+        if (s.time_anomaly_threshold_ms !== undefined && typeof s.time_anomaly_threshold_ms !== 'number') {
+            throw new Error('settings.time_anomaly_threshold_ms must be a number');
+        }
+        if (s.oob_server_url !== undefined && typeof s.oob_server_url !== 'string') {
+            throw new Error('settings.oob_server_url must be a string');
+        }
+        if (s.debug !== undefined && typeof s.debug !== 'boolean') {
+            throw new Error('settings.debug must be a boolean');
+        }
+    }
+    if (config.endpoints !== undefined && !Array.isArray(config.endpoints)) {
+        throw new Error('endpoints must be an array');
+    }
+    if (config.disabled_endpoints !== undefined && !Array.isArray(config.disabled_endpoints)) {
+        throw new Error('disabled_endpoints must be an array');
+    }
+    if (config._swagger_urls !== undefined && !Array.isArray(config._swagger_urls)) {
+        throw new Error('_swagger_urls must be an array');
+    }
+    if (config.wordlist_files !== undefined && (typeof config.wordlist_files !== 'object' || config.wordlist_files === null)) {
+        throw new Error('wordlist_files must be an object');
+    }
+    if (config.auth_sequence !== undefined && !Array.isArray(config.auth_sequence)) {
+        throw new Error('auth_sequence must be an array');
+    }
+    if (config.auth_identities !== undefined && (typeof config.auth_identities !== 'object' || config.auth_identities === null)) {
+        throw new Error('auth_identities must be an object');
+    }
+    if (config.security !== undefined) {
+        if (typeof config.security !== 'object' || config.security === null) {
+            throw new Error('security must be an object');
+        }
+        if (config.security.allow_private_ips !== undefined && typeof config.security.allow_private_ips !== 'boolean') {
+            throw new Error('security.allow_private_ips must be a boolean');
+        }
+    }
+}
 
 function loadConfig(): SwazzConfig {
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
-            return { ...DEFAULT_CONFIG, ...parsed, settings: { ...DEFAULT_SETTINGS, ...parsed.settings } };
+            return {
+                ...DEFAULT_CONFIG,
+                ...parsed,
+                settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+                security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
+            };
         }
     } catch { /* ignore */ }
     return { ...DEFAULT_CONFIG };
@@ -80,10 +166,12 @@ export function useConfig() {
     const importConfig = useCallback((json: string) => {
         try {
             const parsed = JSON.parse(json) as SwazzConfig;
+            validateConfig(parsed);
             setConfig({
                 ...DEFAULT_CONFIG,
                 ...parsed,
                 settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
+                security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
             });
         } catch (err) {
             throw new Error('Invalid JSON config: ' + (err instanceof Error ? err.message : String(err)));
@@ -91,7 +179,16 @@ export function useConfig() {
     }, []);
 
     const exportConfig = useCallback((): string => {
-        return JSON.stringify(config, null, 2);
+        const { endpoints, ...rest } = config;
+        const exportedConfig = {
+            ...rest,
+            headers: config.global_headers || {},
+            swagger_urls: config._swagger_urls || [],
+            endpoints: {
+                exclude: config.disabled_endpoints || []
+            }
+        };
+        return JSON.stringify(exportedConfig, null, 2);
     }, [config]);
 
     return {
