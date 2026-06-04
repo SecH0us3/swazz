@@ -437,3 +437,56 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Go Install:** Ensure the engine can be installed natively via go install (this may require renaming the packages/container directory to packages/swazz or packages/swazz-engine so the compiled binary is not named container).
     - **Homebrew:** Create a Homebrew formula/tap to allow installation via brew install swazz (and standardize the binary name to swazz instead of swazz-engine).
     - **APT:** Create Debian packages (.deb) and provide an APT repository for installation via apt install swazz (standardizing the binary name to swazz).
+
+- [ ] **Task 48: Implement Active Web Crawler (Spider)**
+  - **Design Goal:** Enable target discovery by dynamically crawling web applications from a starting URL without relying solely on static API specifications.
+  - **Implementation Details:**
+    - Parse HTML responses for anchor tags, forms, link/script tags, and check common discovery files like robots.txt and sitemap.xml.
+    - Implement a concurrent, recursive crawler in Go with rate-limiting, depth-limits, and domain scoping to build a dynamic Sitemap.
+    - Feed discovered URLs and form inputs into the fuzzing execution pipeline.
+
+- [ ] **Task 49: Automated Session & CSRF Management**
+  - **Design Goal:** Maintain active authenticated sessions and handle CSRF protection mechanisms dynamically throughout fuzzing runs.
+  - **Implementation Details:**
+    - Detect session expirations dynamically (e.g., HTTP 401/403 or specific redirect patterns) and automate re-authentication flows.
+    - Identify anti-CSRF tokens in HTML forms and cookies, dynamically fetching fresh tokens and injecting them into headers/bodies of outgoing fuzz requests.
+
+- [ ] **Task 50: Expand Active Scanning Rules (Path Traversal, OS Command Injection, SSTI, XXE)**
+  - **Design Goal:** Extend the vulnerabilities coverage of the core scanner beyond API-specific vulnerabilities to general web application flaws.
+  - **Implementation Details:**
+    - Implement a Path Traversal and File Inclusion (LFI/RFI) analyzer injecting traversal/inclusion payloads and verifying response indicators.
+    - Implement an OS Command Injection analyzer injecting shell payloads and checking for out-of-band interactions or timing delays.
+    - Implement Server-Side Template Injection (SSTI) and XML External Entity (XXE) analyzers with dedicated payloads and detectors.
+
+- [ ] **Task 51: User Authentication, Cloudflare-Hosted Browser Running, and Custom Runners**
+  - **Design Goal:** Support multi-user collaboration by adding user registration, allowing browser-based runs on Cloudflare using Cloudflare tokens, and letting users register and connect their own self-hosted runners.
+  - **Implementation Details:**
+    - Implement user registration and authentication (e.g., JWT-based or OAuth2).
+    - Build integration with Cloudflare Workers/Pages utilizing Cloudflare API tokens to trigger scans directly from browser.
+    - Implement a runner registration system (e.g. WebSocket connection or long polling) allowing external runners to register, authenticate, and pull scan jobs from the central coordinator.
+
+- [ ] **Task 52: Standardize Configuration Schema & Optimize Web Config Export**
+  - **Design Goal:** Resolve configuration mismatch bugs by unifying CLI and Web schemas, and optimize the dashboard's exported config size by refining endpoint inclusion rules.
+  - **Implementation Details:**
+    - Verify and align schemas between CLI configurations and the Web dashboard settings to ensure complete compatibility (1:1 conversion).
+    - Limit the web dashboard's configuration export format so that downloading config from the Web UI does not dump excessive endpoints.
+    - Implement client-side and server-side config schema validation to prevent malformed or incompatible options from being imported.
+
+- [ ] **Task 53: CI/CD Integration, Fail-on-Severity, and SARIF/JUnit Reports**
+  - **Design Goal:** Support DevSecOps workflows by enabling automated gatekeeping in CI pipelines and exporting industry-standard security analysis formats.
+  - **Implementation Details:**
+    - Add CLI flags (e.g. `--fail-on-severity`) to exit with non-zero codes when specific vulnerability thresholds are met.
+    - Generate report outputs in SARIF (Static Analysis Results Interchange Format) to integrate natively with GitHub Code Scanning alerts, and JUnit XML for general CI test runners.
+
+- [ ] **Task 54: Finding Triaging, Suppressions, and Ignore Rules**
+  - **Design Goal:** Reduce noise and manage false positives effectively by allowing developers to mute or skip specific vulnerability alerts.
+  - **Implementation Details:**
+    - Allow users to mark findings as `False Positive`, `Ignored`, or `Acknowledged` in the web dashboard.
+    - Export a `swazz.ignore.json` configuration containing rules (such as matched endpoint, payload, or vulnerability type) to automatically suppress matching findings in subsequent CLI and Web runs.
+
+- [ ] **Task 55: Stateful API Fuzzing & Request Chaining**
+  - **Design Goal:** Enable fuzzing of complex multi-step workflows by dynamically passing variables extracted from earlier HTTP responses into subsequent requests.
+  - **Implementation Details:**
+    - Define variable extraction rules (e.g. extracting a created resource ID from a JSON body or Location header during a POST request).
+    - Map extracted variables into the fuzzing execution pipeline to be injected into URL paths, headers, or bodies of subsequent requests (e.g. GET/PUT/DELETE) to fuzz authenticated multi-step flows.
+
