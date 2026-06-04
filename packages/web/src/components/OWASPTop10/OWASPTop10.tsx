@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding } from '../../types.js';
@@ -57,6 +57,58 @@ const OWASP_CATEGORIES_METADATA = [
     }
 ];
 
+interface OWASPFindingRowProps {
+    result: ResultSummary;
+    finding?: AnalysisFinding;
+    methodColor: string;
+    onSelect: (row: ResultSummary) => void;
+}
+
+const OWASPFindingRow: React.FC<OWASPFindingRowProps> = React.memo(({ result, finding, methodColor, onSelect }) => {
+    const displayPath = result.resolvedPath || result.endpoint;
+    const displayDesc = finding ? finding.message : `HTTP ${result.status} Status Code Error`;
+
+    return (
+        <div
+            className="owasp-finding-row"
+            onClick={() => onSelect(result)}
+        >
+            <div className="owasp-finding-left">
+                <span
+                    className="owasp-finding-method"
+                    style={{
+                        color: methodColor,
+                        border: `1px solid ${methodColor}40`,
+                        background: `${methodColor}10`,
+                    }}
+                >
+                    {result.method}
+                </span>
+                <div className="owasp-finding-info">
+                    <span className="owasp-finding-path">{displayPath}</span>
+                    <span className="owasp-finding-desc">{displayDesc}</span>
+                </div>
+            </div>
+            <div className="owasp-finding-right">
+                {result.identity && (
+                    <span className="owasp-finding-identity">
+                        {result.identity}
+                    </span>
+                )}
+                <span
+                    style={{
+                        fontSize: 'var(--font-size-xs)',
+                        fontWeight: 600,
+                        color: result.status >= 500 ? 'var(--color-error)' : 'var(--color-warning)',
+                    }}
+                >
+                    HTTP {result.status}
+                </span>
+            </div>
+        </div>
+    );
+});
+
 interface Props {
     runId: string | null;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
@@ -65,9 +117,17 @@ interface Props {
 }
 
 export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult }: Props) {
+    const onSelectResultRef = useRef(onSelectResult);
+    onSelectResultRef.current = onSelectResult;
+
+    const handleSelectResultStable = useCallback((row: ResultSummary) => {
+        onSelectResultRef.current(row);
+    }, []);
+
     const [rows, setRows] = useState<ResultSummary[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+    const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>({});
 
     useEffect(() => {
         if (!runId) {
@@ -239,58 +299,41 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
                                             </svg>
                                         </div>
 
-                                        {isExpanded && (
-                                            <div className="owasp-accordion-items">
-                                                {items.map(({ result, finding }, idx) => {
-                                                    const methodColor = methodColors[result.method] || 'var(--text-muted)';
-                                                    const displayPath = result.resolvedPath || result.endpoint;
-                                                    const displayDesc = finding
-                                                        ? finding.message
-                                                        : `HTTP ${result.status} Status Code Error`;
-
-                                                    return (
-                                                        <div
-                                                            key={`${result.id}-${idx}`}
-                                                            className="owasp-finding-row"
-                                                            onClick={() => onSelectResult(result)}
-                                                        >
-                                                            <div className="owasp-finding-left">
-                                                                <span
-                                                                    className="owasp-finding-method"
-                                                                    style={{
-                                                                        color: methodColor,
-                                                                        border: `1px solid ${methodColor}40`,
-                                                                        background: `${methodColor}10`,
-                                                                    }}
-                                                                >
-                                                                    {result.method}
-                                                                </span>
-                                                                <div className="owasp-finding-info">
-                                                                    <span className="owasp-finding-path">{displayPath}</span>
-                                                                    <span className="owasp-finding-desc">{displayDesc}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="owasp-finding-right">
-                                                                {result.identity && (
-                                                                    <span className="owasp-finding-identity">
-                                                                        {result.identity}
-                                                                    </span>
-                                                                )}
-                                                                <span
-                                                                    style={{
-                                                                        fontSize: 'var(--font-size-xs)',
-                                                                        fontWeight: 600,
-                                                                        color: result.status >= 500 ? 'var(--color-error)' : 'var(--color-warning)',
-                                                                    }}
-                                                                >
-                                                                    HTTP {result.status}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
+                                        {isExpanded && (() => {
+                                             const categoryLimit = categoryLimits[title] || 50;
+                                             const visibleItems = items.slice(0, categoryLimit);
+                                             return (
+                                                 <div className="owasp-accordion-items">
+                                                      {visibleItems.map(({ result, finding }, idx) => {
+                                                          const methodColor = methodColors[result.method] || 'var(--text-muted)';
+                                                          return (
+                                                              <OWASPFindingRow
+                                                                  key={`${result.id}-${idx}`}
+                                                                  result={result}
+                                                                  finding={finding}
+                                                                  methodColor={methodColor}
+                                                                  onSelect={handleSelectResultStable}
+                                                              />
+                                                          );
+                                                      })}
+                                                     {items.length > categoryLimit && (
+                                                         <button
+                                                             className="btn btn-ghost btn-sm load-more-findings"
+                                                             style={{ width: '100%', margin: 'var(--space-2) 0' }}
+                                                             onClick={(e) => {
+                                                                 e.stopPropagation();
+                                                                 setCategoryLimits(prev => ({
+                                                                     ...prev,
+                                                                     [title]: categoryLimit + 50
+                                                                 }));
+                                                             }}
+                                                         >
+                                                             Show More (+{Math.min(50, items.length - categoryLimit)})
+                                                         </button>
+                                                     )}
+                                                 </div>
+                                             );
+                                         })()}
                                     </div>
                                 );
                             })}

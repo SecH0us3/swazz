@@ -215,4 +215,11 @@ In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. 
 - **HTML**: A static report of the findings, featuring an executive summary that groups all findings by their corresponding **OWASP API Security Top 10 (2023)** categories.
 - **SARIF**: For integration into GitHub Advanced Security and other SAST/DAST tools.
 
+### UI Performance Optimization
+
+The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. The following strategies keep the interface fluid and responsive:
+- **Localized Cell Hover**: Heatmap cells manage their own hover states locally. Moving the cursor over the grid does not trigger expensive dashboard or full-grid re-renders.
+- **Memoized Rows**: Endpoint rows use `React.memo` with custom value comparison. A row only updates when its specific endpoint stats change.
+- **Findings Pagination**: Both the **Grouped Errors** and **OWASP Top 10** lists cap expanded category views to 50 items by default. A "Show More" button allows loading additional results incrementally, avoiding DOM bloat and lagging.
+
 [← Back to Installation](./installation.html) | [Next: Architecture →](./architecture.html)

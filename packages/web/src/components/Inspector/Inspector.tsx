@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
@@ -60,6 +60,47 @@ function formatIdentityName(name: string): string {
     return name;
 }
 
+interface FindingItemProps {
+    item: { result: ResultSummary; finding?: AnalysisFinding };
+    groupColor: string;
+    onSelect: (row: ResultSummary) => void;
+}
+
+const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, groupColor, onSelect }) => {
+    return (
+        <div 
+            className="finding-item" 
+            onClick={() => onSelect(item.result)}
+            style={{ borderLeft: `3px solid ${groupColor}` }}
+        >
+            <div className="finding-item-row">
+                <div className="finding-item-endpoint">
+                    <span className={`method method-${item.result.method.toLowerCase()}`}>{item.result.method}</span>
+                    <span className="finding-item-path">{item.result.endpoint}</span>
+                </div>
+                <span className={getBadgeClass(item.result.status)}>
+                    {item.result.status || 'ERR'}
+                </span>
+            </div>
+            {item.finding?.message && (
+                <div className="finding-item-message">
+                    {item.finding.message}
+                </div>
+            )}
+            {item.result.status >= 500 && !item.finding && (
+                <div className="finding-item-message">
+                    Server returned unhandled error status {item.result.status}
+                </div>
+            )}
+            {item.finding?.evidence && (
+                <div className="finding-item-evidence" title={item.finding.evidence}>
+                    <strong>Evidence:</strong> {item.finding.evidence}
+                </div>
+            )}
+        </div>
+    );
+});
+
 const PAGE_SIZE = 1000;
 
 export function Inspector({
@@ -73,12 +114,20 @@ export function Inspector({
     findingsOnly = false,
     config,
 }: Props) {
+    const onSelectResultRef = useRef(onSelectResult);
+    onSelectResultRef.current = onSelectResult;
+
+    const handleSelectResultStable = useCallback((row: ResultSummary) => {
+        onSelectResultRef.current(row);
+    }, []);
+
     const [filter, setFilter] = useState<StatusFilter>('all');
     const [search, setSearch] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: 'timestamp' | 'duration'; direction: 'asc' | 'desc' }>({ key: 'timestamp', direction: 'desc' });
 
     const [rows, setRows] = useState<ResultSummary[]>([]);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+    const [groupLimits, setGroupLimits] = useState<Record<string, number>>({});
     const [limit, setLimit] = useState(PAGE_SIZE);
 
     const [identityFilter, setIdentityFilter] = useState<string>('all');
@@ -458,43 +507,37 @@ export function Inspector({
                                         <span className="findings-group-title">{group.title}</span>
                                     </div>
                                 </div>
-                                {expandedGroups[group.key] && (
-                                    <div className="findings-group-items">
-                                        {group.items.map((item, idx) => (
-                                            <div 
-                                                key={idx} 
-                                                className="finding-item" 
-                                                onClick={() => onSelectResult(item.result)}
-                                                style={{ borderLeft: `3px solid ${group.color}` }}
-                                            >
-                                                <div className="finding-item-row">
-                                                    <div className="finding-item-endpoint">
-                                                        <span className={`method method-${item.result.method.toLowerCase()}`}>{item.result.method}</span>
-                                                        <span className="finding-item-path">{item.result.endpoint}</span>
-                                                    </div>
-                                                    <span className={getBadgeClass(item.result.status)}>
-                                                        {item.result.status || 'ERR'}
-                                                    </span>
-                                                </div>
-                                                {item.finding?.message && (
-                                                    <div className="finding-item-message">
-                                                        {item.finding.message}
-                                                    </div>
-                                                )}
-                                                {item.result.status >= 500 && !item.finding && (
-                                                    <div className="finding-item-message">
-                                                        Server returned unhandled error status {item.result.status}
-                                                    </div>
-                                                )}
-                                                {item.finding?.evidence && (
-                                                    <div className="finding-item-evidence" title={item.finding.evidence}>
-                                                        <strong>Evidence:</strong> {item.finding.evidence}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                {expandedGroups[group.key] && (() => {
+                                     const groupLimit = groupLimits[group.key] || 50;
+                                     const visibleItems = group.items.slice(0, groupLimit);
+                                     return (
+                                         <div className="findings-group-items">
+                                             {visibleItems.map((item, idx) => (
+                                                 <FindingItem
+                                                     key={item.result.id || idx}
+                                                     item={item}
+                                                     groupColor={group.color}
+                                                     onSelect={handleSelectResultStable}
+                                                 />
+                                             ))}
+                                             {group.items.length > groupLimit && (
+                                                 <button
+                                                     className="btn btn-ghost btn-sm load-more-findings"
+                                                     style={{ width: '100%', margin: 'var(--space-2) 0' }}
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         setGroupLimits(prev => ({
+                                                             ...prev,
+                                                             [group.key]: groupLimit + 50
+                                                         }));
+                                                     }}
+                                                 >
+                                                     Show More (+{Math.min(50, group.items.length - groupLimit)})
+                                                 </button>
+                                             )}
+                                         </div>
+                                     );
+                                 })()}
                             </div>
                         ))}
                         {total > rows.length && (
