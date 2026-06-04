@@ -32,6 +32,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var Version = "dev"
+
 func main() {
 	runtime.GOMAXPROCS(2)
 
@@ -126,18 +128,38 @@ func runServer() {
 		c.Next()
 	})
 
+	// Serve static files from web/dist if they exist
+	if _, err := os.Stat("web/dist"); err == nil {
+		r.StaticFS("/assets", http.Dir("web/dist/assets"))
+		r.StaticFile("/favicon.svg", "web/dist/favicon.svg")
+		r.StaticFile("/robots.txt", "web/dist/robots.txt")
+		
+		r.NoRoute(func(c *gin.Context) {
+			if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+				c.File("web/dist/index.html")
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
+		})
+	}
+
 	// Routes
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "swazz-engine",
-			"version": "0.1.0",
+			"version": Version,
 		})
 	})
 
 	handler := api.NewHandler()
 	apiGroup := r.Group("/api")
 	{
+		apiGroup.GET("/version", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"version": Version,
+			})
+		})
 		apiGroup.POST("/parse", handler.ParseSpec)
 		apiGroup.POST("/fuzz/start", handler.StartFuzz)
 		apiGroup.POST("/fuzz/stop", handler.StopFuzz)

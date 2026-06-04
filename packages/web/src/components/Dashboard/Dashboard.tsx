@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { RunStats } from '../../types.js';
 import { StatsBar } from './StatsBar.js';
 import { Heatmap } from './Heatmap.js';
@@ -12,57 +13,116 @@ interface Props {
 }
 
 export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
+    const [version, setVersion] = useState<string>('<TAG>');
+
+    useEffect(() => {
+        if (!stats) {
+            fetch('/api/version')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.version && data.version !== 'dev') {
+                        setVersion(data.version);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [stats]);
+
     if (!stats) {
         return (
             <div className="dashboard">
-                <div className="empty-state">
-                    <div className="empty-state-icon">⚡</div>
-                    <div className="empty-state-text" style={{ maxWidth: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ textAlign: 'center' }}>
-                            <div className="empty-state-title" style={{ fontSize: '18px', fontWeight: 600 }}>Welcome to Swazz API Fuzzer</div>
-                            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                                <button 
-                                    className="btn btn-primary" 
-                                    onClick={() => {
-                                        document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
-                                    }}>
-                                    Try Petstore Demo
-                                </button>
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>https://petstore.swagger.io/v2/swagger.json</p>
-                            </div>
+                <div className="empty-state empty-state-welcome">
+                    
+                    {/* Hero Section */}
+                    <div className="welcome-hero">
+                        <div className="welcome-hero-icon">
+                            ⚡
                         </div>
+                        <h2 className="welcome-hero-title">
+                            Welcome to Swazz API Fuzzer
+                        </h2>
+                        <p className="welcome-hero-desc">
+                            A high-performance smart fuzzer that parses OpenAPI specifications to automatically discover crashes, injections, and logic errors in your APIs.
+                        </p>
                         
-                        <div style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                            <h4 style={{ color: 'var(--text-primary)', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🌍 Web Interface Quick Start
-                            </h4>
-                            <ul style={{ margin: '0', paddingLeft: '1.25rem', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <li>Enter your <strong>OpenAPI/Swagger URL</strong> or target domain in the top field.</li>
-                                <li>Press <span style={{ padding: "2px 6px", background: "var(--bg-surface)", borderRadius: "4px", border: "1px solid var(--border-hover)", fontSize: "11px", color: "var(--text-primary)" }}>Run</span> to begin finding vulnerabilities.</li>
-                                <li>Click on <strong>Heatmap cells</strong> to filter the request log by specific endpoints and status codes.</li>
-                                <li>Select any request in the <strong>Timeline</strong> to inspect full payloads and headers.</li>
+                        <div className="welcome-hero-actions">
+                            <button 
+                                className="btn btn-primary welcome-hero-btn" 
+                                onClick={() => {
+                                    document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
+                                }}>
+                                🚀 Try Petstore Demo
+                            </button>
+                            <span className="welcome-hero-btn-target">
+                                Target: https://petstore.swagger.io/v2/swagger.json
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Content Columns */}
+                    <div className="welcome-grid">
+                        
+                        {/* Web UI Card */}
+                        <div className="welcome-card">
+                            <h3 className="welcome-card-title">
+                                🌍 Web Dashboard Mode
+                            </h3>
+                            <ul className="welcome-card-list">
+                                <li>Enter target <strong>OpenAPI URL</strong> or domain in the configuration panel.</li>
+                                <li>Configure authentication, headers, or query parameters.</li>
+                                <li>Click <strong>Run Fuzzer</strong> to start finding vulnerabilities in real-time.</li>
+                                <li>Explore the live <strong>Heatmap</strong> and inspect requests in the <strong>Timeline</strong>.</li>
                             </ul>
                         </div>
 
-                        <div style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                            <h4 style={{ color: 'var(--text-primary)', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                💻 Local CLI & CI/CD
-                            </h4>
-                            <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                Run Swazz locally against internal APIs or integrate it into your CI/CD pipeline to catch vulnerabilities before they reach production:
-                            </p>
-                            <pre style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '14px', borderRadius: '6px', margin: '0 0 12px 0', fontSize: '11px', overflowX: 'auto', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                                <code><span style={{ color: 'var(--text-muted)' }}># Clone the repository and install dependencies</span>{'\n'}git clone https://github.com/SecH0us3/swazz{'\n'}cd swazz{'\n'}npm install{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Navigate to backend package and run scan</span>{'\n'}cd packages/container{'\n'}go run main.go start --config ../../swazz.config.json{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Generate a visual HTML report</span>{'\n'}go run main.go start --config ../../swazz.config.json --format html -o report.html</code>
-                            </pre>
-
-
-
-
-                            <p style={{ margin: '0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                Tip: Use the <code style={{ color: 'var(--color-info)' }}>--fail-on-findings</code> flag in CI pipelines to automatically fail builds if security issues are discovered.
-                            </p>
+                        {/* Docker Card */}
+                        <div className="welcome-card">
+                            <h3 className="welcome-card-title">
+                                🐳 Docker Quick Start
+                            </h3>
+                            <div className="welcome-docker-group">
+                                <div>
+                                    <div className="welcome-docker-item-label">
+                                        Web API Server & Dashboard
+                                    </div>
+                                    <pre className="welcome-pre">
+                                        <code>
+                                            docker pull ghcr.io/sech0us3/swazz:{version}{'\n'}
+                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:{version}
+                                        </code>
+                                    </pre>
+                                </div>
+                                <div>
+                                    <div className="welcome-docker-item-label">
+                                        Headless CLI Fuzzer (CI/CD)
+                                    </div>
+                                    <pre className="welcome-pre">
+                                        <code>
+                                            docker pull ghcr.io/sech0us3/swazz-cli:{version}{'\n'}
+                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:{version} --config /app/swazz.config.json .
+                                        </code>
+                                    </pre>
+                                </div>
+                            </div>
                         </div>
+
                     </div>
+
+                    {/* Documentation Call to Action (CTA) */}
+                    <div className="welcome-footer">
+                        <a 
+                            href="https://sech0us3.github.io/swazz/usage.html" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="welcome-footer-link"
+                        >
+                            📖 Read the Usage & Configuration Guide →
+                        </a>
+                        <p className="welcome-footer-tip">
+                            Tip: The docker commands above automatically reference the running version ({version}). You can replace it with any other release tag (e.g., v1.0.0) or short commit SHA.
+                        </p>
+                    </div>
+
                 </div>
             </div>
         );

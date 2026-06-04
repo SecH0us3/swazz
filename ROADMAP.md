@@ -396,11 +396,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Adjust [Inspector.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Inspector/Inspector.tsx) layout inside `findings-group-title-row` so that the count badge renders before the title text.
     - Update spacing and margins in [index.css](file:///Users/alex/src/swazz/packages/web/src/index.css) to ensure proper margins between chevron, badge, and title.
 
-- [ ] **Task 43:** Redesign the "Welcome to Swazz API Fuzzer" Empty State.
+- [x] **Task 43:** Redesign the "Welcome to Swazz API Fuzzer" Empty State.
   - **Design Goal:** Transform the initial empty state screen into a more promotional and engaging landing view.
   - **Implementation Details:**
-    - Replace the basic welcome text with an embedded promotional or tutorial video showcasing the fuzzer in action.
-    - Add a clear Call-to-Action (CTA) link pointing to the official documentation (`docs/usage.md` or similar) below the video.
+    - Replace the basic welcome text with a modern dashboard mode overview and Docker quick start commands.
+    - Add a clear Call-to-Action (CTA) link pointing to the official documentation below the commands.
 
 - [x] **Task 44:** Add Developer Console Invitation.
   - **Design Goal:** Engage with developers exploring the dashboard's DevTools by rendering a styled console message inviting them to contribute.
