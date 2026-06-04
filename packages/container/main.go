@@ -32,6 +32,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var Version = "dev"
+
 func main() {
 	runtime.GOMAXPROCS(2)
 
@@ -146,13 +148,18 @@ func runServer() {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "swazz-engine",
-			"version": "0.1.0",
+			"version": Version,
 		})
 	})
 
 	handler := api.NewHandler()
 	apiGroup := r.Group("/api")
 	{
+		apiGroup.GET("/version", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"version": Version,
+			})
+		})
 		apiGroup.POST("/parse", handler.ParseSpec)
 		apiGroup.POST("/fuzz/start", handler.StartFuzz)
 		apiGroup.POST("/fuzz/stop", handler.StopFuzz)

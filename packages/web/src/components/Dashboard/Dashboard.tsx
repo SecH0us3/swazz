@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { RunStats } from '../../types.js';
 import { StatsBar } from './StatsBar.js';
 import { Heatmap } from './Heatmap.js';
@@ -12,6 +13,21 @@ interface Props {
 }
 
 export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
+    const [version, setVersion] = useState<string>('latest');
+
+    useEffect(() => {
+        if (!stats) {
+            fetch('/api/version')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.version && data.version !== 'dev') {
+                        setVersion(data.version);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [stats]);
+
     if (!stats) {
         return (
             <div className="dashboard">
@@ -71,8 +87,8 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                     </div>
                                     <pre className="welcome-pre">
                                         <code>
-                                            docker pull ghcr.io/sech0us3/swazz:&lt;TAG&gt;{'\n'}
-                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:&lt;TAG&gt;
+                                            docker pull ghcr.io/sech0us3/swazz:{version}{'\n'}
+                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:{version}
                                         </code>
                                     </pre>
                                 </div>
@@ -82,8 +98,8 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                     </div>
                                     <pre className="welcome-pre">
                                         <code>
-                                            docker pull ghcr.io/sech0us3/swazz-cli:&lt;TAG&gt;{'\n'}
-                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:&lt;TAG&gt; --config /app/swazz.config.json .
+                                            docker pull ghcr.io/sech0us3/swazz-cli:{version}{'\n'}
+                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:{version} --config /app/swazz.config.json .
                                         </code>
                                     </pre>
                                 </div>
@@ -103,7 +119,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                             📖 Read the Usage & Configuration Guide →
                         </a>
                         <p className="welcome-footer-tip">
-                            Tip: Replace &lt;TAG&gt; with the target version (e.g., v1.0.0) or short commit SHA (e.g., sha-ade4df2). For details on setting up auth pipelines, custom wordlists, or rule filters, check the guide.
+                            Tip: The docker commands above automatically reference the running version ({version}). You can replace it with any other release tag (e.g., v1.0.0) or short commit SHA.
                         </p>
                     </div>
 
