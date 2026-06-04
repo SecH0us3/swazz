@@ -457,3 +457,17 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a Path Traversal and File Inclusion (LFI/RFI) analyzer injecting traversal/inclusion payloads and verifying response indicators.
     - Implement an OS Command Injection analyzer injecting shell payloads and checking for out-of-band interactions or timing delays.
     - Implement Server-Side Template Injection (SSTI) and XML External Entity (XXE) analyzers with dedicated payloads and detectors.
+
+- [ ] **Task 51: User Authentication, Cloudflare-Hosted Browser Running, and Custom Runners**
+  - **Design Goal:** Support multi-user collaboration by adding user registration, allowing browser-based runs on Cloudflare using Cloudflare tokens, and letting users register and connect their own self-hosted runners.
+  - **Implementation Details:**
+    - Implement user registration and authentication (e.g., JWT-based or OAuth2).
+    - Build integration with Cloudflare Workers/Pages utilizing Cloudflare API tokens to trigger scans directly from browser.
+    - Implement a runner registration system (e.g. WebSocket connection or long polling) allowing external runners to register, authenticate, and pull scan jobs from the central coordinator.
+
+- [ ] **Task 52: Standardize Configuration Schema & Optimize Web Config Export**
+  - **Design Goal:** Resolve configuration mismatch bugs by unifying CLI and Web schemas, and optimize the dashboard's exported config size by refining endpoint inclusion rules.
+  - **Implementation Details:**
+    - Verify and align schemas between CLI configurations and the Web dashboard settings to ensure complete compatibility (1:1 conversion).
+    - Limit the web dashboard's configuration export format so that downloading config from the Web UI does not dump excessive endpoints.
+    - Implement client-side and server-side config schema validation to prevent malformed or incompatible options from being imported.
