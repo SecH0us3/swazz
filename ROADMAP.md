@@ -451,7 +451,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Detect session expirations dynamically (e.g., HTTP 401/403 or specific redirect patterns) and automate re-authentication flows.
     - Identify anti-CSRF tokens in HTML forms and cookies, dynamically fetching fresh tokens and injecting them into headers/bodies of outgoing fuzz requests.
 
-- [ ] **Task 50: Expand Active Scanning Rules (Path Traversal, OS Command Injection, SSTI, XXE)**
+- [/] **Task 50: Expand Active Scanning Rules (Path Traversal, OS Command Injection, SSTI, XXE)**
   - **Design Goal:** Extend the vulnerabilities coverage of the core scanner beyond API-specific vulnerabilities to general web application flaws.
   - **Implementation Details:**
     - Implement a Path Traversal and File Inclusion (LFI/RFI) analyzer injecting traversal/inclusion payloads and verifying response indicators.

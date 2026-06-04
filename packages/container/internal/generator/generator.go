@@ -22,6 +22,9 @@ var maliciousStringCategories = []struct {
 	{payloads.CatMaliciousXSS, payloads.MaliciousXSS},
 	{payloads.CatMaliciousPathTraversal, payloads.MaliciousPathTraversal},
 	{payloads.CatOOBInteraction, payloads.MaliciousOOB},
+	{payloads.CatMaliciousCmdi, payloads.MaliciousCmdi},
+	{payloads.CatMaliciousSSTI, payloads.MaliciousSSTI},
+	{payloads.CatMaliciousXXE, payloads.MaliciousXXE},
 }
 
 // Generator produces fuzz payloads based on JSON Schema and a fuzzing profile.
@@ -169,6 +172,15 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 		}
 		if is(payloads.CatOOBInteraction) {
 			maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
+		}
+		if is(payloads.CatMaliciousCmdi) {
+			maliciousBody = append(maliciousBody, payloads.MaliciousCmdi...)
+		}
+		if is(payloads.CatMaliciousSSTI) {
+			maliciousBody = append(maliciousBody, payloads.MaliciousSSTI...)
+		}
+		if is(payloads.CatMaliciousXXE) {
+			maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
 		}
 		bodyCount = len(maliciousBody)
 		if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
@@ -543,6 +555,15 @@ func (g *Generator) BodyIterations() int {
 	}
 	if is(payloads.CatMaliciousPathTraversal) {
 		maliciousBody = append(maliciousBody, payloads.MaliciousPathTraversal...)
+	}
+	if is(payloads.CatMaliciousCmdi) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousCmdi...)
+	}
+	if is(payloads.CatMaliciousSSTI) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousSSTI...)
+	}
+	if is(payloads.CatMaliciousXXE) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
 	}
 	bodyCount = len(maliciousBody)
 	if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {

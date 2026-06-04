@@ -213,6 +213,73 @@ func TestGenerate_MaliciousCategoryFiltering(t *testing.T) {
 	}
 }
 
+func TestGenerate_NewCategoriesFiltering(t *testing.T) {
+	newCats := []struct {
+		category string
+		expected []any
+	}{
+		{payloads.CatMaliciousCmdi, payloads.MaliciousCmdi},
+		{payloads.CatMaliciousSSTI, payloads.MaliciousSSTI},
+		{payloads.CatMaliciousXXE, payloads.MaliciousXXE},
+	}
+
+	for _, tc := range newCats {
+		t.Run(tc.category, func(t *testing.T) {
+			settings := swagger.Settings{
+				PayloadCategories: map[swagger.FuzzingProfile][]string{
+					swagger.ProfileMalicious: {tc.category},
+				},
+			}
+			g := New(nil, swagger.ProfileMalicious, settings)
+
+			if len(g.cachedMaliciousStrings) != len(tc.expected) {
+				t.Errorf("Expected cachedMaliciousStrings to have length %d, got %d", len(tc.expected), len(g.cachedMaliciousStrings))
+			}
+
+			catSet := make(map[any]bool)
+			for _, val := range tc.expected {
+				catSet[val] = true
+			}
+
+			for _, val := range g.cachedMaliciousStrings {
+				if !catSet[val] {
+					t.Errorf("Found unexpected payload %v in cachedMaliciousStrings when only %s category was enabled", val, tc.category)
+				}
+			}
+		})
+	}
+}
+
+func TestMinIterationsNeeded_NewCategories(t *testing.T) {
+	newCats := []struct {
+		category string
+		payloads []any
+	}{
+		{payloads.CatMaliciousCmdi, payloads.MaliciousCmdi},
+		{payloads.CatMaliciousSSTI, payloads.MaliciousSSTI},
+		{payloads.CatMaliciousXXE, payloads.MaliciousXXE},
+	}
+
+	for _, tc := range newCats {
+		t.Run(tc.category, func(t *testing.T) {
+			settings := swagger.Settings{
+				PayloadCategories: map[swagger.FuzzingProfile][]string{
+					swagger.ProfileMalicious: {tc.category},
+				},
+			}
+			iters := MinIterationsNeeded(swagger.ProfileMalicious, settings)
+			if iters < len(tc.payloads) {
+				t.Errorf("Expected MinIterationsNeeded to be at least %d for %s, got %d", len(tc.payloads), tc.category, iters)
+			}
+
+			g := New(nil, swagger.ProfileMalicious, settings)
+			bodyIters := g.BodyIterations()
+			if bodyIters != len(tc.payloads) {
+				t.Errorf("Expected BodyIterations to be %d for %s, got %d", len(tc.payloads), tc.category, bodyIters)
+			}
+		})
+	}
+}
 
 func BenchmarkGenerateStringMalicious(b *testing.B) {
 	schema := &swagger.SchemaProperty{
