@@ -20,6 +20,10 @@ func NewRegistry() *AnalyzerRegistry {
 			&SizeAnalyzer{},
 			NewCustomAnalyzer(),
 			&TimingAnalyzer{},
+			&PathTraversalAnalyzer{},
+			&CmdiAnalyzer{},
+			&SSTIAnalyzer{},
+			&XXEAnalyzer{},
 		},
 	}
 }

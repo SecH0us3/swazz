@@ -124,4 +124,52 @@ describe('findings utility', () => {
         expect(result.title).toBe('Time-Based Cmd Injection');
         expect(result.key).toBe('time_based_cmdi');
     });
+
+    it('should categorize swazz/path-traversal-leak rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/path-traversal-leak',
+            level: 'error',
+            message: 'Path Traversal detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('Path Traversal / File Inclusion');
+        expect(result.key).toBe('path_traversal_leak');
+    });
+
+    it('should categorize swazz/cmdi-leak rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/cmdi-leak',
+            level: 'error',
+            message: 'OS Command Injection detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('OS Command Injection');
+        expect(result.key).toBe('cmdi_leak');
+    });
+
+    it('should categorize swazz/ssti-leak rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/ssti-leak',
+            level: 'error',
+            message: 'SSTI detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('Server-Side Template Injection (SSTI)');
+        expect(result.key).toBe('ssti_leak');
+    });
+
+    it('should categorize swazz/xxe-leak rule directly', () => {
+        const finding: AnalysisFinding = {
+            ruleId: 'swazz/xxe-leak',
+            level: 'error',
+            message: 'XXE detected'
+        };
+        const result = categorizeFinding(finding);
+        expect(result.color).toBe('var(--color-error)');
+        expect(result.title).toBe('XML External Entity (XXE)');
+        expect(result.key).toBe('xxe_leak');
+    });
 });

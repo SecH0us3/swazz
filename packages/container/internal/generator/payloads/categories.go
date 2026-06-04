@@ -31,6 +31,9 @@ const (
 	CatIPSpoofing             = "malicious_ip_spoofing"
 	CatJWTManipulation        = "malicious_jwt_manipulation"
 	CatOOBInteraction         = "malicious_oob_interaction"
+	CatMaliciousCmdi          = "malicious_cmdi"
+	CatMaliciousSSTI          = "malicious_ssti"
+	CatMaliciousXXE           = "malicious_xxe"
 )
 
 // Random category IDs (single bucket for all random generators)
@@ -49,6 +52,9 @@ var (
 	MaliciousPathTraversal = toAny(maliciousPathTraversal)
 	MaliciousEncoding      = toAny(maliciousEncoding)
 	MaliciousOOB           = toAny(maliciousOOB)
+	MaliciousCmdi          = toAny(maliciousCmdi)
+	MaliciousSSTI          = toAny(maliciousSSTI)
+	MaliciousXXE           = toAny(maliciousXXE)
 )
 
 func toAny[T any](in []T) []any {
@@ -95,6 +101,9 @@ var MaliciousCategories = []Category{
 	{ID: CatIPSpoofing, Label: "IP Spoofing", Description: "X-Forwarded-For, X-Real-IP injection for access control bypass", Items: toAny(IPSpoofing)},
 	{ID: CatJWTManipulation, Label: "JWT Manipulation", Description: "Authorization header fuzzing: alg:none, invalid tokens", Items: toAny(JWTManipulation)},
 	{ID: CatOOBInteraction, Label: "OOB Interaction", Description: "Injects unique URLs to detect blind SSRF, XSS, and command injection", Items: MaliciousOOB},
+	{ID: CatMaliciousCmdi, Label: "Command Injection", Description: "OS command injection payloads (e.g. ; id, | id, ; whoami, etc.)", Items: MaliciousCmdi},
+	{ID: CatMaliciousSSTI, Label: "Server-Side Template Injection (SSTI)", Description: "Template injection payloads (e.g. {{7*7}}, ${7*7}, etc.)", Items: MaliciousSSTI},
+	{ID: CatMaliciousXXE, Label: "XML External Entity (XXE)", Description: "XML external entity injection payloads for local file read", Items: MaliciousXXE},
 }
 
 // RandomCategories lists all random categories.

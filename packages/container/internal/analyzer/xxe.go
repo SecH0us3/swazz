@@ -1,0 +1,59 @@
+package analyzer
+
+import (
+	"fmt"
+	"strings"
+	"swazz-engine/internal/swagger"
+)
+
+type XXEAnalyzer struct{}
+
+var xxeFileSignatures = []string{
+	"root:x:0:0:",
+	"bin:sh",
+	"/bin/bash",
+	"[extensions]",
+	"[fonts]",
+	"[mci extensions]",
+}
+
+func (a *XXEAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if input.Profile != swagger.ProfileMalicious {
+		return nil
+	}
+
+	sentStrings := extractStrings(input.SentPayload)
+	if len(sentStrings) == 0 {
+		return nil
+	}
+
+	// Check if any of the sent payloads look like an XML/XXE payload
+	isXXEPayload := false
+	for _, s := range sentStrings {
+		if strings.Contains(s, "<?xml") || strings.Contains(s, "<!DOCTYPE") || strings.Contains(s, "<!ENTITY") {
+			isXXEPayload = true
+			break
+		}
+	}
+
+	if !isXXEPayload {
+		return nil
+	}
+
+	bodyStr := string(input.ResponseBody)
+	var findings []swagger.AnalysisFinding
+
+	for _, sig := range xxeFileSignatures {
+		if strings.Contains(bodyStr, sig) {
+			findings = append(findings, swagger.AnalysisFinding{
+				RuleID:   "swazz/xxe-leak",
+				Level:    "error",
+				Message:  fmt.Sprintf("XXE leak detected. File signature '%s' found in response body when XML/XXE payload was sent.", sig),
+				Evidence: fmt.Sprintf("Found leaked signature: %s", sig),
+			})
+			break
+		}
+	}
+
+	return findings
+}

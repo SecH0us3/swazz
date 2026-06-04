@@ -89,6 +89,22 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-error)';
         title = 'Time-Based Cmd Injection';
         key = 'time_based_cmdi';
+    } else if (f.ruleId === 'swazz/path-traversal-leak') {
+        color = 'var(--color-error)';
+        title = 'Path Traversal / File Inclusion';
+        key = 'path_traversal_leak';
+    } else if (f.ruleId === 'swazz/cmdi-leak') {
+        color = 'var(--color-error)';
+        title = 'OS Command Injection';
+        key = 'cmdi_leak';
+    } else if (f.ruleId === 'swazz/ssti-leak') {
+        color = 'var(--color-error)';
+        title = 'Server-Side Template Injection (SSTI)';
+        key = 'ssti_leak';
+    } else if (f.ruleId === 'swazz/xxe-leak') {
+        color = 'var(--color-error)';
+        title = 'XML External Entity (XXE)';
+        key = 'xxe_leak';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;
