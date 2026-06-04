@@ -90,7 +90,7 @@ export default function App() {
             const shift = e.shiftKey;
             const alt = e.altKey;
 
-            if (isInputActive && e.key !== 'Escape' && !mod && !alt) {
+            if (isInputActive && e.key !== 'Escape' && !mod) {
                 return;
             }
 
