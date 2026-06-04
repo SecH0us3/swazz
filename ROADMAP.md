@@ -471,3 +471,22 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Verify and align schemas between CLI configurations and the Web dashboard settings to ensure complete compatibility (1:1 conversion).
     - Limit the web dashboard's configuration export format so that downloading config from the Web UI does not dump excessive endpoints.
     - Implement client-side and server-side config schema validation to prevent malformed or incompatible options from being imported.
+
+- [ ] **Task 53: CI/CD Integration, Fail-on-Severity, and SARIF/JUnit Reports**
+  - **Design Goal:** Support DevSecOps workflows by enabling automated gatekeeping in CI pipelines and exporting industry-standard security analysis formats.
+  - **Implementation Details:**
+    - Add CLI flags (e.g. `--fail-on-severity`) to exit with non-zero codes when specific vulnerability thresholds are met.
+    - Generate report outputs in SARIF (Static Analysis Results Interchange Format) to integrate natively with GitHub Code Scanning alerts, and JUnit XML for general CI test runners.
+
+- [ ] **Task 54: Finding Triaging, Suppressions, and Ignore Rules**
+  - **Design Goal:** Reduce noise and manage false positives effectively by allowing developers to mute or skip specific vulnerability alerts.
+  - **Implementation Details:**
+    - Allow users to mark findings as `False Positive`, `Ignored`, or `Acknowledged` in the web dashboard.
+    - Export a `swazz.ignore.json` configuration containing rules (such as matched endpoint, payload, or vulnerability type) to automatically suppress matching findings in subsequent CLI and Web runs.
+
+- [ ] **Task 55: Stateful API Fuzzing & Request Chaining**
+  - **Design Goal:** Enable fuzzing of complex multi-step workflows by dynamically passing variables extracted from earlier HTTP responses into subsequent requests.
+  - **Implementation Details:**
+    - Define variable extraction rules (e.g. extracting a created resource ID from a JSON body or Location header during a POST request).
+    - Map extracted variables into the fuzzing execution pipeline to be injected into URL paths, headers, or bodies of subsequent requests (e.g. GET/PUT/DELETE) to fuzz authenticated multi-step flows.
+
