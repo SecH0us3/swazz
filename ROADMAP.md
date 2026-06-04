@@ -415,7 +415,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement `React.memo`, `useMemo`, and `useCallback` strategically to prevent costly re-renders of list items and grid cells.
     - Explore windowing/virtualization for the real-time request logs or long findings lists.
 
-- [/] **Task 46:** Implement Keyboard Shortcuts & Help Menu.
+- [x] **Task 46:** Implement Keyboard Shortcuts & Help Menu.
   - **Design Goal:** Improve accessibility and productivity by allowing developers to control the fuzzer and navigate the dashboard via custom keyboard shortcuts.
   - **Implementation Details:**
     - Listen to global `keydown` events.
