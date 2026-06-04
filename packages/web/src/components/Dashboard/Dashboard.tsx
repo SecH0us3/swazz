@@ -15,54 +15,173 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
     if (!stats) {
         return (
             <div className="dashboard">
-                <div className="empty-state">
-                    <div className="empty-state-icon">⚡</div>
-                    <div className="empty-state-text" style={{ maxWidth: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ textAlign: 'center' }}>
-                            <div className="empty-state-title" style={{ fontSize: '18px', fontWeight: 600 }}>Welcome to Swazz API Fuzzer</div>
-                            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                                <button 
-                                    className="btn btn-primary" 
-                                    onClick={() => {
-                                        document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
-                                    }}>
-                                    Try Petstore Demo
-                                </button>
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>https://petstore.swagger.io/v2/swagger.json</p>
-                            </div>
+                <div className="empty-state" style={{ maxWidth: '800px', margin: '40px auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '32px', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                    
+                    {/* Hero Section */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '16px' }}>
+                        <div style={{
+                            width: '72px',
+                            height: '72px',
+                            borderRadius: '50%',
+                            background: 'var(--accent-subtle)',
+                            border: '1px solid var(--accent)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '32px',
+                            boxShadow: 'var(--shadow-glow)',
+                            marginBottom: '8px'
+                        }}>
+                            ⚡
                         </div>
+                        <h2 style={{ 
+                            fontSize: '28px', 
+                            fontWeight: 700, 
+                            letterSpacing: '-0.02em',
+                            margin: 0,
+                            background: 'linear-gradient(135deg, var(--text-primary) 30%, var(--accent-light) 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                        }}>
+                            Welcome to Swazz API Fuzzer
+                        </h2>
+                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '580px', margin: '0 auto', lineHeight: '1.6' }}>
+                            A high-performance smart fuzzer that parses OpenAPI specifications to automatically discover crashes, injections, and logic errors in your APIs.
+                        </p>
                         
-                        <div style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                            <h4 style={{ color: 'var(--text-primary)', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🌍 Web Interface Quick Start
-                            </h4>
-                            <ul style={{ margin: '0', paddingLeft: '1.25rem', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <li>Enter your <strong>OpenAPI/Swagger URL</strong> or target domain in the top field.</li>
-                                <li>Press <span style={{ padding: "2px 6px", background: "var(--bg-surface)", borderRadius: "4px", border: "1px solid var(--border-hover)", fontSize: "11px", color: "var(--text-primary)" }}>Run</span> to begin finding vulnerabilities.</li>
-                                <li>Click on <strong>Heatmap cells</strong> to filter the request log by specific endpoints and status codes.</li>
-                                <li>Select any request in the <strong>Timeline</strong> to inspect full payloads and headers.</li>
+                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <button 
+                                className="btn btn-primary" 
+                                style={{ padding: '10px 24px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
+                                onClick={() => {
+                                    document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
+                                }}>
+                                🚀 Try Petstore Demo
+                            </button>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                Target: https://petstore.swagger.io/v2/swagger.json
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Content Columns */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+                        
+                        {/* Web UI Card */}
+                        <div style={{ 
+                            background: 'var(--bg-card)', 
+                            border: '1px solid var(--border-default)', 
+                            borderRadius: '12px', 
+                            padding: '24px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '16px',
+                            boxShadow: 'var(--shadow-sm)'
+                        }}>
+                            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                🌍 Web Dashboard Mode
+                            </h3>
+                            <ul style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', lineHeight: '1.5' }}>
+                                <li>Enter target <strong>OpenAPI URL</strong> or domain in the configuration panel.</li>
+                                <li>Configure authentication, headers, or query parameters.</li>
+                                <li>Click <strong>Run Fuzzer</strong> to start finding vulnerabilities in real-time.</li>
+                                <li>Explore the live <strong>Heatmap</strong> and inspect requests in the <strong>Timeline</strong>.</li>
                             </ul>
                         </div>
 
-                        <div style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                            <h4 style={{ color: 'var(--text-primary)', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                💻 Local CLI & CI/CD
-                            </h4>
-                            <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                Run Swazz locally against internal APIs or integrate it into your CI/CD pipeline to catch vulnerabilities before they reach production:
-                            </p>
-                            <pre style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '14px', borderRadius: '6px', margin: '0 0 12px 0', fontSize: '11px', overflowX: 'auto', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                                <code><span style={{ color: 'var(--text-muted)' }}># Clone the repository and install dependencies</span>{'\n'}git clone https://github.com/SecH0us3/swazz{'\n'}cd swazz{'\n'}npm install{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Navigate to backend package and run scan</span>{'\n'}cd packages/container{'\n'}go run main.go start --config ../../swazz.config.json{'\n\n'}<span style={{ color: 'var(--text-muted)' }}># Generate a visual HTML report</span>{'\n'}go run main.go start --config ../../swazz.config.json --format html -o report.html</code>
-                            </pre>
-
-
-
-
-                            <p style={{ margin: '0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                Tip: Use the <code style={{ color: 'var(--color-info)' }}>--fail-on-findings</code> flag in CI pipelines to automatically fail builds if security issues are discovered.
-                            </p>
+                        {/* Docker Card */}
+                        <div style={{ 
+                            background: 'var(--bg-card)', 
+                            border: '1px solid var(--border-default)', 
+                            borderRadius: '12px', 
+                            padding: '24px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '16px',
+                            boxShadow: 'var(--shadow-sm)'
+                        }}>
+                            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                🐳 Docker Quick Start
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 500 }}>
+                                        Web API Server & Dashboard
+                                    </div>
+                                    <pre style={{ 
+                                        background: 'var(--bg-app)', 
+                                        border: '1px solid var(--border-subtle)', 
+                                        padding: '10px 12px', 
+                                        borderRadius: '6px', 
+                                        fontSize: '11px', 
+                                        overflowX: 'auto', 
+                                        color: 'var(--text-primary)', 
+                                        fontFamily: 'var(--font-mono)',
+                                        margin: 0
+                                    }}>
+                                        <code>
+                                            docker pull ghcr.io/sech0us3/swazz:sha-ade4df2{'\n'}
+                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:sha-ade4df2
+                                        </code>
+                                    </pre>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 500 }}>
+                                        Headless CLI Fuzzer (CI/CD)
+                                    </div>
+                                    <pre style={{ 
+                                        background: 'var(--bg-app)', 
+                                        border: '1px solid var(--border-subtle)', 
+                                        padding: '10px 12px', 
+                                        borderRadius: '6px', 
+                                        fontSize: '11px', 
+                                        overflowX: 'auto', 
+                                        color: 'var(--text-primary)', 
+                                        fontFamily: 'var(--font-mono)',
+                                        margin: 0
+                                    }}>
+                                        <code>
+                                            docker pull ghcr.io/sech0us3/swazz-cli:sha-ade4df2{'\n'}
+                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:sha-ade4df2 --config /app/swazz.config.json .
+                                        </code>
+                                    </pre>
+                                </div>
+                            </div>
                         </div>
+
                     </div>
+
+                    {/* Documentation Call to Action (CTA) */}
+                    <div style={{ 
+                        borderTop: '1px solid var(--border-subtle)', 
+                        paddingTop: '24px', 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        alignItems: 'center', 
+                        gap: '12px', 
+                        textAlign: 'center' 
+                    }}>
+                        <a 
+                            href="https://sech0us3.github.io/swazz/usage.html" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '8px', 
+                                color: 'var(--accent-light)', 
+                                fontSize: '14px', 
+                                fontWeight: 500, 
+                                textDecoration: 'none'
+                            }}
+                        >
+                            📖 Read the Usage & Configuration Guide →
+                        </a>
+                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                            Tip: To learn how to configure authentication pipelines, custom injection wordlists, or rule filters, refer to the documentation.
+                        </p>
+                    </div>
+
                 </div>
             </div>
         );
