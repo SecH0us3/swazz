@@ -437,3 +437,23 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Go Install:** Ensure the engine can be installed natively via go install (this may require renaming the packages/container directory to packages/swazz or packages/swazz-engine so the compiled binary is not named container).
     - **Homebrew:** Create a Homebrew formula/tap to allow installation via brew install swazz (and standardize the binary name to swazz instead of swazz-engine).
     - **APT:** Create Debian packages (.deb) and provide an APT repository for installation via apt install swazz (standardizing the binary name to swazz).
+
+- [ ] **Task 48: Implement Active Web Crawler (Spider)**
+  - **Design Goal:** Enable target discovery by dynamically crawling web applications from a starting URL without relying solely on static API specifications.
+  - **Implementation Details:**
+    - Parse HTML responses for anchor tags (`<a>`), forms (`<form>`), and buttons.
+    - Implement a concurrent, recursive crawler in Go with rate-limiting, depth-limits, and domain scoping to build a dynamic Sitemap.
+    - Feed discovered URLs and form inputs into the fuzzing execution pipeline.
+
+- [ ] **Task 49: Automated Session & CSRF Management**
+  - **Design Goal:** Maintain active authenticated sessions and handle CSRF protection mechanisms dynamically throughout fuzzing runs.
+  - **Implementation Details:**
+    - Detect session expirations dynamically (e.g., HTTP 401/403 or specific redirect patterns) and automate re-authentication flows.
+    - Identify anti-CSRF tokens in HTML forms and cookies, dynamically fetching fresh tokens and injecting them into headers/bodies of outgoing fuzz requests.
+
+- [ ] **Task 50: Expand Active Scanning Rules (Path Traversal, OS Command Injection, SSTI, XXE)**
+  - **Design Goal:** Extend the vulnerabilities coverage of the core scanner beyond API-specific vulnerabilities to general web application flaws.
+  - **Implementation Details:**
+    - Implement a Path Traversal (LFI/RFI) analyzer injecting directory traversal payloads and verifying response indicators.
+    - Implement an OS Command Injection analyzer injecting shell payloads and checking for out-of-band interactions or timing delays.
+    - Implement Server-Side Template Injection (SSTI) and XML External Entity (XXE) analyzers with dedicated payloads and detectors.
