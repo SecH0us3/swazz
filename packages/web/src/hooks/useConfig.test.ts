@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useConfig } from './useConfig.js';
+import { useConfig, validateConfig } from './useConfig.js';
 import { DEFAULT_SETTINGS } from '../types.js';
 import type { SwazzConfig } from '../types.js';
 
@@ -18,6 +18,7 @@ const DEFAULT_CONFIG: SwazzConfig = {
     endpoints: [],
     disabled_endpoints: [],
     _swagger_urls: [],
+    security: { allow_private_ips: false },
 };
 
 describe('useConfig', () => {
@@ -170,17 +171,69 @@ describe('useConfig', () => {
         expect(result.current.config.settings.profiles).toEqual(['RANDOM', 'MALICIOUS']);
     });
 
-    it('should export config correctly', () => {
+    it('should export config correctly with optimized hybrid format', () => {
         const { result } = renderHook(() => useConfig());
 
         act(() => {
-            result.current.updateConfig({ base_url: 'https://export-test.com' });
+            result.current.updateConfig({
+                base_url: 'https://export-test.com',
+                global_headers: { 'X-Custom-Header': 'val' },
+                _swagger_urls: ['https://example.com/swagger.json'],
+                disabled_endpoints: ['/admin'],
+                endpoints: [{ path: '/users', method: 'GET', schema: {} }]
+            });
         });
 
         const exported = result.current.exportConfig();
         const parsed = JSON.parse(exported);
 
         expect(parsed.base_url).toBe('https://export-test.com');
+        expect(parsed.headers).toEqual({ 'X-Custom-Header': 'val' });
+        expect(parsed.swagger_urls).toEqual(['https://example.com/swagger.json']);
+        expect(parsed.endpoints).toEqual({ exclude: ['/admin'] });
+        expect(parsed.endpoints.exclude).toEqual(['/admin']);
+    });
+
+    describe('validateConfig', () => {
+        it('should pass on a valid partial or full config', () => {
+            expect(() => validateConfig({})).not.toThrow();
+            expect(() => validateConfig({
+                base_url: 'https://api.com',
+                settings: {
+                    concurrency: 5,
+                    bola_similarity_threshold: 0.9
+                },
+                security: {
+                    allow_private_ips: true
+                }
+            })).not.toThrow();
+        });
+
+        it('should throw when config is not an object', () => {
+            expect(() => validateConfig(null)).toThrow('Config must be a JSON object');
+            expect(() => validateConfig('string')).toThrow('Config must be a JSON object');
+            expect(() => validateConfig([])).toThrow('Config must be a JSON object');
+        });
+
+        it('should throw when base_url is not a string', () => {
+            expect(() => validateConfig({ base_url: 123 })).toThrow('base_url must be a string');
+        });
+
+        it('should throw when settings is not an object', () => {
+            expect(() => validateConfig({ settings: 'not an object' })).toThrow('settings must be an object');
+        });
+
+        it('should throw when settings property types are incorrect', () => {
+            expect(() => validateConfig({ settings: { concurrency: '5' } })).toThrow('settings.concurrency must be a number');
+            expect(() => validateConfig({ settings: { debug: 'true' } })).toThrow('settings.debug must be a boolean');
+            expect(() => validateConfig({ settings: { bola_similarity_threshold: '0.85' } })).toThrow('settings.bola_similarity_threshold must be a number');
+            expect(() => validateConfig({ settings: { oob_server_url: 123 } })).toThrow('settings.oob_server_url must be a string');
+        });
+
+        it('should throw when security properties are incorrect', () => {
+            expect(() => validateConfig({ security: 'not an object' })).toThrow('security must be an object');
+            expect(() => validateConfig({ security: { allow_private_ips: 'yes' } })).toThrow('security.allow_private_ips must be a boolean');
+        });
     });
 
     it('should import valid config correctly', () => {

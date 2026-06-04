@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
-import { useConfig } from './hooks/useConfig.js';
+import { useConfig, validateConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
 import type { ResultSummary } from './hooks/useRunner.js';
 import { useDb } from './hooks/useDb.js';
@@ -76,6 +76,45 @@ export default function App() {
         getDb,
         showToast,
     });
+
+    const handleImportConfig = useCallback((jsonString: string) => {
+        let parsed: any;
+        try {
+            parsed = JSON.parse(jsonString);
+        } catch (err) {
+            throw new Error('Invalid JSON: ' + (err instanceof Error ? err.message : String(err)));
+        }
+
+        // Normalize CLI inputs
+        if (parsed.headers && !parsed.global_headers) {
+            parsed.global_headers = parsed.headers;
+        }
+        if (parsed.swagger_urls && !parsed._swagger_urls) {
+            parsed._swagger_urls = parsed.swagger_urls;
+        }
+        if (parsed.endpoints && typeof parsed.endpoints === 'object' && !Array.isArray(parsed.endpoints)) {
+            if (parsed.endpoints.exclude && !parsed.disabled_endpoints) {
+                parsed.disabled_endpoints = parsed.endpoints.exclude;
+            }
+            parsed.endpoints = [];
+        }
+
+        // Run the validation
+        validateConfig(parsed);
+
+        // Call importConfig
+        importConfig(JSON.stringify(parsed));
+
+        // After updating the state, if the imported config contains _swagger_urls but the endpoints list is empty,
+        // asynchronously call loadEndpoints(_swagger_urls) after a short delay (e.g. setTimeout) to automatically fetch and populate spec endpoints in the UI.
+        if (parsed._swagger_urls && parsed._swagger_urls.length > 0 && (!parsed.endpoints || parsed.endpoints.length === 0)) {
+            setTimeout(() => {
+                loadEndpoints(parsed._swagger_urls).catch(err => {
+                    showToast('Failed to automatically load endpoints: ' + (err instanceof Error ? err.message : String(err)), 'error');
+                });
+            }, 100);
+        }
+    }, [importConfig, loadEndpoints, showToast]);
 
     const displayUrl = config.base_url || (config._swagger_urls?.[0] ?? '');
 
@@ -296,7 +335,7 @@ export default function App() {
                     onUpdateDictionaries={updateDictionaries}
                     onUpdateProfiles={updateProfiles}
                     onUpdateConfig={updateConfig}
-                    onImportConfig={importConfig}
+                    onImportConfig={handleImportConfig}
                     onExportConfig={exportConfig}
                     onToast={showToast}
                 />

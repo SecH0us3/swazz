@@ -79,6 +79,10 @@ The fuzzer engine relies on a JSON configuration file. Here is an example of wha
   - **`response_size_anomaly_multiplier`**: (Float) The ratio multiplier above baseline response size required to trigger a `swazz/response-size-anomaly` warning (e.g., `5.0` for 5x larger than baseline). Default is `5.0`.
   - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.
+  - **`bola_similarity_threshold`**: (Float) Threshold ratio for BOLA detection. Default is `0.85`.
+  - **`time_anomaly_threshold_ms`**: (Integer) Threshold in milliseconds for detecting response time anomalies. Default is `4000`.
+  - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`.
+  - **`debug`**: (Boolean) Enables debug logging output. Default is `false`.
 
 ## Authentication Sequences & Variable Evaluation 🔐
 
