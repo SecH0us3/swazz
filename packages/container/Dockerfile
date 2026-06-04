@@ -16,6 +16,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 ENV GOMEMLIMIT=230MiB
 COPY --from=builder /app/swazz-engine /swazz-engine
+COPY --from=builder /app/web/dist /web/dist
 WORKDIR /
 EXPOSE 8080
 

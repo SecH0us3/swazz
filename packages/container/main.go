@@ -126,6 +126,21 @@ func runServer() {
 		c.Next()
 	})
 
+	// Serve static files from web/dist if they exist
+	if _, err := os.Stat("web/dist"); err == nil {
+		r.StaticFS("/assets", http.Dir("web/dist/assets"))
+		r.StaticFile("/favicon.svg", "web/dist/favicon.svg")
+		r.StaticFile("/robots.txt", "web/dist/robots.txt")
+		
+		r.NoRoute(func(c *gin.Context) {
+			if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+				c.File("web/dist/index.html")
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
+		})
+	}
+
 	// Routes
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
