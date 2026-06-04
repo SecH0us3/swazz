@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
-    const [version, setVersion] = useState<string>('latest');
+    const [version, setVersion] = useState<string>('<TAG>');
 
     useEffect(() => {
         if (!stats) {
