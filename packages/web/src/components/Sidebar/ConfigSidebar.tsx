@@ -511,7 +511,7 @@ export function ConfigSidebar({
 
             {/* Import / Export */}
             <Section title="Config">
-                <input ref={fileRef} type="file" accept=".json" style={{ display:'none' }} onChange={handleImport} />
+                <input ref={fileRef} type="file" accept=".json,.yaml,.yml" style={{ display:'none' }} onChange={handleImport} />
                 <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     <button className="btn btn-ghost" style={{ width:'100%', justifyContent:'center' }} onClick={() => fileRef.current?.click()}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

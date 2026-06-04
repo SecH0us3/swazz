@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+// ParseRawSpec checks if the data is YAML, converts it to JSON if needed, and delegates to ParseSpec.
+func ParseRawSpec(data []byte) (*ParseResult, error) {
+	if converted, err := ConvertYAMLToJSON(data); err == nil {
+		data = converted
+	}
+	return ParseSpec(json.RawMessage(data))
+}
+
 // ParseSpec parses a Swagger/OpenAPI JSON spec into a ParseResult.
 // Supports both OpenAPI 3.x and Swagger 2.0.
 func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
@@ -295,7 +303,7 @@ func mergeParams(pathLevel []any, operation map[string]any) []any {
 	if p, ok := operation["parameters"].([]any); ok {
 		opParams = p
 	}
-	merged := make([]any, 0, len(pathLevel)+len(opParams))
+	merged := make([]any, 0)
 	merged = append(merged, pathLevel...)
 	merged = append(merged, opParams...)
 	return merged

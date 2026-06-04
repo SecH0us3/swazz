@@ -93,7 +93,7 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 		return
 	}
 
-	result, err := swagger.ParseSpec(raw)
+	result, err := swagger.ParseRawSpec(raw)
 	if err != nil {
 		if swagger.IsPostman(raw) {
 			resultPostman, errPostman := postman.ParsePostman(raw)

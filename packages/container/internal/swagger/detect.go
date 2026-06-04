@@ -72,7 +72,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json, text/xml, application/xml")
+	req.Header.Set("Accept", "application/json, application/yaml, application/x-yaml, text/yaml, text/x-yaml, text/xml, application/xml")
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -85,6 +85,10 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 		if resp.StatusCode == http.StatusOK {
 			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 			if err == nil {
+				if converted, convErr := ConvertYAMLToJSON(body); convErr == nil {
+					body = converted
+				}
+
 				if IsValidSpec(body) || IsWSDL(body) || IsPostman(body) {
 					return body, nil
 				}

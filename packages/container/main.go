@@ -248,7 +248,7 @@ func runCLI(args []string) {
 		if err != nil {
 			log.Fatalf("Failed to fetch spec %s: %v", urlStr, err)
 		}
-		parsed, err := swagger.ParseSpec(specRaw)
+		parsed, err := swagger.ParseRawSpec(specRaw)
 		if err != nil {
 			if swagger.IsPostman(specRaw) {
 				parsedPostman, errPostman := postman.ParsePostman(specRaw)
