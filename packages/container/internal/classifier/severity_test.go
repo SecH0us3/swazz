@@ -40,6 +40,12 @@ func TestFindingsExceedThreshold(t *testing.T) {
 			expected:  false,
 		},
 		{
+			name:      "findings containing nil returns false",
+			findings:  []*Finding{nil},
+			threshold: "error",
+			expected:  false,
+		},
+		{
 			name: "threshold none returns false even with error findings",
 			findings: []*Finding{
 				{Level: SeverityError},

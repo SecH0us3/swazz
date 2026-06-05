@@ -59,6 +59,9 @@ func ToJUnit(findings []*classifier.Finding, stats *swagger.RunStats) []byte {
 	var groupOrder []string
 
 	for _, f := range findings {
+		if f == nil {
+			continue
+		}
 		key := fmt.Sprintf("%s %s", f.Method, f.Endpoint)
 		g, exists := groupMap[key]
 		if !exists {
@@ -84,6 +87,9 @@ func ToJUnit(findings []*classifier.Finding, stats *swagger.RunStats) []byte {
 		cases := make([]junitTestCase, 0, len(g.findings))
 
 		for _, f := range g.findings {
+			if f == nil {
+				continue
+			}
 			suiteDurationMs += f.Duration
 			tc := junitTestCase{
 				Name:      f.RuleID,
@@ -169,7 +175,12 @@ func formatFailureBody(f *classifier.Finding) string {
 		body += fmt.Sprintf("\nEvidence: %s", f.Error)
 	}
 	if f.Payload != nil {
-		body += fmt.Sprintf("\nPayload: %v", f.Payload)
+		switch p := f.Payload.(type) {
+		case []byte:
+			body += fmt.Sprintf("\nPayload: %s", string(p))
+		default:
+			body += fmt.Sprintf("\nPayload: %v", p)
+		}
 	}
 	return body
 }

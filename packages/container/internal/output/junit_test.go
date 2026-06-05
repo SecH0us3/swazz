@@ -296,6 +296,54 @@ func TestJUnit(t *testing.T) {
 			},
 		},
 		{
+			name: "byte slice payload formats as string",
+			findings: []*classifier.Finding{
+				{
+					RuleID:   "swazz/reflected-xss",
+					Level:    classifier.SeverityError,
+					Method:   "POST",
+					Endpoint: "/api/search",
+					Duration: 42,
+					Payload:  []byte("fuzz-bytes-payload"),
+				},
+			},
+			stats: nil,
+			verify: func(t *testing.T, data []byte) {
+				var root junitRoundTripSuites
+				if err := xml.Unmarshal(data, &root); err != nil {
+					t.Fatalf("Failed to unmarshal: %v", err)
+				}
+				body := root.Suites[0].Cases[0].Failure.Body
+				if !strings.Contains(body, "fuzz-bytes-payload") {
+					t.Errorf("expected body to contain payload string, got: %s", body)
+				}
+			},
+		},
+		{
+			name: "nil findings elements are safely ignored",
+			findings: []*classifier.Finding{
+				nil,
+				{
+					RuleID:   "swazz/status-500",
+					Level:    classifier.SeverityError,
+					Method:   "POST",
+					Endpoint: "/api/users",
+					Duration: 100,
+				},
+				nil,
+			},
+			stats: nil,
+			verify: func(t *testing.T, data []byte) {
+				var root junitRoundTripSuites
+				if err := xml.Unmarshal(data, &root); err != nil {
+					t.Fatalf("Failed to unmarshal: %v", err)
+				}
+				if root.Tests != 1 {
+					t.Errorf("expected 1 test, got %d", root.Tests)
+				}
+			},
+		},
+		{
 			name: "round-trip unmarshal produces correct structure",
 			findings: []*classifier.Finding{
 				{

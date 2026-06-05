@@ -30,6 +30,9 @@ func FindingsExceedThreshold(findings []*Finding, threshold string) bool {
 	}
 
 	for _, f := range findings {
+		if f == nil {
+			continue
+		}
 		if SeverityRank(f.Level) >= thresholdRank {
 			return true
 		}
