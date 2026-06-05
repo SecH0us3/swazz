@@ -10,7 +10,7 @@ type XXEAnalyzer struct{}
 
 var xxeFileSignatures = []string{
 	"root:x:0:0:",
-	"bin:sh",
+	"/bin/sh",
 	"/bin/bash",
 	"[extensions]",
 	"[fonts]",
@@ -30,7 +30,10 @@ func (a *XXEAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	// Check if any of the sent payloads look like an XML/XXE payload
 	isXXEPayload := false
 	for _, s := range sentStrings {
-		if strings.Contains(s, "<?xml") || strings.Contains(s, "<!DOCTYPE") || strings.Contains(s, "<!ENTITY") {
+		lower := strings.ToLower(s)
+		if strings.Contains(lower, "<?xml") ||
+			strings.Contains(lower, "<!doctype") ||
+			strings.Contains(lower, "<!entity") {
 			isXXEPayload = true
 			break
 		}
