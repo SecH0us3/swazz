@@ -143,10 +143,35 @@ var MaliciousBooleans = []any{
 
 // ─── Aggregate: all string-type malicious payloads ──────
 
+var maliciousCmdi = []string{
+	"; id",
+	"| id",
+	"; whoami",
+	"& whoami",
+	"|| id",
+	"&& id",
+	"|| whoami",
+	"&& whoami",
+}
+
+var maliciousSSTI = []string{
+	"{{7*7}}",
+	"${7*7}",
+	"<%= 7*7 %>",
+	"#{7*7}",
+	"{{7+'7'}}",
+	"${{7*7}}",
+}
+
+var maliciousXXE = []string{
+	`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>`,
+	`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">]><foo>&xxe;</foo>`,
+}
+
 var AllMaliciousStrings []any
 
 func init() {
-	all := make([]any, 0, len(maliciousEncoding)+len(maliciousSQLi)+len(maliciousXSS)+len(maliciousPathTraversal))
+	all := make([]any, 0, len(maliciousEncoding)+len(maliciousSQLi)+len(maliciousXSS)+len(maliciousPathTraversal)+len(maliciousCmdi)+len(maliciousSSTI)+len(maliciousXXE))
 	for _, s := range maliciousEncoding {
 		all = append(all, s)
 	}
@@ -157,6 +182,15 @@ func init() {
 		all = append(all, s)
 	}
 	for _, s := range maliciousPathTraversal {
+		all = append(all, s)
+	}
+	for _, s := range maliciousCmdi {
+		all = append(all, s)
+	}
+	for _, s := range maliciousSSTI {
+		all = append(all, s)
+	}
+	for _, s := range maliciousXXE {
 		all = append(all, s)
 	}
 	AllMaliciousStrings = all
