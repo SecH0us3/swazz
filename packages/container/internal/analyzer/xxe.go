@@ -30,9 +30,10 @@ func (a *XXEAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	// Check if any of the sent payloads look like an XML/XXE payload
 	isXXEPayload := false
 	for _, s := range sentStrings {
-		if strings.Contains(strings.ToLower(s), "<?xml") ||
-			strings.Contains(strings.ToLower(s), "<!doctype") ||
-			strings.Contains(strings.ToLower(s), "<!entity") {
+		lower := strings.ToLower(s)
+		if strings.Contains(lower, "<?xml") ||
+			strings.Contains(lower, "<!doctype") ||
+			strings.Contains(lower, "<!entity") {
 			isXXEPayload = true
 			break
 		}
