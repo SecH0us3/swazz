@@ -67,16 +67,21 @@ func printHelp() {
 	fmt.Println("  swazz-engine wizard           Interactive setup to generate swazz.config.json")
 	fmt.Println()
 	fmt.Println("Options for 'start':")
-	fmt.Println("  --config <path>   Path to config file (default: swazz.config.json)")
-	fmt.Println("  --sarif <path>    Export findings in SARIF format (for CI/CD)")
-	fmt.Println("  --json <path>     Export findings in JSON format")
-	fmt.Println("  --html <path>     Generate a standalone HTML report")
-	fmt.Println("  --fail-on-error   Exit with code 1 if any 'error' level findings are detected (useful for CI/CD)")
-	fmt.Println("  --debug           Enable debug logging for all HTTP interactions")
+	fmt.Println("  --config <path>              Path to config file (default: swazz.config.json)")
+	fmt.Println("  --sarif <path>               Export findings in SARIF format")
+	fmt.Println("  --json <path>                Export findings in JSON format")
+	fmt.Println("  --html <path>                Generate a standalone HTML report")
+	fmt.Println("  --junit <path>               Export findings in JUnit XML format (for CI runners)")
+	fmt.Println("  --markdown <path>            Export findings in Markdown format")
+	fmt.Println("  --fail-on-severity <level>   Exit with code 2 if findings meet severity threshold")
+	fmt.Println("                               Levels: error, warning, note, none (default: none)")
+	fmt.Println("  --debug                      Enable debug logging for all HTTP interactions")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  swazz-engine wizard")
 	fmt.Println("  swazz-engine start --config production.json --html report.html")
+	fmt.Println("  swazz-engine start --config ci.json --sarif results.sarif --fail-on-severity error")
+	fmt.Println("  swazz-engine start --config ci.json --junit results.xml --fail-on-severity warning")
 }
 
 
@@ -224,7 +229,9 @@ func runCLI(args []string) {
 	sarifOut := flags.String("sarif", "", "Path to save SARIF output")
 	jsonOut := flags.String("json", "", "Path to save JSON output")
 	htmlOut := flags.String("html", "", "Path to save HTML report")
-	failOnError := flags.Bool("fail-on-error", false, "Exit with code 1 if any 'error' level findings exist")
+	junitOut := flags.String("junit", "", "Path to save JUnit XML output")
+	markdownOut := flags.String("markdown", "", "Path to save Markdown report")
+	failOnSeverity := flags.String("fail-on-severity", "none", "Exit with code 2 if findings meet severity threshold (error|warning|note|none)")
 	allowPrivateIps := flags.Bool("allow-private-ips", true, "Allow requests to private IP addresses (default: true for CLI mode)")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 
@@ -575,14 +582,26 @@ func runCLI(args []string) {
 			fmt.Printf("Saved HTML to %s\n", *htmlOut)
 		}
 	}
-
-	if *failOnError {
-		for _, f := range findings {
-			if f.Level == classifier.SeverityError {
-				fmt.Println("\n\033[1;31m[CI/CD] Error level findings detected. Exiting with code 1.\033[0m")
-				os.Exit(1)
-			}
+	if *junitOut != "" {
+		junitData := output.ToJUnit(findings, &stats)
+		if err := os.WriteFile(*junitOut, junitData, 0600); err != nil { // #nosec G306
+			log.Printf("Failed to write JUnit report: %v", err)
+		} else {
+			fmt.Printf("Saved JUnit XML to %s\n", *junitOut)
 		}
+	}
+	if *markdownOut != "" {
+		mdData := output.ToMarkdown(findings, &stats, Version)
+		if err := os.WriteFile(*markdownOut, mdData, 0600); err != nil { // #nosec G306
+			log.Printf("Failed to write Markdown report: %v", err)
+		} else {
+			fmt.Printf("Saved Markdown to %s\n", *markdownOut)
+		}
+	}
+
+	if classifier.FindingsExceedThreshold(findings, *failOnSeverity) {
+		fmt.Printf("\n\033[1;31m[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.\033[0m\n", *failOnSeverity)
+		os.Exit(2)
 	}
 }
 

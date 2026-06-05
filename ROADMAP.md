@@ -431,12 +431,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
-- [ ] **Task 47:** Support Application Installation via Go, Homebrew, and APT.
-  - **Design Goal:** Simplify the installation process and improve accessibility for developers across different operating systems (macOS, Linux) by providing standard package manager support.
-  - **Implementation Details:**
-    - **Go Install:** Ensure the engine can be installed natively via go install (this may require renaming the packages/container directory to packages/swazz or packages/swazz-engine so the compiled binary is not named container).
-    - **Homebrew:** Create a Homebrew formula/tap to allow installation via brew install swazz (and standardize the binary name to swazz instead of swazz-engine).
-    - **APT:** Create Debian packages (.deb) and provide an APT repository for installation via apt install swazz (standardizing the binary name to swazz).
 
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**
   - **Design Goal:** Enable target discovery by dynamically crawling web applications from a starting URL without relying solely on static API specifications.
@@ -472,7 +466,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Limit the web dashboard's configuration export format so that downloading config from the Web UI does not dump excessive endpoints.
     - Implement client-side and server-side config schema validation to prevent malformed or incompatible options from being imported.
 
-- [ ] **Task 53: CI/CD Integration, Fail-on-Severity, and SARIF/JUnit Reports**
+- [x] **Task 53: CI/CD Integration, Fail-on-Severity, and SARIF/JUnit Reports**
   - **Design Goal:** Support DevSecOps workflows by enabling automated gatekeeping in CI pipelines and exporting industry-standard security analysis formats.
   - **Implementation Details:**
     - Add CLI flags (e.g. `--fail-on-severity`) to exit with non-zero codes when specific vulnerability thresholds are met.
