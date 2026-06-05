@@ -10,7 +10,7 @@ type PathTraversalAnalyzer struct{}
 
 var pathTraversalSignatures = []string{
 	"root:x:0:0:",
-	"bin:sh",
+	"/bin/sh",
 	"/bin/bash",
 	"[extensions]",
 	"[fonts]",
@@ -18,6 +18,9 @@ var pathTraversalSignatures = []string{
 }
 
 func (a *PathTraversalAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if input.Profile != swagger.ProfileMalicious {
+		return nil
+	}
 	if len(input.ResponseBody) == 0 {
 		return nil
 	}

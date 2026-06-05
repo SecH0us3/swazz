@@ -47,6 +47,20 @@ func TestSSTIAnalyzer(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
+			name:          "False positive: 49 embedded inside larger number (e.g. timestamp) should not match",
+			payload:       "{{7*7}}",
+			response:      `{"id": 1492, "created_at": 1492000049123}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
+			name:          "False positive: 77 embedded in port or ID should not match",
+			payload:       "{{7+'7'}}",
+			response:      `{"port": 8077, "user_id": 7777}`,
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 0,
+		},
+		{
 			name:          "Non-malicious profile should be ignored",
 			payload:       "{{7*7}}",
 			response:      "Hello 49!",
@@ -70,5 +84,28 @@ func TestSSTIAnalyzer(t *testing.T) {
 				t.Errorf("unexpected RuleID: %s", findings[0].RuleID)
 			}
 		})
+	}
+}
+
+func TestHasStandaloneNumber(t *testing.T) {
+	tests := []struct {
+		body     string
+		val      string
+		expected bool
+	}{
+		{"Hello 49!", "49", true},
+		{"result=49,done", "49", true},
+		{`{"id": 1492}`, "49", false},
+		{"1492000049123", "49", false},
+		{"port: 8077", "77", false},
+		{"77 bottles", "77", true},
+		{"value=77.", "77", true},
+	}
+
+	for _, tt := range tests {
+		got := hasStandaloneNumber(tt.body, tt.val)
+		if got != tt.expected {
+			t.Errorf("hasStandaloneNumber(%q, %q) = %v, want %v", tt.body, tt.val, got, tt.expected)
+		}
 	}
 }
