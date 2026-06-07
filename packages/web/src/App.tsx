@@ -52,7 +52,7 @@ export default function App() {
 
     const { start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
 
-    const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun } = useDb();
+    const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
 
     const { handleLoadRun, handleDeleteRun, handleExport, handleExportHTML, handleExportMD } = useRunHistory({
         runs,
@@ -115,6 +115,57 @@ export default function App() {
             }, 100);
         }
     }, [importConfig, loadEndpoints, showToast]);
+
+    const handleTriage = useCallback(async (id: string, triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => {
+        await updateTriage(id, triage);
+        const current = useAppStore.getState().selectedResult;
+        if (current && current.id === id) {
+            useAppStore.setState({
+                selectedResult: { ...current, triage } as any
+            });
+        }
+        // Force refresh of the results list in Inspector
+        useAppStore.setState(state => ({ liveCount: state.liveCount + 1 }));
+        showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+    }, [updateTriage, showToast]);
+
+    const handleExportIgnoreRules = useCallback(async () => {
+        const triaged = await getAllTriaged();
+        if (triaged.length === 0) {
+            showToast('No triaged findings to export.', 'info');
+            return;
+        }
+
+        const ignoreRules = triaged.map(f => {
+            const ruleId = f.analyzerFindings?.[0]?.ruleId || (f.status > 0 ? `swazz/status-${f.status}` : 'swazz/network-error');
+            const rule: any = {
+                rule_id: ruleId,
+                endpoint: f.endpoint,
+                method: f.method,
+            };
+            if (f.payloadPreview && f.payloadPreview.length > 0 && f.payloadPreview.length < 150) {
+                let cleanPayload = f.payloadPreview;
+                if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
+                    try {
+                        cleanPayload = JSON.parse(cleanPayload);
+                    } catch { /* */ }
+                }
+                rule.payload = cleanPayload;
+            }
+            return rule;
+        });
+
+        const blob = new Blob([JSON.stringify(ignoreRules, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'swazz.ignore.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`Exported ${ignoreRules.length} ignore rules.`, 'success');
+    }, [getAllTriaged, showToast]);
 
     const displayUrl = config.base_url || (config._swagger_urls?.[0] ?? '');
 
@@ -337,6 +388,7 @@ export default function App() {
                     onUpdateConfig={updateConfig}
                     onImportConfig={handleImportConfig}
                     onExportConfig={exportConfig}
+                    onExportIgnoreRules={handleExportIgnoreRules}
                     onToast={showToast}
                 />
             </main>
@@ -350,6 +402,7 @@ export default function App() {
                     globalHeaders={config.global_headers}
                     globalCookies={config.cookies}
                     config={config}
+                    onTriage={handleTriage}
                 />
             )}
 

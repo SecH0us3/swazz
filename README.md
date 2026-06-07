@@ -84,7 +84,7 @@ Execute the fuzzing run using your generated config.
 ### 3. CI/CD Integration
 Generate SARIF reports and fail the build if any security errors are found (perfect for GitHub Actions / GitLab CI).
 ```bash
-./swazz-engine start --config swazz.config.json --fail-on-error --sarif findings.sarif
+./swazz-engine start --config swazz.config.json --fail-on-severity error --sarif findings.sarif
 ```
 
 ### 4. Test on the Vulnerable Demo API

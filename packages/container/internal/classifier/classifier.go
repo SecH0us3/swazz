@@ -39,9 +39,10 @@ type Finding struct {
 
 // RulesConfig configures how results are classified.
 type RulesConfig struct {
-	Ignore   []int               `json:"ignore,omitempty"`
-	Severity map[string]Severity `json:"severity,omitempty"`
-	Defaults map[string]Severity `json:"defaults,omitempty"`
+	Ignore      []int               `json:"ignore,omitempty"`
+	Severity    map[string]Severity `json:"severity,omitempty"`
+	Defaults    map[string]Severity `json:"defaults,omitempty"`
+	IgnoreRules []IgnoreRule        `json:"ignore_rules,omitempty"`
 }
 
 var defaultIgnore = map[int]bool{
@@ -60,17 +61,19 @@ var defaultDefaults = map[string]Severity{
 
 // Classifier converts raw FuzzResults into Findings based on rules.
 type Classifier struct {
-	ignoreSet map[int]bool
-	severity  map[string]Severity
-	defaults  map[string]Severity
+	ignoreSet   map[int]bool
+	severity    map[string]Severity
+	defaults    map[string]Severity
+	ignoreRules []IgnoreRule
 }
 
 // New creates a Classifier from optional rules config.
 func New(rules *RulesConfig) *Classifier {
 	c := &Classifier{
-		ignoreSet: make(map[int]bool),
-		severity:  make(map[string]Severity),
-		defaults:  defaultDefaults,
+		ignoreSet:   make(map[int]bool),
+		severity:    make(map[string]Severity),
+		defaults:    defaultDefaults,
+		ignoreRules: nil,
 	}
 
 	if rules == nil {
@@ -96,6 +99,7 @@ func New(rules *RulesConfig) *Classifier {
 	if rules.Defaults != nil {
 		c.defaults = rules.Defaults
 	}
+	c.ignoreRules = rules.IgnoreRules
 
 	return c
 }
@@ -136,7 +140,7 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 	for _, r := range results {
 		// 1. Standard status-code finding
 		sf := c.Classify(r)
-		if sf != nil {
+		if sf != nil && !IsIgnored(sf, c.ignoreRules) {
 			defectKey := fmt.Sprintf("%s::%s %s", sf.RuleID, sf.Method, sf.Endpoint)
 			count := defectCounts[defectKey]
 			if count < maxPerDefect {
@@ -175,6 +179,10 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 				Timestamp:     r.Timestamp,
 				Source:        source,
 				OWASPCategory: OWASPCategories(af.RuleID),
+			}
+
+			if IsIgnored(f, c.ignoreRules) {
+				continue
 			}
 
 			defectKey := fmt.Sprintf("%s::%s %s", f.RuleID, f.Method, f.Endpoint)

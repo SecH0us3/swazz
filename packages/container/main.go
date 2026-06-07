@@ -232,6 +232,7 @@ func runCLI(args []string) {
 	junitOut := flags.String("junit", "", "Path to save JUnit XML output")
 	markdownOut := flags.String("markdown", "", "Path to save Markdown report")
 	failOnSeverity := flags.String("fail-on-severity", "none", "Exit with code 2 if findings meet severity threshold (error|warning|note|none)")
+	ignoreConfig := flags.String("ignore-config", "swazz.ignore.json", "Path to ignore rules JSON file")
 	allowPrivateIps := flags.Bool("allow-private-ips", true, "Allow requests to private IP addresses (default: true for CLI mode)")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 
@@ -536,14 +537,20 @@ func runCLI(args []string) {
 	finalResults := results
 	resultsMu.Unlock()
 
+	// Load ignore rules
+	ignoreRules, err := classifier.LoadIgnoreRules(*ignoreConfig)
+	if err != nil {
+		log.Fatalf("Failed to load ignore rules: %v", err)
+	}
+
 	// Map swagger.RulesConfig to classifier.RulesConfig
-	var clsRules *classifier.RulesConfig
+	clsRules := &classifier.RulesConfig{
+		IgnoreRules: ignoreRules,
+	}
 	if runCfg.Rules != nil {
-		clsRules = &classifier.RulesConfig{
-			Ignore:   runCfg.Rules.Ignore,
-			Severity: make(map[string]classifier.Severity),
-			Defaults: make(map[string]classifier.Severity),
-		}
+		clsRules.Ignore = runCfg.Rules.Ignore
+		clsRules.Severity = make(map[string]classifier.Severity)
+		clsRules.Defaults = make(map[string]classifier.Severity)
 		for k, v := range runCfg.Rules.Severity {
 			clsRules.Severity[k] = classifier.Severity(v)
 		}

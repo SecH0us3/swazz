@@ -212,6 +212,42 @@ Swazz enforces SSRF protection by verifying resolved host IP addresses before ma
     }
     ```
 
+## Managing False Positives & Suppressions 🙈
+
+To reduce noise and manage false positives in automated CI/CD pipelines, Swazz supports suppressions via ignore rules.
+
+### Triage in Web Dashboard
+In the Web Dashboard, you can mark any finding in the Request Inspector detailed view as:
+- **False Positive**: Marks the finding as a false alarm.
+- **Ignored**: Suppresses/mutes the finding.
+- **Acknowledged**: Marks the finding as confirmed.
+
+You can download your triaged rules as `swazz.ignore.json` using the **Export Ignore Rules** button in the sidebar configuration.
+
+### Suppressing findings in CLI/CI
+Place the `swazz.ignore.json` file in your project directory (or load it via `--ignore-config <path>` flag). Swazz will automatically exclude matching findings from all generated reports (SARIF, JUnit, Markdown, HTML, JSON) and will not count them towards `--fail-on-severity` threshold breaches.
+
+### `swazz.ignore.json` Rules Format
+The file contains a JSON array of rule objects. A finding is ignored if it matches **all** non-empty criteria fields defined in the rule:
+```json
+[
+  {
+    "rule_id": "swazz/reflected-xss",
+    "endpoint": "/api/search",
+    "method": "GET",
+    "payload": "<script>alert(1)</script>"
+  },
+  {
+    "endpoint": "/api/admin/*",
+    "method": "DELETE"
+  }
+]
+```
+- **`rule_id`**: Matches the Swazz vulnerability type (e.g. `swazz/sql-error-leak`, `swazz/reflected-xss`).
+- **`endpoint`**: Supports exact matches or wildcards (e.g., `/api/admin/*`).
+- **`method`**: Matches the HTTP method (case-insensitive).
+- **`payload`**: Matches the sent payload (supports regex patterns or simple substring matches).
+
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:

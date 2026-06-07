@@ -151,6 +151,7 @@ export interface FuzzResult {
     analyzerFindings?: AnalysisFinding[];
     identity?: string;
     owaspCategory?: string[];
+    triage?: 'false_positive' | 'ignored' | 'acknowledged' | 'none';
 }
 
 // ─── Live Stats ─────────────────────────────────────────

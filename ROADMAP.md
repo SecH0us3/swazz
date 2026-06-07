@@ -472,7 +472,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add CLI flags (e.g. `--fail-on-severity`) to exit with non-zero codes when specific vulnerability thresholds are met.
     - Generate report outputs in SARIF (Static Analysis Results Interchange Format) to integrate natively with GitHub Code Scanning alerts, and JUnit XML for general CI test runners.
 
-- [ ] **Task 54: Finding Triaging, Suppressions, and Ignore Rules**
+- [/] **Task 54: Finding Triaging, Suppressions, and Ignore Rules**
   - **Design Goal:** Reduce noise and manage false positives effectively by allowing developers to mute or skip specific vulnerability alerts.
   - **Implementation Details:**
     - Allow users to mark findings as `False Positive`, `Ignored`, or `Acknowledged` in the web dashboard.

@@ -345,5 +345,30 @@ export function useDb() {
         setRuns((prev) => prev.filter((r) => r.id !== runId));
     }, []);
 
-    return { db, runs, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun };
+    const updateTriage = useCallback(async (id: string, triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => {
+        const database = dbRef.current;
+        if (!database) return;
+        const tx = database.transaction('results', 'readwrite');
+        const store = tx.objectStore('results');
+        const row = await promisify<ResultSummary>(store.get(id) as IDBRequest<ResultSummary>);
+        if (row) {
+            row.triage = triage === 'none' ? undefined : triage;
+            await promisify(store.put(row));
+        }
+        return new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }, []);
+
+    const getAllTriaged = useCallback(async (): Promise<ResultSummary[]> => {
+        const database = dbRef.current;
+        if (!database) return [];
+        const tx = database.transaction('results', 'readonly');
+        const store = tx.objectStore('results');
+        const all = await promisify<ResultSummary[]>(store.getAll() as IDBRequest<ResultSummary[]>);
+        return all.filter(r => r.triage && r.triage !== 'none');
+    }, []);
+
+    return { db, runs, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun, updateTriage, getAllTriaged };
 }
