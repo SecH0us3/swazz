@@ -141,6 +141,36 @@ For detailed setup instructions, including advanced configuration, caching, and 
 - **Dashboard**: React 19, Vite, Vanilla CSS
 - **Formats**: OpenAPI 2.0/3.0, Postman Collections, SOAP (WSDL), SARIF, JSON
 
+## 🙈 Ignore Rules & Suppressions
+
+To suppress false positives and filter noisy findings, Swazz supports ignore rules. You can triage findings in the Web Dashboard and download the rules config, or manually create `swazz.ignore.json` in your project root.
+
+### Example `swazz.ignore.json`
+
+```json
+[
+  {
+    "rule_id": "swazz/reflected-xss",
+    "endpoint": "/api/search",
+    "method": "GET",
+    "payload": "<script>alert(1)</script>"
+  },
+  {
+    "endpoint": "/api/admin/*",
+    "method": "DELETE"
+  },
+  {
+    "rule_id": "swazz/status-500",
+    "payload": ".*(sql|syntax|database).*"
+  }
+]
+```
+
+*   **`rule_id`**: Matches the Swazz vulnerability type (e.g. `swazz/sql-error-leak`, `swazz/reflected-xss`, `swazz/status-500`).
+*   **`endpoint`**: Matches the request URL path (supports exact strings or wildcard `*` suffixes like `/api/admin/*`).
+*   **`method`**: Matches the HTTP request method (case-insensitive).
+*   **`payload`**: Matches the request body/parameters (supports regular expressions or substring matching).
+
 ---
 
 ## 📚 Documentation
