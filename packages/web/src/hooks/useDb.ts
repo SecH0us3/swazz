@@ -40,7 +40,7 @@ export interface QueryOptions {
 // ─── DB open ─────────────────────────────────────────────────
 
 export const DB_NAME = 'swazz-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -57,6 +57,7 @@ export function openDb(): Promise<IDBDatabase> {
 
         req.onupgradeneeded = (e) => {
             const db = (e.target as IDBOpenDBRequest).result;
+            const transaction = (e.target as IDBOpenDBRequest).transaction!;
             const oldVersion = e.oldVersion;
 
             if (!db.objectStoreNames.contains('runs')) {
@@ -67,11 +68,20 @@ export function openDb(): Promise<IDBDatabase> {
                 db.deleteObjectStore('results');
             }
 
+            let store: IDBObjectStore;
             if (!db.objectStoreNames.contains('results')) {
-                const store = db.createObjectStore('results', { keyPath: 'id' });
+                store = db.createObjectStore('results', { keyPath: 'id' });
                 store.createIndex('runId', 'runId', { unique: false });
                 store.createIndex('runId_status', ['runId', 'status'], { unique: false });
                 store.createIndex('runId_timestamp', ['runId', 'timestamp'], { unique: false });
+            } else {
+                store = transaction.objectStore('results');
+            }
+
+            if (oldVersion < 3) {
+                if (!store.indexNames.contains('triage')) {
+                    store.createIndex('triage', 'triage', { unique: false });
+                }
             }
         };
 
@@ -366,10 +376,11 @@ export function useDb() {
         if (!database) return [];
         const tx = database.transaction('results', 'readonly');
         const store = tx.objectStore('results');
+        const index = store.index('triage');
         const triaged: ResultSummary[] = [];
 
         return new Promise<ResultSummary[]>((resolve, reject) => {
-            const req = store.openCursor();
+            const req = index.openCursor();
             req.onsuccess = (e) => {
                 const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
                 if (cursor) {

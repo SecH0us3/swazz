@@ -112,16 +112,17 @@ func payloadMatches(payload any, pattern string) bool {
 		}
 	}
 
-	// Try compiling as regex with caching
+	// Try compiling as regex with caching (including compilation failures)
+	type cacheEntry struct {
+		rx *regexp.Regexp
+	}
 	var rx *regexp.Regexp
 	if val, ok := regexCache.Load(pattern); ok {
-		rx = val.(*regexp.Regexp)
+		rx = val.(*cacheEntry).rx
 	} else {
-		var err error
-		rx, err = regexp.Compile(pattern)
-		if err == nil {
-			regexCache.Store(pattern, rx)
-		}
+		compiled, _ := regexp.Compile(pattern)
+		regexCache.Store(pattern, &cacheEntry{rx: compiled})
+		rx = compiled
 	}
 
 	if rx != nil {
