@@ -6,34 +6,39 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 )
-
-var regexCache sync.Map
 
 // IgnoreRule defines matching criteria to suppress false positive or noise findings.
 type IgnoreRule struct {
-	RuleID   string `json:"rule_id,omitempty"`
-	Endpoint string `json:"endpoint,omitempty"`
-	Method   string `json:"method,omitempty"`
-	Payload  string `json:"payload,omitempty"`
+	RuleID    string `json:"rule_id,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	Method    string `json:"method,omitempty"`
+	Payload   string `json:"payload,omitempty"`
+	payloadRx *regexp.Regexp
 }
 
 // LoadIgnoreRules reads and parses ignore rules from a JSON file.
 // If the file does not exist, it returns an empty slice and no error.
 func LoadIgnoreRules(path string) ([]IgnoreRule, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, nil
-	}
-
 	data, err := os.ReadFile(path) // #nosec G304 -- config path is caller-specified
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to read ignore file: %w", err)
 	}
 
 	var rules []IgnoreRule
 	if err := json.Unmarshal(data, &rules); err != nil {
 		return nil, fmt.Errorf("failed to parse ignore rules: %w", err)
+	}
+
+	for i := range rules {
+		if rules[i].Payload != "" {
+			if rx, err := regexp.Compile(rules[i].Payload); err == nil {
+				rules[i].payloadRx = rx
+			}
+		}
 	}
 
 	return rules, nil
@@ -82,7 +87,7 @@ func ruleMatches(f *Finding, r *IgnoreRule) bool {
 
 	// 4. Payload match (regex or substring)
 	if r.Payload != "" {
-		if !payloadMatches(f.Payload, r.Payload) {
+		if !payloadMatches(f.Payload, r) {
 			return false
 		}
 	}
@@ -90,10 +95,7 @@ func ruleMatches(f *Finding, r *IgnoreRule) bool {
 	return true
 }
 
-func payloadMatches(payload any, pattern string) bool {
-	if pattern == "" {
-		return true
-	}
+func payloadMatches(payload any, r *IgnoreRule) bool {
 	if payload == nil {
 		return false
 	}
@@ -112,23 +114,10 @@ func payloadMatches(payload any, pattern string) bool {
 		}
 	}
 
-	// Try compiling as regex with caching (including compilation failures)
-	type cacheEntry struct {
-		rx *regexp.Regexp
-	}
-	var rx *regexp.Regexp
-	if val, ok := regexCache.Load(pattern); ok {
-		rx = val.(*cacheEntry).rx
-	} else {
-		compiled, _ := regexp.Compile(pattern)
-		regexCache.Store(pattern, &cacheEntry{rx: compiled})
-		rx = compiled
-	}
-
-	if rx != nil {
-		return rx.MatchString(str)
+	if r.payloadRx != nil {
+		return r.payloadRx.MatchString(str)
 	}
 
 	// Fallback to substring
-	return strings.Contains(str, pattern)
+	return strings.Contains(str, r.Payload)
 }

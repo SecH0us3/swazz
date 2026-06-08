@@ -3,6 +3,7 @@ package classifier
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 )
 
@@ -67,6 +68,11 @@ func TestIsIgnored(t *testing.T) {
 		{Payload: "ignore-me"},
 		{Payload: `^[0-9]{3}$`}, // Regex for exactly 3 digits
 		{Payload: `"testkey":"testval"`},
+	}
+	for i := range rules {
+		if rules[i].Payload != "" {
+			rules[i].payloadRx, _ = regexp.Compile(rules[i].Payload)
+		}
 	}
 
 	tests := []struct {

@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -100,6 +101,11 @@ func New(rules *RulesConfig) *Classifier {
 		c.defaults = rules.Defaults
 	}
 	c.ignoreRules = rules.IgnoreRules
+	for i := range c.ignoreRules {
+		if c.ignoreRules[i].Payload != "" && c.ignoreRules[i].payloadRx == nil {
+			c.ignoreRules[i].payloadRx, _ = regexp.Compile(c.ignoreRules[i].Payload)
+		}
+	}
 
 	return c
 }
