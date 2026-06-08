@@ -240,6 +240,10 @@ The file contains a JSON array of rule objects. A finding is ignored if it match
   {
     "endpoint": "/api/admin/*",
     "method": "DELETE"
+  },
+  {
+    "rule_id": "swazz/status-500",
+    "payload": ".*(sql|syntax|database).*"
   }
 ]
 ```
