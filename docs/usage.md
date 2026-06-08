@@ -248,6 +248,28 @@ The file contains a JSON array of rule objects. A finding is ignored if it match
 - **`method`**: Matches the HTTP method (case-insensitive).
 - **`payload`**: Matches the sent payload (supports regex patterns or simple substring matches).
 
+### Supported Rule IDs
+
+When specifying a `"rule_id"` in `swazz.ignore.json`, you can target any of the following standard Swazz findings:
+
+#### 1. System & Protocol Rules (Status Codes and Network Failures)
+* **`swazz/status-5xx`** (e.g. `swazz/status-500`, `swazz/status-502`): Triggers when the target returns a 5xx Server Error.
+* **`swazz/status-4xx`** (e.g. `swazz/status-400`, `swazz/status-422`): Triggers when a 4xx Client Error is returned outside of the standard ignored code list.
+* **`swazz/status-2xx`** (e.g. `swazz/status-200`): Triggers when a 2xx Success code is returned for an anomalous input profile.
+* **`swazz/timeout`**: Triggers when the HTTP request times out.
+* **`swazz/network-error`**: Triggers when connection resets, DNS resolution fails, or other socket-level errors occur.
+
+#### 2. Specialized Security Analyzer Rules
+* **`swazz/reflected-xss`**: Reflected XSS input returned in the HTTP response.
+* **`swazz/null-pointer-exception`**: Leaks of stack traces or references indicating null pointer dereferences (Java, Python, Go, Node, etc.).
+* **`swazz/sql-error-leak`**: Leaks of SQL engine syntax error messages (MySQL, Postgres, MSSQL, Oracle, SQLite).
+* **`swazz/stack-trace-leak`**: Leaks of program execution logs or stack traces.
+* **`swazz/sensitive-data-leak`**: Leaks of AWS credentials, JWTs, SSH private keys, or API tokens.
+* **`swazz/crlf-injection`**: Response header splitting vulnerabilities.
+* **`swazz/cors-misconfig`**: Insecure CORS headers (wildcards or reflected origins).
+* **`swazz/response-size-anomaly`**: Anomalous response size differences indicating potential unauthorized data access.
+
+
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:
