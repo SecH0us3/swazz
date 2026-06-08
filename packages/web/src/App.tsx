@@ -145,13 +145,18 @@ export default function App() {
             };
             if (f.payloadPreview && f.payloadPreview.length > 0 && f.payloadPreview.length < 150) {
                 let cleanPayload = f.payloadPreview.trim();
+                if (cleanPayload.includes('…')) {
+                    cleanPayload = cleanPayload.split('…')[0].trim();
+                }
                 if (!cleanPayload.startsWith('{') && !cleanPayload.startsWith('[')) {
                     if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
                         try {
                             cleanPayload = JSON.parse(cleanPayload);
                         } catch { /* */ }
                     }
-                    rule.payload = cleanPayload;
+                    if (cleanPayload.trim().length > 0) {
+                        rule.payload = cleanPayload;
+                    }
                 }
             }
             return rule;
