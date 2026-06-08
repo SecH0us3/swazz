@@ -6,7 +6,10 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
+
+var regexCache sync.Map
 
 // IgnoreRule defines matching criteria to suppress false positive or noise findings.
 type IgnoreRule struct {
@@ -102,11 +105,26 @@ func payloadMatches(payload any, pattern string) bool {
 	case string:
 		str = p
 	default:
-		str = fmt.Sprintf("%v", p)
+		if j, err := json.Marshal(p); err == nil {
+			str = string(j)
+		} else {
+			str = fmt.Sprintf("%v", p)
+		}
 	}
 
-	// Try compiling as regex
-	if rx, err := regexp.Compile(pattern); err == nil {
+	// Try compiling as regex with caching
+	var rx *regexp.Regexp
+	if val, ok := regexCache.Load(pattern); ok {
+		rx = val.(*regexp.Regexp)
+	} else {
+		var err error
+		rx, err = regexp.Compile(pattern)
+		if err == nil {
+			regexCache.Store(pattern, rx)
+		}
+	}
+
+	if rx != nil {
 		return rx.MatchString(str)
 	}
 

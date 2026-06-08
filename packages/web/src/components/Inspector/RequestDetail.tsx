@@ -396,10 +396,9 @@ export function RequestDetail({
                             if (isFinding) {
                                 return (
                                     <select 
-                                        className="btn btn-ghost btn-sm"
+                                        className="btn btn-ghost btn-sm request-detail-triage-select"
                                         value={result.triage || 'none'}
                                         onChange={(e) => onTriage?.(result.id, e.target.value as any)}
-                                        style={{ cursor: 'pointer', appearance: 'auto', paddingRight: 'var(--space-4)', height: '32px' }}
                                     >
                                         <option value="none">🔍 No Triage</option>
                                         <option value="false_positive">❌ False Positive</option>

@@ -3489,6 +3489,13 @@ button:focus-visible {
   border: 1px solid var(--color-warning);
 }
 
+.request-detail-triage-select {
+  cursor: pointer;
+  appearance: auto;
+  padding-right: var(--space-4);
+  height: 32px;
+}
+
 
 .bola-warning-box svg {
   flex-shrink: 0;

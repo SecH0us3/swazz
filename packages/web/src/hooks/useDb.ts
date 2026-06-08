@@ -366,8 +366,24 @@ export function useDb() {
         if (!database) return [];
         const tx = database.transaction('results', 'readonly');
         const store = tx.objectStore('results');
-        const all = await promisify<ResultSummary[]>(store.getAll() as IDBRequest<ResultSummary[]>);
-        return all.filter(r => r.triage && r.triage !== 'none');
+        const triaged: ResultSummary[] = [];
+
+        return new Promise<ResultSummary[]>((resolve, reject) => {
+            const req = store.openCursor();
+            req.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+                if (cursor) {
+                    const row = cursor.value as ResultSummary;
+                    if (row.triage && row.triage !== 'none') {
+                        triaged.push(row);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(triaged);
+                }
+            };
+            req.onerror = () => reject(req.error);
+        });
     }, []);
 
     return { db, runs, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun, updateTriage, getAllTriaged };

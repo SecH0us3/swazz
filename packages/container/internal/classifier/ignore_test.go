@@ -66,6 +66,7 @@ func TestIsIgnored(t *testing.T) {
 		{Endpoint: "/api/admin/*", Method: "DELETE"},
 		{Payload: "ignore-me"},
 		{Payload: `^[0-9]{3}$`}, // Regex for exactly 3 digits
+		{Payload: `"testkey":"testval"`},
 	}
 
 	tests := []struct {
@@ -137,6 +138,13 @@ func TestIsIgnored(t *testing.T) {
 				Payload: "1234",
 			},
 			expected: false,
+		},
+		{
+			name: "matches rule 4 with complex map payload serialized to json",
+			finding: &Finding{
+				Payload: map[string]any{"testkey": "testval"},
+			},
+			expected: true,
 		},
 	}
 
