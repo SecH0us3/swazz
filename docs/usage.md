@@ -212,6 +212,68 @@ Swazz enforces SSRF protection by verifying resolved host IP addresses before ma
     }
     ```
 
+## Managing False Positives & Suppressions 🙈
+
+To reduce noise and manage false positives in automated CI/CD pipelines, Swazz supports suppressions via ignore rules.
+
+### Triage in Web Dashboard
+In the Web Dashboard, you can mark any finding in the Request Inspector detailed view as:
+- **False Positive**: Marks the finding as a false alarm.
+- **Ignored**: Suppresses/mutes the finding.
+- **Acknowledged**: Marks the finding as confirmed.
+
+You can download your triaged rules as `swazz.ignore.json` using the **Export Ignore Rules** button in the sidebar configuration.
+
+### Suppressing findings in CLI/CI
+Place the `swazz.ignore.json` file in your project directory (or load it via `--ignore-config <path>` flag). Swazz will automatically exclude matching findings from all generated reports (SARIF, JUnit, Markdown, HTML, JSON) and will not count them towards `--fail-on-severity` threshold breaches.
+
+### `swazz.ignore.json` Rules Format
+The file contains a JSON array of rule objects. A finding is ignored if it matches **all** non-empty criteria fields defined in the rule:
+```json
+[
+  {
+    "rule_id": "swazz/reflected-xss",
+    "endpoint": "/api/search",
+    "method": "GET",
+    "payload": "<script>alert(1)</script>"
+  },
+  {
+    "endpoint": "/api/admin/*",
+    "method": "DELETE"
+  },
+  {
+    "rule_id": "swazz/status-500",
+    "payload": ".*(sql|syntax|database).*"
+  }
+]
+```
+- **`rule_id`**: Matches the Swazz vulnerability type (e.g. `swazz/sql-error-leak`, `swazz/reflected-xss`).
+- **`endpoint`**: Supports exact matches or wildcards (e.g., `/api/admin/*`).
+- **`method`**: Matches the HTTP method (case-insensitive).
+- **`payload`**: Matches the sent payload (supports regex patterns or simple substring matches).
+
+### Supported Rule IDs
+
+When specifying a `"rule_id"` in `swazz.ignore.json`, you can target any of the following standard Swazz findings:
+
+#### 1. System & Protocol Rules (Status Codes and Network Failures)
+* **`swazz/status-5xx`** (e.g. `swazz/status-500`, `swazz/status-502`): Triggers when the target returns a 5xx Server Error.
+* **`swazz/status-4xx`** (e.g. `swazz/status-400`, `swazz/status-422`): Triggers when a 4xx Client Error is returned outside of the standard ignored code list.
+* **`swazz/status-2xx`** (e.g. `swazz/status-200`): Triggers when a 2xx Success code is returned for an anomalous input profile.
+* **`swazz/timeout`**: Triggers when the HTTP request times out.
+* **`swazz/network-error`**: Triggers when connection resets, DNS resolution fails, or other socket-level errors occur.
+
+#### 2. Specialized Security Analyzer Rules
+* **`swazz/reflected-xss`**: Reflected XSS input returned in the HTTP response.
+* **`swazz/null-pointer-exception`**: Leaks of stack traces or references indicating null pointer dereferences (Java, Python, Go, Node, etc.).
+* **`swazz/sql-error-leak`**: Leaks of SQL engine syntax error messages (MySQL, Postgres, MSSQL, Oracle, SQLite).
+* **`swazz/stack-trace-leak`**: Leaks of program execution logs or stack traces.
+* **`swazz/sensitive-data-leak`**: Leaks of AWS credentials, JWTs, SSH private keys, or API tokens.
+* **`swazz/crlf-injection`**: Response header splitting vulnerabilities.
+* **`swazz/cors-misconfig`**: Insecure CORS headers (wildcards or reflected origins).
+* **`swazz/response-size-anomaly`**: Anomalous response size differences indicating potential unauthorized data access.
+
+
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:

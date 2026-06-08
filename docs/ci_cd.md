@@ -81,14 +81,14 @@ jobs:
 
       - name: Run Swazz fuzzer
         # continue-on-error so SARIF upload always runs even when
-        # --fail-on-error causes an exit code 1.
+        # --fail-on-severity causes an exit code 2.
         continue-on-error: true
         working-directory: packages/container
         run: |
           ./swazz-engine start \
             --config ../../swazz.config.json \
             --sarif  swazz.sarif \
-            --fail-on-error
+            --fail-on-severity error
 
       - name: Upload SARIF to GitHub Code Scanning
         # Always upload — even if the fuzzer found errors.
@@ -105,7 +105,7 @@ jobs:
 
 1. **Build** — Swazz is compiled from source in the same Go version used by the project (`1.26.3`).
 2. **Fuzz** — `swazz-engine start` reads `swazz.config.json`, fetches your OpenAPI spec, and hammers every endpoint with boundary, random, and malicious payloads.
-3. **`--fail-on-error`** — causes the binary to exit with code `1` if any `error`-level findings are detected. Combined with `continue-on-error: true`, this lets the workflow record a failure *without* blocking the SARIF upload step.
+3. **`--fail-on-severity <level>`** — causes the binary to exit with code `2` if any findings at or above the specified level (e.g. `error`) are detected. Combined with `continue-on-error: true`, this lets the workflow record a failure *without* blocking the SARIF upload step.
 4. **SARIF upload** — the `upload-sarif` action ships results to GitHub's Code Scanning backend, where they are surfaced in the **Security → Code scanning alerts** tab and annotated on PR diffs.
 
 ---
@@ -138,7 +138,7 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-error
+        --fail-on-severity error
   artifacts:
     when: always
     reports:
@@ -168,7 +168,7 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-error
+        --fail-on-severity error
   artifacts:
     when: always
     paths:
@@ -308,7 +308,7 @@ You can configure Dependabot to automatically update these pinned dependencies b
 Keep a dedicated `swazz.config.ci.json` in your repository and pass it with `--config`:
 
 ```bash
-./swazz-engine start --config swazz.config.ci.json --sarif swazz.sarif --fail-on-error
+./swazz-engine start --config swazz.config.ci.json --sarif swazz.sarif --fail-on-severity error
 ```
 
 This lets developers run richer local configs while CI uses a trimmed, fast profile.
@@ -335,7 +335,7 @@ Never commit real credentials. Instead, read auth tokens from environment variab
     ./swazz-engine start \
       --config ../../swazz.config.ci.patched.json \
       --sarif  swazz.sarif \
-      --fail-on-error
+      --fail-on-severity error
   continue-on-error: true
 ```
 
@@ -391,7 +391,7 @@ curl -X POST https://your-api.example.com/api/users \
 
 | Swazz Level | GitHub Code Scanning | Recommended CI Action |
 |---|---|---|
-| `error` | `error` | **Block merge** (set `--fail-on-error` and remove `continue-on-error`) |
+| `error` | `error` | **Block merge** (set `--fail-on-severity error` and remove `continue-on-error`) |
 | `warning` | `warning` | Advisory — review but don't block |
 | `note` | `note` | Informational only |
 
@@ -400,7 +400,7 @@ curl -X POST https://your-api.example.com/api/users \
 We recommend a phased approach:
 
 1. **Phase 1 — Observe (Week 1):** Run Swazz with `allow_failure: true` / `continue-on-error: true`. Review findings without blocking. Tune your `rules.ignore` list.
-2. **Phase 2 — Advisory gate:** Enable `--fail-on-error` but keep `continue-on-error: true` in the workflow. The CI step turns red, but merges are not blocked. Teams are alerted.
+2. **Phase 2 — Advisory gate:** Enable `--fail-on-severity error` but keep `continue-on-error: true` in the workflow. The CI step turns red, but merges are not blocked. Teams are alerted.
 3. **Phase 3 — Hard gate:** Remove `continue-on-error: true`. Any `error`-level finding fails the required status check and blocks the PR.
 
 This avoids a flood of false-positive merge blocks when you first introduce fuzzing.

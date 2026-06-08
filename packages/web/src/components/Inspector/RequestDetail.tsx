@@ -10,6 +10,7 @@ interface Props {
     globalHeaders: Record<string, string>;
     globalCookies: Record<string, string>;
     config?: SwazzConfig;
+    onTriage?: (id: string, status: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => void;
 }
 
 function renderHighlightedJson(json: string): ReactNode {
@@ -129,7 +130,8 @@ export function RequestDetail({
     onReplay,
     globalHeaders,
     globalCookies,
-    config
+    config,
+    onTriage
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
@@ -385,7 +387,28 @@ export function RequestDetail({
                             </div>
                         </div>
                     </div>
-                    <div style={{ display:'flex', gap:'var(--space-2)' }}>
+                    <div style={{ display:'flex', gap:'var(--space-2)', alignItems: 'center' }}>
+                        {(() => {
+                            const isErrorStatus = result.status >= 500 || 
+                                                 (result.status === 0 && result.error) ||
+                                                 (result.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(result.status));
+                            const isFinding = ((result.analyzerFindings && result.analyzerFindings.length > 0) || isErrorStatus) && !!onTriage;
+                            if (isFinding) {
+                                return (
+                                    <select 
+                                        className="btn btn-ghost btn-sm request-detail-triage-select"
+                                        value={result.triage || 'none'}
+                                        onChange={(e) => onTriage?.(result.id, e.target.value as any)}
+                                    >
+                                        <option value="none">🔍 No Triage</option>
+                                        <option value="false_positive">❌ False Positive</option>
+                                        <option value="ignored">🙈 Ignored</option>
+                                        <option value="acknowledged">✅ Acknowledged</option>
+                                    </select>
+                                );
+                            }
+                            return null;
+                        })()}
                         <button className="btn btn-primary" onClick={handleReplay} disabled={isReplaying}>
                             {isReplaying ? '↺ Sending...' : '↺ Replay'}
                         </button>

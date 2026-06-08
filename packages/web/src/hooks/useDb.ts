@@ -40,7 +40,7 @@ export interface QueryOptions {
 // ─── DB open ─────────────────────────────────────────────────
 
 export const DB_NAME = 'swazz-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -57,6 +57,7 @@ export function openDb(): Promise<IDBDatabase> {
 
         req.onupgradeneeded = (e) => {
             const db = (e.target as IDBOpenDBRequest).result;
+            const transaction = (e.target as IDBOpenDBRequest).transaction!;
             const oldVersion = e.oldVersion;
 
             if (!db.objectStoreNames.contains('runs')) {
@@ -67,11 +68,20 @@ export function openDb(): Promise<IDBDatabase> {
                 db.deleteObjectStore('results');
             }
 
+            let store: IDBObjectStore;
             if (!db.objectStoreNames.contains('results')) {
-                const store = db.createObjectStore('results', { keyPath: 'id' });
+                store = db.createObjectStore('results', { keyPath: 'id' });
                 store.createIndex('runId', 'runId', { unique: false });
                 store.createIndex('runId_status', ['runId', 'status'], { unique: false });
                 store.createIndex('runId_timestamp', ['runId', 'timestamp'], { unique: false });
+            } else {
+                store = transaction.objectStore('results');
+            }
+
+            if (oldVersion < 3) {
+                if (!store.indexNames.contains('triage')) {
+                    store.createIndex('triage', 'triage', { unique: false });
+                }
             }
         };
 
@@ -345,5 +355,47 @@ export function useDb() {
         setRuns((prev) => prev.filter((r) => r.id !== runId));
     }, []);
 
-    return { db, runs, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun };
+    const updateTriage = useCallback(async (id: string, triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => {
+        const database = dbRef.current;
+        if (!database) return;
+        const tx = database.transaction('results', 'readwrite');
+        const store = tx.objectStore('results');
+        const row = await promisify<ResultSummary>(store.get(id) as IDBRequest<ResultSummary>);
+        if (row) {
+            row.triage = triage === 'none' ? undefined : triage;
+            await promisify(store.put(row));
+        }
+        return new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }, []);
+
+    const getAllTriaged = useCallback(async (): Promise<ResultSummary[]> => {
+        const database = dbRef.current;
+        if (!database) return [];
+        const tx = database.transaction('results', 'readonly');
+        const store = tx.objectStore('results');
+        const index = store.index('triage');
+        const triaged: ResultSummary[] = [];
+
+        return new Promise<ResultSummary[]>((resolve, reject) => {
+            const req = index.openCursor();
+            req.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+                if (cursor) {
+                    const row = cursor.value as ResultSummary;
+                    if (row.triage && row.triage !== 'none') {
+                        triaged.push(row);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(triaged);
+                }
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }, []);
+
+    return { db, runs, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun, updateTriage, getAllTriaged };
 }

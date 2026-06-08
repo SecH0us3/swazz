@@ -145,4 +145,59 @@ describe('useDb hook', () => {
         expect(ids).toContain('res_200_xss');
         expect(ids).toContain('res_500_sqli');
     });
+
+    it('updates triage status and retrieves all triaged results', async () => {
+        const { result } = renderHook(() => useDb());
+
+        await waitFor(() => {
+            expect(result.current.db).not.toBeNull();
+        });
+
+        const mockRun = {
+            id: 'run_triage_test',
+            startedAt: 1000,
+            completedAt: 2000,
+            baseUrl: 'http://test.com',
+            stats: {} as any
+        };
+        const mockResults = [
+            { id: 'res_t1', status: 500, duration: 10 },
+            { id: 'res_t2', status: 200, duration: 15 }
+        ] as any;
+
+        await act(async () => {
+            await result.current.saveRun(mockRun, mockResults);
+        });
+
+        // Triage the first finding
+        await act(async () => {
+            await result.current.updateTriage('res_t1', 'false_positive');
+        });
+
+        // Verify the finding is triaged in DB query
+        let retrieved: any = null;
+        await act(async () => {
+            retrieved = await result.current.getRunResults('run_triage_test');
+        });
+        const resT1 = retrieved.find((r: any) => r.id === 'res_t1');
+        expect(resT1.triage).toBe('false_positive');
+
+        // Verify getAllTriaged returns it
+        let triagedList: any[] = [];
+        await act(async () => {
+            triagedList = await result.current.getAllTriaged();
+        });
+        expect(triagedList).toHaveLength(1);
+        expect(triagedList[0].id).toBe('res_t1');
+        expect(triagedList[0].triage).toBe('false_positive');
+
+        // Triage the second finding to none/reset
+        await act(async () => {
+            await result.current.updateTriage('res_t1', 'none');
+        });
+        await act(async () => {
+            triagedList = await result.current.getAllTriaged();
+        });
+        expect(triagedList).toHaveLength(0);
+    });
 });
