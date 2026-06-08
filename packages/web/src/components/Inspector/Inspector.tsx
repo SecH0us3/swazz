@@ -610,14 +610,16 @@ export function Inspector({
                                     <span className="log-path">
                                         {r.endpoint}
                                         {r.triage && r.triage !== 'none' && (
-                                            <span style={{ 
-                                                marginLeft: '8px', 
-                                                fontSize: '10px', 
-                                                padding: '2px 4px', 
-                                                borderRadius: '3px',
-                                                background: r.triage === 'acknowledged' ? 'var(--color-success)' : 'var(--bg-muted)',
-                                                color: r.triage === 'acknowledged' ? 'var(--bg-dark)' : 'var(--text-secondary)'
-                                            }}>
+                                            <span 
+                                                className={`badge ${
+                                                    r.triage === 'acknowledged' 
+                                                        ? 'badge-success' 
+                                                        : r.triage === 'false_positive' 
+                                                        ? 'badge-error' 
+                                                        : 'badge-warning'
+                                                }`} 
+                                                style={{ marginLeft: '8px' }}
+                                            >
                                                 {r.triage}
                                             </span>
                                         )}

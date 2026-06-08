@@ -392,7 +392,7 @@ export function RequestDetail({
                             const isErrorStatus = result.status >= 500 || 
                                                  (result.status === 0 && result.error) ||
                                                  (result.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(result.status));
-                            const isFinding = (result.analyzerFindings && result.analyzerFindings.length > 0) || isErrorStatus;
+                            const isFinding = ((result.analyzerFindings && result.analyzerFindings.length > 0) || isErrorStatus) && !!onTriage;
                             if (isFinding) {
                                 return (
                                     <select 
