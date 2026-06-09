@@ -723,12 +723,48 @@ func (r *Runner) replayCandidate(ctx context.Context, cand *swagger.FuzzResult, 
 			}
 		}
 
-		r.testPathForIdentities(ctx, cand, ep, resolvedPath, targetID, paramName, qp, pl, identityHeaders, identityCookies, confirmedIdentities, bolaMu, bolaResults)
-		r.testPathForAnonymous(ctx, cand, ep, resolvedPath, targetID, qp, pl, confirmedIdentities, bolaMu, bolaResults)
+		rctx := bolaReplayContext{
+			Ctx:                 ctx,
+			Cand:                cand,
+			Endpoint:            ep,
+			ResolvedPath:        resolvedPath,
+			TargetID:            targetID,
+			ParamName:           paramName,
+			QueryParams:         qp,
+			Payload:             pl,
+			IdentityHeaders:     identityHeaders,
+			IdentityCookies:     identityCookies,
+			ConfirmedIdentities: confirmedIdentities,
+			BolaMu:              bolaMu,
+			BolaResults:         bolaResults,
+		}
+
+		r.testPathForIdentities(rctx)
+		r.testPathForAnonymous(rctx)
 	}
 }
 
-func (r *Runner) testPathForIdentities(ctx context.Context, cand *swagger.FuzzResult, ep swagger.EndpointConfig, resolvedPath, targetID, paramName string, qp map[string]any, pl any, identityHeaders, identityCookies map[string]map[string]string, confirmedIdentities map[string]bool, bolaMu *sync.Mutex, bolaResults *[]*swagger.FuzzResult) {
+type bolaReplayContext struct {
+	Ctx                 context.Context
+	Cand                *swagger.FuzzResult
+	Endpoint            swagger.EndpointConfig
+	ResolvedPath        string
+	TargetID            string
+	ParamName           string
+	QueryParams         map[string]any
+	Payload             any
+	IdentityHeaders     map[string]map[string]string
+	IdentityCookies     map[string]map[string]string
+	ConfirmedIdentities map[string]bool
+	BolaMu              *sync.Mutex
+	BolaResults         *[]*swagger.FuzzResult
+}
+
+func (r *Runner) testPathForIdentities(rctx bolaReplayContext) {
+	ctx, cand, ep, resolvedPath, targetID, paramName := rctx.Ctx, rctx.Cand, rctx.Endpoint, rctx.ResolvedPath, rctx.TargetID, rctx.ParamName
+	qp, pl, identityHeaders, identityCookies := rctx.QueryParams, rctx.Payload, rctx.IdentityHeaders, rctx.IdentityCookies
+	confirmedIdentities, bolaMu, bolaResults := rctx.ConfirmedIdentities, rctx.BolaMu, rctx.BolaResults
+
 	for idName, headers := range identityHeaders {
 		if confirmedIdentities[idName] {
 			continue
@@ -809,7 +845,11 @@ func (r *Runner) testPathForIdentities(ctx context.Context, cand *swagger.FuzzRe
 	}
 }
 
-func (r *Runner) testPathForAnonymous(ctx context.Context, cand *swagger.FuzzResult, ep swagger.EndpointConfig, resolvedPath, targetID string, qp map[string]any, pl any, confirmedIdentities map[string]bool, bolaMu *sync.Mutex, bolaResults *[]*swagger.FuzzResult) {
+func (r *Runner) testPathForAnonymous(rctx bolaReplayContext) {
+	ctx, cand, ep, resolvedPath, targetID := rctx.Ctx, rctx.Cand, rctx.Endpoint, rctx.ResolvedPath, rctx.TargetID
+	qp, pl, confirmedIdentities := rctx.QueryParams, rctx.Payload, rctx.ConfirmedIdentities
+	bolaMu, bolaResults := rctx.BolaMu, rctx.BolaResults
+
 	if confirmedIdentities["Anonymous"] {
 		return
 	}
