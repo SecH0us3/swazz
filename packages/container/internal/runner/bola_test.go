@@ -382,3 +382,57 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 		}
 	})
 }
+
+func Test_arePrefixesRelated(t *testing.T) {
+	tests := []struct {
+		name string
+		p1   string
+		p2   string
+		want bool
+	}{
+		{
+			name: "related paths, 3 segments",
+			p1:   "/api/v1/users",
+			p2:   "/api/v1/posts",
+			want: true,
+		},
+		{
+			name: "unrelated paths, different version",
+			p1:   "/api/v1/users",
+			p2:   "/api/v2/users",
+			want: false,
+		},
+		{
+			name: "single segment match",
+			p1:   "/api",
+			p2:   "/api/v1",
+			want: true,
+		},
+		{
+			name: "empty first path",
+			p1:   "",
+			p2:   "/api",
+			want: false,
+		},
+		{
+			name: "both empty",
+			p1:   "",
+			p2:   "",
+			want: false,
+		},
+		{
+			name: "different root segment",
+			p1:   "/v1/users",
+			p2:   "/api/v1/users",
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := arePrefixesRelated(tt.p1, tt.p2)
+			if got != tt.want {
+				t.Errorf("arePrefixesRelated(%q, %q) = %v, want %v", tt.p1, tt.p2, got, tt.want)
+			}
+		})
+	}
+}

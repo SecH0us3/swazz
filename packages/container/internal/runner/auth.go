@@ -671,7 +671,7 @@ func (r *Runner) isUsingActiveSession(reqHeaders, reqCookies map[string]string) 
 	for _, hName := range r.config.Settings.AuthHeaders {
 		cfgVal := r.config.GlobalHeaders[hName]
 		reqVal := reqHeaders[hName]
-		if cfgVal != "" && cfgVal == reqVal {
+		if cfgVal != "" && reqVal != "" {
 			return true
 		}
 	}
@@ -680,7 +680,7 @@ func (r *Runner) isUsingActiveSession(reqHeaders, reqCookies map[string]string) 
 	for _, cName := range r.config.Settings.AuthCookies {
 		cfgVal := r.config.Cookies[cName]
 		reqVal := reqCookies[cName]
-		if cfgVal != "" && cfgVal == reqVal {
+		if cfgVal != "" && reqVal != "" {
 			return true
 		}
 	}
@@ -688,8 +688,13 @@ func (r *Runner) isUsingActiveSession(reqHeaders, reqCookies map[string]string) 
 	return false
 }
 
-func (r *Runner) isSessionExpired(resp *http.Response, bodyBytes []byte, reqHeaders, reqCookies map[string]string) bool {
+func (r *Runner) isSessionExpired(resp *http.Response, bodyBytes []byte, reqHeaders, reqCookies map[string]string, profile swagger.FuzzingProfile) bool {
 	if resp == nil {
+		return false
+	}
+
+	// Skip session expiration checks for BOLA/IDOR scans to preserve expected vulnerability findings
+	if profile == swagger.FuzzingProfile("BOLA") {
 		return false
 	}
 
@@ -805,13 +810,14 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 			}
 		}
 	}
-	r.configMu.RUnlock()
 
 	if isFresh {
-		r.configMu.RLock()
-		defer r.configMu.RUnlock()
-		return r.config.GlobalHeaders, r.config.Cookies, true, nil
+		headersCopy := maps.Clone(r.config.GlobalHeaders)
+		cookiesCopy := maps.Clone(r.config.Cookies)
+		r.configMu.RUnlock()
+		return headersCopy, cookiesCopy, true, nil
 	}
+	r.configMu.RUnlock()
 
 	fmt.Println("[Session] Session expired. Initiating automatic re-authentication...")
 	if err := r.RunAuthSequence(ctx); err != nil {
@@ -820,5 +826,5 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 
 	r.configMu.RLock()
 	defer r.configMu.RUnlock()
-	return r.config.GlobalHeaders, r.config.Cookies, true, nil
+	return maps.Clone(r.config.GlobalHeaders), maps.Clone(r.config.Cookies), true, nil
 }

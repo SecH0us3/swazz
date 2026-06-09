@@ -923,7 +923,7 @@ func (r *Runner) executeRequest(
 		r.extractAndSaveCSRFToken(resp, rawBodyBytes)
 
 		// Check for session expiration and trigger re-auth
-		if r.isSessionExpired(resp, rawBodyBytes, mergedHeaders, cookies) && attempt < 1 {
+		if r.isSessionExpired(resp, rawBodyBytes, mergedHeaders, cookies, profile) && attempt < 1 {
 			newHeaders, newCookies, refreshed, reauthErr := r.MaybeReauthenticate(ctx, mergedHeaders, cookies)
 			if reauthErr != nil {
 				fmt.Printf("[Session] Automatic re-authentication failed: %v\n", reauthErr)

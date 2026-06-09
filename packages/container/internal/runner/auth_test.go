@@ -591,22 +591,28 @@ func TestIsSessionExpired(t *testing.T) {
 	reqHeaders := map[string]string{"Authorization": "Bearer current-token"}
 	reqCookies := map[string]string{"session_cookie": "current-session-id"}
 	resp := &http.Response{StatusCode: 401}
-	assert.True(t, r.isSessionExpired(resp, nil, reqHeaders, reqCookies))
+	assert.True(t, r.isSessionExpired(resp, nil, reqHeaders, reqCookies, swagger.ProfileRandom))
 
-	// 2. HTTP 401 using old/different session -> not expired (likely expected BOLA rejection)
+	// 2. HTTP 401 using old/different session -> expired (since it contains active auth header keys and should trigger retry/refresh)
 	oldHeaders := map[string]string{"Authorization": "Bearer old-token"}
 	oldCookies := map[string]string{"session_cookie": "old-session-id"}
-	assert.False(t, r.isSessionExpired(resp, nil, oldHeaders, oldCookies))
+	assert.True(t, r.isSessionExpired(resp, nil, oldHeaders, oldCookies, swagger.ProfileRandom))
 
 	// 3. Redirect to login -> expired
 	redirectReq, _ := http.NewRequest("GET", "http://test.com/login", nil)
 	redirectResp := &http.Response{StatusCode: 302, Header: http.Header{"Location": []string{"/login"}}, Request: redirectReq}
-	assert.True(t, r.isSessionExpired(redirectResp, nil, reqHeaders, reqCookies))
+	assert.True(t, r.isSessionExpired(redirectResp, nil, reqHeaders, reqCookies, swagger.ProfileRandom))
 
 	// 4. HTML response containing form with login indicators -> expired
 	htmlBody := []byte(`<html><body><form action="/login" class="login-form"><input type="password" name="pwd"/></form></body></html>`)
 	okResp := &http.Response{StatusCode: 200}
-	assert.True(t, r.isSessionExpired(okResp, htmlBody, reqHeaders, reqCookies))
+	assert.True(t, r.isSessionExpired(okResp, htmlBody, reqHeaders, reqCookies, swagger.ProfileRandom))
+
+	// 5. BOLA profile -> should always return false to preserve expected findings
+	assert.False(t, r.isSessionExpired(resp, nil, reqHeaders, reqCookies, swagger.FuzzingProfile("BOLA")))
+
+	// 6. Unauthenticated request -> not expired
+	assert.False(t, r.isSessionExpired(resp, nil, nil, nil, swagger.ProfileRandom))
 }
 
 func TestExtractCSRFToken(t *testing.T) {
