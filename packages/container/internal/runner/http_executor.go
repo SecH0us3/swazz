@@ -217,6 +217,7 @@ func (r *Runner) executeRequest(
 		}
 
 		start := time.Now()
+		// codeql[go/request-forgery]
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
 
