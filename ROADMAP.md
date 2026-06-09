@@ -478,7 +478,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Allow users to mark findings as `False Positive`, `Ignored`, or `Acknowledged` in the web dashboard.
     - Export a `swazz.ignore.json` configuration containing rules (such as matched endpoint, payload, or vulnerability type) to automatically suppress matching findings in subsequent CLI and Web runs.
 
-- [ ] **Task 55: Stateful API Fuzzing & Request Chaining**
+- [x] **Task 55: Stateful API Fuzzing & Request Chaining**
   - **Design Goal:** Enable fuzzing of complex multi-step workflows by dynamically passing variables extracted from earlier HTTP responses into subsequent requests.
   - **Implementation Details:**
     - Define variable extraction rules (e.g. extracting a created resource ID from a JSON body or Location header during a POST request).

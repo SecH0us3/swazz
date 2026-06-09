@@ -87,7 +87,24 @@ Generate SARIF reports and fail the build if any security errors are found (perf
 ./swazz-engine start --config swazz.config.json --fail-on-severity error --sarif findings.sarif
 ```
 
-### 4. Test on the Vulnerable Demo API
+### 4. Stateful API Fuzzing & Request Chaining
+Swazz can extract variables from previous responses and inject them into subsequent fuzzing requests (e.g., extracting an `AUTH_TOKEN` from a `POST /login` and injecting it as a header in later requests). Add rules via the Web Dashboard, or configure them manually:
+```json
+{
+  "settings": {
+    "chainingRules": [
+      {
+        "sourceEndpoint": "POST /api/login",
+        "extractType": "json",
+        "extractPath": "$.data.token",
+        "variableName": "AUTH_TOKEN"
+      }
+    ]
+  }
+}
+```
+
+### 5. Test on the Vulnerable Demo API
 If you want to quickly test Swazz's capabilities, we provide a built-in vulnerable API simulated as a Cloudflare Worker in the `demo/` folder.
 > **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (like SQL injection) for testing Swazz. It should **NOT** be used in production or audited for security issues.
 
