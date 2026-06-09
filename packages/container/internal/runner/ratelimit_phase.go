@@ -91,7 +91,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 
 		// Record the burst results in stats
 		for i, status := range statusCodes {
-			r.statsChan <- statsMsg{
+			msg := statsMsg{
 				result: &swagger.FuzzResult{
 					ID:           uuid.New().String(),
 					Endpoint:     endpoint.Path,
@@ -103,6 +103,12 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 				},
 				currentIteration: i + 1,
 				totalIterations:  len(statusCodes),
+			}
+
+			select {
+			case r.statsChan <- msg:
+			case <-ctx.Done():
+				return
 			}
 		}
 

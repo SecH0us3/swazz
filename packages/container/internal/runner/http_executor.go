@@ -178,15 +178,20 @@ func (r *Runner) executeRequest(
 			}
 		}
 
-		if r.config.Settings.Debug {
-			dump, _ := httputil.DumpRequestOut(req, true)
-			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(dump))
+		var reqDump []byte
+		var dumpErr error
+		if r.config.Settings.Debug || profile == swagger.ProfileMalicious {
+			reqDump, dumpErr = httputil.DumpRequestOut(req, true)
+		}
+
+		if r.config.Settings.Debug && dumpErr == nil {
+			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(reqDump))
 		}
 
 		// Look for OOB payloads to register the actual request details
 		if profile == swagger.ProfileMalicious {
-			if dump, err := httputil.DumpRequestOut(req, true); err == nil {
-				reqStr := string(dump)
+			if dumpErr == nil {
+				reqStr := string(reqDump)
 				matches := uuidRegex.FindAllString(reqStr, -1)
 				if len(matches) > 0 {
 					reqLog := &swagger.RequestLog{
@@ -260,8 +265,7 @@ func (r *Runner) executeRequest(
 			buf.Reset()
 			io.Copy(buf, io.LimitReader(resp.Body, 51200)) // #nosec G104 -- error intentionally ignored; buf.Len() check handles empty reads
 			if buf.Len() > 0 {
-				rawBodyBytes = make([]byte, buf.Len())
-				copy(rawBodyBytes, buf.Bytes())
+				rawBodyBytes = bytes.Clone(buf.Bytes())
 				var parsed any
 				if json.Unmarshal(rawBodyBytes, &parsed) == nil {
 					respBody = parsed
