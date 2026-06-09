@@ -212,6 +212,36 @@ Swazz enforces SSRF protection by verifying resolved host IP addresses before ma
     }
     ```
 
+## Automated Session & CSRF Management 🔐
+
+When fuzzing stateful or protected APIs, maintaining valid authenticated sessions and handling anti-CSRF measures is critical to ensure that fuzzing payloads reach the backend logic rather than being rejected prematurely at the auth gateway. Swazz automates this process dynamically throughout the run.
+
+### Dynamic Session Recovery (Re-Authentication)
+
+Swazz monitors all outgoing fuzzing requests that rely on the configured active session. If the session expires or is invalidated during a run, Swazz automatically detects it and triggers the configured `auth_sequence` to obtain new credentials.
+
+- **Expiration Indicators**: A session is classified as expired if:
+  - The response status is `401 Unauthorized` or `403 Forbidden`.
+  - The response redirects (status `3xx`) to a path containing `/login`, `/signin`, or `/auth`.
+  - The response is a `200 OK` HTML page containing a standard login form (e.g., `<form>` with `password`/`username`/`email` inputs and login/signin labels).
+- **Safe Re-Authentication Lock**: To prevent dozens of concurrent fuzzing workers from triggering the `auth_sequence` simultaneously (which can cause account lockouts or rate-limits), Swazz coordinates re-authentication via a mutex lock. The first worker to detect expiration performs the authentication flow while other workers queue. Once re-authentication completes, the queued workers resume using the newly acquired active session.
+- **Infinite Loop Protection**: Requests are capped at a maximum of `1` retry to prevent infinite re-authentication loops in the event of persistent credential invalidity.
+- **Selective Inspection**: Expiration checks are skipped for explicit security/privilege check queries (like BOLA/IDOR scans targeting different/unprivileged identities) to preserve expected vulnerability findings.
+
+### Automated CSRF Management
+
+For unsafe HTTP write requests (`POST`, `PUT`, `PATCH`, `DELETE`), Swazz dynamically extracts and injects anti-CSRF/anti-XSRF tokens to bypass cross-site request forgery protections.
+
+1. **Extraction**: Swazz parses every HTTP response (including intermediate login responses) to extract active anti-CSRF tokens from:
+   - Response cookies whose names match/contain `csrf` or `xsrf` (case-insensitive).
+   - HTML meta tags (e.g. `<meta name="csrf-token" content="...">`).
+   - HTML input forms (e.g. `<input name="csrf_token" value="...">`).
+2. **Injection**: Before executing an unsafe request, Swazz automatically:
+   - Overwrites or inserts CSRF headers matching `X-CSRF-Token`, `X-XSRF-Token`, or any customized headers containing `csrf`/`xsrf` with the latest extracted token.
+   - Updates any keys containing `csrf` or `xsrf` in the request payload body (for JSON and url-encoded forms) with the fresh active token.
+
+---
+
 ## Managing False Positives & Suppressions 🙈
 
 To reduce noise and manage false positives in automated CI/CD pipelines, Swazz supports suppressions via ignore rules.
