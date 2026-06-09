@@ -162,11 +162,12 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 		// 2. Response body analyzer findings
 		for _, af := range r.AnalyzerFindings {
 			source := "response_body"
-			if strings.HasPrefix(af.RuleID, "swazz/crlf-") || strings.HasPrefix(af.RuleID, "swazz/header-") || af.RuleID == "swazz/crlf-injection" {
+			switch {
+			case strings.HasPrefix(af.RuleID, "swazz/crlf-") || strings.HasPrefix(af.RuleID, "swazz/header-") || af.RuleID == "swazz/crlf-injection":
 				source = "response_headers"
-			} else if af.RuleID == "swazz/no-rate-limit" || af.RuleID == "swazz/rate-limit-active" {
+			case af.RuleID == "swazz/no-rate-limit" || af.RuleID == "swazz/rate-limit-active":
 				source = "rate_limiting"
-			} else if af.RuleID == "swazz/bola-idor" || af.RuleID == "swazz/unauthorized-access" {
+			case af.RuleID == "swazz/bola-idor" || af.RuleID == "swazz/unauthorized-access":
 				source = "access_control"
 			}
 			f := &Finding{

@@ -27,7 +27,7 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 		}
 	}
 
-	endpointsMap := make(map[string]swagger.EndpointConfig)
+	endpointsMap := map[string]swagger.EndpointConfig{}
 	var basePath string
 
 	entries.ForEach(func(_, entry gjson.Result) bool {
@@ -65,9 +65,9 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 				Method: method,
 				Schema: swagger.SchemaProperty{
 					Type:       "object",
-					Properties: make(map[string]*swagger.SchemaProperty),
+					Properties: map[string]*swagger.SchemaProperty{},
 				},
-				HeaderParams: make(map[string]*swagger.SchemaProperty),
+				HeaderParams: map[string]*swagger.SchemaProperty{},
 			}
 
 			// Query string
