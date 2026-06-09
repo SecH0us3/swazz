@@ -11,30 +11,30 @@ import (
 
 // junitRoundTrip is a minimal set of structs for round-trip unmarshaling.
 type junitRoundTripSuites struct {
-	XMLName  xml.Name               `xml:"testsuites"`
-	Name     string                 `xml:"name,attr"`
-	Tests    int                    `xml:"tests,attr"`
-	Failures int                    `xml:"failures,attr"`
-	Errors   int                    `xml:"errors,attr"`
-	Time     string                 `xml:"time,attr"`
-	Suites   []junitRoundTripSuite  `xml:"testsuite"`
-}
-
-type junitRoundTripSuite struct {
+	XMLName  xml.Name              `xml:"testsuites"`
 	Name     string                `xml:"name,attr"`
 	Tests    int                   `xml:"tests,attr"`
 	Failures int                   `xml:"failures,attr"`
 	Errors   int                   `xml:"errors,attr"`
 	Time     string                `xml:"time,attr"`
-	Cases    []junitRoundTripCase  `xml:"testcase"`
+	Suites   []junitRoundTripSuite `xml:"testsuite"`
+}
+
+type junitRoundTripSuite struct {
+	Name     string               `xml:"name,attr"`
+	Tests    int                  `xml:"tests,attr"`
+	Failures int                  `xml:"failures,attr"`
+	Errors   int                  `xml:"errors,attr"`
+	Time     string               `xml:"time,attr"`
+	Cases    []junitRoundTripCase `xml:"testcase"`
 }
 
 type junitRoundTripCase struct {
-	Name      string                  `xml:"name,attr"`
-	ClassName string                  `xml:"classname,attr"`
-	Time      string                  `xml:"time,attr"`
-	Failure   *junitRoundTripFailure  `xml:"failure,omitempty"`
-	SystemOut string                  `xml:"system-out,omitempty"`
+	Name      string                 `xml:"name,attr"`
+	ClassName string                 `xml:"classname,attr"`
+	Time      string                 `xml:"time,attr"`
+	Failure   *junitRoundTripFailure `xml:"failure,omitempty"`
+	SystemOut string                 `xml:"system-out,omitempty"`
 }
 
 type junitRoundTripFailure struct {

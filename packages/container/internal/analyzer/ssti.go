@@ -3,8 +3,8 @@ package analyzer
 import (
 	"fmt"
 	"strings"
-	"unicode"
 	"swazz-engine/internal/swagger"
+	"unicode"
 )
 
 type SSTIAnalyzer struct{}

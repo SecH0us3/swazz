@@ -193,19 +193,19 @@ func TestGenerate_MaliciousCategoryFiltering(t *testing.T) {
 			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
 		},
 	}
-	
+
 	g := New(nil, swagger.ProfileMalicious, settings)
-	
+
 	// Verify that cachedMaliciousStrings matches payloads.MaliciousSQLi exactly
 	if len(g.cachedMaliciousStrings) != len(payloads.MaliciousSQLi) {
 		t.Errorf("Expected cachedMaliciousStrings to have length %d, got %d", len(payloads.MaliciousSQLi), len(g.cachedMaliciousStrings))
 	}
-	
+
 	sqliSet := make(map[any]bool)
 	for _, val := range payloads.MaliciousSQLi {
 		sqliSet[val] = true
 	}
-	
+
 	for _, val := range g.cachedMaliciousStrings {
 		if !sqliSet[val] {
 			t.Errorf("Found unexpected payload %v in cachedMaliciousStrings when only SQLi category was enabled", val)
@@ -291,5 +291,3 @@ func BenchmarkGenerateStringMalicious(b *testing.B) {
 		_ = g.Generate("test", schema)
 	}
 }
-
-

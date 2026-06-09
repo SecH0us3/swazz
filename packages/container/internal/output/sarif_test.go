@@ -81,10 +81,10 @@ func TestToSARIF(t *testing.T) {
 				expectedDescriptions := map[string]string{
 					"swazz/timeout":       "Request timed out during fuzzing",
 					"swazz/network-error": "Network error during fuzzing",
-					"swazz/status-500":     "Server error 500 triggered by fuzz payload",
-					"swazz/status-400":     "Client error 400 triggered by fuzz payload",
-					"swazz/status-200":     "Unexpected success 200 with fuzz payload",
-					"swazz/status-301":     "Unexpected status 301 from fuzz payload",
+					"swazz/status-500":    "Server error 500 triggered by fuzz payload",
+					"swazz/status-400":    "Client error 400 triggered by fuzz payload",
+					"swazz/status-200":    "Unexpected success 200 with fuzz payload",
+					"swazz/status-301":    "Unexpected status 301 from fuzz payload",
 					"unknown-rule":        "Unexpected behavior detected by fuzzing",
 				}
 
