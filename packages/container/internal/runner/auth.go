@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"regexp"
@@ -31,12 +32,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 	cfg := r.config
 	headers := make(map[string]string)
 	cookies := make(map[string]string)
-	for k, v := range initialHeaders {
-		headers[k] = v
-	}
-	for k, v := range initialCookies {
-		cookies[k] = v
-	}
+	maps.Copy(headers, initialHeaders)
+	maps.Copy(cookies, initialCookies)
 
 	if len(sequence) == 0 {
 		return headers, cookies, nil
@@ -630,7 +627,7 @@ func solvePoW(challenge string, difficulty int) (string, error) {
 	var hashBuf [sha256.Size]byte
 	var nonceBuf [20]byte // enough for strconv.AppendInt of any int64
 
-	for nonce := 0; nonce < 10_000_000; nonce++ {
+	for nonce := range 10_000_000 {
 		h.Reset()
 		h.Write(challengeBytes)
 		nonceBytes := strconv.AppendInt(nonceBuf[:0], int64(nonce), 10)
@@ -640,7 +637,7 @@ func solvePoW(challenge string, difficulty int) (string, error) {
 		// Check leading zero nibbles directly on raw hash bytes
 		numZeroBytes := difficulty / 2
 		matched := true
-		for i := 0; i < numZeroBytes; i++ {
+		for i := range numZeroBytes {
 			if hash[i] != 0 {
 				matched = false
 				break
