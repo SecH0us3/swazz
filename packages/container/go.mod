@@ -8,6 +8,7 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/securego/gosec/v2 v2.27.1
 	github.com/stretchr/testify v1.11.1
+	github.com/tidwall/gjson v1.19.0
 	golang.org/x/term v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -57,7 +58,6 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
-	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
