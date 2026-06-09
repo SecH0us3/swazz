@@ -436,3 +436,66 @@ func Test_arePrefixesRelated(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentifyCandidates(t *testing.T) {
+	r := &Runner{}
+	results := []*swagger.FuzzResult{
+		{Status: 200, Method: "GET", Endpoint: "/api/test", ResolvedPath: "/api/test"},
+		{Status: 404, Method: "POST", Endpoint: "/api/test", ResolvedPath: "/api/test"},
+		{Status: 204, Method: "DELETE", Endpoint: "/api/test/{id}", ResolvedPath: "/api/test/1"},
+	}
+
+	candidates, hasSuccess := r.identifyCandidates(results)
+
+	if len(candidates) != 2 {
+		t.Fatalf("Expected 2 candidates, got %d", len(candidates))
+	}
+
+	if !hasSuccess["GET /api/test"] {
+		t.Errorf("Expected hasSuccess to contain GET /api/test")
+	}
+	if !hasSuccess["DELETE /api/test/{id}"] {
+		t.Errorf("Expected hasSuccess to contain DELETE /api/test/{id}")
+	}
+	if hasSuccess["POST /api/test"] {
+		t.Errorf("Expected hasSuccess to NOT contain POST /api/test")
+	}
+}
+
+func TestBuildPathsToTest(t *testing.T) {
+	r := &Runner{}
+	// Mock harvested IDs
+	r.harvestedIDs.Store("/api/test", []string{"harvest1", "harvest2"})
+
+	cand := &swagger.FuzzResult{
+		Endpoint:     "/api/test/{id}",
+		ResolvedPath: "/api/test/originalID",
+		Method:       "GET",
+	}
+
+	pathsToTest, pathToID, paramName := r.buildPathsToTest(cand)
+
+	if paramName != "id" {
+		t.Errorf("Expected paramName 'id', got '%s'", paramName)
+	}
+
+	if len(pathsToTest) != 3 { // original + 2 harvested
+		t.Fatalf("Expected 3 paths to test, got %d", len(pathsToTest))
+	}
+
+	expectedPaths := map[string]bool{
+		"/api/test/originalID": true,
+		"/api/test/harvest1":   true,
+		"/api/test/harvest2":   true,
+	}
+
+	for _, p := range pathsToTest {
+		if !expectedPaths[p] {
+			t.Errorf("Unexpected path in pathsToTest: %s", p)
+		}
+	}
+
+	if pathToID["/api/test/harvest1"] != "harvest1" {
+		t.Errorf("Expected pathToID mapping for harvest1")
+	}
+}
