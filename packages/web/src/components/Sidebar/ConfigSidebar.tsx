@@ -3,7 +3,6 @@ import type { SwazzConfig, FuzzingProfile, Dictionary } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 import { PayloadSettingsModal } from './PayloadSettingsModal.js';
 import { ChainingRulesEditor } from './ChainingRulesEditor.js';
-
 interface Props {
     style?: React.CSSProperties;
     config: SwazzConfig;
@@ -18,15 +17,12 @@ interface Props {
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
     className?: string;
 }
-
 const ALL_PROFILES: FuzzingProfile[] = ['RANDOM', 'BOUNDARY', 'MALICIOUS'];
-
 const PROFILE_LABELS: Record<string, string> = {
     RANDOM: 'Random values',
     BOUNDARY: 'Boundary values',
     MALICIOUS: 'Injection attacks',
 };
-
 export function ConfigSidebar({
     style,
     config,
@@ -45,14 +41,12 @@ export function ConfigSidebar({
     const [dictText, setDictText] = useState(JSON.stringify(config.dictionaries, null, 2));
     const [dictError, setDictError] = useState('');
     const [showPayloadSettings, setShowPayloadSettings] = useState(false);
-
     const activeProfiles = config.settings.profiles || [];
     const toggleProfile = (p: FuzzingProfile) => {
         const isActive = activeProfiles.includes(p);
         const next = isActive ? activeProfiles.filter((x) => x !== p) : [...activeProfiles, p];
         if (next.length > 0) onUpdateProfiles(next);
     };
-
     // Compute the minimum payloads needed across active profiles
     const minPayloads = useMemo(() => {
         return activeProfiles.reduce((max, p) => {
@@ -62,7 +56,6 @@ export function ConfigSidebar({
             return Math.max(max, needed);
         }, 0);
     }, [activeProfiles]);
-
     const handleDictBlur = () => {
         try {
             const parsed = JSON.parse(dictText);
@@ -72,7 +65,6 @@ export function ConfigSidebar({
             setDictError('Invalid JSON');
         }
     };
-
     const handleImport = (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -89,16 +81,13 @@ export function ConfigSidebar({
         };
         reader.readAsText(file);
     };
-
     const SETTINGS_FIELDS = [
         { label: 'Concurrency', key: 'concurrency', value: config.settings.concurrency },
         { label: 'Timeout (ms)', key: 'timeout_ms', value: config.settings.timeout_ms },
         { label: 'Delay (ms)', key: 'delay_between_requests_ms', value: config.settings.delay_between_requests_ms },
     ];
-
     return (
         <aside className={`config-sidebar ${className || ''}`} style={{ gridArea:'unset', borderLeft:'1px solid var(--border-subtle)', borderRight:'none', ...style }}>
-
             {/* Profiles */}
             <Section 
                 title="Profiles" 
@@ -141,7 +130,6 @@ export function ConfigSidebar({
                         );
                     })}
                 </div>
-
                 {/* Intensity control */}
                 <div style={{ marginTop:10, padding:'8px 0 0', borderTop:'1px solid var(--border-subtle)' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
@@ -166,7 +154,6 @@ export function ConfigSidebar({
                         </div>
                     )}
                 </div>
-
                 {/* Analyze Response Body */}
                 <div className="sidebar-analyze-body-container">
                     <label className="premium-checkbox-label">
@@ -180,7 +167,6 @@ export function ConfigSidebar({
                         />
                         <span>Analyze Response Body</span>
                     </label>
-
                     {(config.settings.analyze_response_body ?? true) && (
                         <div className="sidebar-sub-setting">
                             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Size Anomaly Multiplier</span>
@@ -209,7 +195,6 @@ export function ConfigSidebar({
                         </div>
                     )}
                 </div>
-
                 {/* Rate Limit Detection */}
                 <div className="sidebar-rate-limit-container">
                     <label className="premium-checkbox-label">
@@ -223,7 +208,6 @@ export function ConfigSidebar({
                         />
                         <span>Rate Limit Detection</span>
                     </label>
-
                     {(config.settings.rate_limit_check ?? false) && (
                         <div className="sidebar-rate-limit-fields">
                             <div className="sidebar-sub-setting">
@@ -254,7 +238,6 @@ export function ConfigSidebar({
                     )}
                 </div>
             </Section>
-
             {/* Headers */}
             <Section
                 title="Headers (User A / Primary Session)"
@@ -279,7 +262,6 @@ export function ConfigSidebar({
                     }}
                 />
             </Section>
-
             {/* Cookies */}
             <Section
                 title="Cookies (User A / Primary Session)"
@@ -304,7 +286,6 @@ export function ConfigSidebar({
                     }}
                 />
             </Section>
-
             {/* BOLA & Multi-Identity */}
             <Section
                 title="BOLA / Multi-Identity"
@@ -322,11 +303,9 @@ export function ConfigSidebar({
                         />
                         <span>Enable BOLA & Bypass Testing</span>
                     </label>
-
                     <div className="bola-description">
                         Check if a secondary session (User B) or an anonymous client can access endpoints using harvested/explicit resource IDs of the primary session (User A).
                     </div>
-
                     {(config.settings.bola_testing ?? false) && (
                         <>
                             {/* Selected Auth Credentials Summary */}
@@ -364,7 +343,6 @@ export function ConfigSidebar({
                                             })
                                         )}
                                     </div>
-
                                     {/* Cookies */}
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                                         <span style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)', width: 55, flexShrink: 0 }}>Cookies:</span>
@@ -395,7 +373,6 @@ export function ConfigSidebar({
                                     </div>
                                 </div>
                             </div>
-
                             {/* Warning if no credentials selected */}
                             {(!config.settings.auth_headers || config.settings.auth_headers.length === 0) &&
                              (!config.settings.auth_cookies || config.settings.auth_cookies.length === 0) && (
@@ -408,14 +385,12 @@ export function ConfigSidebar({
                                     <span>Warning: No authentication credentials are marked. Access control check might not know what to drop or switch.</span>
                                 </div>
                             )}
-
                             {/* User B Panel */}
                             <div className="bola-identity-card">
                                 <div className="bola-identity-badge">User B (Secondary)</div>
                                 <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: 4 }}>
                                     Session credentials representing User B:
                                 </div>
-
                                 <div className="bola-sub-title">Headers (User B)</div>
                                 <KVEditor
                                     entries={config.auth_identities?.userB?.headers || {}}
@@ -435,7 +410,6 @@ export function ConfigSidebar({
                                     keyPlaceholder="Header"
                                     valuePlaceholder="Value"
                                 />
-
                                 <div className="bola-sub-title" style={{ marginTop: 8 }}>Cookies (User B)</div>
                                 <KVEditor
                                     entries={config.auth_identities?.userB?.cookies || {}}
@@ -460,7 +434,6 @@ export function ConfigSidebar({
                     )}
                 </div>
             </Section>
-
             {/* Wordlist Files */}
             <Section
                 title="Wordlist Files"
@@ -474,7 +447,6 @@ export function ConfigSidebar({
                     valuePlaceholder="Filename (in wordlists/ dir)"
                 />
             </Section>
-
             {/* Dictionaries */}
             <Section title="Dictionaries" defaultOpen={false}>
                 <textarea
@@ -491,9 +463,7 @@ export function ConfigSidebar({
                     </div>
                 )}
             </Section>
-
             {/* Settings */}
-
             {/* Request Chaining */}
             <Section title="Request Chaining" defaultOpen={false} count={config.settings.chaining_rules?.length || 0}>
                 <ChainingRulesEditor 
@@ -503,7 +473,6 @@ export function ConfigSidebar({
                     })} 
                 />
             </Section>
-
             <Section title="Settings" defaultOpen={false}>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     {SETTINGS_FIELDS.map(({ label, key, value }) => (
@@ -520,12 +489,26 @@ export function ConfigSidebar({
                             />
                         </div>
                     ))}
+                    <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop: 4, paddingTop: 8, borderTop: '1px solid var(--border-subtle)' }}>
+                        <span style={{ fontSize:'var(--font-size-xs)', color:'var(--text-secondary)' }}>HAR Domain Filter</span>
+                        <input
+                            className="input"
+                            type="text"
+                            placeholder="e.g. api.example.com"
+                            value={config.settings.har_domain_filter || ''}
+                            onChange={(e) => onUpdateConfig({
+                                settings: { ...config.settings, har_domain_filter: e.target.value } as any,
+                            })}
+                        />
+                        <span style={{ fontSize:'var(--font-size-2xs)', color:'var(--text-muted)' }}>
+                            Only import endpoints matching this domain from HAR files.
+                        </span>
+                    </div>
                 </div>
             </Section>
-
             {/* Import / Export */}
             <Section title="Config">
-                <input ref={fileRef} type="file" accept=".json,.yaml,.yml" style={{ display:'none' }} onChange={handleImport} />
+                <input ref={fileRef} type="file" accept=".json,.yaml,.yml,.har" style={{ display:'none' }} onChange={handleImport} />
                 <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     <button className="btn btn-ghost" style={{ width:'100%', justifyContent:'center' }} onClick={() => fileRef.current?.click()}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
