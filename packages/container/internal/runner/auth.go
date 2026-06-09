@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -169,13 +170,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		for _, cookie := range resp.Cookies() {
 			shouldSave := true
 			if len(step.ExtractCookies) > 0 {
-				shouldSave = false
-				for _, name := range step.ExtractCookies {
-					if name == cookie.Name {
-						shouldSave = true
-						break
-					}
-				}
+				shouldSave = slices.Contains(step.ExtractCookies, cookie.Name)
 			}
 
 			if shouldSave {
