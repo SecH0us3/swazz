@@ -225,10 +225,14 @@ func truncateValue(v any, maxLen int) any {
 }
 
 func (r *Runner) subStateVars(input string) string {
+	if !strings.Contains(input, "{{") {
+		return input
+	}
+
 	r.stateMu.RLock()
 	defer r.stateMu.RUnlock()
 	
-	if len(r.state) == 0 || !strings.Contains(input, "{{") {
+	if len(r.state) == 0 {
 		return input
 	}
 	

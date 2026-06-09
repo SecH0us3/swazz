@@ -92,12 +92,12 @@ Swazz can extract variables from previous responses and inject them into subsequ
 ```json
 {
   "settings": {
-    "chainingRules": [
+    "chaining_rules": [
       {
-        "sourceEndpoint": "POST /api/login",
-        "extractType": "json",
-        "extractPath": "data.token",
-        "variableName": "AUTH_TOKEN"
+        "source_endpoint": "POST /api/login",
+        "extract_type": "json",
+        "extract_path": "data.token",
+        "variable_name": "AUTH_TOKEN"
       }
     ]
   }

@@ -1,4 +1,5 @@
 import { ChainingRule } from '../../types.js';
+import './ChainingRulesEditor.css';
 
 interface Props {
     rules: ChainingRule[];
@@ -31,22 +32,14 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        <div className="chaining-rules-container">
             {rules.map((rule, i) => (
-                <div key={i} style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 'var(--space-2)',
-                    padding: 'var(--space-3)',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>Rule {i + 1}</span>
+                <div key={i} className="chaining-rule-card">
+                    <div className="chaining-rule-header">
+                        <span className="chaining-rule-title">Rule {i + 1}</span>
                         <button 
-                            className="btn btn-ghost" 
-                            style={{ padding: '4px', height: 'auto', minHeight: '0' }}
+                            className="btn btn-ghost chaining-rule-delete-btn" 
+
                             onClick={() => deleteRule(i)}
                             title="Delete Rule"
                         >
@@ -56,8 +49,8 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                         </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                        <label style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)' }}>Source Endpoint</label>
+                    <div className="chaining-rule-field">
+                        <label>Source Endpoint</label>
                         <input
                             className="input"
                             placeholder="e.g. POST /api/login"
@@ -66,9 +59,9 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                         />
                     </div>
 
-                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', flex: 1 }}>
-                            <label style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)' }}>Extract Type</label>
+                    <div className="chaining-rule-row">
+                        <div className="chaining-rule-col">
+                            <label>Extract Type</label>
                             <select
                                 className="input"
                                 value={rule.extract_type}
@@ -80,8 +73,8 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                             </select>
                         </div>
                         
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', flex: 1 }}>
-                            <label style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)' }}>Variable Name</label>
+                        <div className="chaining-rule-col">
+                            <label>Variable Name</label>
                             <input
                                 className="input"
                                 placeholder="e.g. AUTH_TOKEN"
@@ -91,8 +84,8 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                        <label style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)' }}>Extract Path / Regex</label>
+                    <div className="chaining-rule-field">
+                        <label>Extract Path / Regex</label>
                         <input
                             className="input"
                             placeholder={rule.extract_type === 'json' ? "e.g. data.token" : rule.extract_type === 'header' ? "e.g. Authorization" : "e.g. token=([a-z0-9]+)"}
@@ -102,7 +95,7 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                     </div>
                 </div>
             ))}
-            <button className="btn" style={{ width: '100%', background: 'var(--bg-surface)', border: '1px dashed var(--border-hover)' }} onClick={addRule}>
+            <button className="btn chaining-rule-add-btn" onClick={addRule}>
                 + Add Rule
             </button>
         </div>

@@ -44,6 +44,7 @@ export interface AnalysisFinding {
 }
 
 export interface ChainingRule {
+    source_profile?: string;
     source_endpoint: string;
     extract_type: 'json' | 'header' | 'regex';
     extract_path: string;
@@ -70,7 +71,7 @@ export interface SwazzSettings {
     time_anomaly_threshold_ms?: number;
     oob_server_url?: string;
     debug?: boolean;
-    chainingRules?: ChainingRule[];
+    chaining_rules?: ChainingRule[];
 }
 
 export interface AuthStep {

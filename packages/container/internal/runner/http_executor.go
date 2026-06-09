@@ -101,7 +101,7 @@ func (r *Runner) executeRequest(
 		if activeCSRF != "" && (method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH") {
 			// 1. Inject into mergedHeaders
 			hasCSRFHeader := false
-	for k := range mergedHeaders {
+			for k := range mergedHeaders {
 				kLower := strings.ToLower(k)
 				if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
 					mergedHeaders[k] = activeCSRF

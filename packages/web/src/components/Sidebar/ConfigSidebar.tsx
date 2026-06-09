@@ -495,11 +495,11 @@ export function ConfigSidebar({
             {/* Settings */}
 
             {/* Request Chaining */}
-            <Section title="Request Chaining" defaultOpen={false} count={config.settings.chainingRules?.length || 0}>
+            <Section title="Request Chaining" defaultOpen={false} count={config.settings.chaining_rules?.length || 0}>
                 <ChainingRulesEditor 
-                    rules={config.settings.chainingRules || []} 
+                    rules={config.settings.chaining_rules || []} 
                     onChange={(rules) => onUpdateConfig({
-                        settings: { ...config.settings, chainingRules: rules }
+                        settings: { ...config.settings, chaining_rules: rules }
                     })} 
                 />
             </Section>
