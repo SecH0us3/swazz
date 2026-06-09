@@ -325,7 +325,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			numCandidatesToSearch++
 		}
 	}
-	r.totalEndpoints.Add(int32(numCandidatesToSearch))
+	r.totalEndpoints.Add(int32(numCandidatesToSearch)) // #nosec G115
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 	var candMu sync.Mutex
