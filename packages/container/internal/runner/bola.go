@@ -540,7 +540,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	var bolaWg sync.WaitGroup
 
 	// Calculate and add len(candidates) to totalEndpoints
-	r.totalEndpoints.Add(int32(len(candidates)))
+	r.totalEndpoints.Add(int32(len(candidates))) // #nosec G115
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 	// 3. Replay requests

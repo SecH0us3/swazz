@@ -594,9 +594,6 @@ func TestToSSE_OWASPCategoryMapping(t *testing.T) {
 	}
 }
 
-
-
-
 func TestExecuteRequest_PassesBaselineTimeMs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Simulate a delay so input.Duration > BaselineTimeMs
@@ -685,7 +682,7 @@ func TestRunner_TimeBaseline(t *testing.T) {
 	r := &Runner{
 		timeBaselines: &sync.Map{},
 	}
-	
+
 	median := r.getTimeBaselineMedian("GET", "/test")
 	if median != 0 {
 		t.Errorf("Expected 0 median for empty baseline, got %d", median)
@@ -699,7 +696,7 @@ func TestRunner_TimeBaseline(t *testing.T) {
 	if median != 200 {
 		t.Errorf("Expected 200 median, got %d", median)
 	}
-	
+
 	median = r.getTimeBaselineMedian("get", "/test")
 	if median != 200 {
 		t.Errorf("Expected 200 median for lowercase method, got %d", median)

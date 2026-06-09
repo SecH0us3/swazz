@@ -1,8 +1,8 @@
 package oob
 
 import (
-	"sync"
 	"swazz-engine/internal/swagger"
+	"sync"
 )
 
 type OOBContext struct {

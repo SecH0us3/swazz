@@ -209,4 +209,3 @@ foo: bar: baz
 		assert.Error(t, err)
 	})
 }
-

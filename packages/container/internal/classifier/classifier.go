@@ -21,20 +21,20 @@ const (
 
 // Finding is a classified fuzz result that is reportable.
 type Finding struct {
-	ID           string                 `json:"id"`
-	RuleID       string                 `json:"ruleId"`
-	Level        Severity               `json:"level"`
-	Endpoint     string                 `json:"endpoint"`
-	ResolvedPath string                 `json:"resolvedPath"`
-	Method       string                 `json:"method"`
-	Profile      swagger.FuzzingProfile `json:"profile"`
-	Status       int                    `json:"status"`
-	Duration     int64                  `json:"duration"`
-	Payload      any                    `json:"payload"`
-	ResponseBody any                    `json:"responseBody,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	Timestamp    int64                  `json:"timestamp"`
-	Source       string                 `json:"source"`
+	ID            string                 `json:"id"`
+	RuleID        string                 `json:"ruleId"`
+	Level         Severity               `json:"level"`
+	Endpoint      string                 `json:"endpoint"`
+	ResolvedPath  string                 `json:"resolvedPath"`
+	Method        string                 `json:"method"`
+	Profile       swagger.FuzzingProfile `json:"profile"`
+	Status        int                    `json:"status"`
+	Duration      int64                  `json:"duration"`
+	Payload       any                    `json:"payload"`
+	ResponseBody  any                    `json:"responseBody,omitempty"`
+	Error         string                 `json:"error,omitempty"`
+	Timestamp     int64                  `json:"timestamp"`
+	Source        string                 `json:"source"`
 	OWASPCategory []string               `json:"owaspCategory,omitempty"`
 }
 
@@ -170,18 +170,18 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 				source = "access_control"
 			}
 			f := &Finding{
-				ID:           r.ID,
-				RuleID:       af.RuleID,
-				Level:        Severity(af.Level),
-				Endpoint:     r.Endpoint,
-				ResolvedPath: r.ResolvedPath,
-				Method:       r.Method,
-				Profile:      r.Profile,
-				Status:       r.Status,
-				Duration:     r.Duration,
-				Payload:      r.Payload,
-				ResponseBody: r.ResponseBody,
-				Error:        af.Evidence, // Store evidence matched fragment here
+				ID:            r.ID,
+				RuleID:        af.RuleID,
+				Level:         Severity(af.Level),
+				Endpoint:      r.Endpoint,
+				ResolvedPath:  r.ResolvedPath,
+				Method:        r.Method,
+				Profile:       r.Profile,
+				Status:        r.Status,
+				Duration:      r.Duration,
+				Payload:       r.Payload,
+				ResponseBody:  r.ResponseBody,
+				Error:         af.Evidence, // Store evidence matched fragment here
 				Timestamp:     r.Timestamp,
 				Source:        source,
 				OWASPCategory: OWASPCategories(af.RuleID),

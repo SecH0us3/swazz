@@ -6,14 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
 	"swazz-engine/internal/swagger"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRunAuthSequence(t *testing.T) {
@@ -456,7 +457,7 @@ func TestBuiltinFunctions(t *testing.T) {
 	t.Run("hmacSHA256", func(t *testing.T) {
 		got, err := call("hmacSHA256", "message", "secret")
 		require.NoError(t, err)
-		assert.Len(t, got, 64) // hex-encoded 32 bytes
+		assert.Len(t, got, 64)      // hex-encoded 32 bytes
 		assert.NotEqual(t, got, "") // non-empty
 	})
 
@@ -711,4 +712,3 @@ func TestMaybeReauthenticate(t *testing.T) {
 	assert.Equal(t, "fresh-token-1", newH2["Authorization"])
 	assert.Equal(t, 1, authCount) // authCount should remain 1!
 }
-

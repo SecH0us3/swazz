@@ -930,7 +930,7 @@ func configureFilePathsAndFilters(config *CliConfig) {
 
 func saveConfig(path string, config *CliConfig) bool {
 	tmpPath := path + ".tmp"
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G304
 	if err != nil {
 		fmt.Printf("\033[31mFailed to open temp config file for writing: %v\033[0m\n", err)
 		return false
@@ -939,12 +939,12 @@ func saveConfig(path string, config *CliConfig) bool {
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(config); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		fmt.Printf("\033[31mFailed to serialize configuration to JSON: %v\033[0m\n", err)
 		return false
 	}
-	f.Close()
+	_ = f.Close()
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath) // best-effort cleanup
