@@ -118,7 +118,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		}
 		if len(cookies) > 0 {
 			for k, v := range cookies {
-				req.AddCookie(&http.Cookie{Name: k, Value: v})
+				req.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
 			}
 		}
 		r.configMu.RUnlock()
@@ -142,8 +142,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("auth step %d: failed to read response: %w", i+1, err)

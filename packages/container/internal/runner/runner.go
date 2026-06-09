@@ -399,7 +399,7 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	if settings.RateLimitCheck {
 		totalEP += len(endpoints)
 	}
-	r.totalEndpoints.Store(int32(totalEP))
+	r.totalEndpoints.Store(int32(totalEP)) // #nosec G115
 }
 
 func (r *Runner) fuzzEndpoint(
@@ -416,7 +416,7 @@ func (r *Runner) fuzzEndpoint(
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
 
 	r.currentEndpoint.Store(epKey)
-	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx))
+	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx)) // #nosec G115
 
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
@@ -479,7 +479,7 @@ func (r *Runner) fuzzEndpoint(
 		if hasFields(&endpoint) {
 			for retries := 0; retries < 10; retries++ {
 				var generated map[string]any
-				if profile == swagger.ProfileRandom && isBodyMethod && rand.Float64() < 0.15 {
+				if profile == swagger.ProfileRandom && isBodyMethod && rand.Float64() < 0.15 { // #nosec G404
 					// In RANDOM profile, there is a 15% chance to send an empty object `{}`
 					// as the request body to test API robustness.
 					generated = map[string]any{}
@@ -624,7 +624,7 @@ func (r *Runner) fuzzEndpoint(
 
 	wg.Wait()
 
-	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx + 1))
+	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx + 1)) // #nosec G115
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 

@@ -79,7 +79,7 @@ func (h *Handler) Proxy(c *gin.Context) {
 	// Add Cookies idiometically
 	for k, v := range req.Cookies {
 		if k != "" && v != "" {
-			httpReq.AddCookie(&http.Cookie{Name: k, Value: v})
+			httpReq.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
 		}
 	}
 

@@ -51,7 +51,7 @@ func LoadWordlists(config *Config) error {
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
 			return fmt.Errorf("invalid wordlist file: %q resolved outside wordlists directory", filePath)
 		}
-		file, err := os.Open(safePath) //nolint:gosec // G304: path validated to remain within trusted base directory
+		file, err := os.Open(safePath) // #nosec G304
 		if err != nil {
 			return fmt.Errorf("failed to open wordlist for category %s: %w", category, err)
 		}

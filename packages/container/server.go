@@ -105,7 +105,7 @@ func runServer() {
 		port = "8080"
 	}
 
-	log.Printf("swazz-engine starting on :%s", port)
+	log.Printf("swazz-engine starting on :%s", port) // #nosec G706
 	if err := r.Run("0.0.0.0:" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

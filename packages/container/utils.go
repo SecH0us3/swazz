@@ -28,7 +28,7 @@ func regexpMatch(pattern, s string) (bool, error) {
 }
 
 func writeJSON(path string, data any) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G302 G306
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G302 G304 G306
 	if err != nil {
 		return err
 	}

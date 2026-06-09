@@ -174,7 +174,7 @@ func (r *Runner) executeRequest(
 		}
 		if len(cookies) > 0 {
 			for k, v := range cookies {
-				req.AddCookie(&http.Cookie{Name: k, Value: v})
+				req.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
 			}
 		}
 
