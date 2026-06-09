@@ -102,6 +102,7 @@ type Settings struct {
 	AuthHeaders                   []string                    `json:"auth_headers,omitempty"`
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
 	ChainingRules                 []ChainingRule              `json:"chaining_rules,omitempty"`
+	HarDomainFilter               string                      `json:"har_domain_filter,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
