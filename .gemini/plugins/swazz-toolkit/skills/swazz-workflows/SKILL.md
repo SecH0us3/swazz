@@ -8,7 +8,7 @@ This skill defines how to work with the `swazz` project.
 
 ## 🛠 Deterministic Helper Scripts
 - Run `scripts/start-all.sh` to spin up the local dev environment (Vite + Go).
-- Run `scripts/test-backend.sh` to execute the Go backend unit tests in the container package.
+- Run `scripts/test-backend.sh` to execute the Go backend unit tests, compiler checks (`go vet`), and SAST security scans (`gosec`).
 
 ## 🔄 Development Architecture
 - **Backend**: `packages/container/`. Contains fuzzing logic.
@@ -23,7 +23,7 @@ When handling a Task N, delegate to specialized subagents:
 **Universal Workflow:**
 1. Create a git branch `feature/task-N`.
 2. Generate `implementation_plan.md`. CRITICAL: Read the ENTIRE task description in ROADMAP.md (including parentheses) and explicitly include Documentation updates in the plan. Wait for user approval.
-3. Write code, sandboxed unit tests (`test-backend.sh`), and Fuzzer E2E tests.
+3. Write code, sandboxed unit tests, and Fuzzer E2E tests. Run `scripts/test-backend.sh` to validate functionality and fix any reported SAST/linter warnings.
 4. TEST AUDIT: Invoke the `test_auditor` subagent to review the PR/changes. DO NOT proceed until `test_auditor` confirms that all new logic is adequately covered by unit/integration tests.
 5. UI QA EVALUATION: If the task involved significant frontend changes, evaluate if visual verification is necessary. If yes, invoke `qa_tester` to use built-in browser tools. Do not run UI tests blindly for minor UI tweaks.
 6. INTEGRATION CHECK: Verify that new backend features are actually invoked by the main execution pipeline (`main.go` and `api/handlers.go`). Ensure frontend UI completely aligns with backend security constraints.
