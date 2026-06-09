@@ -292,6 +292,28 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	fmt.Println("Running Access Control & BOLA/IDOR testing phase...")
 
 	// 1. Authenticate user identities (Identity B)
+	identityHeaders, identityCookies := r.authenticateIdentities(ctx)
+
+	// 2. Identify candidates (successful 2xx requests)
+	candidates, hasSuccessCandidate := r.identifyCandidates(results)
+
+	// 3. For endpoints that don't have a successful candidate, try to construct one
+	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+	generatedCandidates := r.generateMissingCandidates(ctx, hasSuccessCandidate, safeGen)
+	candidates = append(candidates, generatedCandidates...)
+
+	// Calculate and add len(candidates) to totalEndpoints
+	r.totalEndpoints.Add(int32(len(candidates))) // #nosec G115
+	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
+	// 4. Replay requests
+	bolaResults := r.replayCandidates(ctx, candidates, identityHeaders, identityCookies)
+
+	fmt.Printf("Access Control phase complete. Found %d findings.\n", len(bolaResults))
+	return bolaResults
+}
+
+func (r *Runner) authenticateIdentities(ctx context.Context) (map[string]map[string]string, map[string]map[string]string) {
 	identityHeaders := make(map[string]map[string]string)
 	identityCookies := make(map[string]map[string]string)
 	for idName, identity := range r.config.AuthIdentities {
@@ -303,8 +325,10 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		identityHeaders[idName] = h
 		identityCookies[idName] = c
 	}
+	return identityHeaders, identityCookies
+}
 
-	// 2. Identify candidates (successful 2xx requests)
+func (r *Runner) identifyCandidates(results []*swagger.FuzzResult) ([]*swagger.FuzzResult, map[string]bool) {
 	var candidates []*swagger.FuzzResult
 	hasSuccessCandidate := make(map[string]bool)
 	for _, res := range results {
@@ -313,19 +337,19 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			hasSuccessCandidate[strings.ToUpper(res.Method)+" "+res.Endpoint] = true
 		}
 	}
+	return candidates, hasSuccessCandidate
+}
 
-	// For endpoints that don't have a successful candidate, try to construct one
-	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-
-	// Calculate and add numCandidatesToSearch to totalEndpoints
-	var numCandidatesToSearch int
+func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandidate map[string]bool, safeGen *generator.Generator) []*swagger.FuzzResult {
+	var candidates []*swagger.FuzzResult
+	var numCandidatesToSearch int32
 	for _, ep := range r.config.Endpoints {
 		key := strings.ToUpper(ep.Method) + " " + ep.Path
 		if !hasSuccessCandidate[key] {
 			numCandidatesToSearch++
 		}
 	}
-	r.totalEndpoints.Add(int32(numCandidatesToSearch))
+	r.totalEndpoints.Add(numCandidatesToSearch)
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 	var candMu sync.Mutex
@@ -348,180 +372,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 			r.currentEndpoint.Store(epKey)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-			key := strings.ToUpper(ep.Method) + " " + ep.Path
-			if hasSuccessCandidate[key] {
-				r.completedEndpoints.Add(1)
-				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-				return
-			}
-
-			var harvested []string
-			hasPathParams := strings.Contains(ep.Path, "{")
-
-			// We want to try finding a valid candidate by trying harvested IDs
-			uniqueIDs := make(map[string]bool)
-			r.harvestedIDs.Range(func(k, value any) bool {
-				vSlice := value.([]string)
-				for _, id := range vSlice {
-					uniqueIDs[id] = true
-				}
-				return true
-			})
-			for id := range uniqueIDs {
-				harvested = append(harvested, id)
-			}
-
-			// First, generate baseline payload
-			var generated map[string]any
-			if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
-				generated = safeGen.BuildObject(&ep.Schema)
-			}
-
-			var paramName string
-			if hasPathParams {
-				origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
-				for _, part := range origParts {
-					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-						paramName = part[1 : len(part)-1]
-						break
-					}
-				}
-			} else if generated != nil {
-				for k := range generated {
-					kLower := strings.ToLower(k)
-					if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-						paramName = k
-						break
-					}
-				}
-			}
-
-			limit := len(harvested)
-			if limit > 25 {
-				limit = 25 // brute force up to 25 harvested IDs
-			}
-			if limit == 0 {
-				limit = 1 // try at least once (with random/empty ID)
-			}
-
-			var successRes *swagger.FuzzResult
-
-			for i := 0; i < limit; i++ {
-				resolvedPath := ep.Path
-				if hasPathParams && len(harvested) > 0 {
-					origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
-					resolParts := make([]string, len(origParts))
-					copy(resolParts, origParts)
-					for idx, part := range origParts {
-						if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-							kLower := strings.ToLower(part[1 : len(part)-1])
-							if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-								resolParts[idx] = harvested[i]
-							}
-						}
-					}
-					resolvedPath = "/" + strings.Join(resolParts, "/")
-				} else if hasPathParams {
-					// No harvested IDs available, try with a safe generated value
-					origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
-					resolParts := make([]string, len(origParts))
-					copy(resolParts, origParts)
-					for idx, part := range origParts {
-						if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-							kLower := strings.ToLower(part[1 : len(part)-1])
-							if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-								resolParts[idx] = "1"
-							}
-						}
-					}
-					resolvedPath = "/" + strings.Join(resolParts, "/")
-				} else if ep.Example != nil {
-					resolvedPath = ep.Path
-				}
-
-				var payload any
-				var queryParams map[string]any
-
-				if generated != nil {
-					genCopy := make(map[string]any)
-					for k, v := range generated {
-						genCopy[k] = v
-					}
-					if paramName != "" && len(harvested) > 0 && i < len(harvested) {
-						substituted := substituteIDsInPayload(genCopy, paramName, harvested[i])
-						if m, ok := substituted.(map[string]any); ok {
-							genCopy = m
-						}
-					}
-					if isNoBodyMethod(ep.Method) {
-						queryParams = genCopy
-					} else {
-						payload = genCopy
-					}
-				} else if ep.Example != nil {
-					if isNoBodyMethod(ep.Method) {
-						if m, ok := ep.Example.(map[string]any); ok {
-							queryParams = m
-						}
-					} else {
-						payload = ep.Example
-					}
-				}
-
-				// Generate security headers if any
-				generatedHeaders := make(map[string]string)
-				if secHeaders := safeGen.GenerateSecurityHeaders(); secHeaders != nil {
-					for k, v := range secHeaders {
-						generatedHeaders[k] = v
-					}
-				}
-
-				// Build final headers
-				headers := make(map[string]string)
-				r.configMu.RLock()
-				for k, v := range r.config.GlobalHeaders {
-					headers[k] = v
-				}
-				r.configMu.RUnlock()
-				for k, v := range generatedHeaders {
-					headers[k] = v
-				}
-
-				// Increment totalPlanned dynamically before executing
-				r.totalPlanned.Add(1)
-
-				// Execute request under User A (Primary)
-				resUserA := r.executeRequest(
-					ctx,
-					r.config.BaseURL,
-					resolvedPath,
-					ep.Path,
-					ep.Method,
-					headers,
-					r.config.Cookies,
-					payload,
-					swagger.FuzzingProfile("BOLA"),
-					queryParams,
-					nil,
-					ep.ContentType,
-				)
-				resUserA.Identity = "User A"
-
-				r.statsChan <- statsMsg{
-					result:           resUserA,
-					currentIteration: i + 1,
-					totalIterations:  limit,
-				}
-				r.Broadcast(Event{Type: EventResult, Data: resUserA})
-
-				if resUserA.Status >= 200 && resUserA.Status < 300 {
-					successRes = resUserA
-					break
-				}
-				if successRes == nil {
-					successRes = resUserA
-				}
-			}
+			successRes := r.generateCandidateForEndpoint(ctx, ep, safeGen)
 
 			if successRes != nil {
 				candMu.Lock()
@@ -534,16 +385,186 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		}(ep)
 	}
 	candWg.Wait()
+	return candidates
+}
 
+func (r *Runner) generateCandidateForEndpoint(ctx context.Context, ep swagger.EndpointConfig, safeGen *generator.Generator) *swagger.FuzzResult {
+	var harvested []string
+	hasPathParams := strings.Contains(ep.Path, "{")
+
+	// We want to try finding a valid candidate by trying harvested IDs
+	uniqueIDs := make(map[string]bool)
+	r.harvestedIDs.Range(func(k, value any) bool {
+		vSlice := value.([]string)
+		for _, id := range vSlice {
+			uniqueIDs[id] = true
+		}
+		return true
+	})
+	for id := range uniqueIDs {
+		harvested = append(harvested, id)
+	}
+
+	// First, generate baseline payload
+	var generated map[string]any
+	if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
+		generated = safeGen.BuildObject(&ep.Schema)
+	}
+
+	var paramName string
+	if hasPathParams {
+		origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+		for _, part := range origParts {
+			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+				paramName = part[1 : len(part)-1]
+				break
+			}
+		}
+	} else if generated != nil {
+		for k := range generated {
+			kLower := strings.ToLower(k)
+			if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+				paramName = k
+				break
+			}
+		}
+	}
+
+	limit := len(harvested)
+	if limit > 25 {
+		limit = 25 // brute force up to 25 harvested IDs
+	}
+	if limit == 0 {
+		limit = 1 // try at least once (with random/empty ID)
+	}
+
+	var successRes *swagger.FuzzResult
+
+	for i := 0; i < limit; i++ {
+		resolvedPath := ep.Path
+		if hasPathParams && len(harvested) > 0 {
+			origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+			resolParts := make([]string, len(origParts))
+			copy(resolParts, origParts)
+			for idx, part := range origParts {
+				if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+					kLower := strings.ToLower(part[1 : len(part)-1])
+					if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+						resolParts[idx] = harvested[i]
+					}
+				}
+			}
+			resolvedPath = "/" + strings.Join(resolParts, "/")
+		} else if hasPathParams {
+			// No harvested IDs available, try with a safe generated value
+			origParts := strings.Split(strings.Trim(ep.Path, "/"), "/")
+			resolParts := make([]string, len(origParts))
+			copy(resolParts, origParts)
+			for idx, part := range origParts {
+				if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+					kLower := strings.ToLower(part[1 : len(part)-1])
+					if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+						resolParts[idx] = "1"
+					}
+				}
+			}
+			resolvedPath = "/" + strings.Join(resolParts, "/")
+		} else if ep.Example != nil {
+			resolvedPath = ep.Path
+		}
+
+		var payload any
+		var queryParams map[string]any
+
+		if generated != nil {
+			genCopy := make(map[string]any)
+			for k, v := range generated {
+				genCopy[k] = v
+			}
+			if paramName != "" && len(harvested) > 0 && i < len(harvested) {
+				substituted := substituteIDsInPayload(genCopy, paramName, harvested[i])
+				if m, ok := substituted.(map[string]any); ok {
+					genCopy = m
+				}
+			}
+			if isNoBodyMethod(ep.Method) {
+				queryParams = genCopy
+			} else {
+				payload = genCopy
+			}
+		} else if ep.Example != nil {
+			if isNoBodyMethod(ep.Method) {
+				if m, ok := ep.Example.(map[string]any); ok {
+					queryParams = m
+				}
+			} else {
+				payload = ep.Example
+			}
+		}
+
+		// Generate security headers if any
+		generatedHeaders := make(map[string]string)
+		if secHeaders := safeGen.GenerateSecurityHeaders(); secHeaders != nil {
+			for k, v := range secHeaders {
+				generatedHeaders[k] = v
+			}
+		}
+
+		// Build final headers
+		headers := make(map[string]string)
+		r.configMu.RLock()
+		for k, v := range r.config.GlobalHeaders {
+			headers[k] = v
+		}
+		r.configMu.RUnlock()
+		for k, v := range generatedHeaders {
+			headers[k] = v
+		}
+
+		// Increment totalPlanned dynamically before executing
+		r.totalPlanned.Add(1)
+
+		// Execute request under User A (Primary)
+		resUserA := r.executeRequest(
+			ctx,
+			r.config.BaseURL,
+			resolvedPath,
+			ep.Path,
+			ep.Method,
+			headers,
+			r.config.Cookies,
+			payload,
+			swagger.FuzzingProfile("BOLA"),
+			queryParams,
+			nil,
+			ep.ContentType,
+		)
+		resUserA.Identity = "User A"
+
+		r.statsChan <- statsMsg{
+			result:           resUserA,
+			currentIteration: i + 1,
+			totalIterations:  limit,
+		}
+		r.Broadcast(Event{Type: EventResult, Data: resUserA})
+
+		if resUserA.Status >= 200 && resUserA.Status < 300 {
+			successRes = resUserA
+			break
+		}
+		if successRes == nil {
+			successRes = resUserA
+		}
+	}
+
+	return successRes
+}
+
+func (r *Runner) replayCandidates(ctx context.Context, candidates []*swagger.FuzzResult, identityHeaders, identityCookies map[string]map[string]string) []*swagger.FuzzResult {
 	var bolaResults []*swagger.FuzzResult
 	var bolaMu sync.Mutex
 	var bolaWg sync.WaitGroup
 
-	// Calculate and add len(candidates) to totalEndpoints
-	r.totalEndpoints.Add(int32(len(candidates))) // #nosec G115
-	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-
-	// 3. Replay requests
 	for _, cand := range candidates {
 		bolaWg.Add(1)
 		r.limiter.Acquire()
@@ -563,328 +584,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				return
 			}
 
-			hasPathParams := strings.Contains(cand.Endpoint, "{")
-
-			// Replay for each harvested ID (or use candidate's resolved path if none harvested or static)
-			pathsToTest := []string{cand.ResolvedPath}
-			pathToID := make(map[string]string)
-			pathToID[cand.ResolvedPath] = ""
-
-			var paramName string
-			if hasPathParams {
-				origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
-				for _, part := range origParts {
-					if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-						paramName = part[1 : len(part)-1]
-						break
-					}
-				}
-			} else {
-				if m, ok := cand.Payload.(map[string]any); ok {
-					for k := range m {
-						kLower := strings.ToLower(k)
-						if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-							paramName = k
-							break
-						}
-					}
-				}
-			}
-
-			if paramName != "" {
-				uniqueIDs := make(map[string]bool)
-				r.harvestedIDs.Range(func(key, value any) bool {
-					vSlice := value.([]string)
-					for _, id := range vSlice {
-						uniqueIDs[id] = true
-					}
-					return true
-				})
-
-				var harvested []string
-				for id := range uniqueIDs {
-					harvested = append(harvested, id)
-				}
-
-				if len(harvested) > 0 {
-					limit := len(harvested)
-					if limit > 25 {
-						limit = 25
-					}
-					for i := 0; i < limit; i++ {
-						newResolvedPath := cand.ResolvedPath
-						if hasPathParams {
-							origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
-							resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
-							if len(origParts) == len(resolParts) {
-								for idx, part := range origParts {
-									if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-										kLower := strings.ToLower(part[1 : len(part)-1])
-										if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
-											resolParts[idx] = harvested[i]
-										}
-									}
-								}
-								newResolvedPath = "/" + strings.Join(resolParts, "/")
-							}
-						}
-
-						foundDuplicate := false
-						for _, p := range pathsToTest {
-							if p == newResolvedPath && pathToID[p] == harvested[i] {
-								foundDuplicate = true
-								break
-							}
-						}
-						if !foundDuplicate {
-							pathsToTest = append(pathsToTest, newResolvedPath)
-							pathToID[newResolvedPath] = harvested[i]
-						}
-					}
-				}
-			}
-
-			confirmedIdentities := make(map[string]bool)
-
-			for _, resolvedPath := range pathsToTest {
-				// Check if we have already confirmed bypass for all identities and anonymous
-				allDone := true
-				for idName := range identityHeaders {
-					if !confirmedIdentities[idName] {
-						allDone = false
-						break
-					}
-				}
-				if !confirmedIdentities["Anonymous"] {
-					allDone = false
-				}
-				if allDone {
-					break
-				}
-
-				// Determine request payload and query params (substituting current path ID if needed)
-				var qp map[string]any
-				var pl any
-				targetID := pathToID[resolvedPath]
-
-				if isNoBodyMethod(cand.Method) {
-					if m, ok := cand.Payload.(map[string]any); ok {
-						if targetID != "" && paramName != "" {
-							substituted := substituteIDsInPayload(m, paramName, targetID)
-							if subMap, ok := substituted.(map[string]any); ok {
-								qp = subMap
-							} else {
-								qp = m
-							}
-						} else {
-							qp = m
-						}
-					}
-				} else {
-					if targetID != "" && paramName != "" && cand.Payload != nil {
-						pl = substituteIDsInPayload(cand.Payload, paramName, targetID)
-					} else {
-						pl = cand.Payload
-					}
-				}
-
-				// Replay for each identity B (Always run to check for Tenant Bypass)
-				for idName, headers := range identityHeaders {
-					if confirmedIdentities[idName] {
-						continue
-					}
-					cookies := identityCookies[idName]
-
-					// Increment totalPlanned dynamically before executing
-					r.totalPlanned.Add(1)
-
-					// Execute request
-					res := r.executeRequest(
-						ctx,
-						r.config.BaseURL,
-						resolvedPath,
-						cand.Endpoint,
-						cand.Method,
-						headers,
-						cookies,
-						pl,
-						swagger.FuzzingProfile("BOLA"),
-						qp,
-						nil,
-						ep.ContentType,
-					)
-
-					r.statsChan <- statsMsg{
-						result:           res,
-						currentIteration: 1,
-						totalIterations:  1,
-					}
-
-					// If success, check for BOLA or Tenant Bypass
-					if res.Status >= 200 && res.Status < 300 {
-						bodyCand := responseBodyToBytes(cand.ResponseBody)
-						bodyRes := responseBodyToBytes(res.ResponseBody)
-						sim := bola.CheckSimilarity(bodyCand, bodyRes)
-
-						threshold := r.config.Settings.BOLASimilarityThreshold
-						if threshold <= 0 {
-							threshold = 0.85
-						}
-
-						if sim >= threshold {
-							formattedName := formatIdentityName(idName)
-							res.Identity = formattedName
-							confirmedIdentities[idName] = true
-
-							if targetID != "" || paramName != "" {
-								minedFrom := "Unknown"
-								if targetID != "" {
-									if src, ok := r.idSources.Load(targetID); ok {
-										minedFrom = src.(string)
-									}
-								}
-								finding := swagger.AnalysisFinding{
-									RuleID:   "swazz/bola-idor",
-									Level:    "error",
-									Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", formattedName),
-									Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", formattedName, cand.Method, resolvedPath, res.Status, targetID, minedFrom, sim),
-								}
-								res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
-							} else {
-								finding := swagger.AnalysisFinding{
-									RuleID:   "swazz/tenant-isolation-bypass",
-									Level:    "warning",
-									Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", formattedName),
-									Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d (Similarity: %.2f)", formattedName, cand.Method, resolvedPath, res.Status, sim),
-								}
-								res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
-							}
-							bolaMu.Lock()
-							bolaResults = append(bolaResults, res)
-							bolaMu.Unlock()
-						}
-					}
-
-					r.Broadcast(Event{
-						Type: EventResult,
-						Data: res,
-					})
-				}
-
-				// 4. Anonymous access check
-				if !confirmedIdentities["Anonymous"] {
-					anonHeaders := make(map[string]string)
-					anonCookies := make(map[string]string)
-
-					// Determine auth keys to drop
-					dropHeaders := r.config.Settings.AuthHeaders
-					if len(dropHeaders) == 0 {
-						dropHeaders = []string{"Authorization", "X-API-Key"}
-					}
-					dropCookies := r.config.Settings.AuthCookies
-					if len(dropCookies) == 0 {
-						dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
-					}
-
-					r.configMu.RLock()
-					// Copy global headers except those to drop
-					for k, v := range r.config.GlobalHeaders {
-						shouldDrop := false
-						for _, drop := range dropHeaders {
-							if strings.EqualFold(k, drop) {
-								shouldDrop = true
-								break
-							}
-						}
-						if !shouldDrop {
-							anonHeaders[k] = v
-						}
-					}
-
-					// Copy cookies except those to drop
-					for k, v := range r.config.Cookies {
-						shouldDrop := false
-						for _, drop := range dropCookies {
-							if strings.EqualFold(k, drop) {
-								shouldDrop = true
-								break
-							}
-						}
-						if !shouldDrop {
-							anonCookies[k] = v
-						}
-					}
-					r.configMu.RUnlock()
-
-					// Increment totalPlanned dynamically before executing
-					r.totalPlanned.Add(1)
-
-					resAnon := r.executeRequest(
-						ctx,
-						r.config.BaseURL,
-						resolvedPath,
-						cand.Endpoint,
-						cand.Method,
-						anonHeaders,
-						anonCookies,
-						pl,
-						swagger.FuzzingProfile("BOLA"),
-						qp,
-						nil,
-						ep.ContentType,
-					)
-
-					r.statsChan <- statsMsg{
-						result:           resAnon,
-						currentIteration: 1,
-						totalIterations:  1,
-					}
-
-					if resAnon.Status >= 200 && resAnon.Status < 300 {
-						bodyCand := responseBodyToBytes(cand.ResponseBody)
-						bodyAnon := responseBodyToBytes(resAnon.ResponseBody)
-						sim := bola.CheckSimilarity(bodyCand, bodyAnon)
-
-						threshold := r.config.Settings.BOLASimilarityThreshold
-						if threshold <= 0 {
-							threshold = 0.85
-						}
-
-						if sim >= threshold {
-							resAnon.Identity = "Anonymous"
-							confirmedIdentities["Anonymous"] = true
-
-							minedFrom := "Unknown"
-							if targetID != "" {
-								if src, ok := r.idSources.Load(targetID); ok {
-									minedFrom = src.(string)
-								}
-							}
-
-							evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, sim)
-							if targetID != "" {
-								evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom, sim)
-							}
-
-							finding := swagger.AnalysisFinding{
-								RuleID:   "swazz/unauthorized-access",
-								Level:    "error",
-								Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
-								Evidence: evidenceStr,
-							}
-							bolaMu.Lock()
-							resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
-							bolaResults = append(bolaResults, resAnon)
-							bolaMu.Unlock()
-						}
-					}
-
-					r.Broadcast(Event{
-						Type: EventResult,
-						Data: resAnon,
-					})
-				}
-			}
+			r.replayCandidate(ctx, cand, ep, identityHeaders, identityCookies, &bolaMu, &bolaResults)
 
 			r.completedEndpoints.Add(1)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
@@ -892,8 +592,334 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	}
 	bolaWg.Wait()
 
-	fmt.Printf("Access Control phase complete. Found %d findings.\n", len(bolaResults))
 	return bolaResults
+}
+
+func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[string]string, string) {
+	pathsToTest := []string{cand.ResolvedPath}
+	pathToID := make(map[string]string)
+	pathToID[cand.ResolvedPath] = ""
+
+	hasPathParams := strings.Contains(cand.Endpoint, "{")
+	var paramName string
+	if hasPathParams {
+		origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+		for _, part := range origParts {
+			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+				paramName = part[1 : len(part)-1]
+				break
+			}
+		}
+	} else {
+		if m, ok := cand.Payload.(map[string]any); ok {
+			for k := range m {
+				kLower := strings.ToLower(k)
+				if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+					paramName = k
+					break
+				}
+			}
+		}
+	}
+
+	if paramName != "" {
+		uniqueIDs := make(map[string]bool)
+		r.harvestedIDs.Range(func(key, value any) bool {
+			vSlice := value.([]string)
+			for _, id := range vSlice {
+				uniqueIDs[id] = true
+			}
+			return true
+		})
+
+		var harvested []string
+		for id := range uniqueIDs {
+			harvested = append(harvested, id)
+		}
+
+		if len(harvested) > 0 {
+			limit := len(harvested)
+			if limit > 25 {
+				limit = 25
+			}
+			for i := 0; i < limit; i++ {
+				newResolvedPath := cand.ResolvedPath
+				if hasPathParams {
+					origParts := strings.Split(strings.Trim(cand.Endpoint, "/"), "/")
+					resolParts := strings.Split(strings.Trim(cand.ResolvedPath, "/"), "/")
+					if len(origParts) == len(resolParts) {
+						for idx, part := range origParts {
+							if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+								kLower := strings.ToLower(part[1 : len(part)-1])
+								if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "id") {
+									resolParts[idx] = harvested[i]
+								}
+							}
+						}
+						newResolvedPath = "/" + strings.Join(resolParts, "/")
+					}
+				}
+
+				foundDuplicate := false
+				for _, p := range pathsToTest {
+					if p == newResolvedPath && pathToID[p] == harvested[i] {
+						foundDuplicate = true
+						break
+					}
+				}
+				if !foundDuplicate {
+					pathsToTest = append(pathsToTest, newResolvedPath)
+					pathToID[newResolvedPath] = harvested[i]
+				}
+			}
+		}
+	}
+
+	return pathsToTest, pathToID, paramName
+}
+
+func (r *Runner) replayCandidate(ctx context.Context, cand *swagger.FuzzResult, ep swagger.EndpointConfig, identityHeaders, identityCookies map[string]map[string]string, bolaMu *sync.Mutex, bolaResults *[]*swagger.FuzzResult) {
+	pathsToTest, pathToID, paramName := r.buildPathsToTest(cand)
+	confirmedIdentities := make(map[string]bool)
+
+	for _, resolvedPath := range pathsToTest {
+		// Check if we have already confirmed bypass for all identities and anonymous
+		allDone := true
+		for idName := range identityHeaders {
+			if !confirmedIdentities[idName] {
+				allDone = false
+				break
+			}
+		}
+		if !confirmedIdentities["Anonymous"] {
+			allDone = false
+		}
+		if allDone {
+			break
+		}
+
+		var qp map[string]any
+		var pl any
+		targetID := pathToID[resolvedPath]
+
+		if isNoBodyMethod(cand.Method) {
+			if m, ok := cand.Payload.(map[string]any); ok {
+				if targetID != "" && paramName != "" {
+					substituted := substituteIDsInPayload(m, paramName, targetID)
+					if subMap, ok := substituted.(map[string]any); ok {
+						qp = subMap
+					} else {
+						qp = m
+					}
+				} else {
+					qp = m
+				}
+			}
+		} else {
+			if targetID != "" && paramName != "" && cand.Payload != nil {
+				pl = substituteIDsInPayload(cand.Payload, paramName, targetID)
+			} else {
+				pl = cand.Payload
+			}
+		}
+
+		r.testPathForIdentities(ctx, cand, ep, resolvedPath, targetID, paramName, qp, pl, identityHeaders, identityCookies, confirmedIdentities, bolaMu, bolaResults)
+		r.testPathForAnonymous(ctx, cand, ep, resolvedPath, targetID, qp, pl, confirmedIdentities, bolaMu, bolaResults)
+	}
+}
+
+func (r *Runner) testPathForIdentities(ctx context.Context, cand *swagger.FuzzResult, ep swagger.EndpointConfig, resolvedPath, targetID, paramName string, qp map[string]any, pl any, identityHeaders, identityCookies map[string]map[string]string, confirmedIdentities map[string]bool, bolaMu *sync.Mutex, bolaResults *[]*swagger.FuzzResult) {
+	for idName, headers := range identityHeaders {
+		if confirmedIdentities[idName] {
+			continue
+		}
+		cookies := identityCookies[idName]
+
+		r.totalPlanned.Add(1)
+
+		res := r.executeRequest(
+			ctx,
+			r.config.BaseURL,
+			resolvedPath,
+			cand.Endpoint,
+			cand.Method,
+			headers,
+			cookies,
+			pl,
+			swagger.FuzzingProfile("BOLA"),
+			qp,
+			nil,
+			ep.ContentType,
+		)
+
+		r.statsChan <- statsMsg{
+			result:           res,
+			currentIteration: 1,
+			totalIterations:  1,
+		}
+
+		if res.Status >= 200 && res.Status < 300 {
+			bodyCand := responseBodyToBytes(cand.ResponseBody)
+			bodyRes := responseBodyToBytes(res.ResponseBody)
+			sim := bola.CheckSimilarity(bodyCand, bodyRes)
+
+			threshold := r.config.Settings.BOLASimilarityThreshold
+			if threshold <= 0 {
+				threshold = 0.85
+			}
+
+			if sim >= threshold {
+				formattedName := formatIdentityName(idName)
+				res.Identity = formattedName
+				confirmedIdentities[idName] = true
+
+				if targetID != "" || paramName != "" {
+					minedFrom := "Unknown"
+					if targetID != "" {
+						if src, ok := r.idSources.Load(targetID); ok {
+							minedFrom = src.(string)
+						}
+					}
+					finding := swagger.AnalysisFinding{
+						RuleID:   "swazz/bola-idor",
+						Level:    "error",
+						Message:  fmt.Sprintf("BOLA / IDOR vulnerability confirmed. Identity %s succeeded to access resource of Identity A.", formattedName),
+						Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", formattedName, cand.Method, resolvedPath, res.Status, targetID, minedFrom, sim),
+					}
+					res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+				} else {
+					finding := swagger.AnalysisFinding{
+						RuleID:   "swazz/tenant-isolation-bypass",
+						Level:    "warning",
+						Message:  fmt.Sprintf("Tenant Isolation Bypass candidate. Identity %s successfully accessed endpoint normally used by Identity A.", formattedName),
+						Evidence: fmt.Sprintf("Identity: %s, Endpoint: %s %s, Status: %d (Similarity: %.2f)", formattedName, cand.Method, resolvedPath, res.Status, sim),
+					}
+					res.AnalyzerFindings = append(res.AnalyzerFindings, finding)
+				}
+				bolaMu.Lock()
+				*bolaResults = append(*bolaResults, res)
+				bolaMu.Unlock()
+			}
+		}
+
+		r.Broadcast(Event{
+			Type: EventResult,
+			Data: res,
+		})
+	}
+}
+
+func (r *Runner) testPathForAnonymous(ctx context.Context, cand *swagger.FuzzResult, ep swagger.EndpointConfig, resolvedPath, targetID string, qp map[string]any, pl any, confirmedIdentities map[string]bool, bolaMu *sync.Mutex, bolaResults *[]*swagger.FuzzResult) {
+	if confirmedIdentities["Anonymous"] {
+		return
+	}
+
+	anonHeaders := make(map[string]string)
+	anonCookies := make(map[string]string)
+
+	dropHeaders := r.config.Settings.AuthHeaders
+	if len(dropHeaders) == 0 {
+		dropHeaders = []string{"Authorization", "X-API-Key"}
+	}
+	dropCookies := r.config.Settings.AuthCookies
+	if len(dropCookies) == 0 {
+		dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
+	}
+
+	r.configMu.RLock()
+	for k, v := range r.config.GlobalHeaders {
+		shouldDrop := false
+		for _, drop := range dropHeaders {
+			if strings.EqualFold(k, drop) {
+				shouldDrop = true
+				break
+			}
+		}
+		if !shouldDrop {
+			anonHeaders[k] = v
+		}
+	}
+
+	for k, v := range r.config.Cookies {
+		shouldDrop := false
+		for _, drop := range dropCookies {
+			if strings.EqualFold(k, drop) {
+				shouldDrop = true
+				break
+			}
+		}
+		if !shouldDrop {
+			anonCookies[k] = v
+		}
+	}
+	r.configMu.RUnlock()
+
+	r.totalPlanned.Add(1)
+
+	resAnon := r.executeRequest(
+		ctx,
+		r.config.BaseURL,
+		resolvedPath,
+		cand.Endpoint,
+		cand.Method,
+		anonHeaders,
+		anonCookies,
+		pl,
+		swagger.FuzzingProfile("BOLA"),
+		qp,
+		nil,
+		ep.ContentType,
+	)
+
+	r.statsChan <- statsMsg{
+		result:           resAnon,
+		currentIteration: 1,
+		totalIterations:  1,
+	}
+
+	if resAnon.Status >= 200 && resAnon.Status < 300 {
+		bodyCand := responseBodyToBytes(cand.ResponseBody)
+		bodyAnon := responseBodyToBytes(resAnon.ResponseBody)
+		sim := bola.CheckSimilarity(bodyCand, bodyAnon)
+
+		threshold := r.config.Settings.BOLASimilarityThreshold
+		if threshold <= 0 {
+			threshold = 0.85
+		}
+
+		if sim >= threshold {
+			resAnon.Identity = "Anonymous"
+			confirmedIdentities["Anonymous"] = true
+
+			minedFrom := "Unknown"
+			if targetID != "" {
+				if src, ok := r.idSources.Load(targetID); ok {
+					minedFrom = src.(string)
+				}
+			}
+
+			evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, sim)
+			if targetID != "" {
+				evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom, sim)
+			}
+
+			finding := swagger.AnalysisFinding{
+				RuleID:   "swazz/unauthorized-access",
+				Level:    "error",
+				Message:  "Unauthenticated access bypass vulnerability confirmed. Endpoint accepts requests without authentication credentials.",
+				Evidence: evidenceStr,
+			}
+			bolaMu.Lock()
+			resAnon.AnalyzerFindings = append(resAnon.AnalyzerFindings, finding)
+			*bolaResults = append(*bolaResults, resAnon)
+			bolaMu.Unlock()
+		}
+	}
+
+	r.Broadcast(Event{
+		Type: EventResult,
+		Data: resAnon,
+	})
 }
 
 func responseBodyToBytes(body any) []byte {
