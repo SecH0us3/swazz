@@ -478,9 +478,11 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 				// Build final headers
 				headers := make(map[string]string)
+				r.configMu.RLock()
 				for k, v := range r.config.GlobalHeaders {
 					headers[k] = v
 				}
+				r.configMu.RUnlock()
 				for k, v := range generatedHeaders {
 					headers[k] = v
 				}
@@ -784,6 +786,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 						dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
 					}
 
+					r.configMu.RLock()
 					// Copy global headers except those to drop
 					for k, v := range r.config.GlobalHeaders {
 						shouldDrop := false
@@ -811,6 +814,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 							anonCookies[k] = v
 						}
 					}
+					r.configMu.RUnlock()
 
 					// Increment totalPlanned dynamically before executing
 					r.totalPlanned.Add(1)
