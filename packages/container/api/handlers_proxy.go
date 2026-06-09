@@ -84,7 +84,7 @@ func (h *Handler) Proxy(c *gin.Context) {
 	}
 
 	start := time.Now()
-	// codeql[go/request-forgery]
+	// codeql[go/request-forgery] false positive: intentional proxy request
 	resp, err := h.getClient().Do(httpReq)
 	duration := time.Since(start).Milliseconds()
 

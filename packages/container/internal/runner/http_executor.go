@@ -217,7 +217,7 @@ func (r *Runner) executeRequest(
 		}
 
 		start := time.Now()
-		// codeql[go/request-forgery]
+		// codeql[go/request-forgery] false positive: fuzzer needs to request arbitrary user URLs
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
 
