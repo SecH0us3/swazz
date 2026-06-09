@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -734,6 +735,13 @@ func (r *Runner) executeRequest(
 		payloadSize := 0
 		reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 
+		// Clone cookies on the first attempt to prevent concurrent map read/write races
+		if attempt == 0 {
+			r.configMu.RLock()
+			cookies = maps.Clone(cookies)
+			r.configMu.RUnlock()
+		}
+
 		// Inject CSRF token if active and request is unsafe (POST, PUT, DELETE, PATCH)
 		r.csrfMu.RLock()
 		activeCSRF := r.activeCSRFToken
@@ -942,6 +950,17 @@ func (r *Runner) executeRequest(
 				rawURL = strings.TrimRight(baseURL, "/") + resolvedPath
 				rawURL = r.subVarsLocked(rawURL)
 				r.configMu.RUnlock()
+
+				if len(queryParams) > 0 {
+					if parsedURL, err := url.Parse(rawURL); err == nil {
+						query := parsedURL.Query()
+						for k, v := range queryParams {
+							query.Set(k, fmt.Sprintf("%v", v))
+						}
+						parsedURL.RawQuery = query.Encode()
+						rawURL = parsedURL.String()
+					}
+				}
 
 				continue // Retry request with new auth session
 			}
