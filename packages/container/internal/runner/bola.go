@@ -29,13 +29,15 @@ func getPathPrefix(originalPath string) string {
 }
 
 func arePrefixesRelated(p1, p2 string) bool {
-	p1Parts := strings.Split(strings.Trim(p1, "/"), "/")
-	p2Parts := strings.Split(strings.Trim(p2, "/"), "/")
-	
-	minLen := len(p1Parts)
-	if len(p2Parts) < minLen {
-		minLen = len(p2Parts)
+	p1Trim := strings.Trim(p1, "/")
+	p2Trim := strings.Trim(p2, "/")
+	if p1Trim == "" || p2Trim == "" {
+		return false
 	}
+	p1Parts := strings.Split(p1Trim, "/")
+	p2Parts := strings.Split(p2Trim, "/")
+
+	minLen := min(len(p2Parts), len(p1Parts))
 	if minLen == 0 {
 		return false
 	}
@@ -308,13 +310,13 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	for _, res := range results {
 		if res.Status >= 200 && res.Status < 300 {
 			candidates = append(candidates, res)
-			hasSuccessCandidate[strings.ToUpper(res.Method) + " " + res.Endpoint] = true
+			hasSuccessCandidate[strings.ToUpper(res.Method)+" "+res.Endpoint] = true
 		}
 	}
 
 	// For endpoints that don't have a successful candidate, try to construct one
 	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-	
+
 	// Calculate and add numCandidatesToSearch to totalEndpoints
 	var numCandidatesToSearch int
 	for _, ep := range r.config.Endpoints {
@@ -334,10 +336,10 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 		if hasSuccessCandidate[key] {
 			continue
 		}
-		
+
 		candWg.Add(1)
 		r.limiter.Acquire()
-		
+
 		go func(ep swagger.EndpointConfig) {
 			defer r.limiter.Release()
 			defer candWg.Done()
@@ -439,7 +441,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 				var payload any
 				var queryParams map[string]any
-				
+
 				if generated != nil {
 					genCopy := make(map[string]any)
 					for k, v := range generated {
@@ -476,9 +478,11 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 
 				// Build final headers
 				headers := make(map[string]string)
+				r.configMu.RLock()
 				for k, v := range r.config.GlobalHeaders {
 					headers[k] = v
 				}
+				r.configMu.RUnlock()
 				for k, v := range generatedHeaders {
 					headers[k] = v
 				}
@@ -524,7 +528,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 				candidates = append(candidates, successRes)
 				candMu.Unlock()
 			}
-			
+
 			r.completedEndpoints.Add(1)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 		}(ep)
@@ -543,7 +547,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	for _, cand := range candidates {
 		bolaWg.Add(1)
 		r.limiter.Acquire()
-		
+
 		go func(cand *swagger.FuzzResult) {
 			defer r.limiter.Release()
 			defer bolaWg.Done()
@@ -731,7 +735,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 							formattedName := formatIdentityName(idName)
 							res.Identity = formattedName
 							confirmedIdentities[idName] = true
-							
+
 							if targetID != "" || paramName != "" {
 								minedFrom := "Unknown"
 								if targetID != "" {
@@ -782,6 +786,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 						dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
 					}
 
+					r.configMu.RLock()
 					// Copy global headers except those to drop
 					for k, v := range r.config.GlobalHeaders {
 						shouldDrop := false
@@ -809,6 +814,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 							anonCookies[k] = v
 						}
 					}
+					r.configMu.RUnlock()
 
 					// Increment totalPlanned dynamically before executing
 					r.totalPlanned.Add(1)
@@ -847,19 +853,19 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 						if sim >= threshold {
 							resAnon.Identity = "Anonymous"
 							confirmedIdentities["Anonymous"] = true
-							
+
 							minedFrom := "Unknown"
 							if targetID != "" {
 								if src, ok := r.idSources.Load(targetID); ok {
 									minedFrom = src.(string)
 								}
 							}
-							
+
 							evidenceStr := fmt.Sprintf("Endpoint: %s %s, Status: %d (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, sim)
 							if targetID != "" {
 								evidenceStr = fmt.Sprintf("Endpoint: %s %s, Status: %d, ID %s mined from: %s (Similarity: %.2f)", cand.Method, resolvedPath, resAnon.Status, targetID, minedFrom, sim)
 							}
-							
+
 							finding := swagger.AnalysisFinding{
 								RuleID:   "swazz/unauthorized-access",
 								Level:    "error",

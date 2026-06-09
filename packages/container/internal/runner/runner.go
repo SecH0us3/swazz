@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -87,6 +88,10 @@ type Runner struct {
 	resultsMu sync.Mutex
 	allResults []*swagger.FuzzResult
 	limiter *ConcurrencyLimiter
+
+	reauthMu        sync.Mutex
+	csrfMu          sync.RWMutex
+	activeCSRFToken string
 }
 
 // New creates a new Runner.
@@ -730,6 +735,49 @@ func (r *Runner) executeRequest(
 		payloadSize := 0
 		reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 
+		// Clone cookies on the first attempt to prevent concurrent map read/write races
+		if attempt == 0 {
+			r.configMu.RLock()
+			cookies = maps.Clone(cookies)
+			r.configMu.RUnlock()
+		}
+
+		// Inject CSRF token if active and request is unsafe (POST, PUT, DELETE, PATCH)
+		r.csrfMu.RLock()
+		activeCSRF := r.activeCSRFToken
+		r.csrfMu.RUnlock()
+
+		if activeCSRF != "" && (method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH") {
+			// 1. Inject into mergedHeaders
+			hasCSRFHeader := false
+			for k := range mergedHeaders {
+				kLower := strings.ToLower(k)
+				if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
+					mergedHeaders[k] = activeCSRF
+					hasCSRFHeader = true
+				}
+			}
+			if !hasCSRFHeader {
+				mergedHeaders["X-CSRF-Token"] = activeCSRF
+			}
+
+			// 2. Inject into payload body if payload is map[string]any
+			if m, ok := payload.(map[string]any); ok {
+				// Make a copy of map to avoid mutating the shared configuration definition
+				mCopy := make(map[string]any)
+				for k, v := range m {
+					mCopy[k] = v
+				}
+				for k := range mCopy {
+					kLower := strings.ToLower(k)
+					if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
+						mCopy[k] = activeCSRF
+					}
+				}
+				payload = mCopy
+			}
+		}
+
 		var bodyReader io.Reader
 		if isBody && payload != nil {
 			if strings.Contains(effectiveCT, "x-www-form-urlencoded") {
@@ -878,6 +926,45 @@ func (r *Runner) executeRequest(
 		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
 		resp.Body.Close() // #nosec G104 -- close error irrelevant after body fully consumed
 		reqCancel()
+
+		// Extract and save CSRF token if present
+		r.extractAndSaveCSRFToken(resp, rawBodyBytes)
+
+		// Check for session expiration and trigger re-auth
+		if r.isSessionExpired(resp, rawBodyBytes, mergedHeaders, cookies, profile) && attempt < 1 {
+			newHeaders, newCookies, refreshed, reauthErr := r.MaybeReauthenticate(ctx, mergedHeaders, cookies)
+			if reauthErr != nil {
+				fmt.Printf("[Session] Automatic re-authentication failed: %v\n", reauthErr)
+			} else if refreshed {
+				// Update cookies/headers for retry
+				cookies = newCookies
+				mergedHeaders = make(map[string]string)
+				for k, v := range generatedHeaders {
+					mergedHeaders[k] = v
+				}
+				r.configMu.RLock()
+				for k, v := range newHeaders {
+					mergedHeaders[k] = r.subVarsLocked(v)
+				}
+				// Re-calculate rawURL with new variables if any
+				rawURL = strings.TrimRight(baseURL, "/") + resolvedPath
+				rawURL = r.subVarsLocked(rawURL)
+				r.configMu.RUnlock()
+
+				if len(queryParams) > 0 {
+					if parsedURL, err := url.Parse(rawURL); err == nil {
+						query := parsedURL.Query()
+						for k, v := range queryParams {
+							query.Set(k, fmt.Sprintf("%v", v))
+						}
+						parsedURL.RawQuery = query.Encode()
+						rawURL = parsedURL.String()
+					}
+				}
+
+				continue // Retry request with new auth session
+			}
+		}
 
 		responseSize := resp.ContentLength
 		if responseSize < 0 {

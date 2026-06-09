@@ -14,8 +14,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httputil"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,12 +32,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 	cfg := r.config
 	headers := make(map[string]string)
 	cookies := make(map[string]string)
-	for k, v := range initialHeaders {
-		headers[k] = v
-	}
-	for k, v := range initialCookies {
-		cookies[k] = v
-	}
+	maps.Copy(headers, initialHeaders)
+	maps.Copy(cookies, initialCookies)
 
 	if len(sequence) == 0 {
 		return headers, cookies, nil
@@ -168,13 +167,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		for _, cookie := range resp.Cookies() {
 			shouldSave := true
 			if len(step.ExtractCookies) > 0 {
-				shouldSave = false
-				for _, name := range step.ExtractCookies {
-					if name == cookie.Name {
-						shouldSave = true
-						break
-					}
-				}
+				shouldSave = slices.Contains(step.ExtractCookies, cookie.Name)
 			}
 
 			if shouldSave {
@@ -634,7 +627,7 @@ func solvePoW(challenge string, difficulty int) (string, error) {
 	var hashBuf [sha256.Size]byte
 	var nonceBuf [20]byte // enough for strconv.AppendInt of any int64
 
-	for nonce := 0; nonce < 10_000_000; nonce++ {
+	for nonce := range 10_000_000 {
 		h.Reset()
 		h.Write(challengeBytes)
 		nonceBytes := strconv.AppendInt(nonceBuf[:0], int64(nonce), 10)
@@ -644,7 +637,7 @@ func solvePoW(challenge string, difficulty int) (string, error) {
 		// Check leading zero nibbles directly on raw hash bytes
 		numZeroBytes := difficulty / 2
 		matched := true
-		for i := 0; i < numZeroBytes; i++ {
+		for i := range numZeroBytes {
 			if hash[i] != 0 {
 				matched = false
 				break
@@ -660,4 +653,178 @@ func solvePoW(challenge string, difficulty int) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("solvePoW: nonce not found in 10M iterations (difficulty=%d)", difficulty)
+}
+
+var csrfMetaRegex = regexp.MustCompile(`(?i)<meta\s+[^>]*?(?:name=["']_?(?:csrf|xsrf)(?:[-_]token)?["']\s+[^>]*?content=["']([^"']+)["']|content=["']([^"']+)["']\s+[^>]*?name=["']_?(?:csrf|xsrf)(?:[-_]token)?["'])`)
+var csrfInputRegex = regexp.MustCompile(`(?i)<input\s+[^>]*?(?:name=["']_?(?:csrf|xsrf)(?:[-_]token)?["']\s+[^>]*?value=["']([^"']+)["']|value=["']([^"']+)["']\s+[^>]*?name=["']_?(?:csrf|xsrf)(?:[-_]token)?["'])`)
+
+func (r *Runner) isUsingActiveSession(reqHeaders, reqCookies map[string]string) bool {
+	r.configMu.RLock()
+	defer r.configMu.RUnlock()
+
+	// If no auth headers or cookies are configured, we assume it's always using active session
+	if len(r.config.Settings.AuthHeaders) == 0 && len(r.config.Settings.AuthCookies) == 0 {
+		return true
+	}
+
+	// Check headers
+	for _, hName := range r.config.Settings.AuthHeaders {
+		cfgVal := r.config.GlobalHeaders[hName]
+		reqVal := reqHeaders[hName]
+		if cfgVal != "" && reqVal != "" {
+			return true
+		}
+	}
+
+	// Check cookies
+	for _, cName := range r.config.Settings.AuthCookies {
+		cfgVal := r.config.Cookies[cName]
+		reqVal := reqCookies[cName]
+		if cfgVal != "" && reqVal != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *Runner) isSessionExpired(resp *http.Response, bodyBytes []byte, reqHeaders, reqCookies map[string]string, profile swagger.FuzzingProfile) bool {
+	if resp == nil {
+		return false
+	}
+
+	// Skip session expiration checks for BOLA/IDOR scans to preserve expected vulnerability findings
+	if profile == swagger.FuzzingProfile("BOLA") {
+		return false
+	}
+
+	// 1. HTTP 401 or 403
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return r.isUsingActiveSession(reqHeaders, reqCookies)
+	}
+
+	// 2. Redirect to login page in Location header or final URL
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		loc := resp.Header.Get("Location")
+		if loc != "" {
+			locLower := strings.ToLower(loc)
+			if strings.Contains(locLower, "/login") || strings.Contains(locLower, "/signin") || strings.Contains(locLower, "/auth") {
+				return r.isUsingActiveSession(reqHeaders, reqCookies)
+			}
+		}
+	}
+	if resp.Request != nil && resp.Request.URL != nil {
+		path := strings.ToLower(resp.Request.URL.Path)
+		if strings.Contains(path, "/login") || strings.Contains(path, "/signin") || strings.Contains(path, "/auth") {
+			return r.isUsingActiveSession(reqHeaders, reqCookies)
+		}
+	}
+
+	// 3. Response body contains typical login form indicators
+	if len(bodyBytes) > 0 {
+		bodyStr := strings.ToLower(string(bodyBytes))
+		if (strings.Contains(bodyStr, "login-form") || strings.Contains(bodyStr, "sign in") || strings.Contains(bodyStr, "please sign in")) &&
+			strings.Contains(bodyStr, "<form") &&
+			(strings.Contains(bodyStr, "password") || strings.Contains(bodyStr, "username") || strings.Contains(bodyStr, "email")) {
+			return r.isUsingActiveSession(reqHeaders, reqCookies)
+		}
+	}
+	return false
+}
+
+func (r *Runner) extractAndSaveCSRFToken(resp *http.Response, bodyBytes []byte) {
+	if resp == nil {
+		return
+	}
+
+	var token string
+
+	// 1. Check cookies first
+	for _, cookie := range resp.Cookies() {
+		name := strings.ToLower(cookie.Name)
+		if strings.Contains(name, "csrf") || strings.Contains(name, "xsrf") {
+			token = cookie.Value
+			break
+		}
+	}
+
+	// 2. Check HTML body meta tags or inputs
+	if token == "" && len(bodyBytes) > 0 {
+		if matches := csrfMetaRegex.FindSubmatch(bodyBytes); len(matches) > 0 {
+			for i := 1; i < len(matches); i++ {
+				if len(matches[i]) > 0 {
+					token = string(matches[i])
+					break
+				}
+			}
+		}
+		if token == "" {
+			if matches := csrfInputRegex.FindSubmatch(bodyBytes); len(matches) > 0 {
+				for i := 1; i < len(matches); i++ {
+					if len(matches[i]) > 0 {
+						token = string(matches[i])
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if token != "" {
+		r.csrfMu.Lock()
+		r.activeCSRFToken = token
+		r.csrfMu.Unlock()
+	}
+}
+
+func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies map[string]string) (map[string]string, map[string]string, bool, error) {
+	r.reauthMu.Lock()
+	defer r.reauthMu.Unlock()
+
+	// Double check: check if the session has already been refreshed since this request started/failed.
+	isFresh := false
+	r.configMu.RLock()
+	for _, hName := range r.config.Settings.AuthHeaders {
+		if r.config.GlobalHeaders[hName] != reqHeaders[hName] {
+			isFresh = true
+			break
+		}
+	}
+	for _, cName := range r.config.Settings.AuthCookies {
+		if r.config.Cookies[cName] != reqCookies[cName] {
+			isFresh = true
+			break
+		}
+	}
+	if len(r.config.Settings.AuthHeaders) == 0 && len(r.config.Settings.AuthCookies) == 0 {
+		for k, v := range r.config.GlobalHeaders {
+			if reqHeaders[k] != v {
+				isFresh = true
+				break
+			}
+		}
+		for k, v := range r.config.Cookies {
+			if reqCookies[k] != v {
+				isFresh = true
+				break
+			}
+		}
+	}
+
+	if isFresh {
+		headersCopy := maps.Clone(r.config.GlobalHeaders)
+		cookiesCopy := maps.Clone(r.config.Cookies)
+		r.configMu.RUnlock()
+		return headersCopy, cookiesCopy, true, nil
+	}
+	r.configMu.RUnlock()
+
+	fmt.Println("[Session] Session expired. Initiating automatic re-authentication...")
+	if err := r.RunAuthSequence(ctx); err != nil {
+		return nil, nil, false, fmt.Errorf("re-authentication failed: %w", err)
+	}
+
+	r.configMu.RLock()
+	defer r.configMu.RUnlock()
+	return maps.Clone(r.config.GlobalHeaders), maps.Clone(r.config.Cookies), true, nil
 }

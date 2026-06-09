@@ -575,3 +575,140 @@ func TestBuiltinFunctions(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid JSON")
 	})
 }
+
+func TestIsSessionExpired(t *testing.T) {
+	cfg := &swagger.Config{
+		Settings: swagger.Settings{
+			AuthHeaders: []string{"Authorization"},
+			AuthCookies: []string{"session_cookie"},
+		},
+		GlobalHeaders: map[string]string{"Authorization": "Bearer current-token"},
+		Cookies:       map[string]string{"session_cookie": "current-session-id"},
+	}
+	r := New(cfg, nil)
+
+	// 1. HTTP 401 using current active session -> expired
+	reqHeaders := map[string]string{"Authorization": "Bearer current-token"}
+	reqCookies := map[string]string{"session_cookie": "current-session-id"}
+	resp := &http.Response{StatusCode: 401}
+	assert.True(t, r.isSessionExpired(resp, nil, reqHeaders, reqCookies, swagger.ProfileRandom))
+
+	// 2. HTTP 401 using old/different session -> expired (since it contains active auth header keys and should trigger retry/refresh)
+	oldHeaders := map[string]string{"Authorization": "Bearer old-token"}
+	oldCookies := map[string]string{"session_cookie": "old-session-id"}
+	assert.True(t, r.isSessionExpired(resp, nil, oldHeaders, oldCookies, swagger.ProfileRandom))
+
+	// 3. Redirect to login -> expired
+	redirectReq, _ := http.NewRequest("GET", "http://test.com/login", nil)
+	redirectResp := &http.Response{StatusCode: 302, Header: http.Header{"Location": []string{"/login"}}, Request: redirectReq}
+	assert.True(t, r.isSessionExpired(redirectResp, nil, reqHeaders, reqCookies, swagger.ProfileRandom))
+
+	// 4. HTML response containing form with login indicators -> expired
+	htmlBody := []byte(`<html><body><form action="/login" class="login-form"><input type="password" name="pwd"/></form></body></html>`)
+	okResp := &http.Response{StatusCode: 200}
+	assert.True(t, r.isSessionExpired(okResp, htmlBody, reqHeaders, reqCookies, swagger.ProfileRandom))
+
+	// 5. BOLA profile -> should always return false to preserve expected findings
+	assert.False(t, r.isSessionExpired(resp, nil, reqHeaders, reqCookies, swagger.FuzzingProfile("BOLA")))
+
+	// 6. Unauthenticated request -> not expired
+	assert.False(t, r.isSessionExpired(resp, nil, nil, nil, swagger.ProfileRandom))
+}
+
+func TestExtractCSRFToken(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+
+	// 1. Extract from Cookie
+	cookieResp := &http.Response{
+		Header: http.Header{
+			"Set-Cookie": []string{"csrf_token=cookie-csrf-val; Path=/"},
+		},
+	}
+	r.extractAndSaveCSRFToken(cookieResp, nil)
+	assert.Equal(t, "cookie-csrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 2. Extract from meta tag
+	htmlMeta := []byte(`<html><head><meta name="csrf-token" content="meta-csrf-val"></head></html>`)
+	resp := &http.Response{}
+	r.extractAndSaveCSRFToken(resp, htmlMeta)
+	assert.Equal(t, "meta-csrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 3. Extract from input tag
+	htmlInput := []byte(`<html><body><input type="hidden" name="csrf-token" value="input-csrf-val"></body></html>`)
+	r.extractAndSaveCSRFToken(resp, htmlInput)
+	assert.Equal(t, "input-csrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 4. Extract from input tag with reversed attributes (value before name) and short name _csrf
+	htmlReversedInput := []byte(`<html><body><input type="hidden" value="reversed-csrf-val" name="_csrf"></body></html>`)
+	r.extractAndSaveCSRFToken(resp, htmlReversedInput)
+	assert.Equal(t, "reversed-csrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 5. Extract from meta tag with reversed attributes and xsrf-token name
+	htmlReversedMeta := []byte(`<html><head><meta content="reversed-xsrf-val" name="xsrf-token"></head></html>`)
+	r.extractAndSaveCSRFToken(resp, htmlReversedMeta)
+	assert.Equal(t, "reversed-xsrf-val", r.activeCSRFToken)
+}
+
+func TestMaybeReauthenticate(t *testing.T) {
+	// Setup mock server
+	authCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authCount++
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"token": fmt.Sprintf("fresh-token-%d", authCount),
+		})
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Method: "POST",
+				URL:    "/",
+				ExtractJSON: map[string]string{
+					"token": "Authorization",
+				},
+			},
+		},
+		Settings: swagger.Settings{
+			AuthHeaders: []string{"Authorization"},
+		},
+		GlobalHeaders: map[string]string{"Authorization": "old-token"},
+	}
+
+	r := New(cfg, nil)
+
+	// 1. Initial call should trigger re-authentication
+	reqHeaders := map[string]string{"Authorization": "old-token"}
+	newH, _, refreshed, err := r.MaybeReauthenticate(context.Background(), reqHeaders, nil)
+	require.NoError(t, err)
+	assert.True(t, refreshed)
+	assert.Equal(t, "fresh-token-1", newH["Authorization"])
+
+	// 2. Concurrent check: if another request has headers that match the *old* token,
+	// but the runner has already moved to "fresh-token-1", it should return immediately
+	// using the fresh token without invoking the auth server again.
+	newH2, _, refreshed2, err2 := r.MaybeReauthenticate(context.Background(), reqHeaders, nil)
+	require.NoError(t, err2)
+	assert.True(t, refreshed2)
+	assert.Equal(t, "fresh-token-1", newH2["Authorization"])
+	assert.Equal(t, 1, authCount) // authCount should remain 1!
+}
+

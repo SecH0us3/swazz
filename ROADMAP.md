@@ -439,7 +439,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a concurrent, recursive crawler in Go with rate-limiting, depth-limits, and domain scoping to build a dynamic Sitemap.
     - Feed discovered URLs and form inputs into the fuzzing execution pipeline.
 
-- [ ] **Task 49: Automated Session & CSRF Management**
+- [x] **Task 49: Automated Session & CSRF Management**
   - **Design Goal:** Maintain active authenticated sessions and handle CSRF protection mechanisms dynamically throughout fuzzing runs.
   - **Implementation Details:**
     - Detect session expirations dynamically (e.g., HTTP 401/403 or specific redirect patterns) and automate re-authentication flows.
