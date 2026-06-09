@@ -128,6 +128,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 			fmt.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
 		}
 
+		// codeql[go/request-forgery] false positive: fuzzer auth process needs to request user-specified URLs
 		resp, err := r.client.Do(req)
 		if err != nil {
 			return nil, nil, fmt.Errorf("auth step %d: request failed: %w", i+1, err)
