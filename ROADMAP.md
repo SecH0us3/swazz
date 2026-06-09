@@ -484,3 +484,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Define variable extraction rules (e.g. extracting a created resource ID from a JSON body or Location header during a POST request).
     - Map extracted variables into the fuzzing execution pipeline to be injected into URL paths, headers, or bodies of subsequent requests (e.g. GET/PUT/DELETE) to fuzz authenticated multi-step flows.
 
+- [ ] **Task 56: HAR File Support (Traffic Replay Fuzzing)**
+  - **Design Goal:** Enable "zero-setup" fuzzing by allowing users to import HTTP Archive (HAR) files captured directly from browser developer tools. This provides instant fuzzing of undocumented (shadow) APIs and automatic replay of real-world authentication states (cookies, tokens, CSRF headers).
+  - **Success Criteria:**
+    - Swazz correctly parses standard `.har` files exported from Chrome/Firefox.
+    - Swazz extracts distinct endpoints (Method + URL), headers, and payloads from the HAR file and converts them into the internal `EndpointConfig` structure.
+    - Implemented a heuristic Type/Schema Inference engine that guesses data types (`string`, `integer`, `boolean`) from the raw HAR JSON payloads and mutates them appropriately.
+    - Implemented a filtering mechanism allowing users to specify a target domain/regex so that third-party analytics and static assets present in the HAR file are ignored.
+    - The CLI flag `--har <file>` triggers HAR-based fuzzing and logs correct identification of extracted shadow endpoints.
