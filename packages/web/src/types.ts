@@ -72,6 +72,7 @@ export interface SwazzSettings {
     oob_server_url?: string;
     debug?: boolean;
     chaining_rules?: ChainingRule[];
+    har_domain_filter?: string;
 }
 
 export interface AuthStep {
