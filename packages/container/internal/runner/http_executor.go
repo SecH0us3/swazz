@@ -17,6 +17,8 @@ import (
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
 	"time"
+	"regexp"
+	tidwallgjson "github.com/tidwall/gjson"
 
 	"github.com/google/uuid"
 )
@@ -35,13 +37,13 @@ func (r *Runner) executeRequest(
 	isBody := !isNoBodyMethod(method)
 	mergedHeaders := make(map[string]string)
 	for k, v := range generatedHeaders {
-		mergedHeaders[k] = v
+		mergedHeaders[k] = r.subStateVars(v)
 	}
 
 	r.configMu.RLock()
 	for k, v := range headers {
 		// Apply variable substitution to global headers too
-		mergedHeaders[k] = r.subVarsLocked(v)
+		mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 	}
 
 	effectiveCT := contentType
@@ -49,6 +51,7 @@ func (r *Runner) executeRequest(
 		effectiveCT = "application/json"
 	}
 	hasContentType := false
+	payload = r.subStateVarsAny(payload)
 	for k := range mergedHeaders {
 		if strings.EqualFold(k, "content-type") {
 			hasContentType = true
@@ -60,13 +63,13 @@ func (r *Runner) executeRequest(
 	}
 
 	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
-	rawURL = r.subVarsLocked(rawURL)
+	rawURL = r.subStateVars(r.subVarsLocked(rawURL))
 
 	if len(queryParams) > 0 {
 		if parsedURL, err := url.Parse(rawURL); err == nil {
 			query := parsedURL.Query()
 			for k, v := range queryParams {
-				query.Set(k, fmt.Sprintf("%v", v))
+				query.Set(k, r.subStateVars(fmt.Sprintf("%v", v)))
 			}
 			parsedURL.RawQuery = query.Encode()
 			rawURL = parsedURL.String()
@@ -98,7 +101,8 @@ func (r *Runner) executeRequest(
 		if activeCSRF != "" && (method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH") {
 			// 1. Inject into mergedHeaders
 			hasCSRFHeader := false
-			for k := range mergedHeaders {
+			payload = r.subStateVarsAny(payload)
+	for k := range mergedHeaders {
 				kLower := strings.ToLower(k)
 				if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
 					mergedHeaders[k] = activeCSRF
@@ -261,7 +265,8 @@ func (r *Runner) executeRequest(
 
 		var respBody any
 		var rawBodyBytes []byte
-		if resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody {
+		needsBody := resp.StatusCode >= 400 || r.config.Settings.AnalyzeResponseBody || r.hasChainingRuleFor(originalPath)
+		if needsBody {
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
 			io.Copy(buf, io.LimitReader(resp.Body, 51200)) // #nosec G104 -- error intentionally ignored; buf.Len() check handles empty reads
@@ -282,6 +287,7 @@ func (r *Runner) executeRequest(
 
 		// Extract and save CSRF token if present
 		r.extractAndSaveCSRFToken(resp, rawBodyBytes)
+		r.extractChainingVariables(originalPath, resp, rawBodyBytes)
 
 		// Check for session expiration and trigger re-auth
 		if r.isSessionExpired(resp, rawBodyBytes, mergedHeaders, cookies, profile) && attempt < 1 {
@@ -293,22 +299,22 @@ func (r *Runner) executeRequest(
 				cookies = newCookies
 				mergedHeaders = make(map[string]string)
 				for k, v := range generatedHeaders {
-					mergedHeaders[k] = v
+					mergedHeaders[k] = r.subStateVars(v)
 				}
 				r.configMu.RLock()
 				for k, v := range newHeaders {
-					mergedHeaders[k] = r.subVarsLocked(v)
+					mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 				}
 				// Re-calculate rawURL with new variables if any
 				rawURL = strings.TrimRight(baseURL, "/") + resolvedPath
-				rawURL = r.subVarsLocked(rawURL)
+				rawURL = r.subStateVars(r.subVarsLocked(rawURL))
 				r.configMu.RUnlock()
 
 				if len(queryParams) > 0 {
 					if parsedURL, err := url.Parse(rawURL); err == nil {
 						query := parsedURL.Query()
 						for k, v := range queryParams {
-							query.Set(k, fmt.Sprintf("%v", v))
+							query.Set(k, r.subStateVars(fmt.Sprintf("%v", v)))
 						}
 						parsedURL.RawQuery = query.Encode()
 						rawURL = parsedURL.String()
@@ -384,5 +390,54 @@ func (r *Runner) executeRequest(
 		}
 
 		return result
+	}
+}
+
+func (r *Runner) hasChainingRuleFor(endpoint string) bool {
+	r.configMu.RLock()
+	defer r.configMu.RUnlock()
+	for _, cr := range r.config.Settings.ChainingRules {
+		if cr.SourceEndpoint == endpoint {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runner) extractChainingVariables(endpoint string, resp *http.Response, rawBody []byte) {
+	r.configMu.RLock()
+	rules := r.config.Settings.ChainingRules
+	r.configMu.RUnlock()
+
+	for _, cr := range rules {
+		if cr.SourceEndpoint != endpoint {
+			continue
+		}
+		var valStr string
+		switch cr.ExtractType {
+		case "json":
+			res := tidwallgjson.GetBytes(rawBody, cr.ExtractPath)
+			if res.Exists() {
+				valStr = res.String()
+			}
+		case "header":
+			valStr = resp.Header.Get(cr.ExtractPath)
+		case "regex":
+			re, err := regexp.Compile(cr.ExtractPath)
+			if err == nil {
+				matches := re.FindSubmatch(rawBody)
+				if len(matches) > 1 {
+					valStr = string(matches[1])
+				} else if len(matches) > 0 {
+					valStr = string(matches[0])
+				}
+			}
+		}
+
+		if valStr != "" {
+			r.stateMu.Lock()
+			r.state[cr.VariableName] = valStr
+			r.stateMu.Unlock()
+		}
 	}
 }

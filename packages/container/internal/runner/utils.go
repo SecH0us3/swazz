@@ -72,19 +72,30 @@ func fillPathParams(path string, pathParams map[string]*swagger.SchemaProperty, 
 		}
 	}
 
-	// Handle any remaining {param} not in pathParams
+	// Handle any remaining {param} not in pathParams, skipping {{param}}
+	searchStart := 0
 	for {
-		start := strings.IndexByte(result, '{')
+		start := strings.IndexByte(result[searchStart:], '{')
 		if start < 0 {
 			break
 		}
+		start += searchStart
+		
+		// Check for double brace
+		if start+1 < len(result) && result[start+1] == '{' {
+			searchStart = start + 2
+			continue
+		}
+		
 		end := strings.IndexByte(result[start:], '}')
 		if end < 0 {
 			break
 		}
+		
 		fallbackSchema := &swagger.SchemaProperty{Type: "string"}
 		val := capPathParam(gen.Generate("id", fallbackSchema))
 		result = result[:start] + url.PathEscape(val) + result[start+end+1:]
+		// do not advance searchStart, as string length changed
 	}
 
 	return result
@@ -207,6 +218,55 @@ func truncateValue(v any, maxLen int) any {
 		res = append(res, truncateValue(val[0], maxLen))
 		res = append(res, truncateValue(val[1], maxLen))
 		res = append(res, fmt.Sprintf("... and %d more elements", len(val)-2))
+		return res
+	default:
+		return v
+	}
+}
+
+func (r *Runner) subStateVars(input string) string {
+	r.stateMu.RLock()
+	defer r.stateMu.RUnlock()
+	
+	if len(r.state) == 0 || !strings.Contains(input, "{{") {
+		return input
+	}
+	
+	for k, v := range r.state {
+		placeholder := "{{" + k + "}}"
+		if strings.Contains(input, placeholder) {
+			input = strings.ReplaceAll(input, placeholder, v)
+		}
+	}
+	return input
+}
+
+func (r *Runner) subStateVarsAny(v any) any {
+	r.stateMu.RLock()
+	if len(r.state) == 0 {
+		r.stateMu.RUnlock()
+		return v
+	}
+	r.stateMu.RUnlock()
+
+	return subVarsRecursive(v, r)
+}
+
+func subVarsRecursive(v any, r *Runner) any {
+	switch val := v.(type) {
+	case string:
+		return r.subStateVars(val)
+	case map[string]any:
+		res := make(map[string]any)
+		for k, v := range val {
+			res[k] = subVarsRecursive(v, r)
+		}
+		return res
+	case []any:
+		res := make([]any, len(val))
+		for i, v := range val {
+			res[i] = subVarsRecursive(v, r)
+		}
 		return res
 	default:
 		return v

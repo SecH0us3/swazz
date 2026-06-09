@@ -84,6 +84,9 @@ type Runner struct {
 	reauthMu        sync.Mutex
 	csrfMu          sync.RWMutex
 	activeCSRFToken string
+
+	stateMu sync.RWMutex
+	state   map[string]string
 }
 
 // New creates a new Runner.
@@ -105,6 +108,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		analyzer:      analyzer.NewRegistry(),
 		sizeBaselines: &sync.Map{},
 		timeBaselines: &sync.Map{},
+		state:         make(map[string]string),
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
 	r.pauseCond = sync.NewCond(&r.pauseMu)
