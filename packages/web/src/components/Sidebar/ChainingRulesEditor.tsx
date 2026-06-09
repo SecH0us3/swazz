@@ -10,10 +10,10 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
         onChange([
             ...rules,
             {
-                sourceEndpoint: '',
-                extractType: 'json',
-                extractPath: '',
-                variableName: ''
+                source_endpoint: '',
+                extract_type: 'json',
+                extract_path: '',
+                variable_name: ''
             }
         ]);
     };
@@ -61,8 +61,8 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                         <input
                             className="input"
                             placeholder="e.g. POST /api/login"
-                            value={rule.sourceEndpoint}
-                            onChange={(e) => updateRule(i, { sourceEndpoint: e.target.value })}
+                            value={rule.source_endpoint}
+                            onChange={(e) => updateRule(i, { source_endpoint: e.target.value })}
                         />
                     </div>
 
@@ -71,8 +71,8 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                             <label style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)' }}>Extract Type</label>
                             <select
                                 className="input"
-                                value={rule.extractType}
-                                onChange={(e) => updateRule(i, { extractType: e.target.value as 'json' | 'header' | 'regex' })}
+                                value={rule.extract_type}
+                                onChange={(e) => updateRule(i, { extract_type: e.target.value as 'json' | 'header' | 'regex' })}
                             >
                                 <option value="json">JSON Body</option>
                                 <option value="header">Response Header</option>
@@ -85,8 +85,8 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                             <input
                                 className="input"
                                 placeholder="e.g. AUTH_TOKEN"
-                                value={rule.variableName}
-                                onChange={(e) => updateRule(i, { variableName: e.target.value })}
+                                value={rule.variable_name}
+                                onChange={(e) => updateRule(i, { variable_name: e.target.value })}
                             />
                         </div>
                     </div>
@@ -95,9 +95,9 @@ export function ChainingRulesEditor({ rules, onChange }: Props) {
                         <label style={{ fontSize: 'var(--font-size-2xs)', color: 'var(--text-muted)' }}>Extract Path / Regex</label>
                         <input
                             className="input"
-                            placeholder={rule.extractType === 'json' ? "e.g. $.data.token" : rule.extractType === 'header' ? "e.g. Authorization" : "e.g. token=([a-z0-9]+)"}
-                            value={rule.extractPath}
-                            onChange={(e) => updateRule(i, { extractPath: e.target.value })}
+                            placeholder={rule.extract_type === 'json' ? "e.g. data.token" : rule.extract_type === 'header' ? "e.g. Authorization" : "e.g. token=([a-z0-9]+)"}
+                            value={rule.extract_path}
+                            onChange={(e) => updateRule(i, { extract_path: e.target.value })}
                         />
                     </div>
                 </div>

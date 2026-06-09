@@ -101,7 +101,6 @@ func (r *Runner) executeRequest(
 		if activeCSRF != "" && (method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH") {
 			// 1. Inject into mergedHeaders
 			hasCSRFHeader := false
-			payload = r.subStateVarsAny(payload)
 	for k := range mergedHeaders {
 				kLower := strings.ToLower(k)
 				if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
@@ -423,8 +422,19 @@ func (r *Runner) extractChainingVariables(endpoint string, resp *http.Response, 
 		case "header":
 			valStr = resp.Header.Get(cr.ExtractPath)
 		case "regex":
-			re, err := regexp.Compile(cr.ExtractPath)
-			if err == nil {
+			r.regexCacheMu.RLock()
+			re := r.regexCache[cr.ExtractPath]
+			r.regexCacheMu.RUnlock()
+			if re == nil {
+				compiled, err := regexp.Compile(cr.ExtractPath)
+				if err == nil {
+					re = compiled
+					r.regexCacheMu.Lock()
+					r.regexCache[cr.ExtractPath] = re
+					r.regexCacheMu.Unlock()
+				}
+			}
+			if re != nil {
 				matches := re.FindSubmatch(rawBody)
 				if len(matches) > 1 {
 					valStr = string(matches[1])

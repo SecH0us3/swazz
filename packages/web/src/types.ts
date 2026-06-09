@@ -44,10 +44,10 @@ export interface AnalysisFinding {
 }
 
 export interface ChainingRule {
-    sourceEndpoint: string;
-    extractType: 'json' | 'header' | 'regex';
-    extractPath: string;
-    variableName: string;
+    source_endpoint: string;
+    extract_type: 'json' | 'header' | 'regex';
+    extract_path: string;
+    variable_name: string;
 }
 
 export interface SwazzSettings {

@@ -96,7 +96,7 @@ Swazz can extract variables from previous responses and inject them into subsequ
       {
         "sourceEndpoint": "POST /api/login",
         "extractType": "json",
-        "extractPath": "$.data.token",
+        "extractPath": "data.token",
         "variableName": "AUTH_TOKEN"
       }
     ]

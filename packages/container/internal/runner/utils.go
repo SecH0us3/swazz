@@ -247,25 +247,39 @@ func (r *Runner) subStateVarsAny(v any) any {
 		r.stateMu.RUnlock()
 		return v
 	}
+	// Copy state to avoid holding lock during recursive subVars
+	stateCopy := make(map[string]string, len(r.state))
+	for k, v := range r.state {
+		stateCopy[k] = v
+	}
 	r.stateMu.RUnlock()
 
-	return subVarsRecursive(v, r)
+	return subVarsRecursive(v, stateCopy)
 }
 
-func subVarsRecursive(v any, r *Runner) any {
+func subVarsRecursive(v any, state map[string]string) any {
 	switch val := v.(type) {
 	case string:
-		return r.subStateVars(val)
+		if !strings.Contains(val, "{{") {
+			return val
+		}
+		for k, sv := range state {
+			placeholder := "{{" + k + "}}"
+			if strings.Contains(val, placeholder) {
+				val = strings.ReplaceAll(val, placeholder, sv)
+			}
+		}
+		return val
 	case map[string]any:
 		res := make(map[string]any)
 		for k, v := range val {
-			res[k] = subVarsRecursive(v, r)
+			res[k] = subVarsRecursive(v, state)
 		}
 		return res
 	case []any:
 		res := make([]any, len(val))
 		for i, v := range val {
-			res[i] = subVarsRecursive(v, r)
+			res[i] = subVarsRecursive(v, state)
 		}
 		return res
 	default:
