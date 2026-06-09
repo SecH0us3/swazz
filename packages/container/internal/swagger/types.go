@@ -101,6 +101,7 @@ type Settings struct {
 	BOLASimilarityThreshold       float64                     `json:"bola_similarity_threshold"`
 	AuthHeaders                   []string                    `json:"auth_headers,omitempty"`
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
+	ChainingRules                 []ChainingRule              `json:"chaining_rules,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -235,3 +236,11 @@ type PayloadCategoryDef struct {
 
 // PayloadCatalog maps each profile to its list of available categories.
 type PayloadCatalog map[FuzzingProfile][]PayloadCategoryDef
+
+// ChainingRule defines how to extract a variable from an endpoint response to be used in subsequent requests.
+type ChainingRule struct {
+	SourceEndpoint string `json:"source_endpoint"`
+	ExtractType    string `json:"extract_type"` // "json", "header", "regex"
+	ExtractPath    string `json:"extract_path"`
+	VariableName   string `json:"variable_name"`
+}

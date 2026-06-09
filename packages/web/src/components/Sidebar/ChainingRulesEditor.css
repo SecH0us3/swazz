@@ -1,0 +1,62 @@
+.chaining-rules-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.chaining-rule-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: var(--bg-input);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+}
+
+.chaining-rule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chaining-rule-title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.chaining-rule-delete-btn {
+    padding: 4px;
+    height: auto;
+    min-height: 0;
+}
+
+.chaining-rule-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.chaining-rule-field label {
+    font-size: var(--font-size-2xs);
+    color: var(--text-muted);
+}
+
+.chaining-rule-row {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.chaining-rule-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+}
+
+.chaining-rule-add-btn {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px dashed var(--border-hover);
+}

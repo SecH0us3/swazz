@@ -43,6 +43,14 @@ export interface AnalysisFinding {
     owaspCategory?: string[];
 }
 
+export interface ChainingRule {
+    source_profile?: string;
+    source_endpoint: string;
+    extract_type: 'json' | 'header' | 'regex';
+    extract_path: string;
+    variable_name: string;
+}
+
 export interface SwazzSettings {
     iterations_per_profile: number;
     concurrency: number;
@@ -63,6 +71,7 @@ export interface SwazzSettings {
     time_anomaly_threshold_ms?: number;
     oob_server_url?: string;
     debug?: boolean;
+    chaining_rules?: ChainingRule[];
 }
 
 export interface AuthStep {
