@@ -47,6 +47,21 @@ func IsWSDL(raw []byte) bool {
 	return strings.Contains(content, "<definitions") || strings.Contains(content, "<wsdl:definitions")
 }
 
+
+// IsHAR checks if the given raw JSON represents a HAR file.
+func IsHAR(raw []byte) bool {
+	var check map[string]any
+	if err := json.Unmarshal(raw, &check); err != nil {
+		return false
+	}
+	if log, ok := check["log"].(map[string]any); ok {
+		if _, ok := log["entries"].([]any); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // IsPostman checks if the given raw JSON represents a Postman Collection.
 func IsPostman(raw []byte) bool {
 	var check map[string]any
@@ -89,7 +104,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 					body = converted
 				}
 
-				if IsValidSpec(body) || IsWSDL(body) || IsPostman(body) {
+				if IsValidSpec(body) || IsWSDL(body) || IsPostman(body) || IsHAR(body) {
 					return body, nil
 				}
 			}
@@ -129,7 +144,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	if postResp.StatusCode == http.StatusOK {
 		postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024)) // 10MB limit
 		if err == nil {
-			if IsValidSpec(postBody) || IsPostman(postBody) {
+			if IsValidSpec(postBody) || IsPostman(postBody) || IsHAR(postBody) {
 				return postBody, nil
 			}
 		}

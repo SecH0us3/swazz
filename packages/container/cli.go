@@ -14,6 +14,7 @@ import (
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
+	"swazz-engine/internal/har"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
 	"sync"
@@ -178,6 +179,14 @@ func runCLI(args []string) {
 		}
 		parsed, err := swagger.ParseRawSpec(specRaw)
 		if err != nil {
+			if swagger.IsHAR(specRaw) {
+				parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
+				if errHAR != nil {
+					log.Fatalf("Failed to parse spec %s as HAR: %v", urlStr, errHAR)
+				}
+				parsed = parsedHAR
+			} else 
+
 			if swagger.IsPostman(specRaw) {
 				parsedPostman, errPostman := postman.ParsePostman(specRaw)
 				if errPostman != nil {
