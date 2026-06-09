@@ -491,4 +491,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Swazz extracts distinct endpoints (Method + URL), headers, and payloads from the HAR file and converts them into the internal `EndpointConfig` structure.
     - Implemented a heuristic Type/Schema Inference engine that guesses data types (`string`, `integer`, `boolean`) from the raw HAR JSON payloads and mutates them appropriately.
     - Implemented a filtering mechanism allowing users to specify a target domain/regex so that third-party analytics and static assets present in the HAR file are ignored.
-    - The CLI flag `--har <file>` triggers HAR-based fuzzing and logs correct identification of extracted shadow endpoints.
+    - **Config File Integration:** Instead of a new CLI flag, users can specify the path to a `.har` file directly in the config (`target` or `spec` field) just like an OpenAPI spec.
+    - **Authentication Compatibility:** If the user has defined an `auth_sequence` in the config, Swazz must execute it and apply the fresh tokens/cookies to the requests extracted from the HAR file (overriding the expired ones captured in the browser).
+    - **Web Dashboard:** Users can upload a `.har` file directly through the Web UI configuration panel.
