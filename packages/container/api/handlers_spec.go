@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/har"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/wsdl"
@@ -54,6 +55,16 @@ func (h *Handler) ParseSpec(c *gin.Context) {
 
 	result, err := swagger.ParseRawSpec(raw)
 	if err != nil {
+		if swagger.IsHAR(raw) {
+			resultHAR, errHAR := har.ParseHAR(raw, "")
+			if errHAR == nil {
+				c.JSON(http.StatusOK, resultHAR)
+				return
+			}
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("failed to parse spec as HAR: %v", errHAR.Error())})
+			return
+		}
+
 		if swagger.IsPostman(raw) {
 			resultPostman, errPostman := postman.ParsePostman(raw)
 			if errPostman == nil {

@@ -30,7 +30,8 @@ func TestCliConfigAliasesAndValidation(t *testing.T) {
 		"settings": {
 			"concurrency": 10,
 			"timeout_ms": 2000,
-			"profiles": ["RANDOM"]
+			"profiles": ["RANDOM"],
+			"har_domain_filter": "example\\.com"
 		}
 	}`
 
@@ -114,5 +115,10 @@ func TestCliConfigAliasesAndValidation(t *testing.T) {
 	cliCfg.Settings.Concurrency = -1
 	if err := cliCfg.Validate(); err == nil {
 		t.Error("Expected validation to fail for negative concurrency, but it succeeded")
+	}
+
+	// Verify HAR domain filter parsing
+	if cliCfg.Settings.HarDomainFilter != "example\\.com" {
+		t.Errorf("Expected HarDomainFilter 'example\\.com', got %v", cliCfg.Settings.HarDomainFilter)
 	}
 }
