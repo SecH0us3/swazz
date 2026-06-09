@@ -124,7 +124,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		r.configMu.RUnlock()
 
 		if cfg.Settings.Debug {
-			dump, _ := httputil.DumpRequestOut(req, true)
+			// codeql[go/request-forgery] false positive: fuzzer auth
+			dump, _ := httputil.DumpRequestOut(req, true) //lgtm[go/request-forgery]
 			fmt.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
 		}
 
@@ -135,7 +136,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		}
 
 		if cfg.Settings.Debug {
-			dump, _ := httputil.DumpResponse(resp, false)
+			// codeql[go/request-forgery] false positive: fuzzer auth
+			dump, _ := httputil.DumpResponse(resp, false) //lgtm[go/request-forgery]
 			fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
 		}
 
