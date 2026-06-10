@@ -6,11 +6,10 @@ import (
 )
 
 type ConcurrencyLimiter struct {
-	mu       sync.Mutex
-	waitChan chan struct{} // Closed and recreated to notify waiters
-	target   int
-	current  int
-	waiters  int
+	mu      sync.Mutex
+	target  int
+	current int
+	waiters []chan struct{}
 }
 
 func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
@@ -20,11 +19,9 @@ func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
 	if initial > 1000 {
 		initial = 1000
 	}
-	l := &ConcurrencyLimiter{
-		target:   initial,
-		waitChan: make(chan struct{}),
+	return &ConcurrencyLimiter{
+		target: initial,
 	}
-	return l
 }
 
 func (l *ConcurrencyLimiter) SetTarget(target int) {
@@ -36,9 +33,13 @@ func (l *ConcurrencyLimiter) SetTarget(target int) {
 		target = 1000
 	}
 	l.target = target
-	if l.waiters > 0 {
-		close(l.waitChan)
-		l.waitChan = make(chan struct{})
+
+	// Wake up as many waiters as the new target allows
+	for len(l.waiters) > 0 && l.current < l.target {
+		l.current++
+		ch := l.waiters[0]
+		l.waiters = l.waiters[1:]
+		close(ch)
 	}
 	l.mu.Unlock()
 }
@@ -50,37 +51,53 @@ func (l *ConcurrencyLimiter) GetTarget() int {
 }
 
 func (l *ConcurrencyLimiter) Acquire(ctx context.Context) error {
-	for {
-		l.mu.Lock()
-		if l.current < l.target {
-			l.current++
-			l.mu.Unlock()
-			return nil
-		}
-		ch := l.waitChan
-		l.waiters++
+	l.mu.Lock()
+	if l.current < l.target {
+		l.current++
 		l.mu.Unlock()
+		return nil
+	}
+	ch := make(chan struct{})
+	l.waiters = append(l.waiters, ch)
+	l.mu.Unlock()
 
-		select {
-		case <-ch:
-			l.mu.Lock()
-			l.waiters--
-			l.mu.Unlock()
-		case <-ctx.Done():
-			l.mu.Lock()
-			l.waiters--
-			l.mu.Unlock()
-			return ctx.Err()
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		l.mu.Lock()
+		found := false
+		for i, w := range l.waiters {
+			if w == ch {
+				l.waiters = append(l.waiters[:i], l.waiters[i+1:]...)
+				found = true
+				break
+			}
 		}
+		if !found {
+			// Already popped and handed a slot, but we timed out/cancelled.
+			// Return the slot and pass it to the next waiter if any.
+			l.current--
+			if len(l.waiters) > 0 && l.current < l.target {
+				l.current++
+				nextCh := l.waiters[0]
+				l.waiters = l.waiters[1:]
+				close(nextCh)
+			}
+		}
+		l.mu.Unlock()
+		return ctx.Err()
 	}
 }
 
 func (l *ConcurrencyLimiter) Release() {
 	l.mu.Lock()
 	l.current--
-	if l.waiters > 0 {
-		close(l.waitChan)
-		l.waitChan = make(chan struct{})
+	if len(l.waiters) > 0 && l.current < l.target {
+		l.current++
+		ch := l.waiters[0]
+		l.waiters = l.waiters[1:]
+		close(ch)
 	}
 	l.mu.Unlock()
 }
