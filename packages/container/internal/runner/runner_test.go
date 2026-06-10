@@ -341,14 +341,14 @@ func TestPauseResumeAtomic(t *testing.T) {
 
 	// Pause
 	r.Pause()
-	if !r.isPaused.Load() {
+	if !r.lifecycle.isPaused.Load() {
 		t.Error("Expected isPaused to be true after Pause()")
 	}
 
 	// Resume after a brief pause
 	time.Sleep(50 * time.Millisecond)
 	r.Resume()
-	if r.isPaused.Load() {
+	if r.lifecycle.isPaused.Load() {
 		t.Error("Expected isPaused to be false after Resume()")
 	}
 
