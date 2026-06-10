@@ -8,6 +8,22 @@ import (
 	"time"
 )
 
+const (
+	MaxIdleConns        = 1000
+	MaxIdleConnsPerHost = 1000
+	IdleConnTimeout     = 90 * time.Second
+)
+
+// ConfigureTransport applies standard high-performance pool limits to a transport.
+func ConfigureTransport(t *http.Transport) {
+	if t == nil {
+		return
+	}
+	t.MaxIdleConns = MaxIdleConns
+	t.MaxIdleConnsPerHost = MaxIdleConnsPerHost
+	t.IdleConnTimeout = IdleConnTimeout
+}
+
 // IsPrivateIP checks if the given IP address is loopback, link-local, private (RFC 1918 / RFC 4193), or unspecified.
 func IsPrivateIP(ip net.IP) bool {
 	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() || ip.IsUnspecified()
@@ -20,7 +36,7 @@ func NewSSRFProtectedTransport(allowPrivate bool) http.RoundTripper {
 		return http.DefaultTransport
 	}
 
-	return &http.Transport{
+	t := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(addr)
 			if err != nil {
@@ -70,10 +86,9 @@ func NewSSRFProtectedTransport(allowPrivate bool) http.RoundTripper {
 			}
 			return nil, fmt.Errorf("failed to connect to any resolved IPs: %w", lastErr)
 		},
-		MaxIdleConns:        1000,
-		MaxIdleConnsPerHost: 1000,
-		IdleConnTimeout:     90 * time.Second,
 	}
+	ConfigureTransport(t)
+	return t
 }
 
 // WrapWithSSRFProtection wraps an existing RoundTripper with SSRF protection.

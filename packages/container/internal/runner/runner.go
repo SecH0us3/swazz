@@ -105,13 +105,11 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 					KeepAlive: 30 * time.Second,
 				}).DialContext,
 				ForceAttemptHTTP2:     true,
-				MaxIdleConns:          1000,
-				MaxIdleConnsPerHost:   1000,
-				IdleConnTimeout:       90 * time.Second,
 				TLSHandshakeTimeout:   10 * time.Second,
 				ExpectContinueTimeout: 1 * time.Second,
 			},
 		}
+		security.ConfigureTransport(client.Transport.(*http.Transport))
 	} else if client.Transport == nil {
 		client.Transport = &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -120,15 +118,12 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          1000,
-			MaxIdleConnsPerHost:   1000,
-			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
+		security.ConfigureTransport(client.Transport.(*http.Transport))
 	} else if transport, ok := client.Transport.(*http.Transport); ok {
-		transport.MaxIdleConns = 1000
-		transport.MaxIdleConnsPerHost = 1000
+		security.ConfigureTransport(transport)
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 	r := &Runner{
