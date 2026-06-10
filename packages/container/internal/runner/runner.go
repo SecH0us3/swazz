@@ -22,7 +22,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strings"
@@ -452,7 +451,7 @@ func (r *Runner) buildFuzzIteration(
 	}
 
 	for range maxRetries {
-		attempt := buildFuzzPayload(endpoint, gen, safeGen, isSecHeaderIter)
+		attempt := buildFuzzPayload(endpoint, gen, safeGen, isSecHeaderIter, enableDedup)
 
 		// Size check via buffer pool.
 		buf := bufPool.Get().(*bytes.Buffer)
@@ -666,7 +665,3 @@ func (r *Runner) finaliseRun() {
 func (r *Runner) stopped() bool { return r.lifecycle.shouldStop.Load() }
 
 func (r *Runner) paused() bool { return r.lifecycle.isPaused.Load() }
-
-// ─── Unused field silencer ────────────────────────────────────────────────────
-// rand is used via math/rand/v2 in fuzzEndpoint for the 15% empty-body chance.
-var _ = rand.Float64

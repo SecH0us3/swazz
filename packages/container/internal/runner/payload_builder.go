@@ -15,6 +15,7 @@ package runner
 
 import (
 	"fmt"
+	"math/rand/v2"
 
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
@@ -49,6 +50,7 @@ func buildFuzzPayload(
 	gen *generator.Generator,
 	safeGen *generator.Generator,
 	isSecHeaderIter bool,
+	isRandom bool,
 ) generatedPayload {
 	if !hasFields(&ep) {
 		return generatedPayload{headers: buildHeaders(ep, selectGen(gen, safeGen, isSecHeaderIter))}
@@ -61,7 +63,11 @@ func buildFuzzPayload(
 
 	if isBody {
 		if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
-			out.body = bodyGen.BuildObject(&ep.Schema)
+			if isRandom && rand.Float64() < 0.15 {
+				out.body = map[string]any{}
+			} else {
+				out.body = bodyGen.BuildObject(&ep.Schema)
+			}
 		}
 		if len(ep.QueryParams) > 0 {
 			qpSchema := objectSchema(ep.QueryParams)

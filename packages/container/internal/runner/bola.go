@@ -716,11 +716,15 @@ func (r *Runner) replayCandidates(
 	return bolaResults
 }
 
+type replayTarget struct {
+	path string
+	id   string
+}
+
 // buildPathsToTest returns the set of concrete paths to probe for a given
 // candidate, expanding harvested IDs into path parameters up to the cap.
-func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[string]string, string) {
-	pathsToTest := []string{cand.ResolvedPath}
-	pathToID := map[string]string{cand.ResolvedPath: ""}
+func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]replayTarget, string) {
+	targets := []replayTarget{{path: cand.ResolvedPath, id: ""}}
 
 	hasPathParams := strings.Contains(cand.Endpoint, "{")
 	paramName := ""
@@ -736,7 +740,7 @@ func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[strin
 	}
 
 	if paramName == "" {
-		return pathsToTest, pathToID, paramName
+		return targets, paramName
 	}
 
 	harvested := r.collectAllHarvestedIDs()
@@ -764,19 +768,18 @@ func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[strin
 
 		// Skip duplicates (same path + same injected ID).
 		isDup := false
-		for _, p := range pathsToTest {
-			if p == newPath && pathToID[p] == harvested[i] {
+		for _, t := range targets {
+			if t.path == newPath && t.id == harvested[i] {
 				isDup = true
 				break
 			}
 		}
 		if !isDup {
-			pathsToTest = append(pathsToTest, newPath)
-			pathToID[newPath] = harvested[i]
+			targets = append(targets, replayTarget{path: newPath, id: harvested[i]})
 		}
 	}
 
-	return pathsToTest, pathToID, paramName
+	return targets, paramName
 }
 
 // replayCandidate probes all paths for one candidate under each identity and
@@ -789,23 +792,22 @@ func (r *Runner) replayCandidate(
 	bolaMu *sync.Mutex,
 	bolaResults *[]*swagger.FuzzResult,
 ) {
-	pathsToTest, pathToID, paramName := r.buildPathsToTest(cand)
+	targets, paramName := r.buildPathsToTest(cand)
 	confirmed := make(map[string]bool)
 
-	for _, resolvedPath := range pathsToTest {
+	for _, target := range targets {
 		if allIdentitiesConfirmed(confirmed, identityHeaders) {
 			break
 		}
 
-		targetID := pathToID[resolvedPath]
-		payload, queryParams := resolveReplayPayload(cand, isNoBodyMethod(cand.Method), paramName, targetID)
+		payload, queryParams := resolveReplayPayload(cand, isNoBodyMethod(cand.Method), paramName, target.id)
 
 		// Probe each named identity.
 		for idName, headers := range identityHeaders {
 			if confirmed[idName] {
 				continue
 			}
-			r.probeIdentity(ctx, cand, ep, resolvedPath, targetID, paramName,
+			r.probeIdentity(ctx, cand, ep, target.path, target.id, paramName,
 				idName, headers, identityCookies[idName],
 				payload, queryParams,
 				confirmed, bolaMu, bolaResults,
@@ -814,7 +816,7 @@ func (r *Runner) replayCandidate(
 
 		// Probe anonymous (no auth credentials).
 		if !confirmed["Anonymous"] {
-			r.probeAnonymous(ctx, cand, ep, resolvedPath, targetID,
+			r.probeAnonymous(ctx, cand, ep, target.path, target.id,
 				payload, queryParams,
 				confirmed, bolaMu, bolaResults,
 			)
