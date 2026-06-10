@@ -50,6 +50,7 @@ func (r *Runner) subVarsLocked(input string) string {
 func hasFields(ep *swagger.EndpointConfig) bool {
 	return (ep.Schema.Properties != nil && len(ep.Schema.Properties) > 0) ||
 		(ep.PathParams != nil && len(ep.PathParams) > 0) ||
+		(ep.QueryParams != nil && len(ep.QueryParams) > 0) ||
 		(ep.HeaderParams != nil && len(ep.HeaderParams) > 0)
 }
 

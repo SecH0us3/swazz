@@ -59,58 +59,78 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 
 		key := method + " " + path
 
-		if _, exists := endpointsMap[key]; !exists {
-			ep := swagger.EndpointConfig{
-				Path:   path,
-				Method: method,
+		ep, exists := endpointsMap[key]
+		if !exists {
+			ep = swagger.EndpointConfig{
+				Path:         path,
+				Method:       method,
 				Schema: swagger.SchemaProperty{
 					Type:       "object",
 					Properties: map[string]*swagger.SchemaProperty{},
 				},
+				QueryParams:  map[string]*swagger.SchemaProperty{},
 				HeaderParams: map[string]*swagger.SchemaProperty{},
 			}
+		}
 
-			// Query string
-			qs := req.Get("queryString").Array()
-			if len(qs) > 0 {
-				for _, q := range qs {
-					name := q.Get("name").String()
-					// Infer type from value
+		// 1. Merge Query parameters
+		qs := req.Get("queryString").Array()
+		if len(qs) > 0 {
+			if ep.QueryParams == nil {
+				ep.QueryParams = map[string]*swagger.SchemaProperty{}
+			}
+			for _, q := range qs {
+				name := q.Get("name").String()
+				if _, found := ep.QueryParams[name]; !found {
 					val := q.Get("value").String()
-					// For query string, we usually treat it as string or infer if it's numeric/boolean
 					inferred := inferQueryValue(val)
-					ep.Schema.Properties[name] = &inferred
+					ep.QueryParams[name] = &inferred
 				}
 			}
+		}
 
-			// Post data
-			postData := req.Get("postData")
-			if postData.Exists() {
-				mime := postData.Get("mimeType").String()
-				text := postData.Get("text").String()
-				if strings.Contains(mime, "application/json") && text != "" {
-					ep.ContentType = mime
-					bodySchema := InferSchemaFromJSON(text)
-					
-					// Merge body schema into the main schema properties if it's an object
-					if bodySchema.Type == "object" && bodySchema.Properties != nil {
-						for k, v := range bodySchema.Properties {
+		// 2. Merge Post data (Request Body)
+		postData := req.Get("postData")
+		if postData.Exists() {
+			mime := postData.Get("mimeType").String()
+			text := postData.Get("text").String()
+			if strings.Contains(mime, "application/json") && text != "" {
+				ep.ContentType = mime
+				newBodySchema := InferSchemaFromJSON(text)
+
+				// Merge body schemas
+				if ep.Schema.Type == "" || (ep.Schema.Type == "object" && len(ep.Schema.Properties) == 0) {
+					ep.Schema = newBodySchema
+				} else if ep.Schema.Type == "object" && newBodySchema.Type == "object" {
+					if ep.Schema.Properties == nil {
+						ep.Schema.Properties = map[string]*swagger.SchemaProperty{}
+					}
+					for k, v := range newBodySchema.Properties {
+						if _, found := ep.Schema.Properties[k]; !found {
 							ep.Schema.Properties[k] = v
 						}
-					} else {
-						// If the body is an array or something else, set it directly (this simplifies, but is sufficient for phase 1)
-						ep.Schema = bodySchema
 					}
-					
-					// Parse example
-					var example any
-					_ = json.Unmarshal([]byte(text), &example)
-					ep.Example = example
+				}
+
+				// Merge examples
+				var newExample any
+				if err := json.Unmarshal([]byte(text), &newExample); err == nil {
+					if ep.Example == nil {
+						ep.Example = newExample
+					} else if existingMap, ok1 := ep.Example.(map[string]any); ok1 {
+						if newMap, ok2 := newExample.(map[string]any); ok2 {
+							for k, v := range newMap {
+								if _, found := existingMap[k]; !found {
+									existingMap[k] = v
+								}
+							}
+						}
+					}
 				}
 			}
-
-			endpointsMap[key] = ep
 		}
+
+		endpointsMap[key] = ep
 
 		return true
 	})

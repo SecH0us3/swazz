@@ -303,8 +303,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	candidates, hasSuccessCandidate := r.identifyCandidates(results)
 
 	// 3. For endpoints that don't have a successful candidate, try to construct one
-	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-	generatedCandidates := r.generateMissingCandidates(ctx, hasSuccessCandidate, safeGen)
+	generatedCandidates := r.generateMissingCandidates(ctx, hasSuccessCandidate)
 	candidates = append(candidates, generatedCandidates...)
 
 	// Calculate and add len(candidates) to totalEndpoints
@@ -345,7 +344,7 @@ func (r *Runner) identifyCandidates(results []*swagger.FuzzResult) ([]*swagger.F
 	return candidates, hasSuccessCandidate
 }
 
-func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandidate map[string]bool, safeGen *generator.Generator) []*swagger.FuzzResult {
+func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandidate map[string]bool) []*swagger.FuzzResult {
 	var candidates []*swagger.FuzzResult
 	var numCandidatesToSearch int32
 	for _, ep := range r.config.Endpoints {
@@ -377,7 +376,9 @@ func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandid
 			r.currentEndpoint.Store(epKey)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-			successRes := r.generateCandidateForEndpoint(ctx, ep, safeGen)
+			// Create a fresh generator for each goroutine to guarantee concurrency correctness
+			epGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			successRes := r.generateCandidateForEndpoint(ctx, ep, epGen)
 
 			if successRes != nil {
 				candMu.Lock()
