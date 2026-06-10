@@ -4,7 +4,7 @@ This file provides localized instructions and shortcuts for AI agents working wi
 
 ## 🚀 Key Commands
 
-All commands below should be executed with `Cwd: "/Users/alex/src/swazz/packages/container"`.
+All commands below should be executed with `Cwd` pointing to `packages/container` (relative to the workspace root).
 Always prefix shell commands with `rtk` (e.g., `rtk go test ./...`).
 
 ### Build & Run
@@ -35,11 +35,11 @@ Always prefix shell commands with `rtk` (e.g., `rtk go test ./...`).
 
 ## 📁 Go Module Architecture
 
-- [main.go](file:///Users/alex/src/swazz/packages/container/main.go): Main entry point for CLI and web API server.
-- [api/](file:///Users/alex/src/swazz/packages/container/api/): Gin web framework routes and request/response handlers.
-- [internal/runner/](file:///Users/alex/src/swazz/packages/container/internal/runner/): Fuzzer execution engine, concurrency limiter, and BOLA replayer.
-- [internal/generator/](file:///Users/alex/src/swazz/packages/container/internal/generator/): Smart payload generator, dictionary builders, and wordlists.
-- [internal/analyzer/](file:///Users/alex/src/swazz/packages/container/internal/analyzer/): Security analyzers detecting XSS, SQLi, SSTI, and sensitive data leaks.
+- [main.go](./main.go): Main entry point for CLI and web API server.
+- [api/](./api/): Gin web framework routes and request/response handlers.
+- [internal/runner/](./internal/runner/): Fuzzer execution engine, concurrency limiter, and BOLA replayer.
+- [internal/generator/](./internal/generator/): Smart payload generator, dictionary builders, and wordlists.
+- [internal/analyzer/](./internal/analyzer/): Security analyzers detecting XSS, SQLi, SSTI, and sensitive data leaks.
 
 ---
 
@@ -47,7 +47,7 @@ Always prefix shell commands with `rtk` (e.g., `rtk go test ./...`).
 
 1. **Defensive Concurrency**:
    - Always pass `context.Context` to blocking/network calls.
-   - Use [ConcurrencyLimiter](file:///Users/alex/src/swazz/packages/container/internal/runner/limiter.go) to control concurrency. Always check errors from `limiter.Acquire(ctx)`.
+   - Use [ConcurrencyLimiter](./internal/runner/limiter.go) to control concurrency. Always check errors from `limiter.Acquire(ctx)`.
 2. **Zero-Allocation Focus**:
    - Reuse byte slices/buffers via `sync.Pool` on the hot path (e.g. `bufPool` in `runner.go`).
    - Pre-allocate maps and slices where the size is known.
