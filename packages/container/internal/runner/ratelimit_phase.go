@@ -22,7 +22,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		return
 	}
 
-	r.currentProfile.Store("RATE-LIMIT")
+	r.progress.currentProfile.Store("RATE-LIMIT")
 
 	for _, endpoint := range r.config.Endpoints {
 		if r.stopped() {
@@ -30,7 +30,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		}
 
 		epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
-		r.currentEndpoint.Store(epKey)
+		r.progress.currentEndpoint.Store(epKey)
 		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 		safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
@@ -137,7 +137,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 			r.Broadcast(Event{Type: EventResult, Data: result})
 		}
 
-		r.completedEndpoints.Add(1)
+		r.progress.completedEndpoints.Add(1)
 		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 	}
 }

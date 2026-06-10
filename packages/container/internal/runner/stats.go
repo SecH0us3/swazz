@@ -79,16 +79,16 @@ func (r *Runner) publishSnapshot(stats *swagger.RunStats, iteration, totalIterat
 	snap.EndpointCounts = copyMapEndpoint(stats.EndpointCounts)
 
 	// Merge atomic progress values set by the main loop
-	snap.TotalPlanned = r.totalPlanned.Load()
+	snap.TotalPlanned = r.progress.totalPlanned.Load()
 	snap.Concurrency = r.GetConcurrency()
-	if ep, ok := r.currentEndpoint.Load().(string); ok {
+	if ep, ok := r.progress.currentEndpoint.Load().(string); ok {
 		snap.Progress.CurrentEndpoint = ep
 	}
-	if pr, ok := r.currentProfile.Load().(string); ok {
+	if pr, ok := r.progress.currentProfile.Load().(string); ok {
 		snap.Progress.CurrentProfile = pr
 	}
-	snap.Progress.CompletedEndpoints = int(r.completedEndpoints.Load())
-	snap.Progress.TotalEndpoints = int(r.totalEndpoints.Load())
+	snap.Progress.CompletedEndpoints = int(r.progress.completedEndpoints.Load())
+	snap.Progress.TotalEndpoints = int(r.progress.totalEndpoints.Load())
 	snap.Progress.CurrentIteration = iteration
 	snap.Progress.TotalIterations = totalIterations
 
