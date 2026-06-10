@@ -26,14 +26,15 @@ func inferValue(result gjson.Result) swagger.SchemaProperty {
 		return swagger.SchemaProperty{Type: "boolean"}
 	case gjson.JSON:
 		if result.IsObject() {
-			props := make(map[string]*swagger.SchemaProperty)
+			props := map[string]*swagger.SchemaProperty{}
 			result.ForEach(func(key, value gjson.Result) bool {
 				prop := inferValue(value)
 				props[key.String()] = &prop
 				return true
 			})
 			return swagger.SchemaProperty{Type: "object", Properties: props}
-		} else if result.IsArray() {
+		}
+		if result.IsArray() {
 			arr := result.Array()
 			if len(arr) > 0 {
 				itemProp := inferValue(arr[0])

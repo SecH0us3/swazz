@@ -26,6 +26,8 @@ export interface EndpointConfig {
     schema: SchemaProperty;
     /** Schemas for {param} placeholders in the path (e.g. /users/{id}) */
     pathParams?: Record<string, SchemaProperty>;
+    /** Schemas for query parameters to be fuzzed */
+    queryParams?: Record<string, SchemaProperty>;
     /** Schemas for header parameters to be fuzzed (in: 'header' params from spec). */
     headerParams?: Record<string, SchemaProperty>;
     /** Content-Type for the request body (e.g. 'application/x-www-form-urlencoded'). */

@@ -243,15 +243,36 @@ func (r *Runner) Start(ctx context.Context) error {
 						}
 					}
 				} else if hasFields(&ep) {
-					generated := safeGen.BuildObject(&ep.Schema)
 					isBody := !isNoBodyMethod(ep.Method)
 					if isBody {
-						payload = generated
+						if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
+							payload = safeGen.BuildObject(&ep.Schema)
+						}
+						if len(ep.QueryParams) > 0 {
+							qpSchema := &swagger.SchemaProperty{
+								Type:       "object",
+								Properties: ep.QueryParams,
+							}
+							qp = safeGen.BuildObject(qpSchema)
+						}
 					} else {
-						qp = generated
+						combinedProps := map[string]*swagger.SchemaProperty{}
+						for k, v := range ep.Schema.Properties {
+							combinedProps[k] = v
+						}
+						for k, v := range ep.QueryParams {
+							combinedProps[k] = v
+						}
+						if len(combinedProps) > 0 {
+							qpSchema := &swagger.SchemaProperty{
+								Type:       "object",
+								Properties: combinedProps,
+							}
+							qp = safeGen.BuildObject(qpSchema)
+						}
 					}
 					if len(ep.HeaderParams) > 0 {
-						gh = make(map[string]string)
+						gh = map[string]string{}
 						headerSchema := &swagger.SchemaProperty{
 							Type:       "object",
 							Properties: ep.HeaderParams,
@@ -485,20 +506,62 @@ func (r *Runner) fuzzEndpoint(
 
 		if hasFields(&endpoint) {
 			for retries := 0; retries < 10; retries++ {
-				var generated map[string]any
-				if profile == swagger.ProfileRandom && isBodyMethod && rand.Float64() < 0.15 { // #nosec G404
-					// In RANDOM profile, there is a 15% chance to send an empty object `{}`
-					// as the request body to test API robustness.
-					generated = map[string]any{}
-				} else if isSecHeaderIter {
-					generated = safeGen.BuildObject(&endpoint.Schema)
+				var generatedBody map[string]any
+				var generatedQP map[string]any
+
+				if isBodyMethod {
+					if len(endpoint.Schema.Properties) > 0 || endpoint.Schema.Type == "array" || endpoint.Schema.Type == "object" {
+						if profile == swagger.ProfileRandom && rand.Float64() < 0.15 { // #nosec G404
+							generatedBody = map[string]any{}
+						} else if isSecHeaderIter {
+							generatedBody = safeGen.BuildObject(&endpoint.Schema)
+						} else {
+							generatedBody = gen.BuildObject(&endpoint.Schema)
+						}
+					}
+					if len(endpoint.QueryParams) > 0 {
+						qpSchema := &swagger.SchemaProperty{
+							Type:       "object",
+							Properties: endpoint.QueryParams,
+						}
+						if isSecHeaderIter {
+							generatedQP = safeGen.BuildObject(qpSchema)
+						} else {
+							generatedQP = gen.BuildObject(qpSchema)
+						}
+					}
 				} else {
-					generated = gen.BuildObject(&endpoint.Schema)
+					combinedProps := map[string]*swagger.SchemaProperty{}
+					for k, v := range endpoint.Schema.Properties {
+						combinedProps[k] = v
+					}
+					for k, v := range endpoint.QueryParams {
+						combinedProps[k] = v
+					}
+					if len(combinedProps) > 0 {
+						qpSchema := &swagger.SchemaProperty{
+							Type:       "object",
+							Properties: combinedProps,
+						}
+						if isSecHeaderIter {
+							generatedQP = safeGen.BuildObject(qpSchema)
+						} else {
+							generatedQP = gen.BuildObject(qpSchema)
+						}
+					}
 				}
 
 				buf := bufPool.Get().(*bytes.Buffer)
 				buf.Reset()
-				err := json.NewEncoder(buf).Encode(generated)
+				var err error
+				if generatedBody != nil {
+					err = json.NewEncoder(buf).Encode(generatedBody)
+				} else if !isBodyMethod && generatedQP != nil {
+					err = json.NewEncoder(buf).Encode(generatedQP)
+				} else {
+					_ = buf.WriteByte('{')
+					_ = buf.WriteByte('}')
+				}
 
 				if err != nil || buf.Len() > currentMaxPayloadSize {
 					bufPool.Put(buf)
@@ -506,11 +569,8 @@ func (r *Runner) fuzzEndpoint(
 					continue
 				}
 
-				if isBodyMethod {
-					payload = generated
-				} else {
-					queryParams = generated
-				}
+				payload = generatedBody
+				queryParams = generatedQP
 				payloadStr := strings.TrimSuffix(buf.String(), "\n")
 				payloadHash = payloads.HashStr(payloadStr)
 				bufPool.Put(buf)

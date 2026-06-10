@@ -54,8 +54,9 @@ func arePrefixesRelated(p1, p2 string) bool {
 }
 
 func harvestIDs(data any, ids map[string]bool) {
-	if m, ok := data.(map[string]any); ok {
-		for k, v := range m {
+	switch val := data.(type) {
+	case map[string]any:
+		for k, v := range val {
 			kLower := strings.ToLower(k)
 			if kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "_id") || strings.HasSuffix(kLower, "id") {
 				switch val := v.(type) {
@@ -73,40 +74,42 @@ func harvestIDs(data any, ids map[string]bool) {
 			}
 			harvestIDs(v, ids)
 		}
-	} else if arr, ok := data.([]any); ok {
-		for _, item := range arr {
+	case []any:
+		for _, item := range val {
 			harvestIDs(item, ids)
 		}
 	}
 }
 
 func substituteIDsInPayload(data any, paramName string, harvestedID string) any {
-	if m, ok := data.(map[string]any); ok {
-		newMap := make(map[string]any, len(m))
-		for k, v := range m {
+	switch val := data.(type) {
+	case map[string]any:
+		newMap := make(map[string]any, len(val))
+		for k, v := range val {
 			kLower := strings.ToLower(k)
 			if kLower == strings.ToLower(paramName) || kLower == "id" || kLower == "uuid" || strings.HasSuffix(kLower, "_id") || strings.HasSuffix(kLower, "id") {
-				if _, isStr := v.(string); isStr {
+				switch v.(type) {
+				case string:
 					newMap[k] = harvestedID
-				} else if _, isNum := v.(float64); isNum {
-					if val, err := strconv.ParseFloat(harvestedID, 64); err == nil {
-						newMap[k] = val
+				case float64:
+					if parsed, err := strconv.ParseFloat(harvestedID, 64); err == nil {
+						newMap[k] = parsed
 					} else {
 						newMap[k] = v
 					}
-				} else if _, isInt := v.(int); isInt {
-					if val, err := strconv.Atoi(harvestedID); err == nil {
-						newMap[k] = val
+				case int:
+					if parsed, err := strconv.Atoi(harvestedID); err == nil {
+						newMap[k] = parsed
 					} else {
 						newMap[k] = v
 					}
-				} else if _, isInt64 := v.(int64); isInt64 {
-					if val, err := strconv.ParseInt(harvestedID, 10, 64); err == nil {
-						newMap[k] = val
+				case int64:
+					if parsed, err := strconv.ParseInt(harvestedID, 10, 64); err == nil {
+						newMap[k] = parsed
 					} else {
 						newMap[k] = v
 					}
-				} else {
+				default:
 					newMap[k] = substituteIDsInPayload(v, paramName, harvestedID)
 				}
 			} else {
@@ -114,15 +117,17 @@ func substituteIDsInPayload(data any, paramName string, harvestedID string) any 
 			}
 		}
 		return newMap
-	} else if arr, ok := data.([]any); ok {
-		newArr := make([]any, len(arr))
-		for i, v := range arr {
+	case []any:
+		newArr := make([]any, len(val))
+		for i, v := range val {
 			newArr[i] = substituteIDsInPayload(v, paramName, harvestedID)
 		}
 		return newArr
+	default:
+		return data
 	}
-	return data
 }
+
 
 func extractJSONPathExtended(data any, path string) any {
 	path = strings.TrimPrefix(path, "$")
@@ -201,7 +206,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 	if len(ep.ExtractVariables) > 0 {
 		r.configMu.Lock()
 		if r.config.Variables == nil {
-			r.config.Variables = make(map[string]any)
+			r.config.Variables = map[string]any{}
 		}
 		varsUpdated := false
 		for jsonPath, varName := range ep.ExtractVariables {
@@ -222,7 +227,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 
 	// 2. Heuristic Harvesting
 	prefix := getPathPrefix(originalPath)
-	harvested := make(map[string]bool)
+	harvested := map[string]bool{}
 	harvestIDs(respBody, harvested)
 	if len(harvested) > 0 {
 		actualSlice := []string{}
@@ -233,7 +238,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 		r.resultsMu.Lock()
 		if val, ok := r.harvestedIDs.Load(prefix); ok {
 			existing := val.([]string)
-			uniqueMap := make(map[string]bool)
+			uniqueMap := map[string]bool{}
 			for _, id := range existing {
 				uniqueMap[id] = true
 			}
@@ -256,7 +261,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 }
 
 func extractParamsFromPath(originalPath, resolvedPath string) map[string]string {
-	params := make(map[string]string)
+	params := map[string]string{}
 	origParts := strings.Split(strings.Trim(originalPath, "/"), "/")
 	resolParts := strings.Split(strings.Trim(resolvedPath, "/"), "/")
 	if len(origParts) != len(resolParts) {
@@ -298,8 +303,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	candidates, hasSuccessCandidate := r.identifyCandidates(results)
 
 	// 3. For endpoints that don't have a successful candidate, try to construct one
-	safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-	generatedCandidates := r.generateMissingCandidates(ctx, hasSuccessCandidate, safeGen)
+	generatedCandidates := r.generateMissingCandidates(ctx, hasSuccessCandidate)
 	candidates = append(candidates, generatedCandidates...)
 
 	// Calculate and add len(candidates) to totalEndpoints
@@ -314,8 +318,8 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 }
 
 func (r *Runner) authenticateIdentities(ctx context.Context) (map[string]map[string]string, map[string]map[string]string) {
-	identityHeaders := make(map[string]map[string]string)
-	identityCookies := make(map[string]map[string]string)
+	identityHeaders := map[string]map[string]string{}
+	identityCookies := map[string]map[string]string{}
 	for idName, identity := range r.config.AuthIdentities {
 		h, c, err := r.ExecuteAuthSequence(ctx, identity.AuthSequence, identity.Headers, identity.Cookies)
 		if err != nil {
@@ -330,7 +334,7 @@ func (r *Runner) authenticateIdentities(ctx context.Context) (map[string]map[str
 
 func (r *Runner) identifyCandidates(results []*swagger.FuzzResult) ([]*swagger.FuzzResult, map[string]bool) {
 	var candidates []*swagger.FuzzResult
-	hasSuccessCandidate := make(map[string]bool)
+	hasSuccessCandidate := map[string]bool{}
 	for _, res := range results {
 		if res.Status >= 200 && res.Status < 300 {
 			candidates = append(candidates, res)
@@ -340,7 +344,7 @@ func (r *Runner) identifyCandidates(results []*swagger.FuzzResult) ([]*swagger.F
 	return candidates, hasSuccessCandidate
 }
 
-func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandidate map[string]bool, safeGen *generator.Generator) []*swagger.FuzzResult {
+func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandidate map[string]bool) []*swagger.FuzzResult {
 	var candidates []*swagger.FuzzResult
 	var numCandidatesToSearch int32
 	for _, ep := range r.config.Endpoints {
@@ -372,7 +376,9 @@ func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandid
 			r.currentEndpoint.Store(epKey)
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-			successRes := r.generateCandidateForEndpoint(ctx, ep, safeGen)
+			// Create a fresh generator for each goroutine to guarantee concurrency correctness
+			epGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			successRes := r.generateCandidateForEndpoint(ctx, ep, epGen)
 
 			if successRes != nil {
 				candMu.Lock()
@@ -393,7 +399,7 @@ func (r *Runner) generateCandidateForEndpoint(ctx context.Context, ep swagger.En
 	hasPathParams := strings.Contains(ep.Path, "{")
 
 	// We want to try finding a valid candidate by trying harvested IDs
-	uniqueIDs := make(map[string]bool)
+	uniqueIDs := map[string]bool{}
 	r.harvestedIDs.Range(func(k, value any) bool {
 		vSlice := value.([]string)
 		for _, id := range vSlice {
@@ -477,7 +483,7 @@ func (r *Runner) generateCandidateForEndpoint(ctx context.Context, ep swagger.En
 		var queryParams map[string]any
 
 		if generated != nil {
-			genCopy := make(map[string]any)
+			genCopy := map[string]any{}
 			for k, v := range generated {
 				genCopy[k] = v
 			}
@@ -503,7 +509,7 @@ func (r *Runner) generateCandidateForEndpoint(ctx context.Context, ep swagger.En
 		}
 
 		// Generate security headers if any
-		generatedHeaders := make(map[string]string)
+		generatedHeaders := map[string]string{}
 		if secHeaders := safeGen.GenerateSecurityHeaders(); secHeaders != nil {
 			for k, v := range secHeaders {
 				generatedHeaders[k] = v
@@ -511,7 +517,7 @@ func (r *Runner) generateCandidateForEndpoint(ctx context.Context, ep swagger.En
 		}
 
 		// Build final headers
-		headers := make(map[string]string)
+		headers := map[string]string{}
 		r.configMu.RLock()
 		for k, v := range r.config.GlobalHeaders {
 			headers[k] = v
@@ -597,7 +603,7 @@ func (r *Runner) replayCandidates(ctx context.Context, candidates []*swagger.Fuz
 
 func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[string]string, string) {
 	pathsToTest := []string{cand.ResolvedPath}
-	pathToID := make(map[string]string)
+	pathToID := map[string]string{}
 	pathToID[cand.ResolvedPath] = ""
 
 	hasPathParams := strings.Contains(cand.Endpoint, "{")
@@ -623,7 +629,7 @@ func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[strin
 	}
 
 	if paramName != "" {
-		uniqueIDs := make(map[string]bool)
+		uniqueIDs := map[string]bool{}
 		r.harvestedIDs.Range(func(key, value any) bool {
 			vSlice := value.([]string)
 			for _, id := range vSlice {
@@ -680,7 +686,7 @@ func (r *Runner) buildPathsToTest(cand *swagger.FuzzResult) ([]string, map[strin
 
 func (r *Runner) replayCandidate(ctx context.Context, cand *swagger.FuzzResult, ep swagger.EndpointConfig, identityHeaders, identityCookies map[string]map[string]string, bolaMu *sync.Mutex, bolaResults *[]*swagger.FuzzResult) {
 	pathsToTest, pathToID, paramName := r.buildPathsToTest(cand)
-	confirmedIdentities := make(map[string]bool)
+	confirmedIdentities := map[string]bool{}
 
 	for _, resolvedPath := range pathsToTest {
 		// Check if we have already confirmed bypass for all identities and anonymous
@@ -854,8 +860,8 @@ func (r *Runner) testPathForAnonymous(rctx bolaReplayContext) {
 		return
 	}
 
-	anonHeaders := make(map[string]string)
-	anonCookies := make(map[string]string)
+	anonHeaders := map[string]string{}
+	anonCookies := map[string]string{}
 
 	dropHeaders := r.config.Settings.AuthHeaders
 	if len(dropHeaders) == 0 {

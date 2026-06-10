@@ -27,6 +27,7 @@ type EndpointConfig struct {
 	Method           string                     `json:"method"`
 	Schema           SchemaProperty             `json:"schema"`
 	PathParams       map[string]*SchemaProperty `json:"pathParams,omitempty"`
+	QueryParams      map[string]*SchemaProperty `json:"queryParams,omitempty"`
 	HeaderParams     map[string]*SchemaProperty `json:"headerParams,omitempty"`
 	ContentType      string                     `json:"contentType,omitempty"`
 	ExtractVariables map[string]string          `json:"extract_variables,omitempty"` // map JSON path to variable name

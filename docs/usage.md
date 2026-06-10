@@ -183,6 +183,36 @@ Swazz supports importing Postman Collection JSON files (v2.0.0 and v2.1.0) direc
    - Path variables like `:userId` or `{{userId}}` are automatically converted to `{userId}` format.
    - If the request includes query parameters or a body (JSON payloads, URL-encoded forms, or multipart form-data), Swazz infers their schemas and fuzzes their inputs.
 
+## HAR (HTTP Archive) Fuzzing 📂
+
+Swazz supports importing `.har` (HTTP Archive) files directly. This enables **Zero-Setup Fuzzing**—you can export a browser session capturing real-world user flows (e.g., from Chrome or Firefox Developer Tools) and replay/fuzz those exact endpoints and payloads immediately without requiring any OpenAPI/Swagger specification.
+
+### How to use HAR files with Swazz
+
+1. **Record a browser session**:
+   - Open your browser's Developer Tools (`F12`), go to the **Network** tab, and check **Preserve Log**.
+   - Perform the actions you want to fuzz (e.g., login, create a resource, update settings, delete items).
+   - Right-click anywhere in the network request list and select **Save all as HAR with content**.
+2. **Supply your HAR file to Swazz**:
+   - **Web UI**: In the Configuration Sidebar, select your `.har` file in the spec upload field.
+   - **CLI Mode**: Configure `"swagger_urls"` in your `swazz.config.json` to point to a local `.har` file or a remote URL hosting it:
+     ```json
+     {
+       "swagger_urls": ["./my_browser_session.har"]
+     }
+     ```
+3. **Advanced HAR Configuration**:
+   - **Type & Schema Inference**: Since HAR files only capture raw request/response data, Swazz's engine automatically analyzes the structure of each captured query parameter and JSON request body to reconstruct an active schema representation. Values are typed as `string`, `integer`, `boolean`, `array`, or `object`, enabling the generator to intelligently mutate payloads.
+   - **HAR Domain Regex Filter**: Browser logs often capture noisy requests to analytics trackers, CDNs, or third-party assets. You can filter these out by setting `har_domain_filter` to a regular expression (matching the hosts you want to include).
+     - **Web UI**: Enter your regex in the **HAR Domain Filter** field.
+     - **JSON Config**: Add the setting:
+       ```json
+       "settings": {
+         "har_domain_filter": "^api\\.example\\.com$"
+       }
+       ```
+   - **Authentication & Concurrency Integration**: Swazz's concurrent runner pool manages stateful authorization checks during replay fuzzing. If you define an `auth_sequence` in your configuration, Swazz's concurrent worker pool will automatically overwrite any outdated credentials/tokens captured inside the HAR file with fresh ones, preventing HTTP workers from failing due to session expiration.
+
 ## SSRF Protection & Private IP Filtering 🛡️
 
 To prevent Server-Side Request Forgery (SSRF) when Swazz is hosted as a shared remote service (e.g., in a cloud environment or Cloudflare Workers/Pages), Swazz includes built-in private IP filtering.
