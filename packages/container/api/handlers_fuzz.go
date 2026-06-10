@@ -63,6 +63,7 @@ func (h *Handler) StartFuzz(c *gin.Context) {
 	if err := r.RunAuthSequence(c.Request.Context()); err != nil {
 		fmt.Printf("Authentication sequence failed: %v\n", err)
 		r.Unsubscribe(resultsCh)
+		r.Close()
 		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("Authentication sequence failed: %v", err)})
 		return
 	}

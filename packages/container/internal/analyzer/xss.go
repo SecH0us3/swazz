@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -53,17 +54,27 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	var findings []swagger.AnalysisFinding
-	bodyStr := string(input.ResponseBody)
 	contentType := input.ResponseHeaders.Get("Content-Type")
+	contentTypeLower := strings.ToLower(contentType)
+	isHTML := strings.Contains(contentTypeLower, "text/html")
 
-	isHTML := strings.Contains(strings.ToLower(contentType), "text/html")
-	isJSON := strings.Contains(strings.ToLower(contentType), "application/json") || ((strings.HasPrefix(strings.TrimSpace(bodyStr), "{") || strings.HasPrefix(strings.TrimSpace(bodyStr), "[")) && json.Valid(input.ResponseBody))
+	var isJSON bool
+	if strings.Contains(contentTypeLower, "application/json") {
+		isJSON = true
+	} else {
+		trimmedBody := bytes.TrimSpace(input.ResponseBody)
+		if (bytes.HasPrefix(trimmedBody, []byte("{")) || bytes.HasPrefix(trimmedBody, []byte("["))) && json.Valid(input.ResponseBody) {
+			isJSON = true
+		}
+	}
 
 	if isJSON && !isHTML {
 		// Safe JSON context
 		return nil
 	}
+
+	var findings []swagger.AnalysisFinding
+	bodyLower := bytes.ToLower(input.ResponseBody)
 
 	for _, payloadStr := range sentStrings {
 		if payloadStr == "" {
@@ -75,7 +86,8 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			continue
 		}
 
-		if strings.Contains(strings.ToLower(bodyStr), strings.ToLower(payloadStr)) {
+		payloadLower := []byte(strings.ToLower(payloadStr))
+		if bytes.Contains(bodyLower, payloadLower) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:   "swazz/reflected-xss",
 				Level:    "error",

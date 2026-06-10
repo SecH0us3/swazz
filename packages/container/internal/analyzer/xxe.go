@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"swazz-engine/internal/swagger"
@@ -8,13 +9,13 @@ import (
 
 type XXEAnalyzer struct{}
 
-var xxeFileSignatures = []string{
-	"root:x:0:0:",
-	"/bin/sh",
-	"/bin/bash",
-	"[extensions]",
-	"[fonts]",
-	"[mci extensions]",
+var xxeFileSignatures = [][]byte{
+	[]byte("root:x:0:0:"),
+	[]byte("/bin/sh"),
+	[]byte("/bin/bash"),
+	[]byte("[extensions]"),
+	[]byte("[fonts]"),
+	[]byte("[mci extensions]"),
 }
 
 func (a *XXEAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -43,16 +44,15 @@ func (a *XXEAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	bodyStr := string(input.ResponseBody)
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range xxeFileSignatures {
-		if strings.Contains(bodyStr, sig) {
+		if bytes.Contains(input.ResponseBody, sig) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:   "swazz/xxe-leak",
 				Level:    "error",
-				Message:  fmt.Sprintf("XXE leak detected. File signature '%s' found in response body when XML/XXE payload was sent.", sig),
-				Evidence: fmt.Sprintf("Found leaked signature: %s", sig),
+				Message:  fmt.Sprintf("XXE leak detected. File signature '%s' found in response body when XML/XXE payload was sent.", string(sig)),
+				Evidence: fmt.Sprintf("Found leaked signature: %s", string(sig)),
 			})
 			break
 		}

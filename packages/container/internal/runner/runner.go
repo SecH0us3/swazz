@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -106,10 +107,11 @@ type Runner struct {
 	varReplacer *strings.Replacer
 
 	// Domain state & regex cache — used by chaining rules.
-	stateMu      sync.RWMutex
-	state        map[string]string
-	regexCache   map[string]*regexp.Regexp
-	regexCacheMu sync.RWMutex
+	stateMu       sync.RWMutex
+	state         map[string]string
+	stateReplacer *strings.Replacer
+	regexCache    map[string]*regexp.Regexp
+	regexCacheMu  sync.RWMutex
 
 	// Auth & CSRF — protected by their own fine-grained mutexes.
 	reauthMu        sync.Mutex
@@ -131,7 +133,40 @@ type Runner struct {
 // New creates a new Runner with sensible defaults.
 func New(config *swagger.Config, client *http.Client) *Runner {
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
+		}
+		security.ConfigureTransport(client.Transport.(*http.Transport))
+	} else if client.Transport == nil {
+		clonedClient := *client
+		clonedClient.Transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+		security.ConfigureTransport(clonedClient.Transport.(*http.Transport))
+		client = &clonedClient
+	} else if transport, ok := client.Transport.(*http.Transport); ok {
+		clonedClient := *client
+		clonedTransport := transport.Clone()
+		security.ConfigureTransport(clonedTransport)
+		clonedClient.Transport = clonedTransport
+		client = &clonedClient
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 
@@ -271,7 +306,9 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 			continue
 		}
 
-		r.limiter.Acquire()
+		if err := r.limiter.Acquire(ctx); err != nil {
+			break
+		}
 		wg.Add(1)
 
 		go func(ep swagger.EndpointConfig) {
@@ -379,7 +416,9 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
-		r.limiter.Acquire()
+		if err := r.limiter.Acquire(ctx); err != nil {
+			break
+		}
 		wg.Add(1)
 
 		go func(it int, p any, qp map[string]any, gh map[string]string) {

@@ -1,12 +1,15 @@
 package runner
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type ConcurrencyLimiter struct {
 	mu      sync.Mutex
-	cond    *sync.Cond
 	target  int
 	current int
+	waiters []chan struct{}
 }
 
 func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
@@ -16,9 +19,9 @@ func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
 	if initial > 1000 {
 		initial = 1000
 	}
-	l := &ConcurrencyLimiter{target: initial}
-	l.cond = sync.NewCond(&l.mu)
-	return l
+	return &ConcurrencyLimiter{
+		target: initial,
+	}
 }
 
 func (l *ConcurrencyLimiter) SetTarget(target int) {
@@ -30,7 +33,14 @@ func (l *ConcurrencyLimiter) SetTarget(target int) {
 		target = 1000
 	}
 	l.target = target
-	l.cond.Broadcast()
+
+	// Wake up as many waiters as the new target allows
+	for len(l.waiters) > 0 && l.current < l.target {
+		l.current++
+		ch := l.waiters[0]
+		l.waiters = l.waiters[1:]
+		close(ch)
+	}
 	l.mu.Unlock()
 }
 
@@ -40,20 +50,56 @@ func (l *ConcurrencyLimiter) GetTarget() int {
 	return l.target
 }
 
-func (l *ConcurrencyLimiter) Acquire() {
+func (l *ConcurrencyLimiter) Acquire(ctx context.Context) error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
-	for l.current >= l.target {
-		l.cond.Wait()
+	if l.current < l.target {
+		l.current++
+		l.mu.Unlock()
+		return nil
 	}
-	l.current++
+	ch := make(chan struct{})
+	l.waiters = append(l.waiters, ch)
+	l.mu.Unlock()
+
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		l.mu.Lock()
+		found := false
+		for i, w := range l.waiters {
+			if w == ch {
+				l.waiters = append(l.waiters[:i], l.waiters[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Already popped and handed a slot, but we timed out/cancelled.
+			// Return the slot and pass it to the next waiter if any.
+			l.current--
+			if len(l.waiters) > 0 && l.current < l.target {
+				l.current++
+				nextCh := l.waiters[0]
+				l.waiters = l.waiters[1:]
+				close(nextCh)
+			}
+		}
+		l.mu.Unlock()
+		return ctx.Err()
+	}
 }
 
 func (l *ConcurrencyLimiter) Release() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.current--
-	l.cond.Signal()
+	if len(l.waiters) > 0 && l.current < l.target {
+		l.current++
+		ch := l.waiters[0]
+		l.waiters = l.waiters[1:]
+		close(ch)
+	}
+	l.mu.Unlock()
 }
 
 func (r *Runner) GetConcurrency() int {

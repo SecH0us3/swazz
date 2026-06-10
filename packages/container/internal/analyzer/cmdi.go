@@ -1,9 +1,9 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
-	"strings"
 	"swazz-engine/internal/swagger"
 )
 
@@ -13,11 +13,11 @@ type CmdiAnalyzer struct{}
 var unixIdRegex = regexp.MustCompile(`(uid|gid|groups)=\d+\([\w\-]+\)`)
 
 // cmdiSignatures contains common indicators of Windows command execution in the response body.
-var cmdiSignatures = []string{
-	"Microsoft Windows [Version",
-	"nt authority\\system",
-	"nt authority\\local service",
-	"nt authority\\network service",
+var cmdiSignatures = [][]byte{
+	[]byte("Microsoft Windows [Version"),
+	[]byte("nt authority\\system"),
+	[]byte("nt authority\\local service"),
+	[]byte("nt authority\\network service"),
 }
 
 func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -28,28 +28,27 @@ func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	bodyStr := string(input.ResponseBody)
 	var findings []swagger.AnalysisFinding
 
 	// Check for Unix id command output pattern (e.g. uid=1000(alex))
-	if match := unixIdRegex.FindString(bodyStr); match != "" {
+	if match := unixIdRegex.Find(input.ResponseBody); len(match) > 0 {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:   "swazz/cmdi-leak",
 			Level:    "error",
 			Message:  "OS Command Injection output signature (Unix id) detected in response body.",
-			Evidence: fmt.Sprintf("Found leaked signature: %s", match),
+			Evidence: fmt.Sprintf("Found leaked signature: %s", string(match)),
 		})
 		return findings
 	}
 
 	// Check for Windows command output signatures
 	for _, sig := range cmdiSignatures {
-		if strings.Contains(bodyStr, sig) {
+		if bytes.Contains(input.ResponseBody, sig) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:   "swazz/cmdi-leak",
 				Level:    "error",
-				Message:  fmt.Sprintf("OS Command Injection output signature '%s' detected in response body.", sig),
-				Evidence: fmt.Sprintf("Found leaked signature: %s", sig),
+				Message:  fmt.Sprintf("OS Command Injection output signature '%s' detected in response body.", string(sig)),
+				Evidence: fmt.Sprintf("Found leaked signature: %s", string(sig)),
 			})
 			break
 		}
