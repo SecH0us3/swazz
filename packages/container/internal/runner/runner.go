@@ -1,6 +1,19 @@
 // runner.go: Core execution engine for the swazz fuzzer.
-// It orchestrates the fuzzing process across endpoints, profiles, and iterations,
-// managing concurrency and the request-response lifecycle.
+//
+// # Execution Phases
+//
+//  1. Baseline phase   — one safe request per endpoint to record size/time baselines.
+//  2. Fuzzing phases   — N iterations × M profiles, concurrent goroutine dispatch.
+//  3. BOLA phase       — replays harvested IDs with alternate identities.
+//  4. Rate-limit phase — burst-probe each endpoint for rate-limit enforcement.
+//
+// # Concurrency Model (summary — see doc.go for the full picture)
+//
+// The struct is divided into embedded sub-structs that group related
+// synchronisation primitives together, making lock ownership obvious at a
+// glance.  The hot path (per-iteration loop) only touches atomic flags
+// (runnerLifecycle / runnerProgress); heavier mutex work is in runnerPause
+// and the per-field mutexes that own their own data.
 
 package runner
 
@@ -9,7 +22,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"regexp"
@@ -31,69 +43,94 @@ var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]
 const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
+
+	defaultMaxPayloadBytes  = 1 << 20  // 1 MiB
+	boundaryMaxPayloadBytes = 1 << 29  // 512 MiB
 )
+
+// ─── embedded sub-structs ────────────────────────────────────────────────────
+
+// runnerLifecycle groups the atomic control-flow flags and the lifecycle mutex.
+// All flag reads on the hot path are zero-lock; Start/Stop/Close are the only
+// callers that need the mutex.
+type runnerLifecycle struct {
+	isRunning  atomic.Bool
+	isPaused   atomic.Bool
+	shouldStop atomic.Bool
+
+	mu     sync.Mutex       // guards cancel only
+	cancel context.CancelFunc
+}
+
+// runnerProgress groups the atomic progress counters written by the main loop
+// and read by the stats aggregator goroutine.
+type runnerProgress struct {
+	currentEndpoint    atomic.Value // string
+	currentProfile     atomic.Value // string
+	completedEndpoints atomic.Int32
+	totalEndpoints     atomic.Int32
+	totalPlanned       atomic.Int64
+}
+
+// runnerPause groups the pause/resume condvar, intentionally separate from
+// the lifecycle mutex to avoid priority inversion between the hot iteration
+// path and Start/Stop state transitions.
+type runnerPause struct {
+	mu   sync.Mutex
+	cond *sync.Cond
+}
+
+// ─── Runner ──────────────────────────────────────────────────────────────────
 
 // Runner orchestrates fuzzing runs across endpoints × profiles × iterations.
 type Runner struct {
 	config *swagger.Config
 	client *http.Client
 
-	// Control-flow flags — atomic, zero-lock reads from hot path.
-	isRunning  atomic.Bool
-	isPaused   atomic.Bool
-	shouldStop atomic.Bool
-
-	// Lifecycle guard — only for Start/Stop/Close state transitions.
-	lifecycleMu sync.Mutex
-	cancel      context.CancelFunc
+	lifecycle runnerLifecycle
+	progress  runnerProgress
+	pause     runnerPause
 
 	// Stats aggregation — channel-based, owned by statsAggregator goroutine.
 	statsChan   chan statsMsg
 	latestStats atomic.Pointer[swagger.RunStats]
 	statsDone   chan struct{}
 
-	// Progress metadata — written by main loop (single writer), read by aggregator.
-	currentEndpoint    atomic.Value // string
-	currentProfile     atomic.Value // string
-	completedEndpoints atomic.Int32
-	totalEndpoints     atomic.Int32
-	totalPlanned       atomic.Int64
-
-	// SSE subscribers
-	subsMu sync.RWMutex
-	subs   map[chan Event]struct{}
-
+	// SSE event pipeline (lock-free MPSCQueue + RW-guarded subscriber set).
+	subsMu     sync.RWMutex
+	subs       map[chan Event]struct{}
 	eventQueue *MPSCQueue
 	doneCh     chan struct{}
 
+	// Config variable substitution — written once per config reload.
 	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
 
-	// Pause/resume — separate mutex, not on hot path.
-	pauseMu   sync.Mutex
-	pauseCond *sync.Cond
-
-	analyzer      *analyzer.AnalyzerRegistry
-	sizeBaselines *sync.Map
-	timeBaselines *sync.Map
-	harvestedIDs  sync.Map // maps path prefix string -> []string
-	idSources     sync.Map // maps ID string -> source string
-	resultsMu     sync.Mutex
-	allResults    []*swagger.FuzzResult
-	limiter       *ConcurrencyLimiter
-
-	reauthMu        sync.Mutex
-	csrfMu          sync.RWMutex
-	activeCSRFToken string
-
+	// Domain state & regex cache — used by chaining rules.
 	stateMu       sync.RWMutex
 	state         map[string]string
 	stateReplacer *strings.Replacer
 	regexCache    map[string]*regexp.Regexp
 	regexCacheMu  sync.RWMutex
+
+	// Auth & CSRF — protected by their own fine-grained mutexes.
+	reauthMu        sync.Mutex
+	csrfMu          sync.RWMutex
+	activeCSRFToken string
+
+	// Per-run baselines, results, and concurrency control.
+	sizeBaselines *sync.Map
+	timeBaselines *sync.Map
+	harvestedIDs  sync.Map // path prefix → []string
+	idSources     sync.Map // ID string → source string
+	resultsMu     sync.Mutex
+	allResults    []*swagger.FuzzResult
+	limiter       *ConcurrencyLimiter
+
+	analyzer *analyzer.AnalyzerRegistry
 }
 
-// New creates a new Runner.
+// New creates a new Runner with sensible defaults.
 func New(config *swagger.Config, client *http.Client) *Runner {
 	if client == nil {
 		client = &http.Client{
@@ -110,28 +147,29 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 			},
 		}
 		security.ConfigureTransport(client.Transport.(*http.Transport))
-	} else {
-		cloned := *client
-		if cloned.Transport == nil {
-			cloned.Transport = &http.Transport{
-				Proxy: http.ProxyFromEnvironment,
-				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				ForceAttemptHTTP2:     true,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-			}
-			security.ConfigureTransport(cloned.Transport.(*http.Transport))
-		} else if transport, ok := cloned.Transport.(*http.Transport); ok {
-			clonedTransport := transport.Clone()
-			security.ConfigureTransport(clonedTransport)
-			cloned.Transport = clonedTransport
+	} else if client.Transport == nil {
+		clonedClient := *client
+		clonedClient.Transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 		}
-		client = &cloned
+		security.ConfigureTransport(clonedClient.Transport.(*http.Transport))
+		client = &clonedClient
+	} else if transport, ok := client.Transport.(*http.Transport); ok {
+		clonedClient := *client
+		clonedTransport := transport.Clone()
+		security.ConfigureTransport(clonedTransport)
+		clonedClient.Transport = clonedTransport
+		client = &clonedClient
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
+
 	r := &Runner{
 		config:        config,
 		client:        client,
@@ -147,75 +185,34 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		regexCache:    make(map[string]*regexp.Regexp),
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
-	r.pauseCond = sync.NewCond(&r.pauseMu)
+	r.pause.cond = sync.NewCond(&r.pause.mu)
 	r.updateReplacer()
-	// Publish initial empty stats snapshot.
+
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
 	go r.broadcastLoop()
 	return r
 }
 
-// Close stops the background broadcast loop and cleans up resources.
+// Close stops the background broadcast loop and cancels any active run.
 func (r *Runner) Close() {
-	r.lifecycleMu.Lock()
-	if r.cancel != nil {
-		r.cancel()
+	r.lifecycle.mu.Lock()
+	if r.lifecycle.cancel != nil {
+		r.lifecycle.cancel()
 	}
-	r.lifecycleMu.Unlock()
+	r.lifecycle.mu.Unlock()
 	close(r.doneCh)
 }
 
-// Start begins the fuzzing run. Blocks until complete or stopped.
+// Start begins the fuzzing run. It blocks until the run completes or is stopped.
+// Returns an error only when a run is already in progress.
 func (r *Runner) Start(ctx context.Context) error {
-	r.lifecycleMu.Lock()
-	if r.isRunning.Load() {
-		r.lifecycleMu.Unlock()
-		return fmt.Errorf("already running")
+	runCtx, err := r.initRun(ctx)
+	if err != nil {
+		return err
 	}
-	r.isRunning.Store(true)
-	r.isPaused.Store(false)
-	r.shouldStop.Store(false)
 
-	// Re-create stats channel (may have been closed by a previous run).
-	r.statsChan = make(chan statsMsg, 4096)
-	r.statsDone = make(chan struct{})
-	empty := newEmptyStats()
-	r.latestStats.Store(&empty)
-	r.sizeBaselines = &sync.Map{}
-	r.timeBaselines = &sync.Map{}
-
-	// Clear the global OOB store to prevent memory leaks from stale UUIDs of previous runs
-	oob.GlobalStore.Clear()
-
-	ctx, cancel := context.WithCancel(ctx)
-	r.cancel = cancel
-	r.lifecycleMu.Unlock()
-
-	// Launch the stats aggregator goroutine.
-	go r.statsAggregator()
-
-	r.resultsMu.Lock()
-	r.allResults = nil
-	r.resultsMu.Unlock()
-
-	defer func() {
-		cancel()
-
-		// Close the stats channel to signal aggregator shutdown,
-		// then wait for it to drain and publish the final snapshot.
-		close(r.statsChan)
-		<-r.statsDone
-
-		r.isRunning.Store(false)
-		// Publish final snapshot with IsRunning=false.
-		final := r.GetStats()
-		final.IsRunning = false
-		final.Progress.CurrentEndpoint = ""
-		final.Progress.CurrentProfile = ""
-		r.latestStats.Store(&final)
-		r.Broadcast(Event{Type: EventComplete, Data: final})
-	}()
+	defer r.finaliseRun()
 
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
@@ -226,159 +223,26 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	r.limiter.SetTarget(r.config.Settings.Concurrency)
-	var wg sync.WaitGroup
 
-	r.currentProfile.Store("BASELINE")
-	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-
-	for _, endpoint := range r.config.Endpoints {
-		if r.stopped() {
-			break
-		}
-		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
-		if _, ok := r.sizeBaselines.Load(key); !ok {
-			if err := r.limiter.Acquire(ctx); err != nil {
-				break
-			}
-			wg.Add(1)
-
-			go func(ep swagger.EndpointConfig) {
-				defer func() {
-					r.limiter.Release()
-					wg.Done()
-				}()
-
-				epKey := ep.Method + " " + ep.Path
-				r.currentEndpoint.Store(epKey)
-				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-
-				safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-				safeGen.Endpoint = epKey
-				var payload any
-				var qp map[string]any
-				var gh map[string]string
-				if ep.Example != nil {
-					isBody := !isNoBodyMethod(ep.Method)
-					if isBody {
-						payload = ep.Example
-					} else {
-						if m, ok := ep.Example.(map[string]any); ok {
-							qp = m
-						}
-					}
-					if len(ep.HeaderParams) > 0 {
-						gh = make(map[string]string)
-						headerSchema := &swagger.SchemaProperty{
-							Type:       "object",
-							Properties: ep.HeaderParams,
-						}
-						headerObj := safeGen.BuildObject(headerSchema)
-						for k, v := range headerObj {
-							gh[k] = fmt.Sprintf("%v", v)
-						}
-					}
-				} else if hasFields(&ep) {
-					isBody := !isNoBodyMethod(ep.Method)
-					if isBody {
-						if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
-							payload = safeGen.BuildObject(&ep.Schema)
-						}
-						if len(ep.QueryParams) > 0 {
-							qpSchema := &swagger.SchemaProperty{
-								Type:       "object",
-								Properties: ep.QueryParams,
-							}
-							qp = safeGen.BuildObject(qpSchema)
-						}
-					} else {
-						combinedProps := map[string]*swagger.SchemaProperty{}
-						for k, v := range ep.Schema.Properties {
-							combinedProps[k] = v
-						}
-						for k, v := range ep.QueryParams {
-							combinedProps[k] = v
-						}
-						if len(combinedProps) > 0 {
-							qpSchema := &swagger.SchemaProperty{
-								Type:       "object",
-								Properties: combinedProps,
-							}
-							qp = safeGen.BuildObject(qpSchema)
-						}
-					}
-					if len(ep.HeaderParams) > 0 {
-						gh = map[string]string{}
-						headerSchema := &swagger.SchemaProperty{
-							Type:       "object",
-							Properties: ep.HeaderParams,
-						}
-						headerObj := safeGen.BuildObject(headerSchema)
-						for k, v := range headerObj {
-							gh[k] = fmt.Sprintf("%v", v)
-						}
-					}
-				}
-				resolvedPath := fillPathParams(ep.Path, ep.PathParams, safeGen)
-				result := r.executeRequest(
-					ctx,
-					r.config.BaseURL,
-					resolvedPath,
-					ep.Path,
-					ep.Method,
-					r.config.GlobalHeaders,
-					r.config.Cookies,
-					payload,
-					swagger.FuzzingProfile("BASELINE"),
-					qp,
-					gh,
-					ep.ContentType,
-				)
-				if r.config.Settings.Debug {
-					fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
-						ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
-				}
-				if result.Status >= 200 && result.Status < 300 {
-					r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
-					r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
-				}
-
-				// Send result to aggregator
-				r.statsChan <- statsMsg{
-					result:           result,
-					currentIteration: 1,
-					totalIterations:  1,
-				}
-				r.Broadcast(Event{Type: EventResult, Data: result})
-
-				r.completedEndpoints.Add(1)
-				r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-			}(endpoint)
-		} else {
-			// Baseline already loaded (e.g. from tests or prior setup)
-			r.completedEndpoints.Add(1)
-		}
-	}
-	wg.Wait()
+	r.baselinePhase(runCtx)
 
 	for profileIdx, profile := range profiles {
 		if r.stopped() {
 			break
 		}
-
-		r.currentProfile.Store(string(profile))
+		r.progress.currentProfile.Store(string(profile))
 
 		for epIdx, endpoint := range r.config.Endpoints {
 			if r.stopped() {
 				break
 			}
-
 			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
-			endpointStr := endpoint.Method + " " + endpoint.Path
-			gen.Endpoint = endpointStr
-			safeGen.Endpoint = endpointStr
+			epStr := endpoint.Method + " " + endpoint.Path
+			gen.Endpoint = epStr
+			safeGen.Endpoint = epStr
 
-			r.fuzzEndpoint(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
+			r.fuzzEndpoint(runCtx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
 		}
 	}
 
@@ -387,84 +251,113 @@ func (r *Runner) Start(ctx context.Context) error {
 	copy(candidates, r.allResults)
 	r.resultsMu.Unlock()
 
-	_ = r.bolaPhase(ctx, candidates)
-
-	r.rateLimitPhase(ctx)
+	_ = r.bolaPhase(runCtx, candidates)
+	r.rateLimitPhase(runCtx)
 
 	return nil
 }
 
-func (r *Runner) getOrderedProfiles() []swagger.FuzzingProfile {
-	settings := r.config.Settings
-	var lightProfiles, heavyList []swagger.FuzzingProfile
-	for _, p := range settings.Profiles {
-		if p == swagger.ProfileBoundary {
-			heavyList = append(heavyList, p)
-		} else {
-			lightProfiles = append(lightProfiles, p)
-		}
+// Stop signals the runner to halt after the current request completes.
+func (r *Runner) Stop() {
+	r.lifecycle.shouldStop.Store(true)
+	r.lifecycle.isPaused.Store(false)
+	r.lifecycle.mu.Lock()
+	if r.lifecycle.cancel != nil {
+		r.lifecycle.cancel()
 	}
-	return append(lightProfiles, heavyList...)
+	r.lifecycle.mu.Unlock()
+	r.pause.cond.Broadcast()
 }
 
-func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
-	settings := r.config.Settings
-	endpoints := r.config.Endpoints
-	iterations := settings.IterationsPerProfile
-
-	var totalPlanned int64
-
-	// 1. Baseline requests: 1 per endpoint
-	totalPlanned += int64(len(endpoints))
-
-	// 2. Fuzzing profiles requests
-	for _, ep := range endpoints {
-		hasF := hasFields(&ep)
-		for _, p := range profiles {
-			minNeeded := generator.MinIterationsNeeded(p, settings)
-			baseIter := iterations
-			if minNeeded > baseIter {
-				baseIter = minNeeded
-			}
-			if !hasF {
-				if p == swagger.ProfileMalicious {
-					baseIter = minNeeded
-					if baseIter < 1 {
-						baseIter = 1
-					}
-				} else {
-					baseIter = 1
-				}
-			}
-			totalPlanned += int64(baseIter)
-		}
+// Pause temporarily suspends dispatching new requests.
+func (r *Runner) Pause() {
+	if r.lifecycle.isRunning.Load() {
+		r.lifecycle.isPaused.Store(true)
 	}
-
-	// 3. Rate Limit check requests
-	if settings.RateLimitCheck {
-		burstSize := settings.RateLimitBurstSize
-		if burstSize <= 0 {
-			burstSize = 50
-		}
-		if burstSize > 1000 {
-			burstSize = 1000
-		}
-		totalPlanned += int64(len(endpoints) * burstSize)
-	}
-
-	r.totalPlanned.Store(totalPlanned)
-
-	// Calculate totalEndpoints:
-	// - Baseline: len(endpoints)
-	// - Fuzzing: len(profiles) * len(endpoints)
-	// - Rate Limit: len(endpoints) if RateLimitCheck is true
-	totalEP := len(endpoints) + len(profiles)*len(endpoints)
-	if settings.RateLimitCheck {
-		totalEP += len(endpoints)
-	}
-	r.totalEndpoints.Store(int32(totalEP)) // #nosec G115
 }
 
+// Resume resumes a paused runner.
+func (r *Runner) Resume() {
+	r.lifecycle.isPaused.Store(false)
+	r.pause.cond.Broadcast()
+}
+
+// IsRunning reports whether the runner is currently executing a fuzz run.
+func (r *Runner) IsRunning() bool { return r.lifecycle.isRunning.Load() }
+
+// ─── Phases ──────────────────────────────────────────────────────────────────
+
+// baselinePhase sends one safe request per endpoint that has not yet been
+// baselined, recording size and latency medians for anomaly detection.
+func (r *Runner) baselinePhase(ctx context.Context) {
+	r.progress.currentProfile.Store("BASELINE")
+	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
+	var wg sync.WaitGroup
+
+	for _, endpoint := range r.config.Endpoints {
+		if r.stopped() {
+			break
+		}
+
+		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
+		if _, alreadyDone := r.sizeBaselines.Load(key); alreadyDone {
+			r.progress.completedEndpoints.Add(1)
+			continue
+		}
+
+		if err := r.limiter.Acquire(ctx); err != nil {
+			break
+		}
+		wg.Add(1)
+
+		go func(ep swagger.EndpointConfig) {
+			defer r.limiter.Release()
+			defer wg.Done()
+
+			epKey := ep.Method + " " + ep.Path
+			r.progress.currentEndpoint.Store(epKey)
+			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+
+			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			safeGen.Endpoint = epKey
+
+			built := buildSafePayload(ep, safeGen)
+			resolvedPath := fillPathParams(ep.Path, ep.PathParams, safeGen)
+
+			result := r.executeRequest(
+				ctx,
+				r.config.BaseURL, resolvedPath, ep.Path, ep.Method,
+				r.config.GlobalHeaders, r.config.Cookies,
+				built.body,
+				swagger.FuzzingProfile("BASELINE"),
+				built.queryParams,
+				built.headers,
+				ep.ContentType,
+			)
+
+			if r.config.Settings.Debug {
+				fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
+					ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
+			}
+
+			if result.Status >= 200 && result.Status < 300 {
+				r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)
+				r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
+			}
+
+			r.statsChan <- statsMsg{result: result, currentIteration: 1, totalIterations: 1}
+			r.Broadcast(Event{Type: EventResult, Data: result})
+
+			r.progress.completedEndpoints.Add(1)
+			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
+		}(endpoint)
+	}
+
+	wg.Wait()
+}
+
+// fuzzEndpoint runs all iterations for a single endpoint × profile combination.
 func (r *Runner) fuzzEndpoint(
 	ctx context.Context,
 	profileIdx int,
@@ -474,204 +367,52 @@ func (r *Runner) fuzzEndpoint(
 	gen *generator.Generator,
 	safeGen *generator.Generator,
 ) {
-	settings := r.config.Settings
 	endpoints := r.config.Endpoints
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
 
-	r.currentEndpoint.Store(epKey)
-	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx)) // #nosec G115
-
+	r.progress.currentEndpoint.Store(epKey)
+	r.progress.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx)) // #nosec G115
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
-	iterations := settings.IterationsPerProfile
-	minNeeded := generator.MinIterationsNeeded(profile, settings)
-	effectiveIterations := iterations
-	if minNeeded > effectiveIterations {
-		effectiveIterations = minNeeded
-	}
-	if !hasFields(&endpoint) {
-		if profile == swagger.ProfileMalicious {
-			effectiveIterations = minNeeded
-			if effectiveIterations < 1 {
-				effectiveIterations = 1
-			}
-		} else {
-			effectiveIterations = 1
-		}
-	}
-
-	defaultMaxPayloadSize := settings.MaxPayloadSizeBytes
-	if defaultMaxPayloadSize <= 0 {
-		defaultMaxPayloadSize = 1048576 // 1MB default
-	}
-
-	currentMaxPayloadSize := defaultMaxPayloadSize
-	if profile == swagger.ProfileBoundary {
-		if currentMaxPayloadSize < 536870912 {
-			currentMaxPayloadSize = 536870912
-		}
-	}
-
-	isBodyMethod := !isNoBodyMethod(endpoint.Method)
+	effectiveIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
+	maxPayload := calcMaxPayloadSize(profile, r.config.Settings)
 	enableDedup := profile == swagger.ProfileRandom
+
 	var wg sync.WaitGroup
 	seenHashes := make(map[uint32]bool)
-	delay := time.Duration(settings.DelayBetweenRequestMs) * time.Millisecond
+	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
-	for i := 0; i < effectiveIterations; i++ {
+	for i := range effectiveIter {
 		if r.stopped() {
 			break
 		}
 
-		// Determine if this is a security header fuzzing iteration.
-		// During header fuzzing, we send valid/safe body payloads to bypass
-		// application structure checks and isolate header-level vulnerabilities.
-		isSecHeaderIter := false
-		if profile == swagger.ProfileMalicious {
-			bodyIters := gen.BodyIterations()
-			if i >= bodyIters {
-				isSecHeaderIter = true
-			}
-		}
-
-		var payload any
-		var queryParams map[string]any
-		var payloadHash uint32 = payloads.HashStr("empty")
-		isDuplicate := false
-
-		if hasFields(&endpoint) {
-			for retries := 0; retries < 10; retries++ {
-				var generatedBody map[string]any
-				var generatedQP map[string]any
-
-				if isBodyMethod {
-					if len(endpoint.Schema.Properties) > 0 || endpoint.Schema.Type == "array" || endpoint.Schema.Type == "object" {
-						if profile == swagger.ProfileRandom && rand.Float64() < 0.15 { // #nosec G404
-							generatedBody = map[string]any{}
-						} else if isSecHeaderIter {
-							generatedBody = safeGen.BuildObject(&endpoint.Schema)
-						} else {
-							generatedBody = gen.BuildObject(&endpoint.Schema)
-						}
-					}
-					if len(endpoint.QueryParams) > 0 {
-						qpSchema := &swagger.SchemaProperty{
-							Type:       "object",
-							Properties: endpoint.QueryParams,
-						}
-						if isSecHeaderIter {
-							generatedQP = safeGen.BuildObject(qpSchema)
-						} else {
-							generatedQP = gen.BuildObject(qpSchema)
-						}
-					}
-				} else {
-					combinedProps := map[string]*swagger.SchemaProperty{}
-					for k, v := range endpoint.Schema.Properties {
-						combinedProps[k] = v
-					}
-					for k, v := range endpoint.QueryParams {
-						combinedProps[k] = v
-					}
-					if len(combinedProps) > 0 {
-						qpSchema := &swagger.SchemaProperty{
-							Type:       "object",
-							Properties: combinedProps,
-						}
-						if isSecHeaderIter {
-							generatedQP = safeGen.BuildObject(qpSchema)
-						} else {
-							generatedQP = gen.BuildObject(qpSchema)
-						}
-					}
-				}
-
-				buf := bufPool.Get().(*bytes.Buffer)
-				buf.Reset()
-				var err error
-				if generatedBody != nil {
-					err = json.NewEncoder(buf).Encode(generatedBody)
-				} else if !isBodyMethod && generatedQP != nil {
-					err = json.NewEncoder(buf).Encode(generatedQP)
-				} else {
-					_ = buf.WriteByte('{')
-					_ = buf.WriteByte('}')
-				}
-
-				if err != nil || buf.Len() > currentMaxPayloadSize {
-					bufPool.Put(buf)
-					isDuplicate = true
-					continue
-				}
-
-				payload = generatedBody
-				queryParams = generatedQP
-				b := buf.Bytes()
-				if len(b) > 0 && b[len(b)-1] == '\n' {
-					b = b[:len(b)-1]
-				}
-				payloadHash = payloads.HashBytes(b)
-				bufPool.Put(buf)
-
-				if enableDedup {
-					if !seenHashes[payloadHash] {
-						isDuplicate = false
-						break
-					}
-					isDuplicate = true
-				} else {
-					isDuplicate = false
-					break
-				}
-			}
-		} else {
-			if enableDedup {
-				isDuplicate = seenHashes[payloadHash]
-			}
-		}
-
+		isSecHeaderIter := isSecurityHeaderIteration(gen, profile, i)
+		built, payloadHash, isDuplicate := r.buildFuzzIteration(
+			endpoint, gen, safeGen, isSecHeaderIter, maxPayload, enableDedup, seenHashes,
+		)
 		if isDuplicate {
-			r.totalPlanned.Add(-1)
+			r.progress.totalPlanned.Add(-1)
 			continue
 		}
 		if enableDedup {
 			seenHashes[payloadHash] = true
 		}
 
-		// Generate fuzzed/safe headers sequentially in the main thread to prevent concurrency data races
-		generatedHeaders := make(map[string]string)
-		if len(endpoint.HeaderParams) > 0 {
-			var headerGen *generator.Generator
-			if isSecHeaderIter {
-				headerGen = safeGen
-			} else {
-				headerGen = gen
-			}
-			headerSchema := &swagger.SchemaProperty{
-				Type:       "object",
-				Properties: endpoint.HeaderParams,
-			}
-			headerObj := headerGen.BuildObject(headerSchema)
-			for k, v := range headerObj {
-				generatedHeaders[k] = fmt.Sprintf("%v", v)
-			}
-		}
-
-		// Inject custom security-test headers if this is a header fuzzing iteration
+		// Inject security-test headers if we are in a header-fuzzing iteration.
 		if isSecHeaderIter {
 			if secHeaders := gen.GenerateSecurityHeaders(); secHeaders != nil {
+				if built.headers == nil {
+					built.headers = make(map[string]string, len(secHeaders))
+				}
 				for k, v := range secHeaders {
-					generatedHeaders[k] = v
+					built.headers[k] = v
 				}
 			}
 		}
 
-		r.pauseMu.Lock()
-		for r.isPaused.Load() && !r.shouldStop.Load() {
-			r.pauseCond.Wait()
-		}
-		r.pauseMu.Unlock()
-		if r.shouldStop.Load() {
+		r.waitIfPaused()
+		if r.stopped() {
 			break
 		}
 
@@ -681,25 +422,15 @@ func (r *Runner) fuzzEndpoint(
 		wg.Add(1)
 
 		go func(it int, p any, qp map[string]any, gh map[string]string) {
-			defer func() {
-				r.limiter.Release()
-				wg.Done()
-			}()
+			defer r.limiter.Release()
+			defer wg.Done()
 
 			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
-
 			result := r.executeRequest(
 				ctx,
-				r.config.BaseURL,
-				resolvedPath,
-				endpoint.Path,
-				endpoint.Method,
-				r.config.GlobalHeaders,
-				r.config.Cookies,
-				p,
-				profile,
-				qp,
-				gh,
+				r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
+				r.config.GlobalHeaders, r.config.Cookies,
+				p, profile, qp, gh,
 				endpoint.ContentType,
 			)
 
@@ -708,13 +439,11 @@ func (r *Runner) fuzzEndpoint(
 				r.recordTimeBaseline(endpoint.Method, endpoint.Path, result.Duration)
 			}
 
-			// Send result to aggregator (buffered, non-blocking under normal load).
 			r.statsChan <- statsMsg{
 				result:           result,
 				currentIteration: it + 1,
-				totalIterations:  effectiveIterations,
+				totalIterations:  effectiveIter,
 			}
-			// Broadcast individual result immediately (lock-free MPSCQueue).
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
 			if result.Status >= 200 && result.Status < 300 {
@@ -722,7 +451,7 @@ func (r *Runner) fuzzEndpoint(
 				r.allResults = append(r.allResults, result)
 				r.resultsMu.Unlock()
 			}
-		}(i, payload, queryParams, generatedHeaders)
+		}(i, built.body, built.queryParams, built.headers)
 
 		if delay > 0 {
 			time.Sleep(delay)
@@ -731,46 +460,247 @@ func (r *Runner) fuzzEndpoint(
 
 	wg.Wait()
 
-	r.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx + 1)) // #nosec G115
+	r.progress.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx + 1)) // #nosec G115
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 }
 
-// Stop signals the runner to stop.
-func (r *Runner) Stop() {
-	r.shouldStop.Store(true)
-	r.isPaused.Store(false)
-	r.lifecycleMu.Lock()
-	if r.cancel != nil {
-		r.cancel()
+// ─── Iteration helpers ────────────────────────────────────────────────────────
+
+// buildFuzzIteration generates one payload attempt, enforces the size cap and
+// dedup check, and returns the result along with its hash and whether it was a
+// duplicate. The caller owns the outer retry loop via effectiveIter.
+func (r *Runner) buildFuzzIteration(
+	endpoint swagger.EndpointConfig,
+	gen, safeGen *generator.Generator,
+	isSecHeaderIter bool,
+	maxPayloadSize int,
+	enableDedup bool,
+	seenHashes map[uint32]bool,
+) (built generatedPayload, hash uint32, duplicate bool) {
+	const maxRetries = 10
+	hash = payloads.HashStr("empty")
+
+	if !hasFields(&endpoint) {
+		// No fields to generate — only headers differ per iteration.
+		built = generatedPayload{headers: buildHeaders(endpoint, selectGen(gen, safeGen, isSecHeaderIter))}
+		if enableDedup {
+			duplicate = seenHashes[hash]
+		}
+		return built, hash, duplicate
 	}
-	r.lifecycleMu.Unlock()
-	// Wake any goroutines waiting on pauseCond.
-	r.pauseCond.Broadcast()
-}
 
-// Pause pauses the runner.
-func (r *Runner) Pause() {
-	if r.isRunning.Load() {
-		r.isPaused.Store(true)
+	for range maxRetries {
+		attempt := buildFuzzPayload(endpoint, gen, safeGen, isSecHeaderIter, enableDedup)
+
+		// Size check via buffer pool.
+		buf := bufPool.Get().(*bytes.Buffer)
+		buf.Reset()
+		var encErr error
+		switch {
+		case attempt.body != nil:
+			encErr = json.NewEncoder(buf).Encode(attempt.body)
+		case attempt.queryParams != nil:
+			encErr = json.NewEncoder(buf).Encode(attempt.queryParams)
+		default:
+			buf.WriteByte('{')
+			buf.WriteByte('}')
+		}
+
+		if encErr != nil || buf.Len() > maxPayloadSize {
+			bufPool.Put(buf)
+			continue
+		}
+
+		payloadStr := strings.TrimSuffix(buf.String(), "\n")
+		hash = payloads.HashStr(payloadStr)
+		bufPool.Put(buf)
+
+		if enableDedup && seenHashes[hash] {
+			continue
+		}
+
+		return attempt, hash, false
 	}
+
+	// All retries exhausted — treat as duplicate to skip.
+	return generatedPayload{}, hash, true
 }
 
-// Resume resumes a paused runner.
-func (r *Runner) Resume() {
-	r.isPaused.Store(false)
-	r.pauseCond.Broadcast()
+// isSecurityHeaderIteration reports whether iteration i should use a safe
+// body payload and inject security-test headers instead of fuzzing the body.
+func isSecurityHeaderIteration(gen *generator.Generator, profile swagger.FuzzingProfile, i int) bool {
+	if profile != swagger.ProfileMalicious {
+		return false
+	}
+	return i >= gen.BodyIterations()
 }
 
-// IsRunning returns whether the runner is active.
-func (r *Runner) IsRunning() bool {
-	return r.isRunning.Load()
+// waitIfPaused blocks the calling goroutine until the runner is resumed or
+// stopped. It must only be called from the main iteration loop (single writer).
+func (r *Runner) waitIfPaused() {
+	r.pause.mu.Lock()
+	for r.lifecycle.isPaused.Load() && !r.lifecycle.shouldStop.Load() {
+		r.pause.cond.Wait()
+	}
+	r.pause.mu.Unlock()
 }
 
-// ─── Private ────────────────────────────────────────────
+// ─── Profile / iteration helpers ─────────────────────────────────────────────
 
-func (r *Runner) stopped() bool { return r.shouldStop.Load() }
+// getOrderedProfiles returns configured profiles with boundary testing last,
+// ensuring cheap profiles run first so results arrive early.
+func (r *Runner) getOrderedProfiles() []swagger.FuzzingProfile {
+	var light, heavy []swagger.FuzzingProfile
+	for _, p := range r.config.Settings.Profiles {
+		if p == swagger.ProfileBoundary {
+			heavy = append(heavy, p)
+		} else {
+			light = append(light, p)
+		}
+	}
+	return append(light, heavy...)
+}
 
-func (r *Runner) paused() bool { return r.isPaused.Load() }
+// calcEffectiveIterations computes how many iterations to run for the given
+// profile × endpoint combination, honouring the minimum iterations constraint.
+func calcEffectiveIterations(
+	profile swagger.FuzzingProfile,
+	settings swagger.Settings,
+	endpoint *swagger.EndpointConfig,
+) int {
+	minNeeded := generator.MinIterationsNeeded(profile, settings)
+	n := settings.IterationsPerProfile
+	if minNeeded > n {
+		n = minNeeded
+	}
+	if hasFields(endpoint) {
+		return n
+	}
+	// No fields: most profiles only need 1 iteration; malicious needs the
+	// minimum (at least 1) to cover its header-fuzzing iterations.
+	if profile == swagger.ProfileMalicious {
+		if minNeeded < 1 {
+			return 1
+		}
+		return minNeeded
+	}
+	return 1
+}
 
-// ConcurrencyLimiter is a dynamic, thread-safe semaphore that allows
-// adjusting the worker limit on the fly.
+// calcMaxPayloadSize returns the per-profile payload size ceiling in bytes.
+func calcMaxPayloadSize(profile swagger.FuzzingProfile, settings swagger.Settings) int {
+	limit := settings.MaxPayloadSizeBytes
+	if limit <= 0 {
+		limit = defaultMaxPayloadBytes
+	}
+	if profile == swagger.ProfileBoundary && limit < boundaryMaxPayloadBytes {
+		limit = boundaryMaxPayloadBytes
+	}
+	return limit
+}
+
+// calculateTotalPlanned pre-computes the total number of requests that will be
+// sent during the run and stores it for progress reporting.
+func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
+	settings := r.config.Settings
+	endpoints := r.config.Endpoints
+	var total int64
+
+	// 1. Baseline: 1 request per endpoint.
+	total += int64(len(endpoints))
+
+	// 2. Fuzz profiles.
+	for _, ep := range endpoints {
+		for _, p := range profiles {
+			total += int64(calcEffectiveIterations(p, settings, &ep))
+		}
+	}
+
+	// 3. Rate-limit phase burst requests.
+	if settings.RateLimitCheck {
+		burst := settings.RateLimitBurstSize
+		if burst <= 0 {
+			burst = 50
+		}
+		if burst > 1000 {
+			burst = 1000
+		}
+		total += int64(len(endpoints) * burst)
+	}
+
+	r.progress.totalPlanned.Store(total)
+
+	totalEP := len(endpoints) + len(profiles)*len(endpoints)
+	if settings.RateLimitCheck {
+		totalEP += len(endpoints)
+	}
+	r.progress.totalEndpoints.Store(int32(totalEP)) // #nosec G115
+}
+
+// ─── Run lifecycle helpers ────────────────────────────────────────────────────
+
+// initRun validates that no run is active, initialises all per-run state, and
+// returns a new context that is cancelled when Stop() is called.
+func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
+	r.lifecycle.mu.Lock()
+	defer r.lifecycle.mu.Unlock()
+
+	if r.lifecycle.isRunning.Load() {
+		return nil, fmt.Errorf("already running")
+	}
+
+	r.lifecycle.isRunning.Store(true)
+	r.lifecycle.isPaused.Store(false)
+	r.lifecycle.shouldStop.Store(false)
+
+	// Re-create channels (may have been closed by a previous run).
+	r.statsChan = make(chan statsMsg, 4096)
+	r.statsDone = make(chan struct{})
+
+	empty := newEmptyStats()
+	r.latestStats.Store(&empty)
+	r.sizeBaselines = &sync.Map{}
+	r.timeBaselines = &sync.Map{}
+
+	oob.GlobalStore.Clear()
+
+	ctx, cancel := context.WithCancel(parentCtx)
+	r.lifecycle.cancel = cancel
+
+	go r.statsAggregator()
+
+	r.resultsMu.Lock()
+	r.allResults = nil
+	r.resultsMu.Unlock()
+
+	return ctx, nil
+}
+
+// finaliseRun is deferred in Start() to cancel the run context, drain stats,
+// update the lifecycle flag, and broadcast the completion event.
+func (r *Runner) finaliseRun() {
+	r.lifecycle.mu.Lock()
+	if r.lifecycle.cancel != nil {
+		r.lifecycle.cancel()
+	}
+	r.lifecycle.mu.Unlock()
+
+	// Signal stats aggregator to flush and exit.
+	close(r.statsChan)
+	<-r.statsDone
+
+	r.lifecycle.isRunning.Store(false)
+
+	final := r.GetStats()
+	final.IsRunning = false
+	final.Progress.CurrentEndpoint = ""
+	final.Progress.CurrentProfile = ""
+	r.latestStats.Store(&final)
+	r.Broadcast(Event{Type: EventComplete, Data: final})
+}
+
+// ─── Private helpers ──────────────────────────────────────────────────────────
+
+func (r *Runner) stopped() bool { return r.lifecycle.shouldStop.Load() }
+
+func (r *Runner) paused() bool { return r.lifecycle.isPaused.Load() }

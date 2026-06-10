@@ -473,29 +473,28 @@ func TestBuildPathsToTest(t *testing.T) {
 		Method:       "GET",
 	}
 
-	pathsToTest, pathToID, paramName := r.buildPathsToTest(cand)
+	targets, paramName := r.buildPathsToTest(cand)
 
 	if paramName != "id" {
 		t.Errorf("Expected paramName 'id', got '%s'", paramName)
 	}
 
-	if len(pathsToTest) != 3 { // original + 2 harvested
-		t.Fatalf("Expected 3 paths to test, got %d", len(pathsToTest))
+	if len(targets) != 3 { // original + 2 harvested
+		t.Fatalf("Expected 3 targets, got %d", len(targets))
 	}
 
-	expectedPaths := map[string]bool{
-		"/api/test/originalID": true,
-		"/api/test/harvest1":   true,
-		"/api/test/harvest2":   true,
+	expectedTargets := map[string]string{
+		"/api/test/originalID": "",
+		"/api/test/harvest1":   "harvest1",
+		"/api/test/harvest2":   "harvest2",
 	}
 
-	for _, p := range pathsToTest {
-		if !expectedPaths[p] {
-			t.Errorf("Unexpected path in pathsToTest: %s", p)
+	for _, target := range targets {
+		expID, exists := expectedTargets[target.path]
+		if !exists {
+			t.Errorf("Unexpected path in targets: %s", target.path)
+		} else if target.id != expID {
+			t.Errorf("Expected ID %q for path %s, got %q", expID, target.path, target.id)
 		}
-	}
-
-	if pathToID["/api/test/harvest1"] != "harvest1" {
-		t.Errorf("Expected pathToID mapping for harvest1")
 	}
 }
