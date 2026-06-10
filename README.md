@@ -200,7 +200,7 @@ Comprehensive documentation, including installation guides, usage instructions, 
 ## 🧩 Adding Custom Error Detectors
 
 New developers can easily add custom finding categories and error signature rules to the scanner. Custom detectors are defined as regex patterns in a single central registry in the backend engine:
-- Edit the [custom.go](file:///Users/alex/src/swazz/packages/container/internal/analyzer/custom.go) file.
+- Edit the [custom.go](./packages/container/internal/analyzer/custom.go) file.
 - Append a new `CustomRule` to the `CustomRules` slice in that file:
   ```go
   var CustomRules = []CustomRule{
