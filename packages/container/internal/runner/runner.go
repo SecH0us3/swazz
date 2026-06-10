@@ -110,20 +110,26 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 			},
 		}
 		security.ConfigureTransport(client.Transport.(*http.Transport))
-	} else if client.Transport == nil {
-		client.Transport = &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+	} else {
+		cloned := *client
+		if cloned.Transport == nil {
+			cloned.Transport = &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			}
+			security.ConfigureTransport(cloned.Transport.(*http.Transport))
+		} else if transport, ok := cloned.Transport.(*http.Transport); ok {
+			clonedTransport := transport.Clone()
+			security.ConfigureTransport(clonedTransport)
+			cloned.Transport = clonedTransport
 		}
-		security.ConfigureTransport(client.Transport.(*http.Transport))
-	} else if transport, ok := client.Transport.(*http.Transport); ok {
-		security.ConfigureTransport(transport)
+		client = &cloned
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 	r := &Runner{
