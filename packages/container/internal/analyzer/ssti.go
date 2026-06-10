@@ -9,9 +9,14 @@ import (
 
 type SSTIAnalyzer struct{}
 
-var sstiExpressions = map[string]string{
-	"7*7":   "49",
-	"7+'7'": "77",
+var sstiRawExprBytes = map[string][]byte{
+	"7*7":   []byte("7*7"),
+	"7+'7'": []byte("7+'7'"),
+}
+
+var sstiEvalValBytes = map[string][]byte{
+	"7*7":   []byte("49"),
+	"7+'7'": []byte("77"),
 }
 
 func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -31,13 +36,13 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			continue
 		}
 
-		for rawExpr, evalVal := range sstiExpressions {
+		for rawExpr, rawExprBytes := range sstiRawExprBytes {
 			if strings.Contains(payloadStr, rawExpr) {
-				rawExprBytes := []byte(rawExpr)
-				evalValBytes := []byte(evalVal)
+				evalValBytes := sstiEvalValBytes[rawExpr]
 				// Match evaluated value as a standalone number (not adjacent to other digits)
 				// and ensure the raw expression itself was not simply reflected back.
 				if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
+					evalVal := string(evalValBytes)
 					findings = append(findings, swagger.AnalysisFinding{
 						RuleID:   "swazz/ssti-leak",
 						Level:    "error",
