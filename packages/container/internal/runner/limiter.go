@@ -10,6 +10,7 @@ type ConcurrencyLimiter struct {
 	waitChan chan struct{} // Closed and recreated to notify waiters
 	target   int
 	current  int
+	waiters  int
 }
 
 func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
@@ -35,8 +36,10 @@ func (l *ConcurrencyLimiter) SetTarget(target int) {
 		target = 1000
 	}
 	l.target = target
-	close(l.waitChan)
-	l.waitChan = make(chan struct{})
+	if l.waiters > 0 {
+		close(l.waitChan)
+		l.waitChan = make(chan struct{})
+	}
 	l.mu.Unlock()
 }
 
@@ -55,12 +58,18 @@ func (l *ConcurrencyLimiter) Acquire(ctx context.Context) error {
 			return nil
 		}
 		ch := l.waitChan
+		l.waiters++
 		l.mu.Unlock()
 
 		select {
 		case <-ch:
-			// wait channel was closed (notified of release or target change), retry
+			l.mu.Lock()
+			l.waiters--
+			l.mu.Unlock()
 		case <-ctx.Done():
+			l.mu.Lock()
+			l.waiters--
+			l.mu.Unlock()
 			return ctx.Err()
 		}
 	}
@@ -69,8 +78,10 @@ func (l *ConcurrencyLimiter) Acquire(ctx context.Context) error {
 func (l *ConcurrencyLimiter) Release() {
 	l.mu.Lock()
 	l.current--
-	close(l.waitChan)
-	l.waitChan = make(chan struct{})
+	if l.waiters > 0 {
+		close(l.waitChan)
+		l.waitChan = make(chan struct{})
+	}
 	l.mu.Unlock()
 }
 
