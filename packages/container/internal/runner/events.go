@@ -126,10 +126,13 @@ func safeSend(ch chan Event, evt Event, timeout time.Duration) (ok bool) {
 		}
 	}()
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	select {
 	case ch <- evt:
 		return true
-	case <-time.After(timeout):
+	case <-timer.C:
 		return false
 	}
 }

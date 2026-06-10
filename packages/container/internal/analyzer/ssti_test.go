@@ -103,7 +103,7 @@ func TestHasStandaloneNumber(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := hasStandaloneNumber(tt.body, tt.val)
+		got := hasStandaloneNumber([]byte(tt.body), []byte(tt.val))
 		if got != tt.expected {
 			t.Errorf("hasStandaloneNumber(%q, %q) = %v, want %v", tt.body, tt.val, got, tt.expected)
 		}

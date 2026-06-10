@@ -249,10 +249,13 @@ func (r *Runner) executeRequest(
 			reqCancel()
 			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
+			timer := time.NewTimer(backoff + jitter)
 			select {
-			case <-time.After(backoff + jitter):
+			case <-timer.C:
+				timer.Stop()
 				continue
 			case <-ctx.Done():
+				timer.Stop()
 				return &swagger.FuzzResult{
 					ID: uuid.New().String(), Endpoint: originalPath, ResolvedPath: resolvedPath,
 					Method: method, Profile: profile, Status: 429, Duration: duration,
@@ -447,6 +450,7 @@ func (r *Runner) extractChainingVariables(endpoint string, resp *http.Response, 
 		if valStr != "" {
 			r.stateMu.Lock()
 			r.state[cr.VariableName] = valStr
+			r.updateStateReplacerLocked()
 			r.stateMu.Unlock()
 		}
 	}

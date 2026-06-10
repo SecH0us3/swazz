@@ -70,8 +70,8 @@ func NewSSRFProtectedTransport(allowPrivate bool) http.RoundTripper {
 			}
 			return nil, fmt.Errorf("failed to connect to any resolved IPs: %w", lastErr)
 		},
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 20,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
 		IdleConnTimeout:     90 * time.Second,
 	}
 }

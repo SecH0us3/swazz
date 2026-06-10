@@ -365,8 +365,10 @@ func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandid
 			continue
 		}
 
+		if err := r.limiter.Acquire(ctx); err != nil {
+			break
+		}
 		candWg.Add(1)
-		r.limiter.Acquire()
 
 		go func(ep swagger.EndpointConfig) {
 			defer r.limiter.Release()
@@ -572,8 +574,10 @@ func (r *Runner) replayCandidates(ctx context.Context, candidates []*swagger.Fuz
 	var bolaWg sync.WaitGroup
 
 	for _, cand := range candidates {
+		if err := r.limiter.Acquire(ctx); err != nil {
+			break
+		}
 		bolaWg.Add(1)
-		r.limiter.Acquire()
 
 		go func(cand *swagger.FuzzResult) {
 			defer r.limiter.Release()

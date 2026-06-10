@@ -134,3 +134,12 @@ func HashStr(s string) uint32 {
 	}
 	return h
 }
+
+// HashBytes computes a fast djb2 hash of a byte slice — used for payload dedup.
+func HashBytes(b []byte) uint32 {
+	var h uint32 = 5381
+	for i := 0; i < len(b); i++ {
+		h = (h << 5) + h + uint32(b[i])
+	}
+	return h
+}

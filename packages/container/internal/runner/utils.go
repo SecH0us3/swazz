@@ -225,66 +225,59 @@ func truncateValue(v any, maxLen int) any {
 	}
 }
 
+func (r *Runner) updateStateReplacerLocked() {
+	args := make([]string, 0, len(r.state)*2)
+	for k, v := range r.state {
+		args = append(args, "{{"+k+"}}", v)
+	}
+	if len(args) > 0 {
+		r.stateReplacer = strings.NewReplacer(args...)
+	} else {
+		r.stateReplacer = nil
+	}
+}
+
 func (r *Runner) subStateVars(input string) string {
 	if !strings.Contains(input, "{{") {
 		return input
 	}
 
 	r.stateMu.RLock()
-	defer r.stateMu.RUnlock()
-	
-	if len(r.state) == 0 {
-		return input
-	}
-	
-	for k, v := range r.state {
-		placeholder := "{{" + k + "}}"
-		if strings.Contains(input, placeholder) {
-			input = strings.ReplaceAll(input, placeholder, v)
-		}
+	replacer := r.stateReplacer
+	r.stateMu.RUnlock()
+
+	if replacer != nil {
+		return replacer.Replace(input)
 	}
 	return input
 }
 
 func (r *Runner) subStateVarsAny(v any) any {
 	r.stateMu.RLock()
-	if len(r.state) == 0 {
-		r.stateMu.RUnlock()
+	defer r.stateMu.RUnlock()
+	if r.stateReplacer == nil {
 		return v
 	}
-	// Copy state to avoid holding lock during recursive subVars
-	stateCopy := make(map[string]string, len(r.state))
-	for k, v := range r.state {
-		stateCopy[k] = v
-	}
-	r.stateMu.RUnlock()
-
-	return subVarsRecursive(v, stateCopy)
+	return subVarsRecursive(v, r.stateReplacer)
 }
 
-func subVarsRecursive(v any, state map[string]string) any {
+func subVarsRecursive(v any, replacer *strings.Replacer) any {
 	switch val := v.(type) {
 	case string:
-		if !strings.Contains(val, "{{") {
+		if !strings.Contains(val, "{{") || replacer == nil {
 			return val
 		}
-		for k, sv := range state {
-			placeholder := "{{" + k + "}}"
-			if strings.Contains(val, placeholder) {
-				val = strings.ReplaceAll(val, placeholder, sv)
-			}
-		}
-		return val
+		return replacer.Replace(val)
 	case map[string]any:
-		res := make(map[string]any)
+		res := make(map[string]any, len(val))
 		for k, v := range val {
-			res[k] = subVarsRecursive(v, state)
+			res[k] = subVarsRecursive(v, replacer)
 		}
 		return res
 	case []any:
 		res := make([]any, len(val))
 		for i, v := range val {
-			res[i] = subVarsRecursive(v, state)
+			res[i] = subVarsRecursive(v, replacer)
 		}
 		return res
 	default:

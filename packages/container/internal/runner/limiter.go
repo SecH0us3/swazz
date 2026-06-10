@@ -1,12 +1,15 @@
 package runner
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type ConcurrencyLimiter struct {
-	mu      sync.Mutex
-	cond    *sync.Cond
-	target  int
-	current int
+	mu       sync.Mutex
+	waitChan chan struct{} // Closed and recreated to notify waiters
+	target   int
+	current  int
 }
 
 func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
@@ -16,8 +19,10 @@ func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
 	if initial > 1000 {
 		initial = 1000
 	}
-	l := &ConcurrencyLimiter{target: initial}
-	l.cond = sync.NewCond(&l.mu)
+	l := &ConcurrencyLimiter{
+		target:   initial,
+		waitChan: make(chan struct{}),
+	}
 	return l
 }
 
@@ -30,7 +35,8 @@ func (l *ConcurrencyLimiter) SetTarget(target int) {
 		target = 1000
 	}
 	l.target = target
-	l.cond.Broadcast()
+	close(l.waitChan)
+	l.waitChan = make(chan struct{})
 	l.mu.Unlock()
 }
 
@@ -40,20 +46,32 @@ func (l *ConcurrencyLimiter) GetTarget() int {
 	return l.target
 }
 
-func (l *ConcurrencyLimiter) Acquire() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for l.current >= l.target {
-		l.cond.Wait()
+func (l *ConcurrencyLimiter) Acquire(ctx context.Context) error {
+	for {
+		l.mu.Lock()
+		if l.current < l.target {
+			l.current++
+			l.mu.Unlock()
+			return nil
+		}
+		ch := l.waitChan
+		l.mu.Unlock()
+
+		select {
+		case <-ch:
+			// wait channel was closed (notified of release or target change), retry
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	l.current++
 }
 
 func (l *ConcurrencyLimiter) Release() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.current--
-	l.cond.Signal()
+	close(l.waitChan)
+	l.waitChan = make(chan struct{})
+	l.mu.Unlock()
 }
 
 func (r *Runner) GetConcurrency() int {

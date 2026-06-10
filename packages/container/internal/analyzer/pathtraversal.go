@@ -1,20 +1,20 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
-	"strings"
 	"swazz-engine/internal/swagger"
 )
 
 type PathTraversalAnalyzer struct{}
 
-var pathTraversalSignatures = []string{
-	"root:x:0:0:",
-	"/bin/sh",
-	"/bin/bash",
-	"[extensions]",
-	"[fonts]",
-	"[mci extensions]",
+var pathTraversalSignatures = [][]byte{
+	[]byte("root:x:0:0:"),
+	[]byte("/bin/sh"),
+	[]byte("/bin/bash"),
+	[]byte("[extensions]"),
+	[]byte("[fonts]"),
+	[]byte("[mci extensions]"),
 }
 
 func (a *PathTraversalAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
@@ -25,16 +25,15 @@ func (a *PathTraversalAnalyzer) Analyze(input *AnalysisInput) []swagger.Analysis
 		return nil
 	}
 
-	bodyStr := string(input.ResponseBody)
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range pathTraversalSignatures {
-		if strings.Contains(bodyStr, sig) {
+		if bytes.Contains(input.ResponseBody, sig) {
 			findings = append(findings, swagger.AnalysisFinding{
 				RuleID:   "swazz/path-traversal-leak",
 				Level:    "error",
-				Message:  fmt.Sprintf("Path traversal or file inclusion leak signature '%s' detected in response body.", sig),
-				Evidence: fmt.Sprintf("Found leaked signature: %s", sig),
+				Message:  fmt.Sprintf("Path traversal or file inclusion leak signature '%s' detected in response body.", string(sig)),
+				Evidence: fmt.Sprintf("Found leaked signature: %s", string(sig)),
 			})
 			break
 		}

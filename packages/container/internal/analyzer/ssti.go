@@ -1,10 +1,10 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"swazz-engine/internal/swagger"
-	"unicode"
 )
 
 type SSTIAnalyzer struct{}
@@ -24,7 +24,6 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
-	bodyStr := string(input.ResponseBody)
 	var findings []swagger.AnalysisFinding
 
 	for _, payloadStr := range sentStrings {
@@ -34,9 +33,11 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 
 		for rawExpr, evalVal := range sstiExpressions {
 			if strings.Contains(payloadStr, rawExpr) {
+				rawExprBytes := []byte(rawExpr)
+				evalValBytes := []byte(evalVal)
 				// Match evaluated value as a standalone number (not adjacent to other digits)
 				// and ensure the raw expression itself was not simply reflected back.
-				if hasStandaloneNumber(bodyStr, evalVal) && !strings.Contains(bodyStr, rawExpr) {
+				if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 					findings = append(findings, swagger.AnalysisFinding{
 						RuleID:   "swazz/ssti-leak",
 						Level:    "error",
@@ -54,10 +55,10 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 
 // hasStandaloneNumber returns true if val appears in body as a standalone number,
 // i.e. not immediately adjacent to other digit characters.
-func hasStandaloneNumber(body, val string) bool {
+func hasStandaloneNumber(body, val []byte) bool {
 	idx := 0
 	for {
-		i := strings.Index(body[idx:], val)
+		i := bytes.Index(body[idx:], val)
 		if i == -1 {
 			return false
 		}
@@ -66,14 +67,16 @@ func hasStandaloneNumber(body, val string) bool {
 
 		beforeOk := true
 		if start > 0 {
-			if unicode.IsDigit(rune(body[start-1])) {
+			c := body[start-1]
+			if c >= '0' && c <= '9' {
 				beforeOk = false
 			}
 		}
 
 		afterOk := true
 		if end < len(body) {
-			if unicode.IsDigit(rune(body[end])) {
+			c := body[end]
+			if c >= '0' && c <= '9' {
 				afterOk = false
 			}
 		}

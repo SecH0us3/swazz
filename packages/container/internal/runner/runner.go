@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -85,10 +86,11 @@ type Runner struct {
 	csrfMu          sync.RWMutex
 	activeCSRFToken string
 
-	stateMu      sync.RWMutex
-	state        map[string]string
-	regexCache   map[string]*regexp.Regexp
-	regexCacheMu sync.RWMutex
+	stateMu       sync.RWMutex
+	state         map[string]string
+	stateReplacer *strings.Replacer
+	regexCache    map[string]*regexp.Regexp
+	regexCacheMu  sync.RWMutex
 }
 
 // New creates a new Runner.
@@ -96,7 +98,37 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 	if client == nil {
 		client = &http.Client{
 			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          1000,
+				MaxIdleConnsPerHost:   1000,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
 		}
+	} else if client.Transport == nil {
+		client.Transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          1000,
+			MaxIdleConnsPerHost:   1000,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+	} else if transport, ok := client.Transport.(*http.Transport); ok {
+		transport.MaxIdleConns = 1000
+		transport.MaxIdleConnsPerHost = 1000
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 	r := &Runner{
@@ -204,7 +236,9 @@ func (r *Runner) Start(ctx context.Context) error {
 		}
 		key := fmt.Sprintf("%s %s", strings.ToUpper(endpoint.Method), endpoint.Path)
 		if _, ok := r.sizeBaselines.Load(key); !ok {
-			r.limiter.Acquire()
+			if err := r.limiter.Acquire(ctx); err != nil {
+				break
+			}
 			wg.Add(1)
 
 			go func(ep swagger.EndpointConfig) {
@@ -571,8 +605,11 @@ func (r *Runner) fuzzEndpoint(
 
 				payload = generatedBody
 				queryParams = generatedQP
-				payloadStr := strings.TrimSuffix(buf.String(), "\n")
-				payloadHash = payloads.HashStr(payloadStr)
+				b := buf.Bytes()
+				if len(b) > 0 && b[len(b)-1] == '\n' {
+					b = b[:len(b)-1]
+				}
+				payloadHash = payloads.HashBytes(b)
 				bufPool.Put(buf)
 
 				if enableDedup {
@@ -637,7 +674,9 @@ func (r *Runner) fuzzEndpoint(
 			break
 		}
 
-		r.limiter.Acquire()
+		if err := r.limiter.Acquire(ctx); err != nil {
+			break
+		}
 		wg.Add(1)
 
 		go func(it int, p any, qp map[string]any, gh map[string]string) {
