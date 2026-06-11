@@ -1,104 +1,85 @@
-import { describe, it, expect, vi } from "vitest";
-import worker, { SwazzContainer } from "./index";
+import { describe, it, expect, vi, beforeAll } from "vitest";
+import { env } from "cloudflare:test";
+import app, { RunnerCoordinator } from "./index";
 
-describe("Swazz Worker", () => {
+describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {
     const req = new Request("http://localhost/");
-    const env = { SWAZZ_DO: {} as DurableObjectNamespace };
-
-    const res = await worker.fetch(req, env);
+    const res = await app.fetch(req, env);
     expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("application/json");
-
     const body = await res.json();
-    expect(body).toEqual({
-      service: "swazz-edge",
-      status: "ok",
-      message: "Use /api/* to interact with the fuzzing engine",
-    });
+    expect(body).toEqual({ service: "swazz-edge", status: "ok" });
   });
 
-  it("proxies /api/* to DO", async () => {
-    const req = new Request("http://localhost/api/test");
-
-    const mockStub = {
-      fetch: vi.fn().mockResolvedValue(new Response("proxied")),
-    };
-
-    const mockDo = {
-      idFromName: vi.fn().mockReturnValue("mock-id"),
-      get: vi.fn().mockReturnValue(mockStub),
-    };
-
-    const env = { SWAZZ_DO: mockDo as unknown as DurableObjectNamespace };
-
-    const res = await worker.fetch(req, env);
-    expect(mockDo.idFromName).toHaveBeenCalledWith("global-swazz");
-    expect(mockDo.get).toHaveBeenCalledWith("mock-id");
-    expect(mockStub.fetch).toHaveBeenCalledWith(req);
-
+  it("auth_enabled is false by default in info endpoint", async () => {
+    const req = new Request("http://localhost/api/info");
+    const res = await app.fetch(req, env);
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("proxied");
-  });
-
-  it("proxies /health to DO", async () => {
-    const req = new Request("http://localhost/health");
-
-    const mockStub = {
-      fetch: vi.fn().mockResolvedValue(new Response("health ok")),
-    };
-
-    const mockDo = {
-      idFromName: vi.fn().mockReturnValue("mock-id"),
-      get: vi.fn().mockReturnValue(mockStub),
-    };
-
-    const env = { SWAZZ_DO: mockDo as unknown as DurableObjectNamespace };
-
-    const res = await worker.fetch(req, env);
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("health ok");
-  });
-
-  it("returns 404 for unknown routes", async () => {
-    const req = new Request("http://localhost/unknown");
-    const env = { SWAZZ_DO: {} as DurableObjectNamespace };
-
-    const res = await worker.fetch(req, env);
-    expect(res.status).toBe(404);
-    expect(await res.text()).toBe("Not Found");
+    const body = await res.json();
+    expect(body).toEqual({ auth_enabled: false, version: "1.0.0" });
   });
 });
 
-describe("SwazzContainer", () => {
-  it("instantiates and proxies fetch to containerFetch", async () => {
-    // Mock the containerFetch on the prototype as the DO base class doesn't allow easy instantiation
-    // without the proper Cloudflare context
-    const origContainerFetch = SwazzContainer.prototype.containerFetch;
+describe("D1 Database Migrations & API", () => {
+  it("can insert and retrieve a user (verifying users table exists)", async () => {
+    // Insert directly into DB to check schema
+    await env.DB.prepare('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)')
+      .bind('test-user-id', 'test@example.com', 'hash123')
+      .run();
 
-    const mockContainerFetch = vi.fn().mockResolvedValue(new Response("container response"));
-    SwazzContainer.prototype.containerFetch = mockContainerFetch;
+    const result = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind('test-user-id').first();
+    expect(result?.email).toBe('test@example.com');
+  });
 
-    try {
-      // Create an instance bypassing the constructor to avoid DurableObjectState checks
-      const container = Object.create(SwazzContainer.prototype);
-      // Run the constructor's side-effects (property initialization)
-      container.defaultPort = 8080;
-      container.sleepAfter = 120;
+  it("can register a new user via API", async () => {
+    const req = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "newuser@example.com", password: "password123" })
+    });
+    
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("ok");
+    expect(typeof body.id).toBe("string");
+  });
 
-      expect(container.defaultPort).toBe(8080);
-      expect(container.sleepAfter).toBe(120);
+  it("can login with registered user", async () => {
+    const req = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "newuser@example.com", password: "password123" })
+    });
+    
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("ok");
+    expect(typeof body.token).toBe("string");
+  });
 
-      // Verify that calling fetch on the container correctly delegates to containerFetch
-      const req = new Request("http://localhost/mock");
-      const res = await container.fetch(req);
-
-      // Because defaultPort is set to 8080, Container.prototype.fetch automatically passes 8080 as the second argument
-      expect(mockContainerFetch).toHaveBeenCalledWith(req, 8080);
-      expect(await res.text()).toBe("container response");
-    } finally {
-      // Restore the original containerFetch
-      SwazzContainer.prototype.containerFetch = origContainerFetch;
+  it("blocks login after 5 failed attempts (rate limiting)", async () => {
+    // Attempt 5 bad logins
+    for (let i = 0; i < 5; i++) {
+      const req = new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "newuser@example.com", password: "wrong" })
+      });
+      const res = await app.fetch(req, env);
+      expect(res.status).toBe(401); // Invalid credentials
     }
+
+    // 6th attempt should hit rate limit (429)
+    const req = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "newuser@example.com", password: "password123" })
+    });
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toContain("locked");
   });
 });

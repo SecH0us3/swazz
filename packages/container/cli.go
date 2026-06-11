@@ -17,6 +17,7 @@ import (
 	"swazz-engine/internal/har"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -104,166 +105,9 @@ func runCLI(args []string) {
 		cliCfg.Settings.Debug = true
 	}
 
-	// Standardize compatibility aliases and merge them:
-	if len(cliCfg.GlobalHeaders) > 0 {
-		if cliCfg.Headers == nil {
-			cliCfg.Headers = make(map[string]string)
-		}
-		for k, v := range cliCfg.GlobalHeaders {
-			if _, exists := cliCfg.Headers[k]; !exists {
-				cliCfg.Headers[k] = v
-			}
-		}
-	}
-
-	if len(cliCfg.SwaggerURLsAlias) > 0 {
-		for _, urlStr := range cliCfg.SwaggerURLsAlias {
-			found := false
-			for _, existing := range cliCfg.SwaggerURLs {
-				if existing == urlStr {
-					found = true
-					break
-				}
-			}
-			if !found {
-				cliCfg.SwaggerURLs = append(cliCfg.SwaggerURLs, urlStr)
-			}
-		}
-	}
-
-	if len(cliCfg.DisabledEndpoints) > 0 {
-		if cliCfg.Endpoints == nil {
-			cliCfg.Endpoints = &struct {
-				Include []string `json:"include"`
-				Exclude []string `json:"exclude"`
-			}{}
-		}
-		for _, ep := range cliCfg.DisabledEndpoints {
-			found := false
-			for _, existing := range cliCfg.Endpoints.Exclude {
-				if existing == ep {
-					found = true
-					break
-				}
-			}
-			if !found {
-				cliCfg.Endpoints.Exclude = append(cliCfg.Endpoints.Exclude, ep)
-			}
-		}
-	}
-
-	// Validate the configuration schema
-	if err := cliCfg.Validate(); err != nil {
-		log.Fatalf("Configuration validation failed: %v", err)
-	}
-
-	if len(cliCfg.SwaggerURLs) == 0 {
-		log.Fatalf("Config must specify at least one swagger_url")
-	}
-
-	if cliCfg.Settings.IterationsPerProfile <= 0 {
-		cliCfg.Settings = swagger.DefaultSettings()
-	}
-	if len(cliCfg.Settings.Profiles) == 0 {
-		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
-	}
-
-	// 2. Fetch and parse specs
-	var allEndpoints []swagger.EndpointConfig
-	basePath := cliCfg.BaseURL
-
-	for _, urlStr := range cliCfg.SwaggerURLs {
-		specRaw, err := fetchSpec(urlStr, cliCfg.Headers, cliCfg.Security.AllowPrivateIPs)
-		if err != nil {
-			log.Fatalf("Failed to fetch spec %s: %v", urlStr, err)
-		}
-		parsed, err := swagger.ParseRawSpec(specRaw)
-		if err != nil {
-			if swagger.IsHAR(specRaw) {
-				parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
-				if errHAR != nil {
-					log.Fatalf("Failed to parse spec %s as HAR: %v", urlStr, errHAR)
-				}
-				parsed = parsedHAR
-			} else 
-
-			if swagger.IsPostman(specRaw) {
-				parsedPostman, errPostman := postman.ParsePostman(specRaw)
-				if errPostman != nil {
-					log.Fatalf("Failed to parse spec %s as Postman Collection: %v", urlStr, errPostman)
-				}
-				parsed = parsedPostman
-			} else {
-				// Try GraphQL parser fallback
-				defaultPath := "/graphql"
-				if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-					if parsedURL.Path != "" && parsedURL.Path != "/" {
-						defaultPath = parsedURL.Path
-					}
-				}
-				parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-				if errGQL != nil {
-					log.Fatalf("Failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
-				}
-				parsed = parsedGQL
-			}
-		}
-		if basePath == "" {
-			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
-				basePath = parsedURL.Scheme + "://" + parsedURL.Host
-			} else {
-				basePath = parsed.BasePath
-			}
-		}
-		allEndpoints = append(allEndpoints, parsed.Endpoints...)
-	}
-
-	if basePath == "" {
-		log.Fatalf("No base_url found in config or specs")
-	}
-
-	// 3. Filter endpoints
-	if cliCfg.Endpoints != nil {
-		var filtered []swagger.EndpointConfig
-		for _, ep := range allEndpoints {
-			key := fmt.Sprintf("%s %s", ep.Method, ep.Path)
-			included := true
-			if len(cliCfg.Endpoints.Include) > 0 {
-				included = matchesAny(key, ep.Path, cliCfg.Endpoints.Include)
-			}
-			if len(cliCfg.Endpoints.Exclude) > 0 {
-				if matchesAny(key, ep.Path, cliCfg.Endpoints.Exclude) {
-					included = false
-				}
-			}
-			if included {
-				filtered = append(filtered, ep)
-			}
-		}
-		allEndpoints = filtered
-	}
-
-	if len(allEndpoints) == 0 {
-		log.Fatalf("No endpoints remaining after filtering")
-	}
-
-	runCfg := &swagger.Config{
-		BaseURL:        basePath,
-		GlobalHeaders:  cliCfg.Headers,
-		Cookies:        cliCfg.Cookies,
-		WordlistFiles:  cliCfg.WordlistFiles,
-		Dictionaries:   cliCfg.Dictionaries,
-		Settings:       cliCfg.Settings,
-		Endpoints:      allEndpoints,
-		Rules:          cliCfg.Rules,
-		AuthSequence:   cliCfg.AuthSequence,
-		AuthIdentities: cliCfg.AuthIdentities,
-		Variables:      cliCfg.Variables,
-		Security:       cliCfg.Security,
-	}
-
-	if err := swagger.LoadWordlists(runCfg); err != nil {
-		log.Fatalf("Failed to load custom wordlists: %v", err)
+	runCfg, err := BuildRunnerConfig(&cliCfg)
+	if err != nil {
+		log.Fatalf("Failed to build runner config: %v", err)
 	}
 
 	// 4. Initialize and start runner
@@ -363,7 +207,7 @@ func runCLI(args []string) {
 		}()
 	}
 
-	fmt.Printf("Starting fuzz run on %d endpoints across %d profiles...\n", len(allEndpoints), len(cliCfg.Settings.Profiles))
+	fmt.Printf("Starting fuzz run on %d endpoints across %d profiles...\n", len(runCfg.Endpoints), len(runCfg.Settings.Profiles))
 	if err := r.Start(ctx); err != nil {
 		restoreTerm()
 		log.Fatalf("Run failed: %v", err)
@@ -451,4 +295,180 @@ func runCLI(args []string) {
 		fmt.Printf("\n\033[1;31m[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.\033[0m\n", *failOnSeverity)
 		os.Exit(2)
 	}
+}
+
+func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
+	// Standardize compatibility aliases and merge them:
+	if len(cliCfg.GlobalHeaders) > 0 {
+		if cliCfg.Headers == nil {
+			cliCfg.Headers = make(map[string]string)
+		}
+		for k, v := range cliCfg.GlobalHeaders {
+			if _, exists := cliCfg.Headers[k]; !exists {
+				cliCfg.Headers[k] = v
+			}
+		}
+	}
+
+	if len(cliCfg.SwaggerURLsAlias) > 0 {
+		for _, urlStr := range cliCfg.SwaggerURLsAlias {
+			found := false
+			for _, existing := range cliCfg.SwaggerURLs {
+				if existing == urlStr {
+					found = true
+					break
+				}
+			}
+			if !found {
+				cliCfg.SwaggerURLs = append(cliCfg.SwaggerURLs, urlStr)
+			}
+		}
+	}
+
+	if len(cliCfg.DisabledEndpoints) > 0 {
+		if cliCfg.Endpoints == nil {
+			cliCfg.Endpoints = &struct {
+				Include []string `json:"include"`
+				Exclude []string `json:"exclude"`
+			}{}
+		}
+		for _, ep := range cliCfg.DisabledEndpoints {
+			found := false
+			for _, existing := range cliCfg.Endpoints.Exclude {
+				if existing == ep {
+					found = true
+					break
+				}
+			}
+			if !found {
+				cliCfg.Endpoints.Exclude = append(cliCfg.Endpoints.Exclude, ep)
+			}
+		}
+	}
+
+	// Validate the configuration schema
+	if err := cliCfg.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %v", err)
+	}
+
+	if len(cliCfg.SwaggerURLs) == 0 {
+		return nil, fmt.Errorf("config must specify at least one swagger_url")
+	}
+
+	if cliCfg.Settings.IterationsPerProfile <= 0 {
+		cliCfg.Settings = swagger.DefaultSettings()
+	}
+	if len(cliCfg.Settings.Profiles) == 0 {
+		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
+	}
+
+	// 2. Fetch and parse specs
+	var allEndpoints []swagger.EndpointConfig
+	basePath := cliCfg.BaseURL
+
+	for _, urlStr := range cliCfg.SwaggerURLs {
+		headersCopy := make(map[string]string)
+		for k, v := range cliCfg.Headers {
+			headersCopy[k] = v
+		}
+		if len(cliCfg.Cookies) > 0 {
+			var cookieParts []string
+			for k, v := range cliCfg.Cookies {
+				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+			}
+			headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
+		}
+
+		specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch spec %s: %v", urlStr, err)
+		}
+		parsed, err := swagger.ParseRawSpec(specRaw)
+		if err != nil {
+			if swagger.IsHAR(specRaw) {
+				parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
+				if errHAR != nil {
+					return nil, fmt.Errorf("failed to parse spec %s as HAR: %v", urlStr, errHAR)
+				}
+				parsed = parsedHAR
+			} else if swagger.IsPostman(specRaw) {
+				parsedPostman, errPostman := postman.ParsePostman(specRaw)
+				if errPostman != nil {
+					return nil, fmt.Errorf("failed to parse spec %s as Postman Collection: %v", urlStr, errPostman)
+				}
+				parsed = parsedPostman
+			} else {
+				// Try GraphQL parser fallback
+				defaultPath := "/graphql"
+				if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+					if parsedURL.Path != "" && parsedURL.Path != "/" {
+						defaultPath = parsedURL.Path
+					}
+				}
+				parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+				if errGQL != nil {
+					return nil, fmt.Errorf("failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
+				}
+				parsed = parsedGQL
+			}
+		}
+		if basePath == "" {
+			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
+				basePath = parsedURL.Scheme + "://" + parsedURL.Host
+			} else {
+				basePath = parsed.BasePath
+			}
+		}
+		allEndpoints = append(allEndpoints, parsed.Endpoints...)
+	}
+
+	if basePath == "" {
+		return nil, fmt.Errorf("no base_url found in config or specs")
+	}
+
+	// 3. Filter endpoints
+	if cliCfg.Endpoints != nil {
+		var filtered []swagger.EndpointConfig
+		for _, ep := range allEndpoints {
+			key := fmt.Sprintf("%s %s", ep.Method, ep.Path)
+			included := true
+			if len(cliCfg.Endpoints.Include) > 0 {
+				included = matchesAny(key, ep.Path, cliCfg.Endpoints.Include)
+			}
+			if len(cliCfg.Endpoints.Exclude) > 0 {
+				if matchesAny(key, ep.Path, cliCfg.Endpoints.Exclude) {
+					included = false
+				}
+			}
+			if included {
+				filtered = append(filtered, ep)
+			}
+		}
+		allEndpoints = filtered
+	}
+
+	if len(allEndpoints) == 0 {
+		return nil, fmt.Errorf("no endpoints remaining after filtering")
+	}
+
+	runCfg := &swagger.Config{
+		BaseURL:        basePath,
+		GlobalHeaders:  cliCfg.Headers,
+		Cookies:        cliCfg.Cookies,
+		WordlistFiles:  cliCfg.WordlistFiles,
+		Dictionaries:   cliCfg.Dictionaries,
+		Settings:       cliCfg.Settings,
+		Endpoints:      allEndpoints,
+		Rules:          cliCfg.Rules,
+		AuthSequence:   cliCfg.AuthSequence,
+		AuthIdentities: cliCfg.AuthIdentities,
+		Variables:      cliCfg.Variables,
+		Security:       cliCfg.Security,
+	}
+
+	if err := swagger.LoadWordlists(runCfg); err != nil {
+		return nil, fmt.Errorf("failed to load custom wordlists: %v", err)
+	}
+
+	return runCfg, nil
 }

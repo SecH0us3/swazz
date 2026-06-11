@@ -3,18 +3,23 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@cloudflare/containers": "^0.3.7"
-  },
   "scripts": {
+    "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.13",
+    "@cloudflare/vitest-pool-workers": "^0.16.14",
     "@cloudflare/workers-types": "^4.20260605.1",
     "@vitest/snapshot": "^4.1.7",
+    "miniflare": "^4.20260609.0",
     "pretty-format": "^30.4.1",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "workerd": "^1.20260611.1"
+  },
+  "dependencies": {
+    "hono": "^4.12.25",
+    "ulidx": "^2.4.1",
+    "zod": "^3.25.76"
   }
 }

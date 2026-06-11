@@ -63,7 +63,7 @@ func buildFuzzPayload(
 
 	if isBody {
 		if len(ep.Schema.Properties) > 0 || ep.Schema.Type == "array" || ep.Schema.Type == "object" {
-			if isRandom && rand.Float64() < 0.15 {
+			if isRandom && rand.Float64() < 0.15 { // #nosec G404
 				out.body = map[string]any{}
 			} else {
 				out.body = bodyGen.BuildObject(&ep.Schema)

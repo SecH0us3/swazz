@@ -19,8 +19,8 @@ func main() {
 	command := os.Args[1]
 
 	switch command {
-	case "serve":
-		runServer()
+	case "run-agent":
+		runAgent(os.Args[2:])
 	case "start":
 		runCLI(os.Args[2:])
 	case "wizard":
@@ -36,9 +36,14 @@ func printHelp() {
 	fmt.Println("\033[1;34m⚡ SWAZZ ENGINE\033[0m - Smart API Fuzzer")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  swazz-engine serve            Start the HTTP API server (for web dashboard)")
-	fmt.Println("  swazz-engine start [options]  Start a CLI fuzzing run using config")
-	fmt.Println("  swazz-engine wizard           Interactive setup to generate swazz.config.json")
+	fmt.Println("  swazz-engine run-agent [options]  Start headless runner connected to Cloudflare Coordinator")
+	fmt.Println("  swazz-engine start [options]      Start a CLI fuzzing run using config (Local offline mode)")
+	fmt.Println("  swazz-engine wizard               Interactive setup to generate swazz.config.json")
+	fmt.Println()
+	fmt.Println("Options for 'run-agent':")
+	fmt.Println("  --coordinator <ws-url>       WebSocket URL of the Swazz Coordinator (e.g. wss://swazz.secmy.app/api/runners/connect)")
+	fmt.Println("  --token <secret>             Runner authentication token")
+	fmt.Println("  --name <name>                (Optional) Name to identify this runner")
 	fmt.Println()
 	fmt.Println("Options for 'start':")
 	fmt.Println("  --config <path>              Path to config file (default: swazz.config.json)")
@@ -53,12 +58,16 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  swazz-engine wizard")
+	fmt.Println("  swazz-engine run-agent --coordinator wss://swazz.secmy.app/api/runners/connect --token xxx")
 	fmt.Println("  swazz-engine start --config production.json --html report.html")
-	fmt.Println("  swazz-engine start --config ci.json --sarif results.sarif --fail-on-severity error")
-	fmt.Println("  swazz-engine start --config ci.json --junit results.xml --fail-on-severity warning")
 }
 
-// ─── SERVER MODE ──────────────────────────────────────────
+// ─── AGENT MODE ───────────────────────────────────────────
+
+func runAgent(args []string) {
+	// Implementation will go to agent package
+	startAgent(args)
+}
 
 // ─── CLI MODE ─────────────────────────────────────────────
 

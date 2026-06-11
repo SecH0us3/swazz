@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
+import { useAuth } from '../hooks/useAuth.js';
+import { ProjectSelector } from './ProjectSelector.js';
+import { UserMenu } from './UserMenu.js';
 
 interface Props {
     baseUrl: string;
@@ -32,6 +35,8 @@ export function Header({
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
     })));
+
+    const { authEnabled, token, logout } = useAuth();
 
     const isBusy = isRunning || isLoadingSpecs;
 
@@ -179,6 +184,10 @@ export function Header({
 
             {/* Right Section: Actions, Toggles */}
             <div className="header-right">
+                {authEnabled && token && (
+                    <ProjectSelector />
+                )}
+
                 {/* Actions */}
                 <div className="header-actions">
                     {!isBusy ? (
@@ -229,6 +238,10 @@ export function Header({
                         </svg>
                     )}
                 </button>
+
+                {authEnabled && token && (
+                    <UserMenu onLogout={logout} />
+                )}
 
                 {/* Right Toggle (Mobile) */}
                 <button className="header-mobile-toggle" onClick={onToggleConfig} title="Settings" aria-label="Toggle Settings">

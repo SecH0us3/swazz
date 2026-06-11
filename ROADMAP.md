@@ -452,9 +452,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement an OS Command Injection analyzer injecting shell payloads and checking for out-of-band interactions or timing delays.
     - Implement Server-Side Template Injection (SSTI) and XML External Entity (XXE) analyzers with dedicated payloads and detectors.
 
-- [ ] **Task 51: User Authentication, Cloudflare-Hosted Browser Running, and Custom Runners**
+- [x] **Task 51: User Authentication, Cloudflare-Hosted Browser Running, and Custom Runners**
   - **Design Goal:** Support multi-user collaboration by adding user registration, allowing browser-based runs on Cloudflare using Cloudflare tokens, and letting users register and connect their own self-hosted runners.
   - **Implementation Details:**
+    - **Database & Storage Architecture:**
+      - Use **Cloudflare D1** (SQLite in local/self-hosted dev) to store relational metadata: user credentials (JWT/OAuth2), configuration profiles, custom runner states, and high-level scan statistics.
+      - Use **Cloudflare R2** (local directory or MinIO in local dev) to store raw scan results, full HTTP request/response logs (HAR files), and generated HTML/Markdown reports, linking them via URLs in D1.
+      - Use **Cloudflare Durable Objects** to manage real-time WebSocket communication and coordinate job assignments with registered custom runners.
     - Implement user registration and authentication (e.g., JWT-based or OAuth2).
     - Build integration with Cloudflare Workers/Pages utilizing Cloudflare API tokens to trigger scans directly from browser.
     - Implement a runner registration system (e.g. WebSocket connection or long polling) allowing external runners to register, authenticate, and pull scan jobs from the central coordinator.

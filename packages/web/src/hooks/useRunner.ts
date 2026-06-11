@@ -122,7 +122,8 @@ export function toSummary(r: any): ResultSummary {
 const PROGRESS_THROTTLE_MS = 300;
 
 export function useRunner(proxyUrl: string) {
-    const eventSourceRef = useRef<EventSource | null>(null);
+    const wsRef = useRef<WebSocket | null>(null);
+    const runIdRef = useRef<string | null>(null);
 
     const sendRequest = useCallback(
         async (req: {
@@ -142,12 +143,6 @@ export function useRunner(proxyUrl: string) {
         [proxyUrl],
     );
 
-    /**
-     * start — starts a fuzz run.
-     * onResult is called for each SSE result event (caller writes to IDB).
-     * onComplete is called once when the run finishes.
-     * No rows[] are stored in this hook.
-     */
     const start = useCallback(
         async (
             config: any,
@@ -158,17 +153,31 @@ export function useRunner(proxyUrl: string) {
 
             useAppStore.setState({ isRunning: true, isPaused: false });
 
+            let runId = '';
             try {
-                const res = await fetch(`${proxyUrl}/api/fuzz/start`, {
+                const configToSend = { ...config };
+                // Go backend expects endpoints to be an object with include/exclude, not an array of objects
+                if (Array.isArray(configToSend.endpoints)) {
+                    const include = configToSend.endpoints.map((ep: any) => `${ep.method} ${ep.path}`);
+                    configToSend.endpoints = {
+                        include,
+                        exclude: configToSend.disabled_endpoints || []
+                    };
+                }
+
+                const res = await fetch(`${proxyUrl}/api/runs`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config),
+                    body: JSON.stringify({ config: configToSend }),
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     useAppStore.setState({ isRunning: false });
                     throw new Error(err.error || 'Failed to start run');
                 }
+                const data = await res.json();
+                runId = data.id;
+                runIdRef.current = runId;
             } catch (err) {
                 useAppStore.setState({ isRunning: false });
                 throw err;
@@ -176,39 +185,37 @@ export function useRunner(proxyUrl: string) {
 
             let lastProgressTime = 0;
 
-            const es = new EventSource(`${proxyUrl}/api/fuzz/stream`);
-            eventSourceRef.current = es;
+            const wsUrl = proxyUrl.replace('http', 'ws');
+            const ws = new WebSocket(`${wsUrl}/api/runs/${runId}/events`);
+            wsRef.current = ws;
 
-            es.addEventListener('result', (e) => {
+            ws.onmessage = (e) => {
                 try {
-                    const raw = JSON.parse(e.data);
-                    onResult(raw);
+                    const msg = JSON.parse(e.data);
+                    
+                    if (msg.type === 'result') {
+                        onResult(msg.data);
+                    } else if (msg.type === 'progress') {
+                        const now = Date.now();
+                        if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
+                            lastProgressTime = now;
+                            useAppStore.setState({ stats: msg.data });
+                        }
+                    } else if (msg.type === 'complete') {
+                        const finalStats = msg.data;
+                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false });
+                        ws.close();
+                        wsRef.current = null;
+                        onComplete(finalStats);
+                    }
                 } catch {
                     // ignore parse errors
                 }
-            });
+            };
 
-            es.addEventListener('progress', (e) => {
-                const now = Date.now();
-                if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
-                    lastProgressTime = now;
-                    try { useAppStore.setState({ stats: JSON.parse(e.data) }); } catch { /* */ }
-                }
-            });
-
-            es.addEventListener('complete', (e) => {
-                try {
-                    const finalStats = JSON.parse(e.data);
-                    useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false });
-                    es.close();
-                    eventSourceRef.current = null;
-                    onComplete(finalStats);
-                } catch { /* */ }
-            });
-
-            es.onerror = () => {
-                es.close();
-                eventSourceRef.current = null;
+            ws.onerror = () => {
+                ws.close();
+                wsRef.current = null;
                 useAppStore.setState({ isRunning: false });
             };
         },
@@ -217,29 +224,33 @@ export function useRunner(proxyUrl: string) {
 
     const stop = useCallback(async () => {
         try {
-            const res = await fetch(`${proxyUrl}/api/fuzz/stop`, { method: 'POST' });
-            if (!res.ok) throw new Error('Failed to stop run');
+            if (runIdRef.current) {
+                const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/stop`, { method: 'POST' });
+                if (!res.ok) throw new Error('Failed to stop run');
+            }
         } finally {
-            eventSourceRef.current?.close();
-            eventSourceRef.current = null;
+            wsRef.current?.close();
+            wsRef.current = null;
             useAppStore.setState({ isRunning: false });
         }
     }, [proxyUrl]);
 
     const pause = useCallback(async () => {
-        const res = await fetch(`${proxyUrl}/api/fuzz/pause`, { method: 'POST' });
+        if (!runIdRef.current) return;
+        const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/pause`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to pause');
         useAppStore.setState({ isPaused: true });
     }, [proxyUrl]);
 
     const resume = useCallback(async () => {
-        const res = await fetch(`${proxyUrl}/api/fuzz/resume`, { method: 'POST' });
+        if (!runIdRef.current) return;
+        const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/resume`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to resume');
         useAppStore.setState({ isPaused: false });
     }, [proxyUrl]);
 
     useEffect(() => {
-        return () => { eventSourceRef.current?.close(); };
+        return () => { wsRef.current?.close(); };
     }, []);
 
     return { start, stop, pause, resume, sendRequest };

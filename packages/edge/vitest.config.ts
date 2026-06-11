@@ -7,6 +7,10 @@ export default defineConfig({
       poolOptions: {
         workers: {
           wrangler: { configPath: "./wrangler.toml" },
+          miniflare: {
+            compatibilityDate: "2026-06-10",
+            d1Databases: ["DB"],
+          }
         },
       },
     }),

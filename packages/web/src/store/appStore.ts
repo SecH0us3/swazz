@@ -9,6 +9,8 @@ export interface UISlice {
     isSidebarHiddenDesktop: boolean;
     isConfigHiddenDesktop: boolean;
     isHotkeysHelpOpen: boolean;
+    isUserProfileOpen: boolean;
+    isProjectSettingsOpen: boolean;
 }
 
 const createUISlice: StateCreator<AppState, [], [], UISlice> = () => ({
@@ -18,6 +20,8 @@ const createUISlice: StateCreator<AppState, [], [], UISlice> = () => ({
     isSidebarHiddenDesktop: false,
     isConfigHiddenDesktop: false,
     isHotkeysHelpOpen: false,
+    isUserProfileOpen: false,
+    isProjectSettingsOpen: false,
 });
 
 export interface FuzzingSlice {
