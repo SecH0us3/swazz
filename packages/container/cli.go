@@ -362,72 +362,128 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
-	// 2. Fetch and parse specs
+	// 2. Fetch and parse specs concurrently
+	type specResult struct {
+		urlStr    string
+		endpoints []swagger.EndpointConfig
+		basePath  string
+		err       error
+	}
+
+	resChan := make(chan specResult, len(cliCfg.SwaggerURLs))
+	var wg sync.WaitGroup
+
+	for _, urlStr := range cliCfg.SwaggerURLs {
+		wg.Add(1)
+		go func(urlStr string) {
+			defer wg.Done()
+			fmt.Printf("[Config] Fetching spec: %s\n", urlStr)
+			startFetch := time.Now()
+
+			headersCopy := make(map[string]string)
+			for k, v := range cliCfg.Headers {
+				headersCopy[k] = v
+			}
+			if len(cliCfg.Cookies) > 0 {
+				var cookieParts []string
+				for k, v := range cliCfg.Cookies {
+					cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+				}
+				headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
+			}
+
+			specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
+			if err != nil {
+				resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}
+				return
+			}
+
+			fetchDur := time.Since(startFetch)
+			fmt.Printf("[Config] Fetched spec %s (size: %d bytes, took: %v)\n", urlStr, len(specRaw), fetchDur)
+
+			parsed, err := swagger.ParseRawSpec(specRaw)
+			if err != nil {
+				if swagger.IsHAR(specRaw) {
+					parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
+					if errHAR != nil {
+						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as HAR: %w", urlStr, errHAR)}
+						return
+					}
+					parsed = parsedHAR
+				} else if swagger.IsPostman(specRaw) {
+					parsedPostman, errPostman := postman.ParsePostman(specRaw)
+					if errPostman != nil {
+						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as Postman Collection: %w", urlStr, errPostman)}
+						return
+					}
+					parsed = parsedPostman
+				} else {
+					// Try GraphQL parser fallback
+					defaultPath := "/graphql"
+					if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+						if parsedURL.Path != "" && parsedURL.Path != "/" {
+							defaultPath = parsedURL.Path
+						}
+					}
+					parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+					if errGQL != nil {
+						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as OpenAPI (%w) or GraphQL (%w)", urlStr, err, errGQL)}
+						return
+					}
+					parsed = parsedGQL
+				}
+			}
+
+			bp := ""
+			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
+				bp = parsedURL.Scheme + "://" + parsedURL.Host
+			} else {
+				bp = parsed.BasePath
+			}
+
+			fmt.Printf("[Config] Parsed spec %s: %d endpoints found\n", urlStr, len(parsed.Endpoints))
+
+			resChan <- specResult{
+				urlStr:    urlStr,
+				endpoints: parsed.Endpoints,
+				basePath:  bp,
+			}
+		}(urlStr)
+	}
+
+	wg.Wait()
+	close(resChan)
+
 	var allEndpoints []swagger.EndpointConfig
 	basePath := cliCfg.BaseURL
 
-	for _, urlStr := range cliCfg.SwaggerURLs {
-		headersCopy := make(map[string]string)
-		for k, v := range cliCfg.Headers {
-			headersCopy[k] = v
+	// Collect results in the order of SwaggerURLs to keep order deterministic
+	resultsMap := make(map[string]specResult)
+	for res := range resChan {
+		if res.err != nil {
+			return nil, res.err
 		}
-		if len(cliCfg.Cookies) > 0 {
-			var cookieParts []string
-			for k, v := range cliCfg.Cookies {
-				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
-			}
-			headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
-		}
+		resultsMap[res.urlStr] = res
+	}
 
-		specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch spec %s: %v", urlStr, err)
+	for _, urlStr := range cliCfg.SwaggerURLs {
+		res := resultsMap[urlStr]
+		if basePath == "" && res.basePath != "" {
+			basePath = res.basePath
 		}
-		parsed, err := swagger.ParseRawSpec(specRaw)
-		if err != nil {
-			if swagger.IsHAR(specRaw) {
-				parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
-				if errHAR != nil {
-					return nil, fmt.Errorf("failed to parse spec %s as HAR: %v", urlStr, errHAR)
-				}
-				parsed = parsedHAR
-			} else if swagger.IsPostman(specRaw) {
-				parsedPostman, errPostman := postman.ParsePostman(specRaw)
-				if errPostman != nil {
-					return nil, fmt.Errorf("failed to parse spec %s as Postman Collection: %v", urlStr, errPostman)
-				}
-				parsed = parsedPostman
-			} else {
-				// Try GraphQL parser fallback
-				defaultPath := "/graphql"
-				if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-					if parsedURL.Path != "" && parsedURL.Path != "/" {
-						defaultPath = parsedURL.Path
-					}
-				}
-				parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-				if errGQL != nil {
-					return nil, fmt.Errorf("failed to parse spec %s as OpenAPI (%v) or GraphQL (%v)", urlStr, err, errGQL)
-				}
-				parsed = parsedGQL
-			}
-		}
-		if basePath == "" {
-			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
-				basePath = parsedURL.Scheme + "://" + parsedURL.Host
-			} else {
-				basePath = parsed.BasePath
-			}
-		}
-		allEndpoints = append(allEndpoints, parsed.Endpoints...)
+		allEndpoints = append(allEndpoints, res.endpoints...)
 	}
 
 	if basePath == "" {
 		return nil, fmt.Errorf("no base_url found in config or specs")
 	}
 
+	fmt.Printf("[Config] Aggregated total endpoints: %d\n", len(allEndpoints))
+
 	// 3. Filter endpoints
 	if cliCfg.Endpoints != nil {
+		fmt.Printf("[Config] Filtering endpoints (Include: %d patterns, Exclude: %d patterns)\n",
+			len(cliCfg.Endpoints.Include), len(cliCfg.Endpoints.Exclude))
 		var filtered []swagger.EndpointConfig
 		for _, ep := range allEndpoints {
 			key := fmt.Sprintf("%s %s", ep.Method, ep.Path)
@@ -445,6 +501,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 			}
 		}
 		allEndpoints = filtered
+		fmt.Printf("[Config] Endpoints after filtering: %d\n", len(allEndpoints))
 	}
 
 	if len(allEndpoints) == 0 {

@@ -26,6 +26,18 @@ type generatedPayload struct {
 	body        map[string]any
 	queryParams map[string]any
 	headers     map[string]string
+	pathParams  map[string]string
+}
+
+func buildPathParams(ep swagger.EndpointConfig, gen *generator.Generator) map[string]string {
+	if len(ep.PathParams) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(ep.PathParams))
+	for name, schema := range ep.PathParams {
+		out[name] = capPathParam(gen.Generate(name, schema))
+	}
+	return out
 }
 
 // buildSafePayload constructs a deterministic, valid payload for the given
@@ -34,12 +46,16 @@ type generatedPayload struct {
 // structurally valid to isolate header-level behaviour.
 func buildSafePayload(ep swagger.EndpointConfig, safeGen *generator.Generator) generatedPayload {
 	if ep.Example != nil {
-		return buildFromExample(ep, safeGen)
+		out := buildFromExample(ep, safeGen)
+		out.pathParams = buildPathParams(ep, safeGen)
+		return out
 	}
 	if !hasFields(&ep) {
 		return generatedPayload{}
 	}
-	return buildFromSchema(ep, safeGen)
+	out := buildFromSchema(ep, safeGen)
+	out.pathParams = buildPathParams(ep, safeGen)
+	return out
 }
 
 // buildFuzzPayload constructs a single fuzz-payload attempt using the fuzz
@@ -82,6 +98,7 @@ func buildFuzzPayload(
 	}
 
 	out.headers = buildHeaders(ep, selectGen(gen, safeGen, isSecHeaderIter))
+	out.pathParams = buildPathParams(ep, bodyGen)
 	return out
 }
 

@@ -323,7 +323,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 			safeGen.Endpoint = epKey
 
 			built := buildSafePayload(ep, safeGen)
-			resolvedPath := fillPathParams(ep.Path, ep.PathParams, safeGen)
+			resolvedPath := fillPathParamsFromMap(ep.Path, built.pathParams)
 
 			result := r.executeRequest(
 				ctx,
@@ -421,11 +421,11 @@ func (r *Runner) fuzzEndpoint(
 		}
 		wg.Add(1)
 
-		go func(it int, p any, qp map[string]any, gh map[string]string) {
+		go func(it int, p any, qp map[string]any, gh map[string]string, pp map[string]string) {
 			defer r.limiter.Release()
 			defer wg.Done()
 
-			resolvedPath := fillPathParams(endpoint.Path, endpoint.PathParams, safeGen)
+			resolvedPath := fillPathParamsFromMap(endpoint.Path, pp)
 			result := r.executeRequest(
 				ctx,
 				r.config.BaseURL, resolvedPath, endpoint.Path, endpoint.Method,
@@ -451,7 +451,7 @@ func (r *Runner) fuzzEndpoint(
 				r.allResults = append(r.allResults, result)
 				r.resultsMu.Unlock()
 			}
-		}(i, built.body, built.queryParams, built.headers)
+		}(i, built.body, built.queryParams, built.headers, built.pathParams)
 
 		if delay > 0 {
 			time.Sleep(delay)
@@ -496,12 +496,16 @@ func (r *Runner) buildFuzzIteration(
 		buf := bufPool.Get().(*bytes.Buffer)
 		buf.Reset()
 		var encErr error
-		switch {
-		case attempt.body != nil:
+		if attempt.body != nil {
 			encErr = json.NewEncoder(buf).Encode(attempt.body)
-		case attempt.queryParams != nil:
+		}
+		if attempt.queryParams != nil && encErr == nil {
 			encErr = json.NewEncoder(buf).Encode(attempt.queryParams)
-		default:
+		}
+		if attempt.pathParams != nil && encErr == nil {
+			encErr = json.NewEncoder(buf).Encode(attempt.pathParams)
+		}
+		if attempt.body == nil && attempt.queryParams == nil && attempt.pathParams == nil {
 			buf.WriteByte('{')
 			buf.WriteByte('}')
 		}
