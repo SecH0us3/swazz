@@ -205,23 +205,21 @@ func startAgent(args []string) {
 			}
 
 		case "parse_request":
-			var req struct {
-				ReqID   string `json:"reqId"`
-				Payload struct {
-					URL string `json:"url"`
-				} `json:"payload"`
+			var reqPayload struct {
+				URL string `json:"url"`
 			}
-			if err := json.Unmarshal(wsMsg.Payload, &req); err != nil {
-				log.Printf("Failed to unmarshal parse_request: %v", err)
+			if err := json.Unmarshal(wsMsg.Payload, &reqPayload); err != nil {
+				log.Printf("Failed to unmarshal parse_request payload: %v", err)
 				continue
 			}
+			reqID := wsMsg.ReqID
 
 			go func() {
 				// Parse swagger
 				var result interface{}
 				
 				client := safenet.NewSafeHTTPClient(30 * time.Second)
-				resp, err := client.Get(req.Payload.URL)
+				resp, err := client.Get(reqPayload.URL)
 				if err != nil {
 					result = map[string]string{"error": err.Error()}
 				} else {
@@ -250,6 +248,7 @@ func startAgent(args []string) {
 							result = map[string]interface{}{
 								"basePath":  parseResult.BasePath,
 								"endpoints": parseResult.Endpoints,
+								"rawSpec":   string(data),
 							}
 						}
 					}
@@ -257,7 +256,7 @@ func startAgent(args []string) {
 
 				outChan <- map[string]interface{}{
 					"type":    "parse_result",
-					"reqId":   req.ReqID,
+					"reqId":   reqID,
 					"payload": result,
 				}
 			}()
@@ -289,6 +288,7 @@ type JobCommandPayload struct {
 
 type WSMessageIn struct {
 	Type    string          `json:"type"`
+	ReqID   string          `json:"reqId,omitempty"`
 	Payload json.RawMessage `json:"payload"`
 }
 

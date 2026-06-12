@@ -46,6 +46,7 @@ export interface StatsSlice {
     isRunning: boolean;
     isPaused: boolean;
     isLoadingSpecs: boolean;
+    specCacheDates: Record<string, string>;
 }
 
 const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
@@ -54,6 +55,7 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
     isRunning: false,
     isPaused: false,
     isLoadingSpecs: false,
+    specCacheDates: {},
 });
 
 export type AppState = UISlice & FuzzingSlice & StatsSlice;

@@ -15,7 +15,7 @@ interface Props {
     onDeleteRun: (runId: string) => void;
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
     onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
-    onLoadEndpoints: (urls: string[]) => Promise<any>;
+    onLoadEndpoints: (urls: string[], forceRebuild?: boolean) => Promise<any>;
     onImportRun: (data: any) => Promise<{ runId: string, run: any } | undefined>;
     className?: string;
 }
@@ -204,20 +204,47 @@ export function Sidebar({
                             No URLs added yet
                         </div>
                     )}
-                    {swaggerUrls.map((url) => (
-                        <div key={url} className="swagger-url-row">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
-                                <polyline points="20 6 9 17 4 12"/>
-                            </svg>
-                            <span className="swagger-url-text" title={url}>{url}</span>
-                            <button
-                                className="kv-delete"
-                                onClick={() => removeUrl(url)}
-                                title="Remove"
-                                aria-label="Remove URL"
-                            >✕</button>
-                        </div>
-                    ))}
+                    {swaggerUrls.map((url) => {
+                        const specCacheDates = useAppStore.getState().specCacheDates;
+                        const cachedAt = specCacheDates[url];
+                        return (
+                            <div key={url} style={{ display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--bg-elevated)', borderRadius: 4, padding: '4px 8px', border: '1px solid var(--border-default)' }}>
+                                <div className="swagger-url-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', flex: 1 }}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
+                                            <polyline points="20 6 9 17 4 12"/>
+                                        </svg>
+                                        <span className="swagger-url-text" title={url} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{url}</span>
+                                    </div>
+                                    <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink: 0 }}>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ padding: '2px 4px', height: 'auto', display: 'flex', alignItems: 'center' }}
+                                            onClick={() => onLoadEndpoints([url], true)}
+                                            title="Refresh / Rebuild Cache"
+                                            aria-label="Refresh Cache"
+                                        >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                                            </svg>
+                                        </button>
+                                        <button
+                                            className="kv-delete"
+                                            onClick={() => removeUrl(url)}
+                                            title="Remove"
+                                            aria-label="Remove URL"
+                                            style={{ margin: 0, padding: '2px 4px', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                        >✕</button>
+                                    </div>
+                                </div>
+                                {cachedAt && (
+                                    <div style={{ fontSize: 10, color: 'var(--text-disabled)', marginLeft: 15, fontFamily: 'var(--font-mono)' }}>
+                                        Cached: {new Date(cachedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                     <div style={{ display:'flex', gap:4 }}>
                         <input
                             className="input"

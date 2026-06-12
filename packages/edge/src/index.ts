@@ -821,8 +821,8 @@ export class RunnerCoordinator {
   env: Env;
   runners: Set<WebSocket>;
   clients: Map<string, Set<WebSocket>>; // runId -> client WS
-  jobs: Map<string, WebSocket>; // runId -> runner WS
   pendingParses: Map<string, (r: Response) => void>;
+  pendingParseUrls: Map<string, string>; // reqId -> url
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -831,13 +831,15 @@ export class RunnerCoordinator {
     this.clients = new Map();
     this.jobs = new Map();
     this.pendingParses = new Map();
+    this.pendingParseUrls = new Map();
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === '/dispatch') {
-      if (this.runners.size === 0) {
+      const activeRunners = this.state.getWebSockets("runner");
+      if (activeRunners.length === 0) {
         return new Response('No runners available', { status: 503 });
       }
       
@@ -848,7 +850,7 @@ export class RunnerCoordinator {
       });
 
       // Pick the first available runner
-      const runner = this.runners.values().next().value;
+      const runner = activeRunners[0];
       if (runner) {
         this.jobs.set(payload.runId, runner);
         runner.send(dispatchMsg);
@@ -872,18 +874,46 @@ export class RunnerCoordinator {
 
     
     if (url.pathname === '/parse') {
-      if (this.runners.size === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
-      const reqId = ulid();
-      const body = await request.text();
+      const bodyText = await request.text();
+      const body = JSON.parse(bodyText) as { url: string; forceRebuild?: boolean };
       
-      const runnerWs = Array.from(this.runners)[0];
-      runnerWs.send(JSON.stringify({ type: 'parse_request', reqId, payload: JSON.parse(body) }));
+      if (!body.forceRebuild) {
+        try {
+          const cached = await this.env.DB.prepare('SELECT base_path, endpoints_r2_key, fetched_at FROM swagger_cache WHERE url = ?')
+            .bind(body.url)
+            .first() as { base_path: string; endpoints_r2_key: string; fetched_at: string } | null;
+            
+          if (cached && cached.endpoints_r2_key) {
+            const r2Object = await this.env.STORAGE.get(cached.endpoints_r2_key);
+            if (r2Object) {
+              const endpointsText = await r2Object.text();
+              return new Response(JSON.stringify({
+                basePath: cached.base_path,
+                endpoints: JSON.parse(endpointsText),
+                cachedAt: cached.fetched_at,
+                fromCache: true
+              }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        } catch (dbErr) {
+          console.error("Failed to read swagger cache from DB/R2:", dbErr);
+        }
+      }
+
+      const activeRunners = this.state.getWebSockets("runner");
+      if (activeRunners.length === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
+      const reqId = ulid();
+      this.pendingParseUrls.set(reqId, body.url);
+      
+      const runnerWs = activeRunners[0];
+      runnerWs.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
       
       return new Promise<Response>((resolve) => {
         this.pendingParses.set(reqId, resolve);
         setTimeout(() => {
           if (this.pendingParses.has(reqId)) {
             this.pendingParses.delete(reqId);
+            this.pendingParseUrls.delete(reqId);
             resolve(new Response(JSON.stringify({ error: "Parse timeout from Go runner" }), { status: 504 }));
           }
         }, 15000);
@@ -893,8 +923,9 @@ export class RunnerCoordinator {
     if (url.pathname === '/start-run') {
       const runId = url.searchParams.get('runId')!;
       const configText = await request.text();
-      if (this.runners.size === 0) return new Response("No runners available", { status: 503 });
-      const runnerWs = Array.from(this.runners)[0];
+      const activeRunners = this.state.getWebSockets("runner");
+      if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
+      const runnerWs = activeRunners[0];
       this.jobs.set(runId, runnerWs);
       const parsedConfig = JSON.parse(configText).config;
       runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
@@ -956,9 +987,66 @@ export class RunnerCoordinator {
         
         if (msg.type === 'parse_result') {
           const resolve = this.pendingParses.get(msg.reqId);
+          const urlStr = this.pendingParseUrls.get(msg.reqId);
+          this.pendingParseUrls.delete(msg.reqId);
+          
           if (resolve) {
             this.pendingParses.delete(msg.reqId);
-            resolve(new Response(JSON.stringify(msg.payload), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+            
+            // Background write to DB/R2
+            if (msg.payload && !msg.payload.error && urlStr) {
+              const db = this.env.DB;
+              const storage = this.env.STORAGE;
+              
+              (async () => {
+                try {
+                  const basePath = msg.payload.basePath || '';
+                  const endpoints = msg.payload.endpoints || [];
+                  const rawSpec = msg.payload.rawSpec || '';
+                  const endpointsJson = JSON.stringify(endpoints);
+                  
+                  const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpointsJson));
+                  const hashArray = Array.from(new Uint8Array(hashBuffer));
+                  const endpointsHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                  
+                  const existing = await db.prepare('SELECT endpoints_hash, endpoints_r2_key, raw_spec_r2_key FROM swagger_cache WHERE url = ?')
+                    .bind(urlStr)
+                    .first() as { endpoints_hash: string; endpoints_r2_key: string; raw_spec_r2_key: string } | null;
+                    
+                  let endpointsR2Key = existing?.endpoints_r2_key;
+                  let rawSpecR2Key = existing?.raw_spec_r2_key;
+                  let shouldWriteR2 = false;
+                  
+                  if (!existing) {
+                    endpointsR2Key = `specs/parsed/${ulid()}.json`;
+                    rawSpecR2Key = `specs/raw/${ulid()}.json`;
+                    shouldWriteR2 = true;
+                  } else if (existing.endpoints_hash !== endpointsHash) {
+                    shouldWriteR2 = true;
+                  }
+                  
+                  if (shouldWriteR2) {
+                    await storage.put(endpointsR2Key!, endpointsJson);
+                    if (rawSpec) {
+                      await storage.put(rawSpecR2Key!, rawSpec);
+                    }
+                  }
+                  
+                  await db.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)')
+                    .bind(urlStr, basePath, endpointsHash, endpointsR2Key, rawSpecR2Key)
+                    .run();
+                } catch (cacheErr) {
+                  console.error("Failed to write swagger cache in background:", cacheErr);
+                }
+              })();
+            }
+
+            const clientPayload = { ...msg.payload };
+            if (clientPayload.rawSpec !== undefined) {
+              delete clientPayload.rawSpec;
+            }
+            
+            resolve(new Response(JSON.stringify(clientPayload), { status: 200, headers: { 'Content-Type': 'application/json' } }));
           }
         }
         if (msg.type === 'event' || msg.type === 'error') {

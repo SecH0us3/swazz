@@ -5,11 +5,12 @@ export async function loadSwaggerUrl(
     url: string,
     headers?: Record<string, string>,
     cookies?: Record<string, string>,
-): Promise<{ basePath: string; endpointCount: number; endpoints: any[] }> {
+    forceRebuild?: boolean,
+): Promise<{ basePath: string; endpointCount: number; endpoints: any[]; cachedAt?: string }> {
     const res = await fetch(`${PROXY_URL}/api/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }), // we can pass headers/cookies if the Go backend supports it eventually
+        body: JSON.stringify({ url, forceRebuild }), // we can pass headers/cookies if the Go backend supports it eventually
     });
 
     if (!res.ok) {
@@ -22,5 +23,6 @@ export async function loadSwaggerUrl(
         basePath: data.basePath,
         endpointCount: data.endpoints.length,
         endpoints: data.endpoints,
+        cachedAt: data.cachedAt,
     };
 }
