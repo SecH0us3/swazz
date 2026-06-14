@@ -14,6 +14,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { RunStats } from '../types.js';
 import { toSummary, type ResultSummary } from './useRunner.js';
+import { useAppStore } from '../store/appStore.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ export interface ScanRun {
     completedAt: number;
     baseUrl: string;
     stats: RunStats;
+    projectId?: string;
 }
 
 export interface QueryOptions {
@@ -245,6 +247,7 @@ export function useDb() {
     const [db, setDb] = useState<IDBDatabase | null>(null);
     const [runs, setRuns] = useState<ScanRun[]>([]);
     const dbRef = useRef<IDBDatabase | null>(null);
+    const activeProject = useAppStore(state => state.activeProject);
 
     useEffect(() => {
         let mounted = true;
@@ -315,12 +318,14 @@ export function useDb() {
             if (data.findings[0]?.resolvedPath) baseUrl = new URL(data.findings[0].resolvedPath).origin;
         } catch { /* */ }
 
+        const activeProject = useAppStore.getState().activeProject;
         const run: ScanRun = {
             id: runId,
             startedAt: timestamp,
             completedAt: timestamp + (data.summary?.durationSeconds || 0) * 1000,
             baseUrl,
             stats,
+            projectId: activeProject ? activeProject.id : undefined,
         };
 
         await dbSaveRun(database, run);
@@ -397,5 +402,16 @@ export function useDb() {
         });
     }, []);
 
-    return { db, runs, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun, updateTriage, getAllTriaged };
+    const filteredRuns = runs.filter(run => {
+        let token: string | null = null;
+        try {
+            token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+        } catch { /* ignore */ }
+        if (token) {
+            return activeProject ? run.projectId === activeProject.id : false;
+        }
+        return true;
+    });
+
+    return { db, runs: filteredRuns, getDb, saveRun, importCliReport, queryResults, countResults, getRunResults, deleteRun, updateTriage, getAllTriaged };
 }

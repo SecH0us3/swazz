@@ -6,6 +6,8 @@ import type { ScanRun } from '../../hooks/useDb.js';
 import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
 import { useAppStore } from '../../store/appStore.js';
+import { ProjectSelector } from '../ProjectSelector.js';
+import { useAuth } from '../../hooks/useAuth.js';
 
 interface Props {
     style?: React.CSSProperties;
@@ -33,6 +35,7 @@ export function Sidebar({
     className,
 }: Props) {
     const loadedRunId = useAppStore(state => state.loadedRunId);
+    const { authEnabled, token } = useAuth();
     
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
@@ -92,6 +95,18 @@ export function Sidebar({
 
     return (
         <aside className={`sidebar ${className || ''}`} style={style}>
+            {authEnabled && token && (
+                <div className="sidebar-project-selector" style={{
+                    padding: '8px 12px 14px 12px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                }}>
+                    <ProjectSelector />
+                </div>
+            )}
             {/* History */}
             <Section 
                 title="History" 

@@ -2,9 +2,10 @@
  * useConfig — manages SwazzConfig in localStorage.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { SwazzConfig, SwazzSettings, Dictionary, FuzzingProfile } from '../types.js';
 import { DEFAULT_SETTINGS } from '../types.js';
+import { useAppStore } from '../store/appStore.js';
 
 const STORAGE_KEY = 'swazz:config';
 
@@ -123,11 +124,64 @@ function saveConfig(config: SwazzConfig): void {
 }
 
 export function useConfig() {
-    const [config, setConfig] = useState<SwazzConfig>(loadConfig);
+    const activeProject = useAppStore(state => state.activeProject);
+    let token: string | null = null;
+    try {
+        token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+    } catch { /* ignore */ }
+    const storageKey = token && activeProject ? `${STORAGE_KEY}:${activeProject.id}` : STORAGE_KEY;
 
+    const [config, setConfig] = useState<SwazzConfig>(() => {
+        try {
+            const stored = localStorage.getItem(storageKey);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return {
+                    ...DEFAULT_CONFIG,
+                    ...parsed,
+                    settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+                    security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
+                };
+            }
+        } catch { /* ignore */ }
+        return { ...DEFAULT_CONFIG };
+    });
+
+    const currentKeyRef = useRef(storageKey);
+
+    // Load config when storage key changes
     useEffect(() => {
-        saveConfig(config);
-    }, [config]);
+        try {
+            const stored = localStorage.getItem(storageKey);
+            let loaded: SwazzConfig;
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                loaded = {
+                    ...DEFAULT_CONFIG,
+                    ...parsed,
+                    settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+                    security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
+                };
+            } else {
+                loaded = { ...DEFAULT_CONFIG };
+            }
+            currentKeyRef.current = storageKey;
+            setConfig(loaded);
+        } catch { 
+            currentKeyRef.current = storageKey;
+            setConfig({ ...DEFAULT_CONFIG });
+        }
+    }, [storageKey]);
+
+    // Save config to current storage key when config changes
+    useEffect(() => {
+        if (currentKeyRef.current !== storageKey) {
+            return;
+        }
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(config));
+        } catch { /* ignore */ }
+    }, [config, storageKey]);
 
     const updateConfig = useCallback((partial: Partial<SwazzConfig>) => {
         setConfig((prev) => ({ ...prev, ...partial }));

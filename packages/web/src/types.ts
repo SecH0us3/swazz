@@ -205,3 +205,11 @@ export type SendRequestFn = (req: SendRequestPayload) => Promise<{
     duration: number;
     headers?: Record<string, string>;
 }>;
+
+// ─── Projects ───────────────────────────────────────────
+
+export interface Project {
+    id: string;
+    name: string;
+    description: string;
+}

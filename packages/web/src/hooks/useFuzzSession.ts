@@ -131,14 +131,14 @@ export function useFuzzSession({
         };
         delete finalConfig.disabled_endpoints;
 
-        const runId = `run_${Date.now()}`;
-
+        const activeProject = useAppStore.getState().activeProject;
         const runRec: ScanRun = {
             id: runId,
             startedAt: Date.now(),
             completedAt: 0,
             baseUrl: finalBaseUrl,
             stats: null as any,
+            projectId: activeProject ? activeProject.id : undefined,
         };
 
         // Save the run metadata immediately so it appears in history

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuth } from '../hooks/useAuth.js';
-import { ProjectSelector } from './ProjectSelector.js';
 import { UserMenu } from './UserMenu.js';
 
 interface Props {
@@ -184,9 +183,7 @@ export function Header({
 
             {/* Right Section: Actions, Toggles */}
             <div className="header-right">
-                {authEnabled && token && (
-                    <ProjectSelector />
-                )}
+
 
                 {/* Actions */}
                 <div className="header-actions">

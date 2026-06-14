@@ -48,7 +48,7 @@ export default function App() {
                 useAppStore.setState({ userProfile: null });
             });
         } else {
-            useAppStore.setState({ userProfile: null });
+            useAppStore.setState({ userProfile: null, activeProject: null });
         }
     }, [token]);
 

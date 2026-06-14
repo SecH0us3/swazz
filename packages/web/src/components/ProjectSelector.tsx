@@ -9,7 +9,19 @@ interface Project {
 
 export function ProjectSelector() {
     const [projects, setProjects] = useState<Project[]>([]);
-    const [activeProject, setActiveProject] = useState<Project | null>(null);
+    const activeProject = useAppStore(state => state.activeProject);
+    const setActiveProject = (p: Project | null) => {
+        useAppStore.setState({
+            activeProject: p,
+            loadedRunId: null,
+            liveRunId: null,
+            historyStats: null,
+            stats: null,
+            liveCount: 0,
+            selectedResult: null,
+            heatmapFilter: null,
+        });
+    };
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -20,7 +32,7 @@ export function ProjectSelector() {
                 if (data.projects) {
                     setProjects(data.projects);
                     if (data.projects.length > 0 && !activeProject) {
-                        setActiveProject(data.projects[0]);
+                        useAppStore.setState({ activeProject: data.projects[0] });
                     }
                 }
             })
@@ -40,17 +52,30 @@ export function ProjectSelector() {
     if (projects.length === 0) return null;
 
     return (
-        <div className="dropdown-container" ref={dropdownRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <div className="dropdown-container" ref={dropdownRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
             <button 
                 className="btn btn-ghost" 
                 onClick={() => setIsOpen(!isOpen)}
-                style={{ gap: '6px', padding: '4px 8px', fontWeight: 500 }}
+                style={{ 
+                    gap: '8px', 
+                    padding: '8px 12px', 
+                    fontWeight: 500, 
+                    width: '100%', 
+                    display: 'flex', 
+                    justifyContent: 'flex-start', 
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: 'var(--radius-md)',
+                }}
             >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-light)', flexShrink: 0 }}>
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                 </svg>
-                {activeProject?.name || 'Select Project'}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flexGrow: 1, textAlign: 'left' }}>
+                    {activeProject?.name || 'Select Project'}
+                </span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, marginLeft: 'auto', flexShrink: 0 }}>
                     <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
             </button>
@@ -59,11 +84,11 @@ export function ProjectSelector() {
                 <div style={{
                     position: 'absolute',
                     top: '100%',
+                    left: 0,
                     right: 0,
                     marginTop: '4px',
                     backgroundColor: 'var(--bg-elevated)',
-                    minWidth: '200px',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
                     zIndex: 100,
                     borderRadius: 'var(--radius-md)',
                     display: 'flex',

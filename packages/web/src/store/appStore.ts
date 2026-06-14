@@ -1,5 +1,5 @@
 import { create, StateCreator } from 'zustand';
-import type { FuzzResult, RunStats } from '../types.js';
+import type { FuzzResult, RunStats, Project } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 
 export interface UISlice {
@@ -66,11 +66,20 @@ const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
     userProfile: null,
 });
 
-export type AppState = UISlice & FuzzingSlice & StatsSlice & UserSlice;
+export interface ProjectSlice {
+    activeProject: Project | null;
+}
+
+const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = () => ({
+    activeProject: null,
+});
+
+export type AppState = UISlice & FuzzingSlice & StatsSlice & UserSlice & ProjectSlice;
 
 export const useAppStore = create<AppState>()((...a) => ({
     ...createUISlice(...a),
     ...createFuzzingSlice(...a),
     ...createStatsSlice(...a),
     ...createUserSlice(...a),
+    ...createProjectSlice(...a),
 }));
