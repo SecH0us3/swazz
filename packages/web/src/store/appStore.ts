@@ -58,10 +58,19 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
     specCacheDates: {},
 });
 
-export type AppState = UISlice & FuzzingSlice & StatsSlice;
+export interface UserSlice {
+    userProfile: { username: string; apiKey: string } | null;
+}
+
+const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
+    userProfile: null,
+});
+
+export type AppState = UISlice & FuzzingSlice & StatsSlice & UserSlice;
 
 export const useAppStore = create<AppState>()((...a) => ({
     ...createUISlice(...a),
     ...createFuzzingSlice(...a),
     ...createStatsSlice(...a),
+    ...createUserSlice(...a),
 }));

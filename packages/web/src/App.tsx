@@ -31,6 +31,27 @@ export default function App() {
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
 
+    useEffect(() => {
+        if (token) {
+            fetch(`${PROXY_URL}/api/auth/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error('Failed to fetch profile');
+            })
+            .then(data => {
+                useAppStore.setState({ userProfile: { username: data.username, apiKey: data.api_key } });
+            })
+            .catch(err => {
+                console.error(err);
+                useAppStore.setState({ userProfile: null });
+            });
+        } else {
+            useAppStore.setState({ userProfile: null });
+        }
+    }, [token]);
+
     // Only subscribe to what App.tsx needs for rendering
     const {
         activeTab,

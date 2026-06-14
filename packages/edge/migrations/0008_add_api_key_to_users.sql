@@ -1,0 +1,1 @@
+-- Placeholder migration. api_key column added directly to 0001_create_users.sql

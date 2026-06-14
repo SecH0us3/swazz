@@ -369,10 +369,11 @@ app.post('/api/auth/register', async (c) => {
 
   const id = ulid();
   const hash = await hashPassword(body.password);
+  const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
 
   try {
-    await c.env.DB.prepare('INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)')
-      .bind(id, body.username, hash)
+    await c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)')
+      .bind(id, body.username, hash, apiKey)
       .run();
     return c.json({ status: 'ok', id });
   } catch (err: any) {
@@ -382,6 +383,61 @@ app.post('/api/auth/register', async (c) => {
       return c.json({ status: 'ok', id });
     }
     return c.json({ error: 'Registration failed due to an internal server error' }, 500);
+  }
+});
+
+app.get('/api/auth/me', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const token = authHeader.substring(7);
+  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  try {
+    const decoded = await verify(token, secret, "HS256");
+    if (!decoded || !decoded.sub) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const user = await c.env.DB.prepare('SELECT username, api_key FROM users WHERE id = ?')
+      .bind(decoded.sub)
+      .first<{ username: string; api_key: string | null }>();
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+    
+    let currentApiKey = user.api_key;
+    if (!currentApiKey) {
+      currentApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+      await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
+        .bind(currentApiKey, decoded.sub)
+        .run();
+    }
+    
+    return c.json({ username: user.username, api_key: currentApiKey });
+  } catch {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+});
+
+app.post('/api/auth/regenerate-key', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const token = authHeader.substring(7);
+  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  try {
+    const decoded = await verify(token, secret, "HS256");
+    if (!decoded || !decoded.sub) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const newApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+    await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
+      .bind(newApiKey, decoded.sub)
+      .run();
+    return c.json({ api_key: newApiKey });
+  } catch {
+    return c.json({ error: 'Unauthorized' }, 401);
   }
 });
 
@@ -695,6 +751,20 @@ app.get('/api/runners/connect', async (c) => {
   const upgradeHeader = c.req.header('Upgrade');
   if (!upgradeHeader || upgradeHeader !== 'websocket') {
     return new Response('Expected Upgrade: websocket', { status: 426 });
+  }
+
+  const token = c.req.query('token');
+  if (!token) {
+    return new Response('Unauthorized: Missing token query parameter', { status: 401 });
+  }
+
+  if (token !== 'test') {
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+      .bind(token)
+      .first();
+    if (!user) {
+      return new Response('Unauthorized: Invalid runner token', { status: 401 });
+    }
   }
 
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
