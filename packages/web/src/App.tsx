@@ -27,7 +27,7 @@ import { LoginScreen } from './components/Auth/LoginScreen.js';
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export default function App() {
-    const { authEnabled, token, isLoading, login, register, logout } = useAuth();
+    const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
 
@@ -317,8 +317,8 @@ export default function App() {
         return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
     }
 
-    if (authEnabled && !token) {
-        return <LoginScreen onLogin={login} onRegister={register} />;
+    if (authEnabled && !token && !isGuest) {
+        return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
     }
 
     return (

@@ -7,9 +7,15 @@ export async function loadSwaggerUrl(
     cookies?: Record<string, string>,
     forceRebuild?: boolean,
 ): Promise<{ basePath: string; endpointCount: number; endpoints: any[]; cachedAt?: string }> {
+    const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+    if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
     const res = await fetch(`${PROXY_URL}/api/parse`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: requestHeaders,
         body: JSON.stringify({ url, forceRebuild }), // we can pass headers/cookies if the Go backend supports it eventually
     });
 

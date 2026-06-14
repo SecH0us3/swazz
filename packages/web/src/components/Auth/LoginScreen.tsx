@@ -4,9 +4,10 @@ import './LoginScreen.css';
 interface LoginScreenProps {
     onLogin: (username: string, password: string) => Promise<void>;
     onRegister: (username: string, password: string) => Promise<void>;
+    onGuest?: () => void;
 }
 
-export function LoginScreen({ onLogin, onRegister }: LoginScreenProps) {
+export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) {
     const [isRegistering, setIsRegistering] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -98,6 +99,14 @@ export function LoginScreen({ onLogin, onRegister }: LoginScreenProps) {
                             isRegistering ? 'Get Started' : 'Enter Workspace'
                         )}
                     </button>
+                    {onGuest && (
+                        <div className="guest-action-wrapper">
+                            <span className="guest-divider">or</span>
+                            <button type="button" onClick={onGuest} className="guest-btn">
+                                Continue as Guest
+                            </button>
+                        </div>
+                    )}
                 </form>
                 <div className="login-footer">
                     {isRegistering ? (

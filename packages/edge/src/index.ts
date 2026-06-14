@@ -10,6 +10,7 @@ export interface Env {
   JWT_SECRET: string;
   TURNSTILE_SECRET?: string;
   AUTH_ENABLED?: string; // 'true' | 'false'
+  LIMIT_ANONYMOUS?: string; // 'true' | 'false'
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -18,7 +19,12 @@ app.use('*', cors());
 
 app.get('/api/info', (c) => {
   const authEnabled = c.env.AUTH_ENABLED === 'true';
-  return c.json({ auth_enabled: authEnabled, version: '1.0.0' });
+  const limitAnonymous = c.env.LIMIT_ANONYMOUS === 'true';
+  return c.json({ 
+    auth_enabled: authEnabled, 
+    limit_anonymous: limitAnonymous, 
+    version: '1.0.0' 
+  });
 });
 // Add Content-Signal header middleware
 app.use('*', async (c, next) => {
@@ -717,6 +723,26 @@ app.get('/api/runs/:id/events', async (c) => {
 
 app.post('/api/runs', async (c) => {
   const body = await c.req.json();
+
+  if (c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
+    const isAnon = await isAnonymousUser(c);
+    if (isAnon) {
+      let endpointCount = 0;
+      const config = body.config || {};
+      const endpoints = config.endpoints;
+      if (endpoints) {
+        if (Array.isArray(endpoints)) {
+          endpointCount = endpoints.length;
+        } else if (Array.isArray(endpoints.include)) {
+          endpointCount = endpoints.include.length;
+        }
+      }
+      if (endpointCount > 50) {
+        return c.json({ error: 'Anonymous limit reached: You can only scan up to 50 endpoints.' }, 403);
+      }
+    }
+  }
+
   const runId = crypto.randomUUID();
 
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -815,9 +841,42 @@ app.all('/api/proxy', async (c) => {
 
 app.post('/api/parse', async (c) => {
   const body = await c.req.text();
+
+  if (c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
+    const isAnon = await isAnonymousUser(c);
+    if (isAnon) {
+      const ip = getClientIp(c);
+      
+      // Ensure anonymous_usage table exists
+      await c.env.DB.prepare(
+        'CREATE TABLE IF NOT EXISTS anonymous_usage (ip TEXT PRIMARY KEY, json_count INTEGER DEFAULT 0, scan_count INTEGER DEFAULT 0)'
+      ).run();
+
+      const usage = await c.env.DB.prepare('SELECT json_count FROM anonymous_usage WHERE ip = ?')
+        .bind(ip)
+        .first<{ json_count: number }>();
+
+      if (usage && usage.json_count >= 1) {
+        return c.json({ error: 'Anonymous limit reached: You can only import/parse 1 JSON spec by IP.' }, 403);
+      }
+    }
+  }
+
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
   const res = await stub.fetch(new Request('http://internal/parse', { method: 'POST', body }));
+
+  if (res.ok && c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
+    const isAnon = await isAnonymousUser(c);
+    if (isAnon) {
+      const ip = getClientIp(c);
+      await c.env.DB.prepare(
+        `INSERT INTO anonymous_usage (ip, json_count) VALUES (?, 1)
+         ON CONFLICT(ip) DO UPDATE SET json_count = json_count + 1`
+      ).bind(ip).run();
+    }
+  }
+
   return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json' } });
 });
 
@@ -1098,4 +1157,30 @@ export class RunnerCoordinator {
   async webSocketError(ws: WebSocket, error: any) {
     await this.webSocketClose(ws, 1011, "Error", false);
   }
+}
+
+async function isAnonymousUser(c: any): Promise<boolean> {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return true;
+  }
+  const token = authHeader.substring(7);
+  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  try {
+    const decoded = await verify(token, secret, "HS256");
+    return !decoded || !decoded.sub;
+  } catch {
+    return true;
+  }
+}
+
+function isWebRequest(c: any): boolean {
+  const ua = c.req.header('User-Agent') || '';
+  const origin = c.req.header('Origin');
+  const referer = c.req.header('Referer');
+  return ua.includes('Mozilla') || !!origin || !!referer;
+}
+
+function getClientIp(c: any): string {
+  return c.req.header('CF-Connecting-IP') || c.req.header('X-Real-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
 }

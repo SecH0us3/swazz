@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 export function useAuth() {
     const [authEnabled, setAuthEnabled] = useState(false);
     const [token, setToken] = useState<string | null>(localStorage.getItem('swazz_token'));
+    const [isGuest, setIsGuest] = useState(sessionStorage.getItem('swazz_guest') === 'true');
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -28,6 +29,8 @@ export function useAuth() {
         if (!res.ok) throw new Error(data.error || 'Login failed');
         setToken(data.token);
         localStorage.setItem('swazz_token', data.token);
+        setIsGuest(false);
+        sessionStorage.removeItem('swazz_guest');
     };
 
     const register = async (username: string, password: string) => {
@@ -49,13 +52,22 @@ export function useAuth() {
         if (loginRes.ok) {
             setToken(loginData.token);
             localStorage.setItem('swazz_token', loginData.token);
+            setIsGuest(false);
+            sessionStorage.removeItem('swazz_guest');
         }
+    };
+
+    const continueAsGuest = () => {
+        setIsGuest(true);
+        sessionStorage.setItem('swazz_guest', 'true');
     };
 
     const logout = () => {
         setToken(null);
         localStorage.removeItem('swazz_token');
+        setIsGuest(false);
+        sessionStorage.removeItem('swazz_guest');
     };
 
-    return { authEnabled, token, isLoading, login, register, logout };
+    return { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout };
 }

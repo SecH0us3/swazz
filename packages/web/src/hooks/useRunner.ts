@@ -165,9 +165,15 @@ export function useRunner(proxyUrl: string) {
                     };
                 }
 
+                const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+                const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+                if (token) {
+                    requestHeaders['Authorization'] = `Bearer ${token}`;
+                }
+
                 const res = await fetch(`${proxyUrl}/api/runs`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: requestHeaders,
                     body: JSON.stringify({ config: configToSend }),
                 });
                 if (!res.ok) {
@@ -223,28 +229,51 @@ export function useRunner(proxyUrl: string) {
     );
 
     const stop = useCallback(async () => {
+        if (!runIdRef.current) return;
         try {
-            if (runIdRef.current) {
-                const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/stop`, { method: 'POST' });
-                if (!res.ok) throw new Error('Failed to stop run');
-            }
+            const headers: Record<string, string> = {};
+            const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/stop`, { 
+                method: 'POST',
+                ...(token ? { headers } : {})
+            });
+            if (!res.ok) throw new Error('Failed to stop run');
+        } catch (err) {
+            console.error(err);
+            throw err;
         } finally {
             wsRef.current?.close();
             wsRef.current = null;
-            useAppStore.setState({ isRunning: false });
+            useAppStore.setState({ isRunning: false, isPaused: false });
         }
     }, [proxyUrl]);
 
     const pause = useCallback(async () => {
         if (!runIdRef.current) return;
-        const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/pause`, { method: 'POST' });
+        const headers: Record<string, string> = {};
+        const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/pause`, { 
+            method: 'POST',
+            ...(token ? { headers } : {})
+        });
         if (!res.ok) throw new Error('Failed to pause');
         useAppStore.setState({ isPaused: true });
     }, [proxyUrl]);
 
     const resume = useCallback(async () => {
         if (!runIdRef.current) return;
-        const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/resume`, { method: 'POST' });
+        const headers: Record<string, string> = {};
+        const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/resume`, { 
+            method: 'POST',
+            ...(token ? { headers } : {})
+        });
         if (!res.ok) throw new Error('Failed to resume');
         useAppStore.setState({ isPaused: false });
     }, [proxyUrl]);
