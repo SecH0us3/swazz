@@ -34,8 +34,8 @@ export function UserProfileModal() {
                 </div>
 
                 <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>Email Address</label>
-                    <input type="text" className="input" value="user@example.com" disabled style={{ width: '100%', opacity: 0.7 }} />
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>Username</label>
+                    <input type="text" className="input" value="admin" disabled style={{ width: '100%', opacity: 0.7 }} />
                 </div>
 
                 <div style={{ marginBottom: '20px' }}>

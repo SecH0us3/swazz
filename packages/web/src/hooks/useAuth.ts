@@ -18,11 +18,11 @@ export function useAuth() {
             });
     }, []);
 
-    const login = async (email: string, password: string) => {
+    const login = async (username: string, password: string) => {
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ username, password })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Login failed');
@@ -30,20 +30,20 @@ export function useAuth() {
         localStorage.setItem('swazz_token', data.token);
     };
 
-    const register = async (email: string, password: string) => {
+    const register = async (username: string, password: string) => {
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ username, password })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Registration failed');
         
-        // Auto-login after registration (dummy token from register endpoint or call login)
+        // Auto-login after registration
         const loginRes = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ username, password })
         });
         const loginData = await loginRes.json();
         if (loginRes.ok) {

@@ -267,16 +267,16 @@ async function verifyTurnstile(token: string, secret: string, remoteip?: string)
 }
 
 /**
- * Check if a login is rate-limited for the given email.
+ * Check if a login is rate-limited for the given username.
  * Returns { locked: true, retryAfter } if the account is locked.
  */
 async function checkLoginRateLimit(
   db: D1Database,
-  email: string
+  username: string
 ): Promise<{ locked: boolean; retryAfter?: string }> {
   const row = await db
-    .prepare('SELECT failed_count, locked_until FROM login_attempts WHERE email = ?')
-    .bind(email)
+    .prepare('SELECT failed_count, locked_until FROM login_attempts WHERE username = ?')
+    .bind(username)
     .first<{ failed_count: number; locked_until: string | null }>();
 
   if (!row) return { locked: false };
@@ -288,8 +288,8 @@ async function checkLoginRateLimit(
     }
     // Lock has expired — reset the counter
     await db
-      .prepare('UPDATE login_attempts SET failed_count = 0, locked_until = NULL WHERE email = ?')
-      .bind(email)
+      .prepare('UPDATE login_attempts SET failed_count = 0, locked_until = NULL WHERE username = ?')
+      .bind(username)
       .run();
   }
 
@@ -303,10 +303,10 @@ const LOCKOUT_MINUTES = 15;
  * Record a failed login attempt. After MAX_LOGIN_ATTEMPTS consecutive failures,
  * lock the account for LOCKOUT_MINUTES.
  */
-async function recordFailedLogin(db: D1Database, email: string): Promise<void> {
+async function recordFailedLogin(db: D1Database, username: string): Promise<void> {
   const row = await db
-    .prepare('SELECT failed_count FROM login_attempts WHERE email = ?')
-    .bind(email)
+    .prepare('SELECT failed_count FROM login_attempts WHERE username = ?')
+    .bind(username)
     .first<{ failed_count: number }>();
 
   const newCount = (row?.failed_count ?? 0) + 1;
@@ -319,21 +319,21 @@ async function recordFailedLogin(db: D1Database, email: string): Promise<void> {
 
   await db
     .prepare(
-      `INSERT INTO login_attempts (email, failed_count, locked_until)
+      `INSERT INTO login_attempts (username, failed_count, locked_until)
        VALUES (?, ?, ?)
-       ON CONFLICT(email) DO UPDATE SET failed_count = ?, locked_until = ?`
+       ON CONFLICT(username) DO UPDATE SET failed_count = ?, locked_until = ?`
     )
-    .bind(email, newCount, lockedUntil, newCount, lockedUntil)
+    .bind(username, newCount, lockedUntil, newCount, lockedUntil)
     .run();
 }
 
 /**
  * Reset the failed login counter on successful login.
  */
-async function resetLoginAttempts(db: D1Database, email: string): Promise<void> {
+async function resetLoginAttempts(db: D1Database, username: string): Promise<void> {
   await db
-    .prepare('DELETE FROM login_attempts WHERE email = ?')
-    .bind(email)
+    .prepare('DELETE FROM login_attempts WHERE username = ?')
+    .bind(username)
     .run();
 }
 
@@ -343,8 +343,8 @@ async function resetLoginAttempts(db: D1Database, email: string): Promise<void> 
 
 app.post('/api/auth/register', async (c) => {
   const body = await c.req.json();
-  if (!body.email || !body.password) {
-    return c.json({ error: 'Missing email or password' }, 400);
+  if (!body.username || !body.password) {
+    return c.json({ error: 'Missing username or password' }, 400);
   }
 
   // Turnstile verification (skip if secret not configured — local dev mode)
@@ -365,19 +365,24 @@ app.post('/api/auth/register', async (c) => {
   const hash = await hashPassword(body.password);
 
   try {
-    await c.env.DB.prepare('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)')
-      .bind(id, body.email, hash)
+    await c.env.DB.prepare('INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)')
+      .bind(id, body.username, hash)
       .run();
     return c.json({ status: 'ok', id });
   } catch (err: any) {
-    return c.json({ error: 'Email already exists' }, 409);
+    const errMsg = String(err?.message || err || '');
+    if (errMsg.includes('UNIQUE constraint failed')) {
+      // Prevent user enumeration by returning success on duplicate username
+      return c.json({ status: 'ok', id });
+    }
+    return c.json({ error: 'Registration failed due to an internal server error' }, 500);
   }
 });
 
 app.post('/api/auth/login', async (c) => {
   const body = await c.req.json();
-  if (!body.email || !body.password) {
-    return c.json({ error: 'Missing email or password' }, 400);
+  if (!body.username || !body.password) {
+    return c.json({ error: 'Missing username or password' }, 400);
   }
 
   // Turnstile verification (skip if secret not configured — local dev mode)
@@ -395,7 +400,7 @@ app.post('/api/auth/login', async (c) => {
   }
 
   // Rate-limit check
-  const rateLimit = await checkLoginRateLimit(c.env.DB, body.email);
+  const rateLimit = await checkLoginRateLimit(c.env.DB, body.username);
   if (rateLimit.locked) {
     return c.json(
       { error: 'Account temporarily locked due to too many failed attempts', retry_after: rateLimit.retryAfter },
@@ -403,24 +408,24 @@ app.post('/api/auth/login', async (c) => {
     );
   }
 
-  const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
-    .bind(body.email)
+  const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE username = ?')
+    .bind(body.username)
     .first<{ id: string; password_hash: string }>();
 
   if (!user) {
-    await recordFailedLogin(c.env.DB, body.email);
+    await recordFailedLogin(c.env.DB, body.username);
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
   const valid = await verifyPassword(body.password, user.password_hash);
   
   if (!valid) {
-    await recordFailedLogin(c.env.DB, body.email);
+    await recordFailedLogin(c.env.DB, body.username);
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
   // Successful login — reset rate-limit counter
-  await resetLoginAttempts(c.env.DB, body.email);
+  await resetLoginAttempts(c.env.DB, body.username);
 
   const payload = {
     sub: user.id,

@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, -- ULID
-    email TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     public_key TEXT,
     retention_days INTEGER DEFAULT 90,
