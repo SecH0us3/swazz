@@ -93,8 +93,11 @@ export function Header({
                     </svg>
                 </button>
 
-                {/* Logo */}
-                <div className="header-logo">
+                <div 
+                    className="header-logo" 
+                    onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
+                    style={{ cursor: 'pointer' }}
+                >
                     <div className="header-logo-icon">⚡</div>
                     <span className="header-logo-text">swazz</span>
                 </div>

@@ -151,29 +151,59 @@ export function useConfig() {
 
     // Load config when storage key changes
     useEffect(() => {
-        try {
-            const stored = localStorage.getItem(storageKey);
-            let loaded: SwazzConfig;
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                loaded = {
-                    ...DEFAULT_CONFIG,
-                    ...parsed,
-                    settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-                    security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
-                };
-            } else {
-                loaded = { ...DEFAULT_CONFIG };
-            }
-            currentKeyRef.current = storageKey;
-            setConfig(loaded);
-        } catch { 
-            currentKeyRef.current = storageKey;
-            setConfig({ ...DEFAULT_CONFIG });
-        }
-    }, [storageKey]);
+        let active = true;
 
-    // Save config to current storage key when config changes
+        const load = async () => {
+            let loaded: SwazzConfig | null = null;
+
+            // 1. Try server first if logged in
+            if (token && activeProject) {
+                try {
+                    const res = await fetch(`/api/projects/${activeProject.id}/config`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.config) {
+                            loaded = data.config;
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[swazz] Failed to load config from server:', err);
+                }
+            }
+
+            // 2. Fall back to localStorage
+            if (!loaded) {
+                try {
+                    const stored = localStorage.getItem(storageKey);
+                    if (stored) {
+                        loaded = JSON.parse(stored);
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (!active) return;
+
+            const finalConfig = loaded ? {
+                ...DEFAULT_CONFIG,
+                ...loaded,
+                settings: { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) },
+                security: loaded.security ? { ...DEFAULT_CONFIG.security, ...loaded.security } : DEFAULT_CONFIG.security,
+            } : { ...DEFAULT_CONFIG };
+
+            currentKeyRef.current = storageKey;
+            setConfig(finalConfig);
+        };
+
+        load();
+
+        return () => {
+            active = false;
+        };
+    }, [storageKey, token, activeProject]);
+
+    // Save config to current storage key when config changes & sync to server (debounced)
     useEffect(() => {
         if (currentKeyRef.current !== storageKey) {
             return;
@@ -181,7 +211,26 @@ export function useConfig() {
         try {
             localStorage.setItem(storageKey, JSON.stringify(config));
         } catch { /* ignore */ }
-    }, [config, storageKey]);
+
+        if (token && activeProject) {
+            const timer = setTimeout(async () => {
+                try {
+                    await fetch(`/api/projects/${activeProject.id}/config`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ config })
+                    });
+                } catch (err) {
+                    console.warn('[swazz] Failed to sync config to server:', err);
+                }
+            }, 1500); // 1.5s debounce
+
+            return () => clearTimeout(timer);
+        }
+    }, [config, storageKey, token, activeProject]);
 
     const updateConfig = useCallback((partial: Partial<SwazzConfig>) => {
         setConfig((prev) => ({ ...prev, ...partial }));

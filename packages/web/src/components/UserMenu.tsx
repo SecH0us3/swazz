@@ -54,7 +54,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                         style={{ padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', color: 'var(--text-default)', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}
                         onClick={() => {
                             setIsOpen(false);
-                            useAppStore.setState({ isUserProfileOpen: true });
+                            useAppStore.setState({ activeTab: 'settings' });
                         }}
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

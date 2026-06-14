@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
+import { UserSettings } from './UserSettings.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -100,7 +101,7 @@ export function MainWorkspace({
 
     return (
         <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
-            {loadedRunId && (
+            {loadedRunId && activeTab !== 'settings' && (
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '10px 16px',
@@ -122,7 +123,9 @@ export function MainWorkspace({
                 </div>
             )}
 
-            {!hasActivity && (
+            {activeTab === 'settings' ? (
+                <UserSettings />
+            ) : !hasActivity ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="empty-state">
                         <div className="empty-state-icon">⚡</div>
@@ -144,9 +147,7 @@ export function MainWorkspace({
                         </div>
                     </div>
                 </div>
-            )}
-
-            {hasActivity && (
+            ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">
                         <button

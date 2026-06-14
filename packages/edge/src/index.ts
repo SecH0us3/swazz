@@ -15,6 +15,24 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
+async function getUserIdFromRequest(c: any): Promise<string | null> {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  try {
+    const decoded = await verify(token, secret, "HS256");
+    if (!decoded || !decoded.sub) {
+      return null;
+    }
+    return String(decoded.sub);
+  } catch {
+    return null;
+  }
+}
+
 app.use('*', cors());
 
 app.get('/api/info', (c) => {
@@ -535,6 +553,54 @@ app.post('/api/projects', async (c) => {
   ]);
 
   return c.json({ id, status: 'created' });
+});
+
+app.get('/api/projects/:id/config', async (c) => {
+  const projectId = c.req.param('id');
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const member = await c.env.DB.prepare(
+      'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?'
+    )
+    .bind(projectId, userId)
+    .first();
+    if (!member) return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const result = await c.env.DB.prepare(
+    "SELECT config_json FROM scan_configs WHERE project_id = ? AND name = 'default'"
+  )
+  .bind(projectId)
+  .first<{ config_json: string }>();
+
+  if (!result) {
+    return c.json({ config: null });
+  }
+  return c.json({ config: JSON.parse(result.config_json) });
+});
+
+app.post('/api/projects/:id/config', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json();
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const member = await c.env.DB.prepare(
+      'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?'
+    )
+    .bind(projectId, userId)
+    .first();
+    if (!member) return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const configJson = JSON.stringify(body.config);
+  const id = ulid();
+
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM scan_configs WHERE project_id = ? AND name = 'default'").bind(projectId),
+    c.env.DB.prepare("INSERT INTO scan_configs (id, project_id, name, config_json) VALUES (?, ?, 'default', ?)").bind(id, projectId, configJson)
+  ]);
+
+  return c.json({ status: 'saved' });
 });
 
 // ---------------------------------------------------------------------------
