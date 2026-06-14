@@ -43,7 +43,7 @@ export function UserProfileModal() {
     };
 
     const coordinatorHost = window.location.origin.replace('http', 'ws');
-    const runCommand = `go run . run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
+    const runCommand = `docker run --rm -it ghcr.io/sech0us3/swazz-runner run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
 
     return (
         <div className="modal-overlay" onClick={close} style={{
