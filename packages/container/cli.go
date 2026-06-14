@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/har"
@@ -103,6 +104,9 @@ func runCLI(args []string) {
 
 	if *debugMode {
 		cliCfg.Settings.Debug = true
+		logger.SetLevel(logger.LevelDebug)
+	} else {
+		logger.SetLevel(logger.LevelWarn)
 	}
 
 	runCfg, err := BuildRunnerConfig(&cliCfg)

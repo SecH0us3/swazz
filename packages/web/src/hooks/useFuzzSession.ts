@@ -76,6 +76,7 @@ export function useFuzzSession({
     }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
 
     const handleStart = async (overrideUrls?: string[], overrideBaseUrl?: string) => {
+        const runId = crypto.randomUUID();
         const swaggerUrls: string[] = overrideUrls || config._swagger_urls || [];
 
         if (swaggerUrls.length === 0 && config.endpoints.length === 0) {

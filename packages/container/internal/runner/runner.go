@@ -33,6 +33,7 @@ import (
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
@@ -217,10 +218,8 @@ func (r *Runner) Start(ctx context.Context) error {
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
 
-	if r.config.Settings.Debug {
-		fmt.Printf("[DEBUG-START-RUN] len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t\n",
-			len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
-	}
+	logger.Debug("Start run: len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t",
+		len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
 
 	r.limiter.SetTarget(r.config.Settings.Concurrency)
 
@@ -336,10 +335,8 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				ep.ContentType,
 			)
 
-			if r.config.Settings.Debug {
-				fmt.Printf("[DEBUG-BASELINE-RUN] method=%s path=%s status=%d size=%d err=%v\n",
-					ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
-			}
+			logger.Debug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
+				ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
 
 			if result.Status >= 200 && result.Status < 300 {
 				r.recordSizeBaseline(ep.Method, ep.Path, result.ResponseSize)

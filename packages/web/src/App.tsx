@@ -40,7 +40,7 @@ export default function App() {
                 throw new Error('Failed to fetch profile');
             })
             .then(data => {
-                useAppStore.setState({ userProfile: { username: data.username, apiKey: data.api_key } });
+                useAppStore.setState({ userProfile: { username: data.username, apiKey: data.api_key, publicKey: data.public_key } });
             })
             .catch(err => {
                 console.error(err);

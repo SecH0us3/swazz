@@ -61,3 +61,7 @@ packages/web/public/ai.txt
 packages/web/public/llms.txt
 packages/web/public/llms-full.txt
 .chrome-dev-profile/
+
+# Runner Keys
+*.key
+*.pub

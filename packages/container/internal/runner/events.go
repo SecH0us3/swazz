@@ -7,8 +7,8 @@ package runner
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"sync"
+	"swazz-engine/internal/logger"
 	"time"
 )
 
@@ -36,7 +36,7 @@ var bufPool = sync.Pool{
 func (e *Event) JSON() string {
 	b, err := json.Marshal(e.Data)
 	if err != nil {
-		fmt.Printf("[ERROR] Failed to marshal event data for type %s: %v\n", e.Type, err)
+		logger.Error("Failed to marshal event data for type %s: %v", e.Type, err)
 		return `{"error": "failed to marshal event data on server"}`
 	}
 	return string(b)

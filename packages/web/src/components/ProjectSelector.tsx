@@ -25,8 +25,50 @@ export function ProjectSelector() {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
+    const handleCreateProject = async (name: string) => {
+        const token = localStorage.getItem('swazz_token');
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        try {
+            const res = await fetch('/api/projects', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ name })
+            });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            
+            // Reload the list of projects
+            const listHeaders: Record<string, string> = {};
+            if (token) {
+                listHeaders['Authorization'] = `Bearer ${token}`;
+            }
+            const listRes = await fetch('/api/projects', { headers: listHeaders });
+            const listData = await listRes.json();
+            if (listData.projects) {
+                setProjects(listData.projects);
+                const newProj = listData.projects.find((p: Project) => p.id === data.id);
+                if (newProj) {
+                    setActiveProject(newProj);
+                }
+            }
+        } catch {
+            alert('Failed to create project');
+        }
+    };
+
     useEffect(() => {
-        fetch('/api/projects')
+        const token = localStorage.getItem('swazz_token');
+        const headers: Record<string, string> = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        fetch('/api/projects', { headers })
             .then(res => res.json())
             .then(data => {
                 if (data.projects) {
@@ -129,6 +171,23 @@ export function ProjectSelector() {
                         </button>
                     ))}
                     <div style={{ height: '1px', background: 'var(--border-default)', margin: '4px 0' }} />
+                    <button 
+                        className="dropdown-item" 
+                        style={{ padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', color: 'var(--accent-light)', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}
+                        onClick={() => {
+                            setIsOpen(false);
+                            const name = prompt('Enter project name:');
+                            if (name && name.trim()) {
+                                handleCreateProject(name.trim());
+                            }
+                        }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Create New Project
+                    </button>
                     <button 
                         className="dropdown-item" 
                         style={{ padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}

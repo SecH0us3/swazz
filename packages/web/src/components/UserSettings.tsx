@@ -1,41 +1,71 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
-    const [showKey, setShowKey] = useState(false);
-    const [copiedKey, setCopiedKey] = useState(false);
     const [copiedCmd, setCopiedCmd] = useState(false);
-    const [isRegenerating, setIsRegenerating] = useState(false);
+    const [copiedRunCmd, setCopiedRunCmd] = useState(false);
+
+    const [pubKeyInput, setPubKeyInput] = useState(userProfile?.publicKey || '');
+    const [isSavingPubKey, setIsSavingPubKey] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [saveError, setSaveError] = useState('');
+
+    useEffect(() => {
+        if (userProfile?.publicKey) {
+            setPubKeyInput(userProfile.publicKey);
+        }
+    }, [userProfile?.publicKey]);
 
     const username = userProfile?.username || 'Guest';
     const apiKey = userProfile?.apiKey || '';
 
-    const handleRegenerate = async () => {
+    const handleSavePublicKey = async (e: React.FormEvent) => {
+        e.preventDefault();
         const token = localStorage.getItem('swazz_token');
         if (!token) return;
-        if (!confirm('Are you sure you want to regenerate your API key? Any currently running agent runners using the old key will be disconnected.')) {
-            return;
-        }
 
-        setIsRegenerating(true);
+        setIsSavingPubKey(true);
+        setSaveSuccess(false);
+        setSaveError('');
+
         try {
-            const res = await fetch(`${PROXY_URL}/api/auth/regenerate-key`, {
+            const cleanKey = pubKeyInput.trim();
+            if (cleanKey !== '') {
+                const hexRegex = /^[0-9a-fA-F]{64}$/;
+                if (!hexRegex.test(cleanKey)) {
+                    throw new Error('Invalid public key format. Must be a 64-character hex-encoded string.');
+                }
+            }
+
+            const res = await fetch(`${PROXY_URL}/api/auth/public-key`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({ public_key: cleanKey || null })
             });
-            if (!res.ok) throw new Error('Failed to regenerate API key');
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to update public key');
+            }
+
             const data = await res.json();
             useAppStore.setState(state => ({
-                userProfile: state.userProfile ? { ...state.userProfile, apiKey: data.api_key } : null
+                userProfile: state.userProfile ? { ...state.userProfile, publicKey: data.public_key } : null
             }));
-        } catch (err) {
+
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (err: any) {
             console.error(err);
-            alert('Failed to regenerate key');
+            setSaveError(err.message || 'Failed to save public key');
         } finally {
-            setIsRegenerating(false);
+            setIsSavingPubKey(false);
         }
     };
 
@@ -46,7 +76,8 @@ export function UserSettings() {
     };
 
     const coordinatorHost = window.location.origin.replace('http', 'ws');
-    const runCommand = `docker run --rm -it ghcr.io/sech0us3/swazz-runner run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
+    const genKeysCmd = `docker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-runner generate-keys`;
+    const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ghcr.io/sech0us3/swazz-runner run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
 
     return (
         <div style={{
@@ -71,7 +102,7 @@ export function UserSettings() {
                 <div>
                     <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: 'var(--text-default)' }}>Settings</h1>
                     <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
-                        Manage your account details, access tokens, and distributed runner integrations.
+                        Manage your account details, asymmetric signing keys, and distributed runner integrations.
                     </p>
                 </div>
                 <button 
@@ -95,7 +126,7 @@ export function UserSettings() {
                 alignItems: 'start'
             }}>
                 
-                {/* Account Details & API Key */}
+                {/* Account Details & Auth Key Configuration */}
                 <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -142,7 +173,7 @@ export function UserSettings() {
                         </div>
                     </div>
 
-                    {/* API Token Card */}
+                    {/* Asymmetric Key Card */}
                     {apiKey && (
                         <div className="card" style={{
                             backgroundColor: 'var(--bg-elevated)',
@@ -153,56 +184,63 @@ export function UserSettings() {
                             flexDirection: 'column',
                             gap: '16px'
                         }}>
-                            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                                Access Credentials
-                            </h2>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                                    API Key / Runner Token
-                                </label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input 
-                                        type={showKey ? 'text' : 'password'} 
-                                        className="input" 
-                                        value={apiKey} 
-                                        disabled 
-                                        style={{ flex: 1, opacity: 0.8, fontFamily: 'monospace', fontSize: '13px' }} 
-                                    />
-                                    <button 
-                                        className="btn btn-secondary" 
-                                        onClick={() => setShowKey(!showKey)}
-                                        style={{ padding: '0 12px' }}
-                                    >
-                                        {showKey ? 'Hide' : 'Show'}
-                                    </button>
-                                    <button 
-                                        className="btn btn-secondary" 
-                                        onClick={() => copyToClipboard(apiKey, setCopiedKey)}
-                                        style={{ padding: '0 12px', minWidth: '70px' }}
-                                    >
-                                        {copiedKey ? 'Copied!' : 'Copy'}
-                                    </button>
-                                </div>
-                                <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                                    Use this token to connect your custom runner agent or execute CLI scans.
-                                </p>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+                                    Asymmetric Runner Authentication
+                                </h2>
+                                <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: 'var(--accent-light)',
+                                    backgroundColor: 'rgba(124, 58, 237, 0.15)',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px'
+                                }}>Recommended</span>
                             </div>
                             
-                            <div style={{ display: 'flex', justifyContent: 'flex-start', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
-                                <button 
-                                    className="btn btn-ghost" 
-                                    onClick={handleRegenerate}
-                                    disabled={isRegenerating}
-                                    style={{ color: 'var(--color-error)' }}
-                                >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                                    </svg>
-                                    Regenerate API Key
-                                </button>
-                            </div>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                                For maximum security, register the runner's Ed25519 public key. The runner signs a cryptographic challenge to prove its identity without exposing secrets.
+                            </p>
+
+                            <form onSubmit={handleSavePublicKey} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                                        Runner Public Key (64-char hex)
+                                    </label>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input 
+                                            type="text" 
+                                            className="input" 
+                                            placeholder="Enter hex-encoded public key (e.g. 9f8a7b...)" 
+                                            value={pubKeyInput}
+                                            onChange={(e) => setPubKeyInput(e.target.value)}
+                                            style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px' }} 
+                                        />
+                                        <button 
+                                            type="submit" 
+                                            className="btn btn-primary" 
+                                            disabled={isSavingPubKey}
+                                            style={{ minWidth: '80px' }}
+                                        >
+                                            {isSavingPubKey ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {saveSuccess && (
+                                    <p style={{ margin: 0, fontSize: '12px', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        ✓ Public key saved successfully!
+                                    </p>
+                                )}
+                                {saveError && (
+                                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-error)' }}>
+                                        Error: {saveError}
+                                    </p>
+                                )}
+                            </form>
                         </div>
                     )}
+
+
                 </div>
 
                 {/* Runner Guide Column */}
@@ -232,9 +270,35 @@ export function UserSettings() {
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     fontSize: '11px', fontWeight: 600, flexShrink: 0
                                 }}>1</div>
-                                <div style={{ fontSize: '13px' }}>
-                                    <strong>Initialize Docker</strong>
-                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>Ensure Docker, Containerd, or a Kubernetes node is running locally.</p>
+                                <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
+                                    <strong>Generate Cryptographic Keys</strong>
+                                    <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Generate your Ed25519 signature keypair inside your project directory:</p>
+                                    
+                                    <div style={{
+                                        padding: '12px',
+                                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--border-default)',
+                                        fontFamily: 'monospace',
+                                        fontSize: '11px',
+                                        color: 'var(--text-default)',
+                                        wordBreak: 'break-all',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '8px'
+                                    }}>
+                                        <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{genKeysCmd}</span>
+                                        <button 
+                                            className="btn btn-secondary btn-sm" 
+                                            onClick={() => copyToClipboard(genKeysCmd, setCopiedCmd)}
+                                            style={{ alignSelf: 'flex-start', padding: '4px 8px', fontSize: '11px' }}
+                                        >
+                                            {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
+                                        </button>
+                                    </div>
+                                    <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        This generates `swazz_runner.key` and `swazz_runner.pub` files. Keep the `.key` private!
+                                    </p>
                                 </div>
                             </div>
 
@@ -245,9 +309,24 @@ export function UserSettings() {
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     fontSize: '11px', fontWeight: 600, flexShrink: 0
                                 }}>2</div>
+                                <div style={{ fontSize: '13px' }}>
+                                    <strong>Register Public Key</strong>
+                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        Copy the hex string from `swazz_runner.pub` and paste it into the **Asymmetric Runner Authentication** form on the left, then click Save.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <div style={{
+                                    width: '20px', height: '20px', borderRadius: '50%',
+                                    backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '11px', fontWeight: 600, flexShrink: 0
+                                }}>3</div>
                                 <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
                                     <strong>Run Agent Command</strong>
-                                    <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Execute this command in your terminal to spin up the official runner image:</p>
+                                    <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Start the runner, mounting the generated private key file:</p>
                                     
                                     <div style={{
                                         padding: '12px',
@@ -265,27 +344,12 @@ export function UserSettings() {
                                         <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{runCommand}</span>
                                         <button 
                                             className="btn btn-secondary btn-sm" 
-                                            onClick={() => copyToClipboard(runCommand, setCopiedCmd)}
+                                            onClick={() => copyToClipboard(runCommand, setCopiedRunCmd)}
                                             style={{ alignSelf: 'flex-start', padding: '4px 8px', fontSize: '11px' }}
                                         >
-                                            {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
+                                            {copiedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <div style={{
-                                    width: '20px', height: '20px', borderRadius: '50%',
-                                    backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                }}>3</div>
-                                <div style={{ fontSize: '13px' }}>
-                                    <strong>Fuzz with Confidence</strong>
-                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                        Once connected, the runner will register under your account and automatically receive scan dispatches.
-                                    </p>
                                 </div>
                             </div>
                         </div>

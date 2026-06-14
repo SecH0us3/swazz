@@ -59,7 +59,7 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
 });
 
 export interface UserSlice {
-    userProfile: { username: string; apiKey: string } | null;
+    userProfile: { username: string; apiKey: string; publicKey?: string | null } | null;
 }
 
 const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({

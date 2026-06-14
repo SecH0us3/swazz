@@ -52,14 +52,16 @@ func IsRunningInContainer() bool {
 // mode to enforce isolation in shared/cloud environments.
 //
 // In local CLI mode (swazz-engine start), this function is never called.
-func AssertRunningInContainer() {
-	if os.Getenv("SWAZZ_DEV") == "1" {
-		log.Println("WARNING: Bypassing container check due to SWAZZ_DEV=1")
+func AssertRunningInContainer(allowBypass bool) {
+	if allowBypass || os.Getenv("SWAZZ_DEV") == "1" {
+		log.Println("WARNING: Bypassing container check (running in dangerous/development host mode)")
 		return
 	}
 	if !IsRunningInContainer() {
 		log.Fatal("FATAL: run-agent mode requires a container runtime (Docker, containerd, or Kubernetes).\n" +
 			"       The runner is not inside a container. Use the official Docker image:\n" +
-			"       docker run ghcr.io/sech0us3/swazz-runner run-agent --coordinator <url> --token <token>")
+			"       docker run ghcr.io/sech0us3/swazz-runner run-agent --coordinator <url> --token <token>\n" +
+			"       Alternatively, if you want to bypass this check on your host machine at your own risk, use:\n" +
+			"       swazz-engine run-agent --dangerous-no-container ...")
 	}
 }

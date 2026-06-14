@@ -386,18 +386,23 @@ app.post('/api/auth/register', async (c) => {
   }
 
   const id = ulid();
+  const projectId = ulid();
   const hash = await hashPassword(body.password);
   const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
 
   try {
-    await c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)')
-      .bind(id, body.username, hash, apiKey)
-      .run();
+    await c.env.DB.batch([
+      c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)')
+        .bind(id, body.username, hash, apiKey),
+      c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+        .bind(projectId),
+      c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+        .bind(projectId, id)
+    ]);
     return c.json({ status: 'ok', id });
   } catch (err: any) {
     const errMsg = String(err?.message || err || '');
     if (errMsg.includes('UNIQUE constraint failed')) {
-      // Prevent user enumeration by returning success on duplicate username
       return c.json({ status: 'ok', id });
     }
     return c.json({ error: 'Registration failed due to an internal server error' }, 500);
@@ -416,9 +421,9 @@ app.get('/api/auth/me', async (c) => {
     if (!decoded || !decoded.sub) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
-    const user = await c.env.DB.prepare('SELECT username, api_key FROM users WHERE id = ?')
+    const user = await c.env.DB.prepare('SELECT username, api_key, public_key FROM users WHERE id = ?')
       .bind(decoded.sub)
-      .first<{ username: string; api_key: string | null }>();
+      .first<{ username: string; api_key: string | null; public_key: string | null }>();
     if (!user) {
       return c.json({ error: 'User not found' }, 404);
     }
@@ -431,9 +436,36 @@ app.get('/api/auth/me', async (c) => {
         .run();
     }
     
-    return c.json({ username: user.username, api_key: currentApiKey });
+    return c.json({ username: user.username, api_key: currentApiKey, public_key: user.public_key });
   } catch {
     return c.json({ error: 'Unauthorized' }, 401);
+  }
+});
+
+app.post('/api/auth/public-key', async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  try {
+    const body = await c.req.json();
+    const publicKey = body.public_key;
+    if (publicKey !== undefined && publicKey !== null && publicKey !== '') {
+      // Validate hex-encoded string of length 64 (Ed25519 raw public key is 32 bytes = 64 hex characters)
+      const hexRegex = /^[0-9a-fA-F]{64}$/;
+      if (!hexRegex.test(publicKey)) {
+        return c.json({ error: 'Invalid public key format. Must be a 64-character hex-encoded string.' }, 400);
+      }
+    }
+
+    const val = (publicKey === '' || publicKey === null || publicKey === undefined) ? null : publicKey.toLowerCase();
+    await c.env.DB.prepare('UPDATE users SET public_key = ? WHERE id = ?')
+      .bind(val, userId)
+      .run();
+
+    return c.json({ status: 'ok', public_key: val });
+  } catch (err: any) {
+    return c.json({ error: err.message || 'Failed to update public key' }, 500);
   }
 });
 
@@ -523,15 +555,30 @@ app.post('/api/auth/login', async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get('/api/projects', async (c) => {
-  const userId = c.req.query('user_id');
+  const userId = await getUserIdFromRequest(c) || c.req.query('user_id');
   if (userId) {
-    const { results } = await c.env.DB.prepare(`
-      SELECT p.*, m.role 
+    let { results } = await c.env.DB.prepare(`
+      SELECT p.* 
       FROM projects p 
       JOIN project_members m ON p.id = m.project_id 
       WHERE m.user_id = ? 
       ORDER BY p.created_at DESC
-    `).bind(userId).all();
+    `).bind(userId).all<{ id: string; name: string; description: string }>();
+
+    // Auto-create a default project if the user has none
+    if (!results || results.length === 0) {
+      const projectId = ulid();
+      await c.env.DB.batch([
+        c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+          .bind(projectId),
+        c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          .bind(projectId, userId)
+      ]);
+      
+      const newProject = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first();
+      results = newProject ? [newProject] : [];
+    }
+
     return c.json({ projects: results });
   }
   
@@ -541,9 +588,9 @@ app.get('/api/projects', async (c) => {
 });
 
 app.post('/api/projects', async (c) => {
+  const userId = await getUserIdFromRequest(c) || 'anonymous';
   const body = await c.req.json();
   const id = ulid();
-  const userId = body.user_id || 'anonymous';
   
   await c.env.DB.batch([
     c.env.DB.prepare('INSERT INTO projects (id, name, description) VALUES (?, ?, ?)')
@@ -820,17 +867,26 @@ app.get('/api/runners/connect', async (c) => {
   }
 
   const token = c.req.query('token');
-  if (!token) {
-    return new Response('Unauthorized: Missing token query parameter', { status: 401 });
-  }
+  const publicKey = c.req.query('public_key');
 
-  if (token !== 'test') {
-    const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-      .bind(token)
+  if (publicKey) {
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
+      .bind(publicKey)
       .first();
     if (!user) {
-      return new Response('Unauthorized: Invalid runner token', { status: 401 });
+      return new Response('Unauthorized: Invalid public key', { status: 401 });
     }
+  } else if (token) {
+    if (token !== 'test') {
+      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+        .bind(token)
+        .first();
+      if (!user) {
+        return new Response('Unauthorized: Invalid runner token', { status: 401 });
+      }
+    }
+  } else {
+    return new Response('Unauthorized: Missing token or public_key query parameter', { status: 401 });
   }
 
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -879,6 +935,21 @@ app.post('/api/runs', async (c) => {
     }
   }
 
+  let userPublicKey = "";
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    try {
+      const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ public_key: string | null }>();
+      if (user && user.public_key) {
+        userPublicKey = user.public_key;
+      }
+    } catch (dbErr) {
+      console.error("Failed to query user public key in /api/runs:", dbErr);
+    }
+  }
+
   const runId = crypto.randomUUID();
 
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -888,6 +959,7 @@ app.post('/api/runs', async (c) => {
     body: JSON.stringify({
       runId,
       config: body.config,
+      userPublicKey,
     }),
   });
   
@@ -998,9 +1070,31 @@ app.post('/api/parse', async (c) => {
     }
   }
 
+  let userPublicKey = "";
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    try {
+      const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ public_key: string | null }>();
+      if (user && user.public_key) {
+        userPublicKey = user.public_key;
+      }
+    } catch (dbErr) {
+      console.error("Failed to query user public key in /api/parse:", dbErr);
+    }
+  }
+
+  let parsedBody: any = {};
+  try {
+    parsedBody = JSON.parse(body);
+  } catch { /* ignored */ }
+  parsedBody.userPublicKey = userPublicKey;
+  const newBodyText = JSON.stringify(parsedBody);
+
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
-  const res = await stub.fetch(new Request('http://internal/parse', { method: 'POST', body }));
+  const res = await stub.fetch(new Request('http://internal/parse', { method: 'POST', body: newBodyText }));
 
   if (res.ok && c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
     const isAnon = await isAnonymousUser(c);
@@ -1021,6 +1115,8 @@ export class RunnerCoordinator {
   env: Env;
   runners: Set<WebSocket>;
   clients: Map<string, Set<WebSocket>>; // runId -> client WS
+  jobs: Map<string, WebSocket>; // runId -> runner WS
+  pendingChallenges?: Map<WebSocket, string>; // runner WS -> challenge nonce
   pendingParses: Map<string, (r: Response) => void>;
   pendingParseUrls: Map<string, string>; // reqId -> url
 
@@ -1038,7 +1134,7 @@ export class RunnerCoordinator {
     const url = new URL(request.url);
 
     if (url.pathname === '/dispatch') {
-      const activeRunners = this.state.getWebSockets("runner");
+      const activeRunners = Array.from(this.runners);
       if (activeRunners.length === 0) {
         return new Response('No runners available', { status: 503 });
       }
@@ -1049,8 +1145,18 @@ export class RunnerCoordinator {
         payload,
       });
 
-      // Pick the first available runner
-      const runner = activeRunners[0];
+      // Prioritize picking the runner matching the user's public key
+      let runner = null;
+      if (payload.userPublicKey) {
+        runner = activeRunners.find(r => {
+          const tags = this.state.getTags(r);
+          return tags.includes(payload.userPublicKey);
+        });
+      }
+      if (!runner) {
+        runner = activeRunners[0];
+      }
+
       if (runner) {
         this.jobs.set(payload.runId, runner);
         runner.send(dispatchMsg);
@@ -1075,7 +1181,7 @@ export class RunnerCoordinator {
     
     if (url.pathname === '/parse') {
       const bodyText = await request.text();
-      const body = JSON.parse(bodyText) as { url: string; forceRebuild?: boolean };
+      const body = JSON.parse(bodyText) as { url: string; forceRebuild?: boolean; userPublicKey?: string };
       
       if (!body.forceRebuild) {
         try {
@@ -1100,12 +1206,23 @@ export class RunnerCoordinator {
         }
       }
 
-      const activeRunners = this.state.getWebSockets("runner");
+      const activeRunners = Array.from(this.runners);
       if (activeRunners.length === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
       const reqId = ulid();
       this.pendingParseUrls.set(reqId, body.url);
       
-      const runnerWs = activeRunners[0];
+      // Prioritize picking the runner matching the user's public key
+      let runnerWs = null;
+      if (body.userPublicKey) {
+        runnerWs = activeRunners.find(r => {
+          const tags = this.state.getTags(r);
+          return tags.includes(body.userPublicKey!);
+        });
+      }
+      if (!runnerWs) {
+        runnerWs = activeRunners[0];
+      }
+
       runnerWs.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
       
       return new Promise<Response>((resolve) => {
@@ -1123,7 +1240,7 @@ export class RunnerCoordinator {
     if (url.pathname === '/start-run') {
       const runId = url.searchParams.get('runId')!;
       const configText = await request.text();
-      const activeRunners = this.state.getWebSockets("runner");
+      const activeRunners = Array.from(this.runners);
       if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
       const runnerWs = activeRunners[0];
       this.jobs.set(runId, runnerWs);
@@ -1146,8 +1263,40 @@ export class RunnerCoordinator {
       const webSocketPair = new WebSocketPair();
       const [client, server] = Object.values(webSocketPair);
       
-      this.state.acceptWebSocket(server, ["runner"]);
-      this.runners.add(server);
+      const publicKey = url.searchParams.get('public_key');
+      
+      if (publicKey) {
+        this.state.acceptWebSocket(server, ["runner-pending", publicKey]);
+        
+        // Generate random 32-byte hex challenge nonce
+        const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+          
+        if (!this.pendingChallenges) {
+          this.pendingChallenges = new Map();
+        }
+        this.pendingChallenges.set(server, nonce);
+        
+        // Send challenge after a tiny delay to ensure client is ready to receive messages
+        setTimeout(() => {
+          try {
+            server.send(JSON.stringify({ type: 'challenge', nonce }));
+          } catch { /* ignored */ }
+        }, 50);
+        
+        // Timeout auth after 5 seconds
+        setTimeout(() => {
+          try {
+            if (!this.runners.has(server)) {
+              server.close(1008, "Authentication timeout");
+            }
+          } catch { /* ignored */ }
+        }, 5000);
+      } else {
+        this.state.acceptWebSocket(server, ["runner"]);
+        this.runners.add(server);
+      }
 
       return new Response(null, {
         status: 101,
@@ -1181,7 +1330,58 @@ export class RunnerCoordinator {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     const tags = this.state.getTags(ws);
     
-    if (tags.includes('runner')) {
+    if (tags.includes('runner-pending') && !this.runners.has(ws)) {
+      try {
+        const msg = JSON.parse(message as string);
+        if (msg.type === 'challenge_response') {
+          const nonce = this.pendingChallenges?.get(ws);
+          const publicKey = tags.find(t => t !== 'runner-pending');
+          if (!nonce || !publicKey) {
+            ws.close(1008, "Invalid authentication state");
+            return;
+          }
+          
+          const signature = msg.signature;
+          let isValid = false;
+          try {
+            const pubKeyBuffer = new Uint8Array(publicKey.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)));
+            const cryptoKey = await crypto.subtle.importKey(
+              "raw",
+              pubKeyBuffer,
+              { name: "Ed25519" },
+              true,
+              ["verify"]
+            );
+            const nonceBuffer = new TextEncoder().encode(nonce);
+            const signatureBuffer = new Uint8Array(signature.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)));
+            
+            isValid = await crypto.subtle.verify(
+              "Ed25519",
+              cryptoKey,
+              signatureBuffer,
+              nonceBuffer
+            );
+          } catch (err) {
+            console.error("Runner Ed25519 verify failed:", err);
+          }
+          
+          if (isValid) {
+            this.pendingChallenges?.delete(ws);
+            this.runners.add(ws);
+            ws.send(JSON.stringify({ type: 'auth_ok' }));
+          } else {
+            ws.send(JSON.stringify({ type: 'auth_failed', error: 'Invalid challenge signature' }));
+            ws.close(1008, "Authentication failed");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to process runner challenge response:", err);
+        ws.close(1008, "Invalid auth request format");
+      }
+      return;
+    }
+    
+    if (tags.includes('runner') || this.runners.has(ws)) {
       try {
         const msg = JSON.parse(message as string);
         
@@ -1271,8 +1471,11 @@ export class RunnerCoordinator {
 
   async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
     const tags = this.state.getTags(ws);
-    if (tags.includes('runner')) {
+    if (tags.includes('runner') || tags.includes('runner-pending')) {
       this.runners.delete(ws);
+      if (this.pendingChallenges) {
+        this.pendingChallenges.delete(ws);
+      }
       // Remove from jobs
       for (const [runId, r] of this.jobs.entries()) {
         if (r === ws) {
