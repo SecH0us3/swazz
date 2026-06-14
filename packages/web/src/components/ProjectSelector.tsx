@@ -8,7 +8,8 @@ interface Project {
 }
 
 export function ProjectSelector() {
-    const [projects, setProjects] = useState<Project[]>([]);
+    const projects = useAppStore(state => state.projects);
+    const setProjects = (projs: Project[]) => useAppStore.setState({ projects: projs });
     const activeProject = useAppStore(state => state.activeProject);
     const setActiveProject = (p: Project | null) => {
         useAppStore.setState({
@@ -193,7 +194,7 @@ export function ProjectSelector() {
                         style={{ padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}
                         onClick={() => {
                             setIsOpen(false);
-                            useAppStore.setState({ isProjectSettingsOpen: true });
+                            useAppStore.setState({ activeTab: 'project_settings' });
                         }}
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

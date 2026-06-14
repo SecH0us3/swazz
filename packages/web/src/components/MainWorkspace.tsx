@@ -5,6 +5,7 @@ import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
 import { UserSettings } from './UserSettings.js';
+import { ProjectSettings } from './ProjectSettings.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -125,6 +126,8 @@ export function MainWorkspace({
 
             {activeTab === 'settings' ? (
                 <UserSettings />
+            ) : activeTab === 'project_settings' ? (
+                <ProjectSettings />
             ) : !hasActivity ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="empty-state">

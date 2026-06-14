@@ -19,7 +19,6 @@ import { MainWorkspace } from './components/MainWorkspace.js';
 import { useAppStore } from './store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
-import { ProjectSettingsModal } from './components/ProjectSettingsModal.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 
@@ -452,7 +451,6 @@ export default function App() {
                 />
             )}
 
-            <ProjectSettingsModal />
 
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
                 {toasts.map((t) => (

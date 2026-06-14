@@ -650,6 +650,50 @@ app.post('/api/projects/:id/config', async (c) => {
   return c.json({ status: 'saved' });
 });
 
+app.patch('/api/projects/:id', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json();
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const member = await c.env.DB.prepare(
+      'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
+    )
+    .bind(projectId, userId)
+    .first<{ role: string }>();
+    if (!member || member.role !== 'owner') return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  await c.env.DB.prepare(
+    'UPDATE projects SET name = ?, description = ? WHERE id = ?'
+  )
+  .bind(body.name, body.description || '', projectId)
+  .run();
+
+  return c.json({ status: 'updated' });
+});
+
+app.delete('/api/projects/:id', async (c) => {
+  const projectId = c.req.param('id');
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const member = await c.env.DB.prepare(
+      'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
+    )
+    .bind(projectId, userId)
+    .first<{ role: string }>();
+    if (!member || member.role !== 'owner') return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectId),
+    c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ?').bind(projectId),
+    c.env.DB.prepare('DELETE FROM scan_configs WHERE project_id = ?').bind(projectId),
+    c.env.DB.prepare('DELETE FROM scans WHERE project_id = ?').bind(projectId),
+  ]);
+
+  return c.json({ status: 'deleted' });
+});
+
 // ---------------------------------------------------------------------------
 // Scans CRUD endpoints
 // ---------------------------------------------------------------------------
@@ -895,6 +939,40 @@ app.get('/api/runners/connect', async (c) => {
   const url = new URL(req.url);
   url.pathname = '/connect-runner';
   return stub.fetch(new Request(url.toString(), req));
+});
+
+app.get('/api/runners', async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  let userPublicKey: string | null = null;
+  try {
+    const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ public_key: string | null }>();
+    if (user) {
+      userPublicKey = user.public_key;
+    }
+  } catch (err) {
+    console.error("Failed to fetch user public key in /api/runners:", err);
+  }
+
+  const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+  const stub = c.env.COORDINATOR_DO.get(id);
+  const res = await stub.fetch(new Request('http://do/runners'));
+  if (!res.ok) {
+    return c.json({ error: 'Failed to fetch runners' }, 500);
+  }
+
+  const data = await res.json() as { runners: any[] };
+  const mappedRunners = data.runners.map(r => ({
+    ...r,
+    isMine: userPublicKey && r.publicKey === userPublicKey,
+  }));
+
+  return c.json({ runners: mappedRunners });
 });
 
 // Client WebSocket Events Proxy
@@ -1259,14 +1337,37 @@ export class RunnerCoordinator {
       return new Response("ok");
     }
 
+    if (url.pathname === '/runners') {
+      const runnerList = [];
+      for (const ws of this.runners) {
+        const tags = this.state.getTags(ws);
+        const isPending = tags.includes('runner-pending');
+        const pubKey = tags.find(t => t !== 'runner-pending' && t !== 'runner' && !t.startsWith('name:')) || null;
+        const nameTag = tags.find(t => t.startsWith('name:'));
+        const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
+
+        runnerList.push({
+          name,
+          publicKey: pubKey,
+          status: isPending ? 'authenticating' : 'connected',
+        });
+      }
+      return new Response(JSON.stringify({ runners: runnerList }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     if (url.pathname === '/connect-runner') {
       const webSocketPair = new WebSocketPair();
       const [client, server] = Object.values(webSocketPair);
       
       const publicKey = url.searchParams.get('public_key');
+      const name = url.searchParams.get('name') || 'Unnamed Runner';
+      const nameTag = `name:${name}`;
       
       if (publicKey) {
-        this.state.acceptWebSocket(server, ["runner-pending", publicKey]);
+        this.state.acceptWebSocket(server, ["runner-pending", publicKey, nameTag]);
         
         // Generate random 32-byte hex challenge nonce
         const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)))
@@ -1294,7 +1395,7 @@ export class RunnerCoordinator {
           } catch { /* ignored */ }
         }, 5000);
       } else {
-        this.state.acceptWebSocket(server, ["runner"]);
+        this.state.acceptWebSocket(server, ["runner", nameTag]);
         this.runners.add(server);
       }
 

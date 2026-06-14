@@ -3,14 +3,13 @@ import type { FuzzResult, RunStats, Project } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 
 export interface UISlice {
-    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'settings';
+    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'settings' | 'project_settings';
     isSidebarOpen: boolean;
     isConfigOpen: boolean;
     isSidebarHiddenDesktop: boolean;
     isConfigHiddenDesktop: boolean;
     isHotkeysHelpOpen: boolean;
     isUserProfileOpen: boolean;
-    isProjectSettingsOpen: boolean;
 }
 
 const createUISlice: StateCreator<AppState, [], [], UISlice> = () => ({
@@ -21,7 +20,6 @@ const createUISlice: StateCreator<AppState, [], [], UISlice> = () => ({
     isConfigHiddenDesktop: false,
     isHotkeysHelpOpen: false,
     isUserProfileOpen: false,
-    isProjectSettingsOpen: false,
 });
 
 export interface FuzzingSlice {
@@ -68,10 +66,12 @@ const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
 
 export interface ProjectSlice {
     activeProject: Project | null;
+    projects: Project[];
 }
 
 const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = () => ({
     activeProject: null,
+    projects: [],
 });
 
 export type AppState = UISlice & FuzzingSlice & StatsSlice & UserSlice & ProjectSlice;

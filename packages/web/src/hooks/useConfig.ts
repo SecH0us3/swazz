@@ -19,6 +19,7 @@ const DEFAULT_CONFIG: SwazzConfig = {
     disabled_endpoints: [],
     _swagger_urls: [],
     security: { allow_private_ips: false },
+    rules: { ignore: [] },
 };
 
 export function validateConfig(config: any): void {
@@ -97,6 +98,14 @@ export function validateConfig(config: any): void {
         }
         if (config.security.allow_private_ips !== undefined && typeof config.security.allow_private_ips !== 'boolean') {
             throw new Error('security.allow_private_ips must be a boolean');
+        }
+    }
+    if (config.rules !== undefined) {
+        if (typeof config.rules !== 'object' || config.rules === null) {
+            throw new Error('rules must be an object');
+        }
+        if (config.rules.ignore !== undefined && !Array.isArray(config.rules.ignore)) {
+            throw new Error('rules.ignore must be an array');
         }
     }
 }

@@ -139,6 +139,9 @@ export interface SwazzConfig {
     security?: {
         allow_private_ips: boolean;
     };
+    rules?: {
+        ignore?: number[];
+    };
 }
 
 // ─── Results ────────────────────────────────────────────
