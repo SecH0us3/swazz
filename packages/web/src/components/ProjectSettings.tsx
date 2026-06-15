@@ -22,9 +22,21 @@ export function ProjectSettings() {
     const projects = useAppStore(state => state.projects);
     const userProfile = useAppStore(state => state.userProfile);
 
-    const { config, updateConfig, updateSettings } = useConfig();
+    const { config, updateConfig, updateSettings, importConfig } = useConfig();
 
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'raw_config'>('general');
+
+    // Raw JSON Config state
+    const [rawConfigText, setRawConfigText] = useState('');
+    const [rawConfigError, setRawConfigError] = useState('');
+    const [isSavingRaw, setIsSavingRaw] = useState(false);
+    const [saveRawSuccess, setSaveRawSuccess] = useState(false);
+
+    // Sync rawConfigText when config changes from elsewhere
+    useEffect(() => {
+        setRawConfigText(JSON.stringify(config, null, 2));
+        setRawConfigError('');
+    }, [config, activeSubTab]);
 
     // General Project Info state
     const [projectName, setProjectName] = useState(activeProject?.name || '');
@@ -373,6 +385,21 @@ export function ProjectSettings() {
                                 {runners.length}
                             </span>
                         )}
+                    </button>
+                    <button
+                        className={`tab-bar-btn ${activeSubTab === 'raw_config' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('raw_config')}
+                        style={{
+                            width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                            background: activeSubTab === 'raw_config' ? 'var(--accent-subtle)' : 'transparent',
+                            color: activeSubTab === 'raw_config' ? 'var(--accent-light)' : 'var(--text-secondary)'
+                        }}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <polyline points="16 18 22 12 16 6"></polyline>
+                            <polyline points="8 6 2 12 8 18"></polyline>
+                        </svg>
+                        Raw JSON Config
                     </button>
                 </div>
 
@@ -904,6 +931,91 @@ export function ProjectSettings() {
                                 rules={config.settings.chaining_rules || []} 
                                 onChange={(rules) => updateSettings({ chaining_rules: rules })} 
                             />
+                        </div>
+                    )}
+
+                    {activeSubTab === 'raw_config' && (
+                        <div className="card" style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            padding: '24px',
+                            borderRadius: 'var(--radius-lg)',
+                            border: '1px solid var(--border-default)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '20px'
+                        }}>
+                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+                                Raw JSON Configuration
+                            </h2>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                                View or modify the raw JSON configuration for this project. Validates schema format before saving.
+                            </p>
+                            
+                            <textarea
+                                className="textarea"
+                                value={rawConfigText}
+                                onChange={(e) => {
+                                    setRawConfigText(e.target.value);
+                                    try {
+                                        JSON.parse(e.target.value);
+                                        setRawConfigError('');
+                                    } catch (err: any) {
+                                        setRawConfigError(`Invalid JSON: ${err.message}`);
+                                    }
+                                }}
+                                style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '13px',
+                                    minHeight: '400px',
+                                    backgroundColor: 'var(--bg-card)',
+                                    color: 'var(--text-primary)',
+                                    border: '1px solid var(--border-default)',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: '12px',
+                                    width: '100%',
+                                    resize: 'vertical'
+                                }}
+                                spellCheck={false}
+                            />
+                            
+                            {rawConfigError && (
+                                <div style={{
+                                    color: 'var(--color-error)',
+                                    fontSize: '13px',
+                                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                                    border: '1px solid rgba(244, 63, 94, 0.2)',
+                                    padding: '8px 12px',
+                                    borderRadius: 'var(--radius-sm)'
+                                }}>
+                                    {rawConfigError}
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    disabled={!!rawConfigError || isSavingRaw}
+                                    onClick={() => {
+                                        setIsSavingRaw(true);
+                                        setSaveRawSuccess(false);
+                                        try {
+                                            importConfig(rawConfigText);
+                                            setSaveRawSuccess(true);
+                                            setTimeout(() => setSaveRawSuccess(false), 3000);
+                                        } catch (err: any) {
+                                            setRawConfigError(err.message || 'Validation failed');
+                                        } finally {
+                                            setIsSavingRaw(false);
+                                        }
+                                    }}
+                                >
+                                    {isSavingRaw ? 'Saving...' : 'Save Configuration'}
+                                </button>
+                                {saveRawSuccess && (
+                                    <span style={{ color: 'var(--color-success)', fontSize: '13px' }}>✓ Configuration updated successfully</span>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

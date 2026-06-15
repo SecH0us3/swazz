@@ -45,7 +45,7 @@ export const HotkeysHelpModal: React.FC<HotkeysHelpModalProps> = ({ onClose }) =
                 </div>
 
                 <div className="hotkeys-row">
-                    <span className="hotkeys-desc">Toggle Left Sidebar (History)</span>
+                    <span className="hotkeys-desc">Toggle Left Sidebar</span>
                     <div className="hotkeys-keys">
                         <kbd>{altKey}</kbd> + <kbd>L</kbd>
                     </div>
@@ -66,9 +66,9 @@ export const HotkeysHelpModal: React.FC<HotkeysHelpModalProps> = ({ onClose }) =
                 </div>
 
                 <div className="hotkeys-row">
-                    <span className="hotkeys-desc">Switch Tabs (Heatmap, Logs, etc.)</span>
+                    <span className="hotkeys-desc">Switch Tabs (Heatmap, Logs, History, etc.)</span>
                     <div className="hotkeys-keys">
-                        <kbd>1</kbd> .. <kbd>4</kbd>
+                        <kbd>1</kbd> .. <kbd>5</kbd>
                     </div>
                 </div>
             </div>

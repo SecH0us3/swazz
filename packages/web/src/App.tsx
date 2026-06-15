@@ -269,6 +269,11 @@ export default function App() {
                     useAppStore.setState({ activeTab: 'owasp' });
                     return;
                 }
+                if (e.key === '5') {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'history' });
+                    return;
+                }
             }
 
             // Run: Mod + Enter
@@ -411,10 +416,14 @@ export default function App() {
                     config={config}
                     handleStart={handleStart}
                     handleSelectResult={handleSelectResult}
-                    handleExport={() => handleExport(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId, config.base_url)}
-                    handleExportHTML={() => handleExportHTML(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
-                    handleExportMD={() => handleExportMD(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
+                    handleExport={handleExport}
+                    handleExportHTML={handleExportHTML}
+                    handleExportMD={handleExportMD}
+                    handleLoadRun={handleLoadRun}
+                    handleDeleteRun={handleDeleteRun}
                     queryResults={queryResults}
+                    runs={runs}
+                    onImportRun={importCliReport}
                 />
 
                 <ConfigSidebar
