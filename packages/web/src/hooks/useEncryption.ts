@@ -1,8 +1,59 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
 // ─── Constants ──────────────────────────────────────────
-const STORAGE_KEY_PRIVATE = 'swazz_encryption_private_jwk';
-const STORAGE_KEY_PUBLIC = 'swazz_encryption_public_jwk';
+const DB_NAME = 'swazz_security';
+const DB_VERSION = 1;
+const STORE_NAME = 'keys';
+const KEY_PRIVATE = 'private_key';
+const KEY_PUBLIC = 'public_key';
+
+// ─── Key Storage Helper ─────────────────────────────────
+
+class KeyStorage {
+    private static async getDB(): Promise<IDBDatabase> {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = () => {
+                request.result.createObjectStore(STORE_NAME);
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async saveKey(id: string, key: CryptoKey): Promise<void> {
+        const db = await this.getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.put(key, id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async getKey(id: string): Promise<CryptoKey | null> {
+        const db = await this.getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.get(id);
+            request.onsuccess = () => resolve(request.result || null);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async clear(): Promise<void> {
+        const db = await this.getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+}
 
 // ─── Types ──────────────────────────────────────────────
 export interface EncryptionKeyPair {
@@ -138,36 +189,20 @@ export function useEncryption(): UseEncryptionReturn {
                 return;
             }
 
-            // Try to restore from localStorage
+            // Try to restore from KeyStorage (IndexedDB)
             try {
-                const privateJwk = localStorage.getItem(STORAGE_KEY_PRIVATE);
-                const publicJwk = localStorage.getItem(STORAGE_KEY_PUBLIC);
+                const privateKey = await KeyStorage.getKey(KEY_PRIVATE);
+                const publicKey = await KeyStorage.getKey(KEY_PUBLIC);
 
-                if (privateJwk && publicJwk) {
-                    const privateKey = await crypto.subtle.importKey(
-                        'jwk',
-                        JSON.parse(privateJwk),
-                        'X25519' as any,
-                        true,
-                        ['deriveBits'],
-                    );
-                    const publicKey = await crypto.subtle.importKey(
-                        'jwk',
-                        JSON.parse(publicJwk),
-                        'X25519' as any,
-                        true,
-                        [],
-                    );
-
+                if (privateKey && publicKey) {
                     if (!cancelled) {
                         keyPairRef.current = { publicKey, privateKey };
                         setHasKeyPair(true);
                     }
                 }
             } catch (err) {
-                // Corrupted keys — clear and let user regenerate
-                localStorage.removeItem(STORAGE_KEY_PRIVATE);
-                localStorage.removeItem(STORAGE_KEY_PUBLIC);
+                // Corrupted keys in DB
+                await KeyStorage.clear();
                 if (!cancelled) {
                     setError('Failed to restore encryption keys — please regenerate.');
                 }
@@ -193,16 +228,13 @@ export function useEncryption(): UseEncryptionReturn {
         try {
             const keyPair = await crypto.subtle.generateKey(
                 'X25519' as any,
-                true, // extractable — needed for JWK export
+                true, // Keep extractable for public key export and derivation
                 ['deriveBits'],
             ) as CryptoKeyPair;
 
-            // Export to JWK for persistence
-            const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-            const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
-
-            localStorage.setItem(STORAGE_KEY_PRIVATE, JSON.stringify(privateJwk));
-            localStorage.setItem(STORAGE_KEY_PUBLIC, JSON.stringify(publicJwk));
+            // Persist CryptoKey objects directly to IndexedDB
+            await KeyStorage.saveKey(KEY_PRIVATE, keyPair.privateKey);
+            await KeyStorage.saveKey(KEY_PUBLIC, keyPair.publicKey);
 
             keyPairRef.current = {
                 publicKey: keyPair.publicKey,
@@ -309,4 +341,4 @@ export function useEncryption(): UseEncryptionReturn {
 }
 
 // Re-export helpers for testing
-export { bufferToBase64, base64ToBuffer, checkX25519Support };
+export { bufferToBase64, base64ToBuffer, checkX25519Support, KeyStorage, KEY_PRIVATE, KEY_PUBLIC };

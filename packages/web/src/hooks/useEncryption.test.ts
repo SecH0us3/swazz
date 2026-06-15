@@ -1,6 +1,7 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useEncryption, bufferToBase64, base64ToBuffer } from './useEncryption.js';
+import { useEncryption, bufferToBase64, base64ToBuffer, KeyStorage, KEY_PRIVATE, KEY_PUBLIC } from './useEncryption.js';
 
 // ─── Helper tests ───────────────────────────────────────
 
@@ -33,30 +34,8 @@ describe('bufferToBase64 / base64ToBuffer', () => {
 // ─── Hook tests ─────────────────────────────────────────
 
 describe('useEncryption', () => {
-    let originalSubtle: SubtleCrypto;
-    let storageMock: Record<string, string>;
-
-    beforeEach(() => {
-        storageMock = {};
-
-        const localStorageMock = {
-            getItem: vi.fn((key: string) => storageMock[key] ?? null),
-            setItem: vi.fn((key: string, value: string) => { storageMock[key] = value; }),
-            removeItem: vi.fn((key: string) => { delete storageMock[key]; }),
-            clear: vi.fn(() => { storageMock = {}; }),
-        };
-        vi.stubGlobal('localStorage', localStorageMock);
-
-        // Also spy on Storage.prototype just in case
-        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(
-            (key: string) => storageMock[key] ?? null,
-        );
-        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(
-            (key: string, value: string) => { storageMock[key] = value; },
-        );
-        vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(
-            (key: string) => { delete storageMock[key]; },
-        );
+    beforeEach(async () => {
+        await KeyStorage.clear();
     });
 
     afterEach(() => {
@@ -187,17 +166,17 @@ describe('useEncryption', () => {
             expect(result.current.hasKeyPair).toBe(true);
             expect(result.current.error).toBeNull();
 
-            // Verify persistence to localStorage
-            expect(storageMock['swazz_encryption_private_jwk']).toBeDefined();
-            expect(storageMock['swazz_encryption_public_jwk']).toBeDefined();
-            expect(JSON.parse(storageMock['swazz_encryption_private_jwk'])).toEqual(mockPrivateJwk);
-            expect(JSON.parse(storageMock['swazz_encryption_public_jwk'])).toEqual(mockPublicJwk);
+            // Verify persistence to KeyStorage
+            const privateKey = await KeyStorage.getKey(KEY_PRIVATE);
+            const publicKey = await KeyStorage.getKey(KEY_PUBLIC);
+            expect(privateKey).toEqual(mockPrivateKey);
+            expect(publicKey).toEqual(mockPublicKey);
         });
 
-        it('should restore keys from localStorage on mount', async () => {
-            // Pre-populate localStorage
-            storageMock['swazz_encryption_private_jwk'] = JSON.stringify(mockPrivateJwk);
-            storageMock['swazz_encryption_public_jwk'] = JSON.stringify(mockPublicJwk);
+        it('should restore keys from KeyStorage on mount', async () => {
+            // Pre-populate KeyStorage
+            await KeyStorage.saveKey(KEY_PRIVATE, mockPrivateKey);
+            await KeyStorage.saveKey(KEY_PUBLIC, mockPublicKey);
 
             const { result } = renderHook(() => useEncryption());
 
@@ -248,14 +227,12 @@ describe('useEncryption', () => {
             expect(publicKeyB64).toBeNull();
         });
 
-        it('should handle corrupted localStorage gracefully', async () => {
-            storageMock['swazz_encryption_private_jwk'] = 'not-valid-json{{{';
-            storageMock['swazz_encryption_public_jwk'] = '{}';
-
-            // importKey will throw for corrupted data
-            vi.spyOn(crypto.subtle, 'importKey').mockRejectedValue(
-                new Error('Invalid key data'),
+        it('should handle corrupted KeyStorage gracefully', async () => {
+            // Force getKey to throw an error
+            vi.spyOn(KeyStorage, 'getKey').mockRejectedValue(
+                new Error('Database corruption'),
             );
+            const clearSpy = vi.spyOn(KeyStorage, 'clear');
 
             const { result } = renderHook(() => useEncryption());
 
@@ -265,10 +242,9 @@ describe('useEncryption', () => {
 
             expect(result.current.hasKeyPair).toBe(false);
             expect(result.current.error).toContain('Failed to restore');
-            // Should have cleared corrupted data
-            expect(storageMock['swazz_encryption_private_jwk']).toBeUndefined();
-            expect(storageMock['swazz_encryption_public_jwk']).toBeUndefined();
+            expect(clearSpy).toHaveBeenCalled();
         });
+
 
         describe('uploadPublicKey', () => {
             beforeEach(() => {

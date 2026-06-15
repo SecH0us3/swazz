@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -120,28 +121,28 @@ func startAgent(args []string) {
 
 	ctx := context.Background()
 
+	headers := make(http.Header)
+	urlWithParams := coordinatorURL
+	encodedName := url.QueryEscape(name)
+	
+	if !strings.Contains(urlWithParams, "?") {
+		urlWithParams += fmt.Sprintf("?name=%s", encodedName)
+	} else {
+		urlWithParams += fmt.Sprintf("&name=%s", encodedName)
+	}
+
+	if useSignatureAuth {
+		headers.Set("X-Runner-Public-Key", pubKeyHex)
+	} else {
+		headers.Set("Authorization", "Bearer "+token)
+	}
+
 	opts := &websocket.DialOptions{
 		Subprotocols: []string{"swazz-agent"},
+		HTTPHeader:   headers,
 	}
 
-	urlWithAuth := coordinatorURL
-	encodedName := url.QueryEscape(name)
-	if useSignatureAuth {
-		if !strings.Contains(urlWithAuth, "?") {
-			urlWithAuth += fmt.Sprintf("?public_key=%s&name=%s", pubKeyHex, encodedName)
-		} else {
-			urlWithAuth += fmt.Sprintf("&public_key=%s&name=%s", pubKeyHex, encodedName)
-		}
-	} else {
-		encodedToken := url.QueryEscape(token)
-		if !strings.Contains(urlWithAuth, "?") {
-			urlWithAuth += fmt.Sprintf("?token=%s&name=%s", encodedToken, encodedName)
-		} else {
-			urlWithAuth += fmt.Sprintf("&token=%s&name=%s", encodedToken, encodedName)
-		}
-	}
-
-	c, _, err := websocket.Dial(ctx, urlWithAuth, opts)
+	c, _, err := websocket.Dial(ctx, urlWithParams, opts)
 	if err != nil {
 		log.Fatalf("Failed to connect to coordinator: %v", err)
 	}

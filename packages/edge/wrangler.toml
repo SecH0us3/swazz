@@ -35,3 +35,4 @@ invocation_logs = true
 [vars]
 AUTH_ENABLED = "true"
 LIMIT_ANONYMOUS = "true"
+ALLOWED_ORIGINS = "*"

@@ -11,6 +11,7 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   AUTH_ENABLED?: string; // 'true' | 'false'
   LIMIT_ANONYMOUS?: string; // 'true' | 'false'
+  ALLOWED_ORIGINS?: string; // Comma-separated list of origins
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -26,7 +27,11 @@ async function getUserIdFromRequest(c: any): Promise<string | null> {
   if (!token) {
     return null;
   }
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) {
+    console.error("JWT_SECRET is not configured");
+    return null;
+  }
   try {
     const decoded = await verify(token, secret, "HS256");
     if (!decoded || !decoded.sub) {
@@ -38,7 +43,20 @@ async function getUserIdFromRequest(c: any): Promise<string | null> {
   }
 }
 
-app.use('*', cors());
+app.use('*', async (c, next) => {
+  const allowedOrigins = c.env.ALLOWED_ORIGINS ? c.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : ['*'];
+  const origin = c.req.header('Origin');
+  
+  const corsMiddleware = cors({
+    origin: allowedOrigins.includes('*') ? '*' : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Upgrade'],
+    exposeHeaders: ['Content-Length', 'Content-Signal'],
+    maxAge: 86400,
+  });
+  
+  return await corsMiddleware(c, next);
+});
 
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
@@ -253,7 +271,7 @@ async function hashPassword(password: string): Promise<string> {
     {
       name: 'PBKDF2',
       salt,
-      iterations: 100000,
+      iterations: 600000,
       hash: 'SHA-256',
     },
     keyMaterial,
@@ -282,14 +300,19 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
     {
       name: 'PBKDF2',
       salt,
-      iterations: 100000,
+      iterations: 600000,
       hash: 'SHA-256',
     },
     keyMaterial,
     256
   );
-  const hashHex = Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex === expectedHashHex;
+  
+  const expectedHash = new Uint8Array(expectedHashHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  const actualHash = new Uint8Array(buffer);
+  
+  if (expectedHash.length !== actualHash.length) return false;
+  
+  return crypto.subtle.timingSafeEqual(expectedHash, actualHash);
 }
 
 /**
@@ -442,7 +465,8 @@ app.get('/api/auth/me', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
   const token = authHeader.substring(7);
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
   try {
     const decoded = await verify(token, secret, "HS256");
     if (!decoded || !decoded.sub) {
@@ -502,7 +526,8 @@ app.post('/api/auth/regenerate-key', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
   const token = authHeader.substring(7);
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
   try {
     const decoded = await verify(token, secret, "HS256");
     if (!decoded || !decoded.sub) {
@@ -571,7 +596,8 @@ app.post('/api/auth/login', async (c) => {
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
   };
   
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
   const token = await sign(payload, secret);
 
   return c.json({ status: 'ok', token });
@@ -855,7 +881,8 @@ app.post('/api/scans/:id/upload-url', async (c) => {
   }
 
   const r2Key = `reports/${scanId}.enc`;
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
 
   const uploadToken = await sign(
     {
@@ -887,7 +914,8 @@ app.put('/api/scans/:id/upload', async (c) => {
     return c.json({ error: 'Missing X-Upload-Token header' }, 401);
   }
 
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
 
   try {
     const decoded = await verify(authHeader, secret, "HS256") as {
@@ -937,8 +965,15 @@ app.get('/api/runners/connect', async (c) => {
     return new Response('Expected Upgrade: websocket', { status: 426 });
   }
 
-  const token = c.req.query('token');
-  const publicKey = c.req.query('public_key');
+  let token = c.req.query('token');
+  if (!token) {
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  const publicKey = c.req.header('X-Runner-Public-Key') || c.req.query('public_key');
 
   if (publicKey) {
     const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
@@ -948,16 +983,14 @@ app.get('/api/runners/connect', async (c) => {
       return new Response('Unauthorized: Invalid public key', { status: 401 });
     }
   } else if (token) {
-    if (token !== 'test') {
-      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-        .bind(token)
-        .first();
-      if (!user) {
-        return new Response('Unauthorized: Invalid runner token', { status: 401 });
-      }
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+      .bind(token)
+      .first();
+    if (!user) {
+      return new Response('Unauthorized: Invalid runner token', { status: 401 });
     }
   } else {
-    return new Response('Unauthorized: Missing token or public_key query parameter', { status: 401 });
+    return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
   }
 
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -965,6 +998,9 @@ app.get('/api/runners/connect', async (c) => {
   const req = new Request(c.req.raw.url, c.req.raw);
   const url = new URL(req.url);
   url.pathname = '/connect-runner';
+  if (publicKey) {
+    url.searchParams.set('public_key', publicKey);
+  }
   return stub.fetch(new Request(url.toString(), req));
 });
 
@@ -1646,7 +1682,8 @@ async function isAnonymousUser(c: any): Promise<boolean> {
     return true;
   }
   const token = authHeader.substring(7);
-  const secret = c.env.JWT_SECRET || 'fallback-secret';
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return true;
   try {
     const decoded = await verify(token, secret, "HS256");
     return !decoded || !decoded.sub;

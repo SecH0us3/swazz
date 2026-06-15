@@ -26,10 +26,13 @@ beforeAll(async () => {
   }
 });
 
+const testEnv = { ...env, JWT_SECRET: 'test-secret' };
+
 describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {
     const req = new Request("http://localhost/");
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ service: "swazz-edge", status: "ok" });
@@ -37,7 +40,8 @@ describe("Swazz Worker (Hono)", () => {
 
   it("auth_enabled is true by default in info endpoint", async () => {
     const req = new Request("http://localhost/api/info");
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0" });
@@ -62,7 +66,8 @@ describe("D1 Database Migrations & API", () => {
       body: JSON.stringify({ username: "newuser", password: "password123" })
     });
     
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe("ok");
@@ -76,7 +81,8 @@ describe("D1 Database Migrations & API", () => {
       body: JSON.stringify({ username: "newuser", password: "password123" })
     });
     
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe("ok");
@@ -91,7 +97,8 @@ describe("D1 Database Migrations & API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: "newuser", password: "wrong" })
       });
-      const res = await app.fetch(req, env);
+      const res = await app.fetch(req, testEnv);
+
       expect(res.status).toBe(401); // Invalid credentials
     }
 
@@ -101,7 +108,8 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "newuser", password: "password123" })
     });
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(429);
     const body = await res.json();
     expect(body.error).toContain("locked");
@@ -110,7 +118,7 @@ describe("D1 Database Migrations & API", () => {
 
 describe("Anonymous Limits", () => {
   let userToken: string;
-  const testEnv = { ...env, AUTH_ENABLED: 'false' };
+  const testEnv = { ...env, AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret' };
 
   beforeAll(async () => {
     // Register and login to get a valid token
@@ -269,14 +277,14 @@ describe("Projects & Runners API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "projuser", password: "password123" })
     });
-    await app.fetch(regReq, env);
+    await app.fetch(regReq, testEnv);
 
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "projuser", password: "password123" })
     });
-    const loginRes = await app.fetch(loginReq, env);
+    const loginRes = await app.fetch(loginReq, testEnv);
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
@@ -289,7 +297,7 @@ describe("Projects & Runners API", () => {
       },
       body: JSON.stringify({ name: "Original Name", description: "Original Description" })
     });
-    const createRes = await app.fetch(createReq, env);
+    const createRes = await app.fetch(createReq, testEnv);
     expect(createRes.status).toBe(200);
     const createBody = await createRes.json() as { id: string };
     projectId = createBody.id;
@@ -299,7 +307,8 @@ describe("Projects & Runners API", () => {
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json() as { projects: any[] };
     const p = body.projects.find(x => x.id === projectId);
@@ -317,7 +326,8 @@ describe("Projects & Runners API", () => {
       },
       body: JSON.stringify({ name: "Updated Name", description: "Updated Description" })
     });
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json() as { status: string };
     expect(body.status).toBe("updated");
@@ -326,7 +336,7 @@ describe("Projects & Runners API", () => {
     const checkReq = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const checkRes = await app.fetch(checkReq, env);
+    const checkRes = await app.fetch(checkReq, testEnv);
     const checkBody = await checkRes.json() as { projects: any[] };
     const p = checkBody.projects.find(x => x.id === projectId);
     expect(p.name).toBe("Updated Name");
@@ -337,7 +347,8 @@ describe("Projects & Runners API", () => {
     const req = new Request("http://localhost/api/runners", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json() as { runners: any[] };
     expect(Array.isArray(body.runners)).toBe(true);
@@ -348,7 +359,8 @@ describe("Projects & Runners API", () => {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const res = await app.fetch(req, env);
+    const res = await app.fetch(req, testEnv);
+
     expect(res.status).toBe(200);
     const body = await res.json() as { status: string };
     expect(body.status).toBe("deleted");
@@ -357,7 +369,7 @@ describe("Projects & Runners API", () => {
     const checkReq = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const checkRes = await app.fetch(checkReq, env);
+    const checkRes = await app.fetch(checkReq, testEnv);
     const checkBody = await checkRes.json() as { projects: any[] };
     const p = checkBody.projects.find(x => x.id === projectId);
     expect(p).toBeUndefined();
