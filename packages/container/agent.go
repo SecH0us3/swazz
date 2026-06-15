@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"swazz-engine/internal/classifier"
@@ -124,17 +125,19 @@ func startAgent(args []string) {
 	}
 
 	urlWithAuth := coordinatorURL
+	encodedName := url.QueryEscape(name)
 	if useSignatureAuth {
 		if !strings.Contains(urlWithAuth, "?") {
-			urlWithAuth += fmt.Sprintf("?public_key=%s&name=%s", pubKeyHex, name)
+			urlWithAuth += fmt.Sprintf("?public_key=%s&name=%s", pubKeyHex, encodedName)
 		} else {
-			urlWithAuth += fmt.Sprintf("&public_key=%s&name=%s", pubKeyHex, name)
+			urlWithAuth += fmt.Sprintf("&public_key=%s&name=%s", pubKeyHex, encodedName)
 		}
 	} else {
+		encodedToken := url.QueryEscape(token)
 		if !strings.Contains(urlWithAuth, "?") {
-			urlWithAuth += fmt.Sprintf("?token=%s&name=%s", token, name)
+			urlWithAuth += fmt.Sprintf("?token=%s&name=%s", encodedToken, encodedName)
 		} else {
-			urlWithAuth += fmt.Sprintf("&token=%s&name=%s", token, name)
+			urlWithAuth += fmt.Sprintf("&token=%s&name=%s", encodedToken, encodedName)
 		}
 	}
 
@@ -192,7 +195,7 @@ func startAgent(args []string) {
 	logInfo("Successfully connected to coordinator. Awaiting jobs...")
 
 	// Write loop
-	outChan := make(chan interface{}, 1000)
+	outChan := make(chan interface{}, 50000)
 	go func() {
 		for msg := range outChan {
 			if err := wsjson.Write(ctx, c, msg); err != nil {

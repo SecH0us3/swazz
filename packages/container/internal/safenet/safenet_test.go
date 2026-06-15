@@ -128,6 +128,6 @@ func TestNewSafeHTTPClient_NotNil(t *testing.T) {
 func TestBlockedCIDRs_Initialised(t *testing.T) {
 	t.Parallel()
 
-	// We expect exactly 7 CIDR entries from init()
-	assert.Len(t, blockedCIDRs, 7)
+	// We expect exactly 9 CIDR entries from init()
+	assert.Len(t, blockedCIDRs, 9)
 }

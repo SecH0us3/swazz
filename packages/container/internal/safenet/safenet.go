@@ -35,6 +35,10 @@ func init() {
 
 		// IPv6 link-local
 		"fe80::/10",
+
+		// Unspecified addresses (bypasses to localhost on many systems)
+		"0.0.0.0/8",
+		"::/128",
 	}
 
 	for _, cidr := range cidrs {
