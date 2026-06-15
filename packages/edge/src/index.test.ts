@@ -110,6 +110,7 @@ describe("D1 Database Migrations & API", () => {
 
 describe("Anonymous Limits", () => {
   let userToken: string;
+  const testEnv = { ...env, AUTH_ENABLED: 'false' };
 
   beforeAll(async () => {
     // Register and login to get a valid token
@@ -118,14 +119,14 @@ describe("Anonymous Limits", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "limituser", password: "password123" })
     });
-    await app.fetch(regReq, env);
+    await app.fetch(regReq, testEnv);
 
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "limituser", password: "password123" })
     });
-    const loginRes = await app.fetch(loginReq, env);
+    const loginRes = await app.fetch(loginReq, testEnv);
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
@@ -147,7 +148,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const res1 = await app.fetch(req1, env);
+    const res1 = await app.fetch(req1, testEnv);
     expect(res1.status).toBe(200);
 
     // 2. Second parse request from same anonymous browser IP - should be blocked (status 403)
@@ -160,7 +161,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const res2 = await app.fetch(req2, env);
+    const res2 = await app.fetch(req2, testEnv);
     expect(res2.status).toBe(403);
     const body2 = await res2.json() as any;
     expect(body2.error).toContain("Anonymous limit reached");
@@ -175,7 +176,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const resCLI = await app.fetch(reqCLI, env);
+    const resCLI = await app.fetch(reqCLI, testEnv);
     expect(resCLI.status).toBe(200);
 
     // 4. Parse request from logged-in browser user (with Authorization header) - should bypass limits and succeed (status 200)
@@ -189,7 +190,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const resAuth = await app.fetch(reqAuth, env);
+    const resAuth = await app.fetch(reqAuth, testEnv);
     expect(resAuth.status).toBe(200);
   });
 
@@ -207,7 +208,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: largeConfig })
     });
-    const resAnonLarge = await app.fetch(reqAnonLarge, env);
+    const resAnonLarge = await app.fetch(reqAnonLarge, testEnv);
     expect(resAnonLarge.status).toBe(403);
     const bodyAnonLarge = await resAnonLarge.json() as any;
     expect(bodyAnonLarge.error).toContain("Anonymous limit reached");
@@ -225,7 +226,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: smallConfig })
     });
-    const resAnonSmall = await app.fetch(reqAnonSmall, env);
+    const resAnonSmall = await app.fetch(reqAnonSmall, testEnv);
     expect([500, 503]).toContain(resAnonSmall.status);
 
     // 3. CLI client with >50 endpoints - should bypass limits check and fail with 500/503 (no runners)
@@ -238,7 +239,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: largeConfig })
     });
-    const resCLILarge = await app.fetch(reqCLILarge, env);
+    const resCLILarge = await app.fetch(reqCLILarge, testEnv);
     expect([500, 503]).toContain(resCLILarge.status);
 
     // 4. Logged-in user with >50 endpoints - should bypass limits check and fail with 500/503 (no runners)
@@ -252,7 +253,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: largeConfig })
     });
-    const resAuthLarge = await app.fetch(reqAuthLarge, env);
+    const resAuthLarge = await app.fetch(reqAuthLarge, testEnv);
     expect([500, 503]).toContain(resAuthLarge.status);
   });
 });

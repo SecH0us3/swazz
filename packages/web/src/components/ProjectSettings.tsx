@@ -22,7 +22,7 @@ export function ProjectSettings() {
     const projects = useAppStore(state => state.projects);
     const userProfile = useAppStore(state => state.userProfile);
 
-    const { config, updateConfig, updateSettings, importConfig } = useConfig();
+    const { config, updateConfig, updateSettings, importConfig, exportConfig } = useConfig();
 
     const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'raw_config'>('general');
 
@@ -34,9 +34,9 @@ export function ProjectSettings() {
 
     // Sync rawConfigText when config changes from elsewhere
     useEffect(() => {
-        setRawConfigText(JSON.stringify(config, null, 2));
+        setRawConfigText(exportConfig());
         setRawConfigError('');
-    }, [config, activeSubTab]);
+    }, [config, activeSubTab, exportConfig]);
 
     // General Project Info state
     const [projectName, setProjectName] = useState(activeProject?.name || '');

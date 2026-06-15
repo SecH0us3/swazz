@@ -369,7 +369,9 @@ func startAgent(args []string) {
 					result = map[string]string{"error": err.Error()}
 				} else {
 					defer resp.Body.Close()
-					data, err := io.ReadAll(resp.Body)
+					// Limit spec reading to 10MB to prevent OOM crashes
+					limitReader := io.LimitReader(resp.Body, 10*1024*1024)
+					data, err := io.ReadAll(limitReader)
 					if err != nil {
 						logError("[Parser] Failed to read spec body: %v", err)
 						result = map[string]string{"error": err.Error()}

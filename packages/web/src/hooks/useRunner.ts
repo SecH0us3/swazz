@@ -191,8 +191,11 @@ export function useRunner(proxyUrl: string) {
 
             let lastProgressTime = 0;
 
-            const wsUrl = proxyUrl.replace('http', 'ws');
-            const ws = new WebSocket(`${wsUrl}/api/runs/${runId}/events`);
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const wsUrl = proxyUrl ? proxyUrl.replace(/^http/, 'ws') : `${protocol}//${host}`;
+            const wsToken = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+            const ws = new WebSocket(`${wsUrl}/api/runs/${runId}/events${wsToken ? `?token=${encodeURIComponent(wsToken)}` : ''}`);
             wsRef.current = ws;
 
             ws.onmessage = (e) => {

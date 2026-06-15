@@ -493,16 +493,19 @@ func (r *Runner) buildFuzzIteration(
 		buf := bufPool.Get().(*bytes.Buffer)
 		buf.Reset()
 		var encErr error
+		payloadMap := make(map[string]any)
 		if attempt.body != nil {
-			encErr = json.NewEncoder(buf).Encode(attempt.body)
+			payloadMap["body"] = attempt.body
 		}
-		if attempt.queryParams != nil && encErr == nil {
-			encErr = json.NewEncoder(buf).Encode(attempt.queryParams)
+		if attempt.queryParams != nil {
+			payloadMap["queryParams"] = attempt.queryParams
 		}
-		if attempt.pathParams != nil && encErr == nil {
-			encErr = json.NewEncoder(buf).Encode(attempt.pathParams)
+		if attempt.pathParams != nil {
+			payloadMap["pathParams"] = attempt.pathParams
 		}
-		if attempt.body == nil && attempt.queryParams == nil && attempt.pathParams == nil {
+		if len(payloadMap) > 0 {
+			encErr = json.NewEncoder(buf).Encode(payloadMap)
+		} else {
 			buf.WriteByte('{')
 			buf.WriteByte('}')
 		}

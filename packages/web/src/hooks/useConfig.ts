@@ -273,29 +273,85 @@ export function useConfig() {
 
     const importConfig = useCallback((json: string) => {
         try {
-            const parsed = JSON.parse(json) as SwazzConfig;
-            validateConfig(parsed);
+            const parsedClean = JSON.parse(json) as any;
+            if (!parsedClean || typeof parsedClean !== 'object') {
+                throw new Error('Config must be a JSON object');
+            }
+
+            // Map clean config to internal SwazzConfig
+            const internal: any = { ...parsedClean };
+
+            // 1. Map swagger_urls -> _swagger_urls
+            if (parsedClean.swagger_urls) {
+                internal._swagger_urls = parsedClean.swagger_urls;
+                delete internal.swagger_urls;
+            } else if (parsedClean._swagger_urls) {
+                internal._swagger_urls = parsedClean._swagger_urls;
+            }
+
+            // 2. Map global_headers/headers
+            if (parsedClean.headers) {
+                internal.global_headers = parsedClean.headers;
+                delete internal.headers;
+            }
+
+            // 3. Map endpoints object -> disabled_endpoints
+            let disabled_endpoints: string[] = config.disabled_endpoints || [];
+            if (parsedClean.endpoints) {
+                if (Array.isArray(parsedClean.endpoints)) {
+                    // Internal format was imported directly
+                    internal.endpoints = parsedClean.endpoints;
+                    if (parsedClean.disabled_endpoints) {
+                        disabled_endpoints = parsedClean.disabled_endpoints;
+                    }
+                } else {
+                    if (parsedClean.endpoints.exclude) {
+                        disabled_endpoints = parsedClean.endpoints.exclude;
+                    } else if (parsedClean.endpoints.include) {
+                        const includeSet = new Set(parsedClean.endpoints.include);
+                        disabled_endpoints = (config.endpoints || [])
+                            .map(e => `${e.method} ${e.path}`)
+                            .filter(key => !includeSet.has(key));
+                    }
+                    // Remove endpoints object from internal config because internal.endpoints must be an array
+                    delete internal.endpoints;
+                }
+            } else if (parsedClean.disabled_endpoints) {
+                disabled_endpoints = parsedClean.disabled_endpoints;
+            }
+
+            internal.disabled_endpoints = disabled_endpoints;
+            
+            // Preserve existing endpoints array if not provided in imported config
+            if (!internal.endpoints) {
+                internal.endpoints = config.endpoints || [];
+            }
+
+            validateConfig(internal);
+
             setConfig({
                 ...DEFAULT_CONFIG,
-                ...parsed,
-                settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
-                security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
+                ...internal,
+                settings: { ...DEFAULT_SETTINGS, ...(internal.settings || {}) },
+                security: internal.security ? { ...DEFAULT_CONFIG.security, ...internal.security } : DEFAULT_CONFIG.security,
             });
         } catch (err) {
             throw new Error('Invalid JSON config: ' + (err instanceof Error ? err.message : String(err)));
         }
-    }, []);
+    }, [config, setConfig]);
 
     const exportConfig = useCallback((): string => {
-        const { endpoints, ...rest } = config;
-        const exportedConfig = {
+        const { endpoints, _swagger_urls, disabled_endpoints, ...rest } = config;
+        const exportedConfig: any = {
             ...rest,
             headers: config.global_headers || {},
-            swagger_urls: config._swagger_urls || [],
-            endpoints: {
-                exclude: config.disabled_endpoints || []
-            }
+            swagger_urls: _swagger_urls || [],
         };
+        if (disabled_endpoints && disabled_endpoints.length > 0) {
+            exportedConfig.endpoints = {
+                exclude: disabled_endpoints
+            };
+        }
         return JSON.stringify(exportedConfig, null, 2);
     }, [config]);
 

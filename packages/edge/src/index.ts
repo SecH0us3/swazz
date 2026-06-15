@@ -16,11 +16,16 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>();
 
 async function getUserIdFromRequest(c: any): Promise<string | null> {
+  let token = null;
   const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else {
+    token = c.req.query('token');
+  }
+  if (!token) {
     return null;
   }
-  const token = authHeader.substring(7);
   const secret = c.env.JWT_SECRET || 'fallback-secret';
   try {
     const decoded = await verify(token, secret, "HS256");
@@ -34,6 +39,28 @@ async function getUserIdFromRequest(c: any): Promise<string | null> {
 }
 
 app.use('*', cors());
+
+app.use('/api/*', async (c, next) => {
+  const path = c.req.path;
+  if (
+    path === '/api/info' ||
+    path === '/api/payload-catalog' ||
+    path.startsWith('/api/auth/') ||
+    path === '/api/runners/connect' ||
+    (path.startsWith('/api/scans/') && path.endsWith('/upload'))
+  ) {
+    return await next();
+  }
+
+  if (c.env.AUTH_ENABLED === 'true') {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  }
+
+  await next();
+});
 
 app.get('/api/info', (c) => {
   const authEnabled = c.env.AUTH_ENABLED === 'true';
@@ -874,12 +901,12 @@ app.put('/api/scans/:id/upload', async (c) => {
       return c.json({ error: 'Token does not match this scan' }, 403);
     }
 
-    const body = await c.req.arrayBuffer();
-    if (!body || body.byteLength === 0) {
+    const bodyStream = c.req.raw.body;
+    if (!bodyStream) {
       return c.json({ error: 'Empty body' }, 400);
     }
 
-    await c.env.STORAGE.put(decoded.r2_key, body, {
+    await c.env.STORAGE.put(decoded.r2_key, bodyStream, {
       customMetadata: {
         scan_id: scanId,
         uploaded_at: new Date().toISOString(),
@@ -1301,7 +1328,12 @@ export class RunnerCoordinator {
         runnerWs = activeRunners[0];
       }
 
-      runnerWs.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
+      try {
+        runnerWs.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
+      } catch (err) {
+        this.pendingParseUrls.delete(reqId);
+        return new Response(JSON.stringify({ error: "Failed to send parse request to runner" }), { status: 500 });
+      }
       
       return new Promise<Response>((resolve) => {
         this.pendingParses.set(reqId, resolve);
@@ -1323,7 +1355,12 @@ export class RunnerCoordinator {
       const runnerWs = activeRunners[0];
       this.jobs.set(runId, runnerWs);
       const parsedConfig = JSON.parse(configText).config;
-      runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
+      try {
+        runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
+      } catch (err) {
+        this.jobs.delete(runId);
+        return new Response("Failed to send start command to runner", { status: 500 });
+      }
       return new Response("ok");
     }
 
@@ -1332,7 +1369,11 @@ export class RunnerCoordinator {
       const action = url.searchParams.get('action')!;
       const runnerWs = this.jobs.get(runId);
       if (runnerWs) {
-        runnerWs.send(JSON.stringify({ type: action, runId }));
+        try {
+          runnerWs.send(JSON.stringify({ type: action, runId }));
+        } catch (err) {
+          // ignore or log
+        }
       }
       return new Response("ok");
     }

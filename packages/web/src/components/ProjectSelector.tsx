@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore.js';
+import { fetchProjects, createProject } from '../services/projectService.js';
 
 interface Project {
     id: string;
@@ -27,36 +28,13 @@ export function ProjectSelector() {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const handleCreateProject = async (name: string) => {
-        const token = localStorage.getItem('swazz_token');
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json'
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        
         try {
-            const res = await fetch('/api/projects', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ name })
-            });
-            if (!res.ok) throw new Error();
-            const data = await res.json();
-            
-            // Reload the list of projects
-            const listHeaders: Record<string, string> = {};
-            if (token) {
-                listHeaders['Authorization'] = `Bearer ${token}`;
-            }
-            const listRes = await fetch('/api/projects', { headers: listHeaders });
-            const listData = await listRes.json();
-            if (listData.projects) {
-                setProjects(listData.projects);
-                const newProj = listData.projects.find((p: Project) => p.id === data.id);
-                if (newProj) {
-                    setActiveProject(newProj);
-                }
+            const data = await createProject(name);
+            const projs = await fetchProjects();
+            setProjects(projs);
+            const newProj = projs.find((p: Project) => p.id === data.id);
+            if (newProj) {
+                setActiveProject(newProj);
             }
         } catch {
             alert('Failed to create project');
@@ -64,19 +42,11 @@ export function ProjectSelector() {
     };
 
     useEffect(() => {
-        const token = localStorage.getItem('swazz_token');
-        const headers: Record<string, string> = {};
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        fetch('/api/projects', { headers })
-            .then(res => res.json())
-            .then(data => {
-                if (data.projects) {
-                    setProjects(data.projects);
-                    if (data.projects.length > 0 && !activeProject) {
-                        useAppStore.setState({ activeProject: data.projects[0] });
-                    }
+        fetchProjects()
+            .then(projs => {
+                setProjects(projs);
+                if (projs.length > 0 && !activeProject) {
+                    useAppStore.setState({ activeProject: projs[0] });
                 }
             })
             .catch(() => {});

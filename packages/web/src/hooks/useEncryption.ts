@@ -246,6 +246,10 @@ export function useEncryption(): UseEncryptionReturn {
             // Derive the AES-GCM decryption key
             const aesKey = await deriveDecryptionKey(keyPairRef.current.privateKey, ephemeralPublicKey);
 
+            if (encryptedData.byteLength < 12) {
+                throw new Error('Encrypted data is too short (minimum 12 bytes for IV)');
+            }
+
             // The encrypted data format: [12-byte IV] [ciphertext+tag]
             const iv = encryptedData.slice(0, 12);
             const ciphertext = encryptedData.slice(12);
