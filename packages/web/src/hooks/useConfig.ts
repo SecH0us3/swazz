@@ -143,21 +143,14 @@ export function useConfig() {
     } catch { /* ignore */ }
     const storageKey = token && activeProject ? `${STORAGE_KEY}:${activeProject.id}` : STORAGE_KEY;
 
-    const [config, setConfig] = useState<SwazzConfig>(() => {
-        try {
-            const stored = localStorage.getItem(storageKey);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                return {
-                    ...DEFAULT_CONFIG,
-                    ...parsed,
-                    settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-                    security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
-                };
-            }
-        } catch { /* ignore */ }
-        return { ...DEFAULT_CONFIG };
-    });
+    const config = useAppStore(state => state.config);
+    const setConfig = useCallback((c: SwazzConfig | ((prev: SwazzConfig) => SwazzConfig)) => {
+        if (typeof c === 'function') {
+            useAppStore.setState((state) => ({ config: c(state.config) }));
+        } else {
+            useAppStore.setState({ config: c });
+        }
+    }, []);
 
     const currentKeyRef = useRef(storageKey);
 

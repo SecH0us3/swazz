@@ -1,5 +1,6 @@
 import { create, StateCreator } from 'zustand';
-import type { FuzzResult, RunStats, Project } from '../types.js';
+import type { FuzzResult, RunStats, Project, SwazzConfig } from '../types.js';
+import { DEFAULT_SETTINGS } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 
 export interface UISlice {
@@ -74,7 +75,26 @@ const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = () => (
     projects: [],
 });
 
-export type AppState = UISlice & FuzzingSlice & StatsSlice & UserSlice & ProjectSlice;
+export interface ConfigSlice {
+    config: SwazzConfig;
+}
+
+const createConfigSlice: StateCreator<AppState, [], [], ConfigSlice> = () => ({
+    config: {
+        base_url: '',
+        global_headers: {},
+        cookies: {},
+        dictionaries: {},
+        settings: { ...DEFAULT_SETTINGS },
+        endpoints: [],
+        disabled_endpoints: [],
+        _swagger_urls: [],
+        security: { allow_private_ips: false },
+        rules: { ignore: [] },
+    },
+});
+
+export type AppState = UISlice & FuzzingSlice & StatsSlice & UserSlice & ProjectSlice & ConfigSlice;
 
 export const useAppStore = create<AppState>()((...a) => ({
     ...createUISlice(...a),
@@ -82,4 +102,5 @@ export const useAppStore = create<AppState>()((...a) => ({
     ...createStatsSlice(...a),
     ...createUserSlice(...a),
     ...createProjectSlice(...a),
+    ...createConfigSlice(...a),
 }));

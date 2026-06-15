@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useConfig } from '../hooks/useConfig.js';
+import { KVEditor } from './Sidebar/Shared.js';
 
 interface Project {
     id: string;
@@ -22,7 +23,7 @@ export function ProjectSettings() {
 
     const { config, updateConfig, updateSettings } = useConfig();
 
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists'>('general');
 
     // General Project Info state
     const [projectName, setProjectName] = useState(activeProject?.name || '');
@@ -315,6 +316,24 @@ export function ProjectSettings() {
                             <line x1="12" y1="17" x2="12.01" y2="17"></line>
                         </svg>
                         Anomalies & Security
+                    </button>
+                    <button
+                        className={`tab-bar-btn ${activeSubTab === 'wordlists' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('wordlists')}
+                        style={{
+                            width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                            background: activeSubTab === 'wordlists' ? 'var(--accent-subtle)' : 'transparent',
+                            color: activeSubTab === 'wordlists' ? 'var(--accent-light)' : 'var(--text-secondary)'
+                        }}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        Wordlist Files
                     </button>
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'runners' ? 'active' : ''}`}
@@ -821,6 +840,31 @@ export function ProjectSettings() {
                                     </table>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {activeSubTab === 'wordlists' && (
+                        <div className="card" style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            padding: '24px',
+                            borderRadius: 'var(--radius-lg)',
+                            border: '1px solid var(--border-default)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '20px'
+                        }}>
+                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+                                Wordlist Files Configuration
+                            </h2>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                                Map custom payload categories to specific wordlist files in the runner's `wordlists/` directory.
+                            </p>
+                            <KVEditor
+                                entries={config.wordlist_files || {}}
+                                onChange={(w) => updateConfig({ wordlist_files: w })}
+                                keyPlaceholder="Category (e.g. xss)"
+                                valuePlaceholder="Filename (in wordlists/ dir)"
+                            />
                         </div>
                     )}
                 </div>
