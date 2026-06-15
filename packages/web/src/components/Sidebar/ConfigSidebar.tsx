@@ -2,7 +2,6 @@ import { ChangeEvent, useMemo, useRef, useState } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 import { PayloadSettingsModal } from './PayloadSettingsModal.js';
-import { ChainingRulesEditor } from './ChainingRulesEditor.js';
 import { useAppStore } from '../../store/appStore.js';
 interface Props {
     style?: React.CSSProperties;
@@ -453,15 +452,7 @@ export function ConfigSidebar({
                 )}
             </Section>
             {/* Settings */}
-            {/* Request Chaining */}
-            <Section title="Request Chaining" defaultOpen={false} count={config.settings.chaining_rules?.length || 0}>
-                <ChainingRulesEditor 
-                    rules={config.settings.chaining_rules || []} 
-                    onChange={(rules) => onUpdateConfig({
-                        settings: { ...config.settings, chaining_rules: rules }
-                    })} 
-                />
-            </Section>
+
             <Section title="Settings" defaultOpen={false}>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     {SETTINGS_FIELDS.map(({ label, key, value }) => (

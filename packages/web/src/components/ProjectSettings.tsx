@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useConfig } from '../hooks/useConfig.js';
 import { KVEditor } from './Sidebar/Shared.js';
+import { ChainingRulesEditor } from './Sidebar/ChainingRulesEditor.js';
 
 interface Project {
     id: string;
@@ -23,7 +24,7 @@ export function ProjectSettings() {
 
     const { config, updateConfig, updateSettings } = useConfig();
 
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining'>('general');
 
     // General Project Info state
     const [projectName, setProjectName] = useState(activeProject?.name || '');
@@ -334,6 +335,21 @@ export function ProjectSettings() {
                             <polyline points="10 9 9 9 8 9"></polyline>
                         </svg>
                         Wordlist Files
+                    </button>
+                    <button
+                        className={`tab-bar-btn ${activeSubTab === 'chaining' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('chaining')}
+                        style={{
+                            width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                            background: activeSubTab === 'chaining' ? 'var(--accent-subtle)' : 'transparent',
+                            color: activeSubTab === 'chaining' ? 'var(--accent-light)' : 'var(--text-secondary)'
+                        }}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                        </svg>
+                        Request Chaining
                     </button>
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'runners' ? 'active' : ''}`}
@@ -864,6 +880,29 @@ export function ProjectSettings() {
                                 onChange={(w) => updateConfig({ wordlist_files: w })}
                                 keyPlaceholder="Category (e.g. xss)"
                                 valuePlaceholder="Filename (in wordlists/ dir)"
+                            />
+                        </div>
+                    )}
+
+                    {activeSubTab === 'chaining' && (
+                        <div className="card" style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            padding: '24px',
+                            borderRadius: 'var(--radius-lg)',
+                            border: '1px solid var(--border-default)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '20px'
+                        }}>
+                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+                                Request Chaining Rules
+                            </h2>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                                Configure chaining rules to extract dynamic variables (like CSRF tokens or session IDs) from responses and inject them into subsequent test requests.
+                            </p>
+                            <ChainingRulesEditor 
+                                rules={config.settings.chaining_rules || []} 
+                                onChange={(rules) => updateSettings({ chaining_rules: rules })} 
                             />
                         </div>
                     )}
