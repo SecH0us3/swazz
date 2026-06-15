@@ -73,6 +73,9 @@ export function validateConfig(config: any): void {
         if (s.debug !== undefined && typeof s.debug !== 'boolean') {
             throw new Error('settings.debug must be a boolean');
         }
+        if (s.data_retention !== undefined && typeof s.data_retention !== 'string') {
+            throw new Error('settings.data_retention must be a string');
+        }
     }
     if (config.endpoints !== undefined && !Array.isArray(config.endpoints)) {
         throw new Error('endpoints must be an array');

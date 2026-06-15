@@ -256,3 +256,109 @@ describe("Anonymous Limits", () => {
     expect([500, 503]).toContain(resAuthLarge.status);
   });
 });
+
+describe("Projects & Runners API", () => {
+  let userToken: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    // Register/login to get token
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "projuser", password: "password123" })
+    });
+    await app.fetch(regReq, env);
+
+    const loginReq = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "projuser", password: "password123" })
+    });
+    const loginRes = await app.fetch(loginReq, env);
+    const body = await loginRes.json() as { token: string };
+    userToken = body.token;
+
+    // Create a project
+    const createReq = new Request("http://localhost/api/projects", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${userToken}`
+      },
+      body: JSON.stringify({ name: "Original Name", description: "Original Description" })
+    });
+    const createRes = await app.fetch(createReq, env);
+    expect(createRes.status).toBe(200);
+    const createBody = await createRes.json() as { id: string };
+    projectId = createBody.id;
+  });
+
+  it("GET /api/projects returns the created project", async () => {
+    const req = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${userToken}` }
+    });
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { projects: any[] };
+    const p = body.projects.find(x => x.id === projectId);
+    expect(p).toBeDefined();
+    expect(p.name).toBe("Original Name");
+    expect(p.description).toBe("Original Description");
+  });
+
+  it("PATCH /api/projects/:id updates project name and description", async () => {
+    const req = new Request(`http://localhost/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${userToken}`
+      },
+      body: JSON.stringify({ name: "Updated Name", description: "Updated Description" })
+    });
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { status: string };
+    expect(body.status).toBe("updated");
+
+    // Verify change in DB
+    const checkReq = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${userToken}` }
+    });
+    const checkRes = await app.fetch(checkReq, env);
+    const checkBody = await checkRes.json() as { projects: any[] };
+    const p = checkBody.projects.find(x => x.id === projectId);
+    expect(p.name).toBe("Updated Name");
+    expect(p.description).toBe("Updated Description");
+  });
+
+  it("GET /api/runners returns active runners list", async () => {
+    const req = new Request("http://localhost/api/runners", {
+      headers: { "Authorization": `Bearer ${userToken}` }
+    });
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { runners: any[] };
+    expect(Array.isArray(body.runners)).toBe(true);
+  });
+
+  it("DELETE /api/projects/:id removes the project", async () => {
+    const req = new Request(`http://localhost/api/projects/${projectId}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${userToken}` }
+    });
+    const res = await app.fetch(req, env);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { status: string };
+    expect(body.status).toBe("deleted");
+
+    // Verify it is gone
+    const checkReq = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${userToken}` }
+    });
+    const checkRes = await app.fetch(checkReq, env);
+    const checkBody = await checkRes.json() as { projects: any[] };
+    const p = checkBody.projects.find(x => x.id === projectId);
+    expect(p).toBeUndefined();
+  });
+});

@@ -395,6 +395,24 @@ export function ProjectSettings() {
                                     </span>
                                 </div>
 
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Data Retention</label>
+                                    <select 
+                                        className="input" 
+                                        value={config.settings.data_retention || 'forever'} 
+                                        onChange={(e) => updateSettings({ data_retention: e.target.value })}
+                                        style={{ width: '100%' }}
+                                    >
+                                        <option value="30_days">30 Days</option>
+                                        <option value="90_days">90 Days</option>
+                                        <option value="1_year">1 Year</option>
+                                        <option value="forever">Forever</option>
+                                    </select>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                                        Controls how long scan histories and findings logs are stored in the local index or cloud backup.
+                                    </span>
+                                </div>
+
                                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' }}>
                                     <button type="submit" className="btn btn-primary" disabled={isSavingGeneral}>
                                         {isSavingGeneral ? 'Saving...' : 'Save General Info'}
