@@ -270,6 +270,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build Web UI
+        run: |
+          npm run build
+          mkdir -p packages/container/web
+          cp -r packages/web/dist packages/container/web/dist
+
       - name: Deploy to Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
