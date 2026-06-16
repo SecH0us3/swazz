@@ -28,6 +28,10 @@ new_classes = ["RunnerCoordinator"]
 tag = "v2"
 deleted_classes = ["SwazzContainer"]
 
+[[migrations]]
+tag = "v3"
+new_classes = ["RunnerCoordinator"]
+
 [observability]
 enabled = true
 
