@@ -769,6 +769,12 @@ app.post('/api/scans', async (c) => {
     return c.json({ error: 'Missing required fields: project_id, target_url, profile' }, 400);
   }
 
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkProjectMembership(c, body.project_id, userId);
+    if (!authorized) return error;
+  }
+
   const id = ulid();
   const status = 'pending';
 
@@ -1129,6 +1135,11 @@ app.post('/api/runs', async (c) => {
   let userPublicKey = "";
   const userId = await getUserIdFromRequest(c);
   if (userId) {
+    if (body.config && body.config.projectId) {
+      const { authorized, error } = await checkProjectMembership(c, body.config.projectId, userId);
+      if (!authorized) return error;
+    }
+
     try {
       const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
         .bind(userId)
