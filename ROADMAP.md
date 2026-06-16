@@ -533,7 +533,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints directly into the Swazz configuration profile.
   - **Implementation Details:**
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
-    - Synchronize captured endpoints and authentication states real-time with the local runner profile.
+    - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
 - [ ] **Task 63: UI Actions for Ignoring Findings & Accepting Risks**
   - **Design Goal:** Allow security auditors to triage issues directly in the dashboard by ignoring false positives or acknowledging accepted risks.
