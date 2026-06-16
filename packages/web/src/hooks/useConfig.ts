@@ -2,9 +2,10 @@
  * useConfig — manages SwazzConfig in localStorage.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { SwazzConfig, SwazzSettings, Dictionary, FuzzingProfile } from '../types.js';
 import { DEFAULT_SETTINGS } from '../types.js';
+import { useAppStore } from '../store/appStore.js';
 
 const STORAGE_KEY = 'swazz:config';
 
@@ -18,6 +19,7 @@ const DEFAULT_CONFIG: SwazzConfig = {
     disabled_endpoints: [],
     _swagger_urls: [],
     security: { allow_private_ips: false },
+    rules: { ignore: [] },
 };
 
 export function validateConfig(config: any): void {
@@ -71,6 +73,9 @@ export function validateConfig(config: any): void {
         if (s.debug !== undefined && typeof s.debug !== 'boolean') {
             throw new Error('settings.debug must be a boolean');
         }
+        if (s.data_retention !== undefined && typeof s.data_retention !== 'string') {
+            throw new Error('settings.data_retention must be a string');
+        }
     }
     if (config.endpoints !== undefined && !Array.isArray(config.endpoints)) {
         throw new Error('endpoints must be an array');
@@ -98,6 +103,14 @@ export function validateConfig(config: any): void {
             throw new Error('security.allow_private_ips must be a boolean');
         }
     }
+    if (config.rules !== undefined) {
+        if (typeof config.rules !== 'object' || config.rules === null) {
+            throw new Error('rules must be an object');
+        }
+        if (config.rules.ignore !== undefined && !Array.isArray(config.rules.ignore)) {
+            throw new Error('rules.ignore must be an array');
+        }
+    }
 }
 
 function loadConfig(): SwazzConfig {
@@ -123,11 +136,106 @@ function saveConfig(config: SwazzConfig): void {
 }
 
 export function useConfig() {
-    const [config, setConfig] = useState<SwazzConfig>(loadConfig);
+    const activeProject = useAppStore(state => state.activeProject);
+    let token: string | null = null;
+    try {
+        token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+    } catch { /* ignore */ }
+    const storageKey = token && activeProject ? `${STORAGE_KEY}:${activeProject.id}` : STORAGE_KEY;
 
+    const config = useAppStore(state => state.config);
+    const setConfig = useCallback((c: SwazzConfig | ((prev: SwazzConfig) => SwazzConfig)) => {
+        if (typeof c === 'function') {
+            useAppStore.setState((state) => ({ config: c(state.config) }));
+        } else {
+            useAppStore.setState({ config: c });
+        }
+    }, []);
+
+    const currentKeyRef = useRef<string | null>(null);
+
+    // Load config when storage key changes
     useEffect(() => {
-        saveConfig(config);
-    }, [config]);
+        let active = true;
+
+        const load = async () => {
+            let loaded: SwazzConfig | null = null;
+
+            // 1. Try server first if logged in
+            if (token && activeProject) {
+                try {
+                    const res = await fetch(`/api/projects/${activeProject.id}/config`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.config) {
+                            loaded = data.config;
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[swazz] Failed to load config from server:', err);
+                }
+            }
+
+            // 2. Fall back to localStorage
+            if (!loaded) {
+                try {
+                    const stored = localStorage.getItem(storageKey);
+                    if (stored) {
+                        loaded = JSON.parse(stored);
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (!active) return;
+
+            const finalConfig = loaded ? {
+                ...DEFAULT_CONFIG,
+                ...loaded,
+                settings: { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) },
+                security: loaded.security ? { ...DEFAULT_CONFIG.security, ...loaded.security } : DEFAULT_CONFIG.security,
+            } : { ...DEFAULT_CONFIG };
+
+            currentKeyRef.current = storageKey;
+            setConfig(finalConfig);
+        };
+
+        load();
+
+        return () => {
+            active = false;
+        };
+    }, [storageKey, token, activeProject]);
+
+    // Save config to current storage key when config changes & sync to server (debounced)
+    useEffect(() => {
+        if (currentKeyRef.current !== storageKey) {
+            return;
+        }
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(config));
+        } catch { /* ignore */ }
+
+        if (token && activeProject) {
+            const timer = setTimeout(async () => {
+                try {
+                    await fetch(`/api/projects/${activeProject.id}/config`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ config })
+                    });
+                } catch (err) {
+                    console.warn('[swazz] Failed to sync config to server:', err);
+                }
+            }, 1500); // 1.5s debounce
+
+            return () => clearTimeout(timer);
+        }
+    }, [config, storageKey, token, activeProject]);
 
     const updateConfig = useCallback((partial: Partial<SwazzConfig>) => {
         setConfig((prev) => ({ ...prev, ...partial }));
@@ -165,29 +273,85 @@ export function useConfig() {
 
     const importConfig = useCallback((json: string) => {
         try {
-            const parsed = JSON.parse(json) as SwazzConfig;
-            validateConfig(parsed);
+            const parsedClean = JSON.parse(json) as any;
+            if (!parsedClean || typeof parsedClean !== 'object') {
+                throw new Error('Config must be a JSON object');
+            }
+
+            // Map clean config to internal SwazzConfig
+            const internal: any = { ...parsedClean };
+
+            // 1. Map swagger_urls -> _swagger_urls
+            if (parsedClean.swagger_urls) {
+                internal._swagger_urls = parsedClean.swagger_urls;
+                delete internal.swagger_urls;
+            } else if (parsedClean._swagger_urls) {
+                internal._swagger_urls = parsedClean._swagger_urls;
+            }
+
+            // 2. Map global_headers/headers
+            if (parsedClean.headers) {
+                internal.global_headers = parsedClean.headers;
+                delete internal.headers;
+            }
+
+            // 3. Map endpoints object -> disabled_endpoints
+            let disabled_endpoints: string[] = config.disabled_endpoints || [];
+            if (parsedClean.endpoints) {
+                if (Array.isArray(parsedClean.endpoints)) {
+                    // Internal format was imported directly
+                    internal.endpoints = parsedClean.endpoints;
+                    if (parsedClean.disabled_endpoints) {
+                        disabled_endpoints = parsedClean.disabled_endpoints;
+                    }
+                } else {
+                    if (parsedClean.endpoints.exclude) {
+                        disabled_endpoints = parsedClean.endpoints.exclude;
+                    } else if (parsedClean.endpoints.include) {
+                        const includeSet = new Set(parsedClean.endpoints.include);
+                        disabled_endpoints = (config.endpoints || [])
+                            .map(e => `${e.method} ${e.path}`)
+                            .filter(key => !includeSet.has(key));
+                    }
+                    // Remove endpoints object from internal config because internal.endpoints must be an array
+                    delete internal.endpoints;
+                }
+            } else if (parsedClean.disabled_endpoints) {
+                disabled_endpoints = parsedClean.disabled_endpoints;
+            }
+
+            internal.disabled_endpoints = disabled_endpoints;
+            
+            // Preserve existing endpoints array if not provided in imported config
+            if (!internal.endpoints) {
+                internal.endpoints = config.endpoints || [];
+            }
+
+            validateConfig(internal);
+
             setConfig({
                 ...DEFAULT_CONFIG,
-                ...parsed,
-                settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
-                security: parsed.security ? { ...DEFAULT_CONFIG.security, ...parsed.security } : DEFAULT_CONFIG.security,
+                ...internal,
+                settings: { ...DEFAULT_SETTINGS, ...(internal.settings || {}) },
+                security: internal.security ? { ...DEFAULT_CONFIG.security, ...internal.security } : DEFAULT_CONFIG.security,
             });
         } catch (err) {
             throw new Error('Invalid JSON config: ' + (err instanceof Error ? err.message : String(err)));
         }
-    }, []);
+    }, [config, setConfig]);
 
     const exportConfig = useCallback((): string => {
-        const { endpoints, ...rest } = config;
-        const exportedConfig = {
+        const { endpoints, _swagger_urls, disabled_endpoints, ...rest } = config;
+        const exportedConfig: any = {
             ...rest,
             headers: config.global_headers || {},
-            swagger_urls: config._swagger_urls || [],
-            endpoints: {
-                exclude: config.disabled_endpoints || []
-            }
+            swagger_urls: _swagger_urls || [],
         };
+        if (disabled_endpoints && disabled_endpoints.length > 0) {
+            exportedConfig.endpoints = {
+                exclude: disabled_endpoints
+            };
+        }
         return JSON.stringify(exportedConfig, null, 2);
     }, [config]);
 

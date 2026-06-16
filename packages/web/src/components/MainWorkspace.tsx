@@ -4,6 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
+import { UserSettings } from './UserSettings.js';
+import { ProjectSettings } from './ProjectSettings.js';
+import { HistoryPage } from './HistoryPage.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -13,10 +16,14 @@ interface MainWorkspaceProps {
     config: any;
     handleStart: (urls?: string[]) => void;
     handleSelectResult: (r: ResultSummary) => void;
-    handleExport: () => void;
-    handleExportHTML: () => void;
-    handleExportMD: () => void;
+    handleExport: (runId: string | null, baseUrl?: string) => void;
+    handleExportHTML: (runId: string | null) => void;
+    handleExportMD: (runId: string | null) => void;
+    handleLoadRun: (runId: string, importedRun?: any) => void;
+    handleDeleteRun: (runId: string) => void;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
+    runs: any[];
+    onImportRun: (data: any) => Promise<{ runId: string; run: any } | undefined>;
 }
 
 export function MainWorkspace({
@@ -26,7 +33,11 @@ export function MainWorkspace({
     handleExport,
     handleExportHTML,
     handleExportMD,
+    handleLoadRun,
+    handleDeleteRun,
     queryResults,
+    runs,
+    onImportRun,
 }: MainWorkspaceProps) {
     const {
         activeRunId,
@@ -100,7 +111,7 @@ export function MainWorkspace({
 
     return (
         <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
-            {loadedRunId && (
+            {loadedRunId && activeTab !== 'settings' && (
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '10px 16px',
@@ -122,7 +133,24 @@ export function MainWorkspace({
                 </div>
             )}
 
-            {!hasActivity && (
+            {activeTab === 'settings' ? (
+                <UserSettings />
+            ) : activeTab === 'project_settings' ? (
+                <ProjectSettings />
+            ) : activeTab === 'history' ? (
+                <HistoryPage 
+                    runs={runs}
+                    onLoadRun={(runId, importedRun) => {
+                        handleLoadRun(runId, importedRun);
+                        useAppStore.setState({ activeTab: 'heatmap' });
+                    }}
+                    onDeleteRun={handleDeleteRun}
+                    onImportRun={onImportRun}
+                    onExport={handleExport}
+                    onExportHTML={handleExportHTML}
+                    onExportMD={handleExportMD}
+                />
+            ) : !hasActivity ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="empty-state">
                         <div className="empty-state-icon">⚡</div>
@@ -144,9 +172,7 @@ export function MainWorkspace({
                         </div>
                     </div>
                 </div>
-            )}
-
-            {hasActivity && (
+            ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">
                         <button
@@ -235,7 +261,7 @@ export function MainWorkspace({
                                     <button
                                         className="tab-bar-btn"
                                         style={{ justifyContent: 'flex-start', width: '100%', border: 'none', background: 'transparent', margin: 0, padding: '8px 12px' }}
-                                        onClick={handleExportHTML}
+                                        onClick={() => handleExportHTML(inspectorRunId)}
                                         title="Generate and download a visual HTML report"
                                     >
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -246,7 +272,7 @@ export function MainWorkspace({
                                     <button
                                         className="tab-bar-btn"
                                         style={{ justifyContent: 'flex-start', width: '100%', border: 'none', background: 'transparent', margin: 0, padding: '8px 12px' }}
-                                        onClick={handleExportMD}
+                                        onClick={() => handleExportMD(inspectorRunId)}
                                         title="Generate and download a Markdown report"
                                     >
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -279,7 +305,7 @@ export function MainWorkspace({
                             heatmapFilter={heatmapFilter}
                             onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
                             onSelectResult={handleSelectResult}
-                            onExport={handleExport}
+                            onExport={() => handleExport(inspectorRunId, config.base_url)}
                             config={config}
                         />
                     )}
@@ -291,7 +317,7 @@ export function MainWorkspace({
                             heatmapFilter={heatmapFilter}
                             onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
                             onSelectResult={handleSelectResult}
-                            onExport={handleExport}
+                            onExport={() => handleExport(inspectorRunId, config.base_url)}
                             findingsOnly={true}
                             config={config}
                         />

@@ -5,6 +5,7 @@
     "moduleResolution": "Bundler",
     "types": [
       "@cloudflare/workers-types/2023-07-01",
+      "@cloudflare/vitest-pool-workers/types",
       "vitest/globals"
     ],
     "lib": ["ES2022"],

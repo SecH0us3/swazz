@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
+import { UserMenu } from './UserMenu.js';
 
 interface Props {
     baseUrl: string;
@@ -13,6 +14,10 @@ interface Props {
     onToggleConfig?: () => void;
     theme: 'dark' | 'light';
     onToggleTheme: () => void;
+    authEnabled?: boolean;
+    token?: string | null;
+    isGuest?: boolean;
+    onLogout?: () => void;
 }
 
 export function Header({
@@ -26,6 +31,10 @@ export function Header({
     onToggleConfig,
     theme,
     onToggleTheme,
+    authEnabled = false,
+    token = null,
+    isGuest = false,
+    onLogout,
 }: Props) {
     const { isRunning, isPaused, isLoadingSpecs } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
@@ -89,8 +98,11 @@ export function Header({
                     </svg>
                 </button>
 
-                {/* Logo */}
-                <div className="header-logo">
+                <div 
+                    className="header-logo" 
+                    onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
+                    style={{ cursor: 'pointer' }}
+                >
                     <div className="header-logo-icon">⚡</div>
                     <span className="header-logo-text">swazz</span>
                 </div>
@@ -179,6 +191,8 @@ export function Header({
 
             {/* Right Section: Actions, Toggles */}
             <div className="header-right">
+
+
                 {/* Actions */}
                 <div className="header-actions">
                     {!isBusy ? (
@@ -229,6 +243,26 @@ export function Header({
                         </svg>
                     )}
                 </button>
+
+                {authEnabled && token && (
+                    <UserMenu onLogout={onLogout || (() => {})} />
+                )}
+
+                {authEnabled && isGuest && (
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={onLogout} 
+                        style={{ marginLeft: '8px' }}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                        </svg>
+                        <span style={{ marginLeft: '4px' }}>Sign Up</span>
+                    </button>
+                )}
 
                 {/* Right Toggle (Mobile) */}
                 <button className="header-mobile-toggle" onClick={onToggleConfig} title="Settings" aria-label="Toggle Settings">

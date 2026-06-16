@@ -19,12 +19,36 @@ import { MainWorkspace } from './components/MainWorkspace.js';
 import { useAppStore } from './store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
+import { useAuth } from './hooks/useAuth.js';
+import { LoginScreen } from './components/Auth/LoginScreen.js';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export default function App() {
+    const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
+
+    useEffect(() => {
+        if (token) {
+            fetch(`${PROXY_URL}/api/auth/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error('Failed to fetch profile');
+            })
+            .then(data => {
+                useAppStore.setState({ userProfile: { username: data.username, apiKey: data.api_key, publicKey: data.public_key } });
+            })
+            .catch(err => {
+                console.error(err);
+                useAppStore.setState({ userProfile: null });
+            });
+        } else {
+            useAppStore.setState({ userProfile: null, activeProject: null });
+        }
+    }, [token]);
 
     // Only subscribe to what App.tsx needs for rendering
     const {
@@ -245,6 +269,11 @@ export default function App() {
                     useAppStore.setState({ activeTab: 'owasp' });
                     return;
                 }
+                if (e.key === '5') {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'history' });
+                    return;
+                }
             }
 
             // Run: Mod + Enter
@@ -308,6 +337,14 @@ export default function App() {
         } as FuzzResult });
     };
 
+    if (isLoading) {
+        return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
+    }
+
+    if (authEnabled && !token && !isGuest) {
+        return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
+    }
+
     return (
         <div className="app-layout" style={{ gridTemplateColumns: `${isSidebarHiddenDesktop ? 0 : sidebarWidth}px 1fr` }}>
             <Header
@@ -348,6 +385,10 @@ export default function App() {
                 }}
                 theme={theme}
                 onToggleTheme={toggleTheme}
+                authEnabled={authEnabled}
+                token={token}
+                isGuest={isGuest}
+                onLogout={logout}
             />
 
             <Sidebar
@@ -363,6 +404,8 @@ export default function App() {
                 onToast={showToast}
                 onLoadEndpoints={loadEndpoints}
                 onImportRun={importCliReport}
+                authEnabled={authEnabled}
+                token={token}
             />
 
             {(isSidebarOpen || isConfigOpen) && (
@@ -379,10 +422,14 @@ export default function App() {
                     config={config}
                     handleStart={handleStart}
                     handleSelectResult={handleSelectResult}
-                    handleExport={() => handleExport(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId, config.base_url)}
-                    handleExportHTML={() => handleExportHTML(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
-                    handleExportMD={() => handleExportMD(useAppStore.getState().loadedRunId ?? useAppStore.getState().liveRunId)}
+                    handleExport={handleExport}
+                    handleExportHTML={handleExportHTML}
+                    handleExportMD={handleExportMD}
+                    handleLoadRun={handleLoadRun}
+                    handleDeleteRun={handleDeleteRun}
                     queryResults={queryResults}
+                    runs={runs}
+                    onImportRun={importCliReport}
                 />
 
                 <ConfigSidebar
@@ -418,6 +465,7 @@ export default function App() {
                     onClose={() => useAppStore.setState({ isHotkeysHelpOpen: false })}
                 />
             )}
+
 
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
                 {toasts.map((t) => (

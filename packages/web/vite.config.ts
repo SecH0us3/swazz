@@ -6,18 +6,20 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'jsdom',
+        execArgv: ['--no-webstorage'],
     },
     server: {
         port: 5173,
         proxy: {
             '/api': {
-                target: 'http://127.0.0.1:8080',
+                target: 'http://127.0.0.1:8787',
                 changeOrigin: true,
+                ws: true,
             }
         }
     },
     build: {
-        outDir: '../container/web/dist',
+        outDir: 'dist',
         emptyOutDir: true,
     },
     resolve: {

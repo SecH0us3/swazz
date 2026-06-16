@@ -102,6 +102,51 @@ func fillPathParams(path string, pathParams map[string]*swagger.SchemaProperty, 
 	return result
 }
 
+func fillPathParamsFromMap(path string, params map[string]string) string {
+	if len(params) == 0 && !strings.Contains(path, "{") {
+		return path
+	}
+
+	result := path
+	for name, val := range params {
+		placeholder := "{" + name + "}"
+		if strings.Contains(result, placeholder) {
+			result = strings.ReplaceAll(result, placeholder, url.PathEscape(val))
+		}
+	}
+
+	// Handle any remaining {param} not in params, skipping {{param}}
+	var gen *generator.Generator
+	searchStart := 0
+	for {
+		start := strings.IndexByte(result[searchStart:], '{')
+		if start < 0 {
+			break
+		}
+		start += searchStart
+		
+		// Check for double brace
+		if start+1 < len(result) && result[start+1] == '{' {
+			searchStart = start + 2
+			continue
+		}
+		
+		end := strings.IndexByte(result[start:], '}')
+		if end < 0 {
+			break
+		}
+		
+		if gen == nil {
+			gen = generator.New(nil, swagger.ProfileRandom, swagger.DefaultSettings())
+		}
+		fallbackSchema := &swagger.SchemaProperty{Type: "string"}
+		val := capPathParam(gen.Generate("id", fallbackSchema))
+		result = result[:start] + url.PathEscape(val) + result[start+end+1:]
+	}
+
+	return result
+}
+
 // capPathParam ensures a path parameter value is safe to embed in a URL segment.
 // Practical limit: ~256 chars — beyond that the value doesn't add testing value
 // and breaks URL parsers / logging infrastructure.

@@ -22,4 +22,5 @@ WORKDIR /app
 USER nonroot:nonroot
 
 # For CLI mode, the entrypoint is directly set to execute start by default
-ENTRYPOINT ["/swazz-engine", "start"]
+ENTRYPOINT ["/swazz-engine"]
+CMD ["start"]

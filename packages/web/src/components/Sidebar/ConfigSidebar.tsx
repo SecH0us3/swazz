@@ -2,7 +2,7 @@ import { ChangeEvent, useMemo, useRef, useState } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 import { PayloadSettingsModal } from './PayloadSettingsModal.js';
-import { ChainingRulesEditor } from './ChainingRulesEditor.js';
+import { useAppStore } from '../../store/appStore.js';
 interface Props {
     style?: React.CSSProperties;
     config: SwazzConfig;
@@ -434,19 +434,7 @@ export function ConfigSidebar({
                     )}
                 </div>
             </Section>
-            {/* Wordlist Files */}
-            <Section
-                title="Wordlist Files"
-                count={Object.keys(config.wordlist_files || {}).length}
-                defaultOpen={Object.keys(config.wordlist_files || {}).length > 0}
-            >
-                <KVEditor
-                    entries={config.wordlist_files || {}}
-                    onChange={(w) => onUpdateConfig({ wordlist_files: w })}
-                    keyPlaceholder="Category (e.g. xss)"
-                    valuePlaceholder="Filename (in wordlists/ dir)"
-                />
-            </Section>
+
             {/* Dictionaries */}
             <Section title="Dictionaries" defaultOpen={false}>
                 <textarea
@@ -464,15 +452,7 @@ export function ConfigSidebar({
                 )}
             </Section>
             {/* Settings */}
-            {/* Request Chaining */}
-            <Section title="Request Chaining" defaultOpen={false} count={config.settings.chaining_rules?.length || 0}>
-                <ChainingRulesEditor 
-                    rules={config.settings.chaining_rules || []} 
-                    onChange={(rules) => onUpdateConfig({
-                        settings: { ...config.settings, chaining_rules: rules }
-                    })} 
-                />
-            </Section>
+
             <Section title="Settings" defaultOpen={false}>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     {SETTINGS_FIELDS.map(({ label, key, value }) => (
@@ -555,6 +535,20 @@ export function ConfigSidebar({
             {showPayloadSettings && (
                 <PayloadSettingsModal onClose={() => setShowPayloadSettings(false)} />
             )}
+            
+            <div style={{ padding: '16px 0 0 0', borderTop: '1px solid var(--border-default)', marginTop: '16px', display: 'flex', flexDirection: 'column' }}>
+                <button
+                    className="btn btn-secondary"
+                    style={{ width: '100%', justifyContent: 'center', gap: '8px' }}
+                    onClick={() => useAppStore.setState({ activeTab: 'project_settings' })}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    More Project Settings
+                </button>
+            </div>
         </aside>
     );
 }

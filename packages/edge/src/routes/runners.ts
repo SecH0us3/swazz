@@ -1,0 +1,227 @@
+import { Hono } from 'hono';
+import { Env } from '../env';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
+import { ulid } from 'ulidx';
+import { sign } from 'hono/jwt';
+
+export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
+  app.get('/api/runners/connect', async (c) => {
+    const upgradeHeader = c.req.header('Upgrade');
+    if (!upgradeHeader || upgradeHeader !== 'websocket') {
+      return new Response('Expected Upgrade: websocket', { status: 426 });
+    }
+  
+    let token = c.req.query('token');
+    if (!token) {
+      const authHeader = c.req.header('Authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+  
+    const publicKey = c.req.header('X-Runner-Public-Key') || c.req.query('public_key');
+  
+    if (publicKey) {
+      const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
+        .bind(publicKey)
+        .first();
+      if (!user) {
+        return new Response('Unauthorized: Invalid public key', { status: 401 });
+      }
+    } else if (token) {
+      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+        .bind(token)
+        .first();
+      if (!user) {
+        return new Response('Unauthorized: Invalid runner token', { status: 401 });
+      }
+    } else {
+      return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
+    }
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const req = new Request(c.req.raw.url, c.req.raw);
+    const url = new URL(req.url);
+    url.pathname = '/connect-runner';
+    if (publicKey) {
+      url.searchParams.set('public_key', publicKey);
+    }
+    return stub.fetch(new Request(url.toString(), req));
+  });
+  
+  app.get('/api/runners', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  
+    let userPublicKey: string | null = null;
+    try {
+      const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ public_key: string | null }>();
+      if (user) {
+        userPublicKey = user.public_key;
+      }
+    } catch (err) {
+      console.error("Failed to fetch user public key in /api/runners:", err);
+    }
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const res = await stub.fetch(new Request('http://do/runners'));
+    if (!res.ok) {
+      return c.json({ error: 'Failed to fetch runners' }, 500);
+    }
+  
+    const data = await res.json() as { runners: any[] };
+    const mappedRunners = data.runners.map(r => ({
+      ...r,
+      isMine: userPublicKey && r.publicKey === userPublicKey,
+    }));
+  
+    return c.json({ runners: mappedRunners });
+  });
+  
+  // Client WebSocket Events Proxy
+  app.get('/api/runs/:id/events', async (c) => {
+    const upgradeHeader = c.req.header('Upgrade');
+    if (!upgradeHeader || upgradeHeader !== 'websocket') {
+      return new Response('Expected Upgrade: websocket', { status: 426 });
+    }
+  
+    const runId = c.req.param('id');
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const { authorized, error } = await checkScanMembership(c, runId, userId);
+      if (!authorized) return error;
+    }
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const req = new Request(c.req.raw.url, c.req.raw);
+    const url = new URL(req.url);
+    url.pathname = '/connect-client';
+    url.searchParams.set('runId', runId);
+    return stub.fetch(new Request(url.toString(), req));
+  });
+  
+  app.post('/api/runs', async (c) => {
+    const body = await c.req.json();
+  
+    if (c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
+      const isAnon = await isAnonymousUser(c);
+      if (isAnon) {
+        let endpointCount = 0;
+        const config = body.config || {};
+        const endpoints = config.endpoints;
+        if (endpoints) {
+          if (Array.isArray(endpoints)) {
+            endpointCount = endpoints.length;
+          } else if (Array.isArray(endpoints.include)) {
+            endpointCount = endpoints.include.length;
+          }
+        }
+        if (endpointCount > 50) {
+          return c.json({ error: 'Anonymous limit reached: You can only scan up to 50 endpoints.' }, 403);
+        }
+      }
+    }
+  
+    let userPublicKey = "";
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      if (body.config && body.config.projectId) {
+        const { authorized, error } = await checkProjectMembership(c, body.config.projectId, userId);
+        if (!authorized) return error;
+      }
+  
+      try {
+        const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+          .bind(userId)
+          .first<{ public_key: string | null }>();
+        if (user && user.public_key) {
+          userPublicKey = user.public_key;
+        }
+      } catch (dbErr) {
+        console.error("Failed to query user public key in /api/runs:", dbErr);
+      }
+    }
+  
+    const runId = crypto.randomUUID();
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const doReq = new Request('http://do/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({
+        runId,
+        config: body.config,
+        userPublicKey,
+      }),
+    });
+    
+    const doRes = await stub.fetch(doReq);
+    if (!doRes.ok) {
+      return c.json({ error: 'Failed to dispatch job to runner' }, 500);
+    }
+  
+    return c.json({ id: runId, status: 'dispatched' });
+  });
+  
+  app.post('/api/runs/:id/stop', async (c) => {
+    const runId = c.req.param('id');
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const { authorized, error } = await checkScanMembership(c, runId, userId);
+      if (!authorized) return error;
+    }
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const doReq = new Request('http://do/command', {
+      method: 'POST',
+      body: JSON.stringify({ runId, command: 'stop' }),
+    });
+    await stub.fetch(doReq);
+    return c.json({ status: 'stopped' });
+  });
+  
+  app.post('/api/runs/:id/pause', async (c) => {
+    const runId = c.req.param('id');
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const { authorized, error } = await checkScanMembership(c, runId, userId);
+      if (!authorized) return error;
+    }
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const doReq = new Request('http://do/command', {
+      method: 'POST',
+      body: JSON.stringify({ runId, command: 'pause' }),
+    });
+    await stub.fetch(doReq);
+    return c.json({ status: 'paused' });
+  });
+  
+  app.post('/api/runs/:id/resume', async (c) => {
+    const runId = c.req.param('id');
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const { authorized, error } = await checkScanMembership(c, runId, userId);
+      if (!authorized) return error;
+    }
+  
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const doReq = new Request('http://do/command', {
+      method: 'POST',
+      body: JSON.stringify({ runId, command: 'resume' }),
+    });
+    await stub.fetch(doReq);
+    return c.json({ status: 'resumed' });
+  });
+  
+}

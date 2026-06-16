@@ -75,6 +75,7 @@ export interface SwazzSettings {
     debug?: boolean;
     chaining_rules?: ChainingRule[];
     har_domain_filter?: string;
+    data_retention?: string;
 }
 
 export interface AuthStep {
@@ -120,6 +121,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     time_anomaly_threshold_ms: 4000,
     oob_server_url: '',
     debug: false,
+    data_retention: 'forever',
 };
 
 // ─── Full Config ────────────────────────────────────────
@@ -138,6 +140,9 @@ export interface SwazzConfig {
     auth_identities?: Record<string, AuthIdentity>;
     security?: {
         allow_private_ips: boolean;
+    };
+    rules?: {
+        ignore?: number[];
     };
 }
 
@@ -205,3 +210,11 @@ export type SendRequestFn = (req: SendRequestPayload) => Promise<{
     duration: number;
     headers?: Record<string, string>;
 }>;
+
+// ─── Projects ───────────────────────────────────────────
+
+export interface Project {
+    id: string;
+    name: string;
+    description: string;
+}

@@ -1,6 +1,6 @@
-# ⚡️ swazz — Gemini CLI Context
+# ⚡️ swazz — CLI Context
 
-This file provides essential context for Gemini CLI to understand the `swazz` project structure, development workflows, and architecture.
+This file provides essential context for the developer CLI to understand the `swazz` project structure, development workflows, and architecture.
 
 ## 🎯 Project Overview
 **swazz** is a Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (like XSS or injection) by parsing Swagger/OpenAPI specifications and executing automated fuzzing runs.
@@ -10,6 +10,65 @@ The project is a hybrid repository using **npm workspaces** for the frontend and
 - **`packages/container`**: The core Go engine. Contains the HTTP API server (for the web dashboard), the CLI runner (`swazz-engine start`), the Smart Payload Generator, and output formatters.
 - **`packages/web`**: A React 19 dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management.
 - **`packages/edge`**: Cloudflare integration (if applicable).
+
+---
+
+## 🏗 Swagger Cache & Fuzzing Architecture
+We use a **hybrid caching design** to allow instant loading of endpoint trees on the frontend while avoiding SQLite (D1) database bloat from large Swagger specification files:
+
+1. **SQLite (D1) Metadata Database**: Stores flat metadata like URLs, base paths, SHA-256 hashes of endpoints to check for structural updates, and keys referring to R2 storage files.
+2. **Cloudflare R2 Object Storage**: Stores large payload objects including:
+   - `specs/parsed/<ulid>.json`: Pruned endpoint trees ready for instant UI rendering.
+   - `specs/raw/<ulid>.json`: Original raw specification files (JSON/YAML).
+3. **Go Runner Agent**: Connected via WebSocket to the Edge Durable Object coordinator. Downloads and parses specifications on cache misses, sending them back to the coordinator for storage.
+
+```mermaid
+graph TD
+    %% Define components
+    subgraph UI ["packages/web (Browser React UI)"]
+        Dashboard["Dashboard & Config Panel"]
+        Sidebar["Sidebar Spec Loader"]
+    end
+
+    subgraph Edge ["packages/edge (Cloudflare Coordinator)"]
+        Worker["Hono Worker API"]
+        DO["Durable Object (RunnerCoordinator)"]
+        D1[("SQLite D1 Database <br/> (swagger_cache table)")]
+        R2[("R2 Object Storage <br/> (specs/parsed/ & specs/raw/)")]
+    end
+
+    subgraph Runner ["packages/container (Local Go Engine)"]
+        Agent["Go Agent (agent.go)"]
+        Fuzzer["Fuzzing Engine (runner.go)"]
+    end
+
+    Target["Target Server API"]
+
+    %% Define connections and flows
+    Agent -- "WebSocket Connection" --> DO
+    Sidebar -- "POST /api/parse" --> Worker
+    Worker -- "stub.fetch('/parse')" --> DO
+    
+    %% Caching flow inside DO
+    DO -- "1. Query metadata" --> D1
+    DO -- "2. Cache Hit: Fetch endpoints" --> R2
+    
+    %% Cache Miss Flow
+    DO -- "3. Cache Miss: parse_request" --> Agent
+    Agent -- "4. Download Spec" --> Target
+    Agent -- "5. parse_result (endpoints + rawSpec)" --> DO
+    DO -- "6. Upload parsed & raw specs" --> R2
+    DO -- "7. Write cache metadata" --> D1
+    
+    %% Scan Execution Flow
+    Dashboard -- "POST /api/runs" --> Worker
+    Worker -- "stub.fetch('/start-run')" --> DO
+    DO -- "WebSocket 'start'" --> Agent
+    Agent --> Fuzzer
+    Fuzzer -- "Fuzz HTTP requests (dedup & path params)" --> Target
+    Fuzzer -- "Real-time SSE events" --> DO
+    DO -- "WebSocket event stream" --> Dashboard
+```
 
 ---
 
@@ -28,7 +87,7 @@ The project is a hybrid repository using **npm workspaces** for the frontend and
 - `npm run dev`: Starts the Go backend and Vite frontend concurrently.
 - `npm run build`: Build the web dashboard.
 - `npm run deploy:web`: Deploy the dashboard to Cloudflare Pages.
-- `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` Antigravity CLI plugin from `.gemini/plugins/swazz-toolkit/` into `~/.gemini/config/plugins/` so the agent picks up project-specific skills and subagents automatically.
+- `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` plugin.
 
 ### Backend Commands (in `packages/container`)
 - `go run main.go serve`: Start the HTTP API server.
@@ -59,7 +118,6 @@ The project is a hybrid repository using **npm workspaces** for the frontend and
 
 ### Supply Chain Security
 - **Strict Pinning**: Always pin external dependencies, GitHub Actions, Docker base images, and external scripts to specific commit SHAs or verifiable hashes (e.g. `actions/checkout@<sha>`). Never use mutable tags like `latest`, `master`, or `v1` to prevent supply chain attacks.
-
 
 ---
 

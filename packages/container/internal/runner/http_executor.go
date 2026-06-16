@@ -14,6 +14,7 @@ import (
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
 	"time"
@@ -183,12 +184,12 @@ func (r *Runner) executeRequest(
 
 		var reqDump []byte
 		var dumpErr error
-		if r.config.Settings.Debug || profile == swagger.ProfileMalicious {
+		if logger.IsDebugEnabled() || r.config.Settings.Debug || profile == swagger.ProfileMalicious {
 			reqDump, dumpErr = httputil.DumpRequestOut(req, true)
 		}
 
-		if r.config.Settings.Debug && dumpErr == nil {
-			fmt.Printf("\n--- [DEBUG] Fuzz Request ---\n%s\n----------------------------\n", string(reqDump))
+		if (logger.IsDebugEnabled() || r.config.Settings.Debug) && dumpErr == nil {
+			logger.Debug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
 		}
 
 		// Look for OOB payloads to register the actual request details
@@ -224,9 +225,9 @@ func (r *Runner) executeRequest(
 		resp, err := r.client.Do(req)
 		duration := time.Since(start).Milliseconds()
 
-		if err == nil && r.config.Settings.Debug {
+		if err == nil && (logger.IsDebugEnabled() || r.config.Settings.Debug) {
 			dump, _ := httputil.DumpResponse(resp, false)
-			fmt.Printf("\n--- [DEBUG] Fuzz Response ---\n%s\n-----------------------------\n", string(dump))
+			logger.Debug("\n--- Fuzz Response ---\n%s\n---------------------", string(dump))
 		}
 
 		if err != nil {
@@ -295,7 +296,7 @@ func (r *Runner) executeRequest(
 		if r.isSessionExpired(resp, rawBodyBytes, mergedHeaders, cookies, profile) && attempt < 1 {
 			newHeaders, newCookies, refreshed, reauthErr := r.MaybeReauthenticate(ctx, mergedHeaders, cookies)
 			if reauthErr != nil {
-				fmt.Printf("[Session] Automatic re-authentication failed: %v\n", reauthErr)
+				logger.Error("Automatic re-authentication failed: %v", reauthErr)
 			} else if refreshed {
 				// Update cookies/headers for retry
 				cookies = newCookies
@@ -331,8 +332,8 @@ func (r *Runner) executeRequest(
 		if responseSize < 0 {
 			responseSize = int64(len(rawBodyBytes)) + discarded
 		}
-		if r.config.Settings.Debug && originalPath == "/users" {
-			fmt.Printf("[DEBUG-USERS-RESPONSE] status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t\n",
+		if logger.IsDebugEnabled() && originalPath == "/users" {
+			logger.Debug("Users response: status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t",
 				resp.StatusCode, resp.ContentLength, len(rawBodyBytes), discarded, r.config.Settings.AnalyzeResponseBody)
 		}
 
@@ -382,11 +383,11 @@ func (r *Runner) executeRequest(
 				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
-			if r.config.Settings.Debug && len(result.AnalyzerFindings) > 0 {
-				fmt.Printf("[DEBUG-ANALYZER] Found findings for %s %s: %v\n", method, originalPath, result.AnalyzerFindings)
+			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
+				logger.Debug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
 			}
-			if r.config.Settings.Debug && profile == swagger.ProfileMalicious && originalPath == "/users" {
-				fmt.Printf("[DEBUG-USERS-ANOMALY] method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v\n",
+			if logger.IsDebugEnabled() && profile == swagger.ProfileMalicious && originalPath == "/users" {
+				logger.Debug("Users anomaly check: method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v",
 					method, baselineSize, responseSize, multiplier, len(result.AnalyzerFindings), result.Payload)
 			}
 		}

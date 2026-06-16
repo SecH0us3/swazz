@@ -23,11 +23,11 @@ export function useFuzzSession({
     getDb,
     showToast,
 }: UseFuzzSessionProps) {
-    const loadEndpoints = useCallback(async (urls: string[]) => {
+    const loadEndpoints = useCallback(async (urls: string[], forceRebuild?: boolean) => {
         if (urls.length === 0) return;
 
         useAppStore.setState({ isLoadingSpecs: true });
-        showToast(`Loading ${urls.length} spec${urls.length > 1 ? 's' : ''}...`, 'info');
+        showToast(`${forceRebuild ? 'Refreshing' : 'Loading'} ${urls.length} spec${urls.length > 1 ? 's' : ''}...`, 'info');
 
         let allEndpoints: any[] = [];
         let detectedBaseUrl = config.base_url;
@@ -35,10 +35,11 @@ export function useFuzzSession({
         for (const url of urls) {
             try {
                 const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
-                const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
+                const { basePath, endpoints, endpointCount, cachedAt } = await loadSwaggerUrl(
                     urlToLoad,
                     config.global_headers,
                     config.cookies,
+                    forceRebuild,
                 );
                 allEndpoints = allEndpoints.concat(endpoints);
                 if (!detectedBaseUrl && basePath) {
@@ -49,7 +50,17 @@ export function useFuzzSession({
                         detectedBaseUrl = basePath;
                     }
                 }
-                showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}`, 'success');
+
+                // Update cache date in global store
+                const cacheState = { ...useAppStore.getState().specCacheDates };
+                if (cachedAt) {
+                    cacheState[url] = cachedAt;
+                } else {
+                    cacheState[url] = new Date().toISOString();
+                }
+                useAppStore.setState({ specCacheDates: cacheState });
+
+                showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}${cachedAt ? ' (from cache)' : ''}`, 'success');
             } catch (err) {
                 showToast(`✗ Failed: ${url} — ${err instanceof Error ? err.message : String(err)}`, 'error');
             }
@@ -65,6 +76,7 @@ export function useFuzzSession({
     }, [config.base_url, config.global_headers, config.cookies, updateConfig, showToast]);
 
     const handleStart = async (overrideUrls?: string[], overrideBaseUrl?: string) => {
+        const runId = crypto.randomUUID();
         const swaggerUrls: string[] = overrideUrls || config._swagger_urls || [];
 
         if (swaggerUrls.length === 0 && config.endpoints.length === 0) {
@@ -120,14 +132,14 @@ export function useFuzzSession({
         };
         delete finalConfig.disabled_endpoints;
 
-        const runId = `run_${Date.now()}`;
-
+        const activeProject = useAppStore.getState().activeProject;
         const runRec: ScanRun = {
             id: runId,
             startedAt: Date.now(),
             completedAt: 0,
             baseUrl: finalBaseUrl,
             stats: null as any,
+            projectId: activeProject ? activeProject.id : undefined,
         };
 
         // Save the run metadata immediately so it appears in history

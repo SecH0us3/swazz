@@ -6,18 +6,23 @@ compatibility_flags = ["nodejs_compat"]
 routes = [
   { pattern = "swazz.secmy.app/api*", zone_name = "secmy.app" }
 ]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "swazz_db"
+database_id = "0b09f6b6-8188-4172-9710-04c3798553af"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "swazz-reports"
+
 [[durable_objects.bindings]]
-name = "SWAZZ_DO"
-class_name = "SwazzContainer"
+name = "COORDINATOR_DO"
+class_name = "RunnerCoordinator"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["SwazzContainer"]
-
-[[containers]]
-class_name = "SwazzContainer"
-image = "../container/Dockerfile"
-instance_type = "basic"
+new_classes = ["RunnerCoordinator"]
 
 [observability]
 enabled = true
@@ -26,3 +31,8 @@ enabled = true
 enabled = true
 head_sampling_rate = 1
 invocation_logs = true
+
+[vars]
+AUTH_ENABLED = "true"
+LIMIT_ANONYMOUS = "true"
+ALLOWED_ORIGINS = "*"
