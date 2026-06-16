@@ -117,7 +117,7 @@ export async function verifyTurnstile(token: string, secret: string, remoteip?: 
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString(),
     });
-    const result = await res.json<{ success: boolean }>();
+    const result = (await res.json()) as { success: boolean };
     return result.success === true;
   } catch {
     return false;
