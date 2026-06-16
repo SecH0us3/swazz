@@ -15,17 +15,18 @@ import (
 //	*  – matches any characters within a single path segment (no /)
 //	all other characters are treated as regex literals (QuoteMeta)
 func endpointGlobToRegex(p string) string {
+	runes := []rune(p)
 	var b strings.Builder
 	b.WriteString("^")
-	for i := 0; i < len(p); i++ {
+	for i := 0; i < len(runes); i++ {
 		switch {
-		case p[i] == '*' && i+1 < len(p) && p[i+1] == '*':
+		case runes[i] == '*' && i+1 < len(runes) && runes[i+1] == '*':
 			b.WriteString(".*") // ** → cross-segment wildcard
 			i++
-		case p[i] == '*':
+		case runes[i] == '*':
 			b.WriteString("[^/]*") // * → single-segment wildcard
 		default:
-			b.WriteString(regexp.QuoteMeta(string(p[i])))
+			b.WriteString(regexp.QuoteMeta(string(runes[i])))
 		}
 	}
 	b.WriteString("$")
