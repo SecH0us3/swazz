@@ -509,7 +509,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 58: Content Security Policy (CSP) Security Analysis**
   - **Design Goal:** Detect insecure, overly permissive, or missing Content Security Policies in target API and web application HTTP responses.
   - **Implementation Details:**
-    - Parse headers like `Content-Security-Policy` and `Content-Security-Policy-Report-Only` in the response body analyzer.
+    - Parse headers like Content-Security-Policy and Content-Security-Policy-Report-Only in the response analyzer.
     - Flag unsafe directives such as `unsafe-inline`, `unsafe-eval`, or wildcard sources (`*`) that weaken protection against XSS and data injection.
 
 - [ ] **Task 59: Headless Browser Crawler & Interception Sniffer**
