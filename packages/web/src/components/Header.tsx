@@ -35,7 +35,7 @@ export function Header({
         isLoadingSpecs: state.isLoadingSpecs,
     })));
 
-    const { authEnabled, token, logout } = useAuth();
+    const { authEnabled, token, isGuest, logout } = useAuth();
 
     const isBusy = isRunning || isLoadingSpecs;
 
@@ -241,6 +241,22 @@ export function Header({
 
                 {authEnabled && token && (
                     <UserMenu onLogout={logout} />
+                )}
+
+                {authEnabled && isGuest && (
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={logout} 
+                        style={{ marginLeft: '8px' }}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                        </svg>
+                        <span style={{ marginLeft: '4px' }}>Sign Up</span>
+                    </button>
                 )}
 
                 {/* Right Toggle (Mobile) */}
