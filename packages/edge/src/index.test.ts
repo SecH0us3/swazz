@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { env } from "cloudflare:test";
+import { env as rawEnv } from "cloudflare:test";
+import { Env } from "./env";
 import app from "./index";
+
+const env = rawEnv as unknown as Env;
 
 beforeAll(async () => {
   // Use Vite's import.meta.glob to bundle SQL migrations as raw strings
-  const migrationFiles = import.meta.glob("../migrations/*.sql", {
+  const migrationFiles = (import.meta as any).glob("../migrations/*.sql", {
     eager: true,
     query: "?raw",
     import: "default",
@@ -34,7 +37,7 @@ describe("Swazz Worker (Hono)", () => {
     const res = await app.fetch(req, testEnv);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body).toEqual({ service: "swazz-edge", status: "ok" });
   });
 
@@ -43,7 +46,7 @@ describe("Swazz Worker (Hono)", () => {
     const res = await app.fetch(req, testEnv);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0" });
   });
 });
@@ -69,7 +72,7 @@ describe("D1 Database Migrations & API", () => {
     const res = await app.fetch(req, testEnv);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.status).toBe("ok");
     expect(typeof body.id).toBe("string");
   });
@@ -84,7 +87,7 @@ describe("D1 Database Migrations & API", () => {
     const res = await app.fetch(req, testEnv);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.status).toBe("ok");
     expect(typeof body.token).toBe("string");
   });
@@ -111,7 +114,7 @@ describe("D1 Database Migrations & API", () => {
     const res = await app.fetch(req, testEnv);
 
     expect(res.status).toBe(429);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.error).toContain("locked");
   });
 });
