@@ -154,6 +154,8 @@ jobs:
         run: |
           npm install
           npm run build
+          mkdir -p packages/container/web
+          cp -r packages/web/dist packages/container/web/dist
 
       - name: Extract metadata (Server)
         id: meta-server
