@@ -9,8 +9,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.14",
-    "@cloudflare/workers-types": "^4.20260605.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.15",
+    "@cloudflare/workers-types": "^4.20260612.1",
     "@vitest/snapshot": "^4.1.7",
     "miniflare": "^4.20260609.0",
     "pretty-format": "^30.4.1",
