@@ -87,8 +87,8 @@ func startAgent(args []string) {
 	var pubKeyHex string
 	var useSignatureAuth bool
 
-	// If --key wasn't passed, check default ./swazz_runner.key
-	if keyPathOrHex == "" {
+	// If --key wasn't passed and --token wasn't passed, check default ./swazz_runner.key
+	if keyPathOrHex == "" && token == "" {
 		if _, err := os.Stat("./swazz_runner.key"); err == nil {
 			keyPathOrHex = "./swazz_runner.key"
 		}
