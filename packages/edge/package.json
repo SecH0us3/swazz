@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler d1 migrations apply swazz_db --remote && wrangler deploy",
     "test": "vitest run"
   },
   "devDependencies": {
