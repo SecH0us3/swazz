@@ -65,3 +65,6 @@ packages/web/public/llms-full.txt
 # Runner Keys
 *.key
 *.pub
+
+# Temporary scratch directory
+scratch/
