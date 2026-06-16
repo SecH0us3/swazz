@@ -7,24 +7,40 @@ import (
 	"strings"
 )
 
+// globToRegex converts a glob pattern into a full-match regular expression.
+// Rules:
+//   - ** matches any sequence of characters including path separators (/)
+//   - *  matches any sequence of characters within a single path segment (no /)
+//   - All other characters are treated as regex literals (escaped via QuoteMeta)
+func globToRegex(p string) string {
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(p); i++ {
+		switch {
+		case p[i] == '*' && i+1 < len(p) && p[i+1] == '*':
+			b.WriteString(".*") // ** → cross-segment wildcard
+			i++
+		case p[i] == '*':
+			b.WriteString("[^/]*") // * → single-segment wildcard
+		default:
+			b.WriteString(regexp.QuoteMeta(string(p[i]))) // escape regex metacharacters
+		}
+	}
+	b.WriteString("$")
+	return b.String()
+}
+
 func matchesAny(key, path string, patterns []string) bool {
 	for _, p := range patterns {
-		p = strings.ReplaceAll(p, "**", ".*")
-		p = strings.ReplaceAll(p, "*", "[^/]*")
-		if matched, _ := regexpMatch(p, key); matched {
+		regexPat := globToRegex(p)
+		if matched, _ := regexp.MatchString(regexPat, key); matched {
 			return true
 		}
-		if matched, _ := regexpMatch(p, path); matched {
+		if matched, _ := regexp.MatchString(regexPat, path); matched {
 			return true
 		}
 	}
 	return false
-}
-
-// We implement simple regex matching for globs
-func regexpMatch(pattern, s string) (bool, error) {
-	importRegexp := `^` + pattern + `$`
-	return regexp.MatchString(importRegexp, s)
 }
 
 func writeJSON(path string, data any) error {

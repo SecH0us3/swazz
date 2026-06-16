@@ -84,21 +84,31 @@ func New(rules *RulesConfig) *Classifier {
 		return c
 	}
 
-	if len(rules.Ignore) > 0 {
-		for _, code := range rules.Ignore {
-			c.ignoreSet[code] = true
-		}
-	} else {
-		for k, v := range defaultIgnore {
-			c.ignoreSet[k] = v
-		}
+	// Always seed with the built-in default ignore codes, then overlay any
+	// user-supplied codes on top (merge, not replace).  This means specifying
+	// "ignore": [400] extends the defaults rather than wiping out
+	// 403/404/405/422/429.
+	for k, v := range defaultIgnore {
+		c.ignoreSet[k] = v
+	}
+	for _, code := range rules.Ignore {
+		c.ignoreSet[code] = true
 	}
 
 	if rules.Severity != nil {
 		c.severity = rules.Severity
 	}
+	// Merge user-supplied Defaults on top of the built-in defaultDefaults so
+	// that a partial override (e.g. just "2xx") does not wipe out the rest.
 	if rules.Defaults != nil {
-		c.defaults = rules.Defaults
+		merged := make(map[string]Severity, len(defaultDefaults)+len(rules.Defaults))
+		for k, v := range defaultDefaults {
+			merged[k] = v
+		}
+		for k, v := range rules.Defaults {
+			merged[k] = v
+		}
+		c.defaults = merged
 	}
 	c.ignoreRules = rules.IgnoreRules
 	for i := range c.ignoreRules {

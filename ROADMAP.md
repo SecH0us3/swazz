@@ -558,3 +558,20 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
+
+- [ ] **Task 70: JSONC Support for Configuration Files**
+  - **Design Goal:** Allow users to annotate their `swazz.config.json`, `swazz.ignore.json`, and `wrangler.config.json` files with `//` and `/* */` comments. JSONC (JSON with Comments) is the de-facto standard for developer-facing config files (VS Code, TypeScript, ESLint), and its absence currently forces users to maintain separate out-of-band documentation for non-obvious config fields.
+  - **Implementation Details:**
+    - **Go backend (CLI + agent):** Introduce a `stripJSONC(data []byte) []byte` utility in `packages/container/` (e.g., `jsonc.go`) that strips `// line` and `/* block */` comments while preserving byte offsets (for accurate parse error messages). Apply it to every `os.ReadFile` / `json.Unmarshal` call for user-supplied config files:
+      - `runCLI()` in [cli.go](./packages/container/cli.go) — `swazz.config.json` and `--config` path.
+      - `LoadIgnoreRules()` in [ignore.go](./packages/container/internal/classifier/ignore.go) — `swazz.ignore.json`.
+      - Any config loading in [wizard.go](./packages/container/wizard.go).
+    - **No new dependency required:** a simple state-machine parser (~40 LOC) handles comments without pulling in an external library. Edge cases to cover: comments inside strings must be ignored, escaped quotes (`\"`), and CRLF line endings.
+    - **Rename example files to `.jsonc`:** All example/template config files in the repository root must be renamed from `.json` to `.jsonc` to signal to editors that comments are valid in these files:
+      - `swazz.config.example.json` → `swazz.config.example.jsonc`
+      - `swazz.ignore.example.json` → `swazz.ignore.example.jsonc` (if present)
+      - `wraggler.config.example.json` → `wraggler.config.example.jsonc`
+      - Update all references in `README.md`, `DOCKER.md`, `CONTRIBUTING.md`, `docs/`, and CI workflows.
+      - The actual runtime default filenames (`swazz.config.json`, `swazz.ignore.json`) remain `.json` for backward compatibility — users can rename them to `.jsonc` at their discretion since the parser handles both extensions transparently.
+    - **Web UI:** Update the Monaco-based config editor in the dashboard (if present) to set the language mode to `jsonc` so the editor natively highlights comments without showing lint errors.
+    - **Tests:** Add `packages/container/jsonc_test.go` covering: `//` comment on its own line, inline `//` comment after a value, `/* */` block comment spanning multiple lines, comment inside a string value (must not be stripped), nested escaped quotes, empty input, and valid plain JSON (must pass through unchanged).
