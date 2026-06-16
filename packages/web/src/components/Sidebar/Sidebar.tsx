@@ -7,7 +7,6 @@ import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
 import { useAppStore } from '../../store/appStore.js';
 import { ProjectSelector } from '../ProjectSelector.js';
-import { useAuth } from '../../hooks/useAuth.js';
 
 interface Props {
     style?: React.CSSProperties;
@@ -20,6 +19,8 @@ interface Props {
     onLoadEndpoints: (urls: string[], forceRebuild?: boolean) => Promise<any>;
     onImportRun: (data: any) => Promise<{ runId: string, run: any } | undefined>;
     className?: string;
+    authEnabled?: boolean;
+    token?: string | null;
 }
 
 export function Sidebar({
@@ -33,9 +34,10 @@ export function Sidebar({
     onLoadEndpoints,
     onImportRun,
     className,
+    authEnabled = false,
+    token = null,
 }: Props) {
     const loadedRunId = useAppStore(state => state.loadedRunId);
-    const { authEnabled, token } = useAuth();
     
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');

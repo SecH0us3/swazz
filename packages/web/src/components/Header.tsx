@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
-import { useAuth } from '../hooks/useAuth.js';
 import { UserMenu } from './UserMenu.js';
 
 interface Props {
@@ -15,6 +14,10 @@ interface Props {
     onToggleConfig?: () => void;
     theme: 'dark' | 'light';
     onToggleTheme: () => void;
+    authEnabled?: boolean;
+    token?: string | null;
+    isGuest?: boolean;
+    onLogout?: () => void;
 }
 
 export function Header({
@@ -28,14 +31,16 @@ export function Header({
     onToggleConfig,
     theme,
     onToggleTheme,
+    authEnabled = false,
+    token = null,
+    isGuest = false,
+    onLogout,
 }: Props) {
     const { isRunning, isPaused, isLoadingSpecs } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
     })));
-
-    const { authEnabled, token, isGuest, logout } = useAuth();
 
     const isBusy = isRunning || isLoadingSpecs;
 
@@ -240,13 +245,13 @@ export function Header({
                 </button>
 
                 {authEnabled && token && (
-                    <UserMenu onLogout={logout} />
+                    <UserMenu onLogout={onLogout || (() => {})} />
                 )}
 
                 {authEnabled && isGuest && (
                     <button 
                         className="btn btn-primary" 
-                        onClick={logout} 
+                        onClick={onLogout} 
                         style={{ marginLeft: '8px' }}
                     >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

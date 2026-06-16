@@ -385,6 +385,10 @@ export default function App() {
                 }}
                 theme={theme}
                 onToggleTheme={toggleTheme}
+                authEnabled={authEnabled}
+                token={token}
+                isGuest={isGuest}
+                onLogout={logout}
             />
 
             <Sidebar
@@ -400,6 +404,8 @@ export default function App() {
                 onToast={showToast}
                 onLoadEndpoints={loadEndpoints}
                 onImportRun={importCliReport}
+                authEnabled={authEnabled}
+                token={token}
             />
 
             {(isSidebarOpen || isConfigOpen) && (
