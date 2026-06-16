@@ -55,7 +55,7 @@ export async function hashPassword(password: string): Promise<string> {
     {
       name: 'PBKDF2',
       salt,
-      iterations: 600000,
+      iterations: 100000,
       hash: 'SHA-256',
     },
     keyMaterial,
@@ -84,7 +84,7 @@ export async function verifyPassword(password: string, storedHash: string): Prom
     {
       name: 'PBKDF2',
       salt,
-      iterations: 600000,
+      iterations: 100000,
       hash: 'SHA-256',
     },
     keyMaterial,
