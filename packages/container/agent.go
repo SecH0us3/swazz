@@ -264,6 +264,26 @@ func startAgent(args []string) {
 			activeRunners[dispatch.RunID] = r
 			activeRunnersMu.Unlock()
 
+			// Build a classifier that respects the job's rules config so that
+			// live-severity in WebSocket streaming matches the final report.
+			liveClsRules := &classifier.RulesConfig{}
+			if runCfg.Rules != nil {
+				liveClsRules.Ignore = runCfg.Rules.Ignore
+				if len(runCfg.Rules.Severity) > 0 {
+					liveClsRules.Severity = make(map[string]classifier.Severity, len(runCfg.Rules.Severity))
+					for k, v := range runCfg.Rules.Severity {
+						liveClsRules.Severity[k] = classifier.Severity(v)
+					}
+				}
+				if len(runCfg.Rules.Defaults) > 0 {
+					liveClsRules.Defaults = make(map[string]classifier.Severity, len(runCfg.Rules.Defaults))
+					for k, v := range runCfg.Rules.Defaults {
+						liveClsRules.Defaults[k] = classifier.Severity(v)
+					}
+				}
+			}
+			liveCls := classifier.New(liveClsRules)
+
 			// Sub to events
 			sub := r.Subscribe()
 			go func(runID string) {
@@ -277,8 +297,7 @@ func startAgent(args []string) {
 								severity = res.AnalyzerFindings[0].Level
 								description = res.AnalyzerFindings[0].Message
 							} else {
-								c := classifier.New(nil)
-								finding := c.Classify(res)
+								finding := liveCls.Classify(res)
 								if finding != nil {
 									severity = string(finding.Level)
 									description = fmt.Sprintf("HTTP %d", res.Status)

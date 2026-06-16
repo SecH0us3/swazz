@@ -64,7 +64,9 @@ func TestLoadIgnoreRules(t *testing.T) {
 func TestIsIgnored(t *testing.T) {
 	rules := []IgnoreRule{
 		{RuleID: "swazz/reflected-xss", Endpoint: "/api/search"},
-		{Endpoint: "/api/admin/*", Method: "DELETE"},
+		// ** is required to cross path segments; the old HasPrefix implementation
+		// silently behaved like **, so we update the pattern to be explicit.
+		{Endpoint: "/api/admin/**", Method: "DELETE"},
 		{Payload: "ignore-me"},
 		{Payload: `^[0-9]{3}$`}, // Regex for exactly 3 digits
 		{Payload: `"testkey":"testval"`},
@@ -159,6 +161,98 @@ func TestIsIgnored(t *testing.T) {
 			got := IsIgnored(tt.finding, rules)
 			if got != tt.expected {
 				t.Errorf("IsIgnored() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestEndpointGlobToRegex exercises the glob engine used in IgnoreRule.Endpoint.
+func TestEndpointGlobToRegex(t *testing.T) {
+	tests := []struct {
+		pattern  string
+		endpoint string
+		want     bool
+	}{
+		// ** crosses path separators
+		{"**/callback/**", "/api/tm/buffy/callback/aml", true},
+		{"**/webhook", "/api/partner/intercom/webhook", true},
+		// * stays within a single segment
+		{"/api/*/users", "/api/v1/users", true},
+		{"/api/*/users", "/api/a/b/users", false}, // two segments — no match
+		// exact match (no wildcards)
+		{"/health", "/health", true},
+		{"/health", "/ready", false},
+		// trailing * (previously the only supported style — must still work)
+		{"/api/admin/*", "/api/admin/users", true},
+		{"/api/admin/*", "/api/admin/users/123", false}, // * does not cross /
+		// ** at end
+		{"/api/admin/**", "/api/admin/users/123", true},
+		// literal dot in endpoint path
+		{"/v1.0/ping", "/v1.0/ping", true},
+		{"/v1.0/ping", "/v100/ping", false}, // dot is literal, not regex .
+	}
+
+	for _, tt := range tests {
+		got := endpointMatches(tt.pattern, tt.endpoint)
+		if got != tt.want {
+			t.Errorf("endpointMatches(%q, %q) = %v, want %v",
+				tt.pattern, tt.endpoint, got, tt.want)
+		}
+	}
+}
+
+// TestIsIgnored_GlobEndpoint verifies that glob patterns in IgnoreRule.Endpoint
+// work end-to-end through IsIgnored — covering the patterns that were silently
+// broken with the old HasSuffix/HasPrefix implementation.
+func TestIsIgnored_GlobEndpoint(t *testing.T) {
+	rules := []IgnoreRule{
+		{RuleID: "swazz/status-200", Endpoint: "**/callback/**"},
+		{Endpoint: "/api/*/ping"},
+		{Endpoint: "/api/admin/**", Method: "DELETE"},
+	}
+
+	tests := []struct {
+		name    string
+		finding *Finding
+		want    bool
+	}{
+		{
+			name:    "** crosses segments (deep callback path)",
+			finding: &Finding{RuleID: "swazz/status-200", Endpoint: "/api/tm/buffy/callback/aml"},
+			want:    true,
+		},
+		{
+			name:    "** rule does not match unrelated endpoint",
+			finding: &Finding{RuleID: "swazz/status-200", Endpoint: "/api/tm/users"},
+			want:    false,
+		},
+		{
+			name:    "single-segment * matches",
+			finding: &Finding{Endpoint: "/api/v2/ping"},
+			want:    true,
+		},
+		{
+			name:    "single-segment * does not match two segments",
+			finding: &Finding{Endpoint: "/api/v2/extra/ping"},
+			want:    false,
+		},
+		{
+			name:    "** with method constraint matches",
+			finding: &Finding{Endpoint: "/api/admin/roles/123", Method: "DELETE"},
+			want:    true,
+		},
+		{
+			name:    "** with method constraint does not match wrong method",
+			finding: &Finding{Endpoint: "/api/admin/roles/123", Method: "GET"},
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsIgnored(tt.finding, rules)
+			if got != tt.want {
+				t.Errorf("IsIgnored() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -8,6 +8,37 @@ import (
 	"strings"
 )
 
+// endpointGlobToRegex converts a glob pattern into a full-match regular
+// expression string.  Semantics mirror the glob engine in utils.go:
+//
+//	** – matches any characters including path separators (/)
+//	*  – matches any characters within a single path segment (no /)
+//	all other characters are treated as regex literals (QuoteMeta)
+func endpointGlobToRegex(p string) string {
+	runes := []rune(p)
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(runes); i++ {
+		switch {
+		case runes[i] == '*' && i+1 < len(runes) && runes[i+1] == '*':
+			b.WriteString(".*") // ** → cross-segment wildcard
+			i++
+		case runes[i] == '*':
+			b.WriteString("[^/]*") // * → single-segment wildcard
+		default:
+			b.WriteString(regexp.QuoteMeta(string(runes[i])))
+		}
+	}
+	b.WriteString("$")
+	return b.String()
+}
+
+// endpointMatches reports whether a glob pattern matches an endpoint string.
+func endpointMatches(pattern, endpoint string) bool {
+	matched, _ := regexp.MatchString(endpointGlobToRegex(pattern), endpoint)
+	return matched
+}
+
 // IgnoreRule defines matching criteria to suppress false positive or noise findings.
 type IgnoreRule struct {
 	RuleID    string `json:"rule_id,omitempty"`
@@ -71,18 +102,9 @@ func ruleMatches(f *Finding, r *IgnoreRule) bool {
 		return false
 	}
 
-	// 3. Endpoint match with wildcard support
-	if r.Endpoint != "" {
-		if strings.HasSuffix(r.Endpoint, "*") {
-			prefix := r.Endpoint[:len(r.Endpoint)-1]
-			if !strings.HasPrefix(f.Endpoint, prefix) {
-				return false
-			}
-		} else {
-			if r.Endpoint != f.Endpoint {
-				return false
-			}
-		}
+	// 3. Endpoint match — full glob semantics (* single-segment, ** cross-segment).
+	if r.Endpoint != "" && !endpointMatches(r.Endpoint, f.Endpoint) {
+		return false
 	}
 
 	// 4. Payload match (regex or substring)

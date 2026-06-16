@@ -238,13 +238,20 @@ func runCLI(args []string) {
 	}
 	if runCfg.Rules != nil {
 		clsRules.Ignore = runCfg.Rules.Ignore
-		clsRules.Severity = make(map[string]classifier.Severity)
-		clsRules.Defaults = make(map[string]classifier.Severity)
-		for k, v := range runCfg.Rules.Severity {
-			clsRules.Severity[k] = classifier.Severity(v)
+		// Only set Severity/Defaults when the user actually provided values.
+		// Leaving them nil lets classifier.New fall back to the built-in defaults,
+		// preventing an empty map from silently overriding defaultDefaults.
+		if len(runCfg.Rules.Severity) > 0 {
+			clsRules.Severity = make(map[string]classifier.Severity, len(runCfg.Rules.Severity))
+			for k, v := range runCfg.Rules.Severity {
+				clsRules.Severity[k] = classifier.Severity(v)
+			}
 		}
-		for k, v := range runCfg.Rules.Defaults {
-			clsRules.Defaults[k] = classifier.Severity(v)
+		if len(runCfg.Rules.Defaults) > 0 {
+			clsRules.Defaults = make(map[string]classifier.Severity, len(runCfg.Rules.Defaults))
+			for k, v := range runCfg.Rules.Defaults {
+				clsRules.Defaults[k] = classifier.Severity(v)
+			}
 		}
 	}
 

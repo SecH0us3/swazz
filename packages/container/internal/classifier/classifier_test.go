@@ -205,3 +205,127 @@ func TestClassifier_OWASPCategory(t *testing.T) {
 		t.Errorf("Expected OWASPCategory %v, got %v", expectedAnalyzerOWASP, findings[0].OWASPCategory)
 	}
 }
+
+// TestClassifier_PartialRules_IgnoreOnly verifies that supplying only an Ignore
+// list does not destroy the built-in defaultDefaults.
+// Real-world symptom: "rules": {"ignore": [400,415]} → mass false-positive
+// status-200 and status-3xx findings.
+func TestClassifier_PartialRules_IgnoreOnly(t *testing.T) {
+	rules := &RulesConfig{
+		Ignore: []int{400},
+	}
+	cls := New(rules)
+
+	tests := []struct {
+		status   int
+		wantNil  bool // true = should be ignored (Classify returns nil)
+		wantSev  Severity
+	}{
+		// User-added ignore code
+		{400, true, ""},
+		// 200 must still be ignored via defaultDefaults 2xx → ignore
+		{200, true, ""},
+		// 403/404/429 must still be in ignore set (seeded from defaultIgnore)
+		{403, true, ""},
+		{404, true, ""},
+		{429, true, ""},
+		// 500 must still be an error
+		{500, false, SeverityError},
+	}
+
+	for _, tt := range tests {
+		res := &swagger.FuzzResult{Status: tt.status}
+		finding := cls.Classify(res)
+		if tt.wantNil {
+			if finding != nil {
+				t.Errorf("status %d: expected ignore (nil finding), got level %s", tt.status, finding.Level)
+			}
+		} else {
+			if finding == nil {
+				t.Errorf("status %d: expected finding with level %s, got nil", tt.status, tt.wantSev)
+			} else if finding.Level != tt.wantSev {
+				t.Errorf("status %d: expected level %s, got %s", tt.status, tt.wantSev, finding.Level)
+			}
+		}
+	}
+}
+
+// TestClassifier_NilRules_Regression ensures nil rules still behaves
+// identically to the pre-fix baseline (no regression).
+func TestClassifier_NilRules_Regression(t *testing.T) {
+	cls := New(nil)
+
+	tests := []struct {
+		status  int
+		wantNil bool
+		wantSev Severity
+	}{
+		{200, true, ""},
+		{301, true, ""},
+		{401, true, ""},
+		{403, true, ""},
+		{404, true, ""},
+		{405, true, ""},
+		{422, true, ""},
+		{429, true, ""},
+		{400, false, SeverityError},
+		{500, false, SeverityError},
+	}
+
+	for _, tt := range tests {
+		res := &swagger.FuzzResult{Status: tt.status}
+		finding := cls.Classify(res)
+		if tt.wantNil {
+			if finding != nil {
+				t.Errorf("nil rules, status %d: expected ignore, got level %s", tt.status, finding.Level)
+			}
+		} else {
+			if finding == nil {
+				t.Errorf("nil rules, status %d: expected level %s, got nil", tt.status, tt.wantSev)
+			} else if finding.Level != tt.wantSev {
+				t.Errorf("nil rules, status %d: expected level %s, got %s", tt.status, tt.wantSev, finding.Level)
+			}
+		}
+	}
+}
+
+// TestClassifier_PartialRules_DefaultsOnly verifies that overriding only
+// "defaults" preserves the rest of defaultDefaults.
+func TestClassifier_PartialRules_DefaultsOnly(t *testing.T) {
+	rules := &RulesConfig{
+		// Override 2xx to error; everything else should stay at built-in defaults.
+		Defaults: map[string]Severity{"2xx": SeverityError},
+	}
+	cls := New(rules)
+
+	tests := []struct {
+		status  int
+		wantNil bool
+		wantSev Severity
+	}{
+		// 2xx now yields error
+		{200, false, SeverityError},
+		// 4xx/5xx still error (preserved from defaultDefaults)
+		{400, false, SeverityError},
+		{500, false, SeverityError},
+		// defaultIgnore codes still ignored
+		{403, true, ""},
+		{404, true, ""},
+	}
+
+	for _, tt := range tests {
+		res := &swagger.FuzzResult{Status: tt.status}
+		finding := cls.Classify(res)
+		if tt.wantNil {
+			if finding != nil {
+				t.Errorf("defaults-only rules, status %d: expected ignore, got level %s", tt.status, finding.Level)
+			}
+		} else {
+			if finding == nil {
+				t.Errorf("defaults-only rules, status %d: expected level %s, got nil", tt.status, tt.wantSev)
+			} else if finding.Level != tt.wantSev {
+				t.Errorf("defaults-only rules, status %d: expected level %s, got %s", tt.status, tt.wantSev, finding.Level)
+			}
+		}
+	}
+}
