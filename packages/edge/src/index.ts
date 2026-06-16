@@ -1015,6 +1015,18 @@ async function checkProjectMembership(c: any, projectId: string, userId: string,
   return { authorized: true };
 }
 
+async function checkScanMembership(c: any, scanId: string, userId: string): Promise<{ authorized: boolean; error?: any }> {
+  const scan = await c.env.DB.prepare('SELECT project_id FROM scans WHERE id = ?')
+    .bind(scanId)
+    .first<{ project_id: string }>();
+    
+  if (!scan) {
+    return { authorized: false, error: c.json({ error: 'Run/Scan not found' }, 404) };
+  }
+  
+  return checkProjectMembership(c, scan.project_id, userId);
+}
+
 app.get('/api/runners/connect', async (c) => {
   const upgradeHeader = c.req.header('Upgrade');
   if (!upgradeHeader || upgradeHeader !== 'websocket') {
@@ -1101,12 +1113,19 @@ app.get('/api/runs/:id/events', async (c) => {
     return new Response('Expected Upgrade: websocket', { status: 426 });
   }
 
+  const runId = c.req.param('id');
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkScanMembership(c, runId, userId);
+    if (!authorized) return error;
+  }
+
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
   const req = new Request(c.req.raw.url, c.req.raw);
   const url = new URL(req.url);
   url.pathname = '/connect-client';
-  url.searchParams.set('runId', c.req.param('id'));
+  url.searchParams.set('runId', runId);
   return stub.fetch(new Request(url.toString(), req));
 });
 
@@ -1174,33 +1193,54 @@ app.post('/api/runs', async (c) => {
 });
 
 app.post('/api/runs/:id/stop', async (c) => {
+  const runId = c.req.param('id');
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkScanMembership(c, runId, userId);
+    if (!authorized) return error;
+  }
+
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
   const doReq = new Request('http://do/command', {
     method: 'POST',
-    body: JSON.stringify({ runId: c.req.param('id'), command: 'stop' }),
+    body: JSON.stringify({ runId, command: 'stop' }),
   });
   await stub.fetch(doReq);
   return c.json({ status: 'stopped' });
 });
 
 app.post('/api/runs/:id/pause', async (c) => {
+  const runId = c.req.param('id');
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkScanMembership(c, runId, userId);
+    if (!authorized) return error;
+  }
+
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
   const doReq = new Request('http://do/command', {
     method: 'POST',
-    body: JSON.stringify({ runId: c.req.param('id'), command: 'pause' }),
+    body: JSON.stringify({ runId, command: 'pause' }),
   });
   await stub.fetch(doReq);
   return c.json({ status: 'paused' });
 });
 
 app.post('/api/runs/:id/resume', async (c) => {
+  const runId = c.req.param('id');
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkScanMembership(c, runId, userId);
+    if (!authorized) return error;
+  }
+
   const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
   const stub = c.env.COORDINATOR_DO.get(id);
   const doReq = new Request('http://do/command', {
     method: 'POST',
-    body: JSON.stringify({ runId: c.req.param('id'), command: 'resume' }),
+    body: JSON.stringify({ runId, command: 'resume' }),
   });
   await stub.fetch(doReq);
   return c.json({ status: 'resumed' });
