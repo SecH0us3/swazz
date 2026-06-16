@@ -373,12 +373,15 @@ func startAgent(args []string) {
 					result = map[string]string{"error": err.Error()}
 				} else {
 					defer resp.Body.Close()
-					// Limit spec reading to 10MB to prevent OOM crashes
-					limitReader := io.LimitReader(resp.Body, 10*1024*1024)
+					// Limit spec reading to 10MB + 1 byte to detect truncation
+					limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
 					data, err := io.ReadAll(limitReader)
 					if err != nil {
 						logError("[Parser] Failed to read spec body: %v", err)
 						result = map[string]string{"error": err.Error()}
+					} else if len(data) > 10*1024*1024 {
+						logError("[Parser] Spec exceeds 10MB limit")
+						result = map[string]string{"error": "specification file exceeds the 10MB limit"}
 					} else {
 						parseResult, err := swagger.ParseRawSpec(data)
 						if err != nil {
@@ -479,8 +482,12 @@ func loadPrivateKey(keyArg string) (ed25519.PrivateKey, error) {
 		return nil, fmt.Errorf("failed to decode private key hex: %w", err)
 	}
 
+	if len(keyBytes) == ed25519.SeedSize {
+		return ed25519.NewKeyFromSeed(keyBytes), nil
+	}
+
 	if len(keyBytes) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("invalid private key size: expected %d bytes, got %d", ed25519.PrivateKeySize, len(keyBytes))
+		return nil, fmt.Errorf("invalid private key size: expected %d (seed) or %d (private key) bytes, got %d", ed25519.SeedSize, ed25519.PrivateKeySize, len(keyBytes))
 	}
 
 	return ed25519.PrivateKey(keyBytes), nil

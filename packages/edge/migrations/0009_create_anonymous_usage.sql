@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS anonymous_usage (
+    ip TEXT PRIMARY KEY,
+    json_count INTEGER DEFAULT 0,
+    scan_count INTEGER DEFAULT 0,
+    last_reset DATETIME DEFAULT CURRENT_TIMESTAMP
+);

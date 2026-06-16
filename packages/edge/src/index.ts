@@ -27,6 +27,18 @@ async function getUserIdFromRequest(c: any): Promise<string | null> {
   if (!token) {
     return null;
   }
+
+  if (token.startsWith('swazz_live_')) {
+    try {
+      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+        .bind(token)
+        .first<{ id: string }>();
+      return user ? user.id : null;
+    } catch {
+      return null;
+    }
+  }
+
   const secret = c.env.JWT_SECRET;
   if (!secret) {
     console.error("JWT_SECRET is not configured");
@@ -453,7 +465,7 @@ app.post('/api/auth/register', async (c) => {
   } catch (err: any) {
     const errMsg = String(err?.message || err || '');
     if (errMsg.includes('UNIQUE constraint failed')) {
-      return c.json({ status: 'ok', id });
+      return c.json({ error: 'Username already exists' }, 400);
     }
     return c.json({ error: 'Registration failed due to an internal server error' }, 500);
   }
@@ -800,6 +812,12 @@ app.get('/api/scans', async (c) => {
     return c.json({ error: 'Missing query parameter: project_id' }, 400);
   }
 
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkProjectMembership(c, projectId, userId);
+    if (!authorized) return error;
+  }
+
   const { results } = await c.env.DB.prepare(
     'SELECT * FROM scans WHERE project_id = ? ORDER BY created_at DESC'
   )
@@ -813,11 +831,18 @@ app.get('/api/scans/:id', async (c) => {
   const scanId = c.req.param('id');
   const scan = await c.env.DB.prepare('SELECT * FROM scans WHERE id = ?')
     .bind(scanId)
-    .first();
+    .first<{ id: string; project_id: string }>();
 
   if (!scan) {
     return c.json({ error: 'Scan not found' }, 404);
   }
+
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkProjectMembership(c, scan.project_id, userId);
+    if (!authorized) return error;
+  }
+
   return c.json({ scan });
 });
 
@@ -826,11 +851,17 @@ app.patch('/api/scans/:id', async (c) => {
   const body = await c.req.json();
 
   // Verify scan exists
-  const existing = await c.env.DB.prepare('SELECT id FROM scans WHERE id = ?')
+  const scan = await c.env.DB.prepare('SELECT id, project_id FROM scans WHERE id = ?')
     .bind(scanId)
-    .first();
-  if (!existing) {
+    .first<{ id: string; project_id: string }>();
+  if (!scan) {
     return c.json({ error: 'Scan not found' }, 404);
+  }
+
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkProjectMembership(c, scan.project_id, userId);
+    if (!authorized) return error;
   }
 
   // Build dynamic SET clause for allowed fields
@@ -873,11 +904,17 @@ app.post('/api/scans/:id/upload-url', async (c) => {
   const scanId = c.req.param('id');
 
   // Verify scan exists
-  const scan = await c.env.DB.prepare('SELECT id, status FROM scans WHERE id = ?')
+  const scan = await c.env.DB.prepare('SELECT id, project_id, status FROM scans WHERE id = ?')
     .bind(scanId)
-    .first<{ id: string; status: string }>();
+    .first<{ id: string; project_id: string; status: string }>();
   if (!scan) {
     return c.json({ error: 'Scan not found' }, 404);
+  }
+
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const { authorized, error } = await checkProjectMembership(c, scan.project_id, userId);
+    if (!authorized) return error;
   }
 
   const r2Key = `reports/${scanId}.enc`;
@@ -958,6 +995,19 @@ app.put('/api/scans/:id/upload', async (c) => {
 // ---------------------------------------------------------------------------
 // Coordinator WebSocket Proxy
 // ---------------------------------------------------------------------------
+
+async function checkProjectMembership(c: any, projectId: string, userId: string, requiredRole?: string): Promise<{ authorized: boolean; error?: any }> {
+  const member = await c.env.DB.prepare(
+    'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
+  )
+  .bind(projectId, userId)
+  .first<{ role: string }>();
+
+  if (!member) return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
+  if (requiredRole && member.role !== requiredRole) return { authorized: false, error: c.json({ error: 'Forbidden: Owner role required' }, 403) };
+  
+  return { authorized: true };
+}
 
 app.get('/api/runners/connect', async (c) => {
   const upgradeHeader = c.req.header('Upgrade');
@@ -1196,11 +1246,6 @@ app.post('/api/parse', async (c) => {
     if (isAnon) {
       const ip = getClientIp(c);
       
-      // Ensure anonymous_usage table exists
-      await c.env.DB.prepare(
-        'CREATE TABLE IF NOT EXISTS anonymous_usage (ip TEXT PRIMARY KEY, json_count INTEGER DEFAULT 0, scan_count INTEGER DEFAULT 0)'
-      ).run();
-
       const usage = await c.env.DB.prepare('SELECT json_count FROM anonymous_usage WHERE ip = ?')
         .bind(ip)
         .first<{ json_count: number }>();

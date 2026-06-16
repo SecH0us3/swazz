@@ -152,7 +152,7 @@ export function useConfig() {
         }
     }, []);
 
-    const currentKeyRef = useRef(storageKey);
+    const currentKeyRef = useRef<string | null>(null);
 
     // Load config when storage key changes
     useEffect(() => {

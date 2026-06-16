@@ -402,11 +402,12 @@ export function useDb() {
         });
     }, []);
 
+    let token: string | null = null;
+    try {
+        token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+    } catch { /* ignore */ }
+
     const filteredRuns = runs.filter(run => {
-        let token: string | null = null;
-        try {
-            token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
-        } catch { /* ignore */ }
         if (token) {
             return activeProject ? run.projectId === activeProject.id : false;
         }

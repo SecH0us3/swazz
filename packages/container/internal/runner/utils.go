@@ -116,6 +116,7 @@ func fillPathParamsFromMap(path string, params map[string]string) string {
 	}
 
 	// Handle any remaining {param} not in params, skipping {{param}}
+	var gen *generator.Generator
 	searchStart := 0
 	for {
 		start := strings.IndexByte(result[searchStart:], '{')
@@ -135,8 +136,10 @@ func fillPathParamsFromMap(path string, params map[string]string) string {
 			break
 		}
 		
+		if gen == nil {
+			gen = generator.New(nil, swagger.ProfileRandom, swagger.DefaultSettings())
+		}
 		fallbackSchema := &swagger.SchemaProperty{Type: "string"}
-		gen := generator.New(nil, swagger.ProfileRandom, swagger.DefaultSettings())
 		val := capPathParam(gen.Generate("id", fallbackSchema))
 		result = result[:start] + url.PathEscape(val) + result[start+end+1:]
 	}

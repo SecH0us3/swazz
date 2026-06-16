@@ -35,6 +35,9 @@ func buildPathParams(ep swagger.EndpointConfig, gen *generator.Generator) map[st
 	}
 	out := make(map[string]string, len(ep.PathParams))
 	for name, schema := range ep.PathParams {
+		if schema == nil {
+			schema = &swagger.SchemaProperty{Type: "string"}
+		}
 		out[name] = capPathParam(gen.Generate(name, schema))
 	}
 	return out
