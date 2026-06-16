@@ -42,6 +42,7 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
 }
 
 export async function hashPassword(password: string): Promise<string> {
+  const iterations = 100000;
   const encoder = new TextEncoder();
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const keyMaterial = await crypto.subtle.importKey(
@@ -55,7 +56,7 @@ export async function hashPassword(password: string): Promise<string> {
     {
       name: 'PBKDF2',
       salt,
-      iterations: 100000,
+      iterations,
       hash: 'SHA-256',
     },
     keyMaterial,
@@ -64,11 +65,25 @@ export async function hashPassword(password: string): Promise<string> {
   
   const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
   const hashHex = Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return `${saltHex}:${hashHex}`;
+  return `${iterations}:${saltHex}:${hashHex}`;
 }
 
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  const [saltHex, expectedHashHex] = storedHash.split(':');
+  const parts = storedHash.split(':');
+  let iterations = 100000;
+  let saltHex: string;
+  let expectedHashHex: string;
+
+  if (parts.length === 3) {
+    iterations = parseInt(parts[0], 10);
+    saltHex = parts[1];
+    expectedHashHex = parts[2];
+  } else {
+    saltHex = parts[0];
+    expectedHashHex = parts[1];
+    iterations = 600000;
+  }
+
   if (!saltHex || !expectedHashHex) return false;
   
   const salt = new Uint8Array(saltHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
@@ -84,7 +99,7 @@ export async function verifyPassword(password: string, storedHash: string): Prom
     {
       name: 'PBKDF2',
       salt,
-      iterations: 100000,
+      iterations,
       hash: 'SHA-256',
     },
     keyMaterial,
