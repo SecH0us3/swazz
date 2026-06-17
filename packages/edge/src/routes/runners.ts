@@ -132,8 +132,8 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     let userPublicKey = "";
     const userId = await getUserIdFromRequest(c);
     if (userId) {
-      if (body.config && body.config.projectId) {
-        const { authorized, error } = await checkProjectMembership(c, body.config.projectId, userId);
+      if (body.projectId) {
+        const { authorized, error } = await checkProjectMembership(c, body.projectId, userId);
         if (!authorized) return error;
       }
   
@@ -152,7 +152,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     const runId = crypto.randomUUID();
   
     // Insert the scan record in D1 DB so that checkScanMembership (ownership/membership verification) succeeds
-    const projectId = body.config?.projectId || "";
+    const projectId = body.projectId || "";
     const targetUrl = body.config?.base_url || "";
     const profile = (body.config?.profiles && body.config.profiles[0]) || "default";
     const status = 'pending';
