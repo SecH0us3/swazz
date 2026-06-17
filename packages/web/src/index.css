@@ -607,6 +607,18 @@ body.resizing .sidebar-resizer {
   border-color: var(--border-hover);
 }
 
+/* Secondary */
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.btn-secondary:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-hover);
+}
+
+
 /* Icon-only square button */
 .btn-icon {
   padding: 7px;

@@ -22,15 +22,15 @@ class_name = "RunnerCoordinator"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["SwazzContainer"]
+new_classes = ["RunnerCoordinator"]
 
 [[migrations]]
 tag = "v2"
-deleted_classes = ["SwazzContainer"]
+new_classes = ["SwazzContainer"]
 
 [[migrations]]
 tag = "v3"
-new_classes = ["RunnerCoordinator"]
+deleted_classes = ["SwazzContainer"]
 
 [observability]
 enabled = true

@@ -208,16 +208,15 @@ export function UserSettings() {
                                         style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px', opacity: 0.8 }} 
                                     />
                                     <button 
-                                        className="btn btn-secondary"
+                                        className="btn btn-secondary btn-sm"
                                         onClick={() => setShowApiKey(!showApiKey)}
-                                        style={{ padding: '8px 12px', fontSize: '12px' }}
                                     >
                                         {showApiKey ? 'Hide' : 'Show'}
                                     </button>
                                     <button 
-                                        className="btn btn-secondary"
+                                        className="btn btn-secondary btn-sm"
                                         onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
-                                        style={{ minWidth: '90px', fontSize: '12px' }}
+                                        style={{ minWidth: '90px' }}
                                     >
                                         {copiedApiKey ? '✓ Copied' : 'Copy'}
                                     </button>
@@ -344,7 +343,7 @@ export function UserSettings() {
                                         <button 
                                             className="btn btn-secondary btn-sm" 
                                             onClick={() => copyToClipboard(genKeysCmd, setCopiedCmd)}
-                                            style={{ alignSelf: 'flex-start', padding: '4px 8px', fontSize: '11px' }}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
                                             {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
                                         </button>
@@ -398,7 +397,7 @@ export function UserSettings() {
                                         <button 
                                             className="btn btn-secondary btn-sm" 
                                             onClick={() => copyToClipboard(runCommand, setCopiedRunCmd)}
-                                            style={{ alignSelf: 'flex-start', padding: '4px 8px', fontSize: '11px' }}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
                                             {copiedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
                                         </button>
