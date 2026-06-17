@@ -192,7 +192,7 @@ export function useFuzzSession({
         };
 
         try {
-            await start(finalConfig, onResult, onComplete);
+            await start({ ...finalConfig, projectId: activeProject?.id ?? '' }, onResult, onComplete);
             showToast(
                 `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
                 'info',
