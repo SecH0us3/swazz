@@ -26,6 +26,11 @@ var containerIndicators = []string{
 //  1. Presence of /.dockerenv (created by Docker)
 //  2. /proc/1/cgroup containing a known container runtime identifier
 func IsRunningInContainer() bool {
+	// Check 0: Cloudflare Workers Containers environment detection.
+	if os.Getenv("CLOUDFLARE_APPLICATION_ID") != "" {
+		return true
+	}
+
 	// Check 1: Docker creates this sentinel file in every container.
 	if _, err := os.Stat(dockerEnvFile); err == nil {
 		return true
