@@ -88,7 +88,16 @@ export function UserSettings() {
             .catch(() => {});
     }, []);
 
-    const coordinatorHost = window.location.origin.replace('http', 'ws');
+    const getOrigin = (url: string) => {
+        if (!url) return window.location.origin;
+        try {
+            return url.startsWith('http') ? new URL(url).origin : window.location.origin;
+        } catch (e) {
+            return window.location.origin;
+        }
+    };
+    const apiBase = getOrigin(PROXY_URL);
+    const coordinatorHost = apiBase.replace(/^http/, 'ws');
     const runnerImage = `ghcr.io/sech0us3/swazz-cli:${version}`;
     const genKeysCmd = `docker run --rm -it -v $(pwd):/app ${runnerImage} generate-keys`;
     const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
