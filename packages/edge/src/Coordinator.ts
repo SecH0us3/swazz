@@ -19,6 +19,30 @@ export class RunnerCoordinator {
     this.jobs = new Map();
     this.pendingParses = new Map();
     this.pendingParseUrls = new Map();
+
+    // Reconstruct in-memory maps from active WebSockets after waking up/initializing
+    for (const ws of this.state.getWebSockets()) {
+      const tags = this.state.getTags(ws);
+      if (tags.includes('runner') || tags.includes('runner-pending')) {
+        const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null;
+        if (tags.includes('runner') || (attachment && attachment.authenticated)) {
+          this.runners.add(ws);
+          if (attachment && attachment.activeJobs) {
+            for (const runId of attachment.activeJobs) {
+              this.jobs.set(runId, ws);
+            }
+          }
+        }
+      } else if (tags.includes('client')) {
+        const runId = tags.find(t => t !== 'client');
+        if (runId) {
+          if (!this.clients.has(runId)) {
+            this.clients.set(runId, new Set());
+          }
+          this.clients.get(runId)!.add(ws);
+        }
+      }
+    }
   }
 
   isPrivateRunner(ws: WebSocket): boolean {
@@ -56,6 +80,12 @@ export class RunnerCoordinator {
 
       if (runner) {
         this.jobs.set(payload.runId, runner);
+        const attachment = runner.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+        const activeJobs = attachment.activeJobs || [];
+        if (!activeJobs.includes(payload.runId)) {
+          activeJobs.push(payload.runId);
+          runner.serializeAttachment({ ...attachment, activeJobs });
+        }
         runner.send(dispatchMsg);
         return new Response('Dispatched', { status: 200 });
       }
@@ -152,11 +182,24 @@ export class RunnerCoordinator {
         return new Response("No shared runners available", { status: 503 });
       }
       this.jobs.set(runId, runnerWs);
+      const attachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+      const activeJobs = attachment.activeJobs || [];
+      if (!activeJobs.includes(runId)) {
+        activeJobs.push(runId);
+        runnerWs.serializeAttachment({ ...attachment, activeJobs });
+      }
       const parsedConfig = JSON.parse(configText).config;
       try {
         runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
       } catch (err) {
         this.jobs.delete(runId);
+        const updatedAttachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+        const updatedJobs = updatedAttachment.activeJobs || [];
+        const index = updatedJobs.indexOf(runId);
+        if (index > -1) {
+          updatedJobs.splice(index, 1);
+          runnerWs.serializeAttachment({ ...updatedAttachment, activeJobs: updatedJobs });
+        }
         return new Response("Failed to send start command to runner", { status: 500 });
       }
       return new Response("ok");
@@ -235,6 +278,7 @@ export class RunnerCoordinator {
         }, 5000);
       } else {
         this.state.acceptWebSocket(server, ["runner", nameTag]);
+        server.serializeAttachment({ authenticated: true });
         this.runners.add(server);
       }
 
@@ -308,6 +352,7 @@ export class RunnerCoordinator {
           if (isValid) {
             this.pendingChallenges?.delete(ws);
             this.runners.add(ws);
+            ws.serializeAttachment({ authenticated: true });
             ws.send(JSON.stringify({ type: 'auth_ok' }));
           } else {
             ws.send(JSON.stringify({ type: 'auth_failed', error: 'Invalid challenge signature' }));
