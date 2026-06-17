@@ -575,3 +575,36 @@ This roadmap tracks planned features, documentation improvements, and architectu
       - The actual runtime default filenames (`swazz.config.json`, `swazz.ignore.json`) remain `.json` for backward compatibility — users can rename them to `.jsonc` at their discretion since the parser handles both extensions transparently.
     - **Web UI:** Update the Monaco-based config editor in the dashboard (if present) to set the language mode to `jsonc` so the editor natively highlights comments without showing lint errors.
     - **Tests:** Add `packages/container/jsonc_test.go` covering: `//` comment on its own line, inline `//` comment after a value, `/* */` block comment spanning multiple lines, comment inside a string value (must not be stripped), nested escaped quotes, empty input, and valid plain JSON (must pass through unchanged).
+
+- [ ] **Task 71: Runner Registration UI — Shared vs Private Mode**
+  - **Design Goal:** The current Settings page shows a single `docker run` command to register a runner without making it clear that this runner joins the **Shared Pool** (available to all users). Users must be able to choose between two explicit modes — **Shared Runner** (contributes compute to the community pool) and **Private Runner** (exclusive to the owner, matched to their Ed25519 signing key). The distinction must be visually obvious before a user copies and runs any command.
+  - **Current problem:** `UserSettings.tsx` generates only one `docker run ... --key` command for key-authenticated private runners and shows no mention of the Shared Pool or what it means. A user running with `--token` unknowingly contributes their runner to all other users. The coordinator's `isPrivateRunner()` check ([Coordinator.ts L53-55](./packages/edge/src/Coordinator.ts)) silently routes jobs based on this distinction, but the UI exposes none of it.
+  - **Implementation Details:**
+    - **Mode selector in `UserSettings.tsx`:** Replace the single runner command card with a **two-tab or two-card layout** titled `Shared Runner` and `Private Runner`, each with:
+      - A clear **description badge**: e.g. 🌐 `Shared — jobs from all users may run on this machine` vs 🔒 `Private — only your own scans will be dispatched to this runner`.
+      - The appropriate `docker run` command for that mode.
+      - A **warning callout** on the Shared tab: `⚠️ By registering a shared runner you agree to execute fuzzing jobs on behalf of other platform users. Only run this on an isolated, containerised environment.`
+    - **Shared Runner command** (token-based — no key auth, falls into shared pool):
+      ```
+      docker run --rm -it ghcr.io/sech0us3/swazz-cli:<tag> run-agent \
+        --coordinator <wss-url>/api/runners/connect \
+        --token <api_key>
+      ```
+      The `api_key` field must be exposed in the Settings page (already stored in `users.api_key` in D1). Show it in a masked `<input type="password">` with a copy button.
+    - **Private Runner command** (key-based — `pubKeyHex` tag causes `isPrivateRunner()` to return `true`):
+      ```
+      # Step 1: Generate keys (one-time)
+      docker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<tag> generate-keys
+
+      # Step 2: Register your public key (copy from swazz_runner.pub)
+      # (done automatically when key is used for the first time — see docs)
+
+      # Step 3: Start the private runner
+      docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key \
+        ghcr.io/sech0us3/swazz-cli:<tag> run-agent \
+        --coordinator <wss-url>/api/runners/connect \
+        --key /swazz_runner.key
+      ```
+    - **Public key registration flow:** Currently the coordinator validates `X-Runner-Public-Key` against `users.public_key` in D1 ([runners.ts L24-30](./packages/edge/src/routes/runners.ts)). The UI must expose a field to paste/upload the contents of `swazz_runner.pub` and a **Save Public Key** button that calls `PATCH /api/auth/me` (or a new `PUT /api/users/me/public-key` endpoint) to persist it. Without this, a key-mode runner gets `401 Unauthorized: Invalid public key`.
+    - **`/api/runners` response enrichment:** Add an `isShared: boolean` field per runner in the `/runners` list endpoint ([Coordinator.ts L220-240](./packages/edge/src/Coordinator.ts)) derived from `!isPrivateRunner(ws)`, and surface it in the Runners tab of Project Settings with a badge (`Shared` / `Private`).
+    - **Runner name display:** The `--name` flag value is already stored as a `name:<value>` tag. Surface it in Settings as an optional `Runner Name` input pre-filled with `hostname`, so users can identify their runners in the dashboard.
