@@ -7,6 +7,8 @@ export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
     const [copiedCmd, setCopiedCmd] = useState(false);
     const [copiedRunCmd, setCopiedRunCmd] = useState(false);
+    const [copiedApiKey, setCopiedApiKey] = useState(false);
+    const [showApiKey, setShowApiKey] = useState(false);
 
     const [pubKeyInput, setPubKeyInput] = useState(userProfile?.publicKey || '');
     const [isSavingPubKey, setIsSavingPubKey] = useState(false);
@@ -194,6 +196,33 @@ export function UserSettings() {
                                 {apiKey ? 'Registered User (Unlimited scans)' : 'Guest Mode (Scanning limits active)'}
                             </div>
                         </div>
+                        {apiKey && (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>API Key</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input 
+                                        type={showApiKey ? 'text' : 'password'} 
+                                        className="input" 
+                                        value={apiKey} 
+                                        readOnly 
+                                        style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px', opacity: 0.8 }} 
+                                    />
+                                    <button 
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => setShowApiKey(!showApiKey)}
+                                    >
+                                        {showApiKey ? 'Hide' : 'Show'}
+                                    </button>
+                                    <button 
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
+                                        style={{ minWidth: '90px' }}
+                                    >
+                                        {copiedApiKey ? '✓ Copied' : 'Copy'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Asymmetric Key Card */}
@@ -314,7 +343,7 @@ export function UserSettings() {
                                         <button 
                                             className="btn btn-secondary btn-sm" 
                                             onClick={() => copyToClipboard(genKeysCmd, setCopiedCmd)}
-                                            style={{ alignSelf: 'flex-start', padding: '4px 8px', fontSize: '11px' }}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
                                             {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
                                         </button>
@@ -368,7 +397,7 @@ export function UserSettings() {
                                         <button 
                                             className="btn btn-secondary btn-sm" 
                                             onClick={() => copyToClipboard(runCommand, setCopiedRunCmd)}
-                                            style={{ alignSelf: 'flex-start', padding: '4px 8px', fontSize: '11px' }}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
                                             {copiedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
                                         </button>
