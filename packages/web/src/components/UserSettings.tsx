@@ -75,9 +75,32 @@ export function UserSettings() {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const coordinatorHost = window.location.origin.replace('http', 'ws');
-    const genKeysCmd = `docker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-runner generate-keys`;
-    const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ghcr.io/sech0us3/swazz-runner run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
+    const [version, setVersion] = useState<string>('<TAG>');
+
+    useEffect(() => {
+        fetch('/api/version')
+            .then(res => res.json())
+            .then(data => {
+                if (data.version && data.version !== 'dev') {
+                    setVersion(data.version);
+                }
+            })
+            .catch(() => {});
+    }, []);
+
+    const getOrigin = (url: string) => {
+        if (!url) return window.location.origin;
+        try {
+            return url.startsWith('http') ? new URL(url).origin : window.location.origin;
+        } catch (e) {
+            return window.location.origin;
+        }
+    };
+    const apiBase = getOrigin(PROXY_URL);
+    const coordinatorHost = apiBase.replace(/^http/, 'ws');
+    const runnerImage = `ghcr.io/sech0us3/swazz-cli:${version}`;
+    const genKeysCmd = `docker run --rm -it -v $(pwd):/app ${runnerImage} generate-keys`;
+    const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
 
     return (
         <div style={{

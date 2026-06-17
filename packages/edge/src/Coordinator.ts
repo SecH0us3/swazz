@@ -21,6 +21,11 @@ export class RunnerCoordinator {
     this.pendingParseUrls = new Map();
   }
 
+  isPrivateRunner(ws: WebSocket): boolean {
+    const tags = this.state.getTags(ws);
+    return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:'));
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -44,8 +49,9 @@ export class RunnerCoordinator {
           return tags.includes(payload.userPublicKey);
         });
       }
+      // Fallback only to any SHARED (non-private) runner
       if (!runner) {
-        runner = activeRunners[0];
+        runner = activeRunners.find(r => !this.isPrivateRunner(r)) || null;
       }
 
       if (runner) {
@@ -53,7 +59,7 @@ export class RunnerCoordinator {
         runner.send(dispatchMsg);
         return new Response('Dispatched', { status: 200 });
       }
-      return new Response('No runner could accept job', { status: 500 });
+      return new Response('No runner could accept job', { status: 503 });
     }
 
     if (url.pathname === '/command') {
@@ -110,8 +116,9 @@ export class RunnerCoordinator {
           return tags.includes(body.userPublicKey!);
         });
       }
+      // Fallback only to any SHARED (non-private) runner
       if (!runnerWs) {
-        runnerWs = activeRunners[0];
+        runnerWs = activeRunners.find(r => !this.isPrivateRunner(r)) || null;
       }
 
       try {
@@ -138,7 +145,12 @@ export class RunnerCoordinator {
       const configText = await request.text();
       const activeRunners = Array.from(this.runners);
       if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
-      const runnerWs = activeRunners[0];
+      
+      // Fallback only to any SHARED (non-private) runner
+      const runnerWs = activeRunners.find(r => !this.isPrivateRunner(r));
+      if (!runnerWs) {
+        return new Response("No shared runners available", { status: 503 });
+      }
       this.jobs.set(runId, runnerWs);
       const parsedConfig = JSON.parse(configText).config;
       try {
