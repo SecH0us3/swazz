@@ -74,6 +74,31 @@ func startAgent(args []string) {
 		}
 	}
 
+	if coordinatorURL == "" {
+		coordinatorURL = os.Getenv("COORDINATOR_URL")
+		if coordinatorURL == "" {
+			coordinatorURL = os.Getenv("SWAZZ_COORDINATOR")
+		}
+	}
+	if token == "" {
+		token = os.Getenv("RUNNER_TOKEN")
+		if token == "" {
+			token = os.Getenv("SWAZZ_TOKEN")
+		}
+	}
+	if name == "" {
+		name = os.Getenv("RUNNER_NAME")
+		if name == "" {
+			name = os.Getenv("SWAZZ_RUNNER_NAME")
+		}
+	}
+	if keyPathOrHex == "" {
+		keyPathOrHex = os.Getenv("RUNNER_KEY")
+		if keyPathOrHex == "" {
+			keyPathOrHex = os.Getenv("SWAZZ_RUNNER_KEY")
+		}
+	}
+
 	safenet.AssertRunningInContainer(dangerousNoContainer)
 
 	if coordinatorURL == "" {
