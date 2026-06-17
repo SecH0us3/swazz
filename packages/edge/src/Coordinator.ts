@@ -95,6 +95,7 @@ export class RunnerCoordinator {
           runner.send(dispatchMsg);
           return new Response('Dispatched', { status: 200 });
         } catch (err) {
+          this.runners.delete(runner);
           this.jobs.delete(payload.runId);
           const index = activeJobs.indexOf(payload.runId);
           if (index > -1) {
@@ -207,6 +208,7 @@ export class RunnerCoordinator {
       try {
         runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
       } catch (err) {
+        this.runners.delete(runnerWs);
         this.jobs.delete(runId);
         const updatedAttachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
         const updatedJobs = updatedAttachment.activeJobs ? [...updatedAttachment.activeJobs] : [];
