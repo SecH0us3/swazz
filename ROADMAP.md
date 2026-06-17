@@ -608,3 +608,23 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Public key registration flow:** Currently the coordinator validates `X-Runner-Public-Key` against `users.public_key` in D1 ([runners.ts L24-30](./packages/edge/src/routes/runners.ts)). The UI must expose a field to paste/upload the contents of `swazz_runner.pub` and a **Save Public Key** button that calls `PATCH /api/auth/me` (or a new `PUT /api/users/me/public-key` endpoint) to persist it. Without this, a key-mode runner gets `401 Unauthorized: Invalid public key`.
     - **`/api/runners` response enrichment:** Add an `isShared: boolean` field per runner in the `/runners` list endpoint ([Coordinator.ts L220-240](./packages/edge/src/Coordinator.ts)) derived from `!isPrivateRunner(ws)`, and surface it in the Runners tab of Project Settings with a badge (`Shared` / `Private`).
     - **Runner name display:** The `--name` flag value is already stored as a `name:<value>` tag. Surface it in Settings as an optional `Runner Name` input pre-filled with `hostname`, so users can identify their runners in the dashboard.
+
+- [ ] **Task 72: Propagate `projectId` from Web UI to Backend on Scan Start**
+  - **Design Goal:** Scans started from the Web UI must be correctly linked to the active project in D1 so that project-level history, reporting, and access control work end-to-end. Currently `projectId` is only stored locally in IndexedDB (for the run history sidebar) but is never sent to `POST /api/runs`, so the server-side `scans` table always stores an empty `project_id` for web-initiated scans regardless of which project is active.
+  - **Root cause:** In [useFuzzSession.ts L128-132](./packages/web/src/hooks/useFuzzSession.ts), `finalConfig` is built from `SwazzConfig` which has no `projectId` field. The `projectId` is only placed in `runRec` (the local IDB record). It is never included in the `POST /api/runs` body sent to the edge worker.
+  - **Implementation Details:**
+    - **`useFuzzSession.ts`:** After building `finalConfig`, read `activeProject` from the app store and pass it as a top-level field in the request body:
+      ```typescript
+      // useFuzzSession.ts ~L195
+      const activeProject = useAppStore.getState().activeProject;
+      await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete);
+      ```
+    - **`useRunner.ts` (`start` function):** The `config` object passed to `POST /api/runs` already becomes `{ config: configToSend }`. Extract `projectId` before sending to avoid leaking it into the scan config consumed by the agent:
+      ```typescript
+      const { projectId, ...agentConfig } = configToSend;
+      const body = JSON.stringify({ config: agentConfig, projectId: projectId ?? '' });
+      ```
+    - **`POST /api/runs` edge handler ([runners.ts L132-155](./packages/edge/src/routes/runners.ts)):** `projectId` is already read from `body.config.projectId`. After the fix it should instead be read from the top-level `body.projectId` (to keep agent config clean). Update the destructuring accordingly.
+    - **`checkScanMembership`** will then correctly follow the project membership path for project-linked scans and the `user_id` direct-ownership path for standalone scans — no changes required there.
+    - **No schema changes needed** — `project_id` column already exists in `scans` table.
+
