@@ -24,7 +24,7 @@ export class RunnerCoordinator {
     for (const ws of this.state.getWebSockets()) {
       const tags = this.state.getTags(ws);
       if (tags.includes('runner') || tags.includes('runner-pending')) {
-        const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null;
+        const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null;
         if (tags.includes('runner') || (attachment && attachment.authenticated)) {
           this.runners.add(ws);
           if (attachment && attachment.activeJobs) {
@@ -32,6 +32,11 @@ export class RunnerCoordinator {
               this.jobs.set(runId, ws);
             }
           }
+        } else if (attachment && attachment.nonce) {
+          if (!this.pendingChallenges) {
+            this.pendingChallenges = new Map();
+          }
+          this.pendingChallenges.set(ws, attachment.nonce);
         }
       } else if (tags.includes('client')) {
         const runId = tags.find(t => t !== 'client');
@@ -80,14 +85,24 @@ export class RunnerCoordinator {
 
       if (runner) {
         this.jobs.set(payload.runId, runner);
-        const attachment = runner.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
-        const activeJobs = attachment.activeJobs || [];
+        const attachment = runner.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
+        const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
         if (!activeJobs.includes(payload.runId)) {
           activeJobs.push(payload.runId);
           runner.serializeAttachment({ ...attachment, activeJobs });
         }
-        runner.send(dispatchMsg);
-        return new Response('Dispatched', { status: 200 });
+        try {
+          runner.send(dispatchMsg);
+          return new Response('Dispatched', { status: 200 });
+        } catch (err) {
+          this.jobs.delete(payload.runId);
+          const index = activeJobs.indexOf(payload.runId);
+          if (index > -1) {
+            activeJobs.splice(index, 1);
+            runner.serializeAttachment({ ...attachment, activeJobs });
+          }
+          return new Response('Failed to send dispatch command to runner', { status: 500 });
+        }
       }
       return new Response('No runner could accept job', { status: 503 });
     }
@@ -182,8 +197,8 @@ export class RunnerCoordinator {
         return new Response("No shared runners available", { status: 503 });
       }
       this.jobs.set(runId, runnerWs);
-      const attachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
-      const activeJobs = attachment.activeJobs || [];
+      const attachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
+      const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
       if (!activeJobs.includes(runId)) {
         activeJobs.push(runId);
         runnerWs.serializeAttachment({ ...attachment, activeJobs });
@@ -193,8 +208,8 @@ export class RunnerCoordinator {
         runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
       } catch (err) {
         this.jobs.delete(runId);
-        const updatedAttachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
-        const updatedJobs = updatedAttachment.activeJobs || [];
+        const updatedAttachment = runnerWs.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[]; nonce?: string } | null || {};
+        const updatedJobs = updatedAttachment.activeJobs ? [...updatedAttachment.activeJobs] : [];
         const index = updatedJobs.indexOf(runId);
         if (index > -1) {
           updatedJobs.splice(index, 1);
@@ -260,6 +275,7 @@ export class RunnerCoordinator {
           this.pendingChallenges = new Map();
         }
         this.pendingChallenges.set(server, nonce);
+        server.serializeAttachment({ authenticated: false, nonce });
         
         // Send challenge after a tiny delay to ensure client is ready to receive messages
         setTimeout(() => {
@@ -445,6 +461,25 @@ export class RunnerCoordinator {
               } catch (e) {
                 // client closed
               }
+            }
+          }
+
+          // Cleanup jobs map and attachment activeJobs array when a job completes or errors out
+          let shouldCleanup = false;
+          if (msg.type === 'error') {
+            shouldCleanup = true;
+          } else if (msg.type === 'event' && msg.payload && (msg.payload.type === 'complete' || msg.payload.type === 'error')) {
+            shouldCleanup = true;
+          }
+
+          if (shouldCleanup && runId) {
+            this.jobs.delete(runId);
+            const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+            const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
+            const index = activeJobs.indexOf(runId);
+            if (index > -1) {
+              activeJobs.splice(index, 1);
+              ws.serializeAttachment({ ...attachment, activeJobs });
             }
           }
         }
