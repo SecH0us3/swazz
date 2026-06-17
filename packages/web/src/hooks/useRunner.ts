@@ -171,8 +171,8 @@ export function useRunner(proxyUrl: string) {
                     requestHeaders['Authorization'] = `Bearer ${token}`;
                 }
 
-                // Extract projectId from config — keep agent config clean, send projectId at top level
-                const { projectId: scanProjectId, ...agentConfig } = configToSend;
+                // Extract project_id from config — keep agent config clean, send at top level
+                const { project_id: scanProjectId, ...agentConfig } = configToSend;
 
                 const res = await fetch(`${proxyUrl}/api/runs`, {
                     method: 'POST',
