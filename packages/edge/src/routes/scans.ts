@@ -27,13 +27,31 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       .bind(id, body.project_id, body.target_url, body.profile, status)
       .run();
   
+    let userPublicKey = "";
+    if (userId) {
+      try {
+        const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+          .bind(userId)
+          .first<{ public_key: string | null }>();
+        if (user && user.public_key) {
+          userPublicKey = user.public_key;
+        }
+      } catch (dbErr) {
+        console.error("Failed to query user public key in /api/scans:", dbErr);
+      }
+    }
+
     // Dispatch to coordinator
     try {
       const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
       const stub = c.env.COORDINATOR_DO.get(doId);
       const doReq = new Request('http://do/dispatch', {
         method: 'POST',
-        body: JSON.stringify({ runId: id, config: body.config || {} }),
+        body: JSON.stringify({
+          runId: id,
+          config: body.config || {},
+          userPublicKey
+        }),
       });
       const doRes = await stub.fetch(doReq);
       if (!doRes.ok) {

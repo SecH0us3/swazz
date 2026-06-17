@@ -31,6 +31,7 @@ app.use('/api/*', async (c, next) => {
   const path = c.req.path;
   if (
     path === '/api/info' ||
+    path === '/api/version' ||
     path === '/api/payload-catalog' ||
     path.startsWith('/api/auth/') ||
     path === '/api/runners/connect' ||
@@ -55,8 +56,12 @@ app.get('/api/info', (c) => {
   return c.json({ 
     auth_enabled: authEnabled, 
     limit_anonymous: limitAnonymous, 
-    version: '1.0.0' 
+    version: c.env.VERSION || '1.0.0' 
   });
+});
+
+app.get('/api/version', (c) => {
+  return c.json({ version: c.env.VERSION || '1.0.0' });
 });
 // Add Content-Signal header middleware
 

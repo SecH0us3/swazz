@@ -36,6 +36,11 @@ export class RunnerCoordinator {
         payload,
       });
 
+      const isPrivateRunner = (r: WebSocket) => {
+        const tags = this.state.getTags(r);
+        return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:'));
+      };
+
       // Prioritize picking the runner matching the user's public key
       let runner = null;
       if (payload.userPublicKey) {
@@ -44,8 +49,9 @@ export class RunnerCoordinator {
           return tags.includes(payload.userPublicKey);
         });
       }
+      // Fallback only to any SHARED (non-private) runner
       if (!runner) {
-        runner = activeRunners[0];
+        runner = activeRunners.find(r => !isPrivateRunner(r)) || null;
       }
 
       if (runner) {
@@ -53,7 +59,7 @@ export class RunnerCoordinator {
         runner.send(dispatchMsg);
         return new Response('Dispatched', { status: 200 });
       }
-      return new Response('No runner could accept job', { status: 500 });
+      return new Response('No runner could accept job', { status: 503 });
     }
 
     if (url.pathname === '/command') {
@@ -102,6 +108,11 @@ export class RunnerCoordinator {
       const reqId = ulid();
       this.pendingParseUrls.set(reqId, body.url);
       
+      const isPrivateRunner = (r: WebSocket) => {
+        const tags = this.state.getTags(r);
+        return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:'));
+      };
+
       // Prioritize picking the runner matching the user's public key
       let runnerWs = null;
       if (body.userPublicKey) {
@@ -110,8 +121,9 @@ export class RunnerCoordinator {
           return tags.includes(body.userPublicKey!);
         });
       }
+      // Fallback only to any SHARED (non-private) runner
       if (!runnerWs) {
-        runnerWs = activeRunners[0];
+        runnerWs = activeRunners.find(r => !isPrivateRunner(r)) || null;
       }
 
       try {
@@ -138,7 +150,13 @@ export class RunnerCoordinator {
       const configText = await request.text();
       const activeRunners = Array.from(this.runners);
       if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
-      const runnerWs = activeRunners[0];
+      
+      const isPrivateRunner = (r: WebSocket) => {
+        const tags = this.state.getTags(r);
+        return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:'));
+      };
+      // Prefer shared runners, fallback to first active runner if needed
+      const runnerWs = activeRunners.find(r => !isPrivateRunner(r)) || activeRunners[0];
       this.jobs.set(runId, runnerWs);
       const parsedConfig = JSON.parse(configText).config;
       try {

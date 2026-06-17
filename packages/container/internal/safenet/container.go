@@ -60,7 +60,7 @@ func AssertRunningInContainer(allowBypass bool) {
 	if !IsRunningInContainer() {
 		log.Fatal("FATAL: run-agent mode requires a container runtime (Docker, containerd, or Kubernetes).\n" +
 			"       The runner is not inside a container. Use the official Docker image:\n" +
-			"       docker run ghcr.io/sech0us3/swazz-runner run-agent --coordinator <url> --token <token>\n" +
+			"       docker run ghcr.io/sech0us3/swazz-cli run-agent --coordinator <url> --token <token>\n" +
 			"       Alternatively, if you want to bypass this check on your host machine at your own risk, use:\n" +
 			"       swazz-engine run-agent --dangerous-no-container ...")
 	}
