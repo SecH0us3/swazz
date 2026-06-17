@@ -145,7 +145,7 @@ export interface SwazzConfig {
         ignore?: number[];
     };
     /** Project this scan belongs to. Stripped before sending to the Go agent. */
-    projectId?: string;
+    project_id?: string;
 }
 
 // ─── Results ────────────────────────────────────────────
