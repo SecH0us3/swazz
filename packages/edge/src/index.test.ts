@@ -24,7 +24,16 @@ beforeAll(async () => {
       .map((s) => s.trim())
       .filter((s) => s.length > 0 && !s.startsWith("--"));
     for (const statement of statements) {
-      await env.DB.prepare(statement).run();
+      try {
+        await env.DB.prepare(statement).run();
+      } catch (err: any) {
+        // Tolerate idempotent ALTER TABLE ADD COLUMN statements: in test environments
+        // the column may already exist in the base CREATE TABLE definition while the
+        // ALTER TABLE migration is also present for the production upgrade path.
+        const msg = String(err?.message ?? err);
+        if (msg.includes('duplicate column name')) continue;
+        throw err;
+      }
     }
   }
 });

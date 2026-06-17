@@ -224,14 +224,20 @@ export async function checkProjectMembership(c: Context<{ Bindings: Env }>, proj
 }
 
 export async function checkScanMembership(c: Context<{ Bindings: Env }>, scanId: string, userId: string): Promise<{ authorized: boolean; error?: any }> {
-  const scan = await c.env.DB.prepare('SELECT project_id FROM scans WHERE id = ?')
+  const scan = await c.env.DB.prepare('SELECT project_id, user_id FROM scans WHERE id = ?')
     .bind(scanId)
-    .first<{ project_id: string }>();
+    .first<{ project_id: string; user_id: string | null }>();
     
   if (!scan) {
     return { authorized: false, error: c.json({ error: 'Run/Scan not found' }, 404) };
   }
-  
+
+  // Standalone scan (no project): check direct user ownership
+  if (!scan.project_id) {
+    if (scan.user_id === userId) return { authorized: true };
+    return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
+  }
+
   return checkProjectMembership(c, scan.project_id, userId);
 }
 
