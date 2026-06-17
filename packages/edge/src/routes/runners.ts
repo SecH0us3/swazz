@@ -151,6 +151,25 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
   
     const runId = crypto.randomUUID();
   
+    // Insert the scan record in D1 DB so that checkScanMembership (ownership/membership verification) succeeds
+    const projectId = body.config?.projectId || "";
+    const targetUrl = body.config?.base_url || "";
+    const profile = (body.config?.profiles && body.config.profiles[0]) || "default";
+    const status = 'pending';
+
+    if (projectId) {
+      try {
+        await c.env.DB.prepare(
+          `INSERT INTO scans (id, project_id, target_url, profile, status)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+          .bind(runId, projectId, targetUrl, profile, status)
+          .run();
+      } catch (dbErr) {
+        console.error("Failed to insert scan into D1 in /api/runs:", dbErr);
+      }
+    }
+
     const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = c.env.COORDINATOR_DO.get(id);
     const doReq = new Request('http://do/dispatch', {
@@ -164,6 +183,15 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     
     const doRes = await stub.fetch(doReq);
     if (!doRes.ok) {
+      if (projectId) {
+        try {
+          await c.env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
+            .bind('dispatch_failed', runId)
+            .run();
+        } catch (dbErr) {
+          console.error("Failed to update scan status in /api/runs:", dbErr);
+        }
+      }
       return c.json({ error: 'Failed to dispatch job to runner' }, 500);
     }
   
