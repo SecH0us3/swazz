@@ -7,6 +7,8 @@ export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
     const [copiedCmd, setCopiedCmd] = useState(false);
     const [copiedRunCmd, setCopiedRunCmd] = useState(false);
+    const [copiedApiKey, setCopiedApiKey] = useState(false);
+    const [showApiKey, setShowApiKey] = useState(false);
 
     const [pubKeyInput, setPubKeyInput] = useState(userProfile?.publicKey || '');
     const [isSavingPubKey, setIsSavingPubKey] = useState(false);
@@ -194,6 +196,34 @@ export function UserSettings() {
                                 {apiKey ? 'Registered User (Unlimited scans)' : 'Guest Mode (Scanning limits active)'}
                             </div>
                         </div>
+                        {apiKey && (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>API Key</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input 
+                                        type={showApiKey ? 'text' : 'password'} 
+                                        className="input" 
+                                        value={apiKey} 
+                                        readOnly 
+                                        style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px', opacity: 0.8 }} 
+                                    />
+                                    <button 
+                                        className="btn btn-secondary"
+                                        onClick={() => setShowApiKey(!showApiKey)}
+                                        style={{ padding: '8px 12px', fontSize: '12px' }}
+                                    >
+                                        {showApiKey ? 'Hide' : 'Show'}
+                                    </button>
+                                    <button 
+                                        className="btn btn-secondary"
+                                        onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
+                                        style={{ minWidth: '90px', fontSize: '12px' }}
+                                    >
+                                        {copiedApiKey ? '✓ Copied' : 'Copy'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Asymmetric Key Card */}
