@@ -157,17 +157,15 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     const profile = (body.config?.profiles && body.config.profiles[0]) || "default";
     const status = 'pending';
 
-    if (projectId) {
-      try {
-        await c.env.DB.prepare(
-          `INSERT INTO scans (id, project_id, target_url, profile, status)
-           VALUES (?, ?, ?, ?, ?)`
-        )
-          .bind(runId, projectId, targetUrl, profile, status)
-          .run();
-      } catch (dbErr) {
-        console.error("Failed to insert scan into D1 in /api/runs:", dbErr);
-      }
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO scans (id, project_id, target_url, profile, status, user_id)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+        .bind(runId, projectId, targetUrl, profile, status, userId ?? null)
+        .run();
+    } catch (dbErr) {
+      console.error("Failed to insert scan into D1 in /api/runs:", dbErr);
     }
 
     const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
