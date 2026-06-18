@@ -529,8 +529,8 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Modify URL filtering logic to perform case-insensitive comparisons against defined exclude paths (e.g. `/api/admin` matching `/API/Admin`).
 
-- [ ] **Task 62: Browser Extension for Real-Time Traffic Capturing**
-  - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints directly into the Swazz configuration profile.
+- [ ] **Task 62: Browser Extension for Real-Time Traffic Capturing & Request Recording**
+  - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints and capturing client requests directly into the Swazz configuration profile. This can serve as a more optimal, zero-setup alternative to exporting/uploading HAR files.
   - **Implementation Details:**
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
@@ -627,4 +627,49 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **`POST /api/runs` edge handler ([runners.ts L132-155](./packages/edge/src/routes/runners.ts)):** `projectId` is already read from `body.config.projectId`. After the fix it should instead be read from the top-level `body.projectId` (to keep agent config clean). Update the destructuring accordingly.
     - **`checkScanMembership`** will then correctly follow the project membership path for project-linked scans and the `user_id` direct-ownership path for standalone scans — no changes required there.
     - **No schema changes needed** — `project_id` column already exists in `scans` table.
+
+- [ ] **Task 73: Register Private Runners Even with Project-Specific Public Runners**
+  - **Design Goal:** Ensure users can register private/custom runners for a project even if public/shared runners are already registered or available. Currently, once a runner is registered, the UI hides/removes the registration instructions and token, blocking further registrations.
+  - **Implementation Details:**
+    - Update the Settings/Runners UI (e.g., in `UserSettings.tsx`) to ensure the runner registration tokens and registration command cards remain visible and usable regardless of whether other runners are online.
+
+- [ ] **Task 74: Option to Disable Shared Runners in Project Configuration**
+  - **Design Goal:** Allow project owners to prevent their project's fuzzing jobs from running on public/shared runners, restricting them only to their own private runners for data isolation and performance.
+  - **Implementation Details:**
+    - Add a `Disable Shared Runners` setting (represented by a flag like `use_shared_runners: false`) in the project configuration schema and Settings UI.
+    - Update `Coordinator.ts` queue matching logic so that if shared runners are disabled for a project, the coordinator will only dispatch its scans to private runners authenticated with the owner's key.
+
+- [ ] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
+  - **Design Goal:** Secure runner agent connections by supporting token rotation. If a runner's credentials are revoked or become invalid, the runner agent process must fail/exit immediately to prevent unauthorized loops.
+  - **Implementation Details:**
+    - Update the runner agent CLI command (`run-agent` in Go) to detect authentication failure responses (such as `401 Unauthorized`).
+    - Instead of retrying connection loops indefinitely, print a critical error message and terminate the process with a non-zero exit code.
+
+- [ ] **Task 76: AI-Based Findings Analysis with Local Repository Context**
+  - **Design Goal:** Automatically analyze and explain discovered vulnerabilities by correlating finding routes and parameters with the client's local repository code using AI (Claude or Antigravity).
+  - **Implementation Details:**
+    - Extend the CLI with an analysis mode (e.g., `--analyze-repo <path>`) that clones/reads the target repository.
+    - Build a fast pre-indexing system in the CLI to scan the files beforehand for quick symbol and path lookup.
+    - Allow users to configure instructions (prompts) specifying what vulnerabilities to prioritize and where to look.
+    - Match endpoint routes from findings to file paths, retrieve relevant code context, and invoke the LLM to output remediation steps.
+
+- [ ] **Task 77: Dynamic Analytics Dashboard**
+  - **Design Goal:** Provide visual insights into fuzzing history, vulnerability trends, and runner performance over time in a dynamic dashboard.
+  - **Implementation Details:**
+    - Add an Analytics tab/page in the Web UI dashboard.
+    - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
+    - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
+
+- [ ] **Task 78: Upgrade OWASP API Security Categorization to 2025 Edition**
+  - **Design Goal:** Transition compliance tagging from the OWASP API Security Top 10 (2023) to the 2025 standard to keep reports up-to-date.
+  - **Implementation Details:**
+    - Update `packages/container/internal/classifier/owasp.go` mapping function to categorize rule IDs according to the latest OWASP 2025 categories.
+    - Align Web Dashboard tables and report formatters (HTML, JSON, Markdown) to display the updated 2025 taxonomy.
+
+- [ ] **Task 79: Project Security Review & System Architecture Documentation**
+  - **Design Goal:** Improve codebase transparency, security posture, and developer onboarding by performing a formal security review and documenting general system/component architecture diagrams.
+  - **Implementation Details:**
+    - Perform a comprehensive threat modeling and security review of the Swazz core fuzzer, edge coordinator, Web UI, and runner communication channels.
+    - Produce detailed architecture flow diagrams (using Mermaid in Markdown) detailing component interaction, JWT/key authentication sequences, data flow (D1 database & R2 bucket integrations), and WebSocket/SSE streaming.
+    - Write security guidelines for deployment, covering self-hosted runner network isolation and TLS configurations.
 

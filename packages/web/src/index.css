@@ -3581,3 +3581,12 @@ kbd {
   color: var(--text-muted);
   font-size: 11px;
 }
+
+.runner-mode-tab-switcher {
+  display: flex;
+  gap: 4px;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+}

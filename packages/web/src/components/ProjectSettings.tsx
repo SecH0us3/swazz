@@ -851,7 +851,7 @@ export function ProjectSettings() {
                                                         {r.publicKey ? `${r.publicKey.substring(0, 16)}...` : 'Anonymous'}
                                                     </td>
                                                     <td style={{ padding: '12px 16px' }}>
-                                                        {r.isShared ? (
+                                                        {(r.isShared ?? !r.publicKey) ? (
                                                             <span style={{
                                                                 fontSize: '11px',
                                                                 fontWeight: 600,
