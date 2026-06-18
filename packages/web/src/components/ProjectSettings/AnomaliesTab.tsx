@@ -15,7 +15,7 @@ export function AnomaliesTab() {
             return;
         }
         const codeNum = parseInt(trimmed, 10);
-        if (codeNum < 100 || codeNum > 599) {
+        if (!/^\d+$/.test(trimmed) || isNaN(codeNum) || codeNum < 100 || codeNum > 599) {
             alert('Please enter a valid HTTP status code (100-599).');
             return;
         }

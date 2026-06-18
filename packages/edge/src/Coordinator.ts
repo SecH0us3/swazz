@@ -88,7 +88,7 @@ export class RunnerCoordinator {
         });
       }
       // Fallback only to any SHARED (non-private) runner
-      if (!runner && !payload.config?.settings?.disable_shared_runners) {
+      if (!runner && !payload?.config?.settings?.disable_shared_runners) {
         runner = activeRunners.find(r => !this.isPrivateRunner(r)) || null;
       }
 

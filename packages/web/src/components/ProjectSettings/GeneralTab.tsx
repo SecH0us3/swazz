@@ -51,15 +51,11 @@ export function GeneralTab() {
             });
 
             if (!res.ok) {
-                const contentType = res.headers.get('content-type');
                 let errMsg = 'Failed to update project details';
-                if (contentType && contentType.includes('application/json')) {
-                    const errData = await res.json().catch(() => ({}));
+                try {
+                    const errData = await res.json();
                     errMsg = errData.error || errMsg;
-                } else {
-                    const text = await res.text().catch(() => '');
-                    errMsg = text || res.statusText || errMsg;
-                }
+                } catch {}
                 throw new Error(errMsg);
             }
 
