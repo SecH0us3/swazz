@@ -798,11 +798,36 @@ func (r *Runner) replayCandidate(
 ) {
 	targets, paramName := r.buildPathsToTest(cand)
 
-	// Task 65: skip BOLA replay when there is no resource identifier to substitute.
-	// BOLA testing requires an ID that can be swapped between identities — if no
-	// path parameter or body ID field exists, this is not a BOLA-testable endpoint.
-	if paramName == "" {
-		fmt.Printf("[BOLA] Skipping %s %s — no resource identifier to substitute\n",
+	// Skip BOLA/IDOR replay if the baseline request did not use any authentication credentials.
+	// Replaying unauthenticated endpoints anonymously or under other identities
+	// is guaranteed to succeed and only generates false positives.
+	hasAuth := false
+	dropHeaders := r.config.Settings.AuthHeaders
+	if len(dropHeaders) == 0 {
+		dropHeaders = []string{"Authorization", "X-API-Key"}
+	}
+	for k := range cand.RequestHeaders {
+		if containsFold(dropHeaders, k) {
+			hasAuth = true
+			break
+		}
+	}
+	if !hasAuth {
+		dropCookies := r.config.Settings.AuthCookies
+		if len(dropCookies) == 0 {
+			dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
+		}
+		if cookieHeader, ok := cand.RequestHeaders["Cookie"]; ok {
+			for _, cookieName := range dropCookies {
+				if strings.Contains(strings.ToLower(cookieHeader), strings.ToLower(cookieName)) {
+					hasAuth = true
+					break
+				}
+			}
+		}
+	}
+	if !hasAuth {
+		fmt.Printf("[BOLA] Skipping %s %s — no auth credentials in baseline request\n",
 			cand.Method, cand.Endpoint)
 		return
 	}

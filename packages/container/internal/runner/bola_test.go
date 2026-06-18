@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"swazz-engine/internal/swagger"
 	"testing"
 )
@@ -164,13 +165,14 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 	// Simulate successful result for User A (Authorization is missing in this test structure, but we pretend it was successful)
 	results := []*swagger.FuzzResult{
 		{
-			ID:           "test-id",
-			Endpoint:     "/api/goods/{id}",
-			ResolvedPath: "/api/goods/goods-101",
-			Method:       "GET",
-			Status:       200,
-			Payload:      nil,
-			ResponseBody: `{"id": "goods-101", "secret": "user1-private-data"}`,
+			ID:             "test-id",
+			Endpoint:       "/api/goods/{id}",
+			ResolvedPath:   "/api/goods/goods-101",
+			Method:         "GET",
+			Status:         200,
+			Payload:        nil,
+			ResponseBody:   `{"id": "goods-101", "secret": "user1-private-data"}`,
+			RequestHeaders: map[string]string{"Authorization": "Bearer user1-token"},
 		},
 	}
 
@@ -243,13 +245,14 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 
 	results := []*swagger.FuzzResult{
 		{
-			ID:           "test-id-anon",
-			Endpoint:     "/api/public-goods/{id}",
-			ResolvedPath: "/api/public-goods/goods-999",
-			Method:       "GET",
-			Status:       200,
-			Payload:      nil,
-			ResponseBody: `{"id": "goods-999", "public": "visible-to-everyone-even-anonymous"}`,
+			ID:             "test-id-anon",
+			Endpoint:       "/api/public-goods/{id}",
+			ResolvedPath:   "/api/public-goods/goods-999",
+			Method:         "GET",
+			Status:         200,
+			Payload:        nil,
+			ResponseBody:   `{"id": "goods-999", "public": "visible-to-everyone-even-anonymous"}`,
+			RequestHeaders: map[string]string{"Authorization": "Bearer user1-token"},
 		},
 	}
 
@@ -315,6 +318,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 					"description": "A very expensive item",
 					"owner":       "User A",
 				},
+				RequestHeaders: map[string]string{"Authorization": "Bearer user1-token"},
 			},
 		}
 
@@ -370,6 +374,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 					"description": "A very expensive item",
 					"owner":       "User A",
 				},
+				RequestHeaders: map[string]string{"Authorization": "Bearer user1-token"},
 			},
 		}
 
@@ -571,3 +576,81 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 		}
 	})
 }
+
+// TestBOLA_SkipNoAuth verifies that BOLA replay is skipped if the baseline request lacks
+// auth credentials, but is NOT skipped if auth credentials are present (even without resource ID parameters).
+func TestBOLA_SkipNoAuth(t *testing.T) {
+	t.Run("skipped when no auth is present", func(t *testing.T) {
+		r := &Runner{}
+		cfg := &swagger.Config{
+			Settings: swagger.Settings{
+				BOLATesting:         true,
+				AnalyzeResponseBody: true,
+			},
+		}
+		r.config = cfg
+
+		cand := &swagger.FuzzResult{
+			Endpoint:       "/api/health",
+			ResolvedPath:   "/api/health",
+			Method:         "GET",
+			RequestHeaders: map[string]string{"Content-Type": "application/json"},
+		}
+
+		var bolaResults []*swagger.FuzzResult
+		var bolaMu sync.Mutex
+		r.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
+
+		if len(bolaResults) != 0 {
+			t.Errorf("Expected 0 results (skipped BOLA), got %d", len(bolaResults))
+		}
+	})
+
+	t.Run("not skipped when auth is present but no parameters", func(t *testing.T) {
+		// Mock server to handle BOLA replay requests
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"admin": true}`))
+		}))
+		defer server.Close()
+
+		cfg := &swagger.Config{
+			BaseURL: server.URL,
+			Security: swagger.SecurityConfig{
+				AllowPrivateIPs: true,
+			},
+			Settings: swagger.Settings{
+				BOLATesting:         true,
+				AnalyzeResponseBody: true,
+			},
+			Endpoints: []swagger.EndpointConfig{
+				{
+					Path:   "/api/admin/dashboard",
+					Method: "GET",
+				},
+			},
+		}
+
+		r := New(cfg, nil)
+
+		cand := &swagger.FuzzResult{
+			Endpoint:       "/api/admin/dashboard",
+			ResolvedPath:   "/api/admin/dashboard",
+			Method:         "GET",
+			Status:         200,
+			ResponseBody:   `{"admin": true}`,
+			RequestHeaders: map[string]string{"Authorization": "Bearer admin-token"},
+		}
+
+		var bolaResults []*swagger.FuzzResult
+		var bolaMu sync.Mutex
+		r.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
+
+		// Should not be skipped, but since there's no other identities and no anonymous bypass (both mock server and anonymous return similarity 1.0 which is >= 0.75 threshold),
+		// it should produce an anonymous finding!
+		if len(bolaResults) != 1 {
+			t.Errorf("Expected 1 result (not skipped, anonymous bypass flagged), got %d", len(bolaResults))
+		}
+	})
+}
+
