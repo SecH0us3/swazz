@@ -249,7 +249,7 @@ export class RunnerCoordinator {
           name,
           publicKey: pubKey,
           status: isPending ? 'authenticating' : 'connected',
-          isShared: !this.isPrivateRunner(ws),
+          isShared: !pubKey,
         });
       }
       return new Response(JSON.stringify({ runners: runnerList }), {

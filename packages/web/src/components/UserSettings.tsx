@@ -76,12 +76,19 @@ export function UserSettings() {
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (file.size > 1024 * 10) { // Limit to 10KB
+            setSaveError('File is too large. Public key files should be under 10KB.');
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (event) => {
             const content = event.target?.result as string;
             if (content) {
                 setPubKeyInput(content.trim());
             }
+        };
+        reader.onerror = () => {
+            setSaveError('Failed to read the file.');
         };
         reader.readAsText(file);
         e.target.value = '';
@@ -354,14 +361,7 @@ export function UserSettings() {
                         </p>
 
                         {/* Tab Switcher */}
-                        <div style={{
-                            display: 'flex',
-                            gap: '4px',
-                            backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                            padding: '4px',
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--border-default)'
-                        }}>
+                        <div className="runner-mode-tab-switcher">
                             <button
                                 type="button"
                                 className={`btn btn-sm ${activeRunnerMode === 'private' ? 'btn-primary' : 'btn-ghost'}`}
