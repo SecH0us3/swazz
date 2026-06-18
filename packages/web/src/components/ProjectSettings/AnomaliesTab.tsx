@@ -9,8 +9,13 @@ export function AnomaliesTab() {
 
     const handleAddIgnoreCode = (e: React.FormEvent) => {
         e.preventDefault();
-        const codeNum = parseInt(newIgnoreCode.trim());
-        if (isNaN(codeNum) || codeNum < 100 || codeNum > 599) {
+        const trimmed = newIgnoreCode.trim();
+        if (!/^\d{3}$/.test(trimmed)) {
+            alert('Please enter a valid 3-digit HTTP status code (100-599).');
+            return;
+        }
+        const codeNum = parseInt(trimmed, 10);
+        if (codeNum < 100 || codeNum > 599) {
             alert('Please enter a valid HTTP status code (100-599).');
             return;
         }

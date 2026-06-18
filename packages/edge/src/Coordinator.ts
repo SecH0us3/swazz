@@ -64,7 +64,16 @@ export class RunnerCoordinator {
         return new Response('No runners available', { status: 503 });
       }
       
-      const payload = await request.json() as any;
+      let payload: any = null;
+      try {
+        payload = await request.json();
+      } catch (err) {
+        return new Response('Invalid JSON payload', { status: 400 });
+      }
+      if (!payload) {
+        return new Response('Missing payload', { status: 400 });
+      }
+
       const dispatchMsg = JSON.stringify({
         type: 'job_dispatch',
         payload,
@@ -109,7 +118,16 @@ export class RunnerCoordinator {
     }
 
     if (url.pathname === '/command') {
-      const payload = await request.json() as any;
+      let payload: any = null;
+      try {
+        payload = await request.json();
+      } catch (err) {
+        return new Response('Invalid JSON payload', { status: 400 });
+      }
+      if (!payload || !payload.runId) {
+        return new Response('Missing runId', { status: 400 });
+      }
+
       const runner = this.jobs.get(payload.runId);
       if (runner) {
         runner.send(JSON.stringify({
@@ -123,8 +141,16 @@ export class RunnerCoordinator {
 
     
     if (url.pathname === '/parse') {
-      const bodyText = await request.text();
-      const body = JSON.parse(bodyText) as { url: string; forceRebuild?: boolean; userPublicKey?: string };
+      let body: { url: string; forceRebuild?: boolean; userPublicKey?: string } | null = null;
+      try {
+        const bodyText = await request.text();
+        body = JSON.parse(bodyText);
+      } catch (err) {
+        return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (!body || !body.url) {
+        return new Response(JSON.stringify({ error: "Missing required parameter: url" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
       
       if (!body.forceRebuild) {
         try {

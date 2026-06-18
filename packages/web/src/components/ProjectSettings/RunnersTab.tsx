@@ -112,7 +112,7 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                         </thead>
                         <tbody>
                             {runners.map((r, i) => (
-                                <tr key={i} style={{ borderBottom: i === runners.length - 1 ? 'none' : '1px solid var(--border-subtle)', backgroundColor: r.isMine ? 'rgba(124,58,237,0.03)' : 'transparent' }}>
+                                <tr key={`${r.name}-${r.publicKey || i}`} style={{ borderBottom: i === runners.length - 1 ? 'none' : '1px solid var(--border-subtle)', backgroundColor: r.isMine ? 'rgba(124,58,237,0.03)' : 'transparent' }}>
                                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>{r.name}</td>
                                     <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-muted)' }}>
                                         {r.publicKey ? `${r.publicKey.substring(0, 16)}...` : 'Anonymous'}

@@ -51,8 +51,16 @@ export function GeneralTab() {
             });
 
             if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || 'Failed to update project details');
+                const contentType = res.headers.get('content-type');
+                let errMsg = 'Failed to update project details';
+                if (contentType && contentType.includes('application/json')) {
+                    const errData = await res.json().catch(() => ({}));
+                    errMsg = errData.error || errMsg;
+                } else {
+                    const text = await res.text().catch(() => '');
+                    errMsg = text || res.statusText || errMsg;
+                }
+                throw new Error(errMsg);
             }
 
             // Sync with base_url
