@@ -158,6 +158,14 @@ func (r *Runner) executeRequest(
 			}
 		}
 
+		if len(cookies) > 0 {
+			var cookieParts []string
+			for k, v := range cookies {
+				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+			}
+			mergedHeaders["Cookie"] = strings.Join(cookieParts, "; ")
+		}
+
 		req, err := http.NewRequestWithContext(reqCtx, method, rawURL, bodyReader)
 		if err != nil {
 			reqCancel()
@@ -172,7 +180,7 @@ func (r *Runner) executeRequest(
 		for k, v := range mergedHeaders {
 			if strings.EqualFold(k, "Host") {
 				req.Host = v
-			} else {
+			} else if !strings.EqualFold(k, "Cookie") || len(cookies) == 0 {
 				req.Header.Set(k, v)
 			}
 		}

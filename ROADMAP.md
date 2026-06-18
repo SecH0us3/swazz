@@ -544,7 +544,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [/] **Task 64: Include Test Profile Type in SARIF Reports**
   - **Design Goal:** Provide better context in CI/CD pipelines by embedding the exact fuzzer test profile/vulnerability category in SARIF output files.
 
-- [ ] **Task 65: Refine BOLA/IDOR Tests to Ignore Requests without Auth Substitution**
+- [/] **Task 65: Refine BOLA/IDOR Tests to Ignore Requests without Auth Substitution**
   - **Design Goal:** Reduce false positive findings by skipping BOLA evaluation on endpoints where no authorization tokens or parameters were present in the baseline request to swap.
 
 - [/] **Task 66: Fix URL Casing Conversion in SARIF Output**
