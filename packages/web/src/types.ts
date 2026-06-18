@@ -76,6 +76,7 @@ export interface SwazzSettings {
     chaining_rules?: ChainingRule[];
     har_domain_filter?: string;
     data_retention?: string;
+    disable_shared_runners?: boolean;
 }
 
 export interface AuthStep {
@@ -122,6 +123,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     oob_server_url: '',
     debug: false,
     data_retention: 'forever',
+    disable_shared_runners: false,
 };
 
 // ─── Full Config ────────────────────────────────────────
@@ -145,7 +147,7 @@ export interface SwazzConfig {
         ignore?: number[];
     };
     /** Project this scan belongs to. Stripped before sending to the Go agent. */
-    project_id?: string;
+    projectId?: string;
 }
 
 // ─── Results ────────────────────────────────────────────
