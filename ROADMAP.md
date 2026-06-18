@@ -576,7 +576,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Web UI:** Update the Monaco-based config editor in the dashboard (if present) to set the language mode to `jsonc` so the editor natively highlights comments without showing lint errors.
     - **Tests:** Add `packages/container/jsonc_test.go` covering: `//` comment on its own line, inline `//` comment after a value, `/* */` block comment spanning multiple lines, comment inside a string value (must not be stripped), nested escaped quotes, empty input, and valid plain JSON (must pass through unchanged).
 
-- [ ] **Task 71: Runner Registration UI — Shared vs Private Mode**
+- [/] **Task 71: Runner Registration UI — Shared vs Private Mode**
   - **Design Goal:** The current Settings page shows a single `docker run` command to register a runner without making it clear that this runner joins the **Shared Pool** (available to all users). Users must be able to choose between two explicit modes — **Shared Runner** (contributes compute to the community pool) and **Private Runner** (exclusive to the owner, matched to their Ed25519 signing key). The distinction must be visually obvious before a user copies and runs any command.
   - **Current problem:** `UserSettings.tsx` generates only one `docker run ... --key` command for key-authenticated private runners and shows no mention of the Shared Pool or what it means. A user running with `--token` unknowingly contributes their runner to all other users. The coordinator's `isPrivateRunner()` check ([Coordinator.ts L53-55](./packages/edge/src/Coordinator.ts)) silently routes jobs based on this distinction, but the UI exposes none of it.
   - **Implementation Details:**
