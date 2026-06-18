@@ -15,8 +15,9 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string) map[string]any 
 		toolVersion = "1.0.0"
 	}
 
-	// Collect unique rules
+	// Collect unique rules and, for Task 64, track which profiles each rule fires on.
 	rulesMap := make(map[string]map[string]any)
+	ruleProfiles := make(map[string]map[string]bool) // ruleID → set of profile strings
 	for _, f := range findings {
 		if _, ok := rulesMap[f.RuleID]; !ok {
 			rulesMap[f.RuleID] = map[string]any{
@@ -24,11 +25,24 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string) map[string]any 
 				"shortDescription":     map[string]string{"text": descriptionForRule(f.RuleID)},
 				"defaultConfiguration": map[string]string{"level": string(f.Level)},
 			}
+			ruleProfiles[f.RuleID] = make(map[string]bool)
+		}
+		if p := string(f.Profile); p != "" {
+			ruleProfiles[f.RuleID][p] = true
 		}
 	}
 
+	// Task 64: embed profile tags into each rule's properties so CI/CD consumers
+	// (GitHub Code Scanning, Azure Boards) can filter findings by fuzzing profile.
 	rules := make([]map[string]any, 0, len(rulesMap))
-	for _, r := range rulesMap {
+	for id, r := range rulesMap {
+		tags := make([]string, 0, len(ruleProfiles[id]))
+		for p := range ruleProfiles[id] {
+			tags = append(tags, p)
+		}
+		if len(tags) > 0 {
+			r["properties"] = map[string]any{"tags": tags}
+		}
 		rules = append(rules, r)
 	}
 
@@ -59,6 +73,11 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string) map[string]any 
 			msg += fmt.Sprintf(" (%s)", f.Error)
 		}
 
+		// Task 66: physicalLocation.artifactLocation.uri must be a proper URI — only
+		// the path, never the HTTP method. Embedding the method caused SARIF viewers
+		// (VS Code, GitHub Code Scanning) to apply RFC 3986 host normalisation to the
+		// string, which title-cased each path segment (/api/bank → /Api/Bank).
+		// The HTTP method is now carried in logicalLocations[0].name instead.
 		results = append(results, map[string]any{
 			"ruleId":  f.RuleID,
 			"level":   string(f.Level),
@@ -66,9 +85,13 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string) map[string]any 
 			"locations": []map[string]any{{
 				"physicalLocation": map[string]any{
 					"artifactLocation": map[string]string{
-						"uri": fmt.Sprintf("%s %s", f.Method, f.Endpoint),
+						"uri": f.Endpoint, // path only — no HTTP method
 					},
 				},
+				"logicalLocations": []map[string]any{{
+					"name": f.Method, // HTTP verb lives here (Task 66)
+					"kind": "function",
+				}},
 			}},
 			"properties": props,
 		})

@@ -137,9 +137,15 @@ func TestToSARIF(t *testing.T) {
 				}
 
 				loc := res["locations"].([]map[string]any)[0]
+				// Task 66: uri must be path-only, no HTTP method
 				uri := loc["physicalLocation"].(map[string]any)["artifactLocation"].(map[string]string)["uri"]
-				if uri != "POST /api/v1/users" {
-					t.Errorf("expected uri 'POST /api/v1/users', got %q", uri)
+				if uri != "/api/v1/users" {
+					t.Errorf("expected uri '/api/v1/users' (path only), got %q", uri)
+				}
+				// Task 66: method lives in logicalLocations
+				logicalLocs := loc["logicalLocations"].([]map[string]any)
+				if logicalLocs[0]["name"] != "POST" {
+					t.Errorf("expected logicalLocations[0].name 'POST', got %q", logicalLocs[0]["name"])
 				}
 
 				props := res["properties"].(map[string]any)
@@ -178,6 +184,84 @@ func TestToSARIF(t *testing.T) {
 				expectedMsg := "TIMEOUT on GET /slow with random profile"
 				if res["message"].(map[string]string)["text"] != expectedMsg {
 					t.Errorf("expected message %q, got %q", expectedMsg, res["message"].(map[string]string)["text"])
+				}
+			},
+		},
+		{
+			name: "Task 66: uri field contains path only, no HTTP method",
+			findings: []*classifier.Finding{
+				{
+					RuleID:   "swazz/status-500",
+					Level:    classifier.SeverityError,
+					Method:   "DELETE",
+					Endpoint: "/api/bank",
+					Profile:  "RANDOM",
+					Status:   500,
+				},
+			},
+			toolVersion: "1.0.0",
+			verify: func(t *testing.T, output map[string]any) {
+				runs := output["runs"].([]map[string]any)
+				results := runs[0]["results"].([]map[string]any)
+				loc := results[0]["locations"].([]map[string]any)[0]
+				uri := loc["physicalLocation"].(map[string]any)["artifactLocation"].(map[string]string)["uri"]
+				// Must be path-only — no HTTP method embedded
+				if uri != "/api/bank" {
+					t.Errorf("Task 66: expected uri '/api/bank', got %q", uri)
+				}
+				// Case must be preserved exactly as given
+				if uri != "/api/bank" {
+					t.Errorf("Task 66: uri casing changed, got %q", uri)
+				}
+				// HTTP method must be in logicalLocations
+				logicalLocs := loc["logicalLocations"].([]map[string]any)
+				if logicalLocs[0]["name"] != "DELETE" {
+					t.Errorf("Task 66: expected logicalLocations[0].name 'DELETE', got %v", logicalLocs[0]["name"])
+				}
+			},
+		},
+		{
+			name: "Task 64: rule properties contain profile tags",
+			findings: []*classifier.Finding{
+				{RuleID: "swazz/status-500", Level: classifier.SeverityError, Profile: "RANDOM"},
+				{RuleID: "swazz/status-500", Level: classifier.SeverityError, Profile: "MALICIOUS"},
+				{RuleID: "swazz/status-400", Level: classifier.SeverityWarning, Profile: "BOUNDARY"},
+			},
+			toolVersion: "1.0.0",
+			verify: func(t *testing.T, output map[string]any) {
+				runs := output["runs"].([]map[string]any)
+				rules := runs[0]["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]map[string]any)
+				// Build a map for easy lookup
+				rulesByID := make(map[string]map[string]any)
+				for _, r := range rules {
+					rulesByID[r["id"].(string)] = r
+				}
+				// swazz/status-500 fired with RANDOM and MALICIOUS
+				r500, ok := rulesByID["swazz/status-500"]
+				if !ok {
+					t.Fatal("rule swazz/status-500 not found")
+				}
+				props, ok := r500["properties"].(map[string]any)
+				if !ok {
+					t.Fatal("Task 64: rule swazz/status-500 missing properties")
+				}
+				tags, ok := props["tags"].([]string)
+				if !ok || len(tags) == 0 {
+					t.Fatal("Task 64: rule swazz/status-500 missing tags")
+				}
+				tagSet := make(map[string]bool)
+				for _, tag := range tags {
+					tagSet[tag] = true
+				}
+				if !tagSet["RANDOM"] || !tagSet["MALICIOUS"] {
+					t.Errorf("Task 64: expected RANDOM and MALICIOUS tags, got %v", tags)
+				}
+				// swazz/status-400 fired only with BOUNDARY
+				r400 := rulesByID["swazz/status-400"]
+				props400 := r400["properties"].(map[string]any)
+				tags400 := props400["tags"].([]string)
+				if len(tags400) != 1 || tags400[0] != "BOUNDARY" {
+					t.Errorf("Task 64: expected [BOUNDARY] for swazz/status-400, got %v", tags400)
 				}
 			},
 		},
