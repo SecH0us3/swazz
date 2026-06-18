@@ -609,7 +609,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **`/api/runners` response enrichment:** Add an `isShared: boolean` field per runner in the `/runners` list endpoint ([Coordinator.ts L220-240](./packages/edge/src/Coordinator.ts)) derived from `!isPrivateRunner(ws)`, and surface it in the Runners tab of Project Settings with a badge (`Shared` / `Private`).
     - **Runner name display:** The `--name` flag value is already stored as a `name:<value>` tag. Surface it in Settings as an optional `Runner Name` input pre-filled with `hostname`, so users can identify their runners in the dashboard.
 
-- [ ] **Task 72: Propagate `projectId` from Web UI to Backend on Scan Start**
+- [/] **Task 72: Propagate `projectId` from Web UI to Backend on Scan Start**
   - **Design Goal:** Scans started from the Web UI must be correctly linked to the active project in D1 so that project-level history, reporting, and access control work end-to-end. Currently `projectId` is only stored locally in IndexedDB (for the run history sidebar) but is never sent to `POST /api/runs`, so the server-side `scans` table always stores an empty `project_id` for web-initiated scans regardless of which project is active.
   - **Root cause:** In [useFuzzSession.ts L128-132](./packages/web/src/hooks/useFuzzSession.ts), `finalConfig` is built from `SwazzConfig` which has no `projectId` field. The `projectId` is only placed in `runRec` (the local IDB record). It is never included in the `POST /api/runs` body sent to the edge worker.
   - **Implementation Details:**
@@ -628,12 +628,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **`checkScanMembership`** will then correctly follow the project membership path for project-linked scans and the `user_id` direct-ownership path for standalone scans — no changes required there.
     - **No schema changes needed** — `project_id` column already exists in `scans` table.
 
-- [ ] **Task 73: Register Private Runners Even with Project-Specific Public Runners**
+- [/] **Task 73: Register Private Runners Even with Project-Specific Public Runners**
   - **Design Goal:** Ensure users can register private/custom runners for a project even if public/shared runners are already registered or available. Currently, once a runner is registered, the UI hides/removes the registration instructions and token, blocking further registrations.
   - **Implementation Details:**
     - Update the Settings/Runners UI (e.g., in `UserSettings.tsx`) to ensure the runner registration tokens and registration command cards remain visible and usable regardless of whether other runners are online.
 
-- [ ] **Task 74: Option to Disable Shared Runners in Project Configuration**
+- [/] **Task 74: Option to Disable Shared Runners in Project Configuration**
   - **Design Goal:** Allow project owners to prevent their project's fuzzing jobs from running on public/shared runners, restricting them only to their own private runners for data isolation and performance.
   - **Implementation Details:**
     - Add a `Disable Shared Runners` setting (represented by a flag like `use_shared_runners: false`) in the project configuration schema and Settings UI.
