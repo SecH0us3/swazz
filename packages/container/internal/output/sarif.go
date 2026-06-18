@@ -51,7 +51,12 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string) map[string]any 
 		}
 		sort.Strings(tags)
 		if len(tags) > 0 {
-			r["properties"] = map[string]any{"tags": tags}
+			props, ok := r["properties"].(map[string]any)
+			if !ok {
+				props = make(map[string]any)
+				r["properties"] = props
+			}
+			props["tags"] = tags
 		}
 		rules = append(rules, r)
 	}
