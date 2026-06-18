@@ -797,6 +797,52 @@ func (r *Runner) replayCandidate(
 	bolaResults *[]*swagger.FuzzResult,
 ) {
 	targets, paramName := r.buildPathsToTest(cand)
+
+	// Skip BOLA/IDOR replay if the baseline request did not use any authentication credentials.
+	// Replaying unauthenticated endpoints anonymously or under other identities
+	// is guaranteed to succeed and only generates false positives.
+	hasAuth := false
+	dropHeaders := r.config.Settings.AuthHeaders
+	if len(dropHeaders) == 0 {
+		dropHeaders = []string{"Authorization", "X-API-Key"}
+	}
+	for k := range cand.RequestHeaders {
+		if containsFold(dropHeaders, k) {
+			hasAuth = true
+			break
+		}
+	}
+	if !hasAuth {
+		dropCookies := r.config.Settings.AuthCookies
+		if len(dropCookies) == 0 {
+			dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
+		}
+		if cookieHeader, ok := cand.RequestHeaders["Cookie"]; ok {
+			for _, part := range strings.Split(cookieHeader, ";") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				nameVal := strings.SplitN(part, "=", 2)
+				cookieName := strings.TrimSpace(nameVal[0])
+				for _, dropCookie := range dropCookies {
+					if strings.EqualFold(cookieName, dropCookie) {
+						hasAuth = true
+						break
+					}
+				}
+				if hasAuth {
+					break
+				}
+			}
+		}
+	}
+	if !hasAuth {
+		fmt.Printf("[BOLA] Skipping %s %s — no auth credentials in baseline request\n",
+			cand.Method, cand.Endpoint)
+		return
+	}
+
 	confirmed := make(map[string]bool)
 
 	for _, target := range targets {
