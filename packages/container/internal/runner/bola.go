@@ -818,9 +818,20 @@ func (r *Runner) replayCandidate(
 			dropCookies = []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"}
 		}
 		if cookieHeader, ok := cand.RequestHeaders["Cookie"]; ok {
-			for _, cookieName := range dropCookies {
-				if strings.Contains(strings.ToLower(cookieHeader), strings.ToLower(cookieName)) {
-					hasAuth = true
+			for _, part := range strings.Split(cookieHeader, ";") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				nameVal := strings.SplitN(part, "=", 2)
+				cookieName := strings.TrimSpace(nameVal[0])
+				for _, dropCookie := range dropCookies {
+					if strings.EqualFold(cookieName, dropCookie) {
+						hasAuth = true
+						break
+					}
+				}
+				if hasAuth {
 					break
 				}
 			}

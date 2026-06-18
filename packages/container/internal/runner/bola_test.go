@@ -652,5 +652,78 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 			t.Errorf("Expected 1 result (not skipped, anonymous bypass flagged), got %d", len(bolaResults))
 		}
 	})
+
+	t.Run("skipped when Cookie header has unrelated cookies with auth keywords as values or substrings", func(t *testing.T) {
+		r := &Runner{}
+		cfg := &swagger.Config{
+			Settings: swagger.Settings{
+				BOLATesting:         true,
+				AnalyzeResponseBody: true,
+			},
+		}
+		r.config = cfg
+
+		cand := &swagger.FuzzResult{
+			Endpoint:     "/api/health",
+			ResolvedPath: "/api/health",
+			Method:       "GET",
+			// "reside" contains "sid" as substring. "jwt" is in the value, not the cookie name.
+			RequestHeaders: map[string]string{"Cookie": "reside=123; user_info=jwt-token-value-here"},
+		}
+
+		var bolaResults []*swagger.FuzzResult
+		var bolaMu sync.Mutex
+		r.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
+
+		if len(bolaResults) != 0 {
+			t.Errorf("Expected 0 results (skipped BOLA since no auth cookies matched exactly), got %d", len(bolaResults))
+		}
+	})
+
+	t.Run("not skipped when Cookie header has exact auth cookie name", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"admin": true}`))
+		}))
+		defer server.Close()
+
+		cfg := &swagger.Config{
+			BaseURL: server.URL,
+			Security: swagger.SecurityConfig{
+				AllowPrivateIPs: true,
+			},
+			Settings: swagger.Settings{
+				BOLATesting:         true,
+				AnalyzeResponseBody: true,
+			},
+			Endpoints: []swagger.EndpointConfig{
+				{
+					Path:   "/api/admin/dashboard",
+					Method: "GET",
+				},
+			},
+		}
+
+		r := New(cfg, nil)
+
+		cand := &swagger.FuzzResult{
+			Endpoint:     "/api/admin/dashboard",
+			ResolvedPath: "/api/admin/dashboard",
+			Method:       "GET",
+			Status:       200,
+			ResponseBody: `{"admin": true}`,
+			// "session" cookie matches exactly (case-insensitively) one of the default dropCookies
+			RequestHeaders: map[string]string{"Cookie": "other=123; SESSION=xyz-abc"},
+		}
+
+		var bolaResults []*swagger.FuzzResult
+		var bolaMu sync.Mutex
+		r.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
+
+		if len(bolaResults) != 1 {
+			t.Errorf("Expected 1 result (not skipped, anonymous bypass flagged), got %d", len(bolaResults))
+		}
+	})
 }
+
 
