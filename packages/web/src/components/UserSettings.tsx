@@ -84,6 +84,7 @@ export function UserSettings() {
             }
         };
         reader.readAsText(file);
+        e.target.value = '';
     };
 
     const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
