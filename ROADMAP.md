@@ -524,7 +524,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Ensure correct mapping of severity levels, grouping, service names, and URL paths.
     - Embed fuzzed payloads, request/response bodies, and corresponding MITRE CWE identifiers into exported report formats.
 
-- [ ] **Task 61: Case-Insensitive URL Exclusions**
+- [/] **Task 61: Case-Insensitive URL Exclusions**
   - **Design Goal:** Prevent scan contamination by ensuring target path exclusion matching ignores alphabetical casing.
   - **Implementation Details:**
     - Modify URL filtering logic to perform case-insensitive comparisons against defined exclude paths (e.g. `/api/admin` matching `/API/Admin`).
@@ -541,13 +541,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add buttons to individual findings to mute them or mark them as "Accept Risk".
     - Automatically append corresponding rules to `swazz.ignore.json`.
 
-- [ ] **Task 64: Include Test Profile Type in SARIF Reports**
+- [/] **Task 64: Include Test Profile Type in SARIF Reports**
   - **Design Goal:** Provide better context in CI/CD pipelines by embedding the exact fuzzer test profile/vulnerability category in SARIF output files.
 
 - [ ] **Task 65: Refine BOLA/IDOR Tests to Ignore Requests without Auth Substitution**
   - **Design Goal:** Reduce false positive findings by skipping BOLA evaluation on endpoints where no authorization tokens or parameters were present in the baseline request to swap.
 
-- [ ] **Task 66: Fix URL Casing Conversion in SARIF Output**
+- [/] **Task 66: Fix URL Casing Conversion in SARIF Output**
   - **Design Goal:** Resolve the bug where URLs in exported SARIF logs are incorrectly capitalized (e.g., converting `/api/bank` to `/Api/Bank`).
 
 - [ ] **Task 67: Restart Runner Agent Command in Web UI**

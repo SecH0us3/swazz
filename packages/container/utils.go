@@ -12,10 +12,13 @@ import (
 //   - ** matches any sequence of characters including path separators (/)
 //   - *  matches any sequence of characters within a single path segment (no /)
 //   - All other characters are treated as regex literals (escaped via QuoteMeta)
+//
+// The returned pattern is always case-insensitive ((?i) prefix) so that
+// exclude patterns like /api/admin also match /API/Admin (Task 61).
 func globToRegex(p string) string {
 	runes := []rune(p)
 	var b strings.Builder
-	b.WriteString("^")
+	b.WriteString("(?i)^") // (?i) → case-insensitive matching
 	for i := 0; i < len(runes); i++ {
 		switch {
 		case runes[i] == '*' && i+1 < len(runes) && runes[i+1] == '*':
