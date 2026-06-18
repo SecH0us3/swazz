@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
@@ -34,14 +35,28 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string) map[string]any 
 
 	// Task 64: embed profile tags into each rule's properties so CI/CD consumers
 	// (GitHub Code Scanning, Azure Boards) can filter findings by fuzzing profile.
+	// Sort rule IDs and tags alphabetically for deterministic, reproducible output.
+	ruleIDs := make([]string, 0, len(rulesMap))
+	for id := range rulesMap {
+		ruleIDs = append(ruleIDs, id)
+	}
+	sort.Strings(ruleIDs)
+
 	rules := make([]map[string]any, 0, len(rulesMap))
-	for id, r := range rulesMap {
+	for _, id := range ruleIDs {
+		r := rulesMap[id]
 		tags := make([]string, 0, len(ruleProfiles[id]))
 		for p := range ruleProfiles[id] {
 			tags = append(tags, p)
 		}
+		sort.Strings(tags)
 		if len(tags) > 0 {
-			r["properties"] = map[string]any{"tags": tags}
+			props, ok := r["properties"].(map[string]any)
+			if !ok {
+				props = make(map[string]any)
+				r["properties"] = props
+			}
+			props["tags"] = tags
 		}
 		rules = append(rules, r)
 	}
