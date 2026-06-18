@@ -14,6 +14,8 @@ export function UserSettings() {
     const [isSavingPubKey, setIsSavingPubKey] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [saveError, setSaveError] = useState('');
+    const [activeRunnerMode, setActiveRunnerMode] = useState<'shared' | 'private'>('private');
+    const [copiedSharedRunCmd, setCopiedSharedRunCmd] = useState(false);
 
     useEffect(() => {
         if (userProfile?.publicKey) {
@@ -71,6 +73,20 @@ export function UserSettings() {
         }
     };
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target?.result as string;
+            if (content) {
+                setPubKeyInput(content.trim());
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
     const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
         navigator.clipboard.writeText(text);
         setCopied(true);
@@ -103,6 +119,7 @@ export function UserSettings() {
     const runnerImage = `ghcr.io/sech0us3/swazz-cli:${version}`;
     const genKeysCmd = `docker run --rm -it -v $(pwd):/app ${runnerImage} generate-keys`;
     const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
+    const sharedRunCommand = `docker run --rm -it ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
 
     return (
         <div style={{
@@ -277,6 +294,28 @@ export function UserSettings() {
                                             {isSavingPubKey ? 'Saving...' : 'Save'}
                                         </button>
                                     </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Or load:</span>
+                                        <input 
+                                            type="file" 
+                                            id="pubkey-file" 
+                                            accept=".pub,text/plain" 
+                                            onChange={handleFileUpload} 
+                                            style={{ display: 'none' }} 
+                                        />
+                                        <label 
+                                            htmlFor="pubkey-file" 
+                                            className="btn btn-secondary btn-sm"
+                                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="17 8 12 3 7 8"></polyline>
+                                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                            </svg>
+                                            Upload swazz_runner.pub
+                                        </label>
+                                    </div>
                                 </div>
                                 {saveSuccess && (
                                     <p style={{ margin: 0, fontSize: '12px', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -311,100 +350,231 @@ export function UserSettings() {
                             Runner Integration
                         </h2>
                         <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                            Swazz uses distributed agent runners to execute headless fuzz tests. Connect a private runner on your local workstation or server infrastructure to route scans through secure environments.
+                            Swazz uses distributed agent runners to execute headless fuzz tests. Connect a private runner on your local workstation or server infrastructure, or contribute compute to the shared community pool.
                         </p>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <div style={{
-                                    width: '20px', height: '20px', borderRadius: '50%',
-                                    backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                }}>1</div>
-                                <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
-                                    <strong>Generate Cryptographic Keys</strong>
-                                    <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Generate your Ed25519 signature keypair inside your project directory:</p>
-                                    
-                                    <div style={{
-                                        padding: '12px',
-                                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--border-default)',
-                                        fontFamily: 'monospace',
-                                        fontSize: '11px',
-                                        color: 'var(--text-default)',
-                                        wordBreak: 'break-all',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px'
-                                    }}>
-                                        <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{genKeysCmd}</span>
-                                        <button 
-                                            className="btn btn-secondary btn-sm" 
-                                            onClick={() => copyToClipboard(genKeysCmd, setCopiedCmd)}
-                                            style={{ alignSelf: 'flex-start' }}
-                                        >
-                                            {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
-                                        </button>
-                                    </div>
-                                    <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                        This generates `swazz_runner.key` and `swazz_runner.pub` files. Keep the `.key` private!
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <div style={{
-                                    width: '20px', height: '20px', borderRadius: '50%',
-                                    backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                }}>2</div>
-                                <div style={{ fontSize: '13px' }}>
-                                    <strong>Register Public Key</strong>
-                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                        Copy the hex string from `swazz_runner.pub` and paste it into the **Asymmetric Runner Authentication** form on the left, then click Save.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <div style={{
-                                    width: '20px', height: '20px', borderRadius: '50%',
-                                    backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                }}>3</div>
-                                <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
-                                    <strong>Run Agent Command</strong>
-                                    <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Start the runner, mounting the generated private key file:</p>
-                                    
-                                    <div style={{
-                                        padding: '12px',
-                                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--border-default)',
-                                        fontFamily: 'monospace',
-                                        fontSize: '11px',
-                                        color: 'var(--text-default)',
-                                        wordBreak: 'break-all',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px'
-                                    }}>
-                                        <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{runCommand}</span>
-                                        <button 
-                                            className="btn btn-secondary btn-sm" 
-                                            onClick={() => copyToClipboard(runCommand, setCopiedRunCmd)}
-                                            style={{ alignSelf: 'flex-start' }}
-                                        >
-                                            {copiedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                        {/* Tab Switcher */}
+                        <div style={{
+                            display: 'flex',
+                            gap: '4px',
+                            backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                            padding: '4px',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-default)'
+                        }}>
+                            <button
+                                type="button"
+                                className={`btn btn-sm ${activeRunnerMode === 'private' ? 'btn-primary' : 'btn-ghost'}`}
+                                onClick={() => setActiveRunnerMode('private')}
+                                style={{
+                                    flex: 1,
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: activeRunnerMode === 'private' ? 'linear-gradient(135deg, var(--accent), #6d28d9)' : 'transparent',
+                                    border: 'none',
+                                    color: activeRunnerMode === 'private' ? '#ffffff' : 'var(--text-secondary)'
+                                }}
+                            >
+                                🔒 Private Runner
+                            </button>
+                            <button
+                                type="button"
+                                className={`btn btn-sm ${activeRunnerMode === 'shared' ? 'btn-primary' : 'btn-ghost'}`}
+                                onClick={() => setActiveRunnerMode('shared')}
+                                style={{
+                                    flex: 1,
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: activeRunnerMode === 'shared' ? 'linear-gradient(135deg, var(--accent), #6d28d9)' : 'transparent',
+                                    border: 'none',
+                                    color: activeRunnerMode === 'shared' ? '#ffffff' : 'var(--text-secondary)'
+                                }}
+                            >
+                                🌐 Shared Runner
+                            </button>
                         </div>
+
+                        {/* Private Runner Mode Content */}
+                        {activeRunnerMode === 'private' && (
+                            <>
+                                <div style={{
+                                    padding: '8px 12px',
+                                    backgroundColor: 'var(--accent-subtle)',
+                                    border: '1px solid rgba(167, 139, 250, 0.2)',
+                                    borderRadius: 'var(--radius-md)',
+                                    fontSize: '12px',
+                                    color: 'var(--accent-light)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    lineHeight: '1.4'
+                                }}>
+                                    <span style={{ fontSize: '14px' }}>🔒</span>
+                                    <span><strong>Private Mode:</strong> Only your own scans will be dispatched to this runner. Requires key-pair registration.</span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <div style={{
+                                            width: '20px', height: '20px', borderRadius: '50%',
+                                            backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: '11px', fontWeight: 600, flexShrink: 0
+                                        }}>1</div>
+                                        <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
+                                            <strong>Generate Cryptographic Keys</strong>
+                                            <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Generate your Ed25519 signature keypair inside your project directory:</p>
+                                            
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--border-default)',
+                                                fontFamily: 'monospace',
+                                                fontSize: '11px',
+                                                color: 'var(--text-default)',
+                                                wordBreak: 'break-all',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{genKeysCmd}</span>
+                                                <button 
+                                                    className="btn btn-secondary btn-sm" 
+                                                    onClick={() => copyToClipboard(genKeysCmd, setCopiedCmd)}
+                                                    style={{ alignSelf: 'flex-start' }}
+                                                >
+                                                    {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
+                                                </button>
+                                            </div>
+                                            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                                This generates `swazz_runner.key` and `swazz_runner.pub` files. Keep the `.key` private!
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <div style={{
+                                            width: '20px', height: '20px', borderRadius: '50%',
+                                            backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: '11px', fontWeight: 600, flexShrink: 0
+                                        }}>2</div>
+                                        <div style={{ fontSize: '13px' }}>
+                                            <strong>Register Public Key</strong>
+                                            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                                Copy the hex string from `swazz_runner.pub` and paste it into the **Asymmetric Runner Authentication** form on the left, or use the "Upload" button to load it from file.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <div style={{
+                                            width: '20px', height: '20px', borderRadius: '50%',
+                                            backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: '11px', fontWeight: 600, flexShrink: 0
+                                        }}>3</div>
+                                        <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
+                                            <strong>Run Agent Command</strong>
+                                            <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Start the runner, mounting the generated private key file:</p>
+                                            
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--border-default)',
+                                                fontFamily: 'monospace',
+                                                fontSize: '11px',
+                                                color: 'var(--text-default)',
+                                                wordBreak: 'break-all',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{runCommand}</span>
+                                                <button 
+                                                    className="btn btn-secondary btn-sm" 
+                                                    onClick={() => copyToClipboard(runCommand, setCopiedRunCmd)}
+                                                    style={{ alignSelf: 'flex-start' }}
+                                                >
+                                                    {copiedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Shared Runner Mode Content */}
+                        {activeRunnerMode === 'shared' && (
+                            <>
+                                <div style={{
+                                    padding: '8px 12px',
+                                    backgroundColor: 'var(--color-warning-bg)',
+                                    border: '1px solid rgba(245, 158, 11, 0.2)',
+                                    borderRadius: 'var(--radius-md)',
+                                    fontSize: '12px',
+                                    color: 'var(--color-warning)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    lineHeight: '1.4'
+                                }}>
+                                    <span style={{ fontSize: '14px' }}>🌐</span>
+                                    <span><strong>Shared Mode:</strong> Jobs from all users on this coordinator may run on this machine.</span>
+                                </div>
+
+                                <div style={{
+                                    padding: '12px',
+                                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                                    borderRadius: 'var(--radius-md)',
+                                    fontSize: '12px',
+                                    color: 'var(--color-error)',
+                                    lineHeight: '1.5',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '4px'
+                                }}>
+                                    <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        ⚠️ Critical Security Warning
+                                    </div>
+                                    <div>By registering a shared runner, you agree to execute fuzzing jobs on behalf of other platform users. Only run this on an isolated, containerised environment. Do NOT run shared agents on your personal development workstation.</div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
+                                            <strong>Run Agent Command</strong>
+                                            <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Start the runner in shared pool mode using your API Key:</p>
+                                            
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--border-default)',
+                                                fontFamily: 'monospace',
+                                                fontSize: '11px',
+                                                color: 'var(--text-default)',
+                                                wordBreak: 'break-all',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{sharedRunCommand}</span>
+                                                <button 
+                                                    className="btn btn-secondary btn-sm" 
+                                                    onClick={() => copyToClipboard(sharedRunCommand, setCopiedSharedRunCmd)}
+                                                    style={{ alignSelf: 'flex-start' }}
+                                                >
+                                                    {copiedSharedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

@@ -15,6 +15,7 @@ interface Runner {
     publicKey: string | null;
     status: 'authenticating' | 'connected';
     isMine: boolean;
+    isShared: boolean;
 }
 
 export function ProjectSettings() {
@@ -837,6 +838,7 @@ export function ProjectSettings() {
                                             <tr style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-default)' }}>
                                                 <th style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text-secondary)' }}>Agent Name</th>
                                                 <th style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text-secondary)' }}>Public Key Hash</th>
+                                                <th style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text-secondary)' }}>Mode</th>
                                                 <th style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text-secondary)' }}>Owner</th>
                                                 <th style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text-secondary)' }}>Status</th>
                                             </tr>
@@ -847,6 +849,28 @@ export function ProjectSettings() {
                                                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>{r.name}</td>
                                                     <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-muted)' }}>
                                                         {r.publicKey ? `${r.publicKey.substring(0, 16)}...` : 'Anonymous'}
+                                                    </td>
+                                                    <td style={{ padding: '12px 16px' }}>
+                                                        {r.isShared ? (
+                                                            <span style={{
+                                                                fontSize: '11px',
+                                                                fontWeight: 600,
+                                                                color: 'var(--text-secondary)',
+                                                                backgroundColor: 'var(--border-default)',
+                                                                padding: '2px 8px',
+                                                                borderRadius: '12px'
+                                                            }}>Shared</span>
+                                                        ) : (
+                                                            <span style={{
+                                                                fontSize: '11px',
+                                                                fontWeight: 600,
+                                                                color: 'var(--accent-light)',
+                                                                backgroundColor: 'var(--accent-subtle)',
+                                                                padding: '2px 8px',
+                                                                borderRadius: '12px',
+                                                                border: '1px solid rgba(167, 139, 250, 0.15)'
+                                                            }}>Private</span>
+                                                        )}
                                                     </td>
                                                     <td style={{ padding: '12px 16px' }}>
                                                         {r.isMine ? (

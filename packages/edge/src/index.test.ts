@@ -355,7 +355,70 @@ describe("Projects & Runners API", () => {
     expect(p.description).toBe("Updated Description");
   });
 
-  it("GET /api/runners returns active runners list", async () => {
+  it("GET /api/runners returns active runners list with correct mode and properties", async () => {
+    const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = env.COORDINATOR_DO.get(id);
+
+    // 1. Connect a shared runner (no public_key)
+    const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunner1", {
+      headers: { "Upgrade": "websocket" }
+    });
+    const connectSharedRes = await stub.fetch(connectSharedReq);
+    expect(connectSharedRes.status).toBe(101);
+    const sharedWs = connectSharedRes.webSocket!;
+    sharedWs.accept();
+
+    // 2. Connect a private runner (with public_key)
+    const keyPair = await crypto.subtle.generateKey(
+      { name: "Ed25519" },
+      true,
+      ["sign", "verify"]
+    );
+    const rawPubKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+    const pubKeyHex = Array.from(new Uint8Array(rawPubKey))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunner1&public_key=${pubKeyHex}`, {
+      headers: { "Upgrade": "websocket" }
+    });
+    const connectPrivateRes = await stub.fetch(connectPrivateReq);
+    expect(connectPrivateRes.status).toBe(101);
+    const privateWs = connectPrivateRes.webSocket!;
+    privateWs.accept();
+
+    // Challenge-response auth logic for private runner
+    await new Promise<void>((resolve, reject) => {
+      privateWs.addEventListener("message", async (evt) => {
+        try {
+          const msg = JSON.parse(evt.data as string);
+          if (msg.type === "challenge") {
+            const nonce = msg.nonce;
+            const nonceBuffer = new TextEncoder().encode(nonce);
+            const signatureBuffer = await crypto.subtle.sign(
+              "Ed25519",
+              keyPair.privateKey,
+              nonceBuffer
+            );
+            const signatureHex = Array.from(new Uint8Array(signatureBuffer))
+              .map(b => b.toString(16).padStart(2, '0'))
+              .join('');
+            privateWs.send(JSON.stringify({
+              type: "challenge_response",
+              signature: signatureHex
+            }));
+          } else if (msg.type === "auth_ok") {
+            resolve();
+          } else if (msg.type === "auth_failed") {
+            reject(new Error(msg.error));
+          }
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    // 3. Query the endpoint
     const req = new Request("http://localhost/api/runners", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
@@ -364,6 +427,16 @@ describe("Projects & Runners API", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { runners: any[] };
     expect(Array.isArray(body.runners)).toBe(true);
+
+    const sharedRunner = body.runners.find(r => r.name === 'SharedRunner1');
+    expect(sharedRunner).toBeDefined();
+    expect(sharedRunner.isShared).toBe(true);
+    expect(sharedRunner.publicKey).toBeNull();
+
+    const privateRunner = body.runners.find(r => r.name === 'PrivateRunner1');
+    expect(privateRunner).toBeDefined();
+    expect(privateRunner.isShared).toBe(false);
+    expect(privateRunner.publicKey).toBe(pubKeyHex);
   });
 
   it("DELETE /api/projects/:id removes the project", async () => {
