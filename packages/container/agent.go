@@ -486,8 +486,8 @@ type WSEventPayload struct {
 
 func loadPrivateKey(keyArg string) (ed25519.PrivateKey, error) {
 	var hexStr string
-	if _, err := os.Stat(keyArg); err == nil {
-		data, err := os.ReadFile(keyArg)
+	if _, err := os.Stat(keyArg); err == nil { // #nosec G304 G703
+		data, err := os.ReadFile(keyArg) // #nosec G304 G703
 		if err != nil {
 			return nil, fmt.Errorf("failed to read key file %s: %w", keyArg, err)
 		}

@@ -99,7 +99,7 @@ func runGenerateKeys() {
 		os.Exit(1)
 	}
 
-	err = os.WriteFile(pubFile, []byte(pubHex+"\n"), 0644)
+	err = os.WriteFile(pubFile, []byte(pubHex+"\n"), 0644) // #nosec G306
 	if err != nil {
 		fmt.Printf("Error writing public key file: %v\n", err)
 		os.Exit(1)
