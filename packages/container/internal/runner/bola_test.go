@@ -498,3 +498,76 @@ func TestBuildPathsToTest(t *testing.T) {
 		}
 	}
 }
+
+// TestBOLA_SkipNoResourceIdentifier verifies that replayCandidate skips
+// endpoints that have no resource identifier (path param or body ID field)
+// to substitute between identities, which would make BOLA testing meaningless.
+func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
+	t.Run("endpoint with path param is not skipped", func(t *testing.T) {
+		// A candidate with a path parameter like {id} should proceed to BOLA replay.
+		// buildPathsToTest returns a non-empty paramName for /api/goods/{id}.
+		r := &Runner{}
+		cand := &swagger.FuzzResult{
+			Endpoint:     "/api/goods/{id}",
+			ResolvedPath: "/api/goods/123",
+			Method:       "GET",
+		}
+		_, paramName := r.buildPathsToTest(cand)
+		if paramName == "" {
+			t.Errorf("Expected non-empty paramName for endpoint with path param, got empty")
+		}
+	})
+
+	t.Run("health endpoint with no params is skipped", func(t *testing.T) {
+		// A candidate with no path params and empty payload should be skipped.
+		// buildPathsToTest returns empty paramName for /api/health.
+		r := &Runner{}
+		cand := &swagger.FuzzResult{
+			Endpoint:     "/api/health",
+			ResolvedPath: "/api/health",
+			Method:       "GET",
+			Payload:      nil,
+		}
+		_, paramName := r.buildPathsToTest(cand)
+		if paramName != "" {
+			t.Errorf("Expected empty paramName for health endpoint, got %q", paramName)
+		}
+	})
+
+	t.Run("no path params but body has id field is not skipped", func(t *testing.T) {
+		// A candidate with no path params but an ID field in the body payload
+		// should still proceed — the body field is the substituable identifier.
+		r := &Runner{}
+		cand := &swagger.FuzzResult{
+			Endpoint:     "/api/orders",
+			ResolvedPath: "/api/orders",
+			Method:       "POST",
+			Payload: map[string]any{
+				"id":    "order-42",
+				"total": 99.99,
+			},
+		}
+		_, paramName := r.buildPathsToTest(cand)
+		if paramName == "" {
+			t.Errorf("Expected non-empty paramName for payload with id field, got empty")
+		}
+	})
+
+	t.Run("no path params and payload has no id field is skipped", func(t *testing.T) {
+		// A candidate with no path params and a payload without any ID-like field
+		// should be skipped — there is nothing to substitute between identities.
+		r := &Runner{}
+		cand := &swagger.FuzzResult{
+			Endpoint:     "/api/ping",
+			ResolvedPath: "/api/ping",
+			Method:       "POST",
+			Payload: map[string]any{
+				"name": "foo",
+			},
+		}
+		_, paramName := r.buildPathsToTest(cand)
+		if paramName != "" {
+			t.Errorf("Expected empty paramName for payload with no id field, got %q", paramName)
+		}
+	})
+}

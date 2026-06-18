@@ -797,6 +797,16 @@ func (r *Runner) replayCandidate(
 	bolaResults *[]*swagger.FuzzResult,
 ) {
 	targets, paramName := r.buildPathsToTest(cand)
+
+	// Task 65: skip BOLA replay when there is no resource identifier to substitute.
+	// BOLA testing requires an ID that can be swapped between identities — if no
+	// path parameter or body ID field exists, this is not a BOLA-testable endpoint.
+	if paramName == "" {
+		fmt.Printf("[BOLA] Skipping %s %s — no resource identifier to substitute\n",
+			cand.Method, cand.Endpoint)
+		return
+	}
+
 	confirmed := make(map[string]bool)
 
 	for _, target := range targets {
