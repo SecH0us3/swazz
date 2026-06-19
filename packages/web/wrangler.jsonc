@@ -6,10 +6,7 @@
     "directory": "../container/web/dist",
     "binding": "ASSETS"
   },
-  "services": [
-    {
-      "binding": "API",
-      "service": "swazz-api"
-    }
-  ]
+  "vars": {
+    "API_URL": "https://your-gcp-backend-url.com"
+  }
 }
