@@ -95,4 +95,4 @@ Build the dashboard panels to interact with AI-based reviews.
 2. **Verification & SAST:**
    - Run `scripts/test-backend.sh` to ensure Go compilation and safety checks pass.
 3. **Documentation:**
-   - Update [README.md](file:///Users/alex/src/swazz/README.md) and [docs/](file:///Users/alex/src/swazz/docs/) with instructions on setting up AI analysis, configuring API keys, and CLI/dashboard workflows.
+   - Update [README.md](README.md) and [docs/](docs/) with instructions on setting up AI analysis, configuring API keys, and CLI/dashboard workflows.
