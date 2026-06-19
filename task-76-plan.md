@@ -43,7 +43,9 @@ Build the AI engine interface inside the runner to invoke cheap and expensive LL
    - Use environment variables (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) for API authentication.
 2. **Prompts configuration:**
    - Define base system prompts for vulnerability analysis (Relevance check) and fix generation (Remediation).
+   - The fix prompt template must explicitly command the LLM to output a clean, syntax-valid, git-compatible unified diff patch for the target code so the runner can parse and apply the patch automatically.
    - Read local instructions / prompt modifications configured per project.
+
 3. **Analyze Pipeline:**
    - **First Stage (Cheap Model):** Send finding details + code snippet. Ask if the finding is a true positive (`confirmed` or `false_positive`).
    - **Second Stage (Expensive Model):** If confirmed, request the model to generate:
@@ -68,6 +70,9 @@ Build the AI engine interface inside the runner to invoke cheap and expensive LL
 ## 🐙 Step 4: Automated Git & Pull Request Loop (Go CLI / Runner)
 Provide automated code patching and repository synchronization.
 
+0. **Prerequisites & Git Environment Setup (Critical):**
+   - The environment/runner running the Swazz CLI must have the command-line `git` client pre-configured.
+   - The runner's git environment must have pre-existing write access to the target repository (e.g., via configured SSH keys, active credential helpers, or git access tokens) and configured user identification (`git config user.name` and `git config user.email`). The CLI will not prompt for interactive credentials.
 1. **Local Patch Application:**
    - Implement Go utility to apply the generated unified diff patch to the local workspace folder.
 2. **Validation Hook:**
@@ -76,6 +81,7 @@ Provide automated code patching and repository synchronization.
 3. **PR Creation:**
    - Use Git commands (or GitHub/GitLab REST API) to push changes to a branch named `swazz/fix-<finding-id>`.
    - Create a Pull Request and return the URL link.
+
 
 ---
 
