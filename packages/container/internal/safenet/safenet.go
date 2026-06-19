@@ -60,8 +60,15 @@ func (e *ErrBlockedAddress) Error() string {
 	return fmt.Sprintf("safenet: connection to %s (%s) blocked — target is a private/reserved address", e.Host, e.IP)
 }
 
+// AllowLocalNetwork bypasses private/reserved IP checks when true.
+var AllowLocalNetwork bool
+
 // IsBlocked reports whether the given IP falls into any blocked CIDR range.
 func IsBlocked(ip net.IP) bool {
+	if AllowLocalNetwork {
+		return false
+	}
+
 	// Normalize to 4-byte representation if it's an IPv4 address
 	// (handles IPv4-mapped IPv6 addresses like ::ffff:127.0.0.1)
 	if v4 := ip.To4(); v4 != nil {

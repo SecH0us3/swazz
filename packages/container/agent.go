@@ -199,7 +199,16 @@ func startAgent(args []string) {
 	outChan := make(chan interface{}, 50000)
 	go func() {
 		for msg := range outChan {
-			if err := wsjson.Write(ctx, c, msg); err != nil {
+			b, err := json.Marshal(msg)
+			if err != nil {
+				logError("Failed to marshal WS message: %v", err)
+				continue
+			}
+			if len(b) > 1*1024*1024 {
+				logError("WS message is too large: %d bytes. Dropping message to prevent WebSocket close.", len(b))
+				continue
+			}
+			if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 				logError("Failed to write to WS: %v", err)
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return

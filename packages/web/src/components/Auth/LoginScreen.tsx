@@ -52,7 +52,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                             placeholder="Enter username"
                             autoComplete="username"
                             required
-                            pattern="^[a-zA-Z0-9_-]{3,20}$"
+                            pattern="^[a-zA-Z0-9_\-]{3,20}$"
                             title="3 to 20 characters, alphanumeric, including hyphen or underscore"
                         />
                         <span id="username-hint" className="field-hint">3-20 characters (letters, numbers, _ or -)</span>

@@ -99,3 +99,31 @@ Run the Vitest suite in the frontend workspace:
 ```bash
 npm run test --workspace=packages/web
 ```
+
+### End-to-End (E2E) Browser Tests
+We use Playwright to verify integration between the React frontend, the Go runner agent, the Cloudflare Edge coordinator, and the Vulnerable Demo API.
+
+#### Running E2E Tests Locally:
+1. **Apply local migrations for the Edge coordinator**:
+   ```bash
+   npx --workspace=packages/edge wrangler d1 migrations apply swazz_db --local
+   ```
+2. **Start the local services in separate terminal windows**:
+   *   **Vulnerable Demo API**: `npm run dev --prefix demo -- --port 8788`
+   *   **Edge Coordinator**: `npm run dev:backend`
+   *   **React Frontend**: `npm run dev:frontend`
+   *   **Go Runner Agent**:
+       ```bash
+       cd packages/container
+       go run main.go generate-keys # if not already generated
+       go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --dangerous-no-container
+       ```
+3. **Execute Playwright Tests**:
+   ```bash
+   # Install Playwright browsers (first-time setup)
+   npx playwright install chromium
+
+   # Run tests
+   npm run test:e2e
+   ```
+

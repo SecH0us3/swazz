@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS scans (
     target_url TEXT NOT NULL,
     profile TEXT NOT NULL,
     status TEXT NOT NULL,
-    user_id TEXT,
     summary_stats TEXT,
     report_url TEXT,
     is_encrypted BOOLEAN DEFAULT 0,
@@ -13,5 +12,4 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_project_id ON scans(project_id);
-CREATE INDEX IF NOT EXISTS idx_scans_user_id ON scans(user_id);
 

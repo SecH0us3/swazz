@@ -17,6 +17,7 @@ import (
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/har"
 	"swazz-engine/internal/runner"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"strings"
 	"sync"
@@ -309,6 +310,9 @@ func runCLI(args []string) {
 }
 
 func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
+	if safenet.AllowLocalNetwork {
+		cliCfg.Security.AllowPrivateIPs = true
+	}
 	// Standardize compatibility aliases and merge them:
 	if len(cliCfg.GlobalHeaders) > 0 {
 		if cliCfg.Headers == nil {
