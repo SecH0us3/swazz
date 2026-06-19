@@ -17,6 +17,7 @@ cleanup() {
   if [ ${#PIDS[@]} -ne 0 ]; then
     echo -e "\n=== Cleaning up background services (PIDs: ${PIDS[*]}) ==="
     for pid in "${PIDS[@]}"; do
+      pkill -P "$pid" 2>/dev/null || true
       kill "$pid" 2>/dev/null || true
     done
   fi

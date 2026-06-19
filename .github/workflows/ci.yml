@@ -132,9 +132,9 @@ jobs:
 
       - name: Start Go Runner Agent
         run: |
-          cd packages/container && go run main.go generate-keys
+          cd packages/container && go run . generate-keys
           cd ../..
-          go run packages/container/main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --dangerous-no-container --name ci-runner &
+          go run ./packages/container run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --dangerous-no-container --name ci-runner &
 
       - name: Wait for services to be ready
         run: sleep 8

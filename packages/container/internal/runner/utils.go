@@ -285,6 +285,20 @@ func truncateValue(v any, maxLen int) any {
 		}
 		v = string(b)
 	}
+
+	// Fast path for common primitive and generic types to avoid expensive JSON round-trips
+	switch val := v.(type) {
+	case string:
+		if len(val) > maxLen {
+			return fmt.Sprintf("%s... [truncated %d chars]", val[:maxLen], len(val)-maxLen)
+		}
+		return val
+	case map[string]any, []any:
+		return truncateValueGeneric(val, maxLen)
+	case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
+		return val
+	}
+
 	// Convert to generic JSON map/slice structure to normalize all concrete slices/structs/etc.
 	// into []any and map[string]any.
 	mar, err := json.Marshal(v)
