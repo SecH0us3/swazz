@@ -29,9 +29,20 @@ export default {
           }
         );
       } else {
-        const targetUrl = new URL(url.pathname + url.search, env.API_URL);
-        const newRequest = new Request(targetUrl.toString(), request);
-        response = await fetch(newRequest);
+        try {
+          const targetUrl = new URL(url.pathname + url.search, env.API_URL);
+          const newRequest = new Request(targetUrl.toString(), request);
+          newRequest.headers.set('host', targetUrl.host);
+          response = await fetch(newRequest);
+        } catch (error) {
+          response = new Response(
+            JSON.stringify({ error: "Failed to proxy request to backend. Please check if API_URL is configured correctly." }),
+            {
+              status: 502,
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+        }
       }
     } else {
       // Content negotiation: return clean Markdown if requested
