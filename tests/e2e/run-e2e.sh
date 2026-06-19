@@ -59,7 +59,7 @@ if check_port 8787; then
   echo "✓ Edge Coordinator is already running on port 8787."
 else
   echo "→ Starting Edge Coordinator..."
-  npx wrangler dev > edge.log 2>&1 &
+  JWT_SECRET="local-secret-key-123456" npx wrangler dev --cwd packages/edge > edge.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8787 "Edge Coordinator"
 fi

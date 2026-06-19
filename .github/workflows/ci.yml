@@ -125,6 +125,8 @@ jobs:
         run: npx --prefix demo wrangler dev --port 8788 &
 
       - name: Start Edge Coordinator API
+        env:
+          JWT_SECRET: "local-secret-key-123456"
         run: npm run dev:backend &
 
       - name: Start Vite Frontend
