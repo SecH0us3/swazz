@@ -68,7 +68,7 @@ Provide automated code patching and repository synchronization.
 
 ---
 
-## 5: Web UI Visual Enhancements (React 19)
+## 🎨 Step 5: Web UI Visual Enhancements (React 19)
 Build the dashboard panels to interact with AI-based reviews.
 
 1. **Project Config update (`packages/web/src/components/ProjectSettings.tsx`):**
