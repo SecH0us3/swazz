@@ -19,7 +19,7 @@
   "devDependencies": {
     "concurrently": "^10.0.3",
     "jsdom": "^29.1.1",
-    "wrangler": "^4.100.0"
+    "wrangler": "^4.103.0"
   },
   "dependencies": {
     "fake-indexeddb": "^6.2.5"
