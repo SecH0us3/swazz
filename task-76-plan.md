@@ -50,7 +50,11 @@ Build the AI engine interface inside the runner to invoke cheap and expensive LL
      - Clear explanation of the bug.
      - Actionable remediation steps.
      - A precise unified diff format patch.
-   - **Custom CLI execution:** Also support running a local console command/wrapper (e.g. `claude -p`) if configured by the user.
+   - **Custom CLI execution:** Also support running a local console command/wrapper (e.g., `agy -p {{prompt_file}}` or `claude -p {{prompt_file}}`) if configured by the user. To do this safely:
+     * **No Shell Execution:** Run the command directly using Go's `exec.Command` without spawning a shell (no `sh -c` or `bash -c`). This prevents shell injection tricks (like `;`, `&&`, `|`, `$()`).
+     * **Safe Argument Parsing:** Tokenize the user-provided command string into a slice of arguments using a shell-lexical parser (e.g., `github.com/google/shlex`) rather than simple string splitting, preventing argument injection.
+     * **Runner-Controlled Placeholders:** Only allow interpolation of system-controlled temporary file paths (such as `{{prompt_file}}` containing the prepared prompt and `{{output_file}}` to capture the output). Never interpolate untrusted data (like payloads or headers) directly into the command arguments.
+
 4. **Prompt Injection & Data Isolation Security (Critical):**
    To prevent fuzzed inputs, payloads, or target server response bodies (untrusted finding data) from hijacking the LLM (Indirect Prompt Injection):
    - **Strict XML-Tag Encapsulation:** Wrap all raw finding metadata, payloads, and response bodies in custom tags (e.g., `<untrusted-finding-context>...</untrusted-finding-context>`).
