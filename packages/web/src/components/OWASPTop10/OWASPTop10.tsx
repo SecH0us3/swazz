@@ -6,54 +6,54 @@ import './OWASPTop10.css';
 
 const OWASP_CATEGORIES_METADATA = [
     {
-        id: 'API1:2023',
-        title: 'API1:2023 Broken Object Level Authorization',
-        desc: 'APIs tend to expose endpoints that handle object identifiers, creating a wide attack surface level access control issue.',
+        id: 'A01:2025',
+        title: 'A01:2025 Broken Access Control',
+        desc: 'Restriction on what authenticated users are allowed to do is not properly enforced, leading to unauthorized information disclosure, modification, or destruction.',
     },
     {
-        id: 'API2:2023',
-        title: 'API2:2023 Broken Authentication',
-        desc: 'Authentication mechanisms are often implemented incorrectly, allowing attackers to compromise authentication tokens or exploit implementation flaws.',
+        id: 'A02:2025',
+        title: 'A02:2025 Security Misconfiguration',
+        desc: 'Insecure default configurations, open ports, verbose error messages, or permissive CORS settings that leak system details or allow exploitation.',
     },
     {
-        id: 'API3:2023',
-        title: 'API3:2023 Broken Object Property Level Authorization',
-        desc: 'This category combines Excessive Data Exposure and Mass Assignment, focusing on lack of validation for user access to specific object properties.',
+        id: 'A03:2025',
+        title: 'A03:2025 Software Supply Chain Failures',
+        desc: 'Vulnerabilities arising from insecure third-party packages, dependencies, build/test environments, or compromised software components.',
     },
     {
-        id: 'API4:2023',
-        title: 'API4:2023 Unrestricted Resource Consumption',
-        desc: 'Lack of rate limiting or resource restriction allows attackers to cause denial of service or high operational costs.',
+        id: 'A04:2025',
+        title: 'A04:2025 Cryptographic Failures',
+        desc: 'Inadequate protection of sensitive data in transit or at rest, including weak encryption algorithms, poor key management, or insecure protocol usage.',
     },
     {
-        id: 'API5:2023',
-        title: 'API5:2023 Broken Function Level Authorization',
-        desc: 'Missing authorization checks at the function or endpoint level, allowing regular users to execute administrative functions.',
+        id: 'A05:2025',
+        title: 'A05:2025 Injection',
+        desc: 'User-supplied data is sent to an interpreter as part of a command or query, resulting in unauthorized command execution or data modification (e.g. SQLi, CRLF, Reflected XSS).',
     },
     {
-        id: 'API6:2023',
-        title: 'API6:2023 Unrestricted Access to Sensitive Business Flows',
-        desc: 'Exposing sensitive business flows without rate limits or bot protections, permitting automated abuse.',
+        id: 'A06:2025',
+        title: 'A06:2025 Insecure Design',
+        desc: 'Flaws in the design, architecture, or business logic of the application, such as missing threat modeling or insecure resource consumption limits.',
     },
     {
-        id: 'API7:2023',
-        title: 'API7:2023 Server-Side Request Forgery',
-        desc: 'API fetches a remote resource without validating the user-supplied URI, allowing SSRF.',
+        id: 'A07:2025',
+        title: 'A07:2025 Authentication Failures',
+        desc: 'Weaknesses in identifying the user\'s identity, allowing attackers to compromise authentication tokens, session IDs, or exploit credential verification steps.',
     },
     {
-        id: 'API8:2023',
-        title: 'API8:2023 Security Misconfiguration',
-        desc: 'Verbose error messages, stack trace leaks, CORS wildcard misconfigurations, or lack of security headers.',
+        id: 'A08:2025',
+        title: 'A08:2025 Software or Data Integrity Failures',
+        desc: 'Applications trusting code, updates, or serialized data/objects from untrusted sources without verification (e.g. insecure deserialization, unsafe OOB interactions).',
     },
     {
-        id: 'API9:2023',
-        title: 'API9:2023 Improper Inventory Management',
-        desc: 'Outdated API versions, lack of documentation, or shadow APIs that lack proper controls.',
+        id: 'A09:2025',
+        title: 'A09:2025 Security Logging & Alerting Failures',
+        desc: 'Insufficient logging, monitoring, and active detection of suspicious activities, hindering incident response and visibility.',
     },
     {
-        id: 'API10:2023',
-        title: 'API10:2023 Unsafe Consumption of APIs',
-        desc: 'Trusting data received from other APIs without proper verification, leading to downstream security vulnerabilities.',
+        id: 'A10:2025',
+        title: 'A10:2025 Mishandling of Exceptional Conditions',
+        desc: 'Failures in gracefully handling errors, exceptions, timeouts, or network drops, exposing detailed stack traces or database/network leaks.',
     }
 ];
 
@@ -228,7 +228,7 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
     return (
         <div className="owasp-container">
             <div className="owasp-summary-banner">
-                <div className="owasp-summary-title">OWASP API Security Top 10 (2023) Coverage</div>
+                 <div className="owasp-summary-title">OWASP Top 10 (2025) Coverage</div>
                 <div className="owasp-summary-count">
                     {totalFindingsCount} {totalFindingsCount === 1 ? 'Finding' : 'Findings'} Detected
                 </div>

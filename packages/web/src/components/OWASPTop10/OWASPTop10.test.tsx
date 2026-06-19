@@ -21,7 +21,7 @@ describe('OWASPTop10 Component', () => {
             payloadPreview: '',
             responsePreview: 'Internal Server Error',
             responseSize: 100,
-            owaspCategory: ['API8:2023 Security Misconfiguration'],
+            owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
         },
         {
             id: '2',
@@ -42,7 +42,7 @@ describe('OWASPTop10 Component', () => {
                     ruleId: 'swazz/bola-idor',
                     level: 'error',
                     message: 'BOLA vulnerability',
-                    owaspCategory: ['API1:2023 Broken Object Level Authorization'],
+                    owaspCategory: ['A01:2025 Broken Access Control'],
                 }
             ]
         }
@@ -66,7 +66,7 @@ describe('OWASPTop10 Component', () => {
         expect(await screen.findByText(/2 Findings Detected/, {}, { timeout: 3000 })).toBeTruthy();
 
         // Verify category titles are rendered
-        expect(screen.getAllByText(/Broken Object Level Authorization/)).toBeTruthy();
+        expect(screen.getAllByText(/Broken Access Control/)).toBeTruthy();
         expect(screen.getAllByText(/Security Misconfiguration/)).toBeTruthy();
     });
 
@@ -87,7 +87,7 @@ describe('OWASPTop10 Component', () => {
         );
 
         // Wait for the rows to load and accordion trigger to be visible
-        const accordionHeader = await screen.findByText(/API1:2023 Broken Object Level Authorization \(1\)/, {}, { timeout: 3000 });
+        const accordionHeader = await screen.findByText(/A01:2025 Broken Access Control \(1\)/, {}, { timeout: 3000 });
         expect(accordionHeader).toBeTruthy();
 
         // Click to expand
@@ -117,7 +117,7 @@ describe('OWASPTop10 Component', () => {
             payloadPreview: '',
             responsePreview: 'Internal Server Error',
             responseSize: 100,
-            owaspCategory: ['API8:2023 Security Misconfiguration'],
+            owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
         }));
 
         mockQueryResults.mockResolvedValue({
@@ -134,7 +134,7 @@ describe('OWASPTop10 Component', () => {
         );
 
         // Wait for the rows to load and accordion trigger to be visible
-        const accordionHeader = await screen.findByText(/API8:2023 Security Misconfiguration \(60\)/, {}, { timeout: 3000 });
+        const accordionHeader = await screen.findByText(/A10:2025 Mishandling of Exceptional Conditions \(60\)/, {}, { timeout: 3000 });
         expect(accordionHeader).toBeTruthy();
 
         // Click to expand

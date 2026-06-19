@@ -338,7 +338,7 @@ When specifying a `"rule_id"` in `swazz.ignore.json`, you can target any of the 
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:
 - **JSON**: Detailed machine-readable output.
-- **HTML**: A static report of the findings, featuring an executive summary that groups all findings by their corresponding **OWASP API Security Top 10 (2023)** categories.
+- **HTML**: A static report of the findings, featuring an executive summary that groups all findings by their corresponding **OWASP Top 10 (2025)** categories.
 - **SARIF**: For integration into GitHub Advanced Security and other SAST/DAST tools.
 
 ### UI Performance Optimization
