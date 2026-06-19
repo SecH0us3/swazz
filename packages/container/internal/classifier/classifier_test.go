@@ -178,7 +178,7 @@ func TestClassifier_OWASPCategory(t *testing.T) {
 	if finding == nil {
 		t.Fatal("Expected finding for status 500")
 	}
-	expectedOWASP := []string{"API8:2023 Security Misconfiguration"}
+	expectedOWASP := []string{"A10:2025 Mishandling of Exceptional Conditions"}
 	if !reflect.DeepEqual(finding.OWASPCategory, expectedOWASP) {
 		t.Errorf("Expected OWASPCategory %v, got %v", expectedOWASP, finding.OWASPCategory)
 	}
@@ -200,7 +200,7 @@ func TestClassifier_OWASPCategory(t *testing.T) {
 	if len(findings) != 1 {
 		t.Fatalf("Expected 1 finding, got %d", len(findings))
 	}
-	expectedAnalyzerOWASP := []string{"API1:2023 Broken Object Level Authorization"}
+	expectedAnalyzerOWASP := []string{"A01:2025 Broken Access Control"}
 	if !reflect.DeepEqual(findings[0].OWASPCategory, expectedAnalyzerOWASP) {
 		t.Errorf("Expected OWASPCategory %v, got %v", expectedAnalyzerOWASP, findings[0].OWASPCategory)
 	}

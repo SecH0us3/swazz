@@ -660,7 +660,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [ ] **Task 78: Upgrade OWASP API Security Categorization to 2025 Edition**
+- [/] **Task 78: Upgrade OWASP API Security Categorization to 2025 Edition**
   - **Design Goal:** Transition compliance tagging from the OWASP API Security Top 10 (2023) to the 2025 standard to keep reports up-to-date.
   - **Implementation Details:**
     - Update `packages/container/internal/classifier/owasp.go` mapping function to categorize rule IDs according to the latest OWASP 2025 categories.

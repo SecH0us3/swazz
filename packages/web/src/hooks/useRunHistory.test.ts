@@ -232,4 +232,92 @@ describe('useRunHistory', () => {
         expect(mockAnchor.download).toContain('.md');
         expect(mockShowToast).toHaveBeenCalledWith('Markdown downloaded', 'success');
     });
+
+    it('correctly maps rule IDs to OWASP 2025 categories during HTML/MD exports', async () => {
+        const mockRows: ResultSummary[] = [
+            {
+                id: 'res-bola',
+                timestamp: 1718000000000,
+                method: 'GET',
+                endpoint: '/bola',
+                resolvedPath: 'http://example.com/bola',
+                status: 400,
+                profile: 'RANDOM',
+                duration: 50,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'error',
+                responseSize: 5,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/bola-idor',
+                        level: 'error',
+                        message: 'BOLA vulnerability',
+                        evidence: 'evidence'
+                    }
+                ]
+            },
+            {
+                id: 'res-rate-limit',
+                timestamp: 1718000000000,
+                method: 'POST',
+                endpoint: '/rate-limit',
+                resolvedPath: 'http://example.com/rate-limit',
+                status: 429,
+                profile: 'RANDOM',
+                duration: 50,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'error',
+                responseSize: 5,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/no-rate-limit',
+                        level: 'warning',
+                        message: 'Rate limit vulnerability',
+                        evidence: 'evidence'
+                    }
+                ]
+            },
+            {
+                id: 'res-status-500',
+                timestamp: 1718000000000,
+                method: 'GET',
+                endpoint: '/server-error',
+                resolvedPath: 'http://example.com/server-error',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 50,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 21
+            }
+        ];
+
+        mockGetRunResults.mockResolvedValueOnce(mockRows);
+
+        const { result } = renderHook(() => useRunHistory({
+            runs: mockRuns,
+            queryResults: mockQueryResults,
+            getRunResults: mockGetRunResults,
+            deleteRun: mockDeleteRun,
+            showToast: mockShowToast,
+            onRunLoaded: mockOnRunLoaded
+        }));
+
+        let mockBlobConstructor = vi.spyOn(window, 'Blob');
+
+        await act(async () => {
+            await result.current.handleExportMD('run-1');
+        });
+
+        const mdContent = mockBlobConstructor.mock.calls[0]?.[0]?.[0] || '';
+        expect(mdContent).toContain('**OWASP Category:** A01:2025 Broken Access Control');
+        expect(mdContent).toContain('**OWASP Category:** A06:2025 Insecure Design');
+        expect(mdContent).toContain('**OWASP Category:** A10:2025 Mishandling of Exceptional Conditions');
+    });
 });

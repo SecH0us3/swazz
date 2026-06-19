@@ -579,7 +579,7 @@ func TestToSSE_OWASPCategoryMapping(t *testing.T) {
 	sse := ToSSE(res)
 
 	// Verify parent result OWASPCategory mapping
-	expectedResultOWASP := []string{"API8:2023 Security Misconfiguration"}
+	expectedResultOWASP := []string{"A10:2025 Mishandling of Exceptional Conditions"}
 	if !reflect.DeepEqual(sse.OWASPCategory, expectedResultOWASP) {
 		t.Errorf("Expected result OWASPCategory %v, got %v", expectedResultOWASP, sse.OWASPCategory)
 	}
@@ -588,7 +588,7 @@ func TestToSSE_OWASPCategoryMapping(t *testing.T) {
 	if len(sse.AnalyzerFindings) != 1 {
 		t.Fatalf("Expected 1 analyzer finding, got %d", len(sse.AnalyzerFindings))
 	}
-	expectedFindingOWASP := []string{"API1:2023 Broken Object Level Authorization"}
+	expectedFindingOWASP := []string{"A01:2025 Broken Access Control"}
 	if !reflect.DeepEqual(sse.AnalyzerFindings[0].OWASPCategory, expectedFindingOWASP) {
 		t.Errorf("Expected analyzer finding OWASPCategory %v, got %v", expectedFindingOWASP, sse.AnalyzerFindings[0].OWASPCategory)
 	}
