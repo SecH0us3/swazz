@@ -8,7 +8,7 @@ This plan details the step-by-step implementation for automatically analyzing, e
 Extend the findings table schema to store AI-generated explanation, remediation metadata, code diffs, and pull request references.
 
 1. **Create Migration:**
-   - Add a new migration file under [packages/edge/migrations/](file:///Users/alex/src/swazz/packages/edge/migrations/).
+   - Add a new migration file under [packages/edge/migrations/](packages/edge/migrations/).
    - Add the following fields to the `findings` table:
      - `ai_status` (TEXT: `'none'`, `'analyzing'`, `'completed'`, `'failed'`)
      - `ai_relevance` (TEXT: `'confirmed'`, `'false_positive'`)
