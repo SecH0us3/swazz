@@ -198,6 +198,8 @@ function getOwaspCategories(ruleId: string): string[] {
         case 'swazz/header-injection':
         case 'swazz/reflected-xss':
         case 'swazz/rce-leak':
+        case 'swazz/time-based-sqli':
+        case 'swazz/time-based-cmdi':
             return ['A05:2025 Injection'];
         case 'swazz/stack-trace-leak':
         case 'swazz/null-pointer-exception':

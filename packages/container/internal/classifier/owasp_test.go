@@ -23,6 +23,8 @@ func TestOWASPCategories(t *testing.T) {
 		{"swazz/header-injection", []string{"A05:2025 Injection"}},
 		{"swazz/reflected-xss", []string{"A05:2025 Injection"}},
 		{"swazz/rce-leak", []string{"A05:2025 Injection"}},
+		{"swazz/time-based-sqli", []string{"A05:2025 Injection"}},
+		{"swazz/time-based-cmdi", []string{"A05:2025 Injection"}},
 		{"swazz/stack-trace-leak", []string{"A10:2025 Mishandling of Exceptional Conditions"}},
 		{"swazz/null-pointer-exception", []string{"A10:2025 Mishandling of Exceptional Conditions"}},
 		{"swazz/sql-error-leak", []string{"A10:2025 Mishandling of Exceptional Conditions"}},

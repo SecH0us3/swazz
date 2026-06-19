@@ -295,6 +295,29 @@ describe('useRunHistory', () => {
                 payloadPreview: '',
                 responsePreview: 'Internal Server Error',
                 responseSize: 21
+            },
+            {
+                id: 'res-time-based-sqli',
+                timestamp: 1718000000000,
+                method: 'GET',
+                endpoint: '/time-based-sqli',
+                resolvedPath: 'http://example.com/time-based-sqli',
+                status: 200,
+                profile: 'RANDOM',
+                duration: 50,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'success',
+                responseSize: 7,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/time-based-sqli',
+                        level: 'error',
+                        message: 'Time-based SQLi vulnerability',
+                        evidence: 'evidence'
+                    }
+                ]
             }
         ];
 
@@ -319,5 +342,6 @@ describe('useRunHistory', () => {
         expect(mdContent).toContain('**OWASP Category:** A01:2025 Broken Access Control');
         expect(mdContent).toContain('**OWASP Category:** A06:2025 Insecure Design');
         expect(mdContent).toContain('**OWASP Category:** A10:2025 Mishandling of Exceptional Conditions');
+        expect(mdContent).toContain('**OWASP Category:** A05:2025 Injection');
     });
 });
