@@ -14,6 +14,7 @@ echo "Project Root: $ROOT_DIR"
 # Keep track of PIDs we start to kill them on exit
 PIDS=()
 cleanup() {
+cleanup() {
   if [ ${#PIDS[@]} -ne 0 ]; then
     echo -e "\n=== Cleaning up background services (PIDs: ${PIDS[*]}) ==="
     for pid in "${PIDS[@]}"; do
