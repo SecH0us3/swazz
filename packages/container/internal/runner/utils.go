@@ -185,7 +185,38 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 
 	var sseHeaders http.Header
 	if hasHeaderInjection && r.ResponseHeaders != nil {
-		sseHeaders = r.ResponseHeaders.Clone()
+		sseHeaders = make(http.Header, len(r.ResponseHeaders))
+		for k, vs := range r.ResponseHeaders {
+			kTrunc := k
+			if len(kTrunc) > 200 {
+				kTrunc = kTrunc[:200] + "…"
+			}
+			truncated := make([]string, len(vs))
+			for i, v := range vs {
+				if len(v) > 1000 {
+					truncated[i] = v[:1000] + "… [truncated]"
+				} else {
+					truncated[i] = v
+				}
+			}
+			sseHeaders[kTrunc] = truncated
+		}
+	}
+
+	var sseRequestHeaders map[string]string
+	if r.RequestHeaders != nil {
+		sseRequestHeaders = make(map[string]string, len(r.RequestHeaders))
+		for k, v := range r.RequestHeaders {
+			kTrunc := k
+			if len(kTrunc) > 200 {
+				kTrunc = kTrunc[:200] + "…"
+			}
+			if len(v) > 1000 {
+				sseRequestHeaders[kTrunc] = v[:1000] + "… [truncated]"
+			} else {
+				sseRequestHeaders[kTrunc] = v
+			}
+		}
 	}
 
 	// Map OWASPCategory for a safe copy of AnalyzerFindings
@@ -194,6 +225,12 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		findingsCopy = make([]swagger.AnalysisFinding, len(r.AnalyzerFindings))
 		for i, f := range r.AnalyzerFindings {
 			f.OWASPCategory = classifier.OWASPCategories(f.RuleID)
+			if len(f.Evidence) > 1000 {
+				f.Evidence = f.Evidence[:1000] + "… [truncated]"
+			}
+			if len(f.Message) > 1000 {
+				f.Message = f.Message[:1000] + "… [truncated]"
+			}
 			findingsCopy[i] = f
 		}
 	}
@@ -219,7 +256,7 @@ func ToSSE(r *swagger.FuzzResult) *swagger.FuzzResultSSE {
 		ResponseSize:       r.ResponseSize,
 		HasHeaderInjection: hasHeaderInjection,
 		ResponseHeaders:    sseHeaders,
-		RequestHeaders:     r.RequestHeaders,
+		RequestHeaders:     sseRequestHeaders,
 		AnalyzerFindings:   findingsCopy,
 		Identity:           r.Identity,
 		OWASPCategory:      overallCategory,
@@ -239,6 +276,29 @@ func previewAny(v any, maxLen int) string {
 }
 
 func truncateValue(v any, maxLen int) any {
+	if v == nil {
+		return nil
+	}
+	if b, ok := v.([]byte); ok {
+		if len(b) > maxLen {
+			return fmt.Sprintf("<raw data: %d bytes (truncated)>", len(b))
+		}
+		v = string(b)
+	}
+	// Convert to generic JSON map/slice structure to normalize all concrete slices/structs/etc.
+	// into []any and map[string]any.
+	mar, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("<error marshalling: %v>", err)
+	}
+	var generic any
+	if err := json.Unmarshal(mar, &generic); err != nil {
+		return fmt.Sprintf("<error unmarshalling: %v>", err)
+	}
+	return truncateValueGeneric(generic, maxLen)
+}
+
+func truncateValueGeneric(v any, maxLen int) any {
 	switch val := v.(type) {
 	case string:
 		if len(val) > maxLen {
@@ -247,22 +307,28 @@ func truncateValue(v any, maxLen int) any {
 		return val
 	case map[string]any:
 		res := make(map[string]any)
+		count := 0
 		for k, v := range val {
-			res[k] = truncateValue(v, maxLen)
+			if count > 50 {
+				res["... (truncated keys)"] = fmt.Sprintf("and %d more keys", len(val)-50)
+				break
+			}
+			res[k] = truncateValueGeneric(v, maxLen)
+			count++
 		}
 		return res
 	case []any:
 		if len(val) <= 2 {
 			res := make([]any, len(val))
 			for i, v := range val {
-				res[i] = truncateValue(v, maxLen)
+				res[i] = truncateValueGeneric(v, maxLen)
 			}
 			return res
 		}
 		// Truncate long arrays to 2 elements + a count note
 		res := make([]any, 0, 3)
-		res = append(res, truncateValue(val[0], maxLen))
-		res = append(res, truncateValue(val[1], maxLen))
+		res = append(res, truncateValueGeneric(val[0], maxLen))
+		res = append(res, truncateValueGeneric(val[1], maxLen))
 		res = append(res, fmt.Sprintf("... and %d more elements", len(val)-2))
 		return res
 	default:

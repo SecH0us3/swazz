@@ -23,7 +23,7 @@ When handling a Task N, delegate to specialized subagents:
 **Universal Workflow:**
 1. Create a git branch `feature/task-N`.
 2. Generate `implementation_plan.md`. CRITICAL: Read the ENTIRE task description in ROADMAP.md (including parentheses) and explicitly include Documentation updates in the plan. Wait for user approval.
-3. Write code, sandboxed unit tests, and Fuzzer E2E tests. Run `scripts/test-backend.sh` to validate functionality and fix any reported SAST/linter warnings.
+3. Write code, sandboxed unit tests, and Playwright E2E integration tests (in `tests/e2e/`). Run `scripts/test-backend.sh` and `bash tests/e2e/run-e2e.sh` to validate functionality and fix any reported SAST/linter warnings or E2E failures.
 4. TEST AUDIT: Invoke the `test_auditor` subagent to review the PR/changes. DO NOT proceed until `test_auditor` confirms that all new logic is adequately covered by unit/integration tests.
 5. UI QA EVALUATION: If the task involved significant frontend changes, evaluate if visual verification is necessary. If yes, invoke `qa_tester` to use built-in browser tools. Do not run UI tests blindly for minor UI tweaks.
 6. INTEGRATION CHECK: Verify that new backend features are actually invoked by the main execution pipeline (`main.go` and `api/handlers.go`). Ensure frontend UI completely aligns with backend security constraints.

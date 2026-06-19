@@ -14,9 +14,11 @@
     "build": "npm run build --workspace=packages/web",
     "deploy:api": "npm run deploy --workspace=packages/edge",
     "deploy:web": "npm run deploy --workspace=packages/web",
-    "deploy:all": "npm run deploy:web"
+    "deploy:all": "npm run deploy:web",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "concurrently": "^10.0.3",
     "jsdom": "^29.1.1",
     "wrangler": "^4.100.0"

@@ -68,3 +68,7 @@ packages/web/public/llms-full.txt
 
 # Temporary scratch directory
 scratch/
+
+# Playwright test results & reports
+test-results/
+playwright-report/

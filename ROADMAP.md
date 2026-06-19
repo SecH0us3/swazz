@@ -608,6 +608,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Public key registration flow:** Currently the coordinator validates `X-Runner-Public-Key` against `users.public_key` in D1 ([runners.ts L24-30](./packages/edge/src/routes/runners.ts)). The UI must expose a field to paste/upload the contents of `swazz_runner.pub` and a **Save Public Key** button that calls `PATCH /api/auth/me` (or a new `PUT /api/users/me/public-key` endpoint) to persist it. Without this, a key-mode runner gets `401 Unauthorized: Invalid public key`.
     - **`/api/runners` response enrichment:** Add an `isShared: boolean` field per runner in the `/runners` list endpoint ([Coordinator.ts L220-240](./packages/edge/src/Coordinator.ts)) derived from `!isPrivateRunner(ws)`, and surface it in the Runners tab of Project Settings with a badge (`Shared` / `Private`).
     - **Runner name display:** The `--name` flag value is already stored as a `name:<value>` tag. Surface it in Settings as an optional `Runner Name` input pre-filled with `hostname`, so users can identify their runners in the dashboard.
+    - **Agent version display:** Surface the runner agent's version tag next to the name/status in the "Distributed Fuzzing Agents" settings table. The version tag must comply with semantic versioning (semver, e.g. `v1.0.0`).
 
 - [/] **Task 72: Propagate `projectId` from Web UI to Backend on Scan Start**
   - **Design Goal:** Scans started from the Web UI must be correctly linked to the active project in D1 so that project-level history, reporting, and access control work end-to-end. Currently `projectId` is only stored locally in IndexedDB (for the run history sidebar) but is never sent to `POST /api/runs`, so the server-side `scans` table always stores an empty `project_id` for web-initiated scans regardless of which project is active.
@@ -672,4 +673,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Perform a comprehensive threat modeling and security review of the Swazz core fuzzer, edge coordinator, Web UI, and runner communication channels.
     - Produce detailed architecture flow diagrams (using Mermaid in Markdown) detailing component interaction, JWT/key authentication sequences, data flow (D1 database & R2 bucket integrations), and WebSocket/SSE streaming.
     - Write security guidelines for deployment, covering self-hosted runner network isolation and TLS configurations.
+
+- [ ] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
+  - **Design Goal:** Allow users to immediately and permanently delete all their account data, project configurations, runners, and scan history to comply with privacy regulations (e.g. GDPR) and ensure clean slate capabilities.
+  - **Implementation Details:**
+    - Add a **Delete My Account & Data** button (with a double-confirmation prompt) in the `UserSettings` dashboard overlay.
+    - Implement a `DELETE /api/users/me` edge worker API endpoint in the coordinator.
+    - Ensure the endpoint executes a clean cascading database deletion in D1 (deleting `users`, associated `projects`, `scans`, `findings`, and `runners`).
+    - Revoke and drop any active WebSocket runner connections matching the deleted user's ID immediately in the Durable Object.
+    - Clear all client-side cache and credentials (auth tokens, cookies, and local IndexedDB databases) before redirecting the browser to the registration screen.
+
 

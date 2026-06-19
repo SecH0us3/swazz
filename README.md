@@ -117,6 +117,25 @@ Swazz can extract variables from previous responses and inject them into subsequ
 If you want to quickly test Swazz's capabilities, we provide a built-in vulnerable API simulated as a Cloudflare Worker in the `demo/` folder.
 > **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (like SQL injection) for testing Swazz. It should **NOT** be used in production or audited for security issues.
 
+### 6. End-to-End (E2E) Browser Testing
+We have a suite of Playwright E2E browser automation tests that verify integration between the frontend dashboard, the Cloudflare coordinator, the Go runner agent, and the Vulnerable Demo API.
+
+To run Playwright tests locally:
+```bash
+# Apply migrations for local D1 coordinator DB
+npx --workspace=packages/edge wrangler d1 migrations apply swazz_db --local
+
+# Start services (run each in background or separate shell session)
+npm run dev --prefix demo -- --port 8788
+npm run dev:backend
+npm run dev:frontend
+cd packages/container && go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --dangerous-no-container
+
+# Run the test suite
+npx playwright install chromium
+npm run test:e2e
+```
+
 ---
 
 ## 🔄 CI/CD Integration
