@@ -95,7 +95,7 @@ go test -timeout 30s -cpu 1,2 ./...
 You can also run the backend test script:
 ```bash
 # If using the developer toolkit
-./.gemini/plugins/swazz-toolkit/skills/swazz-workflows/scripts/test-backend.sh
+./.agents/plugins/swazz-toolkit/skills/swazz-workflows/scripts/test-backend.sh
 ```
 
 ### Frontend React Tests
