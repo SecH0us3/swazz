@@ -14,7 +14,7 @@
     "build": "npm run build --workspace=packages/web",
     "deploy:api": "npm run deploy --workspace=packages/edge",
     "deploy:web": "npm run deploy --workspace=packages/web",
-    "deploy:all": "npm run deploy:web && npm run deploy:api"
+    "deploy:all": "npm run deploy:web"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",

@@ -1,5 +1,5 @@
 interface Env {
-  API: Fetcher;
+  API_URL: string;
   ASSETS: Fetcher;
 }
 
@@ -18,9 +18,32 @@ export default {
     const url = new URL(request.url);
     let response: Response;
 
-    // Proxy API requests internally to the swazz-api Worker
+    // Proxy API requests to the GCP API URL
     if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
-      response = await env.API.fetch(request);
+      if (!env.API_URL) {
+        response = new Response(
+          JSON.stringify({ error: "Backend API_URL is not configured on the frontend Cloudflare worker. Please set the API_URL environment variable." }),
+          {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      } else {
+        try {
+          const targetUrl = new URL(url.pathname + url.search, env.API_URL);
+          const newRequest = new Request(targetUrl.toString(), request);
+          newRequest.headers.set('host', targetUrl.host);
+          response = await fetch(newRequest);
+        } catch (error) {
+          response = new Response(
+            JSON.stringify({ error: "Failed to proxy request to backend. Please check if API_URL is configured correctly." }),
+            {
+              status: 502,
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+        }
+      }
     } else {
       // Content negotiation: return clean Markdown if requested
       const acceptHeader = request.headers.get("Accept") || "";

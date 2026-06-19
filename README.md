@@ -55,6 +55,14 @@ docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config 
 
 If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
 
+#### Cloudflare Pages Frontend & External Backend (GCP / Cloud)
+If you run the backend container on a cloud platform like GCP (Google Cloud Platform), you can host the client dashboard on Cloudflare Pages and proxy API requests to the cloud container.
+
+To configure this:
+1. Deploy the frontend to Cloudflare Pages using `npm run deploy:web`.
+2. Configure the `API_URL` environment variable (or variable binding in your Cloudflare Pages dashboard) to point to your GCP backend instance (e.g., `https://swazz-api.yourdomain.com`).
+3. The Cloudflare Pages worker will automatically proxy `/api/*` and `/health` requests to the configured `API_URL` to avoid CORS issues.
+
 ### Build from Source
 ```bash
 # Clone the repository
