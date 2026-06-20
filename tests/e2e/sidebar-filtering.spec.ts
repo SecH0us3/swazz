@@ -18,6 +18,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await page.waitForLoadState('networkidle');
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

@@ -93,6 +93,10 @@ func SafeDialContext(timeout time.Duration) func(ctx context.Context, network, a
 	}
 
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if AllowLocalNetwork {
+			return dialer.DialContext(ctx, network, addr)
+		}
+
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, fmt.Errorf("safenet: invalid address %q: %w", addr, err)

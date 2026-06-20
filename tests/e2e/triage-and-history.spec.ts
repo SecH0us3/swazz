@@ -18,6 +18,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await page.waitForLoadState('networkidle');
 
     // 3. Add Vulnerable Demo API spec
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -89,6 +90,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     // 7. Reload the page
     await page.reload();
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await page.waitForLoadState('networkidle');
 
     // 8. Navigate to Scan History in the sidebar
     const historyBtn = page.locator('button:has-text("Scan History")');

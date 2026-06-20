@@ -19,10 +19,16 @@ beforeAll(async () => {
   for (const path of sortedPaths) {
     const sql = migrationFiles[path];
     // Split by semicolon and run statements, ignoring comments and empty lines
-    const statements = sql
+    const cleanedSql = sql
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
+
+    const statements = cleanedSql
       .split(";")
       .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith("--"));
+      .filter((s) => s.length > 0);
+
     for (const statement of statements) {
       try {
         await env.DB.prepare(statement).run();
