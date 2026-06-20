@@ -84,10 +84,9 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await expect(fpBadge).toBeVisible();
 
     // Close the detail inspector panel
-    const closeInspectorBtn = page.locator('button.request-detail-close');
-    if (await closeInspectorBtn.isVisible()) {
-      await closeInspectorBtn.click();
-    }
+    const closeInspectorBtn = page.locator('button[aria-label="Close"]');
+    await expect(closeInspectorBtn).toBeVisible({ timeout: 10000 });
+    await closeInspectorBtn.click();
 
     // 7. Reload the page
     const configPromiseReload = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
