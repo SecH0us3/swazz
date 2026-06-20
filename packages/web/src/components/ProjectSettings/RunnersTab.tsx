@@ -122,7 +122,6 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                                                     fontSize: '11px',
                                                     color: 'var(--text-muted)',
                                                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                                    padding: '2px 6px',
                                                     borderRadius: '4px',
                                                     border: '1px solid var(--border-default)'
                                                 }}>
