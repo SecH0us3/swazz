@@ -106,8 +106,6 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await expect(findingRow).toBeVisible({ timeout: 10000 });
 
     const pathSpan = findingRow.locator('.owasp-finding-path').first();
-    await expect(pathSpan).toBeVisible();
-    const pathText = await pathSpan.textContent();
-    expect(pathText?.length).toBeGreaterThan(0);
+    await expect(pathSpan).toHaveText(/.+/);
   });
 });
