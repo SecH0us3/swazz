@@ -52,7 +52,7 @@ export class RunnerCoordinator {
 
   isPrivateRunner(ws: WebSocket): boolean {
     const tags = this.state.getTags(ws);
-    return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:'));
+    return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:') && !tag.startsWith('version:'));
   }
 
   async fetch(request: Request): Promise<Response> {
