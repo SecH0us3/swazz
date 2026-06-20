@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
+import { useTheme } from '../hooks/useTheme.js';
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
 
 export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
+    const { theme, toggleTheme } = useTheme();
     const [copiedCmd, setCopiedCmd] = useState(false);
     const [copiedRunCmd, setCopiedRunCmd] = useState(false);
     const [copiedApiKey, setCopiedApiKey] = useState(false);
@@ -219,6 +221,18 @@ export function UserSettings() {
                                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: apiKey ? 'var(--accent-light)' : 'var(--text-muted)' }} />
                                 {apiKey ? 'Registered User (Unlimited scans)' : 'Guest Mode (Scanning limits active)'}
                             </div>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>Theme Preference</label>
+                            <button 
+                                className="btn btn-secondary btn-sm"
+                                onClick={toggleTheme}
+                                type="button"
+                                id="btn-toggle-theme-settings"
+                                style={{ width: '100%' }}
+                            >
+                                Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
+                            </button>
                         </div>
                         {apiKey && (
                             <div>
