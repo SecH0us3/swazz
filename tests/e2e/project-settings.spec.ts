@@ -108,17 +108,11 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     const firstCatalogItem = page.locator('.catalog-item').first();
     await expect(firstCatalogItem).toBeVisible();
     
-    // Toggle the category
+    // Toggle the category (verifying initial checked state and toggling off)
     const checkboxInItem = firstCatalogItem.locator('input[type="checkbox"]');
-    const wasChecked = await checkboxInItem.isChecked();
+    await expect(checkboxInItem).toBeChecked();
     await firstCatalogItem.click();
-    
-    // Assert state toggled
-    if (wasChecked) {
-      await expect(checkboxInItem).not.toBeChecked();
-    } else {
-      await expect(checkboxInItem).toBeChecked();
-    }
+    await expect(checkboxInItem).not.toBeChecked();
 
     // Close Modal by pressing Escape
     await page.keyboard.press('Escape');
