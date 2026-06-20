@@ -124,11 +124,16 @@ func startAgent(args []string) {
 	headers := make(http.Header)
 	urlWithParams := coordinatorURL
 	encodedName := url.QueryEscape(name)
+	agentVer := Version
+	if agentVer == "dev" {
+		agentVer = "v1.0.0"
+	}
+	encodedVersion := url.QueryEscape(agentVer)
 	
 	if !strings.Contains(urlWithParams, "?") {
-		urlWithParams += fmt.Sprintf("?name=%s", encodedName)
+		urlWithParams += fmt.Sprintf("?name=%s&version=%s", encodedName, encodedVersion)
 	} else {
-		urlWithParams += fmt.Sprintf("&name=%s", encodedName)
+		urlWithParams += fmt.Sprintf("&name=%s&version=%s", encodedName, encodedVersion)
 	}
 
 	if useSignatureAuth {

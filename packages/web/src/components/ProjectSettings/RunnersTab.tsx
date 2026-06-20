@@ -7,6 +7,7 @@ interface Runner {
     status: 'authenticating' | 'connected';
     isMine: boolean;
     isShared: boolean;
+    version?: string;
 }
 
 interface RunnersTabProps {
@@ -113,7 +114,23 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                         <tbody>
                             {runners.map((r, i) => (
                                 <tr key={r.publicKey || r.name} style={{ borderBottom: i === runners.length - 1 ? 'none' : '1px solid var(--border-subtle)', backgroundColor: r.isMine ? 'rgba(124,58,237,0.03)' : 'transparent' }}>
-                                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>{r.name}</td>
+                                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span className="runner-name">{r.name}</span>
+                                            {r.version && (
+                                                <span className="runner-version-badge" style={{
+                                                    fontSize: '11px',
+                                                    color: 'var(--text-muted)',
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    border: '1px solid var(--border-default)'
+                                                }}>
+                                                    {r.version}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-muted)' }}>
                                         {r.publicKey ? `${r.publicKey.substring(0, 16)}...` : 'Anonymous'}
                                     </td>

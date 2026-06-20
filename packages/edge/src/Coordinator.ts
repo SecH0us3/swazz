@@ -267,15 +267,18 @@ export class RunnerCoordinator {
       for (const ws of this.runners) {
         const tags = this.state.getTags(ws);
         const isPending = tags.includes('runner-pending');
-        const pubKey = tags.find(t => t !== 'runner-pending' && t !== 'runner' && !t.startsWith('name:')) || null;
+        const pubKey = tags.find(t => t !== 'runner-pending' && t !== 'runner' && !t.startsWith('name:') && !t.startsWith('version:')) || null;
         const nameTag = tags.find(t => t.startsWith('name:'));
         const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
+        const versionTag = tags.find(t => t.startsWith('version:'));
+        const version = versionTag ? versionTag.substring(8) : 'v0.0.0';
 
         runnerList.push({
           name,
           publicKey: pubKey,
           status: isPending ? 'authenticating' : 'connected',
           isShared: !pubKey,
+          version,
         });
       }
       return new Response(JSON.stringify({ runners: runnerList }), {
@@ -290,10 +293,12 @@ export class RunnerCoordinator {
       
       const publicKey = url.searchParams.get('public_key');
       const name = url.searchParams.get('name') || 'Unnamed Runner';
+      const version = url.searchParams.get('version') || 'v1.0.0';
       const nameTag = `name:${name}`;
+      const versionTag = `version:${version}`;
       
       if (publicKey) {
-        this.state.acceptWebSocket(server, ["runner-pending", publicKey, nameTag]);
+        this.state.acceptWebSocket(server, ["runner-pending", publicKey, nameTag, versionTag]);
         
         // Generate random 32-byte hex challenge nonce
         const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)))
@@ -322,7 +327,7 @@ export class RunnerCoordinator {
           } catch { /* ignored */ }
         }, 5000);
       } else {
-        this.state.acceptWebSocket(server, ["runner", nameTag]);
+        this.state.acceptWebSocket(server, ["runner", nameTag, versionTag]);
         server.serializeAttachment({ authenticated: true });
         this.runners.add(server);
       }
