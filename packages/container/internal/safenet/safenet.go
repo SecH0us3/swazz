@@ -93,6 +93,10 @@ func SafeDialContext(timeout time.Duration) func(ctx context.Context, network, a
 	}
 
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if AllowLocalNetwork {
+			return dialer.DialContext(ctx, network, addr)
+		}
+
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, fmt.Errorf("safenet: invalid address %q: %w", addr, err)
@@ -111,12 +115,21 @@ func SafeDialContext(timeout time.Duration) func(ctx context.Context, network, a
 			}
 		}
 
-		// All resolved IPs are safe — dial the original address.
-		// We dial with the resolved IP to prevent TOCTOU DNS rebinding.
-		// Use the first resolved IP.
+		// All resolved IPs are safe — dial the resolved IPs.
+		// We dial with the resolved IPs to prevent TOCTOU DNS rebinding,
+		// trying them in order (e.g. dual-stack fallback).
+		var lastErr error
+		for _, ipAddr := range ips {
+			safeAddr := net.JoinHostPort(ipAddr.IP.String(), port)
+			conn, err := dialer.DialContext(ctx, network, safeAddr)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+
 		if len(ips) > 0 {
-			safeAddr := net.JoinHostPort(ips[0].IP.String(), port)
-			return dialer.DialContext(ctx, network, safeAddr)
+			return nil, lastErr
 		}
 
 		return dialer.DialContext(ctx, network, addr)

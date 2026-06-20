@@ -208,7 +208,7 @@ export class RunnerCoordinator {
             this.pendingParseUrls.delete(reqId);
             resolve(new Response(JSON.stringify({ error: "Parse timeout from Go runner" }), { status: 504 }));
           }
-        }, 15000);
+        }, 30000);
       });
     }
 

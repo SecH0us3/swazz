@@ -399,7 +399,7 @@ func startAgent(args []string) {
 				// Parse swagger
 				var result interface{}
 				
-				client := safenet.NewSafeHTTPClient(30 * time.Second)
+				client := safenet.NewSafeHTTPClient(15 * time.Second)
 				resp, err := client.Get(reqPayload.URL)
 				if err != nil {
 					logError("[Parser] Failed to fetch spec: %v", err)
@@ -444,11 +444,25 @@ func startAgent(args []string) {
 					}
 				}
 
-				outChan <- map[string]interface{}{
+				msgPayload := map[string]interface{}{
 					"type":    "parse_result",
 					"reqId":   reqID,
 					"payload": result,
 				}
+				if b, err := json.Marshal(msgPayload); err == nil && len(b) > 1*1024*1024 {
+					logWarn("[Parser] Parse result size (%d bytes) exceeds 1MB limit. Retrying without rawSpec...", len(b))
+					if resultMap, ok := result.(map[string]interface{}); ok {
+						resultMap["rawSpec"] = ""
+						msgPayload["payload"] = resultMap
+						if b2, err2 := json.Marshal(msgPayload); err2 == nil && len(b2) > 1*1024*1024 {
+							logError("[Parser] Parse result endpoints schema is still too large (%d bytes). Returning error.", len(b2))
+							msgPayload["payload"] = map[string]string{
+								"error": "The parsed endpoints schema is too large to transmit over the 1MB WebSocket limit.",
+							}
+						}
+					}
+				}
+				outChan <- msgPayload
 			}()
 		}
 	}
