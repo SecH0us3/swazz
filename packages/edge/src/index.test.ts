@@ -5,6 +5,109 @@ import app from "./index";
 
 const env = rawEnv as unknown as Env;
 
+export function splitSql(sql: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inInlineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const nextChar = sql[i + 1];
+
+    if (inInlineComment) {
+      if (char === "\n") {
+        inInlineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === "*" && nextChar === "/") {
+        inBlockComment = false;
+        i++; // skip '/'
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      current += char;
+      if (char === "'" && nextChar === "'") {
+        current += "'";
+        i++;
+      } else if (char === "\\") {
+        if (nextChar !== undefined) {
+          current += nextChar;
+          i++;
+        }
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      current += char;
+      if (char === "\\") {
+        if (nextChar !== undefined) {
+          current += nextChar;
+          i++;
+        }
+      } else if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    // Check for comments start
+    if (char === "-" && nextChar === "-") {
+      inInlineComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    // Check for string start
+    if (char === "'") {
+      inSingleQuote = true;
+      current += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      current += char;
+      continue;
+    }
+
+    // Semicolon separator
+    if (char === ";") {
+      const stmt = current.trim();
+      if (stmt.length > 0) {
+        statements.push(stmt);
+      }
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  const stmt = current.trim();
+  if (stmt.length > 0) {
+    statements.push(stmt);
+  }
+
+  return statements;
+}
+
 beforeAll(async () => {
   // Use Vite's import.meta.glob to bundle SQL migrations as raw strings
   const migrationFiles = (import.meta as any).glob("../migrations/*.sql", {
@@ -18,16 +121,7 @@ beforeAll(async () => {
 
   for (const path of sortedPaths) {
     const sql = migrationFiles[path];
-    // Split by semicolon and run statements, ignoring comments and empty lines
-    const cleanedSql = sql
-      .split("\n")
-      .filter((line) => !line.trim().startsWith("--"))
-      .join("\n");
-
-    const statements = cleanedSql
-      .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    const statements = splitSql(sql);
 
     for (const statement of statements) {
       try {
@@ -464,5 +558,44 @@ describe("Projects & Runners API", () => {
     const checkBody = await checkRes.json() as { projects: any[] };
     const p = checkBody.projects.find(x => x.id === projectId);
     expect(p).toBeUndefined();
+  });
+});
+
+describe("splitSql helper", () => {
+  it("splits simple statements by semicolon", () => {
+    const sql = "SELECT * FROM users; SELECT * FROM projects;";
+    expect(splitSql(sql)).toEqual([
+      "SELECT * FROM users",
+      "SELECT * FROM projects"
+    ]);
+  });
+
+  it("handles semicolons inside single-quoted strings", () => {
+    const sql = "INSERT INTO users (name) VALUES ('hello; world'); SELECT 1;";
+    expect(splitSql(sql)).toEqual([
+      "INSERT INTO users (name) VALUES ('hello; world')",
+      "SELECT 1"
+    ]);
+  });
+
+  it("handles single-quoted string escapes", () => {
+    const sql = "INSERT INTO users (name) VALUES ('it''s a test; yes'); SELECT 1;";
+    expect(splitSql(sql)).toEqual([
+      "INSERT INTO users (name) VALUES ('it''s a test; yes')",
+      "SELECT 1"
+    ]);
+  });
+
+  it("handles inline and block comments with semicolons", () => {
+    const sql = `
+      -- this is a comment; with a semicolon
+      SELECT 1;
+      /* block comment; with semicolon */
+      SELECT 2;
+    `;
+    expect(splitSql(sql)).toEqual([
+      "SELECT 1",
+      "SELECT 2"
+    ]);
   });
 });
