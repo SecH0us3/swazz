@@ -55,15 +55,14 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
 
     // Disable BOUNDARY and MALICIOUS profiles, leaving only RANDOM profile active to keep request counts minimal
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
-    if (await boundaryToggle.evaluate(el => el.classList.contains('active'))) {
-      await boundaryToggle.click();
-      await expect(boundaryToggle).not.toHaveClass(/active/);
-    }
+    await expect(boundaryToggle).toHaveClass(/active/);
+    await boundaryToggle.click();
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
-    if (await maliciousToggle.evaluate(el => el.classList.contains('active'))) {
-      await maliciousToggle.click();
-      await expect(maliciousToggle).not.toHaveClass(/active/);
-    }
+    await expect(maliciousToggle).toHaveClass(/active/);
+    await maliciousToggle.click();
+    await expect(maliciousToggle).not.toHaveClass(/active/);
 
     // 3. Configure Headers for User A (Primary Session)
     await expandSection(page, 'Headers (User A / Primary Session)');

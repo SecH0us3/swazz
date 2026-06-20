@@ -64,13 +64,22 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     // Wait for the textarea to be populated with configuration JSON (race condition guard)
     await expect(rawTextarea).toHaveValue(/timeout_ms/);
 
-    // Verify the inputs were serialized in JSON config correctly
-    const rawConfigValue = await rawTextarea.inputValue();
-    const parsedConfig = JSON.parse(rawConfigValue);
-    expect(parsedConfig.settings.timeout_ms).toBe(2500);
-    expect(parsedConfig.settings.delay_between_requests_ms).toBe(100);
-    expect(parsedConfig.settings.bola_testing).toBe(true);
-    expect(parsedConfig.security.allow_private_ips).toBe(true);
+    await expect.poll(async () => {
+      try {
+        return JSON.parse(await rawTextarea.inputValue());
+      } catch {
+        return null;
+      }
+    }).toMatchObject({
+      settings: {
+        timeout_ms: 2500,
+        delay_between_requests_ms: 100,
+        bola_testing: true,
+      },
+      security: {
+        allow_private_ips: true,
+      },
+    });
 
     // Save configuration
     const saveBtn = page.locator('button:has-text("Save Configuration")');
