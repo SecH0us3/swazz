@@ -55,13 +55,20 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     const logPaths = page.locator('.log-path');
     await expect(logPaths.first()).toBeVisible({ timeout: 10000 });
 
+    // Store original total count of requests
+    const countIndicator = page.locator('text=/\\d+ req(s)?/').first();
+    await expect(countIndicator).toBeVisible();
+    const originalCountText = await countIndicator.textContent();
+    expect(originalCountText).not.toBeNull();
+
     // 7. Test Status Tab Filtering: Click 5xx tab
     const tab5xx = page.locator('.inspector-tab:has-text("5xx")');
     await expect(tab5xx).toBeVisible();
     await tab5xx.click();
 
-    // Verify all visible rows have status-5xx class (wait a brief moment to render)
-    await page.waitForTimeout(500);
+    // Verify all visible rows have status-5xx class (wait for first row to be updated)
+    const first5xxRow = page.locator('.log-row:not(.log-header)').first();
+    await expect(first5xxRow).toHaveClass(/status-5xx/);
     const visible5xxRows = page.locator('.log-row:not(.log-header)');
     const count5xx = await visible5xxRows.count();
     
@@ -81,7 +88,9 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     const searchInput = page.locator('input[aria-label="Filter by path"]');
     await expect(searchInput).toBeVisible();
     await searchInput.fill('/welcome');
-    await page.waitForTimeout(500);
+    // Wait for the path filter to apply
+    const firstFilteredPath = page.locator('.log-path').first();
+    await expect(firstFilteredPath).toHaveText(/\/welcome/);
 
     const filteredLogPaths = page.locator('.log-path');
     const filteredCount = await filteredLogPaths.count();
@@ -95,22 +104,9 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     const clearSearchBtn = page.locator('button[aria-label="Clear search"]');
     await expect(clearSearchBtn).toBeVisible();
     await clearSearchBtn.click();
-    await page.waitForTimeout(500);
 
-    // Verify search is cleared and different endpoints appear again
+    // Verify search is cleared and different endpoints appear again (count goes back up to original)
     await expect(searchInput).toHaveValue('');
-    const restoredPaths = page.locator('.log-path');
-    const restoredCount = await restoredPaths.count();
-    
-    // Check that at least one of the restored visible log paths does NOT contain "/welcome"
-    let hasOtherPath = false;
-    for (let i = 0; i < restoredCount; i++) {
-      const text = await restoredPaths.nth(i).textContent();
-      if (text && !text.includes('/welcome')) {
-        hasOtherPath = true;
-        break;
-      }
-    }
-    expect(hasOtherPath).toBe(true);
+    await expect(countIndicator).toHaveText(originalCountText!);
   });
 });

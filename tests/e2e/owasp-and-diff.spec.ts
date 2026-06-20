@@ -59,7 +59,6 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const filterInput = page.locator('input[placeholder*="Filter by path"]');
     await expect(filterInput).toBeVisible();
     await filterInput.fill('/login');
-    await page.waitForTimeout(1000); // Wait for the logs to filter
 
     // Locate a fuzzed POST request log row (which has a request body)
     const fuzzedPostRow = page.locator('.log-row')
@@ -90,9 +89,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
 
     // Verify the summary banner displays findings detected
     const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toBeVisible({ timeout: 10000 });
-    const textContent = await summaryBanner.textContent();
-    expect(textContent).toMatch(/\d+ Finding[s]? Detected/);
+    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: 10000 });
 
     // Verify that at least one category card (e.g. A05:2025 Injection or A10:2025 Mishandling of Exceptional Conditions) has findings
     const owaspCardWithFindings = page.locator('.owasp-card.has-findings').first();
