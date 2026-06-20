@@ -14,6 +14,7 @@ interface Runner {
     status: 'authenticating' | 'connected';
     isMine: boolean;
     isShared: boolean;
+    version?: string;
 }
 
 export function ProjectSettings() {

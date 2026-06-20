@@ -122,14 +122,19 @@ func startAgent(args []string) {
 	ctx := context.Background()
 
 	headers := make(http.Header)
-	urlWithParams := coordinatorURL
-	encodedName := url.QueryEscape(name)
-	
-	if !strings.Contains(urlWithParams, "?") {
-		urlWithParams += fmt.Sprintf("?name=%s", encodedName)
-	} else {
-		urlWithParams += fmt.Sprintf("&name=%s", encodedName)
+	u, err := url.Parse(coordinatorURL)
+	if err != nil {
+		log.Fatalf("Failed to parse coordinator URL: %v", err)
 	}
+	q := u.Query()
+	q.Set("name", name)
+	agentVer := Version
+	if agentVer == "dev" {
+		agentVer = "v1.0.0"
+	}
+	q.Set("version", agentVer)
+	u.RawQuery = q.Encode()
+	urlWithParams := u.String()
 
 	if useSignatureAuth {
 		headers.Set("X-Runner-Public-Key", pubKeyHex)

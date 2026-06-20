@@ -101,7 +101,7 @@ This document lists candidate E2E test scenarios to be added to the Swazz suite 
   2. Verify that the system parses the traffic and renders the reconstructed endpoints in the sidebar.
   3. Check that parameters mapped from request paths and query params in the HAR are listed.
 
-## 12. Request Log Filters (Status, Path & Identity)
+## 12. Request Log Filters (Status, Path & Identity) [DONE]
 * **Objective**: Ensure that logs can be sliced dynamically using the header filter bar.
 * **Test Steps**:
   1. Complete a fuzzing run.
@@ -110,7 +110,7 @@ This document lists candidate E2E test scenarios to be added to the Swazz suite 
   4. Select `User B` in the identity dropdown filter, and verify that only requests mapped to User B are visible.
   5. Click the `✕` button next to search input and verify that the search text is cleared.
 
-## 13. Sidebar Endpoint Tree Filtering
+## 13. Sidebar Endpoint Tree Filtering [DONE]
 * **Objective**: Verify that selecting/deselecting target endpoints in the sidebar filters the fuzzing scope.
 * **Test Steps**:
   1. Load the Vulnerable Demo API.
@@ -119,11 +119,37 @@ This document lists candidate E2E test scenarios to be added to the Swazz suite 
   4. Trigger a fuzzing run.
   5. Verify that no requests targeting `POST /login` appear in the live logs and heatmap cells.
 
-## 14. Modal Backdrop and Closure Dismissals
+## 14. Modal Backdrop and Closure Dismissals [DONE]
 * **Objective**: Ensure consistent dismiss behaviors for all modals (escape, close button, backdrop click).
 * **Test Steps**:
   1. Open the "Project Settings" modal.
   2. Click on the overlay backdrop surrounding the settings window, and verify that the modal is dismissed.
   3. Reopen the modal, click the close button (`✕`) in the top-right corner, and verify it closes.
   4. Open the "Payload Settings" modal, press the `Escape` key, and verify it closes.
+
+## 15. Runner Agent Disconnection & Failover
+* **Objective**: Verify fuzzer stability when a connected runner agent goes offline unexpectedly during a run.
+* **Test Steps**:
+  1. Connect two runner agents to the Coordinator.
+  2. Start a fuzzing run.
+  3. Kill one of the runner agent processes midway through the run.
+  4. Verify that the Coordinator successfully re-allocates pending fuzzing paths to the remaining active runner.
+  5. Ensure the scan completes successfully without hangs.
+
+## 16. Rate Limit Detection & Throttle Control
+* **Objective**: Ensure the fuzzer respects rate limiting thresholds and throttles requests when encountering HTTP 429.
+* **Test Steps**:
+  1. Start the fuzzing run against an endpoint configured to return HTTP 429 after 20 requests.
+  2. Enable Rate Limit Detection in the Project Settings.
+  3. Start the scan.
+  4. Verify that the fuzzer dynamically drops concurrency and pauses according to the burst/backoff configurations when 429 is encountered.
+
+## 17. OWASP Top 10 Mapping Accuracy
+* **Objective**: Ensure vulnerability findings are mapped to the correct OWASP Top 10 categories.
+* **Test Steps**:
+  1. Complete a fuzzing run that triggers SQL Injection and XSS vulnerabilities.
+  2. Navigate to the "OWASP Top 10" tab in the dashboard.
+  3. Verify that the findings are correctly aggregated under `A03:2021-Injection` and `A01:2021-Broken Access Control` (for BOLA).
+  4. Expand a category card to verify it lists the correct finding instances.
+
 

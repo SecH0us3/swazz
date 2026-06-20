@@ -11,6 +11,8 @@ export function useTheme() {
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
+        document.body.classList.remove('dark', 'light');
+        document.body.classList.add(theme);
         localStorage.setItem('swazz-theme', theme);
     }, [theme]);
 

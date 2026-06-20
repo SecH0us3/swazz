@@ -3590,3 +3590,7 @@ kbd {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
 }
+
+.runner-version-badge {
+  padding: 2px 6px;
+}
