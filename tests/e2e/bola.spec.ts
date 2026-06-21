@@ -27,7 +27,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     await page.goto('/');
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.locator('button.link-btn:has-text("Sign up")').click();
+    await page.getByRole('button', { name: 'Sign up' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
