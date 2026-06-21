@@ -362,3 +362,10 @@ func TestFetchRemoteSpec(t *testing.T) {
 		}
 	})
 }
+
+func TestIsHAR(t *testing.T) {
+	raw := []byte(`{"log":{"version":"1.2","creator":{"name":"Swazz HAR Generator","version":"1.0"},"entries":[{"request":{"method":"GET","url":"http://127.0.0.1:8788/welcome","queryString":[]}},{"request":{"method":"GET","url":"http://127.0.0.1:8788/users","queryString":[]}},{"request":{"method":"GET","url":"http://127.0.0.1:8788/api/goods","queryString":[{"name":"limit","value":"10"}]}}]}}`)
+	if !IsHAR(raw) {
+		t.Errorf("IsHAR failed to detect valid HAR spec")
+	}
+}

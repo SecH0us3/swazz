@@ -13,7 +13,10 @@ import (
 	"os"
 	"strings"
 	"swazz-engine/internal/classifier"
+	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/har"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
@@ -416,10 +419,28 @@ func startAgent(args []string) {
 						logError("[Parser] Spec exceeds 10MB limit")
 						result = map[string]string{"error": "specification file exceeds the 10MB limit"}
 					} else {
-						parseResult, err := swagger.ParseRawSpec(data)
-						if err != nil {
-							logError("[Parser] Failed to parse spec: %v", err)
-							result = map[string]string{"error": err.Error()}
+						var parseResult *swagger.ParseResult
+						var parseErr error
+						parseResult, parseErr = swagger.ParseRawSpec(data)
+						if parseErr != nil {
+							if swagger.IsHAR(data) {
+								parseResult, parseErr = har.ParseHAR(data, "")
+							} else if swagger.IsPostman(data) {
+								parseResult, parseErr = postman.ParsePostman(data)
+							} else {
+								defaultPath := "/graphql"
+								if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
+									if parsedURL.Path != "" && parsedURL.Path != "/" {
+										defaultPath = parsedURL.Path
+									}
+								}
+								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+							}
+						}
+
+						if parseErr != nil {
+							logError("[Parser] Failed to parse spec: %v", parseErr)
+							result = map[string]string{"error": parseErr.Error()}
 						} else {
 							// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
 							for i := range parseResult.Endpoints {
