@@ -423,6 +423,7 @@ func startAgent(args []string) {
 						var parseErr error
 						parseResult, parseErr = swagger.ParseRawSpec(data)
 						if parseErr != nil {
+							originalErr := parseErr
 							if swagger.IsHAR(data) {
 								parseResult, parseErr = har.ParseHAR(data, "")
 							} else if swagger.IsPostman(data) {
@@ -434,10 +435,9 @@ func startAgent(args []string) {
 										defaultPath = parsedURL.Path
 									}
 								}
-								var parseGQLErr error
-								parseResult, parseGQLErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
-								if parseGQLErr != nil {
-									parseErr = fmt.Errorf("failed to parse spec as OpenAPI (%w) or GraphQL (%w)", parseErr, parseGQLErr)
+								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+								if parseErr != nil {
+									parseErr = originalErr
 								}
 							}
 						}
