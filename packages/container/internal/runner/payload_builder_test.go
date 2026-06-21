@@ -90,6 +90,7 @@ func TestBuildSafePayload_Schema(t *testing.T) {
 	}
 	out = buildSafePayload(ep, gen)
 	assert.NotNil(t, out.body)
+	assert.Nil(t, out.queryParams)
 }
 
 func TestBuildFuzzPayload(t *testing.T) {
@@ -119,6 +120,7 @@ func TestBuildFuzzPayload(t *testing.T) {
 	}
 	out = buildFuzzPayload(ep, gen, safeGen, false, false)
 	assert.NotNil(t, out.queryParams)
+	assert.Nil(t, out.body)
 
 	// POST method with query parameters and body schema
 	ep = swagger.EndpointConfig{
@@ -162,9 +164,10 @@ func TestMergeProps(t *testing.T) {
 	out := mergeProps(nil, nil)
 	assert.Nil(t, out)
 
-	// Non-empty merge
+	// Non-empty merge with key collision to verify overwrite behavior
 	a := map[string]*swagger.SchemaProperty{
 		"k1": {Type: "string"},
+		"k2": {Type: "string"},
 	}
 	b := map[string]*swagger.SchemaProperty{
 		"k2": {Type: "integer"},
