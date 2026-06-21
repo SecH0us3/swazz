@@ -6,10 +6,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.goto('/');
 
     // 2. Handle Login/Registration: Register a unique user
-    const signUpLink = page.locator('button.link-btn:has-text("Sign up")');
-    if (await signUpLink.isVisible()) {
-      await signUpLink.click();
-    }
+    await page.locator('button.link-btn:has-text("Sign up")').click();
 
     // Username limit is 3-20 characters
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
@@ -84,10 +81,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.goto('/');
 
     // 2. Handle Login/Registration: Register a unique user
-    const signUpLink = page.locator('button.link-btn:has-text("Sign up")');
-    if (await signUpLink.isVisible()) {
-      await signUpLink.click();
-    }
+    await page.locator('button.link-btn:has-text("Sign up")').click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

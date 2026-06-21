@@ -434,7 +434,11 @@ func startAgent(args []string) {
 										defaultPath = parsedURL.Path
 									}
 								}
-								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+								var parseGQLErr error
+								parseResult, parseGQLErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+								if parseGQLErr != nil {
+									parseErr = fmt.Errorf("failed to parse spec as OpenAPI (%w) or GraphQL (%w)", parseErr, parseGQLErr)
+								}
 							}
 						}
 
