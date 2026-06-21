@@ -72,3 +72,6 @@ scratch/
 # Playwright test results & reports
 test-results/
 playwright-report/
+
+# Coverage
+coverage/
