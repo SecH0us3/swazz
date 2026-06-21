@@ -317,7 +317,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     } finally {
       // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests
       // Check if we are currently on the settings page or dashboard
-      if (await backBtn.isVisible()) {
+      if (await moreSettingsBtn.isVisible()) {
         await moreSettingsBtn.click();
       }
       await fuzzingTabBtn.click();
