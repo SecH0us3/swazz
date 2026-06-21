@@ -38,7 +38,8 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await configPromise;
 
     // 3. Spawn a second runner agent process
-    const agentBinary = path.join(process.cwd(), 'packages/container', 'swazz-engine');
+    const isWindows = process.platform === 'win32';
+    const agentBinary = path.join(process.cwd(), 'packages/container', isWindows ? 'swazz-engine.exe' : 'swazz-engine');
     const agentName = 'runner-failover-agent';
     
     console.log(`Spawning second agent process: ${agentBinary}`);

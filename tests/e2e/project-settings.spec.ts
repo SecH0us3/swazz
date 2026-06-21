@@ -223,112 +223,122 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     const rawTextarea = page.locator('.card:has-text("Raw JSON Configuration") >> textarea.textarea');
     await expect(rawTextarea).toBeVisible();
 
-    // Verify raw configuration JSON matches our inputs
-    await expect.poll(async () => {
-      try {
-        return JSON.parse(await rawTextarea.inputValue());
-      } catch {
-        return null;
-      }
-    }).toMatchObject({
-      base_url: 'http://127.0.0.1:8788',
-      wordlist_files: {
-        xss: 'xss-custom.txt',
-      },
-      settings: {
-        chaining_rules: [
-          {
-            source_endpoint: 'POST /api/login',
-            extract_type: 'json',
-            extract_path: 'data.session_id',
-            variable_name: 'SESSION_TOKEN',
-          }
-        ]
-      }
-    });
-
-    // 8. Now set the timeout to 1ms to test the settings have actual effect on fuzzing
     const fuzzingTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing & Performance")');
-    await expect(fuzzingTabBtn).toBeVisible();
-    await fuzzingTabBtn.click();
-
     const timeoutInput = page.locator('label:has-text("Individual Request Timeout (ms)") + input');
-    await expect(timeoutInput).toBeVisible();
-    await timeoutInput.fill('1'); // 1ms timeout!
-
-    // Switch to Raw JSON Config tab to save the configuration
     const rawConfigTabBtnSecond = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
-    await expect(rawConfigTabBtnSecond).toBeVisible();
-    await rawConfigTabBtnSecond.click();
-
-    // Save configuration
     const saveBtn = page.locator('button:has-text("Save Configuration")');
-    await expect(saveBtn).toBeVisible();
-    await saveBtn.click();
-
     const successMsg = page.locator('text=/Configuration updated successfully/');
-    await expect(successMsg).toBeVisible();
-
-    // 9. Go back to Dashboard and run fuzzer
     const backBtn = page.locator('button:has-text("Back to Dashboard")');
-    await expect(backBtn).toBeVisible();
-    await backBtn.click();
-    await expect(moreSettingsBtn).toBeVisible();
-
-    // Set intensity to 1 and disable heavy profiles to speed up E2E test
     const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
     const intensityInput = profilesSection.locator('input[type="number"]').first();
-    await intensityInput.fill('1');
-
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
-    await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click();
-    await expect(boundaryToggle).not.toHaveClass(/active/);
-
     const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
-    await expect(maliciousToggle).toHaveClass(/active/);
-    await maliciousToggle.click();
-    await expect(maliciousToggle).not.toHaveClass(/active/);
 
-    // Add Vulnerable Demo spec
-    const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
-    await specUrlInput.fill('http://127.0.0.1:8788/swagger.json');
-    const addBtn = page.locator('button.btn-primary:has-text("Add")');
-    await addBtn.click();
+    try {
+      // Verify raw configuration JSON matches our inputs
+      await expect.poll(async () => {
+        try {
+          return JSON.parse(await rawTextarea.inputValue());
+        } catch {
+          return null;
+        }
+      }).toMatchObject({
+        base_url: 'http://127.0.0.1:8788',
+        wordlist_files: {
+          xss: 'xss-custom.txt',
+        },
+        settings: {
+          chaining_rules: [
+            {
+              source_endpoint: 'POST /api/login',
+              extract_type: 'json',
+              extract_path: 'data.session_id',
+              variable_name: 'SESSION_TOKEN',
+            }
+          ]
+        }
+      });
 
-    const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+      // 8. Now set the timeout to 1ms to test the settings have actual effect on fuzzing
+      await expect(fuzzingTabBtn).toBeVisible();
+      await fuzzingTabBtn.click();
 
-    // Trigger fuzzing
-    const startBtn = page.locator('#btn-start');
-    await expect(startBtn).toBeVisible();
-    await startBtn.click();
+      await expect(timeoutInput).toBeVisible();
+      await timeoutInput.fill('1'); // 1ms timeout!
 
-    // Wait for the fuzzer to complete (timeout of 1ms makes it complete/fail almost instantly)
-    await expect(startBtn).toBeVisible({ timeout: 20000 });
+      // Switch to Raw JSON Config tab to save the configuration
+      await expect(rawConfigTabBtnSecond).toBeVisible();
+      await rawConfigTabBtnSecond.click();
 
-    // 10. Verify that the 1ms timeout had an effect by checking that total requests ran but 2xx success count is 0
-    const totalStat = page.locator('.stat-card.stat-total .stat-value');
-    await expect(totalStat).not.toHaveText('0');
+      // Save configuration
+      await expect(saveBtn).toBeVisible();
+      await saveBtn.click();
+      await expect(successMsg).toBeVisible();
 
-    const successStat = page.locator('.stat-card.stat-2xx .stat-value');
-    await expect(successStat).toHaveText('0');
+      // 9. Go back to Dashboard and run fuzzer
+      await expect(backBtn).toBeVisible();
+      await backBtn.click();
+      await expect(moreSettingsBtn).toBeVisible();
 
-    // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests
-    await moreSettingsBtn.click();
-    await fuzzingTabBtn.click();
-    await timeoutInput.fill('2000');
-    await rawConfigTabBtnSecond.click();
-    await saveBtn.click();
-    await expect(successMsg).toBeVisible();
+      // Set intensity to 1 and disable heavy profiles to speed up E2E test
+      await intensityInput.fill('1');
 
-    // Restore boundary/malicious profiles and intensity back to default (Boundary, Malicious active, intensity 5)
-    await backBtn.click();
-    await expect(moreSettingsBtn).toBeVisible();
-    await intensityInput.fill('5');
-    await boundaryToggle.click();
-    await expect(boundaryToggle).toHaveClass(/active/);
-    await maliciousToggle.click();
-    await expect(maliciousToggle).toHaveClass(/active/);
+      await expect(boundaryToggle).toHaveClass(/active/);
+      await boundaryToggle.click();
+      await expect(boundaryToggle).not.toHaveClass(/active/);
+
+      await expect(maliciousToggle).toHaveClass(/active/);
+      await maliciousToggle.click();
+      await expect(maliciousToggle).not.toHaveClass(/active/);
+
+      // Add Vulnerable Demo spec
+      const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
+      await specUrlInput.fill('http://127.0.0.1:8788/swagger.json');
+      const addBtn = page.locator('button.btn-primary:has-text("Add")');
+      await addBtn.click();
+
+      const endpointItems = page.locator('.tree-leaf-row');
+      await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+
+      // Trigger fuzzing
+      const startBtn = page.locator('#btn-start');
+      await expect(startBtn).toBeVisible();
+      await startBtn.click();
+
+      // Wait for the fuzzer to complete (timeout of 1ms makes it complete/fail almost instantly)
+      await expect(startBtn).toBeVisible({ timeout: 20000 });
+
+      // 10. Verify that the 1ms timeout had an effect by checking that total requests ran but 2xx success count is 0
+      const totalStat = page.locator('.stat-card.stat-total .stat-value');
+      await expect(totalStat).not.toHaveText('0');
+
+      const successStat = page.locator('.stat-card.stat-2xx .stat-value');
+      await expect(successStat).toHaveText('0');
+    } finally {
+      // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests
+      // Check if we are currently on the settings page or dashboard
+      if (await backBtn.isVisible()) {
+        await moreSettingsBtn.click();
+      }
+      await fuzzingTabBtn.click();
+      await timeoutInput.fill('2000');
+      await rawConfigTabBtnSecond.click();
+      await saveBtn.click();
+      await expect(successMsg).toBeVisible();
+
+      // Restore boundary/malicious profiles and intensity back to default (Boundary, Malicious active, intensity 5)
+      await backBtn.click();
+      await expect(moreSettingsBtn).toBeVisible();
+      await intensityInput.fill('5');
+      
+      const boundaryClass = await boundaryToggle.getAttribute('class');
+      if (boundaryClass && !boundaryClass.includes('active')) {
+        await boundaryToggle.click();
+      }
+      const maliciousClass = await maliciousToggle.getAttribute('class');
+      if (maliciousClass && !maliciousClass.includes('active')) {
+        await maliciousToggle.click();
+      }
+    }
   });
 });
