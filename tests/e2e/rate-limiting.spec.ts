@@ -16,30 +16,32 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // 3. Turn on Rate Limit Detection with burst size 25 in the sidebar
+    // 3. Define selectors for Rate Limit Detection settings
     const rateLimitCheckbox = page.locator('label:has-text("Rate Limit Detection") >> input[type="checkbox"]');
-    await expect(rateLimitCheckbox).toBeVisible();
-    await rateLimitCheckbox.check();
-    await expect(rateLimitCheckbox).toBeChecked();
-
     const burstSizeInput = page.locator('span:has-text("Burst Size") + input');
-    await expect(burstSizeInput).toBeVisible();
-    await burstSizeInput.fill('25'); // Send 25 requests concurrently to trigger the limit (since demo API limits at > 20)
-
-    // Disable regular profiles to speed up testing
     const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
     const intensityInput = profilesSection.locator('input[type="number"]').first();
-    await intensityInput.fill('1');
-
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
-    await boundaryToggle.click();
-    await expect(boundaryToggle).not.toHaveClass(/active/);
-
     const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
-    await maliciousToggle.click();
-    await expect(maliciousToggle).not.toHaveClass(/active/);
 
     try {
+      // Move all state-modifying setup steps inside the try block to guarantee finally cleanup runs
+      await expect(rateLimitCheckbox).toBeVisible();
+      await rateLimitCheckbox.check();
+      await expect(rateLimitCheckbox).toBeChecked();
+
+      await expect(burstSizeInput).toBeVisible();
+      await burstSizeInput.fill('25'); // Send 25 requests concurrently to trigger the limit (since demo API limits at > 20)
+
+      // Disable regular profiles to speed up testing
+      await intensityInput.fill('1');
+
+      await boundaryToggle.click();
+      await expect(boundaryToggle).not.toHaveClass(/active/);
+
+      await maliciousToggle.click();
+      await expect(maliciousToggle).not.toHaveClass(/active/);
+
       // Add Swagger spec URL
       const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
       await specUrlInput.fill('http://127.0.0.1:8788/swagger.json');
@@ -54,6 +56,9 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       const startBtn = page.locator('#btn-start');
       await expect(startBtn).toBeVisible();
       await startBtn.click();
+
+      // Wait for the fuzzer to start (button becomes hidden) to prevent race conditions
+      await expect(startBtn).toBeHidden();
 
       // Wait for the fuzzer to complete (timeout of 120s max)
       await expect(startBtn).toBeVisible({ timeout: 120000 });
