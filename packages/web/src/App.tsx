@@ -231,9 +231,28 @@ export default function App() {
             });
             setTriageScope('finding');
         } else {
-            showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+            if (triage === 'none' || triage === 'acknowledged') {
+                const ruleId = current?.analyzerFindings?.[0]?.ruleId || (current?.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+                const currentIgnoreRules = config.rules?.ignore_rules || [];
+                const filteredRules = currentIgnoreRules.filter(r => 
+                    !(r.rule_id === ruleId && r.endpoint === current?.endpoint && r.method === current?.method)
+                );
+                if (filteredRules.length !== currentIgnoreRules.length) {
+                    updateConfig({
+                        rules: {
+                            ...config.rules,
+                            ignore_rules: filteredRules,
+                        }
+                    });
+                    showToast(`Removed matching ignore rule for ${ruleId}`, 'info');
+                } else {
+                    showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+                }
+            } else {
+                showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+            }
         }
-    }, [updateTriage, showToast]);
+    }, [updateTriage, showToast, config, updateConfig]);
 
     const handleExportIgnoreRules = useCallback(async () => {
         const triaged = await getAllTriaged();
