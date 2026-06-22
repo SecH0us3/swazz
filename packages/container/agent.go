@@ -298,6 +298,9 @@ func startAgent(args []string) {
 						liveClsRules.Defaults[k] = classifier.Severity(v)
 					}
 				}
+				if len(runCfg.Rules.IgnoreRules) > 0 {
+					liveClsRules.IgnoreRules = runCfg.Rules.IgnoreRules
+				}
 			}
 			liveCls := classifier.New(liveClsRules)
 

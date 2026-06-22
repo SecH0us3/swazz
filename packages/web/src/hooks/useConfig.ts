@@ -110,6 +110,9 @@ export function validateConfig(config: any): void {
         if (config.rules.ignore !== undefined && !Array.isArray(config.rules.ignore)) {
             throw new Error('rules.ignore must be an array');
         }
+        if (config.rules.ignore_rules !== undefined && !Array.isArray(config.rules.ignore_rules)) {
+            throw new Error('rules.ignore_rules must be an array');
+        }
     }
 }
 

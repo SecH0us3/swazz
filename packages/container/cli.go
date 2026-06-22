@@ -233,9 +233,15 @@ func runCLI(args []string) {
 		log.Fatalf("Failed to load ignore rules: %v", err)
 	}
 
+	var combinedIgnoreRules []classifier.IgnoreRule
+	combinedIgnoreRules = append(combinedIgnoreRules, ignoreRules...)
+	if runCfg.Rules != nil && len(runCfg.Rules.IgnoreRules) > 0 {
+		combinedIgnoreRules = append(combinedIgnoreRules, runCfg.Rules.IgnoreRules...)
+	}
+
 	// Map swagger.RulesConfig to classifier.RulesConfig
 	clsRules := &classifier.RulesConfig{
-		IgnoreRules: ignoreRules,
+		IgnoreRules: combinedIgnoreRules,
 	}
 	if runCfg.Rules != nil {
 		clsRules.Ignore = runCfg.Rules.Ignore

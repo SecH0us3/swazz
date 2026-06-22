@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
@@ -74,6 +74,16 @@ export default function App() {
         updateDictionaries, updateProfiles, importConfig, exportConfig
     } = useConfig();
 
+    const [triagePrompt, setTriagePrompt] = useState<{
+        id: string;
+        triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none';
+        ruleId: string;
+        endpoint: string;
+        method: string;
+        payload?: string;
+    } | null>(null);
+    const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
+
     const { start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
@@ -140,6 +150,64 @@ export default function App() {
         }
     }, [importConfig, loadEndpoints, showToast]);
 
+    const handleConfirmTriageIgnore = useCallback(() => {
+        if (!triagePrompt) return;
+
+        const newRule: any = {
+            rule_id: triagePrompt.ruleId,
+        };
+
+        if (triageScope === 'finding') {
+            newRule.endpoint = triagePrompt.endpoint;
+            newRule.method = triagePrompt.method;
+        } else if (triageScope === 'endpoint') {
+            newRule.endpoint = triagePrompt.endpoint;
+        } else if (triageScope === 'all') {
+            newRule.endpoint = '**';
+        }
+
+        // Clean payload if present and short enough
+        if (triagePrompt.payload && triagePrompt.payload.length > 0 && triagePrompt.payload.length < 150) {
+            let cleanPayload = triagePrompt.payload.trim();
+            if (cleanPayload.includes('…')) {
+                cleanPayload = cleanPayload.split('…')[0].trim();
+            }
+            if (!cleanPayload.startsWith('{') && !cleanPayload.startsWith('[')) {
+                if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
+                    try {
+                        cleanPayload = JSON.parse(cleanPayload);
+                    } catch { /* */ }
+                }
+                if (cleanPayload.trim().length > 0) {
+                    newRule.payload = cleanPayload;
+                }
+            }
+        }
+
+        const currentIgnoreRules = config.rules?.ignore_rules || [];
+        // Check if identical rule already exists to avoid duplication
+        const exists = currentIgnoreRules.some(r => 
+            r.rule_id === newRule.rule_id && 
+            r.endpoint === newRule.endpoint && 
+            r.method === newRule.method && 
+            r.payload === newRule.payload
+        );
+
+        if (!exists) {
+            updateConfig({
+                rules: {
+                    ...config.rules,
+                    ignore_rules: [...currentIgnoreRules, newRule],
+                }
+            });
+            showToast(`Added ignore rule for ${newRule.rule_id}`, 'success');
+        } else {
+            showToast(`Ignore rule already exists in config`, 'info');
+        }
+
+        setTriagePrompt(null);
+    }, [triagePrompt, triageScope, config, updateConfig, showToast]);
+
     const handleTriage = useCallback(async (id: string, triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => {
         await updateTriage(id, triage);
         const current = useAppStore.getState().selectedResult;
@@ -150,7 +218,21 @@ export default function App() {
         }
         // Force refresh of the results list in Inspector
         useAppStore.setState(state => ({ liveCount: state.liveCount + 1 }));
-        showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+
+        if (triage === 'ignored' || triage === 'false_positive') {
+            const ruleId = current?.analyzerFindings?.[0]?.ruleId || (current?.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+            setTriagePrompt({
+                id,
+                triage,
+                ruleId,
+                endpoint: current?.endpoint || '',
+                method: current?.method || '',
+                payload: current?.payloadPreview || '',
+            });
+            setTriageScope('finding');
+        } else {
+            showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+        }
     }, [updateTriage, showToast]);
 
     const handleExportIgnoreRules = useCallback(async () => {
@@ -458,6 +540,80 @@ export default function App() {
                     config={config}
                     onTriage={handleTriage}
                 />
+            )}
+
+            {triagePrompt && (
+                <div className="modal-container">
+                    <div className="modal-overlay" onClick={() => setTriagePrompt(null)} />
+                    <div className="ignore-modal-content">
+                        <div className="modal-header">
+                            <h2>Add Ignore Rule</h2>
+                            <button className="modal-close" onClick={() => setTriagePrompt(null)}>✕</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="ignore-modal-form">
+                                <div className="ignore-modal-field">
+                                    <label className="ignore-modal-label">Rule ID</label>
+                                    <input className="input" type="text" value={triagePrompt.ruleId} readOnly />
+                                </div>
+                                <div className="ignore-modal-field">
+                                    <label className="ignore-modal-label">Select Scope</label>
+                                    <div className="ignore-modal-radio-group">
+                                        <label className="ignore-modal-radio-label">
+                                            <input 
+                                                type="radio" 
+                                                name="ignore-scope" 
+                                                value="finding" 
+                                                checked={triageScope === 'finding'} 
+                                                onChange={() => setTriageScope('finding')} 
+                                            />
+                                            <div>
+                                                <div>Only this finding</div>
+                                                <div className="ignore-modal-radio-desc">
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.method} {triagePrompt.endpoint}</strong>
+                                                </div>
+                                            </div>
+                                        </label>
+                                        <label className="ignore-modal-radio-label">
+                                            <input 
+                                                type="radio" 
+                                                name="ignore-scope" 
+                                                value="endpoint" 
+                                                checked={triageScope === 'endpoint'} 
+                                                onChange={() => setTriageScope('endpoint')} 
+                                            />
+                                            <div>
+                                                <div>All methods on this endpoint</div>
+                                                <div className="ignore-modal-radio-desc">
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.endpoint}</strong> for any method
+                                                </div>
+                                            </div>
+                                        </label>
+                                        <label className="ignore-modal-radio-label">
+                                            <input 
+                                                type="radio" 
+                                                name="ignore-scope" 
+                                                value="all" 
+                                                checked={triageScope === 'all'} 
+                                                onChange={() => setTriageScope('all')} 
+                                            />
+                                            <div>
+                                                <div>Everywhere</div>
+                                                <div className="ignore-modal-radio-desc">
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> across all endpoints
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div className="ignore-modal-footer">
+                                    <button className="btn btn-ghost" onClick={() => setTriagePrompt(null)}>Cancel</button>
+                                    <button className="btn btn-primary" onClick={handleConfirmTriageIgnore}>Ignore Finding</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {isHotkeysHelpOpen && (
