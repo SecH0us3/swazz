@@ -175,7 +175,10 @@ export default function App() {
             if (!cleanPayload.startsWith('{') && !cleanPayload.startsWith('[')) {
                 if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
                     try {
-                        cleanPayload = JSON.parse(cleanPayload);
+                        const parsed = JSON.parse(cleanPayload);
+                        if (typeof parsed === 'string') {
+                            cleanPayload = parsed;
+                        }
                     } catch { /* */ }
                 }
                 if (cleanPayload.trim().length > 0) {
@@ -211,7 +214,8 @@ export default function App() {
     const handleTriage = useCallback(async (id: string, triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => {
         await updateTriage(id, triage);
         const current = useAppStore.getState().selectedResult;
-        if (current && current.id === id) {
+        const matchesCurrent = current && current.id === id;
+        if (matchesCurrent) {
             useAppStore.setState({
                 selectedResult: { ...current, triage } as any
             });
@@ -220,31 +224,39 @@ export default function App() {
         useAppStore.setState(state => ({ liveCount: state.liveCount + 1 }));
 
         if (triage === 'ignored' || triage === 'false_positive') {
-            const ruleId = current?.analyzerFindings?.[0]?.ruleId || (current?.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
-            setTriagePrompt({
-                id,
-                triage,
-                ruleId,
-                endpoint: current?.endpoint || '',
-                method: current?.method || '',
-                payload: current?.payloadPreview || '',
-            });
-            setTriageScope('finding');
+            if (matchesCurrent) {
+                const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+                setTriagePrompt({
+                    id,
+                    triage,
+                    ruleId,
+                    endpoint: current.endpoint || '',
+                    method: current.method || '',
+                    payload: current.payloadPreview || '',
+                });
+                setTriageScope('finding');
+            } else {
+                showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+            }
         } else {
             if (triage === 'none' || triage === 'acknowledged') {
-                const ruleId = current?.analyzerFindings?.[0]?.ruleId || (current?.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
-                const currentIgnoreRules = config.rules?.ignore_rules || [];
-                const filteredRules = currentIgnoreRules.filter(r => 
-                    !(r.rule_id === ruleId && r.endpoint === current?.endpoint && r.method === current?.method)
-                );
-                if (filteredRules.length !== currentIgnoreRules.length) {
-                    updateConfig({
-                        rules: {
-                            ...config.rules,
-                            ignore_rules: filteredRules,
-                        }
-                    });
-                    showToast(`Removed matching ignore rule for ${ruleId}`, 'info');
+                if (matchesCurrent) {
+                    const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+                    const currentIgnoreRules = config.rules?.ignore_rules || [];
+                    const filteredRules = currentIgnoreRules.filter(r => 
+                        !(r.rule_id === ruleId && r.endpoint === current.endpoint && r.method === current.method)
+                    );
+                    if (filteredRules.length !== currentIgnoreRules.length) {
+                        updateConfig({
+                            rules: {
+                                ...config.rules,
+                                ignore_rules: filteredRules,
+                            }
+                        });
+                        showToast(`Removed matching ignore rule for ${ruleId}`, 'info');
+                    } else {
+                        showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+                    }
                 } else {
                     showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
                 }
@@ -276,7 +288,10 @@ export default function App() {
                 if (!cleanPayload.startsWith('{') && !cleanPayload.startsWith('[')) {
                     if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
                         try {
-                            cleanPayload = JSON.parse(cleanPayload);
+                            const parsed = JSON.parse(cleanPayload);
+                            if (typeof parsed === 'string') {
+                                cleanPayload = parsed;
+                            }
                         } catch { /* */ }
                     }
                     if (cleanPayload.trim().length > 0) {

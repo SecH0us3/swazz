@@ -110,8 +110,27 @@ export function validateConfig(config: any): void {
         if (config.rules.ignore !== undefined && !Array.isArray(config.rules.ignore)) {
             throw new Error('rules.ignore must be an array');
         }
-        if (config.rules.ignore_rules !== undefined && !Array.isArray(config.rules.ignore_rules)) {
-            throw new Error('rules.ignore_rules must be an array');
+        if (config.rules.ignore_rules !== undefined) {
+            if (!Array.isArray(config.rules.ignore_rules)) {
+                throw new Error('rules.ignore_rules must be an array');
+            }
+            for (const rule of config.rules.ignore_rules) {
+                if (typeof rule !== 'object' || rule === null) {
+                    throw new Error('rules.ignore_rules elements must be objects');
+                }
+                if (rule.rule_id !== undefined && typeof rule.rule_id !== 'string') {
+                    throw new Error('ignore_rule rule_id must be a string');
+                }
+                if (rule.endpoint !== undefined && typeof rule.endpoint !== 'string') {
+                    throw new Error('ignore_rule endpoint must be a string');
+                }
+                if (rule.method !== undefined && typeof rule.method !== 'string') {
+                    throw new Error('ignore_rule method must be a string');
+                }
+                if (rule.payload !== undefined && typeof rule.payload !== 'string') {
+                    throw new Error('ignore_rule payload must be a string');
+                }
+            }
         }
     }
 }
