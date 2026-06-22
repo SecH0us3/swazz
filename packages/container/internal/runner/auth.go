@@ -385,7 +385,28 @@ func (r *Runner) extractAndSaveCSRFToken(resp *http.Response, bodyBytes []byte) 
 		}
 	}
 
-	// 2. Check HTML body meta tags or inputs
+	// 2. Check response headers
+	if token == "" {
+		var keys []string
+		for k := range resp.Header {
+			kLower := strings.ToLower(k)
+			if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) > 0 {
+			slices.Sort(keys)
+			for _, k := range keys {
+				values := resp.Header[k]
+				if len(values) > 0 && values[0] != "" {
+					token = values[0]
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Check HTML body meta tags or inputs
 	if token == "" && len(bodyBytes) > 0 {
 		if matches := csrfMetaRegex.FindSubmatch(bodyBytes); len(matches) > 0 {
 			for i := 1; i < len(matches); i++ {
