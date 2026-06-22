@@ -73,7 +73,7 @@ func TestIsIgnored(t *testing.T) {
 	}
 	for i := range rules {
 		if rules[i].Payload != "" {
-			rules[i].payloadRx, _ = regexp.Compile(rules[i].Payload)
+			rules[i].PayloadRx, _ = regexp.Compile(rules[i].Payload)
 		}
 	}
 
