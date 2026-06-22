@@ -181,7 +181,7 @@ export default function App() {
                         }
                     } catch { /* */ }
                 }
-                if (cleanPayload.trim().length > 0) {
+                if (typeof cleanPayload === 'string' && cleanPayload.trim().length > 0) {
                     newRule.payload = cleanPayload;
                 }
             }
@@ -224,8 +224,8 @@ export default function App() {
         useAppStore.setState(state => ({ liveCount: state.liveCount + 1 }));
 
         if (triage === 'ignored' || triage === 'false_positive') {
-            if (matchesCurrent) {
-                const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+            if (current && current.id === id) {
+                const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
                 setTriagePrompt({
                     id,
                     triage,
@@ -240,8 +240,8 @@ export default function App() {
             }
         } else {
             if (triage === 'none' || triage === 'acknowledged') {
-                if (matchesCurrent) {
-                    const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+                if (current && current.id === id) {
+                    const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
                     const currentIgnoreRules = config.rules?.ignore_rules || [];
                     const filteredRules = currentIgnoreRules.filter(r => 
                         !(r.rule_id === ruleId && r.endpoint === current.endpoint && r.method === current.method)
@@ -294,7 +294,7 @@ export default function App() {
                             }
                         } catch { /* */ }
                     }
-                    if (cleanPayload.trim().length > 0) {
+                    if (typeof cleanPayload === 'string' && cleanPayload.trim().length > 0) {
                         rule.payload = cleanPayload;
                     }
                 }
