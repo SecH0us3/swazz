@@ -660,6 +660,33 @@ func TestExtractCSRFToken(t *testing.T) {
 	htmlReversedMeta := []byte(`<html><head><meta content="reversed-xsrf-val" name="xsrf-token"></head></html>`)
 	r.extractAndSaveCSRFToken(resp, htmlReversedMeta)
 	assert.Equal(t, "reversed-xsrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 6. Extract from response headers (e.g. X-CSRF-Token)
+	headerResp := &http.Response{
+		Header: http.Header{
+			"X-CSRF-Token": []string{"header-csrf-val"},
+		},
+	}
+	r.extractAndSaveCSRFToken(headerResp, nil)
+	assert.Equal(t, "header-csrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 7. Extract from response headers deterministically when multiple match (sorting keys)
+	// Keys are: "X-XSRF-Token" and "X-CSRF-Token". Sorted: "X-CSRF-Token", "X-XSRF-Token"
+	// So "X-CSRF-Token" should be picked first.
+	multiHeaderResp := &http.Response{
+		Header: http.Header{
+			"X-XSRF-Token": []string{"xsrf-val"},
+			"X-CSRF-Token": []string{"csrf-val"},
+		},
+	}
+	r.extractAndSaveCSRFToken(multiHeaderResp, nil)
+	assert.Equal(t, "csrf-val", r.activeCSRFToken)
 }
 
 func TestMaybeReauthenticate(t *testing.T) {
