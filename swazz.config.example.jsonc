@@ -1,7 +1,9 @@
 {
+    // The URLs pointing to OpenAPI/Swagger specifications or GraphQL Introspection endpoints
     "swagger_urls": [
         "https://api.example.com/swagger.json"
     ],
+    // The target API URL where generated requests will be sent
     "base_url": "https://api.example.com",
     "headers": {
         "Authorization": "Bearer YOUR_AUTH_TOKEN_HERE"
@@ -14,6 +16,10 @@
         "email": ["admin@test.com", "a@b.c"]
     },
     "settings": {
+        /*
+           iterations_per_profile defines how many fuzz attempts to perform per payload category,
+           and concurrency specifies the number of concurrent worker goroutines.
+        */
         "iterations_per_profile": 2,
         "concurrency": 2,
         "timeout_ms": 2000,

@@ -1,9 +1,14 @@
 {
+    // The base URL of the target API for local development
     "base_url": "https://jsonplaceholder.typicode.com",
     "global_headers": {
         "Content-Type": "application/json"
     },
     "cookies": {},
+    /*
+       Custom dictionaries are loaded by name to seed generated string inputs.
+       This is used when a field name matches the dictionary name (case-insensitive).
+    */
     "dictionaries": {
         "email": [
             "user@test.com",

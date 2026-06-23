@@ -54,6 +54,7 @@ func LoadIgnoreRules(path string) ([]IgnoreRule, error) {
 		}
 		return nil, fmt.Errorf("failed to read ignore file: %w", err)
 	}
+	data = swagger.StripJSONC(data)
 
 	var rules []IgnoreRule
 	if err := json.Unmarshal(data, &rules); err != nil {

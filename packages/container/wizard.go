@@ -52,6 +52,7 @@ func runWizard() {
 				fmt.Printf("\033[31mError reading existing config: %v. Starting fresh.\033[0m\n", err)
 				config = CliConfig{Settings: swagger.DefaultSettings()}
 			} else {
+				data = swagger.StripJSONC(data)
 				if err := json.Unmarshal(data, &config); err != nil {
 					fmt.Printf("\033[31mError parsing existing config: %v. Starting fresh.\033[0m\n", err)
 					config = CliConfig{Settings: swagger.DefaultSettings()}

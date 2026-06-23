@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { SwazzConfig, SwazzSettings, Dictionary, FuzzingProfile } from '../types.js';
 import { DEFAULT_SETTINGS } from '../types.js';
 import { useAppStore } from '../store/appStore.js';
+import { stripJSONC } from '../utils/jsonc.js';
 
 const STORAGE_KEY = 'swazz:config';
 
@@ -295,7 +296,7 @@ export function useConfig() {
 
     const importConfig = useCallback((json: string) => {
         try {
-            const parsedClean = JSON.parse(json) as any;
+            const parsedClean = JSON.parse(stripJSONC(json)) as any;
             if (!parsedClean || typeof parsedClean !== 'object') {
                 throw new Error('Config must be a JSON object');
             }

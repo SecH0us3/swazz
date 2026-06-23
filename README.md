@@ -151,7 +151,7 @@ For detailed setup instructions, including advanced configuration, caching, and 
 
 ## ⚙️ Configuration Example
 
-`swazz` uses a flexible JSON configuration for fine-grained control:
+`swazz` uses a flexible JSONC configuration (JSON with comments) for fine-grained control, allowing both single-line (`//`) and multi-line (`/* */`) comments:
 
 ```json
 {
@@ -188,7 +188,7 @@ For detailed setup instructions, including advanced configuration, caching, and 
 
 ## 🙈 Ignore Rules & Suppressions
 
-To suppress false positives and filter noisy findings, Swazz supports ignore rules. You can triage findings in the Web Dashboard and download the rules config, or manually create `swazz.ignore.json` in your project root.
+To suppress false positives and filter noisy findings, Swazz supports ignore rules. You can triage findings in the Web Dashboard and download the rules config, or manually create `swazz.ignore.json` (which also supports JSONC comments) in your project root.
 
 ### Example `swazz.ignore.json`
 

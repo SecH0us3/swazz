@@ -559,7 +559,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
 
-- [ ] **Task 70: JSONC Support for Configuration Files**
+- [/] **Task 70: JSONC Support for Configuration Files**
   - **Design Goal:** Allow users to annotate their `swazz.config.json`, `swazz.ignore.json`, and `wrangler.config.json` files with `//` and `/* */` comments. JSONC (JSON with Comments) is the de-facto standard for developer-facing config files (VS Code, TypeScript, ESLint), and its absence currently forces users to maintain separate out-of-band documentation for non-obvious config fields.
   - **Implementation Details:**
     - **Go backend (CLI + agent):** Introduce a `stripJSONC(data []byte) []byte` utility in `packages/container/` (e.g., `jsonc.go`) that strips `// line` and `/* block */` comments while preserving byte offsets (for accurate parse error messages). Apply it to every `os.ReadFile` / `json.Unmarshal` call for user-supplied config files:

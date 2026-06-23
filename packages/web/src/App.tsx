@@ -244,7 +244,9 @@ export default function App() {
                     const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
                     const currentIgnoreRules = config.rules?.ignore_rules || [];
                     const filteredRules = currentIgnoreRules.filter(r => 
-                        !(r.rule_id === ruleId && r.endpoint === current.endpoint && r.method === current.method)
+                        !(r.rule_id === ruleId && 
+                          (r.endpoint === current.endpoint || r.endpoint === '**') && 
+                          (r.method === current.method || !r.method))
                     );
                     if (filteredRules.length !== currentIgnoreRules.length) {
                         updateConfig({

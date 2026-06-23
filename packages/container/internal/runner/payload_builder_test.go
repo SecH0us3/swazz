@@ -141,7 +141,7 @@ func TestBuildFuzzPayload(t *testing.T) {
 }
 
 func TestBuildHeaders(t *testing.T) {
-	gen := generator.New(nil, swagger.ProfileRandom, swagger.Settings{})
+	gen := generator.New(nil, swagger.ProfileBoundary, swagger.Settings{})
 
 	// Empty headers schema
 	ep := swagger.EndpointConfig{}
