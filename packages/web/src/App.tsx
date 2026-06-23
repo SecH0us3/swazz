@@ -232,7 +232,7 @@ export default function App() {
                     ruleId,
                     endpoint: current.endpoint || '',
                     method: current.method || '',
-                    payload: current.payload || '',
+                    payload: typeof current.payload === 'string' ? current.payload : (current.payload ? JSON.stringify(current.payload) : ''),
                 });
                 setTriageScope('finding');
             } else {
