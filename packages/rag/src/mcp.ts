@@ -52,10 +52,16 @@ export function runMcpServer(dbPath: string) {
     }
   });
 
-  process.on('SIGINT', () => {
-    console.error('[Swazz MCP] Shutting down on SIGINT');
+  const cleanup = () => {
+    console.error('[Swazz MCP] Shutting down...');
+    if (db) {
+      db.close();
+    }
     process.exit(0);
-  });
+  };
+
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 }
 
 function sendResponse(id: any, result: any) {

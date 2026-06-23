@@ -34,16 +34,12 @@ export class CodeIndexer {
     const relativePath = path.relative(this.options.workspaceDir, filepath);
     const parts = relativePath.split(path.sep);
     
-    // Check excludes (e.g. node_modules, .git)
     for (const part of parts) {
-      if (this.options.excludes.includes(part) || part.startsWith('.')) {
-        // Exclude hidden folders like .git, .agents, etc., unless explicitly requested
-        if (part !== '.' && part !== '..' && part !== '.agents' && part !== '.gemini') {
-          // Keep standard project files and exclude node_modules, build, git
-          if (part === '.git' || this.options.excludes.includes(part)) {
-            return true;
-          }
-        }
+      if (part.startsWith('.') && part !== '.' && part !== '..' && part !== '.agents' && part !== '.gemini') {
+        return true;
+      }
+      if (this.options.excludes.includes(part)) {
+        return true;
       }
     }
     return false;
@@ -268,6 +264,9 @@ export class CodeIndexer {
     if (this.queueTimeout) {
       clearTimeout(this.queueTimeout);
       this.queueTimeout = null;
+    }
+    if (this.db) {
+      this.db.close();
     }
   }
 }
