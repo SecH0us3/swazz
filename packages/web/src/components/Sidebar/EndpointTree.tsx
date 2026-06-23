@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { EndpointConfig } from '../../types.js';
+import { matchesPattern } from '../../utils/glob.js';
 
 interface EndpointTreeProps {
     endpoints: EndpointConfig[];
@@ -37,6 +38,14 @@ function getAllEndpointIds(node: TreeNode): string[] {
         ids = ids.concat(getAllEndpointIds(child));
     }
     return ids;
+}
+
+function isEndpointDisabled(id: string, disabledEndpoints: string[]): boolean {
+    const spaceIdx = id.indexOf(' ');
+    if (spaceIdx === -1) return false;
+    const method = id.substring(0, spaceIdx);
+    const path = id.substring(spaceIdx + 1);
+    return matchesPattern(method, path, disabledEndpoints);
 }
 
 export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }: EndpointTreeProps) {
@@ -99,16 +108,16 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
         const allIds = getAllEndpointIds(node);
         if (allIds.length === 0 && node.name !== 'root') return null;
 
-        const disabledCount = allIds.filter((id) => disabledEndpoints.includes(id)).length;
+        const disabledCount = allIds.filter((id) => isEndpointDisabled(id, disabledEndpoints)).length;
         const checked = disabledCount === 0;
         const indeterminate = disabledCount > 0 && disabledCount < allIds.length;
 
         const toggleNode = () => {
             if (checked || indeterminate) {
-                const toDisable = allIds.filter((id) => !disabledEndpoints.includes(id));
+                const toDisable = allIds.filter((id) => !isEndpointDisabled(id, disabledEndpoints));
                 onUpdateDisabled([...disabledEndpoints, ...toDisable]);
             } else {
-                const next = disabledEndpoints.filter((id) => !allIds.includes(id));
+                const next = disabledEndpoints.filter((p) => !allIds.some(id => isEndpointDisabled(id, [p])));
                 onUpdateDisabled(next);
             }
         };
@@ -145,7 +154,7 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                         {Object.values(node.children).map((child) => renderNode(child, nodeKey, depth + 1))}
 
                         {node.endpoints.map((ep) => {
-                            const isChecked = !disabledEndpoints.includes(ep.id);
+                            const isChecked = !isEndpointDisabled(ep.id, disabledEndpoints);
                             return (
                                 <div key={ep.id} className="tree-leaf-row">
                                     <input
@@ -154,8 +163,11 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                                         checked={isChecked}
                                         aria-label={`Enable endpoint ${ep.id}`}
                                         onChange={() => {
-                                            if (isChecked) onUpdateDisabled([...disabledEndpoints, ep.id]);
-                                            else onUpdateDisabled(disabledEndpoints.filter((id) => id !== ep.id));
+                                            if (isChecked) {
+                                                onUpdateDisabled([...disabledEndpoints, ep.id]);
+                                            } else {
+                                                onUpdateDisabled(disabledEndpoints.filter((p) => !isEndpointDisabled(ep.id, [p])));
+                                            }
                                         }}
                                     />
                                     <span className={`method method-${ep.method.toLowerCase()}`} style={{ fontSize:9, width:36 }}>

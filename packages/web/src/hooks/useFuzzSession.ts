@@ -5,6 +5,7 @@ import { loadSwaggerUrl } from '../services/swaggerService.js';
 import { dbStreamResult } from './useDb.js';
 import type { ScanRun } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
+import { matchesPattern } from '../utils/glob.js';
 
 interface UseFuzzSessionProps {
     config: SwazzConfig;
@@ -117,7 +118,7 @@ export function useFuzzSession({
         }
 
         const activeEndpoints = finalEndpoints.filter(
-            ep => !config.disabled_endpoints?.includes(`${ep.method} ${ep.path}`)
+            ep => !matchesPattern(ep.method, ep.path, config.disabled_endpoints || [])
         );
 
         if (activeEndpoints.length === 0) {

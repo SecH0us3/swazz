@@ -287,7 +287,7 @@ Running a fuzzer in CI requires a slightly different configuration profile than 
 | `iterations_per_profile` | `1` | One iteration per profile is enough for a CI signal; exhaustive testing belongs in nightly scheduled runs. |
 | `concurrency` | `5–10` | Keeps the test server responsive; prevents false timeouts from self-inflicted overload. |
 | `timeout_ms` | `3000` | Low enough to catch hanging endpoints quickly; high enough to avoid noise from slow CI runners. |
-| `endpoints.exclude` | `/health`, `/metrics`, `/readyz` | Probes are not business logic — exclude them to keep the findings signal clean. |
+| `endpoints.exclude` | `/health`, `/metrics`, `/readyz` | Probes are not business logic — exclude them to keep the findings signal clean. Matching is case-insensitive and supports glob wildcards (`*` and `**`). |
 | `rules.ignore` | `401`, `403`, `404`, `405`, `429` | Expected defensive responses are not findings. |
 
 ### Supply Chain Security (Commit-Level Pinning)
