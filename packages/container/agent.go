@@ -31,20 +31,21 @@ import (
 func startAgent(args []string) {
 	var coordinatorURL, token, name, keyPathOrHex, logLevelStr, logFilterStr string
 	var dangerousNoContainer bool
-	logLevelStr = "info"
-	logger.SetLevel(logger.LevelInfo)
+	var hasQuiet, hasLogLevel bool
 
 	// Simple arg parsing
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--dangerous-no-container":
 			dangerousNoContainer = true
-		case "--log-level":
+		case "--log-level", "-log-level":
 			if i+1 < len(args) {
 				logLevelStr = args[i+1]
-				logger.SetLevelByName(logLevelStr)
+				hasLogLevel = true
 				i++
 			}
+		case "--quiet", "-quiet", "-q", "--q":
+			hasQuiet = true
 		case "--log-filter":
 			if i+1 < len(args) {
 				logFilterStr = args[i+1]
@@ -76,6 +77,23 @@ func startAgent(args []string) {
 			os.Exit(0)
 		}
 	}
+
+	var finalLevel string
+	envLevel := os.Getenv("SWAZZ_LOG_LEVEL")
+	if envLevel != "" {
+		finalLevel = envLevel
+	} else {
+		finalLevel = "info"
+	}
+
+	if hasQuiet {
+		finalLevel = "error"
+	}
+	if hasLogLevel {
+		finalLevel = logLevelStr
+	}
+
+	logger.SetLevelByName(finalLevel)
 
 	safenet.AssertRunningInContainer(dangerousNoContainer)
 

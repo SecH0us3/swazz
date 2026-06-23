@@ -36,6 +36,7 @@ import (
 
 	"swazz-engine/internal/bola"
 	"swazz-engine/internal/generator"
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -214,10 +215,8 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 			if val := extractJSONPathExtended(respBody, jsonPath); val != nil {
 				r.config.Variables[varName] = val
 				varsUpdated = true
-				if r.config.Settings.Debug {
-					fmt.Printf("[BOLA] Extracted variable %s = %v from response of %s %s\n",
-						varName, val, method, originalPath)
-				}
+				logger.Debug("[BOLA] Extracted variable %s = %v from response of %s %s",
+					varName, val, method, originalPath)
 			}
 		}
 		r.configMu.Unlock()
@@ -250,9 +249,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 	}
 	r.resultsMu.Unlock()
 
-	if r.config.Settings.Debug {
-		fmt.Printf("[BOLA] Harvested IDs for prefix %s: %v\n", prefix, newIDs)
-	}
+	logger.Debug("[BOLA] Harvested IDs for prefix %s: %v", prefix, newIDs)
 }
 
 // mergeUniqueStrings returns the union of two string slices without duplicates.
@@ -431,14 +428,14 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	case concurrency <= 0:
 		concurrency = 5
 	case concurrency > 1000:
-		fmt.Println("BOLA: Concurrency limit exceeded (max 1000)")
+		logger.Warn("BOLA: Concurrency limit exceeded (max 1000)")
 		return nil
 	}
 	r.limiter.SetTarget(concurrency)
 
 	r.progress.currentProfile.Store("BOLA")
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-	fmt.Println("Running Access Control & BOLA/IDOR testing phase...")
+	logger.Info("Running Access Control & BOLA/IDOR testing phase...")
 
 	identityHeaders, identityCookies := r.authenticateIdentities(ctx)
 
@@ -449,7 +446,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 	bolaResults := r.replayCandidates(ctx, candidates, identityHeaders, identityCookies)
-	fmt.Printf("Access Control phase complete. Found %d findings.\n", len(bolaResults))
+	logger.Info("Access Control phase complete. Found %d findings.", len(bolaResults))
 	return bolaResults
 }
 
@@ -461,7 +458,7 @@ func (r *Runner) authenticateIdentities(ctx context.Context) (map[string]map[str
 	for name, identity := range r.config.AuthIdentities {
 		h, c, err := r.ExecuteAuthSequence(ctx, identity.AuthSequence, identity.Headers, identity.Cookies)
 		if err != nil {
-			fmt.Printf("BOLA: Failed to authenticate identity %s: %v\n", name, err)
+			logger.Error("BOLA: Failed to authenticate identity %s: %v", name, err)
 			continue
 		}
 		headers[name] = h
@@ -838,7 +835,7 @@ func (r *Runner) replayCandidate(
 		}
 	}
 	if !hasAuth {
-		fmt.Printf("[BOLA] Skipping %s %s — no auth credentials in baseline request\n",
+		logger.Debug("[BOLA] Skipping %s %s — no auth credentials in baseline request",
 			cand.Method, cand.Endpoint)
 		return
 	}
