@@ -115,7 +115,7 @@ func runCLI(args []string) {
 	if envLevel != "" {
 		finalLevel = envLevel
 	} else {
-		finalLevel = "warn"
+		finalLevel = "info"
 	}
 
 	if hasDebug {
