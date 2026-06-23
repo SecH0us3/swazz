@@ -24,6 +24,10 @@ func SetLevel(level LogLevel) {
 	currentLevel = level
 }
 
+func GetLevel() LogLevel {
+	return currentLevel
+}
+
 func SetLevelByName(levelName string) {
 	switch strings.ToLower(levelName) {
 	case "debug":
@@ -32,7 +36,7 @@ func SetLevelByName(levelName string) {
 		currentLevel = LevelInfo
 	case "warn", "warning":
 		currentLevel = LevelWarn
-	case "error":
+	case "error", "quiet", "q":
 		currentLevel = LevelError
 	default:
 		log.Printf("Unknown log level '%s', defaulting to info", levelName)
