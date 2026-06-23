@@ -75,6 +75,11 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     // 6. Change triage state to 'False Positive'
     await triageSelect.selectOption('false_positive');
 
+    // Confirm the ignore rule modal
+    const confirmBtn = page.locator('button.btn-primary:has-text("Ignore Finding")');
+    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await confirmBtn.click();
+
     // Assert that the item's opacity fades out and the FP badge is applied instantly
     await expect(firstFinding).toHaveCSS('opacity', '0.6');
     const fpBadge = firstFinding.locator('.badge-warning:has-text("FP")');

@@ -6,6 +6,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"swazz-engine/internal/swagger"
 )
 
 // endpointGlobToRegex converts a glob pattern into a full-match regular
@@ -40,13 +42,7 @@ func endpointMatches(pattern, endpoint string) bool {
 }
 
 // IgnoreRule defines matching criteria to suppress false positive or noise findings.
-type IgnoreRule struct {
-	RuleID    string `json:"rule_id,omitempty"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	Method    string `json:"method,omitempty"`
-	Payload   string `json:"payload,omitempty"`
-	payloadRx *regexp.Regexp
-}
+type IgnoreRule = swagger.IgnoreRule
 
 // LoadIgnoreRules reads and parses ignore rules from a JSON file.
 // If the file does not exist, it returns an empty slice and no error.
@@ -67,7 +63,7 @@ func LoadIgnoreRules(path string) ([]IgnoreRule, error) {
 	for i := range rules {
 		if rules[i].Payload != "" {
 			if rx, err := regexp.Compile(rules[i].Payload); err == nil {
-				rules[i].payloadRx = rx
+				rules[i].PayloadRx = rx
 			}
 		}
 	}
@@ -136,8 +132,8 @@ func payloadMatches(payload any, r *IgnoreRule) bool {
 		}
 	}
 
-	if r.payloadRx != nil {
-		return r.payloadRx.MatchString(str)
+	if r.PayloadRx != nil {
+		return r.PayloadRx.MatchString(str)
 	}
 
 	// Fallback to substring

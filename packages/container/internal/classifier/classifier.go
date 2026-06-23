@@ -112,8 +112,8 @@ func New(rules *RulesConfig) *Classifier {
 	}
 	c.ignoreRules = rules.IgnoreRules
 	for i := range c.ignoreRules {
-		if c.ignoreRules[i].Payload != "" && c.ignoreRules[i].payloadRx == nil {
-			c.ignoreRules[i].payloadRx, _ = regexp.Compile(c.ignoreRules[i].Payload)
+		if c.ignoreRules[i].Payload != "" && c.ignoreRules[i].PayloadRx == nil {
+			c.ignoreRules[i].PayloadRx, _ = regexp.Compile(c.ignoreRules[i].Payload)
 		}
 	}
 

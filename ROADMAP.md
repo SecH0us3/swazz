@@ -535,7 +535,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
-- [ ] **Task 63: UI Actions for Ignoring Findings & Accepting Risks**
+- [/] **Task 63: UI Actions for Ignoring Findings & Accepting Risks**
   - **Design Goal:** Allow security auditors to triage issues directly in the dashboard by ignoring false positives or acknowledging accepted risks.
   - **Implementation Details:**
     - Add buttons to individual findings to mute them or mark them as "Accept Risk".
