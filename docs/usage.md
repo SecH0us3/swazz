@@ -46,7 +46,7 @@ go run main.go start --config swazz.config.json
 
 ### Configuration File (`swazz.config.json`)
 
-The fuzzer engine relies on a JSON configuration file. Here is an example of what it looks like:
+The fuzzer engine relies on a JSON configuration file. It fully supports **JSONC** (JSON with Comments), meaning you can use single-line (`//`) and multi-line (`/* */`) comments. Here is an example:
 
 ```json
 {

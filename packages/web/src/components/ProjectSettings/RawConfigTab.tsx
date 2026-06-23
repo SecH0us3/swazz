@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useConfig } from '../../hooks/useConfig.js';
+import { stripJSONC } from '../../utils/jsonc.js';
 
 export function RawConfigTab() {
     const { config, importConfig, exportConfig } = useConfig();
@@ -38,7 +39,7 @@ export function RawConfigTab() {
                 onChange={(e) => {
                     setRawConfigText(e.target.value);
                     try {
-                        JSON.parse(e.target.value);
+                        JSON.parse(stripJSONC(e.target.value));
                         setRawConfigError('');
                     } catch (err: any) {
                         setRawConfigError(`Invalid JSON: ${err.message}`);

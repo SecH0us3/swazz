@@ -3,13 +3,19 @@ package main
 import (
 	"encoding/json"
 	"testing"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestCliConfigAliasesAndValidation(t *testing.T) {
 	configJSON := `{
+		// global headers
 		"global_headers": {
 			"X-Test-Global": "value1"
 		},
+		/*
+		  local headers override
+		*/
 		"headers": {
 			"X-Test-Local": "value2"
 		},
@@ -36,7 +42,8 @@ func TestCliConfigAliasesAndValidation(t *testing.T) {
 	}`
 
 	var cliCfg CliConfig
-	if err := json.Unmarshal([]byte(configJSON), &cliCfg); err != nil {
+	stripped := swagger.StripJSONC([]byte(configJSON))
+	if err := json.Unmarshal(stripped, &cliCfg); err != nil {
 		t.Fatalf("Failed to unmarshal config JSON: %v", err)
 	}
 

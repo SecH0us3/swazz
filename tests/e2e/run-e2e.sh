@@ -11,6 +11,10 @@ cd "$ROOT_DIR"
 echo "=== Swazz E2E Automated Test Runner ==="
 echo "Project Root: $ROOT_DIR"
 
+# Create dummy wordlist folder and file for E2E tests
+mkdir -p wordlists
+echo "dummy-xss-payload" > wordlists/xss-custom.txt
+
 # Keep track of PIDs we start to kill them on exit
 PIDS=()
 cleanup() {
@@ -21,6 +25,8 @@ cleanup() {
       kill "$pid" 2>/dev/null || true
     done
   fi
+  # Clean up dummy wordlist
+  rm -rf wordlists
 }
 # Trap exit signals to ensure cleanup is run
 trap cleanup EXIT

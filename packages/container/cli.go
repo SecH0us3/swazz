@@ -96,6 +96,7 @@ func runCLI(args []string) {
 	if err != nil {
 		log.Fatalf("Failed to read config file %s: %v", *configPath, err)
 	}
+	configData = swagger.StripJSONC(configData)
 
 	cliCfg := CliConfig{
 		Security: swagger.SecurityConfig{
