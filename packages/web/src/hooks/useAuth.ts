@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
+
 export function useAuth() {
     const [authEnabled, setAuthEnabled] = useState(false);
     const [token, setToken] = useState<string | null>(localStorage.getItem('swazz_token'));
@@ -7,7 +9,7 @@ export function useAuth() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        fetch('/api/info')
+        fetch(`${PROXY_URL}/api/info`)
             .then(res => res.json())
             .then(data => {
                 setAuthEnabled(!!data.auth_enabled);
@@ -20,7 +22,7 @@ export function useAuth() {
     }, []);
 
     const login = async (username: string, password: string) => {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(`${PROXY_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -34,7 +36,7 @@ export function useAuth() {
     };
 
     const register = async (username: string, password: string) => {
-        const res = await fetch('/api/auth/register', {
+        const res = await fetch(`${PROXY_URL}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -43,7 +45,7 @@ export function useAuth() {
         if (!res.ok) throw new Error(data.error || 'Registration failed');
         
         // Auto-login after registration
-        const loginRes = await fetch('/api/auth/login', {
+        const loginRes = await fetch(`${PROXY_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -58,7 +60,7 @@ export function useAuth() {
     };
 
     const continueAsGuest = async () => {
-        const res = await fetch('/api/auth/guest', {
+        const res = await fetch(`${PROXY_URL}/api/auth/guest`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });

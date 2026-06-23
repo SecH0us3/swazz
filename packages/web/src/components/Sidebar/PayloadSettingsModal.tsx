@@ -7,7 +7,7 @@ interface PayloadSettingsModalProps {
     onClose: () => void;
 }
 
-const API_BASE = (import.meta.env.VITE_PROXY_URL as string) || '';
+const API_BASE = ((import.meta.env.VITE_PROXY_URL as string) || '').replace(/\/$/, '');
 
 export const PayloadSettingsModal: React.FC<PayloadSettingsModalProps> = ({ onClose }) => {
     const { config, updatePayloadCategories } = useConfig();

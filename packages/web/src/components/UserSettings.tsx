@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useTheme } from '../hooks/useTheme.js';
 
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
