@@ -98,6 +98,11 @@ graph TD
 
 ## 🧠 Development Conventions
 
+### Code Navigation & Search (RAG)
+- **Prefer RAG tools**: For searching code or understanding file structures, prefer using the registered Model Context Protocol (MCP) tools:
+  - `swazz_search_code` for semantic and keyword search across the codebase.
+  - `swazz_get_file_context` for a structured outline of functions, types, and blocks in a specific file (conserves token usage instead of viewing full files).
+
 ### General
 - **Go Best Practices**: The backend is written in Go. Ensure tests use `go test` and follow idiomatic Go conventions.
 - **Web UI Types**: The web dashboard maintains its own `types.ts` to sync with the Go API JSON structures.

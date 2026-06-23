@@ -1,0 +1,9 @@
+{
+  "PreInvocation": [
+    {
+      "type": "command",
+      "command": "swazz-cli check-sync --timeout-ms 500",
+      "timeout": 2
+    }
+  ]
+}
