@@ -26,6 +26,13 @@ async function main() {
     }
   }
 
+  // Resolve DB path
+  if (!path.isAbsolute(dbPath) && dbPath.startsWith('~/')) {
+    dbPath = path.join(os.homedir(), dbPath.slice(2));
+  } else if (!path.isAbsolute(dbPath)) {
+    dbPath = path.resolve(process.cwd(), dbPath);
+  }
+
   try {
     const db = initDb(dbPath);
     const startTime = Date.now();

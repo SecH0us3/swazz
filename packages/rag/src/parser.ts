@@ -64,7 +64,12 @@ function chunkBraceLanguages(content: string, declarationKeywords: string[]): Fi
   let i = 0;
   while (i < lines.length) {
     const line = lines[i].trim();
-    
+
+    if (line.startsWith('//') || line.startsWith('/*') || line.startsWith('*')) {
+      i++;
+      continue;
+    }
+
     // Check if this line starts a logical block (function, struct, class)
     let isDecl = false;
     for (const kw of declarationKeywords) {

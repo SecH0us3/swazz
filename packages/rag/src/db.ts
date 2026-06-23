@@ -38,7 +38,7 @@ export function initDb(dbPath: string): DatabaseSync {
       start_line INTEGER NOT NULL,
       end_line INTEGER NOT NULL,
       content TEXT NOT NULL,
-      vector TEXT NOT NULL,
+      vector BLOB NOT NULL,
       FOREIGN KEY(filepath) REFERENCES files(filepath) ON DELETE CASCADE
     );
   `);
@@ -81,9 +81,9 @@ export function clearFileChunks(db: DatabaseSync, filepath: string) {
 
 export function insertChunk(db: DatabaseSync, chunk: Chunk) {
   const id = `${chunk.filepath}:${chunk.startLine}:${chunk.endLine}`;
-  const vectorStr = JSON.stringify(chunk.vector);
+  const vectorBuffer = Buffer.from(new Float32Array(chunk.vector).buffer);
   const stmt = db.prepare('INSERT OR REPLACE INTO chunks (id, filepath, start_line, end_line, content, vector) VALUES (?, ?, ?, ?, ?, ?)');
-  stmt.run(id, chunk.filepath, chunk.startLine, chunk.endLine, chunk.content, vectorStr);
+  stmt.run(id, chunk.filepath, chunk.startLine, chunk.endLine, chunk.content, vectorBuffer);
 }
 
 export function queueFile(db: DatabaseSync, filepath: string) {
@@ -106,7 +106,7 @@ export function clearQueue(db: DatabaseSync) {
   db.exec('DELETE FROM queue');
 }
 
-export function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let dotProduct = 0;
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -125,12 +125,12 @@ export interface SearchResult {
 
 export function searchChunks(db: DatabaseSync, queryVector: number[], limit: number = 5, threshold: number = 0.7): SearchResult[] {
   const stmt = db.prepare('SELECT filepath, start_line, end_line, content, vector FROM chunks');
-  const rows = stmt.all() as Array<{ filepath: string, start_line: number, end_line: number, content: string, vector: string }>;
+  const rows = stmt.all() as Array<{ filepath: string, start_line: number, end_line: number, content: string, vector: Uint8Array }>;
 
   const results: SearchResult[] = [];
   for (const row of rows) {
     try {
-      const vector = JSON.parse(row.vector) as number[];
+      const vector = new Float32Array(row.vector.buffer, row.vector.byteOffset, row.vector.byteLength / 4);
       const similarity = cosineSimilarity(queryVector, vector);
       if (similarity >= threshold) {
         results.push({
@@ -154,6 +154,6 @@ export function searchChunks(db: DatabaseSync, queryVector: number[], limit: num
 
 export function findCachedVector(db: DatabaseSync, filepath: string, content: string): number[] | null {
   const stmt = db.prepare('SELECT vector FROM chunks WHERE filepath = ? AND content = ? LIMIT 1');
-  const row = stmt.get(filepath, content) as { vector: string } | undefined;
-  return row ? JSON.parse(row.vector) : null;
+  const row = stmt.get(filepath, content) as { vector: Uint8Array } | undefined;
+  return row ? Array.from(new Float32Array(row.vector.buffer, row.vector.byteOffset, row.vector.byteLength / 4)) : null;
 }

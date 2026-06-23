@@ -117,11 +117,12 @@ export class ONNXEmbeddingClient implements EmbeddingClient {
     }
 
     try {
-      const results: number[][] = [];
-      for (const text of texts) {
-        const output = await this.extractor(text, { pooling: 'mean', normalize: true });
-        results.push(Array.from(output.data) as number[]);
-      }
+      const results = await Promise.all(
+        texts.map(async (text) => {
+          const output = await this.extractor(text, { pooling: 'mean', normalize: true });
+          return Array.from(output.data) as number[];
+        })
+      );
       return results;
     } catch (err) {
       console.error('[Swazz RAG] ONNX batch extraction error, falling back:', err);
