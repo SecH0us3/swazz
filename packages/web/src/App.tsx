@@ -232,11 +232,11 @@ export default function App() {
                     ruleId,
                     endpoint: current.endpoint || '',
                     method: current.method || '',
-                    payload: current.payloadPreview || '',
+                    payload: current.payload || '',
                 });
                 setTriageScope('finding');
             } else {
-                showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+                showToast(`Result triaged as: ${triage}`, 'info');
             }
         } else {
             if (triage === 'none' || triage === 'acknowledged') {
