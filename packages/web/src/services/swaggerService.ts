@@ -1,5 +1,5 @@
 // In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export async function loadSwaggerUrl(
     url: string,

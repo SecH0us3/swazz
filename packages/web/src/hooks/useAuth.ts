@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export function useAuth() {
     const [authEnabled, setAuthEnabled] = useState(false);
