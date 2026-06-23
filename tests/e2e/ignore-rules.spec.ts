@@ -76,8 +76,16 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     // Verify opacity & IG badge on dashboard
     await expect(firstFinding).toHaveCSS('opacity', '0.6');
-    const igBadge = firstFinding.locator('.badge-warning:has-text("IG")');
+    const igBadge = firstFinding.locator('.badge:has-text("Ignored")');
     await expect(igBadge).toBeVisible();
+
+    // Close the detail inspector panel
+    const closeInspectorBtn = page.locator('button[aria-label="Close"]');
+    await expect(closeInspectorBtn).toBeVisible();
+    await closeInspectorBtn.click();
+
+    // Wait for the 1.5s debounced config sync to finish persisting to the backend API
+    await page.waitForTimeout(2000);
 
     // 7. Verify the ignore rule is synced to project settings raw config
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -118,9 +126,15 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     await triageSelect.selectOption('none');
 
+    // Close the detail inspector panel
+    await closeInspectorBtn.click();
+
     // Opacity goes back to 1
     await expect(firstFinding).toHaveCSS('opacity', '1');
     await expect(igBadge).not.toBeVisible();
+
+    // Wait for the cleanup config sync to finish persisting to the backend API
+    await page.waitForTimeout(2000);
 
     // Verify rule was automatically cleaned up from settings
     await moreSettingsBtn.click();
