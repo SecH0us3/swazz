@@ -7,7 +7,7 @@ description: Core workflows and command instructions for the swazz project.
 This skill defines how to work with the `swazz` project.
 
 ## 🛠 Deterministic Helper Scripts
-- Run `scripts/start-all.sh` to spin up the local dev environment (Vite + Go).
+- Run `npm run dev` to spin up the local dev environment (Vite frontend + Cloudflare edge coordinator).
 - Run `scripts/test-backend.sh` to execute the Go backend unit tests, compiler checks (`go vet`), and SAST security scans (`gosec`).
 
 ## 🔄 Development Architecture
@@ -16,7 +16,7 @@ This skill defines how to work with the `swazz` project.
 
 ## 🤖 Autonomous Execution Flow (Human-in-the-Loop)
 When handling a Task N, delegate to specialized subagents:
-- **`backend_engineer`**: For Go code. Must run `bench.sh` on perf tasks.
+- **`backend_engineer`**: For Go code. Must run Go benchmarks (`go test -bench=. -run=^$ ./...` in `packages/container`) on performance tasks.
 - **`frontend_engineer`**: For React UI tasks.
 - **`qa_tester`**: For writing E2E tests and validating Fuzzer benchmarks.
 
