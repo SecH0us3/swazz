@@ -44,7 +44,7 @@ Build the AI engine interface inside the runner to invoke cheap and expensive LL
 2. **Prompts configuration:**
    - Define base system prompts for vulnerability analysis (Relevance check) and fix generation (Remediation).
    - The fix prompt template must explicitly command the LLM to output a clean, syntax-valid, git-compatible unified diff patch for the target code so the runner can parse and apply the patch automatically.
-   - Read local instructions / prompt modifications configured per project.
+   - Read local instructions / prompt modifications configured per project, ensuring that when loading these user-provided configuration files, they are merged with default values so that missing or zero-valued critical fields are populated with valid, non-zero defaults.
 
 3. **Analyze Pipeline:**
    - **First Stage (Cheap Model):** Send finding details + code snippet. Ask if the finding is a true positive (`confirmed` or `false_positive`).
@@ -95,6 +95,7 @@ Build the dashboard panels to interact with AI-based reviews.
      - Repository mapping settings.
 2. **AI Remediation Panel (`packages/web/src/components/AiRemediation.tsx`):**
    - Display a clean UI inside the Finding Inspector when the "AI Insights" tab is active.
+   - Prefer using CSS classes over inline styles for layout properties (such as padding) to allow for cleaner responsive overrides within media query blocks and maintain modular CSS.
    - Render:
      - Relevance badge ("True Positive" / "False Positive").
      - Explanation & Remediation in Markdown format.
