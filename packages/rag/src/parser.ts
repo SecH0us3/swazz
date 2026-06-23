@@ -28,7 +28,7 @@ function chunkMarkdown(content: string): FileChunk[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (line.startsWith('#')) {
+    if (line.startsWith('# ')) {
       // Flush previous chunk
       if (currentLines.length > 0) {
         chunks.push({
@@ -168,21 +168,26 @@ function chunkBraceLanguages(content: string, declarationKeywords: string[]): Fi
 
 function flushOrphan(lines: string[], startIdx: number, endIdx: number, chunks: FileChunk[]) {
   const orphanLines = lines.slice(startIdx, endIdx);
+  const content = orphanLines.join('\n');
+  if (content.trim().length === 0) return;
+
   // If orphan is small, just make it a single chunk
   if (orphanLines.length <= 50) {
     chunks.push({
       startLine: startIdx + 1,
       endLine: endIdx,
-      content: orphanLines.join('\n')
+      content: content
     });
   } else {
     // Split large orphans into 40-line blocks
     for (let o = 0; o < orphanLines.length; o += 40) {
       const chunkLines = orphanLines.slice(o, o + 50); // 10 lines overlap
+      const chunkContent = chunkLines.join('\n');
+      if (chunkContent.trim().length === 0) continue;
       chunks.push({
         startLine: startIdx + o + 1,
         endLine: Math.min(startIdx + o + chunkLines.length, endIdx),
-        content: chunkLines.join('\n')
+        content: chunkContent
       });
     }
   }

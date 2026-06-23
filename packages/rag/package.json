@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "test": "vitest run"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0"
