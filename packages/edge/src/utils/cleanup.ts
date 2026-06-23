@@ -2,7 +2,7 @@ export async function cleanupExpiredGuests(db: any): Promise<void> {
   try {
     // 1. Find all expired guest users
     const expiredGuests = await db.prepare(
-      "SELECT id, username FROM users WHERE is_guest = 1 AND expires_at < datetime('now')"
+      "SELECT id, username FROM users WHERE is_guest = 1 AND expires_at < datetime('now') LIMIT 20"
     ).all<{ id: string; username: string }>();
 
     if (!expiredGuests.results || expiredGuests.results.length === 0) {

@@ -58,7 +58,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       cleanupExpiredGuests(c.env.DB).catch(console.error);
     }
 
-    const username = `g_${Math.random().toString(36).substring(2, 9)}_${Math.floor(Math.random() * 1000)}`;
+    const username = "g_" + crypto.randomUUID().replace(/-/g, "").substring(0, 12);
     const password = `guest_pass_${crypto.randomUUID().replace(/-/g, '')}`;
     const id = ulid();
     const projectId = ulid();
