@@ -5,7 +5,8 @@
   "description": "Smart API Fuzzer — find crashes before your users do",
   "workspaces": [
     "packages/web",
-    "packages/edge"
+    "packages/edge",
+    "packages/rag"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=packages/edge",

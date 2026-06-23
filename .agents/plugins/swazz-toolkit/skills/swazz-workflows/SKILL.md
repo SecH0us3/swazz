@@ -10,6 +10,9 @@ This skill defines how to work with the `swazz` project.
 - Run `npm run dev` to spin up the local dev environment (Vite frontend + Cloudflare edge coordinator).
 - Run `scripts/test-backend.sh` to execute the Go backend unit tests, compiler checks (`go vet`), and SAST security scans (`gosec`).
 
+## 🔍 Code Navigation & RAG Search
+- **Prefer RAG tools**: For searching the codebase or understanding file layouts, prefer utilizing the MCP tools `swazz_search_code` and `swazz_get_file_context`. This keeps context sizes smaller and operations faster.
+
 ## 🔄 Development Architecture
 - **Backend**: `packages/container/`. Contains fuzzing logic.
 - **Frontend**: `packages/web/`. Contains React 19 UI. Use `modern-web-guidance`.
