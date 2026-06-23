@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { initDb, getFileHash, insertFile, deleteFile, clearFileChunks, insertChunk, queueFile, dequeueFile, clearQueue } from './db.js';
+import { initDb, getFileHash, insertFile, deleteFile, clearFileChunks, insertChunk, queueFile, dequeueFile, clearQueue, findCachedVector } from './db.js';
 import { chunkFile } from './parser.js';
 import { createEmbeddingClient, EmbeddingClient } from './embedding.js';
 
@@ -160,17 +160,40 @@ export class CodeIndexer {
           // Split into logical blocks
           const fileChunks = chunkFile(relPath, content);
 
-          const chunksWithVectors = [];
+          const chunksWithVectors: any[] = [];
+          const missingChunks: any[] = [];
+          const missingTexts: string[] = [];
+
           for (const chunk of fileChunks) {
             if (chunk.content.trim().length === 0) continue;
-            const vector = await this.embedder.getEmbedding(chunk.content);
-            chunksWithVectors.push({
-              filepath: relPath,
-              startLine: chunk.startLine,
-              endLine: chunk.endLine,
-              content: chunk.content,
-              vector
-            });
+
+            const cachedVector = findCachedVector(this.db, relPath, chunk.content);
+            if (cachedVector) {
+              chunksWithVectors.push({
+                filepath: relPath,
+                startLine: chunk.startLine,
+                endLine: chunk.endLine,
+                content: chunk.content,
+                vector: cachedVector
+              });
+            } else {
+              missingChunks.push(chunk);
+              missingTexts.push(chunk.content);
+            }
+          }
+
+          // Batch generate embeddings for chunks not found in cache
+          if (missingTexts.length > 0) {
+            const vectors = await this.embedder.getEmbeddings(missingTexts);
+            for (let idx = 0; idx < missingChunks.length; idx++) {
+              chunksWithVectors.push({
+                filepath: relPath,
+                startLine: missingChunks[idx].startLine,
+                endLine: missingChunks[idx].endLine,
+                content: missingChunks[idx].content,
+                vector: vectors[idx]
+              });
+            }
           }
 
           // Write to DB in a single fast transaction
@@ -182,7 +205,7 @@ export class CodeIndexer {
               insertChunk(this.db, chunk);
             }
             this.db.exec('COMMIT;');
-            console.log(`[Swazz RAG] Successfully indexed: ${relPath} (${fileChunks.length} chunks)`);
+            console.log(`[Swazz RAG] Successfully indexed: ${relPath} (${fileChunks.length} chunks, reused ${fileChunks.length - missingChunks.length})`);
           } catch (err) {
             this.db.exec('ROLLBACK;');
             throw err;

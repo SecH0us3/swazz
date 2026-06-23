@@ -151,3 +151,9 @@ export function searchChunks(db: DatabaseSync, queryVector: number[], limit: num
 
   return results.slice(0, limit);
 }
+
+export function findCachedVector(db: DatabaseSync, filepath: string, content: string): number[] | null {
+  const stmt = db.prepare('SELECT vector FROM chunks WHERE filepath = ? AND content = ? LIMIT 1');
+  const row = stmt.get(filepath, content) as { vector: string } | undefined;
+  return row ? JSON.parse(row.vector) : null;
+}
