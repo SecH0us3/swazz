@@ -218,8 +218,8 @@ export function UserSettings() {
                                 alignItems: 'center',
                                 gap: '8px'
                             }}>
-                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: apiKey ? 'var(--accent-light)' : 'var(--text-muted)' }} />
-                                {apiKey ? 'Registered User (Unlimited scans)' : 'Guest Mode (Scanning limits active)'}
+                                <span className={`account-status-dot ${(apiKey && !userProfile?.isGuest) ? 'active' : 'inactive'}`} />
+                                {(apiKey && !userProfile?.isGuest) ? 'Registered User (Unlimited scans)' : 'Guest Mode (Temporary account - deletes in 24 hours)'}
                             </div>
                         </div>
                         <div>

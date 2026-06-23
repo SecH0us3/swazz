@@ -22,9 +22,10 @@ describe('useFuzzSession hook', () => {
         settings: {
             concurrency: 5,
             timeout_ms: 5000,
-            delay_ms: 0,
+            max_payload_size_bytes: 1048576,
+            delay_between_requests_ms: 0,
             profiles: ['RANDOM'],
-            iterations: 10,
+            iterations_per_profile: 10,
             analyze_response_body: true,
             time_anomaly_threshold_ms: 4000,
             response_size_anomaly_multiplier: 5,
@@ -49,7 +50,7 @@ describe('useFuzzSession hook', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useAppStore.setState({
-            activeProject: { id: 'proj-123', name: 'Test Proj', created_at: '', updated_at: '' },
+            activeProject: { id: 'proj-123', name: 'Test Proj', description: '' },
             liveRunId: null,
             liveCount: 0,
             activeTab: 'heatmap',

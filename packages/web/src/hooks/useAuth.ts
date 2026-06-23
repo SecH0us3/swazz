@@ -57,7 +57,15 @@ export function useAuth() {
         }
     };
 
-    const continueAsGuest = () => {
+    const continueAsGuest = async () => {
+        const res = await fetch('/api/auth/guest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Guest login failed');
+        setToken(data.token);
+        localStorage.setItem('swazz_token', data.token);
         setIsGuest(true);
         sessionStorage.setItem('swazz_guest', 'true');
     };

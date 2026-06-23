@@ -201,6 +201,52 @@ describe("D1 Database Migrations & API", () => {
     expect(typeof body.token).toBe("string");
   });
 
+  it("can login as guest, fetch profile with guest flag, and triggers cleanup", async () => {
+    // 1. Login as guest
+    const guestReq = new Request("http://localhost/api/auth/guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const guestRes = await app.fetch(guestReq, testEnv);
+    expect(guestRes.status).toBe(200);
+    const guestBody = await guestRes.json() as any;
+    expect(guestBody.status).toBe("ok");
+    expect(typeof guestBody.token).toBe("string");
+    expect(guestBody.username).toMatch(/^g_/);
+    expect(typeof guestBody.expires_at).toBe("string");
+
+    // 2. Fetch profile and verify is_guest is true
+    const meReq = new Request("http://localhost/api/auth/me", {
+      headers: { "Authorization": `Bearer ${guestBody.token}` }
+    });
+    const meRes = await app.fetch(meReq, testEnv);
+    expect(meRes.status).toBe(200);
+    const meBody = await meRes.json() as any;
+    expect(meBody.username).toBe(guestBody.username);
+    expect(meBody.is_guest).toBe(true);
+
+    // 3. Verify guest user is stored in DB
+    const dbUser = await env.DB.prepare('SELECT is_guest, expires_at FROM users WHERE username = ?')
+      .bind(guestBody.username)
+      .first<{ is_guest: number; expires_at: string }>();
+    expect(dbUser?.is_guest).toBe(1);
+    expect(dbUser?.expires_at).toBeDefined();
+
+    // 4. Test cleanup utility: manually expire the guest user in the DB and run cleanup
+    await env.DB.prepare("UPDATE users SET expires_at = datetime('now', '-5 minutes') WHERE username = ?")
+      .bind(guestBody.username)
+      .run();
+
+    const { cleanupExpiredGuests } = await import("./utils/cleanup");
+    await cleanupExpiredGuests(env.DB);
+
+    // Verify guest user and their projects/scans are deleted
+    const dbUserAfter = await env.DB.prepare('SELECT is_guest FROM users WHERE username = ?')
+      .bind(guestBody.username)
+      .first();
+    expect(dbUserAfter).toBeNull();
+  });
+
   it("blocks login after 5 failed attempts (rate limiting)", async () => {
     // Attempt 5 bad logins
     for (let i = 0; i < 5; i++) {

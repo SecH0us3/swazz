@@ -3660,3 +3660,36 @@ kbd {
   gap: 12px;
   margin-top: 8px;
 }
+
+/* Guest Mode Styles */
+.guest-badge {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.sign-up-btn {
+  margin-left: 8px;
+}
+
+.sign-up-text {
+  margin-left: 4px;
+}
+
+.account-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.account-status-dot.active {
+  background-color: var(--accent-light);
+}
+.account-status-dot.inactive {
+  background-color: var(--text-muted);
+}

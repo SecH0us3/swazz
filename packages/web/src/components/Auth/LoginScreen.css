@@ -355,3 +355,12 @@
     background-color: rgba(255, 255, 255, 0.02);
 }
 
+.guest-warning {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    text-align: center;
+    max-width: 90%;
+    line-height: 1.25;
+}
+
+
