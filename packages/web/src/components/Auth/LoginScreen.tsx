@@ -4,7 +4,7 @@ import './LoginScreen.css';
 interface LoginScreenProps {
     onLogin: (username: string, password: string) => Promise<void>;
     onRegister: (username: string, password: string) => Promise<void>;
-    onGuest?: () => void;
+    onGuest?: () => Promise<void>;
 }
 
 export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) {
@@ -27,6 +27,19 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             }
         } catch (err: any) {
             setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleGuestClick = async () => {
+        if (!onGuest) return;
+        setError('');
+        setIsLoading(true);
+        try {
+            await onGuest();
+        } catch (err: any) {
+            setError(err.message || 'Failed to enter as guest');
         } finally {
             setIsLoading(false);
         }
@@ -102,9 +115,12 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     {onGuest && (
                         <div className="guest-action-wrapper">
                             <span className="guest-divider">or</span>
-                            <button type="button" onClick={onGuest} className="guest-btn">
+                            <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
                                 Continue as Guest
                             </button>
+                            <p className="guest-warning">
+                                * Temporary account. All guest data will be permanently deleted after 24 hours.
+                            </p>
                         </div>
                     )}
                 </form>

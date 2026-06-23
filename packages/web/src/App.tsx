@@ -35,11 +35,22 @@ export default function App() {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             .then(res => {
+                if (res.status === 401) {
+                    logout();
+                    throw new Error('Session expired');
+                }
                 if (res.ok) return res.json();
                 throw new Error('Failed to fetch profile');
             })
             .then(data => {
-                useAppStore.setState({ userProfile: { username: data.username, apiKey: data.api_key, publicKey: data.public_key } });
+                useAppStore.setState({ 
+                    userProfile: { 
+                        username: data.username, 
+                        apiKey: data.api_key, 
+                        publicKey: data.public_key,
+                        isGuest: data.is_guest
+                    } 
+                });
             })
             .catch(err => {
                 console.error(err);

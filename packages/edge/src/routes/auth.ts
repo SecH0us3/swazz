@@ -3,6 +3,7 @@ import { Env } from '../env';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
+import { cleanupExpiredGuests } from '../utils/cleanup';
 
 export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/auth/register', async (c) => {
@@ -48,6 +49,53 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Registration failed due to an internal server error' }, 500);
     }
   });
+
+  app.post('/api/auth/guest', async (c) => {
+    // Proactively clean up expired guests asynchronously (non-blocking)
+    try {
+      c.executionCtx.waitUntil(cleanupExpiredGuests(c.env.DB));
+    } catch {
+      cleanupExpiredGuests(c.env.DB).catch(console.error);
+    }
+
+    const username = `g_${Math.random().toString(36).substring(2, 9)}_${Math.floor(Math.random() * 1000)}`;
+    const password = `guest_pass_${crypto.randomUUID().replace(/-/g, '')}`;
+    const id = ulid();
+    const projectId = ulid();
+    const hash = await hashPassword(password);
+    const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          "INSERT INTO users (id, username, password_hash, api_key, is_guest, expires_at) VALUES (?, ?, ?, ?, 1, datetime('now', '+1 day'))"
+        ).bind(id, username, hash, apiKey),
+        c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+          .bind(projectId),
+        c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          .bind(projectId, id)
+      ]);
+
+      const payload = {
+        sub: id,
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
+      };
+      
+      const secret = c.env.JWT_SECRET;
+      if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
+      const token = await sign(payload, secret);
+
+      return c.json({ 
+        status: 'ok', 
+        token, 
+        username,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      });
+    } catch (err: any) {
+      console.error("Failed to create guest user:", err);
+      return c.json({ error: 'Failed to create guest user account' }, 500);
+    }
+  });
   
   app.get('/api/auth/me', async (c) => {
     const authHeader = c.req.header('Authorization');
@@ -62,9 +110,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await c.env.DB.prepare('SELECT username, api_key, public_key FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest FROM users WHERE id = ?')
         .bind(decoded.sub)
-        .first<{ username: string; api_key: string | null; public_key: string | null }>();
+        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number }>();
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -77,7 +125,12 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
           .run();
       }
       
-      return c.json({ username: user.username, api_key: currentApiKey, public_key: user.public_key });
+      return c.json({ 
+        username: user.username, 
+        api_key: currentApiKey, 
+        public_key: user.public_key,
+        is_guest: user.is_guest === 1
+      });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);
     }

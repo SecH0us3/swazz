@@ -7,6 +7,7 @@ import { registerProjectsRoutes } from './routes/projects';
 import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
+import { cleanupExpiredGuests } from './utils/cleanup';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -236,4 +237,10 @@ registerScansRoutes(app);
 registerRunnersRoutes(app);
 registerMiscRoutes(app);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(event: any, env: Env, ctx: any) {
+    ctx.waitUntil(cleanupExpiredGuests(env.DB));
+  }
+};
+
