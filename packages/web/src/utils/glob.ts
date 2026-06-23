@@ -1,3 +1,17 @@
+const regexCache = new Map<string, RegExp>();
+
+function getRegex(pattern: string): RegExp {
+    let regex = regexCache.get(pattern);
+    if (!regex) {
+        const escaped = pattern
+            .replace(/[.+^?${}()|[\]\\]/g, '\\$&')
+            .replace(/\*\*|\*/g, (m) => (m === '**' ? '.*' : '[^/]*'));
+        regex = new RegExp(`^${escaped}$`, 'i');
+        regexCache.set(pattern, regex);
+    }
+    return regex;
+}
+
 /**
  * Checks if a given endpoint (method + path) matches any of the glob patterns.
  * Matches case-insensitively (Task 61).
@@ -12,14 +26,8 @@ export function matchesPattern(method: string, path: string, patterns: string[])
     return patterns.some(p => {
         try {
             // Check if pattern has method prefix, e.g. "GET /api/admin"
-            const hasMethodPrefix = /^[A-Z]+\s/.test(p);
-            
-            // Convert wildcard glob pattern to regex securely
-            const escaped = p.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-                             .replace(/\*\*/g, '___DOUBLE_STAR___')
-                             .replace(/\*/g, '[^/]*')
-                             .replace(/___DOUBLE_STAR___/g, '.*');
-            const regex = new RegExp(`^${escaped}$`, 'i');
+            const hasMethodPrefix = /^[A-Z]+\s/i.test(p);
+            const regex = getRegex(p);
             
             if (hasMethodPrefix) {
                 return regex.test(key);
@@ -31,3 +39,4 @@ export function matchesPattern(method: string, path: string, patterns: string[])
         }
     });
 }
+

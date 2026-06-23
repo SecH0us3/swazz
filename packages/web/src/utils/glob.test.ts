@@ -33,4 +33,13 @@ describe('glob matching utility', () => {
         expect(matchesPattern('GET', '/api/admin/roles', patterns)).toBe(true);
         expect(matchesPattern('GET', '/api/health', patterns)).toBe(false);
     });
+
+    it('should match method prefixes case-insensitively', () => {
+        expect(matchesPattern('GET', '/api/admin', ['get /api/admin'])).toBe(true);
+        expect(matchesPattern('POST', '/api/admin', ['post /api/admin'])).toBe(true);
+    });
+
+    it('should escape literal question mark characters', () => {
+        expect(matchesPattern('GET', '/api/search?q=test', ['/api/search?q=test'])).toBe(true);
+    });
 });
