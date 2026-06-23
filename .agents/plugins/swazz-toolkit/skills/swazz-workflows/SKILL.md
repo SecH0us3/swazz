@@ -16,7 +16,7 @@ This skill defines how to work with the `swazz` project.
 
 ## 🤖 Autonomous Execution Flow (Human-in-the-Loop)
 When handling a Task N, delegate to specialized subagents:
-- **`backend_engineer`**: For Go code. Must run Go benchmarks (`go test -bench=. ./...` in `packages/container`) on performance tasks.
+- **`backend_engineer`**: For Go code. Must run Go benchmarks (`go test -bench=. -run=^$ ./...` in `packages/container`) on performance tasks.
 - **`frontend_engineer`**: For React UI tasks.
 - **`qa_tester`**: For writing E2E tests and validating Fuzzer benchmarks.
 
