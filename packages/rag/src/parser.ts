@@ -81,24 +81,68 @@ function chunkBraceLanguages(content: string, declarationKeywords: string[]): Fi
       let foundStartBrace = false;
       let endLine = i + 1;
 
-      // Scan ahead to match braces
+      // Scan ahead to match braces, ignoring strings and comments
+      let inString: string | null = null;
+      let inMultilineComment = false;
+
       for (let j = i; j < lines.length; j++) {
         const scanLine = lines[j];
-        for (let charIdx = 0; charIdx < scanLine.length; charIdx++) {
-          const char = scanLine[charIdx];
+        let k = 0;
+        while (k < scanLine.length) {
+          if (inMultilineComment) {
+            if (scanLine[k] === '*' && scanLine[k + 1] === '/') {
+              inMultilineComment = false;
+              k += 2;
+            } else {
+              k++;
+            }
+            continue;
+          }
+
+          if (!inString && scanLine[k] === '/' && scanLine[k + 1] === '/') {
+            break; // Ignore rest of the line
+          }
+
+          if (!inString && scanLine[k] === '/' && scanLine[k + 1] === '*') {
+            inMultilineComment = true;
+            k += 2;
+            continue;
+          }
+
+          const char = scanLine[k];
+
+          if (inString) {
+            if (char === '\\') {
+              k += 2; // Skip escaped char
+              continue;
+            }
+            if (char === inString) {
+              inString = null;
+            }
+            k++;
+            continue;
+          }
+
+          if (char === '"' || char === "'" || char === String.fromCharCode(96)) {
+            inString = char;
+            k++;
+            continue;
+          }
+
           if (char === '{') {
             braceCount++;
             foundStartBrace = true;
           } else if (char === '}') {
             braceCount--;
           }
+          k++;
         }
-        
+
         if (foundStartBrace && braceCount === 0) {
           endLine = j + 1;
           break;
         }
-        
+
         // If we scanned more than 150 lines and didn't close braces, stop to avoid runaway chunking
         if (j - i > 150) {
           endLine = j + 1;

@@ -23,23 +23,23 @@ echo "Installing binary wrappers..."
 mkdir -p "$BIN_DIR"
 
 # Indexer Wrapper
-cat << 'EOF' > "$BIN_DIR/swazz-indexer"
+cat << EOF > "$BIN_DIR/swazz-indexer"
 #!/bin/bash
-exec node "/Users/alex/src/swazz/packages/rag/dist/bin-indexer.js" "$@"
+exec node "$WORKSPACE_DIR/packages/rag/dist/bin-indexer.js" "\$@"
 EOF
 chmod +x "$BIN_DIR/swazz-indexer"
 
 # MCP Wrapper
-cat << 'EOF' > "$BIN_DIR/swazz-mcp"
+cat << EOF > "$BIN_DIR/swazz-mcp"
 #!/bin/bash
-exec node "/Users/alex/src/swazz/packages/rag/dist/bin-mcp.js" "$@"
+exec node "$WORKSPACE_DIR/packages/rag/dist/bin-mcp.js" "\$@"
 EOF
 chmod +x "$BIN_DIR/swazz-mcp"
 
 # CLI Wrapper
-cat << 'EOF' > "$BIN_DIR/swazz-cli"
+cat << EOF > "$BIN_DIR/swazz-cli"
 #!/bin/bash
-exec node "/Users/alex/src/swazz/packages/rag/dist/bin-cli.js" "$@"
+exec node "$WORKSPACE_DIR/packages/rag/dist/bin-cli.js" "\$@"
 EOF
 chmod +x "$BIN_DIR/swazz-cli"
 
@@ -76,7 +76,9 @@ if (fs.existsSync(file)) {
 }
 data.sidecars = data.sidecars || {};
 data.sidecars["swazz-rag"] = { enabled: true };
-fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+const tempFile = file + ".tmp";
+fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf8");
+fs.renameSync(tempFile, file);
 '
 
 # 6. Configure MCP Server in mcp_config.json
@@ -101,7 +103,9 @@ data.mcpServers["swazz-rag"] = {
     LOG_LEVEL: "info"
   }
 };
-fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+const tempFile = file + ".tmp";
+fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf8");
+fs.renameSync(tempFile, file);
 '
 
 echo "=== Swazz RAG Installation Successful! ==="

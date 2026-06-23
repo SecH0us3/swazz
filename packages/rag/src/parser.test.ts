@@ -109,4 +109,21 @@ class Calculator {
     expect(chunks[1].startLine).toBe(41);
     expect(chunks[1].endLine).toBe(80);
   });
+
+  it('should ignore braces in comments and strings when chunking brace-based languages', () => {
+    const content = `function complex() {
+      // Ignore this brace: }
+      /* Ignore multi-line brace: } */
+      const msg = "Ignore brace in string: }";
+      const tmpl = \`Ignore template brace: }\`;
+      return { val: 42 };
+    }`;
+
+    const chunks = chunkFile('complex.ts', content);
+    // Should successfully extract complex function as one block, ending at line 8
+    const mainFunc = chunks.find(c => c.content.includes('function complex()'));
+    expect(mainFunc).toBeDefined();
+    expect(mainFunc?.startLine).toBe(1); // starts on line 1
+    expect(mainFunc?.endLine).toBe(7);
+  });
 });

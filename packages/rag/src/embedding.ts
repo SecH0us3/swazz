@@ -69,36 +69,30 @@ export class KeywordHashEmbeddingClient implements EmbeddingClient {
 // ─── TRANSFORMERS ONNX EMBEDDING CLIENT ─────────────────────────────────────
 export class ONNXEmbeddingClient implements EmbeddingClient {
   private extractor: any = null;
-  private isInitializing = false;
+  private initPromise: Promise<void> | null = null;
   private fallbackClient = new KeywordHashEmbeddingClient();
 
   private async init() {
     if (this.extractor) return;
-    if (this.isInitializing) {
-      while (this.isInitializing) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-      return;
-    }
-
-    this.isInitializing = true;
-    try {
-      console.log('[Swazz RAG] Loading ONNX model Xenova/all-MiniLM-L6-v2...');
-      // Disable remote loading warnings or configure cache if needed
-      this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-        progress_callback: (info: any) => {
-          if (info.status === 'downloading') {
-            console.log(`[Swazz RAG] Downloading model: ${info.file} (${Math.round(info.loaded / 1024 / 1024)}MB / ${Math.round(info.total / 1024 / 1024)}MB)`);
-          }
+    if (!this.initPromise) {
+      this.initPromise = (async () => {
+        try {
+          console.log('[Swazz RAG] Loading ONNX model Xenova/all-MiniLM-L6-v2...');
+          this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+            progress_callback: (info: any) => {
+              if (info.status === 'downloading') {
+                console.log(`[Swazz RAG] Downloading model: ${info.file} (${Math.round(info.loaded / 1024 / 1024)}MB / ${Math.round(info.total / 1024 / 1024)}MB)`);
+              }
+            }
+          });
+          console.log('[Swazz RAG] ONNX model loaded successfully.');
+        } catch (err) {
+          console.error('[Swazz RAG] Failed to load ONNX model, using keyword-hash fallback:', err);
+          this.extractor = null;
         }
-      });
-      console.log('[Swazz RAG] ONNX model loaded successfully.');
-    } catch (err) {
-      console.error('[Swazz RAG] Failed to load ONNX model, using keyword-hash fallback:', err);
-      this.extractor = null;
-    } finally {
-      this.isInitializing = false;
+      })();
     }
+    await this.initPromise;
   }
 
   public async getEmbedding(text: string): Promise<number[]> {

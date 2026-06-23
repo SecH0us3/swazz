@@ -159,17 +159,12 @@ export class CodeIndexer {
           
           // Split into logical blocks
           const fileChunks = chunkFile(relPath, content);
-          clearFileChunks(this.db, relPath);
 
-          // Insert file record first to satisfy SQLite foreign key constraints
-          insertFile(this.db, relPath, hash);
-
-          // Generate embeddings in batches if possible
+          const chunksWithVectors = [];
           for (const chunk of fileChunks) {
             if (chunk.content.trim().length === 0) continue;
-
             const vector = await this.embedder.getEmbedding(chunk.content);
-            insertChunk(this.db, {
+            chunksWithVectors.push({
               filepath: relPath,
               startLine: chunk.startLine,
               endLine: chunk.endLine,
@@ -177,7 +172,21 @@ export class CodeIndexer {
               vector
             });
           }
-          console.log(`[Swazz RAG] Successfully indexed: ${relPath} (${fileChunks.length} chunks)`);
+
+          // Write to DB in a single fast transaction
+          this.db.exec('BEGIN TRANSACTION;');
+          try {
+            clearFileChunks(this.db, relPath);
+            insertFile(this.db, relPath, hash);
+            for (const chunk of chunksWithVectors) {
+              insertChunk(this.db, chunk);
+            }
+            this.db.exec('COMMIT;');
+            console.log(`[Swazz RAG] Successfully indexed: ${relPath} (${fileChunks.length} chunks)`);
+          } catch (err) {
+            this.db.exec('ROLLBACK;');
+            throw err;
+          }
         } catch (err) {
           console.error(`[Swazz RAG] Error processing file ${relPath}:`, err);
         } finally {

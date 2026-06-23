@@ -92,7 +92,7 @@ describe('Database Helper (db.ts)', () => {
       startLine: 1,
       endLine: 10,
       content: 'function add(a, b) { return a + b; }',
-      vector: [0.9, 0.1, 0.0]
+      vector: [1.0, 0.0, 0.0]
     });
 
     insertChunk(db, {
@@ -100,11 +100,11 @@ describe('Database Helper (db.ts)', () => {
       startLine: 11,
       endLine: 20,
       content: 'function multiply(a, b) { return a * b; }',
-      vector: [0.1, 0.9, 0.0]
+      vector: [0.0, 1.0, 0.0]
     });
 
     // Check search functionality
-    const queryVector = [0.95, 0.05, 0.0];
+    const queryVector = [0.98, 0.2, 0.0];
     const results = searchChunks(db, queryVector, 1, 0.5);
 
     expect(results).toHaveLength(1);

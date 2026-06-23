@@ -108,15 +108,11 @@ export function clearQueue(db: DatabaseSync) {
 
 export function cosineSimilarity(a: number[], b: number[]): number {
   let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++) {
     dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
   }
-  return normA === 0 || normB === 0 ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  return dotProduct;
 }
 
 export interface SearchResult {
