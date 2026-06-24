@@ -9,12 +9,17 @@ export function RawConfigTab() {
     const [rawConfigError, setRawConfigError] = useState('');
     const [isSavingRaw, setIsSavingRaw] = useState(false);
     const [saveRawSuccess, setSaveRawSuccess] = useState(false);
+    const [lastSyncedConfig, setLastSyncedConfig] = useState('');
 
-    // Sync rawConfigText when config changes
+    // Sync rawConfigText when config changes, but only if user hasn't edited it
     useEffect(() => {
-        setRawConfigText(exportConfig());
-        setRawConfigError('');
-    }, [config, exportConfig]);
+        const exported = exportConfig();
+        if (rawConfigText === lastSyncedConfig || rawConfigText === '') {
+            setRawConfigText(exported);
+            setLastSyncedConfig(exported);
+            setRawConfigError('');
+        }
+    }, [config, exportConfig, rawConfigText, lastSyncedConfig]);
 
     return (
         <div className="card" style={{
