@@ -500,10 +500,12 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 	if err := r.RunAuthSequence(ctx); err != nil {
 		return nil, nil, false, fmt.Errorf("re-authentication failed: %w", err)
 	}
+	r.lastProbeTime = time.Now()
 
 	r.configMu.RLock()
 	defer r.configMu.RUnlock()
 	return maps.Clone(r.config.GlobalHeaders), maps.Clone(r.config.Cookies), true, nil
+
 }
 
 func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
@@ -546,9 +548,14 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 		logger.Debug("[Auth] Probe request failed: %v", err)
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close() // #nosec G104
+	}()
+
 
 	logger.Debug("[Auth] Probe response status: %d", resp.StatusCode)
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
+
 }
 
