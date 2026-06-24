@@ -17,6 +17,7 @@ type resolverCtx struct {
 	depth        int
 	truncated    bool
 	endpointHint string
+	lastRef      string
 }
 
 func newResolverCtx(spec map[string]any, endpointHint string, maxNodes, maxDepth int) *resolverCtx {
@@ -58,7 +59,7 @@ func (ctx *resolverCtx) resolve(schema any) SchemaProperty {
 	if ctx.depth > ctx.maxDepth {
 		if !ctx.truncated {
 			ctx.truncated = true
-			logger.Warn("Schema resolution depth limit (%d) reached. Truncated schema. Context: %s", ctx.maxDepth, ctx.endpointHint)
+			logger.Warn("Schema resolution depth limit (%d) reached. Truncated schema. Context: %s, Last Ref: %s", ctx.maxDepth, ctx.endpointHint, ctx.lastRef)
 		}
 		return SchemaProperty{Type: "object"}
 	}
@@ -67,7 +68,7 @@ func (ctx *resolverCtx) resolve(schema any) SchemaProperty {
 	if ctx.nodeCount > ctx.maxNodes {
 		if !ctx.truncated {
 			ctx.truncated = true
-			logger.Warn("Schema resolution node budget (%d) exceeded. Truncated schema. Context: %s", ctx.maxNodes, ctx.endpointHint)
+			logger.Warn("Schema resolution node budget (%d) exceeded. Truncated schema. Context: %s, Last Ref: %s", ctx.maxNodes, ctx.endpointHint, ctx.lastRef)
 		}
 		return SchemaProperty{Type: "object"}
 	}
@@ -79,6 +80,7 @@ func (ctx *resolverCtx) resolve(schema any) SchemaProperty {
 
 	// Handle $ref with cycle detection and memoization
 	if ref, ok := m["$ref"].(string); ok {
+		ctx.lastRef = ref
 		if ctx.inProgress[ref] {
 			// Circular reference — safe fallback
 			return SchemaProperty{Type: "object"}
@@ -181,12 +183,4 @@ func resolveRef(ref string, spec map[string]any) any {
 	}
 
 	return current
-}
-
-func copySeenRefs(src map[string]bool) map[string]bool {
-	dst := make(map[string]bool, len(src)+1)
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
 }

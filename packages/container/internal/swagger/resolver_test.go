@@ -325,7 +325,7 @@ func TestResolveSchema_WarningsAndHints(t *testing.T) {
 		t.Errorf("Expected resolution to be truncated")
 	}
 	logStr := logBuf.String()
-	expectedDepthWarning := "Schema resolution depth limit (2) reached. Truncated schema. Context: POST /api/test-depth"
+	expectedDepthWarning := "Schema resolution depth limit (2) reached. Truncated schema. Context: POST /api/test-depth, Last Ref: #/components/schemas/A"
 	if !strings.Contains(logStr, expectedDepthWarning) {
 		t.Errorf("Expected log warning %q, got: %q", expectedDepthWarning, logStr)
 	}
@@ -347,7 +347,7 @@ func TestResolveSchema_WarningsAndHints(t *testing.T) {
 		t.Errorf("Expected resolution to be truncated")
 	}
 	logStr = logBuf.String()
-	expectedNodeWarning := "Schema resolution node budget (2) exceeded. Truncated schema. Context: GET /api/test-nodes"
+	expectedNodeWarning := "Schema resolution node budget (2) exceeded. Truncated schema. Context: GET /api/test-nodes, Last Ref: #/components/schemas/A"
 	if !strings.Contains(logStr, expectedNodeWarning) {
 		t.Errorf("Expected log warning %q, got: %q", expectedNodeWarning, logStr)
 	}
