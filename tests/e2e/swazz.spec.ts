@@ -109,7 +109,7 @@ test.describe('Swazz Integration E2E Test', () => {
       const content = fs.readFileSync(path, 'utf8');
       expect(content).toContain('<!DOCTYPE html>');
       expect(content).toContain('Swazz Fuzzing Report');
-      expect(content).toContain('fuzz-report');
+      expect(content).toContain('noscript-warning');
     }
   });
 });
