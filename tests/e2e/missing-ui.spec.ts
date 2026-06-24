@@ -122,7 +122,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(toggleApiKeyBtn).toHaveText('Show');
 
     // 2. Upload public key file
-    const tempPubKeyPath = path.join(process.cwd(), 'temp_pubkey.pub');
+    const tempPubKeyPath = path.join(process.cwd(), "temp_pubkey_" + Date.now() + "_" + Math.floor(Math.random() * 1000) + ".pub");
     const mockPubKeyText = 'b'.repeat(64);
     fs.writeFileSync(tempPubKeyPath, mockPubKeyText, 'utf8');
 
@@ -191,7 +191,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(page.locator('h1:has-text("Scan History")')).toBeVisible();
 
     // Create a temp CLI report JSON
-    const tempReportPath = path.join(process.cwd(), 'temp_cli_report.json');
+    const tempReportPath = path.join(process.cwd(), "temp_cli_report_" + Date.now() + "_" + Math.floor(Math.random() * 1000) + ".json");
     const mockReport = {
       tool: "swazz",
       timestamp: new Date().toISOString(),
