@@ -375,7 +375,15 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     // Wait for the textarea to be populated
     await expect(rawTextarea).toHaveValue(/timeout_ms/);
 
-    // 5. Input a JSONC string containing single-line and multi-line comments
+    // 5. Test invalid JSON format validation (negative scenario)
+    await rawTextarea.fill('{ invalid-json-here }');
+    const invalidJsonError = page.locator('text=Invalid JSON');
+    await expect(invalidJsonError).toBeVisible();
+
+    const saveBtn = page.locator('button:has-text("Save Configuration")');
+    await expect(saveBtn).toBeDisabled();
+
+    // 6. Input a JSONC string containing single-line and multi-line comments (positive scenario)
     const jsoncConfig = `{
       // Set fuzzer timeout in ms
       "timeout_ms": 2500,
@@ -389,12 +397,12 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await rawTextarea.fill(jsoncConfig);
 
     // Verify no validation errors are displayed
-    const rawConfigError = page.locator('.card:has-text("Raw JSON Configuration") >> text=/Invalid JSON/');
-    await expect(rawConfigError).not.toBeVisible();
+    await expect(invalidJsonError).not.toBeVisible();
+
 
     // Save configuration
-    const saveBtn = page.locator('button:has-text("Save Configuration")');
     await expect(saveBtn).toBeVisible();
+    await expect(saveBtn).toBeEnabled();
     await saveBtn.click();
 
     // Verify success indicator

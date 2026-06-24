@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import fs from 'fs';
 
 test.describe('Swazz Integration E2E Test', () => {
   test('should load dashboard, add vulnerable demo spec, trigger fuzzing, and verify results', async ({ page }) => {
@@ -102,5 +103,14 @@ test.describe('Swazz Integration E2E Test', () => {
     // Wait for the download process to complete
     const path = await download.path();
     expect(path).not.toBeNull();
+
+    // Verify downloaded file content (file download verification scenario)
+    if (path) {
+      const content = fs.readFileSync(path, 'utf8');
+      expect(content).toContain('<!DOCTYPE html>');
+      expect(content).toContain('Swazz Fuzzing Report');
+      expect(content).toContain('fuzz-report');
+    }
   });
 });
+
