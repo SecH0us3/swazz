@@ -88,15 +88,18 @@ test.describe('User Settings and Profile Management E2E Test', () => {
     // Default should be Private Runner mode active
     await expect(page.locator('text=Private Mode:')).toBeVisible();
     await expect(page.locator('text=generate-keys')).toBeVisible();
+    await expect(page.locator('text=--key')).toBeVisible();
 
     // Switch to Shared Runner mode
     await sharedRunnerTab.click();
     await expect(page.locator('text=Shared Mode:')).toBeVisible();
-    await expect(page.locator('text=run-agent --coordinator')).toBeVisible();
+    await expect(page.locator('text=--token')).toBeVisible();
+    await expect(page.locator('text=generate-keys')).toBeHidden();
 
     // Switch back to Private
     await privateRunnerTab.click();
     await expect(page.locator('text=Private Mode:')).toBeVisible();
+    await expect(page.locator('text=--key')).toBeVisible();
 
     // 7. Test invalid public key format validation (negative scenario)
     const pubKeyInput = page.locator('input[placeholder*="Enter hex-encoded public key"]');
