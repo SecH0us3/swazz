@@ -478,6 +478,24 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 	}
 	r.configMu.RUnlock()
 
+	// Check if probe is configured and session is still alive
+	r.configMu.RLock()
+	hasProbe := r.config.Settings.AuthProbeURL != ""
+	r.configMu.RUnlock()
+
+	if hasProbe {
+		if time.Since(r.lastProbeTime) < 5*time.Second {
+			logger.Debug("[Auth] Session considered alive (cached probe check within 5s).")
+			return nil, nil, false, nil
+		}
+
+		if r.isSessionAliveViaProbe(ctx) {
+			logger.Debug("[Auth] Session is still alive via probe, skipping re-authentication.")
+			r.lastProbeTime = time.Now()
+			return nil, nil, false, nil
+		}
+	}
+
 	logger.Info("[Session] Session expired. Initiating automatic re-authentication...")
 	if err := r.RunAuthSequence(ctx); err != nil {
 		return nil, nil, false, fmt.Errorf("re-authentication failed: %w", err)
@@ -487,3 +505,50 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 	defer r.configMu.RUnlock()
 	return maps.Clone(r.config.GlobalHeaders), maps.Clone(r.config.Cookies), true, nil
 }
+
+func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
+	r.configMu.RLock()
+	probePath := r.config.Settings.AuthProbeURL
+	baseURL := r.config.BaseURL
+	globalHeaders := maps.Clone(r.config.GlobalHeaders)
+	cookies := maps.Clone(r.config.Cookies)
+	r.configMu.RUnlock()
+
+	if probePath == "" {
+		return false
+	}
+
+	probeURL := probePath
+	if !strings.HasPrefix(probeURL, "http://") && !strings.HasPrefix(probeURL, "https://") {
+		probeURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(probeURL, "/")
+	}
+
+	reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer reqCancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "GET", probeURL, nil)
+	if err != nil {
+		logger.Debug("[Auth] Failed to create auth probe request: %v", err)
+		return false
+	}
+
+	for k, v := range globalHeaders {
+		req.Header.Set(k, v)
+	}
+	for k, v := range cookies {
+		req.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
+	}
+
+
+	logger.Debug("[Auth] Sending probe request to %s to check session validity...", probeURL)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		logger.Debug("[Auth] Probe request failed: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	logger.Debug("[Auth] Probe response status: %d", resp.StatusCode)
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+

@@ -118,6 +118,8 @@ type Runner struct {
 	reauthMu        sync.Mutex
 	csrfMu          sync.RWMutex
 	activeCSRFToken string
+	lastProbeTime   time.Time
+
 
 	// Per-run baselines, results, and concurrency control.
 	sizeBaselines *sync.Map
