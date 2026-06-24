@@ -53,7 +53,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
 - [x] **Task 14:** Setup Static Application Security Testing (SAST) for Swazz itself using `gosec` (Go Security Checker) and GitHub CodeQL. *(Depends on: Task 2)*
 - [x] **Task 15:** Configure Dependabot or Renovate to automatically update Go modules and npm dependencies.
-- [ ] **Task 22:** Implement E2E browser automation tests using Playwright.
+- [x] **Task 22:** Implement E2E browser automation tests using Playwright.
   - **Design Goal:** Ensure full integration verification between the Vite frontend SPA, Go REST API server, SSE engine, and IndexedDB local client storage during continuous integration builds.
   - **Implementation Details:**
     - Create a suite of TypeScript Playwright tests under a new directory `tests/e2e/`.
