@@ -576,7 +576,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Web UI:** Update the Monaco-based config editor in the dashboard (if present) to set the language mode to `jsonc` so the editor natively highlights comments without showing lint errors.
     - **Tests:** Add `packages/container/jsonc_test.go` covering: `//` comment on its own line, inline `//` comment after a value, `/* */` block comment spanning multiple lines, comment inside a string value (must not be stripped), nested escaped quotes, empty input, and valid plain JSON (must pass through unchanged).
 
-- [/] **Task 71: Runner Registration UI — Shared vs Private Mode**
+- [x] **Task 71: Runner Registration UI — Shared vs Private Mode**
   - **Design Goal:** The current Settings page shows a single `docker run` command to register a runner without making it clear that this runner joins the **Shared Pool** (available to all users). Users must be able to choose between two explicit modes — **Shared Runner** (contributes compute to the community pool) and **Private Runner** (exclusive to the owner, matched to their Ed25519 signing key). The distinction must be visually obvious before a user copies and runs any command.
   - **Current problem:** `UserSettings.tsx` generates only one `docker run ... --key` command for key-authenticated private runners and shows no mention of the Shared Pool or what it means. A user running with `--token` unknowingly contributes their runner to all other users. The coordinator's `isPrivateRunner()` check ([Coordinator.ts L53-55](./packages/edge/src/Coordinator.ts)) silently routes jobs based on this distinction, but the UI exposes none of it.
   - **Implementation Details:**
@@ -610,7 +610,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Runner name display:** The `--name` flag value is already stored as a `name:<value>` tag. Surface it in Settings as an optional `Runner Name` input pre-filled with `hostname`, so users can identify their runners in the dashboard.
     - **Agent version display:** Surface the runner agent's version tag next to the name/status in the "Distributed Fuzzing Agents" settings table. The version tag must comply with semantic versioning (semver, e.g. `v1.0.0`).
 
-- [/] **Task 72: Propagate `projectId` from Web UI to Backend on Scan Start**
+- [x] **Task 72: Propagate `projectId` from Web UI to Backend on Scan Start**
   - **Design Goal:** Scans started from the Web UI must be correctly linked to the active project in D1 so that project-level history, reporting, and access control work end-to-end. Currently `projectId` is only stored locally in IndexedDB (for the run history sidebar) but is never sent to `POST /api/runs`, so the server-side `scans` table always stores an empty `project_id` for web-initiated scans regardless of which project is active.
   - **Root cause:** In [useFuzzSession.ts L128-132](./packages/web/src/hooks/useFuzzSession.ts), `finalConfig` is built from `SwazzConfig` which has no `projectId` field. The `projectId` is only placed in `runRec` (the local IDB record). It is never included in the `POST /api/runs` body sent to the edge worker.
   - **Implementation Details:**
@@ -629,12 +629,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **`checkScanMembership`** will then correctly follow the project membership path for project-linked scans and the `user_id` direct-ownership path for standalone scans — no changes required there.
     - **No schema changes needed** — `project_id` column already exists in `scans` table.
 
-- [/] **Task 73: Register Private Runners Even with Project-Specific Public Runners**
+- [x] **Task 73: Register Private Runners Even with Project-Specific Public Runners**
   - **Design Goal:** Ensure users can register private/custom runners for a project even if public/shared runners are already registered or available. Currently, once a runner is registered, the UI hides/removes the registration instructions and token, blocking further registrations.
   - **Implementation Details:**
     - Update the Settings/Runners UI (e.g., in `UserSettings.tsx`) to ensure the runner registration tokens and registration command cards remain visible and usable regardless of whether other runners are online.
 
-- [/] **Task 74: Option to Disable Shared Runners in Project Configuration**
+- [x] **Task 74: Option to Disable Shared Runners in Project Configuration**
   - **Design Goal:** Allow project owners to prevent their project's fuzzing jobs from running on public/shared runners, restricting them only to their own private runners for data isolation and performance.
   - **Implementation Details:**
     - Add a `Disable Shared Runners` setting (represented by a flag like `use_shared_runners: false`) in the project configuration schema and Settings UI.
@@ -661,7 +661,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [/] **Task 78: Upgrade OWASP API Security Categorization to 2025 Edition**
+- [x] **Task 78: Upgrade OWASP API Security Categorization to 2025 Edition**
   - **Design Goal:** Transition compliance tagging from the OWASP API Security Top 10 (2023) to the 2025 standard to keep reports up-to-date.
   - **Implementation Details:**
     - Update `packages/container/internal/classifier/owasp.go` mapping function to categorize rule IDs according to the latest OWASP 2025 categories.
