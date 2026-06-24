@@ -74,6 +74,7 @@ func runCLI(args []string) {
 	logLevelFlag := flags.String("log-level", "", "Log level: debug, info, warn, error")
 	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")
 	qFlag := flags.Bool("q", false, "Silence all progress output (alias of -quiet)")
+	progressOnChangeFlag := flags.Bool("progress-on-change", false, "Only print progress when the active endpoint changes")
 
 	if err := flags.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -166,6 +167,8 @@ func runCLI(args []string) {
 	var resultsMu sync.Mutex
 
 	go func() {
+		var lastEndpoint string
+		var lastProfile string
 		for evt := range resultsCh {
 			if evt.Type == runner.EventResult {
 				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
@@ -175,7 +178,17 @@ func runCLI(args []string) {
 				}
 			} else if evt.Type == runner.EventProgress {
 				if stats, ok := evt.Data.(swagger.RunStats); ok {
-					printProgress(stats)
+					if *progressOnChangeFlag {
+						currEp := stats.Progress.CurrentEndpoint
+						currProf := stats.Progress.CurrentProfile
+						if (currEp != "" && currEp != lastEndpoint) || (currProf != "" && currProf != lastProfile) {
+							lastEndpoint = currEp
+							lastProfile = currProf
+							printProgressClean(stats)
+						}
+					} else {
+						printProgress(stats)
+					}
 				}
 			}
 		}

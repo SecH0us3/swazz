@@ -94,6 +94,32 @@ func printProgress(stats swagger.RunStats) {
 	numLinesPrinted = linesToPrint
 }
 
+func printProgressClean(stats swagger.RunStats) {
+	if logger.GetLevel() >= logger.LevelError {
+		return
+	}
+
+	pct := 0
+	if stats.TotalPlanned > 0 {
+		pct = int(float64(stats.TotalRequests) / float64(stats.TotalPlanned) * 100)
+	}
+
+	ep := ""
+	if stats.Progress.CurrentEndpoint != "" {
+		iterInfo := ""
+		if stats.Progress.TotalIterations > 0 {
+			iterInfo = fmt.Sprintf(" [test %d/%d]", stats.Progress.CurrentIteration, stats.Progress.TotalIterations)
+		}
+		ep = fmt.Sprintf("%s (%s)%s", stats.Progress.CurrentEndpoint, stats.Progress.CurrentProfile, iterInfo)
+	}
+
+	if ep != "" {
+		fmt.Fprintf(os.Stderr, "🎯 Progress: [%d%%] %d/%d reqs | %.1f rps | Active: %s\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec, ep)
+	} else {
+		fmt.Fprintf(os.Stderr, "🎯 Progress: [%d%%] %d/%d reqs | %.1f rps\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec)
+	}
+}
+
 func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 	if logger.GetLevel() >= logger.LevelError {
 		return

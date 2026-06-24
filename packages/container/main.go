@@ -63,6 +63,7 @@ func printHelp() {
 	fmt.Println("  --markdown <path>            Export findings in Markdown format")
 	fmt.Println("  --fail-on-severity <level>   Exit with code 2 if findings meet severity threshold")
 	fmt.Println("                               Levels: error, warning, note, none (default: none)")
+	fmt.Println("  --progress-on-change         Only print progress when the active endpoint changes")
 	fmt.Println("  --debug                      Enable debug logging for all HTTP interactions")
 	fmt.Println()
 	fmt.Println("Examples:")
