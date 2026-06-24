@@ -9,11 +9,22 @@ export function RawConfigTab() {
     const [rawConfigError, setRawConfigError] = useState('');
     const [isSavingRaw, setIsSavingRaw] = useState(false);
     const [saveRawSuccess, setSaveRawSuccess] = useState(false);
+    const lastSyncedConfigRef = React.useRef('');
+    const rawConfigTextRef = React.useRef(rawConfigText);
 
-    // Sync rawConfigText when config changes
     useEffect(() => {
-        setRawConfigText(exportConfig());
-        setRawConfigError('');
+        rawConfigTextRef.current = rawConfigText;
+    }, [rawConfigText]);
+
+    // Sync rawConfigText when config changes, but only if user hasn't edited it
+    useEffect(() => {
+        const exported = exportConfig();
+        const currentText = rawConfigTextRef.current;
+        if (currentText === lastSyncedConfigRef.current || currentText === '') {
+            setRawConfigText(exported);
+            lastSyncedConfigRef.current = exported;
+            setRawConfigError('');
+        }
     }, [config, exportConfig]);
 
     return (
