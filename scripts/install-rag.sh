@@ -29,15 +29,23 @@ write_wrapper() {
 #!/bin/bash
 NODE_BIN="node"
 if [ -d "\$HOME/.nvm/versions/node" ]; then
-  for v_dir in \$(ls -vd \$HOME/.nvm/versions/node/v* 2>/dev/null | tac); do
+  best_major=0
+  best_path=""
+  for v_dir in "\$HOME"/.nvm/versions/node/v*; do
+    [ -d "\$v_dir" ] || continue
     v_name=\$(basename "\$v_dir")
-    major_ver=\${v_name#v}
-    major_ver=\${major_ver%%.*}
-    if [ "\$major_ver" -ge 22 ] && [ -x "\$v_dir/bin/node" ]; then
-      NODE_BIN="\$v_dir/bin/node"
-      break
+    ver=\${v_name#v}
+    major_ver=\${ver%%.*}
+    if [[ "\$major_ver" =~ ^[0-9]+\$ ]]; then
+      if [ "\$major_ver" -ge 22 ] && [ "\$major_ver" -ge "\$best_major" ] && [ -x "\$v_dir/bin/node" ]; then
+        best_major=\$major_ver
+        best_path="\$v_dir/bin/node"
+      fi
     fi
   done
+  if [ -n "\$best_path" ]; then
+    NODE_BIN="\$best_path"
+  fi
 fi
 exec "\$NODE_BIN" "$script_js" "\$@"
 EOF
