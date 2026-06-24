@@ -115,7 +115,9 @@ type Settings struct {
 	BOLASimilarityThreshold       float64                     `json:"bola_similarity_threshold"`
 	AuthHeaders                   []string                    `json:"auth_headers,omitempty"`
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
+	AuthProbeURL                  string                      `json:"auth_probe_url,omitempty"`
 	ChainingRules                 []ChainingRule              `json:"chaining_rules,omitempty"`
+
 	HarDomainFilter               string                      `json:"har_domain_filter,omitempty"`
 	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
 	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
