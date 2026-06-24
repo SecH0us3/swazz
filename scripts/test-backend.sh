@@ -8,19 +8,19 @@ echo "======================================"
 
 # Run go vet for compiler-like warnings
 echo "-> Running go vet..."
-go vet ./...
+rtk go vet ./...
 
 # Check and run gosec for SAST
 if ! command -v gosec &> /dev/null; then
     echo "-> gosec not found, installing..."
-    go install github.com/securego/gosec/v2/cmd/gosec@latest
+    rtk go install github.com/securego/gosec/v2/cmd/gosec@latest
 fi
 
 echo "-> Running gosec..."
 # Run gosec but exclude test files. We don't fail immediately to still run tests,
 # but we capture the exit code.
 set +e
-~/go/bin/gosec -exclude-dir=tests -quiet ./...
+rtk ~/go/bin/gosec -exclude-dir=tests -quiet ./...
 GOSEC_EXIT=$?
 set -e
 
@@ -31,7 +31,7 @@ fi
 echo "======================================"
 echo "🧪 Running unit tests..."
 echo "======================================"
-go test -race ./...
+rtk go test -race ./...
 
 # Return the gosec exit code if tests passed but SAST failed
 if [ $GOSEC_EXIT -ne 0 ]; then
