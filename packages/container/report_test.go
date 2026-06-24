@@ -17,6 +17,10 @@ func TestPrintProgressClean(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
 	// Set logger to info to ensure it prints
 	logger.SetLevelByName("info")
 
@@ -33,7 +37,6 @@ func TestPrintProgressClean(t *testing.T) {
 	printProgressClean(stats)
 
 	w.Close()
-	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)

@@ -168,6 +168,7 @@ func runCLI(args []string) {
 
 	go func() {
 		var lastEndpoint string
+		var lastProfile string
 		for evt := range resultsCh {
 			if evt.Type == runner.EventResult {
 				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
@@ -179,8 +180,10 @@ func runCLI(args []string) {
 				if stats, ok := evt.Data.(swagger.RunStats); ok {
 					if *progressOnChangeFlag {
 						currEp := stats.Progress.CurrentEndpoint
-						if currEp != "" && currEp != lastEndpoint {
+						currProf := stats.Progress.CurrentProfile
+						if (currEp != "" && currEp != lastEndpoint) || (currProf != "" && currProf != lastProfile) {
 							lastEndpoint = currEp
+							lastProfile = currProf
 							printProgressClean(stats)
 						}
 					} else {
