@@ -447,7 +447,15 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 			fetchDur := time.Since(startFetch)
 			logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
 
-			parsed, err := swagger.ParseRawSpec(specRaw)
+			var parseOpts []swagger.ParserOption
+			if cliCfg.Settings.MaxNodesBudget > 0 {
+				parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
+			}
+			if cliCfg.Settings.MaxDepthLimit > 0 {
+				parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
+			}
+
+			parsed, err := swagger.ParseRawSpec(specRaw, parseOpts...)
 			if err != nil {
 				if swagger.IsHAR(specRaw) {
 					parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)

@@ -13,6 +13,12 @@ func (s *Settings) Validate() error {
 	if s.TimeoutMs < 0 {
 		return fmt.Errorf("timeout_ms must be greater than or equal to 0")
 	}
+	if s.MaxNodesBudget <= 0 {
+		s.MaxNodesBudget = 50000
+	}
+	if s.MaxDepthLimit <= 0 {
+		s.MaxDepthLimit = 64
+	}
 	for _, profile := range s.Profiles {
 		if profile != ProfileRandom && profile != ProfileBoundary && profile != ProfileMalicious {
 			return fmt.Errorf("invalid profile: %q (must be RANDOM, BOUNDARY, or MALICIOUS)", profile)

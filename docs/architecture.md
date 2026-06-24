@@ -35,4 +35,14 @@ Reserved for Cloudflare Workers integration and edge-deployments.
 3. **Execute**: The Runner executes these requests concurrently against the target API.
 4. **Analyze**: The response analyzer checks for unexpected status codes (e.g., 500 Internal Server Error) or data leaks, reporting them back via the CLI or live via SSE to the React Dashboard.
 
+## OpenAPI Safety Limits & OOM Protection
+
+To protect the fuzzing runner from excessive memory usage (OOM) on very large, dense, or cyclic OpenAPI specifications, Swazz implements the following schema resolution safety mechanisms:
+
+- **DAG-based Resolution & Memoization**: Each schema reference (`$ref`) is resolved exactly once per root schema and cached. Subsequent encounters of the same reference reuse the cached resolved representation. This transforms an exponential-size resolution tree into a linear-size Directed Acyclic Graph (DAG).
+- **Cycle Detection**: Active traversal paths track references on the recursion stack to break cycles safely. Circular references return a fallback `object` schema representation to prevent infinite recursion.
+- **Node Budget**: A safety limit of **50,000 SchemaProperty nodes** is enforced during resolution. If exceeded, schema expansion is safely truncated, and a `WARN` log is emitted specifying the endpoint context where the truncation occurred.
+- **Depth Limit**: Recursion is limited to a maximum depth of **64**. If exceeded, the schema resolves to a fallback `object`.
+
 [← Back to Usage](./usage.html)
+

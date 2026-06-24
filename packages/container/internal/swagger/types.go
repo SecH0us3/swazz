@@ -117,6 +117,8 @@ type Settings struct {
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
 	ChainingRules                 []ChainingRule              `json:"chaining_rules,omitempty"`
 	HarDomainFilter               string                      `json:"har_domain_filter,omitempty"`
+	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
+	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -137,6 +139,8 @@ func DefaultSettings() Settings {
 		BOLASimilarityThreshold:       0.85,
 		AuthHeaders:                   []string{"Authorization", "X-API-Key"},
 		AuthCookies:                   []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"},
+		MaxNodesBudget:                50000,
+		MaxDepthLimit:                 64,
 	}
 }
 

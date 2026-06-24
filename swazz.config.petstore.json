@@ -6,6 +6,8 @@
   "settings": {
     "iterations_per_profile": 5,
     "concurrency": 3,
+    "max_nodes_budget": 50000,
+    "max_depth_limit": 64,
     "profiles": [
       "RANDOM",
       "BOUNDARY",
