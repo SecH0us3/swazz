@@ -22,26 +22,31 @@ npm run build --workspace=packages/rag
 echo "Installing binary wrappers..."
 mkdir -p "$BIN_DIR"
 
-# Indexer Wrapper
-cat << EOF > "$BIN_DIR/swazz-indexer"
+write_wrapper() {
+  local target_file="$1"
+  local script_js="$2"
+  cat << EOF > "$target_file"
 #!/bin/bash
-exec node "$WORKSPACE_DIR/packages/rag/dist/bin-indexer.js" "\$@"
+NODE_BIN="node"
+if [ -d "\$HOME/.nvm/versions/node" ]; then
+  for v_dir in \$(ls -vd \$HOME/.nvm/versions/node/v* 2>/dev/null | tac); do
+    v_name=\$(basename "\$v_dir")
+    major_ver=\${v_name#v}
+    major_ver=\${major_ver%%.*}
+    if [ "\$major_ver" -ge 22 ] && [ -x "\$v_dir/bin/node" ]; then
+      NODE_BIN="\$v_dir/bin/node"
+      break
+    fi
+  done
+fi
+exec "\$NODE_BIN" "$script_js" "\$@"
 EOF
-chmod +x "$BIN_DIR/swazz-indexer"
+  chmod +x "$target_file"
+}
 
-# MCP Wrapper
-cat << EOF > "$BIN_DIR/swazz-mcp"
-#!/bin/bash
-exec node "$WORKSPACE_DIR/packages/rag/dist/bin-mcp.js" "\$@"
-EOF
-chmod +x "$BIN_DIR/swazz-mcp"
-
-# CLI Wrapper
-cat << EOF > "$BIN_DIR/swazz-cli"
-#!/bin/bash
-exec node "$WORKSPACE_DIR/packages/rag/dist/bin-cli.js" "\$@"
-EOF
-chmod +x "$BIN_DIR/swazz-cli"
+write_wrapper "$BIN_DIR/swazz-indexer" "$WORKSPACE_DIR/packages/rag/dist/bin-indexer.js"
+write_wrapper "$BIN_DIR/swazz-mcp" "$WORKSPACE_DIR/packages/rag/dist/bin-mcp.js"
+write_wrapper "$BIN_DIR/swazz-cli" "$WORKSPACE_DIR/packages/rag/dist/bin-cli.js"
 
 # 4. Create Sidecar Configuration
 echo "Configuring sidecar..."

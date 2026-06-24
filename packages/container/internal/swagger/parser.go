@@ -72,8 +72,10 @@ func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
 			// Merge path-level + operation-level parameters
 			allParams := mergeParams(pathLevelParams, operation)
 
+			endpointHint := strings.ToUpper(method) + " " + path
+
 			// Extract request body schema
-			bodyResult := extractRequestSchema(operation, fullSpec)
+			bodyResult := extractRequestSchema(operation, fullSpec, endpointHint)
 
 			var schema SchemaProperty
 			if bodyResult != nil {
@@ -94,7 +96,7 @@ func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
 			}
 
 			pathParams := extractPathParams(allParams)
-			headerParams := extractHeaderParams(allParams, fullSpec)
+			headerParams := extractHeaderParams(allParams, fullSpec, endpointHint)
 
 			ep := EndpointConfig{
 				Path:   path,
@@ -183,7 +185,7 @@ type bodyResult struct {
 }
 
 // extractRequestSchema extracts the request body schema from an operation.
-func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyResult {
+func extractRequestSchema(operation map[string]any, spec map[string]any, endpointHint string) *bodyResult {
 	// OpenAPI 3.x: requestBody → content → <mime> → schema
 	if rb, ok := operation["requestBody"].(map[string]any); ok {
 		if content, ok := rb["content"].(map[string]any); ok {
@@ -253,7 +255,7 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 							}
 						}
 						return &bodyResult{
-							schema:      resolveSchema(s, spec, nil),
+							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint),
 							contentType: ct,
 							example:     example,
 						}
@@ -284,7 +286,7 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 							}
 						}
 						return &bodyResult{
-							schema:      resolveSchema(s, spec, nil),
+							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint),
 							contentType: "application/json",
 							example:     example,
 						}
@@ -394,7 +396,7 @@ func extractPathParams(params []any) map[string]*SchemaProperty {
 }
 
 // extractHeaderParams extracts header parameters for injection fuzzing.
-func extractHeaderParams(params []any, spec map[string]any) map[string]*SchemaProperty {
+func extractHeaderParams(params []any, spec map[string]any, endpointHint string) map[string]*SchemaProperty {
 	result := make(map[string]*SchemaProperty)
 
 	for _, p := range params {
@@ -411,7 +413,7 @@ func extractHeaderParams(params []any, spec map[string]any) map[string]*SchemaPr
 		}
 
 		if schema, ok := pm["schema"]; ok {
-			resolved := resolveSchema(schema, spec, nil)
+			resolved := resolveSchemaWithHint(schema, spec, nil, endpointHint)
 			result[name] = &resolved
 		} else {
 			result[name] = &SchemaProperty{
