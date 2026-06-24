@@ -11,7 +11,7 @@ This skill defines how to work with the `swazz` project.
 - Run `scripts/test-backend.sh` to execute the Go backend unit tests, compiler checks (`go vet`), and SAST security scans (`gosec`).
 
 ## 🔍 Code Navigation & RAG Search
-- **Prefer RAG tools**: For searching the codebase or understanding file layouts, prefer utilizing the MCP tools `swazz_search_code` and `swazz_get_file_context`. This keeps context sizes smaller and operations faster.
+- **MANDATORY RAG tools usage**: You MUST use the MCP tools `swazz_search_code` (for semantic and keyword search) and `swazz_get_file_context` (for structured outlines of files) as your primary methods for code navigation and search. Do not use generic grep search or view full files using `view_file` unless the RAG tools are not applicable, have failed, or you explicitly need to read the entire file. This keeps token usage optimal.
 
 ## 🔄 Development Architecture
 - **Backend**: `packages/container/`. Contains fuzzing logic.
