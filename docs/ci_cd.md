@@ -138,7 +138,8 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-severity error
+        --fail-on-severity error \
+        --progress-on-change
   artifacts:
     when: always
     reports:
@@ -168,7 +169,8 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-severity error
+        --fail-on-severity error \
+        --progress-on-change
   artifacts:
     when: always
     paths:
@@ -194,6 +196,9 @@ convert-sast:
 ```
 
 > **Supply-chain note:** In both options above, base images are pinned to specific SHA-256 digests (`golang@sha256:...` and `sarif-converter@sha256:...`) to defend against supply-chain compromise. Always verify these digests when updating CI dependencies.
+
+> [!TIP]
+> Use the `--progress-on-change` flag in CI environments like GitLab. This prints a single clean progress line only when the active fuzzing endpoint changes, preventing the multi-line interactive terminal progress bar from spamming and cluttering the pipeline log.
 
 ### Validating and Testing GitLab Configurations
 
