@@ -667,7 +667,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Update `packages/container/internal/classifier/owasp.go` mapping function to categorize rule IDs according to the latest OWASP 2025 categories.
     - Align Web Dashboard tables and report formatters (HTML, JSON, Markdown) to display the updated 2025 taxonomy.
 
-- [ ] **Task 79: Project Security Review & System Architecture Documentation**
+- [/] **Task 79: Project Security Review & System Architecture Documentation**
   - **Design Goal:** Improve codebase transparency, security posture, and developer onboarding by performing a formal security review and documenting general system/component architecture diagrams.
   - **Implementation Details:**
     - Perform a comprehensive threat modeling and security review of the Swazz core fuzzer, edge coordinator, Web UI, and runner communication channels.
