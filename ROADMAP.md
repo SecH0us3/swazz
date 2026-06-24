@@ -524,7 +524,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Ensure correct mapping of severity levels, grouping, service names, and URL paths.
     - Embed fuzzed payloads, request/response bodies, and corresponding MITRE CWE identifiers into exported report formats.
 
-- [/] **Task 61: Case-Insensitive URL Exclusions**
+- [x] **Task 61: Case-Insensitive URL Exclusions**
   - **Design Goal:** Prevent scan contamination by ensuring target path exclusion matching ignores alphabetical casing.
   - **Implementation Details:**
     - Modify URL filtering logic to perform case-insensitive comparisons against defined exclude paths (e.g. `/api/admin` matching `/API/Admin`).
@@ -535,19 +535,19 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
-- [/] **Task 63: UI Actions for Ignoring Findings & Accepting Risks**
+- [x] **Task 63: UI Actions for Ignoring Findings & Accepting Risks**
   - **Design Goal:** Allow security auditors to triage issues directly in the dashboard by ignoring false positives or acknowledging accepted risks.
   - **Implementation Details:**
     - Add buttons to individual findings to mute them or mark them as "Accept Risk".
     - Automatically append corresponding rules to `swazz.ignore.json`.
 
-- [/] **Task 64: Include Test Profile Type in SARIF Reports**
+- [x] **Task 64: Include Test Profile Type in SARIF Reports**
   - **Design Goal:** Provide better context in CI/CD pipelines by embedding the exact fuzzer test profile/vulnerability category in SARIF output files.
 
-- [/] **Task 65: Refine BOLA/IDOR Tests to Ignore Requests without Auth Substitution**
+- [x] **Task 65: Refine BOLA/IDOR Tests to Ignore Requests without Auth Substitution**
   - **Design Goal:** Reduce false positive findings by skipping BOLA evaluation on endpoints where no authorization tokens or parameters were present in the baseline request to swap.
 
-- [/] **Task 66: Fix URL Casing Conversion in SARIF Output**
+- [x] **Task 66: Fix URL Casing Conversion in SARIF Output**
   - **Design Goal:** Resolve the bug where URLs in exported SARIF logs are incorrectly capitalized (e.g., converting `/api/bank` to `/Api/Bank`).
 
 - [ ] **Task 67: Restart Runner Agent Command in Web UI**
@@ -559,7 +559,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
 
-- [/] **Task 70: JSONC Support for Configuration Files**
+- [x] **Task 70: JSONC Support for Configuration Files**
   - **Design Goal:** Allow users to annotate their `swazz.config.json`, `swazz.ignore.json`, and `wrangler.config.json` files with `//` and `/* */` comments. JSONC (JSON with Comments) is the de-facto standard for developer-facing config files (VS Code, TypeScript, ESLint), and its absence currently forces users to maintain separate out-of-band documentation for non-obvious config fields.
   - **Implementation Details:**
     - **Go backend (CLI + agent):** Introduce a `stripJSONC(data []byte) []byte` utility in `packages/container/` (e.g., `jsonc.go`) that strips `// line` and `/* block */` comments while preserving byte offsets (for accurate parse error messages). Apply it to every `os.ReadFile` / `json.Unmarshal` call for user-supplied config files:
