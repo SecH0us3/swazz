@@ -1,7 +1,7 @@
 {
   "name": "sec_auditor",
   "description": "Specialist for security reviews, threat modeling, vulnerability analysis, and code auditing.",
-  "model": "gemini-3.1-pro",
+  "model": "gemini-3.1-pro-high",
   "enable_write_tools": true,
   "enable_mcp_tools": true,
   "enable_subagent_tools": false,
