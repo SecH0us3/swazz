@@ -19,13 +19,13 @@ type resolverCtx struct {
 	endpointHint string
 }
 
-func newResolverCtx(spec map[string]any, endpointHint string) *resolverCtx {
+func newResolverCtx(spec map[string]any, endpointHint string, maxNodes, maxDepth int) *resolverCtx {
 	return &resolverCtx{
 		spec:         spec,
 		inProgress:   make(map[string]bool),
 		resolvedRefs: make(map[string]*SchemaProperty),
-		maxNodes:     50000,
-		maxDepth:     64,
+		maxNodes:     maxNodes,
+		maxDepth:     maxDepth,
 		endpointHint: endpointHint,
 	}
 }
@@ -33,12 +33,12 @@ func newResolverCtx(spec map[string]any, endpointHint string) *resolverCtx {
 // resolveSchema resolves a JSON schema, handling $ref with cycle detection and memoization.
 // seenRefs tracks $ref strings on the call stack to prevent infinite recursion (for backward compatibility).
 func resolveSchema(schema any, spec map[string]any, seenRefs map[string]bool) SchemaProperty {
-	return resolveSchemaWithHint(schema, spec, seenRefs, "")
+	return resolveSchemaWithHint(schema, spec, seenRefs, "", 50000, 64)
 }
 
 // resolveSchemaWithHint resolves a JSON schema, providing an endpoint hint for logs when safety budgets are exceeded.
-func resolveSchemaWithHint(schema any, spec map[string]any, seenRefs map[string]bool, endpointHint string) SchemaProperty {
-	ctx := newResolverCtx(spec, endpointHint)
+func resolveSchemaWithHint(schema any, spec map[string]any, seenRefs map[string]bool, endpointHint string, maxNodes, maxDepth int) SchemaProperty {
+	ctx := newResolverCtx(spec, endpointHint, maxNodes, maxDepth)
 	// Seed inProgress with any caller-specified seenRefs for safety/backward compatibility
 	for k, v := range seenRefs {
 		if v {

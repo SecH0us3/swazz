@@ -429,3 +429,45 @@ func TestResolveSchema_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestParseSpec_WithParserOptions(t *testing.T) {
+	specRaw := `{
+		"openapi": "3.0.0",
+		"info": {"title": "Test API", "version": "1.0"},
+		"paths": {
+			"/test": {
+				"post": {
+					"requestBody": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"name": {"type": "string"}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+
+	// Test with node budget that causes truncation
+	result, err := ParseRawSpec([]byte(specRaw), WithMaxNodes(1))
+	if err != nil {
+		t.Fatalf("Failed to parse spec: %v", err)
+	}
+	
+	// Since node budget is 1, the nested "name" property should be truncated to the safe fallback "object" (instead of "string")
+	ep := result.Endpoints[0]
+	nameProp := ep.Schema.Properties["name"]
+	if nameProp == nil {
+		t.Fatalf("Expected property 'name' to exist")
+	}
+	if nameProp.Type != "object" {
+		t.Errorf("Expected truncated fallback type 'object' for property 'name', got '%s'", nameProp.Type)
+	}
+}
+
+
