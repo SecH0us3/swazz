@@ -683,7 +683,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Revoke and drop any active WebSocket runner connections matching the deleted user's ID immediately in the Durable Object.
     - Clear all client-side cache and credentials (auth tokens, cookies, and local IndexedDB databases) before redirecting the browser to the registration screen.
 
-- [/] **Task 81: Limit $ref expansion in swazz (protection from OOM on dense/cyclic OpenAPI)**
+- [x] **Task 81: Limit $ref expansion in swazz (protection from OOM on dense/cyclic OpenAPI)**
   - **Design Goal:** Limit the recursive expansion of `$ref` in OpenAPI spec parsing to prevent memory blowup (OOM) on highly dense, cyclic, or complex specs.
   - **Implementation Details:**
     - Introduce DAG-based resolution with memoization (`resolvedRefs`) and recursion tracking (`inProgress`) in `resolver.go`.
