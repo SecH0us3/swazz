@@ -7,11 +7,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 📝 Documentation & Onboarding
 
-- [ ] **Task 3:** Add high-quality screenshots or GIFs of the Web Dashboard (Heatmap, Inspector) to the `README.md`. *(Depends on: Task 12)*
+- [x] **Task 3:** Add high-quality screenshots or GIFs of the Web Dashboard (Heatmap, Inspector) to the `README.md`. *(Depends on: Task 12)*
 
 ## 📦 Compatibility & Quality
 
-- [ ] **Task 35:** Add high-quality screenshots or GIFs of the Web Dashboard to the `README.md` *(replaces Task 3)*.
+- [x] **Task 35:** Add high-quality screenshots or GIFs of the Web Dashboard to the `README.md` *(replaces Task 3)*.
   - **Design Goal:** Create a strong first impression for developers visiting the GitHub repository. *(Depends on: Task 21 completion for mutation diff screenshots)*
   - **Implementation Details:**
     - Capture screenshots/GIFs of: Heatmap view during an active run against the demo API (Task 12), Inspector with request detail & mutation diff (Task 21), Configuration sidebar with payload categories modal, HTML export report, CLI terminal output.

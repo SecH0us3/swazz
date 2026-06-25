@@ -7,6 +7,10 @@ title: Home
 
 Welcome to the official documentation for **Swazz**! 
 
+<p align="center">
+  <video src="./assets/swazz_demo.webm" width="800" controls autoplay muted loop></video>
+</p>
+
 Swazz is an advanced, high-performance Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (such as XSS, SQL injection, and boundary bypassing) by automatically parsing your Swagger/OpenAPI specifications.
 
 ## 🌟 Key Features
