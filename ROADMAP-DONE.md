@@ -17,6 +17,8 @@ This file contains completed tasks.
 
 - [x] **Task 12:** Create a local "Vulnerable Demo API" (e.g., in a `demo/` folder) so users can immediately test Swazz capabilities out of the box.
 
+- [x] **Task 3:** Add high-quality screenshots or GIFs of the Web Dashboard (Heatmap, Inspector) to the `README.md`. *(Depends on: Task 12)*
+
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
 - [x] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
@@ -34,6 +36,22 @@ This file contains completed tasks.
     - At runtime, default to `false` in server mode (`serve`) unless overridden by configuration or environment variable `SWAZZ_ALLOW_PRIVATE_IPS=true`. Default to `true` in CLI mode (`start`).
     - Wrap the HTTP transport dialer in [detect.go](./packages/container/internal/swagger/detect.go) and [runner.go](./packages/container/internal/runner/runner.go) with custom IP verification logic. Resolve hostnames to IPs and block RFC 1918 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`, `::1`), and link-local (`169.254.0.0/16`) ranges when the filter is active.
     - Return a standardized error `request blocked by SSRF policy` on violation.
+
+- [x] **Task 82: Analyze and Fix Memory Leaks in the Golang Application**
+  - **Design Goal:** Identify, analyze, and resolve memory leaks (heap growth or goroutine leaks) in the Go fuzzer agent to ensure stability during long-running continuous fuzzing sessions.
+  - **Implementation Details:**
+    - Instrument the Go application with runtime/pprof or a localhost-bound net/http/pprof server for dynamic profiling.
+    - Run extended load testing/fuzzing sessions and capture heap and goroutine profiles.
+    - Analyze the profiles to locate unbounded memory allocations, orphaned goroutines, or unclosed resource handles.
+    - Implement the necessary fixes and add automated memory leak detection (e.g., using `goleak` in tests) to prevent regression.
+
+- [x] **Task 85: Lifetime Username Lock via Secure Hashing**
+  - **Design Goal:** Prevent recycling or hijacking of usernames by storing a lifetime secure hash of all registered usernames (even after GDPR deletion), ensuring that once a username is taken, it can never be claimed by another account.
+  - **Implementation Details:**
+    - When a user registers, generate a salted SHA-256 hash of their username.
+    - Store this hash in a persistent `username_registry` table.
+    - When a user requests deletion (or when the account is purged), do not delete the record from `username_registry`.
+    - Modify the registration endpoint to check if the hash of the requested username exists in `username_registry` and reject it if found.
 
 ## 🎨 Web Dashboard Enhancements
 
@@ -283,6 +301,15 @@ This file contains completed tasks.
       - `swazz/response-size-anomaly` -> "Response Size Anomaly" (Warning)
     - **Dashboard Sync:** Ensure the React frontend's `categorizeFinding` in [findings.ts](./packages/web/src/utils/findings.ts) and `extractErrorSubtype` in [errors.ts](./packages/web/src/utils/errors.ts) correctly recognize the extended language/framework formats sent by the backend.
     - **Tests:** Add unit tests in `stacktrace_test.go` and `sqli_test.go` with sample responses from Rails, Django, Laravel, NestJS, and Spring Boot to verify correct language detection.
+
+- [x] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
+  - **Design Goal:** Allow users to immediately and permanently delete all their account data, project configurations, runners, and scan history to comply with privacy regulations (e.g. GDPR) and ensure clean slate capabilities.
+  - **Implementation Details:**
+    - Add a **Delete My Account & Data** button (with a double-confirmation prompt) in the `UserSettings` dashboard overlay.
+    - Implement a `DELETE /api/users/me` edge worker API endpoint in the coordinator.
+    - Ensure the endpoint executes a clean cascading database deletion in D1 (deleting `users`, associated `projects`, `scans`, `findings`, and `runners`).
+    - Revoke and drop any active WebSocket runner connections matching the deleted user's ID immediately in the Durable Object.
+    - Clear all client-side cache and credentials (auth tokens, cookies, and local IndexedDB databases) before redirecting the browser to the registration screen.
 
 ## 📦 Compatibility & Quality
 
@@ -627,3 +654,10 @@ This file contains completed tasks.
     - Derive a key using PBKDF2 from the user's raw password combined with a unique salt.
     - Store the unique initialization vector (IV) and the encrypted payload in the `two_factor_secret` column.
     - Decrypt the secret on-the-fly during login/verification inside edge memory (which has access to the user's raw password parameter).
+
+- [x] **Task 35:** Add high-quality screenshots or GIFs of the Web Dashboard to the `README.md` *(replaces Task 3)*.
+  - **Design Goal:** Create a strong first impression for developers visiting the GitHub repository. *(Depends on: Task 21 completion for mutation diff screenshots)*
+  - **Implementation Details:**
+    - Capture screenshots/GIFs of: Heatmap view during an active run against the demo API (Task 12), Inspector with request detail & mutation diff (Task 21), Configuration sidebar with payload categories modal, HTML export report, CLI terminal output.
+    - Optimize images for web (compressed PNG or animated WebP, <500KB each).
+    - Add a visual "Features" section to `README.md` with an image carousel or table layout.
