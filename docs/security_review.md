@@ -16,7 +16,7 @@ Swazz operates as a hybrid architecture divided into three main components:
 2. **Edge Coordinator (`packages/edge`)**: A Cloudflare Hono Worker and Durable Object proxying commands, orchestrating runners, caching Swagger documents in Cloudflare R2, and storing metadata in SQLite D1.
 3. **Go Runner Agent (`packages/container`)**: A high-performance execution engine running locally (CLI) or as a background service connected to the Edge Coordinator via WebSockets.
 
-### High-Level System Architecture & Data Flows
+### High-Level System Architecture & Component Interaction
 
 ```mermaid
 graph TD
@@ -152,9 +152,121 @@ Authentication and session controls on the Web platform enforce the following se
 - **Turnstile Verification**: The login and register pages validate a Cloudflare Turnstile token to deter bots and automated brute-force attacks.
 - **Data Isolation**: Database queries validating project updates, scan retrievals, and deletions verify project membership using `checkProjectMembership` or scan membership using `checkScanMembership`.
 
+### JWT/Key Authentication Sequences
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Web/API Client
+    participant Worker as Hono API Worker (index.ts)
+    participant DB as SQLite D1 Database
+
+    %% Session Login
+    Note over User, Worker: Option A: Login with Credentials
+    User->>Worker: POST /api/auth/login (username, password)
+    Worker->>DB: Query user by username
+    DB-->>Worker: Return stored hash (PBKDF2)
+    Worker->>Worker: Verify password (timingSafeEqual)
+    alt Password Valid
+        Worker->>Worker: Sign JWT token (HS256 with JWT_SECRET)
+        Worker-->>User: Return JWT token
+    else Password Invalid
+        Worker-->>User: 401 Unauthorized
+    end
+
+    %% Session Request
+    Note over User, Worker: Option B: Authenticating API Requests
+    User->>Worker: GET /api/projects (Authorization: Bearer <token>)
+    alt Token starts with swazz_live_
+        Worker->>DB: Query user by api_key
+        DB-->>Worker: Return User Record
+    else Standard JWT
+        Worker->>Worker: Verify JWT signature (HS256 using JWT_SECRET)
+    end
+    alt Auth Valid
+        Worker-->>User: Proceed (200 OK with Data)
+    else Auth Invalid
+        Worker-->>User: 401 Unauthorized
+    end
+```
+
 ---
 
-## 5. OpenAPI Schema Processing Safety (OOM & ReDoS Mitigation)
+## 5. D1 Database & R2 Storage Caching Data Flow
+
+To optimize performance and minimize remote runner overhead, the Edge Coordinator utilizes Cloudflare D1 for metadata indexing and Cloudflare R2 for storing schema documents.
+
+### Cache Lookup and Write Sequences
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Dashboard UI
+    participant Worker as Hono API Worker
+    participant DO as Durable Object Coordinator
+    participant DB as SQLite D1 Database
+    participant R2 as R2 Object Storage
+    participant Agent as Go Runner Agent
+
+    UI->>Worker: POST /api/runs (Swagger Spec URL / Config)
+    Worker->>DB: Insert scan record (status: 'pending')
+    Worker->>DO: Dispatch run job (runId, url, userPublicKey)
+    
+    %% Cache Check
+    DO->>DB: SELECT base_path, endpoints_r2_key FROM swagger_cache WHERE url = ?
+    alt Cache Hit
+        DB-->>DO: Return cache records (base_path, endpoints_r2_key)
+        DO->>R2: GET key (endpoints_r2_key)
+        R2-->>DO: Return cached endpoints (JSON)
+        DO->>Agent: Dispatch job with config & endpoints
+    else Cache Miss
+        DB-->>DO: Return NULL
+        DO->>Agent: Request endpoints parsing: parse_swagger(url, reqId)
+        Agent->>Agent: Fetch & Parse OpenAPI spec
+        Agent-->>DO: WS message: parse_result { reqId, base_path, endpoints, raw_swagger }
+        DO->>R2: PUT raw_swagger & endpoints JSON
+        R2-->>DO: Return storage keys
+        DO->>DB: INSERT INTO swagger_cache (url, base_path, endpoints_r2_key, fetched_at)
+        DO->>Agent: Dispatch job with config & endpoints
+    end
+```
+
+---
+
+## 6. WebSocket / SSE Streaming Sequence
+
+Real-time scanning feedback and vulnerability discoveries are reported immediately to the front-end dashboard using persistent streaming channels.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor UI as Dashboard UI
+    participant Worker as Hono API Worker
+    participant DO as Durable Object Coordinator
+    participant Agent as Go Runner Agent
+    participant DB as SQLite D1 Database
+
+    %% Establish Streams
+    UI->>Worker: WS Connection: /api/runs/:id/events
+    Worker->>DO: Forward WebSocket client connection
+    note over DO: Register client WebSocket in active client set for runId
+
+    Agent->>DO: WS Connection: /connect-runner (Authenticated)
+    note over DO: Register runner WebSocket in active runners set
+
+    %% Streaming Fuzzing Events
+    Agent->>DO: WS message: event { type: "event", runId, data: { status: "fuzzing", endpoint, payload } }
+    DO->>UI: Broadcast WS message: event { type: "event", runId, data }
+    
+    %% Streaming Findings
+    Agent->>DO: WS message: event { type: "finding", runId, data: { vulnerability, severity, path } }
+    DO->>DB: INSERT INTO findings (scan_id, type, severity, path)
+    DO->>UI: Broadcast WS message: event { type: "finding", runId, data }
+```
+
+---
+
+## 7. OpenAPI Schema Processing Safety (OOM & ReDoS Mitigation)
 
 Large, complex, or circular OpenAPI specifications can crash parsing tools via memory exhaustion (OOM) or stack overflows. Swazz protects its engine with the following limits:
 
@@ -165,7 +277,7 @@ Large, complex, or circular OpenAPI specifications can crash parsing tools via m
 
 ---
 
-## 6. Supply Chain Security
+## 8. Supply Chain Security
 
 To protect the Swazz project against supply chain compromises, the build and pipeline actions conform to strict configurations:
 
