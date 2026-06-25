@@ -194,9 +194,9 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                                     <tr key={r.publicKey || r.name} className={r.isMine ? 'runners-tr-mine' : 'runners-tr-default'}>
                                         <td className="runners-td-bold">
                                             <div className="runners-name-row">
-                                                <span>{r.name}</span>
+                                                <span className="runner-name">{r.name}</span>
                                                 {r.version && (
-                                                    <span className="runners-version-badge">
+                                                    <span className="runners-version-badge runner-version-badge">
                                                         {r.version}
                                                     </span>
                                                 )}

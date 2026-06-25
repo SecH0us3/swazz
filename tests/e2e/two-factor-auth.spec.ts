@@ -69,8 +69,8 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     // 1. Navigate to the frontend
     await page.goto('/');
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create Account' });
-    const enterWorkspaceBtn = page.getByRole('button', { name: 'Enter Workspace' });
+    const createAccountBtn = page.getByRole('button', { name: 'Create' });
+    const enterWorkspaceBtn = page.getByRole('button', { name: 'Enter' });
     await expect(createAccountBtn).toBeVisible();
 
     // 2. Perform direct registration

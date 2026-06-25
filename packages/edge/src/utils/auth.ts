@@ -283,3 +283,18 @@ export async function getDeleteRequestedAt(db: any, userId: string): Promise<str
   deletionCache.set(userId, { deleteRequestedAt, expiry: now + 60000 }); // cache for 1 minute
   return deleteRequestedAt;
 }
+
+export async function hashUsername(username: string): Promise<string> {
+  if (typeof username !== 'string') {
+    throw new TypeError('Username must be a string');
+  }
+  const normalized = username.trim().toLowerCase();
+  const salt = 'swazz-secure-username-salt-constant-2026';
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalized + ':' + salt);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+

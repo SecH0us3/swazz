@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Login UX and Combined Actions E2E Tests', () => {
-  test('should allow direct registration via Create Account, show tip on invalid credentials, and handle layout properly', async ({ page }) => {
+  test('should allow direct registration via Create, show tip on invalid credentials, and handle layout properly', async ({ page }) => {
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
@@ -9,8 +9,8 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     // 1. Navigate to the frontend
     await page.goto('/');
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create Account' });
-    const enterWorkspaceBtn = page.getByRole('button', { name: 'Enter Workspace' });
+    const createAccountBtn = page.getByRole('button', { name: 'Create' });
+    const enterWorkspaceBtn = page.getByRole('button', { name: 'Enter' });
     await expect(createAccountBtn).toBeVisible();
     await expect(enterWorkspaceBtn).toBeVisible();
 
@@ -19,7 +19,7 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('password123');
 
-    // Register by clicking Create Account
+    // Register by clicking Create
     const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     await createAccountBtn.click();
 
@@ -51,6 +51,6 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     
     const tipEl = page.locator('.login-error-tip');
     await expect(tipEl).toBeVisible();
-    await expect(tipEl).toContainText('New user? Click Create Account to sign up.');
+    await expect(tipEl).toContainText('New user? Click Create to sign up.');
   });
 });

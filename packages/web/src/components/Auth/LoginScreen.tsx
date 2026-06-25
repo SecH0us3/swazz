@@ -127,8 +127,15 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         <div className="login-screen-overlay">
             <div className="login-modal">
                 <div className="login-header">
-                    <h2>{isRegistering ? 'Create Account' : 'Welcome to Swazz'}</h2>
-                    <p>{isRegistering ? 'Register to start fuzzing' : 'Sign in or create an account to enter your workspace'}</p>
+                    <h2>{isRegistering ? 'Create' : 'Welcome to Swazz'}</h2>
+                    {!isRegistering ? (
+                        <p className="login-subtitle">
+                            Enter your credentials to access your workspace. <br />
+                            New user? Click <strong>Create</strong> to sign up.
+                        </p>
+                    ) : (
+                        <p>Register to start fuzzing</p>
+                    )}
                 </div>
                 {error && (
                     <div className="login-error">
@@ -136,7 +143,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                             <span className="error-text">{error}</span>
                             {error === 'Invalid credentials' && (
                                 <div className="login-error-tip">
-                                    New user? Click <strong>Create Account</strong> to sign up.
+                                    New user? Click <strong>Create</strong> to sign up.
                                 </div>
                             )}
                         </div>
@@ -200,14 +207,14 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                             {isLoading && !isRegistering ? (
                                 <span className="spinner"></span>
                             ) : (
-                                isRegistering ? 'Get Started' : 'Enter Workspace'
+                                isRegistering ? 'Get Started' : 'Enter'
                             )}
                         </button>
                         <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
                             {isLoading && isRegistering ? (
                                 <span className="spinner"></span>
                             ) : (
-                                'Create Account'
+                                'Create'
                             )}
                         </button>
                     </div>
