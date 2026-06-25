@@ -12,8 +12,8 @@ Use the GitHub CLI (`gh`) to fetch the latest comments and feedback from reviewe
 Since this project uses the `rtk` wrapper for token efficiency, use the following command:
 `rtk gh pr view <PR_NUMBER> --comments`
 
-If you need to see line-by-line review comments or suggested changes, you can also use:
-`rtk gh pr review <PR_NUMBER>`
+If you need to view detailed reviews or comments in JSON format, you can use:
+`rtk gh pr view <PR_NUMBER> --json reviews,comments`
 
 ## 2. Analyze Feedback
 Carefully analyze the feedback. Identify actionable items:
@@ -25,7 +25,7 @@ Carefully analyze the feedback. Identify actionable items:
 ## 3. Plan and Execute
 - **Draft a plan**: If the feedback requires significant structural changes, present a brief plan to the user and ask for confirmation. For straightforward fixes, proceed directly.
 - **Implement**: Make the necessary changes in the corresponding files.
-- **Verify**: Always run the relevant tests (e.g., `rtk go test ./...`) to ensure the changes don't break existing functionality and actually fix the issue.
+- **Verify**: Always run the relevant tests (e.g., by running `rtk go test ./...` inside the `packages/container` directory or running the script `./scripts/test-backend.sh`) to ensure the changes don't break existing functionality and actually fix the issue.
 
 ## 4. Commit and Push
 Commit the changes using a descriptive commit message that references the PR or the fix.
