@@ -12,13 +12,15 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [activeLoading, setActiveLoading] = useState<'submit' | 'register' | 'guest' | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+
+    const isLoading = activeLoading !== null;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        setIsLoading(true);
+        setActiveLoading('submit');
         try {
             if (isRegistering) {
                 await onRegister(username, password);
@@ -28,39 +30,38 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         } catch (err: any) {
             setError(err.message);
         } finally {
-            setIsLoading(false);
+            setActiveLoading(null);
         }
     };
 
     const handleRegisterClick = async (e: React.MouseEvent) => {
         e.preventDefault();
+        setIsRegistering(true);
         const form = (e.currentTarget as HTMLElement).closest('form');
         if (form && !form.reportValidity()) {
             return;
         }
         setError('');
-        setIsRegistering(true);
-        setIsLoading(true);
+        setActiveLoading('register');
         try {
             await onRegister(username, password);
         } catch (err: any) {
             setError(err.message);
-            setIsRegistering(false);
         } finally {
-            setIsLoading(false);
+            setActiveLoading(null);
         }
     };
 
     const handleGuestClick = async () => {
         if (!onGuest) return;
         setError('');
-        setIsLoading(true);
+        setActiveLoading('guest');
         try {
             await onGuest();
         } catch (err: any) {
             setError(err.message || 'Failed to enter as guest');
         } finally {
-            setIsLoading(false);
+            setActiveLoading(null);
         }
     };
 
@@ -138,14 +139,14 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     
                     <div className="login-actions">
                         <button type="submit" disabled={isLoading} className="login-btn">
-                            {isLoading && !isRegistering ? (
+                            {activeLoading === 'submit' ? (
                                 <span className="spinner"></span>
                             ) : (
                                 isRegistering ? 'Get Started' : 'Enter Workspace'
                             )}
                         </button>
                         <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
-                            {isLoading && isRegistering ? (
+                            {activeLoading === 'register' ? (
                                 <span className="spinner"></span>
                             ) : (
                                 'Create Account'
@@ -157,7 +158,11 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                         <div className="guest-action-wrapper">
                             <span className="guest-divider">or</span>
                             <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
-                                Continue as Guest
+                                {activeLoading === 'guest' ? (
+                                    <span className="spinner"></span>
+                                ) : (
+                                    'Continue as Guest'
+                                )}
                             </button>
                             <p className="guest-warning">
                                 * Temporary account. All guest data will be permanently deleted after 24 hours.
