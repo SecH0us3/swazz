@@ -187,6 +187,44 @@ describe("D1 Database Migrations & API", () => {
     expect(typeof body.id).toBe("string");
   });
 
+  it("rejects registrations with invalid username formats", async () => {
+    // 1. Too short
+    const resShort = await app.fetch(new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "ab", password: "password123" })
+    }), testEnv);
+    expect(resShort.status).toBe(400);
+    expect((await resShort.json() as any).error).toContain("Username must be 3-20 characters long");
+
+    // 2. Too long
+    const resLong = await app.fetch(new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "a".repeat(21), password: "password123" })
+    }), testEnv);
+    expect(resLong.status).toBe(400);
+    expect((await resLong.json() as any).error).toContain("Username must be 3-20 characters long");
+
+    // 3. Invalid characters
+    const resChars = await app.fetch(new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "user@name", password: "password123" })
+    }), testEnv);
+    expect(resChars.status).toBe(400);
+    expect((await resChars.json() as any).error).toContain("Username must be 3-20 characters long");
+
+    // 4. Non-string username
+    const resNonString = await app.fetch(new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: 123, password: "password123" })
+    }), testEnv);
+    expect(resNonString.status).toBe(400);
+    expect((await resNonString.json() as any).error).toContain("Missing username or password");
+  });
+
   it("prevents registering the same username twice due to registry lock", async () => {
     const req = new Request("http://localhost/api/auth/register", {
       method: "POST",
