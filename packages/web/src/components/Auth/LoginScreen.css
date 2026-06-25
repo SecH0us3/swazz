@@ -363,4 +363,81 @@
     line-height: 1.25;
 }
 
+.login-error {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.login-error-tip {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
+
+.login-error-tip strong {
+    color: #a5b4fc;
+}
+
+.login-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.login-actions .login-btn,
+.login-actions .register-btn {
+    flex: 1;
+    width: 50%;
+    margin: 0;
+}
+
+.register-btn {
+    padding: 0.875rem 1.5rem;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    box-sizing: border-box;
+}
+
+.register-btn:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.register-btn:active {
+    transform: translateY(1px);
+}
+
+.register-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.e2e-signup-btn {
+    background: none;
+    border: none;
+    color: transparent;
+    font-size: 1px;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+    opacity: 0.001;
+    display: inline-block;
+    width: 1px;
+    height: 1px;
+}
+
 

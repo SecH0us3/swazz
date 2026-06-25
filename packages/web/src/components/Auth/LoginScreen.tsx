@@ -32,6 +32,23 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         }
     };
 
+    const handleRegisterClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        const form = (e.target as HTMLElement).closest('form');
+        if (form && !form.reportValidity()) {
+            return;
+        }
+        setError('');
+        setIsLoading(true);
+        try {
+            await onRegister(username, password);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleGuestClick = async () => {
         if (!onGuest) return;
         setError('');
@@ -50,9 +67,20 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             <div className="login-modal">
                 <div className="login-header">
                     <h2>{isRegistering ? 'Create Account' : 'Welcome to Swazz'}</h2>
-                    <p>{isRegistering ? 'Register to start fuzzing' : 'Sign in to continue to your workspace'}</p>
+                    <p>{isRegistering ? 'Register to start fuzzing' : 'Sign in or create an account to enter your workspace'}</p>
                 </div>
-                {error && <div className="login-error">{error}</div>}
+                {error && (
+                    <div className="login-error">
+                        <div className="error-content">
+                            <span className="error-text">{error}</span>
+                            {error === 'Invalid credentials' && (
+                                <div className="login-error-tip">
+                                    New user? Click <strong>Create Account</strong> to sign up.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
                 <form className="login-form" onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label htmlFor="username">Username</label>
@@ -105,13 +133,24 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                         </div>
                         {isRegistering && <span className="field-hint">At least 8 characters</span>}
                     </div>
-                    <button type="submit" disabled={isLoading} className="login-btn">
-                        {isLoading ? (
-                            <span className="spinner"></span>
-                        ) : (
-                            isRegistering ? 'Get Started' : 'Enter Workspace'
-                        )}
-                    </button>
+                    
+                    <div className="login-actions">
+                        <button type="submit" disabled={isLoading} className="login-btn">
+                            {isLoading && !isRegistering ? (
+                                <span className="spinner"></span>
+                            ) : (
+                                'Enter Workspace'
+                            )}
+                        </button>
+                        <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
+                            {isLoading && isRegistering ? (
+                                <span className="spinner"></span>
+                            ) : (
+                                'Create Account'
+                            )}
+                        </button>
+                    </div>
+
                     {onGuest && (
                         <div className="guest-action-wrapper">
                             <span className="guest-divider">or</span>
@@ -125,11 +164,13 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     )}
                 </form>
                 <div className="login-footer">
-                    {isRegistering ? (
-                        <p>Already have an account? <button onClick={() => { setIsRegistering(false); setError(''); }} className="link-btn">Sign in</button></p>
-                    ) : (
-                        <p>Don't have an account? <button onClick={() => { setIsRegistering(true); setError(''); }} className="link-btn">Sign up</button></p>
-                    )}
+                    <button 
+                        type="button" 
+                        onClick={() => setIsRegistering(true)} 
+                        className="e2e-signup-btn"
+                    >
+                        Sign up
+                    </button>
                 </div>
             </div>
         </div>
