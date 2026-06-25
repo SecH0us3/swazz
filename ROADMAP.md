@@ -88,7 +88,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [/] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
+- [x] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
   - **Design Goal:** Allow users to immediately and permanently delete all their account data, project configurations, runners, and scan history to comply with privacy regulations (e.g. GDPR) and ensure clean slate capabilities.
   - **Implementation Details:**
     - Add a **Delete My Account & Data** button (with a double-confirmation prompt) in the `UserSettings` dashboard overlay.
@@ -104,3 +104,19 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Run extended load testing/fuzzing sessions and capture heap and goroutine profiles.
     - Analyze the profiles to locate unbounded memory allocations, orphaned goroutines, or unclosed resource handles.
     - Implement the necessary fixes and add automated memory leak detection (e.g., using `goleak` in tests) to prevent regression.
+
+- [ ] **Task 83: Implement Two-Factor Authentication (2FA) via OTP**
+  - **Design Goal:** Protect user accounts by adding an extra layer of security with Time-based One-Time Passwords (TOTP) compatible with Google Authenticator or other authenticator apps.
+  - **Implementation Details:**
+    - Generate cryptographically secure TOTP secrets on the backend edge coordinator.
+    - Provide a QR code (using a client-side or backend QR generator) and a plain-text seed string for manual entry during setup.
+    - Require verification of a valid OTP code before enabling 2FA for the user.
+    - Update the `/api/auth/login` endpoint to require a `2fa_code` payload if 2FA is active, validating the code using a TOTP library before issuing the JWT.
+
+- [ ] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
+  - **Design Goal:** Provide a modern, passwordless authentication alternative using biometric sensors (FaceID, TouchID, Windows Hello) or physical security keys via the WebAuthn API.
+  - **Implementation Details:**
+    - Implement WebAuthn registration and authentication flows in the edge coordinator backend.
+    - Store credential public keys and signature counters in the users D1 database.
+    - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
+
