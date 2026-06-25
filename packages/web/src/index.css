@@ -3926,3 +3926,873 @@ kbd {
 .deletion-error-spacing {
   margin-bottom: 16px;
 }
+
+/* ─── Two Factor Authentication UI ───────────────────────── */
+.two-factor-card {
+  background-color: var(--bg-elevated);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.two-factor-header-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 10px;
+}
+
+.two-factor-status-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.two-factor-status-badge {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.two-factor-status-badge.enabled {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.two-factor-status-badge.disabled {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.two-factor-setup-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.two-factor-instructions {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.two-factor-setup-flow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.two-factor-qr-wrapper {
+  background: white;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 140px;
+}
+
+.two-factor-qr-image {
+  width: 120px;
+  height: 120px;
+}
+
+.two-factor-setup-details {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.two-factor-secret-key-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.two-factor-secret-key-display {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-default);
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.two-factor-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.two-factor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.two-factor-success-alert {
+  padding: 8px 12px;
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-md);
+  color: #10b981;
+  font-size: 13px;
+}
+
+.two-factor-error-alert {
+  padding: 8px 12px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-md);
+  color: #ef4444;
+  font-size: 13px;
+}
+
+/* 2FA Helpers */
+.two-factor-w-full {
+  width: 100%;
+}
+.two-factor-mt-8 {
+  margin-top: 8px;
+}
+.two-factor-flex-1 {
+  flex: 1;
+}
+.two-factor-text-center-spaced {
+  text-align: center;
+  letter-spacing: 2px;
+  font-size: 16px;
+}
+
+/* ─── Settings Page & Component Layouts ─────────────────── */
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  height: 100%;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.settings-header {
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.settings-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-header-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-default);
+}
+
+.settings-header-desc {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.settings-back-btn {
+  gap: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.settings-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px;
+  background-color: rgba(255,255,255,0.01);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.settings-nav-btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all var(--duration-fast);
+}
+
+.settings-nav-btn.active {
+  background: var(--accent-subtle);
+  color: var(--accent-light);
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-card {
+  background-color: var(--bg-elevated);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 10px;
+}
+
+.settings-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.settings-input-w-full {
+  width: 100%;
+}
+
+.settings-input-disabled {
+  opacity: 0.8;
+}
+
+.settings-account-status {
+  padding: 8px 12px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-btn-w-full {
+  width: 100%;
+}
+
+.settings-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-input-monospace {
+  flex: 1;
+  font-family: monospace;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.settings-btn-min-w {
+  min-width: 90px;
+}
+
+/* Danger Zone specific */
+.settings-danger-card {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.settings-danger-title {
+  color: #ef4444;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.1);
+  padding-bottom: 10px;
+}
+
+.settings-danger-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.settings-delete-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-delete-title {
+  margin: 0;
+  font-size: 14px;
+  color: #ef4444;
+}
+
+.settings-delete-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.settings-delete-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-delete-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-error);
+}
+
+/* Runners Tab layouts */
+.runners-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.runners-main-card {
+  background-color: var(--bg-elevated);
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.runners-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.runners-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.runners-status-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.runners-status-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.runners-status-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.runners-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-success);
+}
+
+.runners-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.runners-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--text-muted);
+}
+
+.runners-error-alert {
+  padding: 12px 16px;
+  background-color: var(--color-error-bg);
+  border: 1px solid rgba(244,63,94,0.25);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  font-size: 13px;
+}
+
+.runners-empty-state {
+  padding: 32px 0;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.runners-empty-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.runners-empty-title {
+  font-size: 14px;
+}
+
+.runners-empty-text {
+  font-size: 12px;
+  max-width: 380px;
+  margin: 4px auto 0 auto;
+  text-align: center;
+}
+
+.runners-empty-btn {
+  margin-top: 16px;
+}
+
+.runners-table-container {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.runners-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.runners-table-header {
+  background-color: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.runners-th {
+  padding: 10px 16px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.runners-tr-mine {
+  background-color: rgba(124,58,237,0.03);
+}
+
+.runners-tr-default {
+  background-color: transparent;
+}
+
+.runners-td {
+  padding: 12px 16px;
+}
+
+.runners-td-bold {
+  padding: 12px 16px;
+  font-weight: 500;
+}
+
+.runners-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runners-version-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  border: 1px solid var(--border-default);
+}
+
+.runners-td-mono {
+  padding: 12px 16px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.runners-mode-badge-shared {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: var(--border-default);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.runners-mode-badge-private {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-light);
+  background-color: var(--accent-subtle);
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.15);
+}
+
+.runners-owner-badge-mine {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-success);
+  background-color: rgba(34,211,160,0.12);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.runners-owner-badge-shared {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.runners-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.runners-status-dot-cell {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.runners-status-dot-connected {
+  background-color: var(--color-success);
+}
+
+.runners-status-dot-other {
+  background-color: var(--color-warning);
+}
+
+.runners-status-text {
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.runners-status-text-connected {
+  color: var(--text-primary);
+}
+
+.runners-status-text-other {
+  color: var(--text-secondary);
+}
+
+/* Runner Setup Layout */
+.runner-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.runner-setup-card {
+  background-color: var(--bg-elevated);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.runner-setup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 10px;
+}
+
+.runner-setup-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.runner-setup-badge-rec {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-light);
+  background-color: rgba(124, 58, 237, 0.15);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.runner-setup-text-small {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.runner-setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.runner-setup-input-container {
+  display: flex;
+  gap: 8px;
+}
+
+.runner-setup-input-mono {
+  flex: 1;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.runner-setup-btn-min-w {
+  min-width: 80px;
+}
+
+.runner-setup-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.runner-setup-upload-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.runner-setup-success-msg {
+  margin: 0;
+  font-size: 12px;
+  color: #10B981;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.runner-setup-error-msg {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-error);
+}
+
+.runner-setup-guide-card {
+  background-color: var(--bg-elevated);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.runner-setup-guide-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 10px;
+}
+
+.runner-setup-guide-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.runner-setup-tab-switcher {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-default);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  gap: 2px;
+}
+
+.runner-setup-tab-btn {
+  flex: 1;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--duration-fast);
+}
+
+.runner-setup-tab-btn.active {
+  background: linear-gradient(135deg, var(--accent), #6d28d9);
+  color: #ffffff;
+}
+
+.runner-setup-mode-info-private {
+  padding: 8px 12px;
+  background-color: var(--accent-subtle);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--accent-light);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.runner-setup-mode-info-shared {
+  padding: 8px 12px;
+  background-color: var(--color-warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.runner-setup-step-row {
+  display: flex;
+  gap: 12px;
+}
+
+.runner-setup-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: rgba(124,58,237,0.15);
+  color: var(--accent-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.runner-setup-step-content {
+  font-size: 13px;
+  width: 100%;
+  min-width: 0;
+}
+
+.runner-setup-step-title {
+  font-weight: 600;
+}
+
+.runner-setup-step-desc {
+  margin: 2px 0 8px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.runner-setup-code-box {
+  padding: 12px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-default);
+  word-break: break-all;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.runner-setup-code-text {
+  color: #a3a3a3;
+  line-height: 1.4;
+}
+
+.runner-setup-code-btn {
+  align-self: flex-start;
+}
+
+.runner-setup-step-footer {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.runner-setup-security-warning {
+  padding: 12px;
+  background-color: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--color-error);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.runner-setup-warning-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

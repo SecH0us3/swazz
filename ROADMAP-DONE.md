@@ -611,3 +611,19 @@ This file contains completed tasks.
     - Enforce a safety node budget limit of 50,000 nodes and recursion depth limit of 64.
     - Log warnings detailing endpoint/schema truncation context upon exceeding limits.
     - Document safety limits in architecture documentation.
+
+- [x] **Task 83: Implement Two-Factor Authentication (2FA) via OTP**
+  - **Design Goal:** Protect user accounts by adding an extra layer of security with Time-based One-Time Passwords (TOTP) compatible with Google Authenticator or other authenticator apps.
+  - **Implementation Details:**
+    - Generate cryptographically secure TOTP secrets on the backend edge coordinator.
+    - Provide a QR code (using a client-side or backend QR generator) and a plain-text seed string for manual entry during setup.
+    - Require verification of a valid OTP code before enabling 2FA for the user.
+    - Update the `/api/auth/login` endpoint to require a `2fa_code` payload if 2FA is active, validating the code using a TOTP library before issuing the JWT.
+
+- [x] **Task 89: Encrypt TOTP Secrets with User Passwords (AES-256-GCM)**
+  - **Design Goal:** Increase database security by storing `two_factor_secret` in an encrypted format using AES-256-GCM, with the user's password as part of the key generation mechanism.
+  - **Implementation Details:**
+    - Instead of plain Base32 secrets in the DB, encrypt the generated seed using Web Crypto API's AES-256-GCM.
+    - Derive a key using PBKDF2 from the user's raw password combined with a unique salt.
+    - Store the unique initialization vector (IV) and the encrypted payload in the `two_factor_secret` column.
+    - Decrypt the secret on-the-fly during login/verification inside edge memory (which has access to the user's raw password parameter).

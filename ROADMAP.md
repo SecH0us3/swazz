@@ -105,13 +105,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Analyze the profiles to locate unbounded memory allocations, orphaned goroutines, or unclosed resource handles.
     - Implement the necessary fixes and add automated memory leak detection (e.g., using `goleak` in tests) to prevent regression.
 
-- [ ] **Task 83: Implement Two-Factor Authentication (2FA) via OTP**
-  - **Design Goal:** Protect user accounts by adding an extra layer of security with Time-based One-Time Passwords (TOTP) compatible with Google Authenticator or other authenticator apps.
-  - **Implementation Details:**
-    - Generate cryptographically secure TOTP secrets on the backend edge coordinator.
-    - Provide a QR code (using a client-side or backend QR generator) and a plain-text seed string for manual entry during setup.
-    - Require verification of a valid OTP code before enabling 2FA for the user.
-    - Update the `/api/auth/login` endpoint to require a `2fa_code` payload if 2FA is active, validating the code using a TOTP library before issuing the JWT.
 
 - [ ] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
   - **Design Goal:** Provide a modern, passwordless authentication alternative using biometric sensors (FaceID, TouchID, Windows Hello) or physical security keys via the WebAuthn API.
@@ -133,5 +126,43 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
     - Research using KV for keeping track of active runner heartbeat state to avoid Durable Object lookups.
+
+- [ ] **Task 87: Project Invitations and Collaboration (via Email/Username)**
+  - **Design Goal:** Enable multi-user collaboration inside projects by allowing project owners to invite other users to join their projects with structured Role-Based Access Control (RBAC).
+  - **Implementation Details:**
+    - Define a formal permission set mapping combinations of HTTP Verbs and Endpoint paths (e.g., `READ: /api/projects/:id/runs`, `WRITE: /api/projects/:id/settings`).
+    - Define roles (e.g., Owner, Editor, Viewer) as collections of these verb+endpoint permission items.
+    - Create a project member invitation schema and endpoints (`POST /api/projects/:id/invitations`).
+    - Support inviting users directly by email (sending an invitation code or registration link) or by username, assigning them a target role.
+    - Implement an invitation state machine (Pending, Accepted, Expired, Revoked) in the database.
+    - Validate permissions on the edge coordinator using the RBAC mapping during API requests.
+    - Update frontend Settings screen to display a "Members" tab listing active members, pending invitations, and options to invite new users or manage member roles.
+
+
+- [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
+  - **Design Goal:** Provide secure password management tools including dynamic password changes, email-based password recovery (forgot password flow), and 2FA backup codes.
+  - **Implementation Details:**
+    - Implement `POST /api/auth/password/change` validating the current password before applying a new PBKDF2 hash.
+    - Implement a tokenized forgot password flow: send recovery links/tokens via email, verifying them at `/api/auth/password/reset`.
+    - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
+
+
+- [ ] **Task 90: Implement CSRF Protection Middleware in Coordinator**
+  - **Design Goal:** Protect state-changing HTTP endpoints (POST, PUT, DELETE, PATCH) on the edge coordinator from Cross-Site Request Forgery attacks, establishing double-submit cookie validation.
+  - **Implementation Details:**
+    - Implement a custom CSRF protection middleware in Hono (or integrate `hono/csrf`).
+    - Verify that requests with credentials validate the `X-CSRF-Token` HTTP request header against a cryptographically secure token stored in a HTTP-only session cookie.
+    - Ensure that safe methods (GET, HEAD, OPTIONS) bypass CSRF checks.
+    - Update frontend request hooks (`useRunner`, `useFuzzSession`, auth actions) to dynamically parse the CSRF token from the DOM/cookies and attach it to state-changing API request headers.
+
+- [ ] **Task 91: Modernize Login Page & Form Security Features**
+  - **Design Goal:** Enhance the login form and backend authentication logic to match modern security best practices, protecting against brute-force, credentials stuffing, and username enumeration while maintaining a frictionless user experience.
+  - **Implementation Details:**
+    - **Split Data Entry:** Split the login process into two steps: Step 1 collects the username/email and returns a short-lived temporary session token (regardless of user existence). Step 2 accepts the token and password to finalize authentication.
+    - **Adaptive/Dynamic CAPTCHA:** Integrate Cloudflare Turnstile, but configure it dynamically. Only show/require CAPTCHA when auth failure rates or login request volume exceed baseline thresholds.
+    - **Defensive Delays (Anti-Enumeration):** Introduce dynamic response delays. If a user does not exist, inject a random delay (e.g., 150-250ms) to ensure overall request latency matches database-heavy lookups of valid users.
+    - **Rate Limiting:** Implement IP-based and overall system rate limiting for authentication endpoints, returning HTTP 429 when limits are breached.
+    - **Weak Password Rejection & Strength Meter:** Reject weak passwords during registration using a blacklist or k-Anonymity (Pwned Passwords). Add a dynamic password strength meter on the UI, encouraging password manager usage.
+    - **Passwordless Option:** Support magic link authentication via short-lived, single-use email tokens verified against the client IP/device.
 
 

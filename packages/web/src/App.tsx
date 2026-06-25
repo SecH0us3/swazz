@@ -51,7 +51,8 @@ export default function App() {
                         apiKey: data.api_key, 
                         publicKey: data.public_key,
                         isGuest: data.is_guest,
-                        deleteRequestedAt: data.delete_requested_at
+                        deleteRequestedAt: data.delete_requested_at,
+                        twoFactorEnabled: data.two_factor_enabled
                     } 
                 });
             })

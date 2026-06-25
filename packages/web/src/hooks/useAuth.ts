@@ -21,18 +21,22 @@ export function useAuth() {
             });
     }, []);
 
-    const login = async (username: string, password: string) => {
+    const login = async (username: string, password: string, twoFactorCode?: string) => {
         const res = await fetch(`${PROXY_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password, two_factor_code: twoFactorCode })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Login failed');
+        if (data.status === '2fa_required') {
+            return { twoFactorRequired: true };
+        }
         setToken(data.token);
         localStorage.setItem('swazz_token', data.token);
         setIsGuest(false);
         sessionStorage.removeItem('swazz_guest');
+        return { success: true };
     };
 
     const register = async (username: string, password: string) => {

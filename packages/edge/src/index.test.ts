@@ -460,6 +460,138 @@ describe("D1 Database Migrations & API", () => {
     expect(runnerPost).toBeNull();
     expect(storagePost).toBeNull();
   });
+
+  it("can set up, verify, require, and disable 2FA", async () => {
+    const username = "user_2fa_" + Date.now();
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const regRes = await app.fetch(regReq, testEnv);
+    expect(regRes.status).toBe(200);
+
+    const loginReq1 = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const loginRes1 = await app.fetch(loginReq1, testEnv);
+    const { token } = await loginRes1.json() as any;
+
+    const setupReq = new Request("http://localhost/api/auth/2fa/setup", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ password: "password123" })
+    });
+    const setupRes = await app.fetch(setupReq, testEnv);
+    expect(setupRes.status).toBe(200);
+    const setupBody = await setupRes.json() as any;
+    expect(setupBody.status).toBe("ok");
+    expect(typeof setupBody.secret).toBe("string");
+    expect(setupBody.otpauth_url).toContain("otpauth://totp");
+
+    const loginReq2 = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const loginRes2 = await app.fetch(loginReq2, testEnv);
+    expect(loginRes2.status).toBe(200);
+    const loginBody2 = await loginRes2.json() as any;
+    expect(loginBody2.status).toBe("ok");
+
+    const verifyReq1 = new Request("http://localhost/api/auth/2fa/verify", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ code: "000000", password: "password123" })
+    });
+    const verifyRes1 = await app.fetch(verifyReq1, testEnv);
+    expect(verifyRes1.status).toBe(401);
+
+    const { generateTOTP } = await import("./utils/totp");
+    const validCode = await generateTOTP(setupBody.secret);
+    
+    const verifyReq2 = new Request("http://localhost/api/auth/2fa/verify", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ code: validCode, password: "password123" })
+    });
+    const verifyRes2 = await app.fetch(verifyReq2, testEnv);
+    expect(verifyRes2.status).toBe(200);
+
+    const loginReq3 = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const loginRes3 = await app.fetch(loginReq3, testEnv);
+    expect(loginRes3.status).toBe(200);
+    const loginBody3 = await loginRes3.json() as any;
+    expect(loginBody3.status).toBe("2fa_required");
+
+    const loginReq4 = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123", two_factor_code: "111111" })
+    });
+    const loginRes4 = await app.fetch(loginReq4, testEnv);
+    expect(loginRes4.status).toBe(401);
+
+    const freshCode = await generateTOTP(setupBody.secret);
+    const loginReq5 = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123", two_factor_code: freshCode })
+    });
+    const loginRes5 = await app.fetch(loginReq5, testEnv);
+    expect(loginRes5.status).toBe(200);
+    const loginBody5 = await loginRes5.json() as any;
+    expect(loginBody5.status).toBe("ok");
+    expect(typeof loginBody5.token).toBe("string");
+
+    const disableReq1 = new Request("http://localhost/api/auth/2fa/disable", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ code: "000000", password: "password123" })
+    });
+    const disableRes1 = await app.fetch(disableReq1, testEnv);
+    expect(disableRes1.status).toBe(401);
+
+    const disableCode = await generateTOTP(setupBody.secret);
+    const disableReq2 = new Request("http://localhost/api/auth/2fa/disable", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ code: disableCode, password: "password123" })
+    });
+    const disableRes2 = await app.fetch(disableReq2, testEnv);
+    expect(disableRes2.status).toBe(200);
+
+    const loginReq6 = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const loginRes6 = await app.fetch(loginReq6, testEnv);
+    expect(loginRes6.status).toBe(200);
+    const loginBody6 = await loginRes6.json() as any;
+    expect(loginBody6.status).toBe("ok");
+  });
 });
 
 describe("Anonymous Limits", () => {
