@@ -89,15 +89,26 @@ export async function encryptTOTPSecret(secret: string, password: string): Promi
   return `${saltHex}:${ivHex}:${encryptedHex}`;
 }
 
+function hexToUint8Array(hex: string): Uint8Array {
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
+    throw new Error('Invalid hex string');
+  }
+  const array = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    array[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return array;
+}
+
 export async function decryptTOTPSecret(encryptedString: string, password: string): Promise<string> {
   const parts = encryptedString.split(':');
   if (parts.length !== 3) {
     throw new Error('Invalid encrypted format');
   }
   
-  const salt = new Uint8Array(parts[0].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-  const iv = new Uint8Array(parts[1].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-  const ciphertext = new Uint8Array(parts[2].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  const salt = hexToUint8Array(parts[0]);
+  const iv = hexToUint8Array(parts[1]);
+  const ciphertext = hexToUint8Array(parts[2]);
   
   const encoder = new TextEncoder();
   const passwordKey = await crypto.subtle.importKey(

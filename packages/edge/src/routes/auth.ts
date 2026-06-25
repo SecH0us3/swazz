@@ -350,12 +350,16 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Missing password verification' }, 400);
       }
 
-      const user = await c.env.DB.prepare('SELECT username, password_hash FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT username, password_hash, two_factor_enabled FROM users WHERE id = ?')
         .bind(userId)
-        .first<{ username: string; password_hash: string }>();
+        .first<{ username: string; password_hash: string; two_factor_enabled: number }>();
 
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
+      }
+
+      if (user.two_factor_enabled === 1) {
+        return c.json({ error: '2FA is already enabled. Disable it first.' }, 400);
       }
 
       // Verify Password
@@ -373,12 +377,10 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
       const issuer = 'Swazz';
       const otpauthUrl = `otpauth://totp/${issuer}:${user.username}?secret=${secret}&issuer=${issuer}`;
-      const qrCodeUrl = `https://quickchart.io/qr?text=${encodeURIComponent(otpauthUrl)}`;
 
       return c.json({
         status: 'ok',
         secret,
-        qr_code_url: qrCodeUrl,
         otpauth_url: otpauthUrl
       });
     } catch (err: any) {

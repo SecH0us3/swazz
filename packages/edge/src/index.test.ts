@@ -492,7 +492,7 @@ describe("D1 Database Migrations & API", () => {
     const setupBody = await setupRes.json() as any;
     expect(setupBody.status).toBe("ok");
     expect(typeof setupBody.secret).toBe("string");
-    expect(setupBody.qr_code_url).toContain("quickchart.io");
+    expect(setupBody.otpauth_url).toContain("otpauth://totp");
 
     const loginReq2 = new Request("http://localhost/api/auth/login", {
       method: "POST",

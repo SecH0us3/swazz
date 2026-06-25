@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useTheme } from '../hooks/useTheme.js';
+import QRCode from 'qrcode';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -14,7 +15,8 @@ export function UserSettings() {
     const [deleteError, setDeleteError] = useState('');
 
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(userProfile?.twoFactorEnabled || false);
-    const [setup2faData, setSetup2faData] = useState<{ secret: string; qr_code_url: string } | null>(null);
+    const [setup2faData, setSetup2faData] = useState<{ secret: string; otpauth_url: string } | null>(null);
+    const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
     const [totpCode, setTotpCode] = useState('');
     const [setupError, setSetupError] = useState('');
     const [setupSuccess, setSetupSuccess] = useState('');
@@ -49,8 +51,10 @@ export function UserSettings() {
             if (!res.ok) throw new Error(data.error || 'Failed to start 2FA setup');
             setSetup2faData({
                 secret: data.secret,
-                qr_code_url: data.qr_code_url
+                otpauth_url: data.otpauth_url
             });
+            const qrDataUrl = await QRCode.toDataURL(data.otpauth_url);
+            setQrCodeDataUrl(qrDataUrl);
         } catch (err: any) {
             setSetupError(err.message);
         } finally {
@@ -365,7 +369,7 @@ export function UserSettings() {
                                         <div className="two-factor-setup-flow">
                                             <div className="two-factor-qr-wrapper">
                                                 <img 
-                                                    src={setup2faData.qr_code_url} 
+                                                    src={qrCodeDataUrl} 
                                                     alt="2FA QR Code" 
                                                     className="two-factor-qr-image"
                                                 />
@@ -407,6 +411,8 @@ export function UserSettings() {
                                                         setSetup2faData(null);
                                                         setTotpCode('');
                                                         setSetupError('');
+                                                        setQrCodeDataUrl('');
+                                                        setConfirmPassword('');
                                                     }}
                                                     disabled={is2faLoading}
                                                 >
