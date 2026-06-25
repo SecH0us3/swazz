@@ -12,6 +12,14 @@ Always prefix shell commands with `rtk` (e.g., `rtk go test ./...`).
 - **Run API Server**: `rtk go run main.go serve`
 - **Run CLI Fuzzer**: `rtk go run main.go start --config swazz.config.json`
 
+### Profiling
+- **Run with Profiling (localhost only)**: 
+  - Using CLI flag: `rtk go run main.go start --config swazz.config.json --pprof-addr 127.0.0.1:6060`
+  - Using environment variable: `SWAZZ_PPROF_ADDR=127.0.0.1:6060 rtk go run main.go start --config swazz.config.json`
+  *Security Note: The pprof server strictly binds only to `127.0.0.1` / `localhost` to prevent unauthorized remote access to memory profiles.*
+- **Capture Heap Profile**: `go tool pprof http://127.0.0.1:6060/debug/pprof/heap`
+- **Capture CPU Profile**: `go tool pprof http://127.0.0.1:6060/debug/pprof/profile`
+
 ### Testing & Verification
 - **Run All Tests**: `rtk go test ./...`
 - **Run Package Tests**: `rtk go test ./internal/runner/...`

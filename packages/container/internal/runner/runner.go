@@ -205,6 +205,9 @@ func (r *Runner) Close() {
 	}
 	r.lifecycle.mu.Unlock()
 	close(r.doneCh)
+	if r.client != nil {
+		r.client.CloseIdleConnections()
+	}
 }
 
 // Start begins the fuzzing run. It blocks until the run completes or is stopped.

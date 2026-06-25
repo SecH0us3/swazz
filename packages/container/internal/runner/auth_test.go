@@ -87,6 +87,7 @@ func TestRunAuthSequence(t *testing.T) {
 
 	// 3. Run runner
 	r := New(cfg, nil)
+	defer r.Close()
 	err := r.RunAuthSequence(context.Background())
 
 	if err != nil {
@@ -123,6 +124,7 @@ func TestRunAuthSequenceFailures(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 	err := r.RunAuthSequence(context.Background())
 
 	if err == nil {
@@ -301,6 +303,7 @@ func TestRunAuthSequenceSetVariables(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 	err := r.RunAuthSequence(context.Background())
 	require.NoError(t, err)
 
@@ -362,6 +365,7 @@ func TestSetVariablesErrors(t *testing.T) {
 				},
 			}
 			r := New(cfg, nil)
+			defer r.Close()
 			err := r.RunAuthSequence(context.Background())
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErrMsg)
@@ -376,6 +380,7 @@ func TestUUIDProducesDifferentValues(t *testing.T) {
 		Variables: make(map[string]any),
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	cache := make(map[string]string)
 	nodeA := &exprNode{name: "uuid", args: []*exprNode{}}
@@ -409,6 +414,7 @@ func TestDeterministicFunctionCacheHit(t *testing.T) {
 		},
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	cache := make(map[string]string)
 	node := &exprNode{
@@ -436,6 +442,7 @@ func TestBuiltinFunctions(t *testing.T) {
 		Variables: make(map[string]any),
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	call := func(name string, args ...string) (string, error) {
 		return r.callBuiltin(name, args)
@@ -589,6 +596,7 @@ func TestIsSessionExpired(t *testing.T) {
 		Cookies:       map[string]string{"session_cookie": "current-session-id"},
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	// 1. HTTP 401 using current active session -> expired
 	reqHeaders := map[string]string{"Authorization": "Bearer current-token"}
@@ -620,6 +628,7 @@ func TestIsSessionExpired(t *testing.T) {
 
 func TestExtractCSRFToken(t *testing.T) {
 	r := New(&swagger.Config{}, nil)
+	defer r.Close()
 
 	// 1. Extract from Cookie
 	cookieResp := &http.Response{
@@ -724,6 +733,7 @@ func TestMaybeReauthenticate(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 
 	// 1. Initial call should trigger re-authentication
 	reqHeaders := map[string]string{"Authorization": "old-token"}
@@ -789,6 +799,7 @@ func TestMaybeReauthenticateWithProbe(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 
 	reqHeaders := map[string]string{"Authorization": "valid-token"}
 	newH, _, refreshed, err := r.MaybeReauthenticate(context.Background(), reqHeaders, nil)

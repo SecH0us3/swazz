@@ -4,14 +4,120 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"net"
+	"net/http"
+	_ "net/http/pprof" // #nosec G108 -- profiling is explicitly requested and restricted to localhost
 	"os"
 	"runtime"
+	"strings"
+	"time"
 )
 
 var Version = "dev"
 
+func validatePprofAddr(addr string) (string, error) {
+	if addr == "" {
+		return "", nil
+	}
+
+	// Normalize address
+	// If it's a port only like ":6060", prefix with "127.0.0.1"
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+
+	// Validate that the host is strictly "127.0.0.1" or "localhost"
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// If split host port fails, it might just be the hostname/IP (e.g. "127.0.0.1" or "localhost")
+		host = addr
+	}
+
+	if host != "127.0.0.1" && host != "localhost" {
+		return "", fmt.Errorf("pprof server must only bind to localhost (127.0.0.1). Specified address %q is unsafe", addr)
+	}
+
+	// Make sure the address contains a port, if not default to 6060
+	if !strings.Contains(addr, ":") {
+		addr = host + ":6060"
+	}
+
+	return addr, nil
+}
+
+func parsePprofAddr(args []string, getenv func(string) string) (string, []string, error) {
+	addr := getenv("SWAZZ_PPROF_ADDR")
+	newArgs := make([]string, 0, len(args))
+	found := false
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--pprof-addr" {
+			if i+1 < len(args) {
+				addr = args[i+1]
+				i++ // skip next arg
+				found = true
+			} else {
+				return "", nil, fmt.Errorf("error: --pprof-addr requires an address value")
+			}
+		} else if strings.HasPrefix(args[i], "--pprof-addr=") {
+			addr = strings.TrimPrefix(args[i], "--pprof-addr=")
+			found = true
+		} else {
+			newArgs = append(newArgs, args[i])
+		}
+	}
+
+	if found {
+		return addr, newArgs, nil
+	}
+	return addr, args, nil
+}
+
+func startPprof(addr string) {
+	validatedAddr, err := validatePprofAddr(addr)
+	if err != nil {
+		fmt.Printf("Security Error: %v\n", err)
+		os.Exit(1)
+	}
+	if validatedAddr == "" {
+		return
+	}
+
+	server := &http.Server{
+		Addr:              validatedAddr,
+		Handler:           nil, // Use default serve mux where pprof is registered
+		ReadHeaderTimeout: 3 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	// Start HTTP server for pprof
+	go func() {
+		fmt.Printf("Starting pprof server on http://%s/debug/pprof/\n", validatedAddr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("pprof server error: %v\n", err)
+		}
+	}()
+}
+
+func extractPprofAddr() string {
+	addr, newArgs, err := parsePprofAddr(os.Args, os.Getenv)
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+	os.Args = newArgs
+	return addr
+}
+
 func main() {
 	runtime.GOMAXPROCS(2)
+
+	pprofAddr := extractPprofAddr()
+	if pprofAddr != "" {
+		startPprof(pprofAddr)
+	}
 
 	if len(os.Args) < 2 {
 		printHelp()

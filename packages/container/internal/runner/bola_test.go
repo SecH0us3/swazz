@@ -21,6 +21,7 @@ func TestBOLA_HeuristicIDHarvesting(t *testing.T) {
 		},
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	// Test GET response with ids
 	respBody := map[string]any{
@@ -78,6 +79,7 @@ func TestBOLA_ExplicitMapping(t *testing.T) {
 		},
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	respBody := map[string]any{
 		"goods": []any{
@@ -161,6 +163,7 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 
 	// Simulate successful result for User A (Authorization is missing in this test structure, but we pretend it was successful)
 	results := []*swagger.FuzzResult{
@@ -242,6 +245,7 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 
 	results := []*swagger.FuzzResult{
 		{
@@ -303,6 +307,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 		}
 
 		r := New(cfg, nil)
+		defer r.Close()
 
 		// Candidate with baseline body
 		results := []*swagger.FuzzResult{
@@ -360,6 +365,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 		}
 
 		r := New(cfg, nil)
+		defer r.Close()
 
 		results := []*swagger.FuzzResult{
 			{
@@ -632,6 +638,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 		}
 
 		r := New(cfg, nil)
+		defer r.Close()
 
 		cand := &swagger.FuzzResult{
 			Endpoint:       "/api/admin/dashboard",
@@ -705,6 +712,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 		}
 
 		r := New(cfg, nil)
+		defer r.Close()
 
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/admin/dashboard",
