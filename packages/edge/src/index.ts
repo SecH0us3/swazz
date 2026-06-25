@@ -46,6 +46,16 @@ app.use('/api/*', async (c, next) => {
     if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
+
+    const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
+    if (!isCancelRoute) {
+      const user = await c.env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ delete_requested_at: string | null }>();
+      if (user && user.delete_requested_at !== null) {
+        return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
+      }
+    }
   }
 
   await next();

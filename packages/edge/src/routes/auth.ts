@@ -258,6 +258,32 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         .bind(userId)
         .run();
 
+      // Terminate active scans for this user
+      await c.env.DB.prepare(`
+        UPDATE scans
+        SET status = 'failed', completed_at = datetime('now')
+        WHERE (user_id = ? OR project_id IN (
+          SELECT pm.project_id FROM project_members pm
+          WHERE pm.user_id = ? AND pm.role = 'owner'
+        )) AND completed_at IS NULL
+      `)
+        .bind(userId, userId)
+        .run();
+
+      // Immediately revoke and disconnect active runner WebSocket connections in Durable Object
+      try {
+        const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+        const stub = c.env.COORDINATOR_DO.get(doId);
+        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
+          method: 'POST'
+        }));
+        if (!doRes.ok) {
+          console.error("Failed to revoke runner connections in DO on schedule deletion:", await doRes.text());
+        }
+      } catch (doErr) {
+        console.error("Failed to invoke DO /revoke-user on schedule deletion:", doErr);
+      }
+
       return c.json({ status: 'deletion_scheduled', eta_days: 7 });
     } catch (err: any) {
       console.error("Failed to schedule user account deletion:", err);

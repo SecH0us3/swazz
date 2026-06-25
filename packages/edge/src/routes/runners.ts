@@ -23,19 +23,25 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
   
     let userId = "";
     if (publicKey) {
-      const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
+      const user = await c.env.DB.prepare('SELECT id, delete_requested_at FROM users WHERE public_key = ?')
         .bind(publicKey)
-        .first<{ id: string }>();
+        .first<{ id: string; delete_requested_at: string | null }>();
       if (!user) {
         return new Response('Unauthorized: Invalid public key', { status: 401 });
       }
+      if (user.delete_requested_at !== null) {
+        return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
+      }
       userId = user.id;
     } else if (token) {
-      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+      const user = await c.env.DB.prepare('SELECT id, delete_requested_at FROM users WHERE api_key = ?')
         .bind(token)
-        .first<{ id: string }>();
+        .first<{ id: string; delete_requested_at: string | null }>();
       if (!user) {
         return new Response('Unauthorized: Invalid runner token', { status: 401 });
+      }
+      if (user.delete_requested_at !== null) {
+        return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
       }
       userId = user.id;
     } else {

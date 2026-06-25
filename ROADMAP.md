@@ -120,3 +120,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Store credential public keys and signature counters in the users D1 database.
     - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
 
+- [ ] **Task 85: Lifetime Username Lock via Secure Hashing**
+  - **Design Goal:** Prevent recycling or hijacking of usernames by storing a lifetime secure hash of all registered usernames (even after GDPR deletion), ensuring that once a username is taken, it can never be claimed by another account.
+  - **Implementation Details:**
+    - When a user registers, generate a salted SHA-256 hash of their username.
+    - Store this hash in a persistent `username_registry` table.
+    - When a user requests deletion (or when the account is purged), do not delete the record from `username_registry`.
+    - Modify the registration endpoint to check if the hash of the requested username exists in `username_registry` and reject it if found.
+
+

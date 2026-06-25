@@ -375,9 +375,47 @@ describe("D1 Database Migrations & API", () => {
     expect(delBody.status).toBe('deletion_scheduled');
     expect(delBody.eta_days).toBe(7);
 
+    // Verify that the active runner's WebSocket is closed immediately with GDPR status 1008
+    const closeCode = await Promise.race([
+      closePromise,
+      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("WebSocket did not close")), 2000))
+    ]);
+    expect(closeCode).toBe(1008);
+
     // Verify the user profile has delete_requested_at set
     const userScheduled = await env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?').bind(userId).first<{ delete_requested_at: string }>();
     expect(userScheduled?.delete_requested_at).not.toBeNull();
+
+    // Verify that active scans are marked as failed
+    const scanScheduled = await env.DB.prepare('SELECT status, completed_at FROM scans WHERE id = ?').bind(scanId).first<{ status: string; completed_at: string }>();
+    expect(scanScheduled?.status).toBe('failed');
+    expect(scanScheduled?.completed_at).not.toBeNull();
+
+    // Verify that other API requests (e.g. GET /api/projects) return 403 Forbidden
+    const projReqForbidden = new Request("http://localhost/api/projects", {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const projResForbidden = await app.fetch(projReqForbidden, testEnv);
+    expect(projResForbidden.status).toBe(403);
+    const projForbiddenBody = await projResForbidden.json() as any;
+    expect(projForbiddenBody.error).toContain("Forbidden");
+
+    // Verify that runner connection for the deleted user returns 403 Forbidden
+    const userRow = await env.DB.prepare('SELECT api_key FROM users WHERE id = ?').bind(userId).first<{ api_key: string | null }>();
+    let apiKey = userRow?.api_key;
+    if (!apiKey) {
+      apiKey = 'swazz_live_test_api_key_123';
+      await env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?').bind(apiKey, userId).run();
+    }
+    const runnerReqDeleted = new Request(`http://localhost/api/runners/connect`, {
+      headers: {
+        "Upgrade": "websocket",
+        "Authorization": `Bearer ${apiKey}`
+      }
+    });
+    const runnerResDeleted = await app.fetch(runnerReqDeleted, testEnv);
+    expect(runnerResDeleted.status).toBe(403);
 
     // 7. Cancel deletion
     const cancelReq = new Request("http://localhost/api/users/me/cancel-deletion", {
@@ -406,13 +444,6 @@ describe("D1 Database Migrations & API", () => {
 
     // 10. Execute the scheduled deletion cleanup
     await cleanupScheduledDeletions(env);
-
-    // Verify that the active runner's WebSocket is closed with GDPR status 1008
-    const closeCode = await Promise.race([
-      closePromise,
-      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("WebSocket did not close")), 2000))
-    ]);
-    expect(closeCode).toBe(1008);
 
     // 11. Verify all entries and storage object are deleted
     const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
