@@ -531,7 +531,7 @@ describe("D1 Database Migrations & API", () => {
   });
 
   it("can set up, verify, require, and disable 2FA", async () => {
-    const username = "user_2fa_" + Date.now();
+    const username = "u" + Date.now().toString().slice(-6) + "_" + Math.floor(Math.random() * 1000);
     const regReq = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

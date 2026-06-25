@@ -10,8 +10,14 @@ import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } 
 export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/auth/register', async (c) => {
     const body = await c.req.json();
-    if (!body.username || !body.password) {
+    if (typeof body.username !== 'string' || typeof body.password !== 'string') {
       return c.json({ error: 'Missing username or password' }, 400);
+    }
+
+    const username = body.username.trim();
+    const usernameRegex = /^[a-zA-Z0-9_\-]{3,20}$/;
+    if (!usernameRegex.test(username)) {
+      return c.json({ error: 'Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens' }, 400);
     }
   
     // Turnstile verification (skip if secret not configured — local dev mode)
@@ -28,16 +34,20 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
   
-    const usernameHash = await hashUsername(body.username);
-    
-    // Check if username is locked
-    const existing = await c.env.DB.prepare('SELECT username_hash FROM username_registry WHERE username_hash = ?')
-      .bind(usernameHash)
-      .first<{ username_hash: string }>();
-    if (existing) {
-      return c.json({ error: 'Username already exists' }, 400);
+    let usernameHash: string;
+    try {
+      usernameHash = await hashUsername(username);
+      // Check if username is locked
+      const existing = await c.env.DB.prepare('SELECT username_hash FROM username_registry WHERE username_hash = ?')
+        .bind(usernameHash)
+        .first<{ username_hash: string }>();
+      if (existing) {
+        return c.json({ error: 'Username already exists' }, 400);
+      }
+    } catch (err: any) {
+      return c.json({ error: 'Registration failed due to an internal server error' }, 500);
     }
-
+ 
     const id = ulid();
     const projectId = ulid();
     const hash = await hashPassword(body.password);
@@ -48,7 +58,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         c.env.DB.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
           .bind(usernameHash),
         c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)')
-          .bind(id, body.username, hash, apiKey),
+          .bind(id, username, hash, apiKey),
         c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")

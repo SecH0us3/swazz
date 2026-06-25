@@ -285,6 +285,9 @@ export async function getDeleteRequestedAt(db: any, userId: string): Promise<str
 }
 
 export async function hashUsername(username: string): Promise<string> {
+  if (typeof username !== 'string') {
+    throw new TypeError('Username must be a string');
+  }
   const normalized = username.trim().toLowerCase();
   const salt = 'swazz-secure-username-salt-constant-2026';
   const encoder = new TextEncoder();

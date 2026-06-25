@@ -37,4 +37,10 @@ describe('Auth Utils - Username Hashing', () => {
     const hash = await hashUsername('testuser');
     expect(hash).toBe('9717408f93c7899956f0e8b4778804623e795b878f15b06cf44f89f0dff257ff');
   });
+
+  it('should reject non-string inputs with a TypeError', async () => {
+    await expect(hashUsername(null as any)).rejects.toThrow(TypeError);
+    await expect(hashUsername(undefined as any)).rejects.toThrow(TypeError);
+    await expect(hashUsername(123 as any)).rejects.toThrow(TypeError);
+  });
 });

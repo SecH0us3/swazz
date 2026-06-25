@@ -171,5 +171,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Design a modern landing page showcasing Swazz features, benefits, and call-to-actions.
     - Implement a modal dialog for authentication, replacing the full-screen LoginScreen with a responsive popup window.
 
+- [ ] **Task 93: Runner Launch Security Review & Target Sandboxing**
+  - **Design Goal:** Prevent runner misuse (such as unauthorized external network scanning, SSRF, or local container escape) by performing a comprehensive security review and implementing target validation filters and sandboxing constraints on runner execution.
+  - **Implementation Details:**
+    - Implement a strict destination whitelist/blacklist check in the fuzzer runner to prevent scanning internal cloud/private endpoints (e.g. metadata service `169.254.169.254` or local loopback `127.0.0.1`).
+    - Audit how the runner executes shell commands, binds keys, or mounts filesystems during runner execution.
+    - Provide a security guide for sandboxing runners in Docker containers (e.g., using `--cap-drop`, rootless mode, and CPU/memory constraints).
+
+
 
 

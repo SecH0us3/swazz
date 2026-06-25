@@ -291,7 +291,7 @@ To protect the Swazz project against supply chain compromises, the build and pip
 
 To prevent username recycling or hijacking (where an account is deleted and its username is subsequently registered by another user to impersonate or hijack the identity), Swazz implements a **lifetime username lock** mechanism:
 
-- **Salted SHA-256 Hashing**: Upon registration, a secure SHA-256 hash of the normalized, lowa-cased username combined with a pepper/salt constant is generated.
+- **Salted SHA-256 Hashing**: Upon registration, a secure SHA-256 hash of the normalized, lower-cased username combined with a pepper/salt constant is generated.
 - **Persistent Username Registry**: This hash is stored in a dedicated `username_registry` table.
 - **GDPR-Compliant Deletion**: When an account is deleted or purged (Right to be Forgotten), all records from the `users`, `projects`, `scans`, and `runners` tables are cascaded and fully purged. However, the record in `username_registry` is **never** deleted.
 - **Hijack Prevention**: The registration endpoint verifies the requested username's hash against `username_registry` and rejects the request if a match is found, ensuring once a username is registered, it remains forever locked and reserved.
