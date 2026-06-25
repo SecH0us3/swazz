@@ -667,7 +667,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Update `packages/container/internal/classifier/owasp.go` mapping function to categorize rule IDs according to the latest OWASP 2025 categories.
     - Align Web Dashboard tables and report formatters (HTML, JSON, Markdown) to display the updated 2025 taxonomy.
 
-- [/] **Task 79: Project Security Review & System Architecture Documentation**
+- [x] **Task 79: Project Security Review & System Architecture Documentation**
   - **Design Goal:** Improve codebase transparency, security posture, and developer onboarding by performing a formal security review and documenting general system/component architecture diagrams.
   - **Implementation Details:**
     - Perform a comprehensive threat modeling and security review of the Swazz core fuzzer, edge coordinator, Web UI, and runner communication channels.
@@ -691,5 +691,10 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Log warnings detailing endpoint/schema truncation context upon exceeding limits.
     - Document safety limits in architecture documentation.
 
-
-
+- [ ] **Task 82: Analyze and Fix Memory Leaks in the Golang Application**
+  - **Design Goal:** Identify, analyze, and resolve memory leaks (heap growth or goroutine leaks) in the Go fuzzer agent to ensure stability during long-running continuous fuzzing sessions.
+  - **Implementation Details:**
+    - Instrument the Go application with `net/http/pprof` for dynamic profiling.
+    - Run extended load testing/fuzzing sessions and capture heap and goroutine profiles.
+    - Analyze the profiles to locate unbounded memory allocations, orphaned goroutines, or unclosed resource handles.
+    - Implement the necessary fixes and add automated memory leak detection (e.g., using `goleak` in tests) to prevent regression.
