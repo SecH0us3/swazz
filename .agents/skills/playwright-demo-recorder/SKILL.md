@@ -11,7 +11,7 @@ This skill provides instructions and templates to capture high-quality, 1920x108
 
 ## 1. Configure Playwright for Full HD Video
 
-Update [playwright.config.ts](file:///Users/alex/src/swazz/playwright.config.ts) temporarily to force 1920x1080 layout viewport and window sizes:
+Update [playwright.config.ts](../../../playwright.config.ts) temporarily to force 1920x1080 layout viewport and window sizes:
 
 ```typescript
 // playwright.config.ts
@@ -143,4 +143,4 @@ async function moveAndType(page: any, locator: any, text: string) {
    find test-results -name "video.webm"
    ```
 3. Copy the recording to the target assets or artifacts directory.
-4. **Important**: Revert changes to [playwright.config.ts](file:///Users/alex/src/swazz/playwright.config.ts) after capturing to prevent slowing down normal E2E test suite executions.
+4. **Important**: Revert changes to [playwright.config.ts](../../../playwright.config.ts) after capturing to prevent slowing down normal E2E test suite executions.
