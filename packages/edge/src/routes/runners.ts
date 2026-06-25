@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
+import { getUserIdFromRequest, getDeleteRequestedAt, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
 
@@ -21,22 +21,30 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
   
     const publicKey = c.req.header('X-Runner-Public-Key') || c.req.query('public_key');
   
+    let userId = "";
     if (publicKey) {
       const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
         .bind(publicKey)
-        .first();
+        .first<{ id: string }>();
       if (!user) {
         return new Response('Unauthorized: Invalid public key', { status: 401 });
       }
+      userId = user.id;
     } else if (token) {
       const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
         .bind(token)
-        .first();
+        .first<{ id: string }>();
       if (!user) {
         return new Response('Unauthorized: Invalid runner token', { status: 401 });
       }
+      userId = user.id;
     } else {
       return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
+    }
+
+    const deleteRequestedAt = await getDeleteRequestedAt(c.env.DB, userId);
+    if (deleteRequestedAt !== null) {
+      return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
     }
   
     const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
@@ -46,6 +54,9 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     url.pathname = '/connect-runner';
     if (publicKey) {
       url.searchParams.set('public_key', publicKey);
+    }
+    if (userId) {
+      url.searchParams.set('user_id', userId);
     }
     return stub.fetch(new Request(url.toString(), req));
   });

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit } from '../utils/auth';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -110,9 +110,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at FROM users WHERE id = ?')
         .bind(decoded.sub)
-        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number }>();
+        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null }>();
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -129,7 +129,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         username: user.username, 
         api_key: currentApiKey, 
         public_key: user.public_key,
-        is_guest: user.is_guest === 1
+        is_guest: user.is_guest === 1,
+        delete_requested_at: user.delete_requested_at
       });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);
@@ -246,4 +247,69 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'ok', token });
   });
   
+  app.delete('/api/users/me', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    try {
+      await c.env.DB.prepare('UPDATE users SET delete_requested_at = datetime(\'now\') WHERE id = ?')
+        .bind(userId)
+        .run();
+
+      deletionCache.delete(userId);
+
+      // Terminate active scans for this user
+      await c.env.DB.prepare(`
+        UPDATE scans
+        SET status = 'failed', completed_at = datetime('now')
+        WHERE (user_id = ? OR project_id IN (
+          SELECT pm.project_id FROM project_members pm
+          WHERE pm.user_id = ? AND pm.role = 'owner'
+        )) AND completed_at IS NULL
+      `)
+        .bind(userId, userId)
+        .run();
+
+      // Immediately revoke and disconnect active runner WebSocket connections in Durable Object
+      try {
+        const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+        const stub = c.env.COORDINATOR_DO.get(doId);
+        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
+          method: 'POST'
+        }));
+        if (!doRes.ok) {
+          console.error("Failed to revoke runner connections in DO on schedule deletion:", await doRes.text());
+        }
+      } catch (doErr) {
+        console.error("Failed to invoke DO /revoke-user on schedule deletion:", doErr);
+      }
+
+      return c.json({ status: 'deletion_scheduled', eta_days: 7 });
+    } catch (err: any) {
+      console.error("Failed to schedule user account deletion:", err);
+      return c.json({ error: err.message || 'Failed to schedule user account deletion' }, 500);
+    }
+  });
+
+  app.post('/api/users/me/cancel-deletion', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    try {
+      await c.env.DB.prepare('UPDATE users SET delete_requested_at = NULL WHERE id = ?')
+        .bind(userId)
+        .run();
+
+      deletionCache.delete(userId);
+
+      return c.json({ status: 'deletion_cancelled' });
+    } catch (err: any) {
+      console.error("Failed to cancel user account deletion:", err);
+      return c.json({ error: err.message || 'Failed to cancel deletion' }, 500);
+    }
+  });
 }

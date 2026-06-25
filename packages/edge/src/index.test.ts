@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 import { env as rawEnv } from "cloudflare:test";
 import { Env } from "./env";
 import app from "./index";
+import { cleanupScheduledDeletions } from "./utils/cleanup";
 
 const env = rawEnv as unknown as Env;
 
@@ -271,6 +272,193 @@ describe("D1 Database Migrations & API", () => {
     expect(res.status).toBe(429);
     const body = await res.json() as any;
     expect(body.error).toContain("locked");
+  });
+
+  it("can delete user account and associated data (Right to be Forgotten)", async () => {
+    // 1. Register a new user
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "deluser", password: "password123" })
+    });
+    const regRes = await app.fetch(regReq, testEnv);
+    expect(regRes.status).toBe(200);
+    const regBody = await regRes.json() as any;
+    const userId = regBody.id;
+
+    // 2. Log in
+    const loginReq = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "deluser", password: "password123" })
+    });
+    const loginRes = await app.fetch(loginReq, testEnv);
+    expect(loginRes.status).toBe(200);
+    const loginBody = await loginRes.json() as any;
+    const token = loginBody.token;
+
+    // 3. Create a project
+    const projReq = new Request("http://localhost/api/projects", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ name: "User Delete Project", description: "To be deleted" })
+    });
+    const projRes = await app.fetch(projReq, testEnv);
+    expect(projRes.status).toBe(200);
+    const projBody = await projRes.json() as any;
+    const projectId = projBody.id;
+
+    // Verify project member entry is created
+    const members = await env.DB.prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?')
+      .bind(projectId, userId)
+      .first<{ role: string }>();
+    expect(members?.role).toBe('owner');
+
+    // 4. Create a scan with a report URL for the project
+    const reportUrl = 'reports/test-scan-report.enc';
+    const scanId = 'scan-to-be-deleted';
+    await env.DB.prepare('INSERT INTO scans (id, project_id, target_url, profile, status, user_id, report_url) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(scanId, projectId, 'http://test.com', 'default', 'pending', userId, reportUrl)
+      .run();
+
+    // Write a mock report file to storage
+    await env.STORAGE.put(reportUrl, "encrypted fuzzer report contents");
+
+    // 5. Create a runner
+    const runnerId = 'runner-to-be-deleted';
+    await env.DB.prepare('INSERT INTO runners (id, user_id, name, secret_hash, status) VALUES (?, ?, ?, ?, ?)')
+      .bind(runnerId, userId, 'Del Runner', 'hash123', 'offline')
+      .run();
+
+    // 5b. Connect an active WebSocket runner associated with the user via Durable Object
+    const doId = env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = env.COORDINATOR_DO.get(doId);
+    const connectReq = new Request(`http://localhost/connect-runner?name=UserRunner&user_id=${userId}`, {
+      headers: { "Upgrade": "websocket" }
+    });
+    const connectRes = await stub.fetch(connectReq);
+    expect(connectRes.status).toBe(101);
+    const runnerWs = connectRes.webSocket!;
+    runnerWs.accept();
+
+    // Setup listener to track connection close
+    const closePromise = new Promise<number>((resolve) => {
+      runnerWs.addEventListener("close", (evt) => {
+        resolve(evt.code);
+      });
+    });
+
+    // Verify entries and R2 object exist before deletion
+    const userPre = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
+    const projPre = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
+    const scanPre = await env.DB.prepare('SELECT id FROM scans WHERE id = ?').bind(scanId).first();
+    const runnerPre = await env.DB.prepare('SELECT id FROM runners WHERE id = ?').bind(runnerId).first();
+    const storagePre = await env.STORAGE.get(reportUrl);
+
+    expect(userPre).toBeDefined();
+    expect(projPre).toBeDefined();
+    expect(scanPre).toBeDefined();
+    expect(runnerPre).toBeDefined();
+    expect(storagePre).not.toBeNull();
+
+    // 6. Schedule account deletion
+    const delReq = new Request("http://localhost/api/users/me", {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const delRes = await app.fetch(delReq, testEnv);
+    expect(delRes.status).toBe(200);
+    const delBody = await delRes.json() as any;
+    expect(delBody.status).toBe('deletion_scheduled');
+    expect(delBody.eta_days).toBe(7);
+
+    // Verify that the active runner's WebSocket is closed immediately with GDPR status 1008
+    const closeCode = await Promise.race([
+      closePromise,
+      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("WebSocket did not close")), 2000))
+    ]);
+    expect(closeCode).toBe(1008);
+
+    // Verify the user profile has delete_requested_at set
+    const userScheduled = await env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?').bind(userId).first<{ delete_requested_at: string }>();
+    expect(userScheduled?.delete_requested_at).not.toBeNull();
+
+    // Verify that active scans are marked as failed
+    const scanScheduled = await env.DB.prepare('SELECT status, completed_at FROM scans WHERE id = ?').bind(scanId).first<{ status: string; completed_at: string }>();
+    expect(scanScheduled?.status).toBe('failed');
+    expect(scanScheduled?.completed_at).not.toBeNull();
+
+    // Verify that other API requests (e.g. GET /api/projects) return 403 Forbidden
+    const projReqForbidden = new Request("http://localhost/api/projects", {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const projResForbidden = await app.fetch(projReqForbidden, testEnv);
+    expect(projResForbidden.status).toBe(403);
+    const projForbiddenBody = await projResForbidden.json() as any;
+    expect(projForbiddenBody.error).toContain("Forbidden");
+
+    // Verify that runner connection for the deleted user returns 403 Forbidden
+    const userRow = await env.DB.prepare('SELECT api_key FROM users WHERE id = ?').bind(userId).first<{ api_key: string | null }>();
+    let apiKey = userRow?.api_key;
+    if (!apiKey) {
+      apiKey = 'swazz_live_test_api_key_123';
+      await env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?').bind(apiKey, userId).run();
+    }
+    const runnerReqDeleted = new Request(`http://localhost/api/runners/connect`, {
+      headers: {
+        "Upgrade": "websocket",
+        "Authorization": `Bearer ${apiKey}`
+      }
+    });
+    const runnerResDeleted = await app.fetch(runnerReqDeleted, testEnv);
+    expect(runnerResDeleted.status).toBe(403);
+
+    // 7. Cancel deletion
+    const cancelReq = new Request("http://localhost/api/users/me/cancel-deletion", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const cancelRes = await app.fetch(cancelReq, testEnv);
+    expect(cancelRes.status).toBe(200);
+    const cancelBody = await cancelRes.json() as any;
+    expect(cancelBody.status).toBe('deletion_cancelled');
+
+    // Verify delete_requested_at is cleared
+    const userCancelled = await env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?').bind(userId).first<{ delete_requested_at: string | null }>();
+    expect(userCancelled?.delete_requested_at).toBeNull();
+
+    // 8. Schedule account deletion again
+    const delReq2 = new Request("http://localhost/api/users/me", {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const delRes2 = await app.fetch(delReq2, testEnv);
+    expect(delRes2.status).toBe(200);
+
+    // 9. Age the deletion timestamp to expired (e.g. -8 days)
+    await env.DB.prepare("UPDATE users SET delete_requested_at = datetime('now', '-8 days') WHERE id = ?").bind(userId).run();
+
+    // 10. Execute the scheduled deletion cleanup
+    await cleanupScheduledDeletions(env);
+
+    // 11. Verify all entries and storage object are deleted
+    const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
+    const projPost = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
+    const memberPost = await env.DB.prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, userId).first();
+    const scanPost = await env.DB.prepare('SELECT id FROM scans WHERE id = ?').bind(scanId).first();
+    const runnerPost = await env.DB.prepare('SELECT id FROM runners WHERE id = ?').bind(runnerId).first();
+    const storagePost = await env.STORAGE.get(reportUrl);
+
+    expect(userPost).toBeNull();
+    expect(projPost).toBeNull();
+    expect(memberPost).toBeNull();
+    expect(scanPost).toBeNull();
+    expect(runnerPost).toBeNull();
+    expect(storagePost).toBeNull();
   });
 });
 

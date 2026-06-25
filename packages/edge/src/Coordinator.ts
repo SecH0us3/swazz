@@ -52,11 +52,45 @@ export class RunnerCoordinator {
 
   isPrivateRunner(ws: WebSocket): boolean {
     const tags = this.state.getTags(ws);
-    return tags.some(tag => tag !== 'runner' && tag !== 'runner-pending' && !tag.startsWith('name:') && !tag.startsWith('version:'));
+    return tags.some(tag => 
+      tag !== 'runner' && 
+      tag !== 'runner-pending' && 
+      !tag.startsWith('name:') && 
+      !tag.startsWith('version:') &&
+      !tag.startsWith('user_id:')
+    );
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === '/revoke-user') {
+      const userId = url.searchParams.get('userId');
+      if (!userId) {
+        return new Response('Missing userId', { status: 400 });
+      }
+
+      const userIdTag = `user_id:${userId}`;
+      let disconnectedCount = 0;
+
+      for (const ws of this.state.getWebSockets()) {
+        const tags = this.state.getTags(ws);
+        if (tags.includes(userIdTag)) {
+          try {
+            ws.close(1008, "User account deleted");
+          } catch {
+            // ignore
+          }
+          this.runners.delete(ws);
+          disconnectedCount++;
+        }
+      }
+
+      return new Response(JSON.stringify({ disconnectedCount }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     if (url.pathname === '/dispatch') {
       const activeRunners = Array.from(this.runners);
@@ -292,13 +326,17 @@ export class RunnerCoordinator {
       const [client, server] = Object.values(webSocketPair);
       
       const publicKey = url.searchParams.get('public_key');
+      const userId = url.searchParams.get('user_id') || '';
       const name = url.searchParams.get('name') || 'Unnamed Runner';
       const version = url.searchParams.get('version') || 'v1.0.0';
       const nameTag = `name:${name}`;
       const versionTag = `version:${version}`;
+      const userIdTag = userId ? `user_id:${userId}` : '';
       
       if (publicKey) {
-        this.state.acceptWebSocket(server, ["runner-pending", publicKey, nameTag, versionTag]);
+        const tags = ["runner-pending", publicKey, nameTag, versionTag];
+        if (userIdTag) tags.push(userIdTag);
+        this.state.acceptWebSocket(server, tags);
         
         // Generate random 32-byte hex challenge nonce
         const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)))
@@ -327,7 +365,9 @@ export class RunnerCoordinator {
           } catch { /* ignored */ }
         }, 5000);
       } else {
-        this.state.acceptWebSocket(server, ["runner", nameTag, versionTag]);
+        const tags = ["runner", nameTag, versionTag];
+        if (userIdTag) tags.push(userIdTag);
+        this.state.acceptWebSocket(server, tags);
         server.serializeAttachment({ authenticated: true });
         this.runners.add(server);
       }

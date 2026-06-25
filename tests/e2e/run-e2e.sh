@@ -50,12 +50,18 @@ wait_for_port() {
   exit 1
 }
 
+# Pre-cleanup: kill any zombie processes on the test ports
+echo "→ Stopping any existing services on ports 8788, 8787, 5173..."
+lsof -ti :8788,8787,5173 | xargs kill -9 2>/dev/null || true
+pkill -f "swazz-engine" || true
+sleep 1
+
 # 1. Start Vulnerable Demo API (Port 8788)
 if check_port 8788; then
   echo "✓ Vulnerable Demo API is already running on port 8788."
 else
   echo "→ Starting Vulnerable Demo API..."
-  npx wrangler dev --port 8788 --cwd demo > demo.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo > demo.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8788 "Vulnerable Demo API"
 fi
@@ -65,7 +71,7 @@ if check_port 8787; then
   echo "✓ Edge Coordinator is already running on port 8787."
 else
   echo "→ Starting Edge Coordinator..."
-  JWT_SECRET="local-secret-key-123456" npx wrangler dev --cwd packages/edge > edge.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="local-secret-key-123456" npx wrangler dev --cwd packages/edge > edge.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8787 "Edge Coordinator"
 fi
@@ -79,6 +85,7 @@ else
   PIDS+=($!)
   wait_for_port 5173 "React Web Frontend"
 fi
+
 
 # 4. Build and start Go Runner Agent
 echo "→ Compiling Go Runner Agent..."

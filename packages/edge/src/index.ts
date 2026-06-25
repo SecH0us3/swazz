@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';
-import { getUserIdFromRequest } from './utils/auth';
+import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
-import { cleanupExpiredGuests } from './utils/cleanup';
+import { cleanupExpiredGuests, cleanupScheduledDeletions } from './utils/cleanup';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -45,6 +45,14 @@ app.use('/api/*', async (c, next) => {
     const userId = await getUserIdFromRequest(c);
     if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
+    if (!isCancelRoute) {
+      const deleteRequestedAt = await getDeleteRequestedAt(c.env.DB, userId);
+      if (deleteRequestedAt !== null) {
+        return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
+      }
     }
   }
 
@@ -241,6 +249,7 @@ export default {
   fetch: app.fetch,
   async scheduled(event: any, env: Env, ctx: any) {
     ctx.waitUntil(cleanupExpiredGuests(env.DB));
+    ctx.waitUntil(cleanupScheduledDeletions(env));
   }
 };
 

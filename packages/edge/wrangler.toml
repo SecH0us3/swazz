@@ -44,3 +44,7 @@ invocation_logs = true
 AUTH_ENABLED = "true"
 LIMIT_ANONYMOUS = "true"
 ALLOWED_ORIGINS = "*"
+
+[triggers]
+crons = [ "0 * * * *" ]
+

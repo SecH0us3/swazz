@@ -347,5 +347,23 @@ The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. Th
 - **Localized Cell Hover**: Heatmap cells manage their own hover states locally. Moving the cursor over the grid does not trigger expensive dashboard or full-grid re-renders.
 - **Memoized Rows**: Endpoint rows use `React.memo` with custom value comparison. A row only updates when its specific endpoint stats change.
 - **Findings Pagination**: Both the **Grouped Errors** and **OWASP Top 10** lists cap expanded category views to 50 items by default. A "Show More" button allows loading additional results incrementally, avoiding DOM bloat and lagging.
+## 🔒 Privacy & Account Deletion (Right to be Forgotten)
+
+Swazz values user privacy and complies with GDPR requirements. If you wish to delete your account and all associated data, you can do so immediately from the dashboard settings page:
+
+1. Click on **Settings** in the dashboard header.
+2. In the left column, scroll down to the **Danger Zone** card.
+3. Click **Delete My Account & Data**.
+4. Confirm the permanent deletion warning when prompted by clicking **Yes, delete permanently**.
+
+This action will immediately and irreversibly purge:
+- Your user profile, API key, and credentials
+- All associated projects and project memberships
+- All scan histories and result databases from the D1 database
+- All fuzzer report archive files (.enc) from R2 object storage
+- Active WebSocket runner connections associated with your account
+- All local browser history, cache, credentials, and IndexedDB databases
+
+---
 
 [← Back to Installation](./installation.html) | [Next: Architecture →](./architecture.html)

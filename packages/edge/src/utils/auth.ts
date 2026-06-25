@@ -267,3 +267,19 @@ export function isWebRequest(c: Context<{ Bindings: Env }>): boolean {
 export function getClientIp(c: Context<{ Bindings: Env }>): string {
   return c.req.header('CF-Connecting-IP') || c.req.header('X-Real-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
 }
+
+export const deletionCache = new Map<string, { deleteRequestedAt: string | null; expiry: number }>();
+
+export async function getDeleteRequestedAt(db: any, userId: string): Promise<string | null> {
+  const now = Date.now();
+  const cached = deletionCache.get(userId);
+  if (cached && cached.expiry > now) {
+    return cached.deleteRequestedAt;
+  }
+  const user = await db.prepare('SELECT delete_requested_at FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ delete_requested_at: string | null }>();
+  const deleteRequestedAt = user ? user.delete_requested_at : null;
+  deletionCache.set(userId, { deleteRequestedAt, expiry: now + 60000 }); // cache for 1 minute
+  return deleteRequestedAt;
+}
