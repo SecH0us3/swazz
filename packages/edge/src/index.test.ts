@@ -187,6 +187,75 @@ describe("D1 Database Migrations & API", () => {
     expect(typeof body.id).toBe("string");
   });
 
+  it("prevents registering the same username twice due to registry lock", async () => {
+    const req = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "newuser", password: "password123" })
+    });
+    
+    const res = await app.fetch(req, testEnv);
+    expect(res.status).toBe(400);
+    const body = await res.json() as any;
+    expect(body.error).toBe("Username already exists");
+  });
+
+  it("prevents registering the same username with different casing or surrounding whitespace due to normalization in registry lock", async () => {
+    // 1. Try different casing
+    const reqCase = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "NewUser", password: "password123" })
+    });
+    const resCase = await app.fetch(reqCase, testEnv);
+    expect(resCase.status).toBe(400);
+    const bodyCase = await resCase.json() as any;
+    expect(bodyCase.error).toBe("Username already exists");
+
+    // 2. Try leading/trailing whitespace
+    const reqSpace = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "  newuser  ", password: "password123" })
+    });
+    const resSpace = await app.fetch(reqSpace, testEnv);
+    expect(resSpace.status).toBe(400);
+    const bodySpace = await resSpace.json() as any;
+    expect(bodySpace.error).toBe("Username already exists");
+  });
+
+  it("prevents registering a username even after user deletion", async () => {
+    const username = "deleteme";
+    
+    // 1. Register user
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const regRes = await app.fetch(regReq, testEnv);
+    expect(regRes.status).toBe(200);
+    const regBody = await regRes.json() as any;
+    
+    // 2. Perform deletion in DB (simulate purge)
+    await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(regBody.id).run();
+    
+    // 3. Confirm user is deleted from users table
+    const deletedUser = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(regBody.id).first();
+    expect(deletedUser).toBeNull();
+    
+    // 4. Try to register with same username again - should be blocked by username_registry
+    const regReq2 = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "password123" })
+    });
+    const regRes2 = await app.fetch(regReq2, testEnv);
+    expect(regRes2.status).toBe(400);
+    const body2 = await regRes2.json() as any;
+    expect(body2.error).toBe("Username already exists");
+  });
+
   it("can login with registered user", async () => {
     const req = new Request("http://localhost/api/auth/login", {
       method: "POST",

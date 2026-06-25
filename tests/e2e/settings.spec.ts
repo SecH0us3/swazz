@@ -64,19 +64,19 @@ test.describe('User Settings and Profile Management E2E Test', () => {
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // 3. Open the UserMenu dropdown in the header
-    const accountBtn = page.locator('button[title="Account"]');
-    await expect(accountBtn).toBeVisible();
-    await accountBtn.click();
+    // 3. Open Project Settings page from the right Config Sidebar
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
 
-    // 4. Click "Profile Settings" in the dropdown to navigate to settings
-    const settingsLink = page.locator('.dropdown-item:has-text("Profile Settings")');
-    await expect(settingsLink).toBeVisible();
-    await settingsLink.click();
-
-    // 5. Verify settings screen is loaded
-    const settingsHeader = page.locator('h1:has-text("Settings")');
+    // 4. Verify Project Settings page is loaded
+    const settingsHeader = page.locator('h1:has-text("Project Settings")');
     await expect(settingsHeader).toBeVisible();
+
+    // 5. Click the "Active Runners" sub-tab in the project settings
+    const activeRunnersTab = page.locator('button.tab-bar-btn:has-text("Active Runners")');
+    await expect(activeRunnersTab).toBeVisible();
+    await activeRunnersTab.click();
 
     // 6. Test runner mode tabs
     const privateRunnerTab = page.locator('button:has-text("Private Runner")');
@@ -125,10 +125,16 @@ test.describe('User Settings and Profile Management E2E Test', () => {
     await page.reload();
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // Open User Settings again
-    await accountBtn.click();
-    await settingsLink.click();
+    // Open Project Settings again
+    const moreSettingsBtn2 = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn2).toBeVisible();
+    await moreSettingsBtn2.click();
     await expect(settingsHeader).toBeVisible();
+
+    // Click Active Runners tab again
+    const activeRunnersTab2 = page.locator('button.tab-bar-btn:has-text("Active Runners")');
+    await expect(activeRunnersTab2).toBeVisible();
+    await activeRunnersTab2.click();
 
     // Verify the saved key is still in the input field
     const reloadedPubKeyInput = page.locator('input[placeholder*="Enter hex-encoded public key"]');

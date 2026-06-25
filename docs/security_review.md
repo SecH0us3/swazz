@@ -284,3 +284,15 @@ To protect the Swazz project against supply chain compromises, the build and pip
 - **Pinned Actions & Base Images**: All GitHub Actions configurations and Dockerfiles pin dependencies and base images to specific, immutable SHA-256 commit hashes (rather than mutable version tags like `latest` or `v1`).
 - **Dependency Audit**: The build process runs automated static code analysis (`gosec` for Go backend, npm security audit for frontend) to discover code and dependency vulnerabilities.
 - **Excluded Rules**: The `.gosec.conf` excludes `G404` (use of weak random numbers). Since Swazz is a fuzzer, utilizing fast pseudo-random values (via `math/rand`) is required for payload variation speed. Cryptographically sensitive operations (challenge signatures, cryptographic nonces, etc.) bypass `math/rand` in favor of standard secure libraries (`crypto/rand`).
+
+---
+
+## 9. Lifetime Username Lock via Secure Hashing
+
+To prevent username recycling or hijacking (where an account is deleted and its username is subsequently registered by another user to impersonate or hijack the identity), Swazz implements a **lifetime username lock** mechanism:
+
+- **Salted SHA-256 Hashing**: Upon registration, a secure SHA-256 hash of the normalized, lowa-cased username combined with a pepper/salt constant is generated.
+- **Persistent Username Registry**: This hash is stored in a dedicated `username_registry` table.
+- **GDPR-Compliant Deletion**: When an account is deleted or purged (Right to be Forgotten), all records from the `users`, `projects`, `scans`, and `runners` tables are cascaded and fully purged. However, the record in `username_registry` is **never** deleted.
+- **Hijack Prevention**: The registration endpoint verifies the requested username's hash against `username_registry` and rejects the request if a match is found, ensuring once a username is registered, it remains forever locked and reserved.
+

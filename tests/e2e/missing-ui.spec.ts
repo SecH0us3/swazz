@@ -121,6 +121,19 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(apiKeyInput).toBeVisible();
     await expect(toggleApiKeyBtn).toHaveText('Show');
 
+    // Navigate to Project Settings -> Active Runners where public key setup now lives
+    const profileBackBtn = page.locator('button:has-text("Back to Dashboard")');
+    await expect(profileBackBtn).toBeVisible();
+    await profileBackBtn.click();
+
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
+
+    const activeRunnersTab = page.locator('button.tab-bar-btn:has-text("Active Runners")');
+    await expect(activeRunnersTab).toBeVisible();
+    await activeRunnersTab.click();
+
     // 2. Upload public key file
     const tempPubKeyPath = path.join(process.cwd(), "temp_pubkey_" + Date.now() + "_" + Math.floor(Math.random() * 1000) + ".pub");
     const mockPubKeyText = 'b'.repeat(64);

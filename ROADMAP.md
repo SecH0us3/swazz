@@ -113,7 +113,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Store credential public keys and signature counters in the users D1 database.
     - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
 
-- [ ] **Task 85: Lifetime Username Lock via Secure Hashing**
+- [x] **Task 85: Lifetime Username Lock via Secure Hashing**
   - **Design Goal:** Prevent recycling or hijacking of usernames by storing a lifetime secure hash of all registered usernames (even after GDPR deletion), ensuring that once a username is taken, it can never be claimed by another account.
   - **Implementation Details:**
     - When a user registers, generate a salted SHA-256 hash of their username.
@@ -164,5 +164,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Rate Limiting:** Implement IP-based and overall system rate limiting for authentication endpoints, returning HTTP 429 when limits are breached.
     - **Weak Password Rejection & Strength Meter:** Reject weak passwords during registration using a blacklist or k-Anonymity (Pwned Passwords). Add a dynamic password strength meter on the UI, encouraging password manager usage.
     - **Passwordless Option:** Support magic link authentication via short-lived, single-use email tokens verified against the client IP/device.
+
+- [ ] **Task 92: Modern Landing Page with Popup Authentication**
+  - **Design Goal:** Replace the current login/registration screen with a high-converting, premium-looking sales landing page, opening the login/registration forms inside a modern, glassmorphic popup modal.
+  - **Implementation Details:**
+    - Design a modern landing page showcasing Swazz features, benefits, and call-to-actions.
+    - Implement a modal dialog for authentication, replacing the full-screen LoginScreen with a responsive popup window.
+
 
 
