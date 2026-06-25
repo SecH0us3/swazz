@@ -100,7 +100,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 82: Analyze and Fix Memory Leaks in the Golang Application**
   - **Design Goal:** Identify, analyze, and resolve memory leaks (heap growth or goroutine leaks) in the Go fuzzer agent to ensure stability during long-running continuous fuzzing sessions.
   - **Implementation Details:**
-    - Instrument the Go application with `net/http/pprof` for dynamic profiling.
+    - Instrument the Go application with runtime/pprof or a localhost-bound net/http/pprof server for dynamic profiling.
     - Run extended load testing/fuzzing sessions and capture heap and goroutine profiles.
     - Analyze the profiles to locate unbounded memory allocations, orphaned goroutines, or unclosed resource handles.
     - Implement the necessary fixes and add automated memory leak detection (e.g., using `goleak` in tests) to prevent regression.
