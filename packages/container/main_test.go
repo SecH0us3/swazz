@@ -174,6 +174,24 @@ func TestValidatePprofAddr(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "ipv6 loopback",
+			addr:    "::1",
+			want:    "[::1]:6060",
+			wantErr: false,
+		},
+		{
+			name:    "ipv6 loopback brackets",
+			addr:    "[::1]",
+			want:    "[::1]:6060",
+			wantErr: false,
+		},
+		{
+			name:    "ipv6 loopback with port",
+			addr:    "[::1]:8080",
+			want:    "[::1]:8080",
+			wantErr: false,
+		},
+		{
 			name:    "unsafe bind 0.0.0.0",
 			addr:    "0.0.0.0:6060",
 			want:    "",

@@ -20,29 +20,32 @@ func validatePprofAddr(addr string) (string, error) {
 		return "", nil
 	}
 
-	// Normalize address
-	// If it's a port only like ":6060", prefix with "127.0.0.1"
-	if strings.HasPrefix(addr, ":") {
-		addr = "127.0.0.1" + addr
-	}
-
-	// Validate that the host is strictly "127.0.0.1" or "localhost"
-	host, _, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		// If split host port fails, it might just be the hostname/IP (e.g. "127.0.0.1" or "localhost")
 		host = addr
+		port = "6060"
 	}
 
-	if host != "127.0.0.1" && host != "localhost" {
-		return "", fmt.Errorf("pprof server must only bind to localhost (127.0.0.1). Specified address %q is unsafe", addr)
+	if host == "" {
+		host = "127.0.0.1"
 	}
 
-	// Make sure the address contains a port, if not default to 6060
-	if !strings.Contains(addr, ":") {
-		addr = host + ":6060"
+	host = strings.Trim(host, "[]")
+
+	if host == "localhost" {
+		return net.JoinHostPort(host, port), nil
 	}
 
-	return addr, nil
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return "", fmt.Errorf("invalid host format in pprof address: %q", addr)
+	}
+
+	if !ip.IsLoopback() {
+		return "", fmt.Errorf("pprof server must only bind to a loopback address (e.g., 127.0.0.1 or [::1]). Specified address %q is unsafe", addr)
+	}
+
+	return net.JoinHostPort(host, port), nil
 }
 
 func parsePprofAddr(args []string, getenv func(string) string) (string, []string, error) {
