@@ -2,7 +2,7 @@ import { useState } from 'react';
 import './LoginScreen.css';
 
 interface LoginScreenProps {
-    onLogin: (username: string, password: string) => Promise<void>;
+    onLogin: (username: string, password: string, twoFactorCode?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
     onRegister: (username: string, password: string) => Promise<void>;
     onGuest?: () => Promise<void>;
 }
@@ -14,6 +14,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,7 +25,11 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             if (isRegistering) {
                 await onRegister(username, password);
             } else {
-                await onLogin(username, password);
+                const res = await onLogin(username, password, twoFactorRequired ? twoFactorCode : undefined);
+                if (res && res.twoFactorRequired) {
+                    setTwoFactorRequired(true);
+                    setTwoFactorCode('');
+                }
             }
         } catch (err: any) {
             setError(err.message);
@@ -63,6 +69,59 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             setIsLoading(false);
         }
     };
+
+    if (twoFactorRequired) {
+        return (
+            <div className="login-screen-overlay">
+                <div className="login-modal">
+                    <div className="login-header">
+                        <h2>Two-Factor Verification</h2>
+                        <p>Enter the 6-digit verification code from your authenticator app to access your account.</p>
+                    </div>
+                    {error && (
+                        <div className="login-error">
+                            <div className="error-content">
+                                <span className="error-text">{error}</span>
+                            </div>
+                        </div>
+                    )}
+                    <form className="login-form" onSubmit={handleSubmit}>
+                        <div className="form-group">
+                            <label htmlFor="twoFactorCode">Verification Code</label>
+                            <input
+                                type="text"
+                                id="twoFactorCode"
+                                name="twoFactorCode"
+                                value={twoFactorCode}
+                                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').substring(0, 6))}
+                                placeholder="000000"
+                                autoComplete="one-time-code"
+                                required
+                                pattern="^\d{6}$"
+                                title="6-digit verification code"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="login-actions">
+                            <button type="submit" disabled={isLoading} className="login-btn">
+                                {isLoading ? <span className="spinner"></span> : 'Verify'}
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={() => {
+                                    setTwoFactorRequired(false);
+                                    setError('');
+                                }} 
+                                className="register-btn"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="login-screen-overlay">

@@ -7,19 +7,134 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
     const { theme, toggleTheme } = useTheme();
-    const [copiedCmd, setCopiedCmd] = useState(false);
-    const [copiedRunCmd, setCopiedRunCmd] = useState(false);
     const [copiedApiKey, setCopiedApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
 
-    const [pubKeyInput, setPubKeyInput] = useState(userProfile?.publicKey || '');
-    const [isSavingPubKey, setIsSavingPubKey] = useState(false);
-    const [saveSuccess, setSaveSuccess] = useState(false);
-    const [saveError, setSaveError] = useState('');
-    const [activeRunnerMode, setActiveRunnerMode] = useState<'shared' | 'private'>('private');
-    const [copiedSharedRunCmd, setCopiedSharedRunCmd] = useState(false);
     const [deleteState, setDeleteState] = useState<'idle' | 'warning' | 'deleting'>('idle');
     const [deleteError, setDeleteError] = useState('');
+
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(userProfile?.twoFactorEnabled || false);
+    const [setup2faData, setSetup2faData] = useState<{ secret: string; qr_code_url: string } | null>(null);
+    const [totpCode, setTotpCode] = useState('');
+    const [setupError, setSetupError] = useState('');
+    const [setupSuccess, setSetupSuccess] = useState('');
+    const [is2faLoading, setIs2faLoading] = useState(false);
+
+    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger'>('account');
+
+    useEffect(() => {
+        if (userProfile) {
+            setTwoFactorEnabled(!!userProfile.twoFactorEnabled);
+        }
+    }, [userProfile]);
+
+    const [confirmPassword, setConfirmPassword] = useState('');
+
+    const handleStart2faSetup = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        setSetupError('');
+        setSetupSuccess('');
+        setIs2faLoading(true);
+        const token = localStorage.getItem('swazz_token');
+        try {
+            const res = await fetch(`${PROXY_URL}/api/auth/2fa/setup`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ password: confirmPassword })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to start 2FA setup');
+            setSetup2faData({
+                secret: data.secret,
+                qr_code_url: data.qr_code_url
+            });
+        } catch (err: any) {
+            setSetupError(err.message);
+        } finally {
+            setIs2faLoading(false);
+        }
+    };
+
+    const handleVerify2fa = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSetupError('');
+        setSetupSuccess('');
+        setIs2faLoading(true);
+        const token = localStorage.getItem('swazz_token');
+        try {
+            const res = await fetch(`${PROXY_URL}/api/auth/2fa/verify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ code: totpCode, password: confirmPassword })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to verify 2FA code');
+            
+            const profile = useAppStore.getState().userProfile;
+            if (profile) {
+                useAppStore.setState({
+                    userProfile: {
+                        ...profile,
+                        twoFactorEnabled: true
+                    }
+                });
+            }
+            setTwoFactorEnabled(true);
+            setSetup2faData(null);
+            setTotpCode('');
+            setConfirmPassword('');
+            setSetupSuccess('Two-factor authentication enabled successfully!');
+        } catch (err: any) {
+            setSetupError(err.message);
+        } finally {
+            setIs2faLoading(false);
+        }
+    };
+
+
+    const handleDisable2fa = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSetupError('');
+        setSetupSuccess('');
+        setIs2faLoading(true);
+        const token = localStorage.getItem('swazz_token');
+        try {
+            const res = await fetch(`${PROXY_URL}/api/auth/2fa/disable`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ code: totpCode, password: confirmPassword })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to disable 2FA');
+
+            const profile = useAppStore.getState().userProfile;
+            if (profile) {
+                useAppStore.setState({
+                    userProfile: {
+                        ...profile,
+                        twoFactorEnabled: false
+                    }
+                });
+            }
+            setTwoFactorEnabled(false);
+            setTotpCode('');
+            setConfirmPassword('');
+            setSetupSuccess('Two-factor authentication disabled.');
+        } catch (err: any) {
+            setSetupError(err.message);
+        } finally {
+            setIs2faLoading(false);
+        }
+    };
 
     const handleDeleteAccount = async () => {
         if (deleteState === 'idle') {
@@ -58,82 +173,8 @@ export function UserSettings() {
         }
     };
 
-    useEffect(() => {
-        if (userProfile?.publicKey) {
-            setPubKeyInput(userProfile.publicKey);
-        }
-    }, [userProfile?.publicKey]);
-
     const username = userProfile?.username || 'Guest';
     const apiKey = userProfile?.apiKey || '';
-
-    const handleSavePublicKey = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const token = localStorage.getItem('swazz_token');
-        if (!token) return;
-
-        setIsSavingPubKey(true);
-        setSaveSuccess(false);
-        setSaveError('');
-
-        try {
-            const cleanKey = pubKeyInput.trim();
-            if (cleanKey !== '') {
-                const hexRegex = /^[0-9a-fA-F]{64}$/;
-                if (!hexRegex.test(cleanKey)) {
-                    throw new Error('Invalid public key format. Must be a 64-character hex-encoded string.');
-                }
-            }
-
-            const res = await fetch(`${PROXY_URL}/api/auth/public-key`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
-                },
-                body: JSON.stringify({ public_key: cleanKey || null })
-            });
-
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed to update public key');
-            }
-
-            const data = await res.json();
-            useAppStore.setState(state => ({
-                userProfile: state.userProfile ? { ...state.userProfile, publicKey: data.public_key } : null
-            }));
-
-            setSaveSuccess(true);
-            setTimeout(() => setSaveSuccess(false), 3000);
-        } catch (err: any) {
-            console.error(err);
-            setSaveError(err.message || 'Failed to save public key');
-        } finally {
-            setIsSavingPubKey(false);
-        }
-    };
-
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 1024 * 10) { // Limit to 10KB
-            setSaveError('File is too large. Public key files should be under 10KB.');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const content = event.target?.result as string;
-            if (content) {
-                setPubKeyInput(content.trim());
-            }
-        };
-        reader.onerror = () => {
-            setSaveError('Failed to read the file.');
-        };
-        reader.readAsText(file);
-        e.target.value = '';
-    };
 
     const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
         navigator.clipboard.writeText(text);
@@ -141,64 +182,19 @@ export function UserSettings() {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const [version, setVersion] = useState<string>('<TAG>');
-
-    useEffect(() => {
-        fetch('/api/version')
-            .then(res => res.json())
-            .then(data => {
-                if (data.version && data.version !== 'dev') {
-                    setVersion(data.version);
-                }
-            })
-            .catch(() => {});
-    }, []);
-
-    const getOrigin = (url: string) => {
-        if (!url) return window.location.origin;
-        try {
-            return url.startsWith('http') ? new URL(url).origin : window.location.origin;
-        } catch (e) {
-            return window.location.origin;
-        }
-    };
-    const apiBase = getOrigin(PROXY_URL);
-    const coordinatorHost = apiBase.replace(/^http/, 'ws');
-    const runnerImage = `ghcr.io/sech0us3/swazz-cli:${version}`;
-    const genKeysCmd = `docker run --rm -it -v $(pwd):/app ${runnerImage} generate-keys`;
-    const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
-    const sharedRunCommand = `docker run --rm -it ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
-
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '24px',
-            padding: '24px',
-            height: '100%',
-            overflowY: 'auto',
-            minWidth: 0
-        }}>
+        <div className="settings-page">
             {/* Header */}
-            <div style={{
-                borderBottom: '1px solid var(--border-default)',
-                paddingBottom: '16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '12px'
-            }}>
-                <div>
-                    <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: 'var(--text-default)' }}>Settings</h1>
-                    <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
-                        Manage your account details, asymmetric signing keys, and distributed runner integrations.
+            <div className="settings-header">
+                <div className="settings-header-info">
+                    <h1 className="settings-header-title">Settings</h1>
+                    <p className="settings-header-desc">
+                        Manage your account details, security settings, and personal options.
                     </p>
                 </div>
                 <button 
-                    className="btn btn-secondary" 
+                    className="btn btn-secondary settings-back-btn" 
                     onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
-                    style={{ gap: '6px', display: 'flex', alignItems: 'center' }}
                 >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -208,492 +204,331 @@ export function UserSettings() {
                 </button>
             </div>
 
-            {/* Layout Columns */}
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-                gap: '24px',
-                alignItems: 'start'
-            }}>
-                
-                {/* Account Details & Auth Key Configuration */}
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '24px'
-                }}>
-                    {/* Profile Card */}
-                    <div className="card" style={{
-                        backgroundColor: 'var(--bg-elevated)',
-                        padding: '20px',
-                        borderRadius: 'var(--radius-lg)',
-                        border: '1px solid var(--border-default)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '16px'
-                    }}>
-                        <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                            Account Details
-                        </h2>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>Username</label>
-                            <input 
-                                type="text" 
-                                className="input" 
-                                value={username} 
-                                disabled 
-                                style={{ width: '100%', opacity: 0.8 }} 
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>Account Level</label>
-                            <div style={{
-                                padding: '8px 12px',
-                                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 'var(--radius-md)',
-                                fontSize: '13px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}>
-                                <span className={`account-status-dot ${(apiKey && !userProfile?.isGuest) ? 'active' : 'inactive'}`} />
-                                {(apiKey && !userProfile?.isGuest) ? 'Registered User (Unlimited scans)' : 'Guest Mode (Temporary account - deletes in 24 hours)'}
+            {/* Layout with Sub-Tabs */}
+            <div className="settings-body">
+                {/* Left Sub-Tab Navigation */}
+                <div className="settings-nav">
+                    <button
+                        className={`settings-nav-btn ${activeSubTab === 'account' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('account')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Account Details
+                    </button>
+                    <button
+                        className={`settings-nav-btn ${activeSubTab === 'security' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('security')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        Security (2FA)
+                    </button>
+                    <button
+                        className={`settings-nav-btn ${activeSubTab === 'danger' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('danger')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        Danger Zone
+                    </button>
+                </div>
+
+                {/* Tab Content Cards */}
+                <div className="settings-content">
+                    {activeSubTab === 'account' && (
+                        <div className="settings-card">
+                            <h2 className="settings-card-title">
+                                Account Details
+                            </h2>
+                            <div className="settings-form-group">
+                                <label className="settings-form-label">Username</label>
+                                <input 
+                                    type="text" 
+                                    className="input settings-input-w-full settings-input-disabled" 
+                                    value={username} 
+                                    disabled 
+                                />
                             </div>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>Theme Preference</label>
-                            <button 
-                                className="btn btn-secondary btn-sm"
-                                onClick={toggleTheme}
-                                type="button"
-                                id="btn-toggle-theme-settings"
-                                style={{ width: '100%' }}
-                            >
-                                Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
-                            </button>
-                        </div>
-                        {apiKey && (
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>API Key</label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input 
-                                        type={showApiKey ? 'text' : 'password'} 
-                                        className="input" 
-                                        value={apiKey} 
-                                        readOnly 
-                                        style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px', opacity: 0.8 }} 
-                                    />
-                                    <button 
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => setShowApiKey(!showApiKey)}
-                                    >
-                                        {showApiKey ? 'Hide' : 'Show'}
-                                    </button>
-                                    <button 
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
-                                        style={{ minWidth: '90px' }}
-                                    >
-                                        {copiedApiKey ? '✓ Copied' : 'Copy'}
-                                    </button>
+                            <div className="settings-form-group">
+                                <label className="settings-form-label">Account Level</label>
+                                <div className="settings-account-status">
+                                    <span className={`account-status-dot ${(apiKey && !userProfile?.isGuest) ? 'active' : 'inactive'}`} />
+                                    {(apiKey && !userProfile?.isGuest) ? 'Registered User (Unlimited scans)' : 'Guest Mode (Temporary account - deletes in 24 hours)'}
                                 </div>
                             </div>
-                        )}
-                    </div>
-
-                    {/* Danger Zone: Account Deletion Card */}
-                    <div className="card danger-zone-card">
-                        <h2 className="danger-zone-title">
-                            Danger Zone
-                        </h2>
-                        
-                        {deleteState === 'idle' ? (
-                            <div>
-                                <p className="danger-zone-text">
-                                    Permanently delete your account and all associated resources. This action is irreversible.
-                                </p>
+                            <div className="settings-form-group">
+                                <label className="settings-form-label">Theme Preference</label>
                                 <button 
-                                    className="btn btn-danger btn-sm delete-account-button-full"
-                                    onClick={handleDeleteAccount}
+                                    className="btn btn-secondary btn-sm settings-btn-w-full"
+                                    onClick={toggleTheme}
                                     type="button"
+                                    id="btn-toggle-theme-settings"
                                 >
-                                    Delete My Account & Data
+                                    Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
                                 </button>
                             </div>
-                        ) : deleteState === 'warning' ? (
-                            <div className="delete-account-container">
-                                <h3 className="delete-account-title">⚠️ Irreversible Action!</h3>
-                                <p className="delete-account-desc">
-                                    This will immediately delete all your scan histories, projects, configurations, and private runners from the platform. There is no backup and this cannot be undone.
-                                </p>
-                                <div className="delete-account-actions">
-                                    <button 
-                                        className="btn btn-danger btn-sm"
-                                        onClick={handleDeleteAccount}
-                                        type="button"
-                                    >
-                                        Yes, delete permanently
-                                    </button>
-                                    <button 
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => { setDeleteState('idle'); setDeleteError(''); }}
-                                        type="button"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <p className="danger-zone-text">
-                                    Executing data purge. Please wait...
-                                </p>
-                                <button 
-                                    className="btn btn-danger btn-sm delete-account-button-full"
-                                    disabled
-                                    type="button"
-                                >
-                                    Deleting account...
-                                </button>
-                            </div>
-                        )}
-                        
-                        {deleteError && (
-                            <p className="delete-error-message">
-                                Error: {deleteError}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Asymmetric Key Card */}
-                    {apiKey && (
-                        <div className="card" style={{
-                            backgroundColor: 'var(--bg-elevated)',
-                            padding: '20px',
-                            borderRadius: 'var(--radius-lg)',
-                            border: '1px solid var(--border-default)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '16px'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-                                    Asymmetric Runner Authentication
-                                </h2>
-                                <span style={{
-                                    fontSize: '11px',
-                                    fontWeight: 600,
-                                    color: 'var(--accent-light)',
-                                    backgroundColor: 'rgba(124, 58, 237, 0.15)',
-                                    padding: '2px 8px',
-                                    borderRadius: '12px'
-                                }}>Recommended</span>
-                            </div>
-                            
-                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                                For maximum security, register the runner's Ed25519 public key. The runner signs a cryptographic challenge to prove its identity without exposing secrets.
-                            </p>
-
-                            <form onSubmit={handleSavePublicKey} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                                        Runner Public Key (64-char hex)
-                                    </label>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
+                            {apiKey && (
+                                <div className="settings-form-group">
+                                    <label className="settings-form-label">API Key</label>
+                                    <div className="settings-input-row">
                                         <input 
-                                            type="text" 
-                                            className="input" 
-                                            placeholder="Enter hex-encoded public key (e.g. 9f8a7b...)" 
-                                            value={pubKeyInput}
-                                            onChange={(e) => setPubKeyInput(e.target.value)}
-                                            style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px' }} 
+                                            type={showApiKey ? 'text' : 'password'} 
+                                            className="input settings-input-monospace" 
+                                            value={apiKey} 
+                                            readOnly 
                                         />
                                         <button 
-                                            type="submit" 
-                                            className="btn btn-primary" 
-                                            disabled={isSavingPubKey}
-                                            style={{ minWidth: '80px' }}
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => setShowApiKey(!showApiKey)}
                                         >
-                                            {isSavingPubKey ? 'Saving...' : 'Save'}
+                                            {showApiKey ? 'Hide' : 'Show'}
+                                        </button>
+                                        <button 
+                                            className="btn btn-secondary btn-sm settings-btn-min-w"
+                                            onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
+                                        >
+                                            {copiedApiKey ? '✓ Copied' : 'Copy'}
                                         </button>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Or load:</span>
-                                        <input 
-                                            type="file" 
-                                            id="pubkey-file" 
-                                            accept=".pub,text/plain" 
-                                            onChange={handleFileUpload} 
-                                            style={{ display: 'none' }} 
-                                        />
-                                        <label 
-                                            htmlFor="pubkey-file" 
-                                            className="btn btn-secondary btn-sm"
-                                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                        >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                                <polyline points="17 8 12 3 7 8"></polyline>
-                                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                                            </svg>
-                                            Upload swazz_runner.pub
-                                        </label>
-                                    </div>
                                 </div>
-                                {saveSuccess && (
-                                    <p style={{ margin: 0, fontSize: '12px', color: '#10B981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        ✓ Public key saved successfully!
-                                    </p>
-                                )}
-                                {saveError && (
-                                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-error)' }}>
-                                        Error: {saveError}
-                                    </p>
-                                )}
-                            </form>
+                            )}
                         </div>
                     )}
 
+                    {activeSubTab === 'security' && (
+                        apiKey && !userProfile?.isGuest ? (
+                            <div className="two-factor-card">
+                                <h2 className="two-factor-header-title">
+                                    Two-Factor Authentication (2FA)
+                                </h2>
+                                
+                                <div className="two-factor-status-container">
+                                    Status: 
+                                    <span className={`two-factor-status-badge ${twoFactorEnabled ? 'enabled' : 'disabled'}`}>
+                                        {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
 
-                </div>
+                                {setupSuccess && (
+                                    <div className="two-factor-success-alert">
+                                        {setupSuccess}
+                                    </div>
+                                )}
 
-                {/* Runner Guide Column */}
-                {apiKey && (
-                    <div className="card" style={{
-                        backgroundColor: 'var(--bg-elevated)',
-                        padding: '20px',
-                        borderRadius: 'var(--radius-lg)',
-                        border: '1px solid var(--border-default)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '16px',
-                        height: '100%'
-                    }}>
-                        <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                            Runner Integration
-                        </h2>
-                        <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                            Swazz uses distributed agent runners to execute headless fuzz tests. Connect a private runner on your local workstation or server infrastructure, or contribute compute to the shared community pool.
-                        </p>
+                                {setupError && (
+                                    <div className="two-factor-error-alert">
+                                        {setupError}
+                                    </div>
+                                )}
 
-                        {/* Tab Switcher */}
-                        <div className="runner-mode-tab-switcher">
-                            <button
-                                type="button"
-                                className={`btn btn-sm ${activeRunnerMode === 'private' ? 'btn-primary' : 'btn-ghost'}`}
-                                onClick={() => setActiveRunnerMode('private')}
-                                style={{
-                                    flex: 1,
-                                    borderRadius: 'var(--radius-sm)',
-                                    background: activeRunnerMode === 'private' ? 'linear-gradient(135deg, var(--accent), #6d28d9)' : 'transparent',
-                                    border: 'none',
-                                    color: activeRunnerMode === 'private' ? '#ffffff' : 'var(--text-secondary)'
-                                }}
-                            >
-                                🔒 Private Runner
-                            </button>
-                            <button
-                                type="button"
-                                className={`btn btn-sm ${activeRunnerMode === 'shared' ? 'btn-primary' : 'btn-ghost'}`}
-                                onClick={() => setActiveRunnerMode('shared')}
-                                style={{
-                                    flex: 1,
-                                    borderRadius: 'var(--radius-sm)',
-                                    background: activeRunnerMode === 'shared' ? 'linear-gradient(135deg, var(--accent), #6d28d9)' : 'transparent',
-                                    border: 'none',
-                                    color: activeRunnerMode === 'shared' ? '#ffffff' : 'var(--text-secondary)'
-                                }}
-                            >
-                                🌐 Shared Runner
-                            </button>
+                                {!twoFactorEnabled && !setup2faData && (
+                                    <form onSubmit={handleStart2faSetup} className="two-factor-input-group">
+                                        <p className="two-factor-instructions">
+                                            Add an extra layer of security to your account by enabling Time-based One-Time Passwords (TOTP).
+                                        </p>
+                                        <label htmlFor="totp-setup-password" className="settings-form-label">
+                                            Enter your password to verify your identity
+                                        </label>
+                                        <input
+                                            type="password"
+                                            id="totp-setup-password"
+                                            className="input"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                            required
+                                        />
+                                        <button
+                                            type="submit"
+                                            className="btn btn-secondary btn-sm two-factor-w-full two-factor-mt-8"
+                                            disabled={is2faLoading}
+                                        >
+                                            {is2faLoading ? 'Loading...' : 'Set Up 2FA'}
+                                        </button>
+                                    </form>
+                                )}
+
+                                {!twoFactorEnabled && setup2faData && (
+                                    <div className="two-factor-setup-container">
+                                        <p className="two-factor-instructions">
+                                            1. Scan the QR code below with your authenticator app (Google Authenticator, Authy, etc.), or enter the secret key manually.
+                                        </p>
+                                        
+                                        <div className="two-factor-setup-flow">
+                                            <div className="two-factor-qr-wrapper">
+                                                <img 
+                                                    src={setup2faData.qr_code_url} 
+                                                    alt="2FA QR Code" 
+                                                    className="two-factor-qr-image"
+                                                />
+                                            </div>
+                                            <div className="two-factor-setup-details">
+                                                <span className="two-factor-secret-key-label">Secret Key</span>
+                                                <div className="two-factor-secret-key-display">
+                                                    {setup2faData.secret}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <form onSubmit={handleVerify2fa} className="two-factor-input-group">
+                                            <label htmlFor="totp-setup-code" className="settings-form-label">
+                                                2. Enter the 6-digit code from your app to verify setup
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="totp-setup-code"
+                                                className="input two-factor-text-center-spaced"
+                                                value={totpCode}
+                                                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').substring(0, 6))}
+                                                placeholder="000000"
+                                                pattern="^\d{6}$"
+                                                required
+                                            />
+                                            <div className="two-factor-actions two-factor-mt-8">
+                                                <button
+                                                    type="submit"
+                                                    className="btn btn-primary btn-sm two-factor-flex-1"
+                                                    disabled={is2faLoading}
+                                                >
+                                                    {is2faLoading ? 'Verifying...' : 'Verify & Enable'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={() => {
+                                                        setSetup2faData(null);
+                                                        setTotpCode('');
+                                                        setSetupError('');
+                                                    }}
+                                                    disabled={is2faLoading}
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                )}
+
+                                {twoFactorEnabled && (
+                                    <div className="two-factor-setup-container">
+                                        <form onSubmit={handleDisable2fa} className="two-factor-input-group">
+                                            <label htmlFor="totp-disable-password" className="settings-form-label">
+                                                Enter your account password to confirm
+                                            </label>
+                                            <input
+                                                type="password"
+                                                id="totp-disable-password"
+                                                className="input"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                placeholder="••••••••"
+                                                required
+                                            />
+                                            <label htmlFor="totp-disable-code" className="settings-form-label">
+                                                Enter 6-digit code from your app
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="totp-disable-code"
+                                                className="input two-factor-text-center-spaced"
+                                                value={totpCode}
+                                                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').substring(0, 6))}
+                                                placeholder="000000"
+                                                pattern="^\d{6}$"
+                                                required
+                                            />
+                                            <button
+                                                type="submit"
+                                                className="btn btn-danger btn-sm two-factor-w-full two-factor-mt-8"
+                                                disabled={is2faLoading}
+                                            >
+                                                {is2faLoading ? 'Disabling...' : 'Disable 2FA'}
+                                            </button>
+                                        </form>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="settings-card">
+                                <h2 className="settings-card-title">Security Settings</h2>
+                                <p className="settings-danger-text">Two-factor authentication is only available for registered users. Guests cannot enable 2FA.</p>
+                            </div>
+                        )
+                    )}
+
+                    {activeSubTab === 'danger' && (
+                        <div className="settings-card settings-danger-card">
+                            <h2 className="settings-danger-title">
+                                Danger Zone
+                            </h2>
+                            
+                            {deleteState === 'idle' ? (
+                                <div className="settings-delete-container">
+                                    <p className="settings-danger-text">
+                                        Permanently delete your account and all associated resources. This action is irreversible.
+                                    </p>
+                                    <button 
+                                        className="btn btn-danger btn-sm settings-btn-w-full"
+                                        onClick={handleDeleteAccount}
+                                        type="button"
+                                    >
+                                        Delete My Account & Data
+                                    </button>
+                                </div>
+                            ) : deleteState === 'warning' ? (
+                                <div className="settings-delete-container">
+                                    <h3 className="settings-delete-title">⚠️ Irreversible Action!</h3>
+                                    <p className="settings-delete-desc">
+                                        This will immediately delete all your scan histories, projects, configurations, and private runners from the platform. There is no backup and this cannot be undone.
+                                    </p>
+                                    <div className="settings-delete-actions">
+                                        <button 
+                                            className="btn btn-danger btn-sm"
+                                            onClick={handleDeleteAccount}
+                                            type="button"
+                                        >
+                                            Yes, delete permanently
+                                        </button>
+                                        <button 
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => { setDeleteState('idle'); setDeleteError(''); }}
+                                            type="button"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="settings-delete-container">
+                                    <p className="settings-danger-text">
+                                        Executing data purge. Please wait...
+                                    </p>
+                                    <button 
+                                        className="btn btn-danger btn-sm settings-btn-w-full"
+                                        disabled
+                                        type="button"
+                                    >
+                                        Deleting account...
+                                    </button>
+                                </div>
+                            )}
+                            
+                            {deleteError && (
+                                <p className="settings-delete-error">
+                                    Error: {deleteError}
+                                </p>
+                            )}
                         </div>
-
-                        {/* Private Runner Mode Content */}
-                        {activeRunnerMode === 'private' && (
-                            <>
-                                <div style={{
-                                    padding: '8px 12px',
-                                    backgroundColor: 'var(--accent-subtle)',
-                                    border: '1px solid rgba(167, 139, 250, 0.2)',
-                                    borderRadius: 'var(--radius-md)',
-                                    fontSize: '12px',
-                                    color: 'var(--accent-light)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    lineHeight: '1.4'
-                                }}>
-                                    <span style={{ fontSize: '14px' }}>🔒</span>
-                                    <span><strong>Private Mode:</strong> Only your own scans will be dispatched to this runner. Requires key-pair registration.</span>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
-                                    <div style={{ display: 'flex', gap: '12px' }}>
-                                        <div style={{
-                                            width: '20px', height: '20px', borderRadius: '50%',
-                                            backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                        }}>1</div>
-                                        <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
-                                            <strong>Generate Cryptographic Keys</strong>
-                                            <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Generate your Ed25519 signature keypair inside your project directory:</p>
-                                            
-                                            <div style={{
-                                                padding: '12px',
-                                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                                borderRadius: 'var(--radius-md)',
-                                                border: '1px solid var(--border-default)',
-                                                fontFamily: 'monospace',
-                                                fontSize: '11px',
-                                                color: 'var(--text-default)',
-                                                wordBreak: 'break-all',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '8px'
-                                            }}>
-                                                <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{genKeysCmd}</span>
-                                                <button 
-                                                    className="btn btn-secondary btn-sm" 
-                                                    onClick={() => copyToClipboard(genKeysCmd, setCopiedCmd)}
-                                                    style={{ alignSelf: 'flex-start' }}
-                                                >
-                                                    {copiedCmd ? '✓ Copied Command!' : 'Copy Command'}
-                                                </button>
-                                            </div>
-                                            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                                This generates `swazz_runner.key` and `swazz_runner.pub` files. Keep the `.key` private!
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '12px' }}>
-                                        <div style={{
-                                            width: '20px', height: '20px', borderRadius: '50%',
-                                            backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                        }}>2</div>
-                                        <div style={{ fontSize: '13px' }}>
-                                            <strong>Register Public Key</strong>
-                                            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                                Copy the hex string from `swazz_runner.pub` and paste it into the **Asymmetric Runner Authentication** form on the left, or use the "Upload" button to load it from file.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '12px' }}>
-                                        <div style={{
-                                            width: '20px', height: '20px', borderRadius: '50%',
-                                            backgroundColor: 'rgba(124,58,237,0.15)', color: 'var(--accent-light)',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            fontSize: '11px', fontWeight: 600, flexShrink: 0
-                                        }}>3</div>
-                                        <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
-                                            <strong>Run Agent Command</strong>
-                                            <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Start the runner, mounting the generated private key file:</p>
-                                            
-                                            <div style={{
-                                                padding: '12px',
-                                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                                borderRadius: 'var(--radius-md)',
-                                                border: '1px solid var(--border-default)',
-                                                fontFamily: 'monospace',
-                                                fontSize: '11px',
-                                                color: 'var(--text-default)',
-                                                wordBreak: 'break-all',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '8px'
-                                            }}>
-                                                <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{runCommand}</span>
-                                                <button 
-                                                    className="btn btn-secondary btn-sm" 
-                                                    onClick={() => copyToClipboard(runCommand, setCopiedRunCmd)}
-                                                    style={{ alignSelf: 'flex-start' }}
-                                                >
-                                                    {copiedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-
-                        {/* Shared Runner Mode Content */}
-                        {activeRunnerMode === 'shared' && (
-                            <>
-                                <div style={{
-                                    padding: '8px 12px',
-                                    backgroundColor: 'var(--color-warning-bg)',
-                                    border: '1px solid rgba(245, 158, 11, 0.2)',
-                                    borderRadius: 'var(--radius-md)',
-                                    fontSize: '12px',
-                                    color: 'var(--color-warning)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    lineHeight: '1.4'
-                                }}>
-                                    <span style={{ fontSize: '14px' }}>🌐</span>
-                                    <span><strong>Shared Mode:</strong> Jobs from all users on this coordinator may run on this machine.</span>
-                                </div>
-
-                                <div style={{
-                                    padding: '12px',
-                                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
-                                    border: '1px solid rgba(244, 63, 94, 0.25)',
-                                    borderRadius: 'var(--radius-md)',
-                                    fontSize: '12px',
-                                    color: 'var(--color-error)',
-                                    lineHeight: '1.5',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '4px'
-                                }}>
-                                    <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        ⚠️ Critical Security Warning
-                                    </div>
-                                    <div>By registering a shared runner, you agree to execute fuzzing jobs on behalf of other platform users. Only run this on an isolated, containerised environment. Do NOT run shared agents on your personal development workstation.</div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
-                                    <div style={{ display: 'flex', gap: '12px' }}>
-                                        <div style={{ fontSize: '13px', width: '100%', minWidth: 0 }}>
-                                            <strong>Run Agent Command</strong>
-                                            <p style={{ margin: '2px 0 8px 0', fontSize: '12px', color: 'var(--text-muted)' }}>Start the runner in shared pool mode using your API Key:</p>
-                                            
-                                            <div style={{
-                                                padding: '12px',
-                                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                                borderRadius: 'var(--radius-md)',
-                                                border: '1px solid var(--border-default)',
-                                                fontFamily: 'monospace',
-                                                fontSize: '11px',
-                                                color: 'var(--text-default)',
-                                                wordBreak: 'break-all',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '8px'
-                                            }}>
-                                                <span style={{ color: '#a3a3a3', lineHeight: '1.4' }}>{sharedRunCommand}</span>
-                                                <button 
-                                                    className="btn btn-secondary btn-sm" 
-                                                    onClick={() => copyToClipboard(sharedRunCommand, setCopiedSharedRunCmd)}
-                                                    style={{ alignSelf: 'flex-start' }}
-                                                >
-                                                    {copiedSharedRunCmd ? '✓ Copied Command!' : 'Copy Command'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

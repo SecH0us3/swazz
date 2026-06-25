@@ -4,6 +4,8 @@ import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, 
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
+import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
+
 
 export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/auth/register', async (c) => {
@@ -110,9 +112,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled FROM users WHERE id = ?')
         .bind(decoded.sub)
-        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null }>();
+        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null; two_factor_enabled: number }>();
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -130,7 +132,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         api_key: currentApiKey, 
         public_key: user.public_key,
         is_guest: user.is_guest === 1,
-        delete_requested_at: user.delete_requested_at
+        delete_requested_at: user.delete_requested_at,
+        two_factor_enabled: user.two_factor_enabled === 1
       });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);
@@ -216,9 +219,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       );
     }
   
-    const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE username = ?')
+    const user = await c.env.DB.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
       .bind(body.username)
-      .first<{ id: string; password_hash: string }>();
+      .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
   
     if (!user) {
       await recordFailedLogin(c.env.DB, body.username);
@@ -230,6 +233,28 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     if (!valid) {
       await recordFailedLogin(c.env.DB, body.username);
       return c.json({ error: 'Invalid credentials' }, 401);
+    }
+
+    // 2FA Verification
+    if (user.two_factor_enabled === 1) {
+      if (!body.two_factor_code) {
+        return c.json({ status: '2fa_required' });
+      }
+      if (!user.two_factor_secret) {
+        return c.json({ error: 'Internal server error: 2FA configured incorrectly' }, 500);
+      }
+      let decryptedSecret: string;
+      try {
+        decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
+      } catch {
+        await recordFailedLogin(c.env.DB, body.username);
+        return c.json({ error: 'Invalid credentials' }, 401);
+      }
+      const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
+      if (!isValid2fa) {
+        await recordFailedLogin(c.env.DB, body.username);
+        return c.json({ error: 'Invalid credentials' }, 401);
+      }
     }
   
     // Successful login — reset rate-limit counter
@@ -310,6 +335,163 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     } catch (err: any) {
       console.error("Failed to cancel user account deletion:", err);
       return c.json({ error: err.message || 'Failed to cancel deletion' }, 500);
+    }
+  });
+
+  app.post('/api/auth/2fa/setup', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    try {
+      const body = await c.req.json();
+      if (!body.password) {
+        return c.json({ error: 'Missing password verification' }, 400);
+      }
+
+      const user = await c.env.DB.prepare('SELECT username, password_hash FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ username: string; password_hash: string }>();
+
+      if (!user) {
+        return c.json({ error: 'User not found' }, 404);
+      }
+
+      // Verify Password
+      const isPasswordValid = await verifyPassword(body.password, user.password_hash);
+      if (!isPasswordValid) {
+        return c.json({ error: 'Invalid password' }, 401);
+      }
+
+      const secret = generateTOTPSecret();
+      const encryptedSecret = await encryptTOTPSecret(secret, body.password);
+      
+      await c.env.DB.prepare('UPDATE users SET two_factor_secret = ? WHERE id = ?')
+        .bind(encryptedSecret, userId)
+        .run();
+
+      const issuer = 'Swazz';
+      const otpauthUrl = `otpauth://totp/${issuer}:${user.username}?secret=${secret}&issuer=${issuer}`;
+      const qrCodeUrl = `https://quickchart.io/qr?text=${encodeURIComponent(otpauthUrl)}`;
+
+      return c.json({
+        status: 'ok',
+        secret,
+        qr_code_url: qrCodeUrl,
+        otpauth_url: otpauthUrl
+      });
+    } catch (err: any) {
+      console.error("Failed to setup 2FA:", err);
+      return c.json({ error: err.message || 'Failed to setup 2FA' }, 500);
+    }
+  });
+
+  app.post('/api/auth/2fa/verify', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    try {
+      const body = await c.req.json();
+      if (!body.code) {
+        return c.json({ error: 'Missing 2FA code' }, 400);
+      }
+      if (!body.password) {
+        return c.json({ error: 'Missing password verification' }, 400);
+      }
+
+      const user = await c.env.DB.prepare('SELECT password_hash, two_factor_secret FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ password_hash: string; two_factor_secret: string | null }>();
+
+      if (!user || !user.two_factor_secret) {
+        return c.json({ error: '2FA has not been set up. Call setup endpoint first.' }, 400);
+      }
+
+      // 1. Verify password
+      const isPasswordValid = await verifyPassword(body.password, user.password_hash);
+      if (!isPasswordValid) {
+        return c.json({ error: 'Invalid password or 2FA code' }, 401);
+      }
+
+      // 2. Decrypt TOTP secret
+      let decryptedSecret: string;
+      try {
+        decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
+      } catch {
+        return c.json({ error: 'Invalid password or 2FA code' }, 401);
+      }
+
+      // 3. Verify Code
+      const isValid = await verifyTOTP(decryptedSecret, body.code);
+      if (!isValid) {
+        return c.json({ error: 'Invalid password or 2FA code' }, 401);
+      }
+
+      await c.env.DB.prepare('UPDATE users SET two_factor_enabled = 1 WHERE id = ?')
+        .bind(userId)
+        .run();
+
+      return c.json({ status: 'ok' });
+    } catch (err: any) {
+      console.error("Failed to verify 2FA:", err);
+      return c.json({ error: err.message || 'Failed to verify 2FA' }, 500);
+    }
+  });
+
+  app.post('/api/auth/2fa/disable', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    try {
+      const body = await c.req.json();
+      if (!body.code) {
+        return c.json({ error: 'Missing 2FA code' }, 400);
+      }
+      if (!body.password) {
+        return c.json({ error: 'Missing password verification' }, 400);
+      }
+
+      const user = await c.env.DB.prepare('SELECT password_hash, two_factor_secret, two_factor_enabled FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ password_hash: string; two_factor_secret: string | null; two_factor_enabled: number }>();
+
+      if (!user || user.two_factor_enabled !== 1 || !user.two_factor_secret) {
+        return c.json({ error: '2FA is not enabled' }, 400);
+      }
+
+      // 1. Verify Password
+      const isPasswordValid = await verifyPassword(body.password, user.password_hash);
+      if (!isPasswordValid) {
+        return c.json({ error: 'Invalid password or 2FA code' }, 401);
+      }
+
+      // 2. Decrypt TOTP secret
+      let decryptedSecret: string;
+      try {
+        decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
+      } catch {
+        return c.json({ error: 'Invalid password or 2FA code' }, 401);
+      }
+
+      // 3. Verify 2FA TOTP Code
+      const isValid = await verifyTOTP(decryptedSecret, body.code);
+      if (!isValid) {
+        return c.json({ error: 'Invalid password or 2FA code' }, 401);
+      }
+
+      await c.env.DB.prepare('UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE id = ?')
+        .bind(userId)
+        .run();
+
+      return c.json({ status: 'ok' });
+    } catch (err: any) {
+      console.error("Failed to disable 2FA:", err);
+      return c.json({ error: err.message || 'Failed to disable 2FA' }, 500);
     }
   });
 }
