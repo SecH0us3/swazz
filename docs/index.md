@@ -22,9 +22,11 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 Explore the documentation to get started and master Swazz:
 
 - [Installation Guide](./installation.html) - Learn how to build and install Swazz.
+- [Deployment Guidelines](./deployment.html) - Production deployment configurations and security hardening checklist.
 - [Usage & Configuration](./usage.html) - Discover CLI and Web UI usage.
 - [CI/CD Integration](./ci_cd.html) - Integrate Swazz into GitHub Actions, GitLab CI, and more with SARIF reporting.
 - [Architecture & Internals](./architecture.html) - Deep dive into the hybrid architecture and source code structure.
+- [Security Review & Threat Model](./security_review.html) - Read the security analysis, SSRF defenses, and authentication designs.
 - [Contributing Guidelines](./contributing.html) - Learn how to set up the dev environment, write tests, and contribute.
 
 ---

@@ -44,5 +44,10 @@ To protect the fuzzing runner from excessive memory usage (OOM) on very large, d
 - **Node Budget**: A safety limit of **50,000 SchemaProperty nodes** is enforced during resolution. If exceeded, schema expansion is safely truncated, and a `WARN` log is emitted specifying the endpoint context where the truncation occurred.
 - **Depth Limit**: Recursion is limited to a maximum depth of **64**. If exceeded, the schema resolves to a fallback `object`.
 
+## Security & Threat Model 🛡️
+
+For a comprehensive analysis of Swazz's security controls, network isolation mechanisms (including SSRF protection and DNS pinning), agent cryptographic challenge-response authentication, and user access policies, please refer to the [Security Review & Threat Model](./security_review.html).
+
 [← Back to Usage](./usage.html)
+
 
