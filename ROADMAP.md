@@ -5,20 +5,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 > **AI Assistant Note:** Antigravity can automatically execute these tasks. Just say: *"Antigravity, start working on task X"* and the AI will implement the feature and check it off the list.
 
 
-## 📝 Documentation & Onboarding
-
-- [x] **Task 3:** Add high-quality screenshots or GIFs of the Web Dashboard (Heatmap, Inspector) to the `README.md`. *(Depends on: Task 12)*
-
 ## 📦 Compatibility & Quality
-
-- [x] **Task 35:** Add high-quality screenshots or GIFs of the Web Dashboard to the `README.md` *(replaces Task 3)*.
-  - **Design Goal:** Create a strong first impression for developers visiting the GitHub repository. *(Depends on: Task 21 completion for mutation diff screenshots)*
-  - **Implementation Details:**
-    - Capture screenshots/GIFs of: Heatmap view during an active run against the demo API (Task 12), Inspector with request detail & mutation diff (Task 21), Configuration sidebar with payload categories modal, HTML export report, CLI terminal output.
-    - Optimize images for web (compressed PNG or animated WebP, <500KB each).
-    - Add a visual "Features" section to `README.md` with an image carousel or table layout.
-
-    - Add a visual "Features" section to `README.md`.
 
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**
   - **Design Goal:** Enable target discovery by dynamically crawling web applications from a starting URL without relying solely on static API specifications.
@@ -88,38 +75,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [x] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
-  - **Design Goal:** Allow users to immediately and permanently delete all their account data, project configurations, runners, and scan history to comply with privacy regulations (e.g. GDPR) and ensure clean slate capabilities.
-  - **Implementation Details:**
-    - Add a **Delete My Account & Data** button (with a double-confirmation prompt) in the `UserSettings` dashboard overlay.
-    - Implement a `DELETE /api/users/me` edge worker API endpoint in the coordinator.
-    - Ensure the endpoint executes a clean cascading database deletion in D1 (deleting `users`, associated `projects`, `scans`, `findings`, and `runners`).
-    - Revoke and drop any active WebSocket runner connections matching the deleted user's ID immediately in the Durable Object.
-    - Clear all client-side cache and credentials (auth tokens, cookies, and local IndexedDB databases) before redirecting the browser to the registration screen.
-
-- [x] **Task 82: Analyze and Fix Memory Leaks in the Golang Application**
-  - **Design Goal:** Identify, analyze, and resolve memory leaks (heap growth or goroutine leaks) in the Go fuzzer agent to ensure stability during long-running continuous fuzzing sessions.
-  - **Implementation Details:**
-    - Instrument the Go application with runtime/pprof or a localhost-bound net/http/pprof server for dynamic profiling.
-    - Run extended load testing/fuzzing sessions and capture heap and goroutine profiles.
-    - Analyze the profiles to locate unbounded memory allocations, orphaned goroutines, or unclosed resource handles.
-    - Implement the necessary fixes and add automated memory leak detection (e.g., using `goleak` in tests) to prevent regression.
-
-
 - [ ] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
   - **Design Goal:** Provide a modern, passwordless authentication alternative using biometric sensors (FaceID, TouchID, Windows Hello) or physical security keys via the WebAuthn API.
   - **Implementation Details:**
     - Implement WebAuthn registration and authentication flows in the edge coordinator backend.
     - Store credential public keys and signature counters in the users D1 database.
     - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
-
-- [x] **Task 85: Lifetime Username Lock via Secure Hashing**
-  - **Design Goal:** Prevent recycling or hijacking of usernames by storing a lifetime secure hash of all registered usernames (even after GDPR deletion), ensuring that once a username is taken, it can never be claimed by another account.
-  - **Implementation Details:**
-    - When a user registers, generate a salted SHA-256 hash of their username.
-    - Store this hash in a persistent `username_registry` table.
-    - When a user requests deletion (or when the account is purged), do not delete the record from `username_registry`.
-    - Modify the registration endpoint to check if the hash of the requested username exists in `username_registry` and reject it if found.
 
 - [ ] **Task 86: Cloudflare KV and Cache API Optimization Research**
   - **Design Goal:** Identify parts of the coordinator and runner architectures that would benefit from global, low-latency Cloudflare KV or regional Cache API storage (e.g., global API rate limiting, scan fuzzer payload catalog caching, global session blacklists, or feature flags).
