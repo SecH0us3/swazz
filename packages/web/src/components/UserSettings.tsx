@@ -18,6 +18,53 @@ export function UserSettings() {
     const [saveError, setSaveError] = useState('');
     const [activeRunnerMode, setActiveRunnerMode] = useState<'shared' | 'private'>('private');
     const [copiedSharedRunCmd, setCopiedSharedRunCmd] = useState(false);
+    const [deleteState, setDeleteState] = useState<'idle' | 'warning' | 'deleting'>('idle');
+    const [deleteError, setDeleteError] = useState('');
+
+    const handleDeleteAccount = async () => {
+        if (deleteState === 'idle') {
+            setDeleteState('warning');
+            return;
+        }
+        if (deleteState === 'warning') {
+            setDeleteState('deleting');
+            setDeleteError('');
+            const token = localStorage.getItem('swazz_token');
+            try {
+                const res = await fetch(`${PROXY_URL}/api/users/me`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || 'Failed to delete account');
+                }
+                
+                // Clear cache & credentials
+                localStorage.clear();
+                sessionStorage.clear();
+                try {
+                    indexedDB.deleteDatabase('swazz-db');
+                } catch (dbErr) {
+                    console.error("Failed to delete IndexedDB:", dbErr);
+                }
+                
+                // Clear cookies
+                document.cookie.split(";").forEach((c) => {
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                });
+
+                // Redirect to home/registration
+                window.location.href = '/';
+            } catch (err: any) {
+                console.error(err);
+                setDeleteError(err.message || 'An error occurred during account deletion');
+                setDeleteState('idle');
+            }
+        }
+    };
 
     useEffect(() => {
         if (userProfile?.publicKey) {
@@ -260,6 +307,70 @@ export function UserSettings() {
                                     </button>
                                 </div>
                             </div>
+                        )}
+                    </div>
+
+                    {/* Danger Zone: Account Deletion Card */}
+                    <div className="card danger-zone-card">
+                        <h2 className="danger-zone-title">
+                            Danger Zone
+                        </h2>
+                        
+                        {deleteState === 'idle' ? (
+                            <div>
+                                <p className="danger-zone-text">
+                                    Permanently delete your account and all associated resources. This action is irreversible.
+                                </p>
+                                <button 
+                                    className="btn btn-danger btn-sm delete-account-button-full"
+                                    onClick={handleDeleteAccount}
+                                    type="button"
+                                >
+                                    Delete My Account & Data
+                                </button>
+                            </div>
+                        ) : deleteState === 'warning' ? (
+                            <div className="delete-account-container">
+                                <h3 className="delete-account-title">⚠️ Irreversible Action!</h3>
+                                <p className="delete-account-desc">
+                                    This will immediately delete all your scan histories, projects, configurations, and private runners from the platform. There is no backup and this cannot be undone.
+                                </p>
+                                <div className="delete-account-actions">
+                                    <button 
+                                        className="btn btn-danger btn-sm"
+                                        onClick={handleDeleteAccount}
+                                        type="button"
+                                    >
+                                        Yes, delete permanently
+                                    </button>
+                                    <button 
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => { setDeleteState('idle'); setDeleteError(''); }}
+                                        type="button"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <p className="danger-zone-text">
+                                    Executing data purge. Please wait...
+                                </p>
+                                <button 
+                                    className="btn btn-danger btn-sm delete-account-button-full"
+                                    disabled
+                                    type="button"
+                                >
+                                    Deleting account...
+                                </button>
+                            </div>
+                        )}
+                        
+                        {deleteError && (
+                            <p className="delete-error-message">
+                                Error: {deleteError}
+                            </p>
                         )}
                     </div>
 

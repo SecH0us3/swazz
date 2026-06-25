@@ -258,6 +258,12 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
+## 🔒 Privacy & Data Deletion (GDPR)
+
+Swazz supports self-service data deletion. Users can permanently and immediately delete their account, associated projects, scan histories, scan report files, and active runner connections directly from the **Danger Zone** section in the **Settings** panel. This ensures compliance with GDPR "Right to be Forgotten" policies.
+
+---
+
 ## 📄 License
 
 Distributed under the MIT License. See `LICENSE` for more information.

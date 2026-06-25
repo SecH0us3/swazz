@@ -21,20 +21,23 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
   
     const publicKey = c.req.header('X-Runner-Public-Key') || c.req.query('public_key');
   
+    let userId = "";
     if (publicKey) {
       const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
         .bind(publicKey)
-        .first();
+        .first<{ id: string }>();
       if (!user) {
         return new Response('Unauthorized: Invalid public key', { status: 401 });
       }
+      userId = user.id;
     } else if (token) {
       const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
         .bind(token)
-        .first();
+        .first<{ id: string }>();
       if (!user) {
         return new Response('Unauthorized: Invalid runner token', { status: 401 });
       }
+      userId = user.id;
     } else {
       return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
     }
@@ -46,6 +49,9 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     url.pathname = '/connect-runner';
     if (publicKey) {
       url.searchParams.set('public_key', publicKey);
+    }
+    if (userId) {
+      url.searchParams.set('user_id', userId);
     }
     return stub.fetch(new Request(url.toString(), req));
   });

@@ -88,7 +88,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [ ] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
+- [/] **Task 80: Immediate User Data Deletion (Right to be Forgotten)**
   - **Design Goal:** Allow users to immediately and permanently delete all their account data, project configurations, runners, and scan history to comply with privacy regulations (e.g. GDPR) and ensure clean slate capabilities.
   - **Implementation Details:**
     - Add a **Delete My Account & Data** button (with a double-confirmation prompt) in the `UserSettings` dashboard overlay.
@@ -97,7 +97,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Revoke and drop any active WebSocket runner connections matching the deleted user's ID immediately in the Durable Object.
     - Clear all client-side cache and credentials (auth tokens, cookies, and local IndexedDB databases) before redirecting the browser to the registration screen.
 
-- [/] **Task 82: Analyze and Fix Memory Leaks in the Golang Application**
+- [x] **Task 82: Analyze and Fix Memory Leaks in the Golang Application**
   - **Design Goal:** Identify, analyze, and resolve memory leaks (heap growth or goroutine leaks) in the Go fuzzer agent to ensure stability during long-running continuous fuzzing sessions.
   - **Implementation Details:**
     - Instrument the Go application with runtime/pprof or a localhost-bound net/http/pprof server for dynamic profiling.
