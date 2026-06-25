@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';
-import { getUserIdFromRequest } from './utils/auth';
+import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerScansRoutes } from './routes/scans';
@@ -49,10 +49,8 @@ app.use('/api/*', async (c, next) => {
 
     const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
     if (!isCancelRoute) {
-      const user = await c.env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?')
-        .bind(userId)
-        .first<{ delete_requested_at: string | null }>();
-      if (user && user.delete_requested_at !== null) {
+      const deleteRequestedAt = await getDeleteRequestedAt(c.env.DB, userId);
+      if (deleteRequestedAt !== null) {
         return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
       }
     }

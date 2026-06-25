@@ -128,4 +128,10 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - When a user requests deletion (or when the account is purged), do not delete the record from `username_registry`.
     - Modify the registration endpoint to check if the hash of the requested username exists in `username_registry` and reject it if found.
 
+- [ ] **Task 86: Cloudflare KV and Cache API Optimization Research**
+  - **Design Goal:** Identify parts of the coordinator and runner architectures that would benefit from global, low-latency Cloudflare KV or regional Cache API storage (e.g., global API rate limiting, scan fuzzer payload catalog caching, global session blacklists, or feature flags).
+  - **Implementation Details:**
+    - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
+    - Research using KV for keeping track of active runner heartbeat state to avoid Durable Object lookups.
+
 

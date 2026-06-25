@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit } from '../utils/auth';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -258,6 +258,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         .bind(userId)
         .run();
 
+      deletionCache.delete(userId);
+
       // Terminate active scans for this user
       await c.env.DB.prepare(`
         UPDATE scans
@@ -301,6 +303,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       await c.env.DB.prepare('UPDATE users SET delete_requested_at = NULL WHERE id = ?')
         .bind(userId)
         .run();
+
+      deletionCache.delete(userId);
 
       return c.json({ status: 'deletion_cancelled' });
     } catch (err: any) {
