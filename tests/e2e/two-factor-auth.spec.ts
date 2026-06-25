@@ -114,9 +114,8 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     // Extract secret key
     const secretDisplay = page.locator('.two-factor-secret-key-display');
     await expect(secretDisplay).toBeVisible();
+    await expect(secretDisplay).toHaveText(/^[A-Z2-7]{16}$/);
     const secret = (await secretDisplay.textContent())?.trim();
-    expect(secret).toBeTruthy();
-    expect(secret?.length).toBe(16);
 
     // 5. Verify 2FA
     const validCode = await generateTOTP(secret!);
