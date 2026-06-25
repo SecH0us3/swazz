@@ -34,16 +34,18 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
     const handleRegisterClick = async (e: React.MouseEvent) => {
         e.preventDefault();
-        const form = (e.target as HTMLElement).closest('form');
+        const form = (e.currentTarget as HTMLElement).closest('form');
         if (form && !form.reportValidity()) {
             return;
         }
         setError('');
+        setIsRegistering(true);
         setIsLoading(true);
         try {
             await onRegister(username, password);
         } catch (err: any) {
             setError(err.message);
+            setIsRegistering(false);
         } finally {
             setIsLoading(false);
         }
@@ -139,7 +141,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                             {isLoading && !isRegistering ? (
                                 <span className="spinner"></span>
                             ) : (
-                                'Enter Workspace'
+                                isRegistering ? 'Get Started' : 'Enter Workspace'
                             )}
                         </button>
                         <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
