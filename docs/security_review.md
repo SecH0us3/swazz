@@ -272,7 +272,7 @@ Large, complex, or circular OpenAPI specifications can crash parsing tools via m
 
 - **DAG-based Resolution & Memoization**: References (`$ref`) are resolved and cached, transforming potential exponential-tree expansion into a Directed Acyclic Graph (DAG) with linear memory complexity.
 - **Cycle Detection**: Active resolution paths are tracked on a recursion stack. Recursive loops are broken immediately, returning a fallback representation.
-- **Node Budget**: Outlines a strict budget of **50,000 SchemaProperty nodes** per schema. Traversal is truncated if the budget is exceeded, saving the scanner from memory exhaustion.
+- **Node Budget**: Enforces a strict budget of **50,000 SchemaProperty nodes** per schema. Traversal is truncated if the budget is exceeded, saving the scanner from memory exhaustion.
 - **Recursion Depth Limit**: A strict depth ceiling of **64** is enforced during schema expansion.
 
 ---
@@ -282,5 +282,5 @@ Large, complex, or circular OpenAPI specifications can crash parsing tools via m
 To protect the Swazz project against supply chain compromises, the build and pipeline actions conform to strict configurations:
 
 - **Pinned Actions & Base Images**: All GitHub Actions configurations and Dockerfiles pin dependencies and base images to specific, immutable SHA-256 commit hashes (rather than mutable version tags like `latest` or `v1`).
-- **Dependency Audit**: The build process runs automated static code analysis (`gosec` for Go backend, npm security audit for frontend) to discover configuration vulnerabilities.
+- **Dependency Audit**: The build process runs automated static code analysis (`gosec` for Go backend, npm security audit for frontend) to discover code and dependency vulnerabilities.
 - **Excluded Rules**: The `.gosec.conf` excludes `G404` (use of weak random numbers). Since Swazz is a fuzzer, utilizing fast pseudo-random values (via `math/rand`) is required for payload variation speed. Cryptographically sensitive operations (challenge signatures, cryptographic nonces, etc.) bypass `math/rand` in favor of standard secure libraries (`crypto/rand`).

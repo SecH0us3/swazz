@@ -45,7 +45,7 @@ In this model, the control plane is fully managed and serverless, while the scan
 The entire stack is deployed on a single virtual machine (VM) using **Docker Compose**:
 - React frontend runs behind an **Nginx** container.
 - Go backend runs as a containerized service.
-- Local sqlite files/databases are mounted via Docker volumes.
+- Local SQLite files/databases are mounted via Docker volumes.
 
 ---
 
@@ -81,7 +81,7 @@ The entire stack is deployed on a single virtual machine (VM) using **Docker Com
    ```bash
    npm run deploy
    ```
-   *(Ensure to configure Pages Custom Domain to match your `ALLOWED_ORIGINS` setting.)*
+   *(Ensure you configure Pages Custom Domain to match your `ALLOWED_ORIGINS` setting.)*
 
 ### 4. Runner Agent Setup (Isolated VM)
 1. Generate an Ed25519 keypair for the agent:
@@ -140,5 +140,5 @@ When deploying Swazz to production, ensure all of the following controls are str
 | 🔑 | **Pin Docker Image Tags** | Supply Chain Compromise | In Dockerfiles and Compose configurations, use specific SHA-256 hashes instead of `latest` or mutable version tags. |
 | 🌐 | **Restrict CORS Headers** | Cross-Origin Data Leakage | Set `ALLOWED_ORIGIN` (compose) or `ALLOWED_ORIGINS` (Workers) to the exact URL of your frontend dashboard. Never use `*`. |
 | 🤖 | **Enable Turnstile CAPTCHA** | Brute-force & Bot registrations | Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` variables to enable Captcha verification during registration/login. |
-| 🔒 | **Enforce HTTPS / SSL** | MitM & Token theft | Use a reverse proxy (e.g. Traefik, Nginx) in front of compose deployments to manage SSL termination via Let's Encrypt. |
+| 🔒 | **Enforce HTTPS / SSL** | MitM & Token theft | Use a reverse proxy (e.g., Traefik, Nginx) in front of compose deployments to manage SSL termination via Let's Encrypt. |
 | 👮 | **Agent Isolation** | Host system compromise | Run target fuzzing runners inside stateless, isolated docker containers or scratch VMs with no connection to the agent's internal subnet. |
