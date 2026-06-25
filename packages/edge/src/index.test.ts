@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 import { env as rawEnv } from "cloudflare:test";
 import { Env } from "./env";
 import app from "./index";
+import { cleanupScheduledDeletions } from "./utils/cleanup";
 
 const env = rawEnv as unknown as Env;
 
@@ -363,7 +364,7 @@ describe("D1 Database Migrations & API", () => {
     expect(runnerPre).toBeDefined();
     expect(storagePre).not.toBeNull();
 
-    // 6. Delete account
+    // 6. Schedule account deletion
     const delReq = new Request("http://localhost/api/users/me", {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}` }
@@ -371,16 +372,49 @@ describe("D1 Database Migrations & API", () => {
     const delRes = await app.fetch(delReq, testEnv);
     expect(delRes.status).toBe(200);
     const delBody = await delRes.json() as any;
-    expect(delBody.status).toBe('deleted');
+    expect(delBody.status).toBe('deletion_scheduled');
+    expect(delBody.eta_days).toBe(7);
+
+    // Verify the user profile has delete_requested_at set
+    const userScheduled = await env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?').bind(userId).first<{ delete_requested_at: string }>();
+    expect(userScheduled?.delete_requested_at).not.toBeNull();
+
+    // 7. Cancel deletion
+    const cancelReq = new Request("http://localhost/api/users/me/cancel-deletion", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const cancelRes = await app.fetch(cancelReq, testEnv);
+    expect(cancelRes.status).toBe(200);
+    const cancelBody = await cancelRes.json() as any;
+    expect(cancelBody.status).toBe('deletion_cancelled');
+
+    // Verify delete_requested_at is cleared
+    const userCancelled = await env.DB.prepare('SELECT delete_requested_at FROM users WHERE id = ?').bind(userId).first<{ delete_requested_at: string | null }>();
+    expect(userCancelled?.delete_requested_at).toBeNull();
+
+    // 8. Schedule account deletion again
+    const delReq2 = new Request("http://localhost/api/users/me", {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const delRes2 = await app.fetch(delReq2, testEnv);
+    expect(delRes2.status).toBe(200);
+
+    // 9. Age the deletion timestamp to expired (e.g. -8 days)
+    await env.DB.prepare("UPDATE users SET delete_requested_at = datetime('now', '-8 days') WHERE id = ?").bind(userId).run();
+
+    // 10. Execute the scheduled deletion cleanup
+    await cleanupScheduledDeletions(env);
 
     // Verify that the active runner's WebSocket is closed with GDPR status 1008
     const closeCode = await Promise.race([
       closePromise,
-      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("WebSocket did not close")), 1000))
+      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("WebSocket did not close")), 2000))
     ]);
     expect(closeCode).toBe(1008);
 
-    // 7. Verify all entries and storage object are deleted
+    // 11. Verify all entries and storage object are deleted
     const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
     const projPost = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
     const memberPost = await env.DB.prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, userId).first();

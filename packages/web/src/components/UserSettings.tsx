@@ -42,22 +42,14 @@ export function UserSettings() {
                     throw new Error(data.error || 'Failed to delete account');
                 }
                 
-                // Clear cache & credentials
-                localStorage.clear();
-                sessionStorage.clear();
-                try {
-                    indexedDB.deleteDatabase('swazz-db');
-                } catch (dbErr) {
-                    console.error("Failed to delete IndexedDB:", dbErr);
-                }
+                useAppStore.setState(state => ({
+                    userProfile: state.userProfile ? {
+                        ...state.userProfile,
+                        deleteRequestedAt: new Date().toISOString()
+                    } : null
+                }));
                 
-                // Clear cookies
-                document.cookie.split(";").forEach((c) => {
-                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-                });
-
-                // Redirect to home/registration
-                window.location.href = '/';
+                setDeleteState('idle');
             } catch (err: any) {
                 console.error(err);
                 setDeleteError(err.message || 'An error occurred during account deletion');

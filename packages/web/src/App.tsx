@@ -21,6 +21,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
+import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -28,6 +29,7 @@ export default function App() {
     const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
+    const userProfile = useAppStore(state => state.userProfile);
 
     useEffect(() => {
         if (token) {
@@ -48,7 +50,8 @@ export default function App() {
                         username: data.username, 
                         apiKey: data.api_key, 
                         publicKey: data.public_key,
-                        isGuest: data.is_guest
+                        isGuest: data.is_guest,
+                        deleteRequestedAt: data.delete_requested_at
                     } 
                 });
             })
@@ -472,6 +475,24 @@ export default function App() {
 
     if (authEnabled && !token && !isGuest) {
         return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
+    }
+
+    if (userProfile?.deleteRequestedAt) {
+        return (
+            <DeletionOverlay
+                deleteRequestedAt={userProfile.deleteRequestedAt}
+                onCancelSuccess={() => {
+                    useAppStore.setState(state => ({
+                        userProfile: state.userProfile ? {
+                            ...state.userProfile,
+                            deleteRequestedAt: null
+                        } : null
+                    }));
+                    showToast('Account deletion cancelled successfully', 'success');
+                }}
+                onLogout={logout}
+            />
+        );
     }
 
     return (

@@ -110,9 +110,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at FROM users WHERE id = ?')
         .bind(decoded.sub)
-        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number }>();
+        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null }>();
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -129,7 +129,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         username: user.username, 
         api_key: currentApiKey, 
         public_key: user.public_key,
-        is_guest: user.is_guest === 1
+        is_guest: user.is_guest === 1,
+        delete_requested_at: user.delete_requested_at
       });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);
@@ -253,66 +254,32 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     try {
-      // 1. Fetch user profile to get username
-      const user = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?')
+      await c.env.DB.prepare('UPDATE users SET delete_requested_at = datetime(\'now\') WHERE id = ?')
         .bind(userId)
-        .first<{ username: string }>();
+        .run();
 
-      // 2. Fetch and delete scan report R2 objects associated with the user
-      const { results: scans } = await c.env.DB.prepare(`
-        SELECT report_url FROM scans 
-        WHERE user_id = ? OR project_id IN (
-          SELECT project_id FROM project_members WHERE user_id = ?
-        )
-      `).bind(userId, userId).all<{ report_url: string | null }>();
-
-      if (scans && scans.length > 0) {
-        for (const scan of scans) {
-          if (scan.report_url) {
-            try {
-              await c.env.STORAGE.delete(scan.report_url);
-            } catch (r2Err) {
-              console.error(`Failed to delete R2 report object ${scan.report_url}:`, r2Err);
-            }
-          }
-        }
-      }
-
-      // 3. Revoke and disconnect active WebSocket runner connections in Durable Object
-      try {
-        const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-        const stub = c.env.COORDINATOR_DO.get(doId);
-        const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
-          method: 'POST'
-        }));
-        if (!doRes.ok) {
-          console.error("Failed to revoke runner connections in DO:", await doRes.text());
-        }
-      } catch (doErr) {
-        console.error("Failed to invoke DO /revoke-user:", doErr);
-      }
-
-      // 4. Batch delete user's data from D1 database in cascading order
-      const queries = [
-        c.env.DB.prepare('DELETE FROM scans WHERE project_id IN (SELECT project_id FROM project_members WHERE user_id = ?) OR user_id = ?').bind(userId, userId),
-        c.env.DB.prepare('DELETE FROM scan_configs WHERE project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)').bind(userId),
-        c.env.DB.prepare('DELETE FROM projects WHERE id IN (SELECT project_id FROM project_members WHERE user_id = ?)').bind(userId),
-        c.env.DB.prepare('DELETE FROM project_members WHERE project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)').bind(userId),
-        c.env.DB.prepare('DELETE FROM project_members WHERE user_id = ?').bind(userId),
-        c.env.DB.prepare('DELETE FROM runners WHERE user_id = ?').bind(userId),
-        c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),
-      ];
-
-      if (user && user.username) {
-        queries.push(c.env.DB.prepare('DELETE FROM login_attempts WHERE username = ?').bind(user.username));
-      }
-
-      await c.env.DB.batch(queries);
-
-      return c.json({ status: 'deleted' });
+      return c.json({ status: 'deletion_scheduled', eta_days: 7 });
     } catch (err: any) {
-      console.error("Failed to delete user account & data:", err);
-      return c.json({ error: err.message || 'Failed to delete user account' }, 500);
+      console.error("Failed to schedule user account deletion:", err);
+      return c.json({ error: err.message || 'Failed to schedule user account deletion' }, 500);
+    }
+  });
+
+  app.post('/api/users/me/cancel-deletion', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    try {
+      await c.env.DB.prepare('UPDATE users SET delete_requested_at = NULL WHERE id = ?')
+        .bind(userId)
+        .run();
+
+      return c.json({ status: 'deletion_cancelled' });
+    } catch (err: any) {
+      console.error("Failed to cancel user account deletion:", err);
+      return c.json({ error: err.message || 'Failed to cancel deletion' }, 500);
     }
   });
 }
