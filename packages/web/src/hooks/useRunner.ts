@@ -254,7 +254,7 @@ export function useRunner(proxyUrl: string) {
 
             const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/stop`, { 
                 method: 'POST',
-                ...(Object.keys(headers).length > 0 ? { headers } : {})
+                headers
             });
             if (!res.ok) throw new Error('Failed to stop run');
         } catch (err) {
@@ -277,7 +277,7 @@ export function useRunner(proxyUrl: string) {
 
         const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/pause`, { 
             method: 'POST',
-            ...(Object.keys(headers).length > 0 ? { headers } : {})
+            headers
         });
         if (!res.ok) throw new Error('Failed to pause');
         useAppStore.setState({ isPaused: true });
@@ -293,7 +293,7 @@ export function useRunner(proxyUrl: string) {
 
         const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/resume`, { 
             method: 'POST',
-            ...(Object.keys(headers).length > 0 ? { headers } : {})
+            headers
         });
         if (!res.ok) throw new Error('Failed to resume');
         useAppStore.setState({ isPaused: false });

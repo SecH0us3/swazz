@@ -12,7 +12,7 @@ export const csrfMiddleware = (): MiddlewareHandler => {
     // If missing, generate a new token (UUID) and set the csrf_token cookie
     if (!csrfToken) {
       csrfToken = crypto.randomUUID();
-      const isSecure = c.req.url.startsWith('https://') || c.req.url.includes('localhost') || c.req.url.includes('127.0.0.1');
+      const isSecure = c.req.url.startsWith('https://');
       setCookie(c, 'csrf_token', csrfToken, {
         path: '/',
         httpOnly: true,
