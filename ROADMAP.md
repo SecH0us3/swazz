@@ -126,7 +126,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Weak Password Rejection & Strength Meter:** Reject weak passwords during registration using a blacklist or k-Anonymity (Pwned Passwords). Add a dynamic password strength meter on the UI, encouraging password manager usage.
     - **Passwordless Option:** Support magic link authentication via short-lived, single-use email tokens verified against the client IP/device.
 
-- [ ] **Task 92: Modern Landing Page with Popup Authentication**
+- [/] **Task 92: Modern Landing Page with Popup Authentication**
   - **Design Goal:** Replace the current login/registration screen with a high-converting, premium-looking sales landing page, opening the login/registration forms inside a modern, glassmorphic popup modal.
   - **Implementation Details:**
     - Design a modern landing page showcasing Swazz features, benefits, and call-to-actions.
@@ -138,6 +138,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a strict destination whitelist/blacklist check in the fuzzer runner to prevent scanning internal cloud/private endpoints (e.g. metadata service `169.254.169.254` or local loopback `127.0.0.1`).
     - Audit how the runner executes shell commands, binds keys, or mounts filesystems during runner execution.
     - Provide a security guide for sandboxing runners in Docker containers (e.g., using `--cap-drop`, rootless mode, and CPU/memory constraints).
+
+- [ ] **Task 94: Support Billing Plans & Admin Plan Management**
+  - **Design Goal:** Support billing plans (Free by default) and allow manual plan upgrades/downgrades to "Supporter Plan" by administrators.
+  - **Implementation Details:**
+    - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
+    - Set the default plan to 'Free' during new user registration in the Edge Coordinator.
+    - Implement a mechanism (database script or coordinator admin endpoint) for manually updating user plans to 'Supporter Plan'.
+
 
 
 
