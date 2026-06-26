@@ -19,7 +19,7 @@
 Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, fuzzes target endpoints, expands grouped findings, inspects a detailed SQL Injection error with mutation diff, and navigates project and user settings:
 
 <p align="center">
-  <video src="docs/assets/swazz_demo.webm" width="800" controls autoplay muted loop></video>
+  <video src="./docs/assets/swazz_demo.webm" width="800" controls autoplay muted loop></video>
 </p>
 
 ---
