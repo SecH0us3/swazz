@@ -139,6 +139,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Audit how the runner executes shell commands, binds keys, or mounts filesystems during runner execution.
     - Provide a security guide for sandboxing runners in Docker containers (e.g., using `--cap-drop`, rootless mode, and CPU/memory constraints).
 
+- [ ] **Task 94: Support Billing Plans & Admin Plan Management**
+  - **Design Goal:** Support billing plans (Free by default) and allow manual plan upgrades/downgrades to "Supporter Plan" by administrators.
+  - **Implementation Details:**
+    - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
+    - Set the default plan to 'Free' during new user registration in the Edge Coordinator.
+    - Implement a mechanism (database script or coordinator admin endpoint) for manually updating user plans to 'Supporter Plan'.
+
+
 
 
 

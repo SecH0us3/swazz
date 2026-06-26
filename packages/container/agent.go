@@ -328,7 +328,13 @@ func startAgent(args []string) {
 				defer r.Unsubscribe(sub)
 				for ev := range sub {
 					if ev.Type == "result" {
-						if res, ok := ev.Data.(*swagger.FuzzResult); ok {
+						var res *swagger.FuzzResult
+						if rPtr, ok := ev.Data.(*swagger.FuzzResult); ok {
+							res = rPtr
+						} else if rVal, ok := ev.Data.(swagger.FuzzResult); ok {
+							res = &rVal
+						}
+						if res != nil {
 							severity := "ignore"
 							description := fmt.Sprintf("HTTP %d", res.Status)
 							if len(res.AnalyzerFindings) > 0 {

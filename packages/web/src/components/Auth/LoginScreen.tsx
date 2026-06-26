@@ -266,16 +266,6 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                             <h3>Compliance Mapping</h3>
                             <p>Map vulnerabilities to OWASP and industry standards.</p>
                         </div>
-                        <div className="bento-card bento-wide" onClick={() => setSelectedFeature(FEATURE_DETAILS.integration)}>
-                            <div className="bento-icon-wrapper">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                                </svg>
-                            </div>
-                            <h3>Seamless Integration</h3>
-                            <p>Generate SARIF reports for easy integration into existing security ecosystems like GitHub, GitLab, or Jira.</p>
-                        </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.grouping)}>
                             <div className="bento-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -298,7 +288,17 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                             <h3>OpenAPI & GraphQL</h3>
                             <p>Native parsing for all Swagger, Postman, and GraphQL specs.</p>
                         </div>
-                        <div className="bento-card bento-wide" onClick={() => setSelectedFeature(FEATURE_DETAILS.privaterunners)}>
+                        <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.integration)}>
+                            <div className="bento-icon-wrapper">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                </svg>
+                            </div>
+                            <h3>Seamless Integration</h3>
+                            <p>Generate SARIF reports for easy integration into existing security ecosystems like GitHub, GitLab, or Jira.</p>
+                        </div>
+                        <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.privaterunners)}>
                             <div className="bento-icon-wrapper">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
@@ -385,16 +385,6 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
                 {/* Pricing & Sponsorship Section */}
                 <section id="pricing" className="landing-pricing-section">
-                    <div className="sponsor-alert-banner">
-                        <svg className="banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                        <span>You must be logged in to sponsor SecH0us3.</span>
-                        <button type="button" className="banner-link-btn" onClick={() => openAuthModal(false)}>Sign In</button>
-                    </div>
-
                     <h2 className="landing-section-title">Empowering the Community</h2>
 
                     <div className="pricing-cards-grid">
