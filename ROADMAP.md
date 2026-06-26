@@ -126,7 +126,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - **Weak Password Rejection & Strength Meter:** Reject weak passwords during registration using a blacklist or k-Anonymity (Pwned Passwords). Add a dynamic password strength meter on the UI, encouraging password manager usage.
     - **Passwordless Option:** Support magic link authentication via short-lived, single-use email tokens verified against the client IP/device.
 
-- [ ] **Task 92: Modern Landing Page with Popup Authentication**
+- [/] **Task 92: Modern Landing Page with Popup Authentication**
   - **Design Goal:** Replace the current login/registration screen with a high-converting, premium-looking sales landing page, opening the login/registration forms inside a modern, glassmorphic popup modal.
   - **Implementation Details:**
     - Design a modern landing page showcasing Swazz features, benefits, and call-to-actions.
