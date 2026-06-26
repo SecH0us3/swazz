@@ -655,46 +655,7 @@
     color: var(--accent-neon);
 }
 
-/* Footer */
-.landing-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 80px;
-    border-top: 1px solid var(--border-tech);
-    color: var(--text-tech-muted);
-    font-size: var(--font-size-xs);
-    margin-top: var(--space-8);
-}
 
-.footer-links {
-    display: flex;
-    gap: var(--space-5);
-}
-
-.footer-links a {
-    color: var(--text-tech-muted);
-    text-decoration: none;
-    transition: color var(--duration-fast) var(--ease-out);
-}
-
-.footer-links a:hover {
-    color: #ffffff;
-}
-
-.footer-socials {
-    display: flex;
-    gap: var(--space-4);
-}
-
-.footer-socials a {
-    color: var(--text-tech-muted);
-    transition: color var(--duration-fast) var(--ease-out);
-}
-
-.footer-socials a:hover {
-    color: var(--accent-neon);
-}
 
 /* ─── Auth Popup Modal ─────────────────────────────────────── */
 
