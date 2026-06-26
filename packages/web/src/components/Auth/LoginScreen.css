@@ -685,6 +685,11 @@
     background-color: var(--border-tech);
 }
 
+.auth-modal-close:focus-visible {
+    outline: 2px solid var(--accent-neon);
+    color: #ffffff;
+}
+
 .login-header {
     text-align: center;
     margin-bottom: var(--space-6);

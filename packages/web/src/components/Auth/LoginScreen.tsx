@@ -80,7 +80,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
     const [showModal, setShowModal] = useState(() => {
         // Auto-open modal for E2E tests to keep them compatible
-        return typeof navigator !== 'undefined' && (navigator.webdriver || window.location.search.includes('e2e'));
+        return typeof window !== 'undefined' && (window.navigator?.webdriver || window.location.search.includes('e2e'));
     });
 
     useEffect(() => {
@@ -159,6 +159,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     };
 
     const closeAuthModal = () => {
+        if (isLoading) return;
         setShowModal(false);
         setTwoFactorRequired(false);
         setError('');
@@ -460,7 +461,15 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
             {/* Auth Modal Popup Overlay */}
             {showModal && (
-                <div className="auth-modal-backdrop" onClick={closeAuthModal}>
+                <div 
+                    className="auth-modal-backdrop" 
+                    onClick={closeAuthModal}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                            closeAuthModal();
+                        }
+                    }}
+                >
                     <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
                         <button type="button" className="auth-modal-close" onClick={closeAuthModal} aria-label="Close modal">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -487,6 +496,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                         <label htmlFor="twoFactorCode">Verification Code</label>
                                         <input
                                             type="text"
+                                            inputMode="numeric"
                                             id="twoFactorCode"
                                             name="twoFactorCode"
                                             value={twoFactorCode}
@@ -556,6 +566,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                             required
                                             pattern="^[a-zA-Z0-9_\-]{3,20}$"
                                             title="3 to 20 characters, alphanumeric, including hyphen or underscore"
+                                            autoFocus
                                         />
                                         <span id="username-hint" className="field-hint">3-20 characters (letters, numbers, _ or -)</span>
                                     </div>
