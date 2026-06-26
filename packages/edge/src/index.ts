@@ -8,6 +8,7 @@ import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
 import { cleanupExpiredGuests, cleanupScheduledDeletions } from './utils/cleanup';
+import { csrfMiddleware } from './utils/csrf';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -20,13 +21,15 @@ app.use('*', async (c, next) => {
   const corsMiddleware = cors({
     origin: allowedOrigins.includes('*') ? '*' : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowHeaders: ['Content-Type', 'Authorization', 'Upgrade'],
-    exposeHeaders: ['Content-Length', 'Content-Signal'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Upgrade', 'X-CSRF-Token'],
+    exposeHeaders: ['Content-Length', 'Content-Signal', 'X-CSRF-Token'],
     maxAge: 86400,
   });
   
   return await corsMiddleware(c, next);
 });
+
+app.use('/api/*', csrfMiddleware());
 
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;

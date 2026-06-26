@@ -1,3 +1,5 @@
+import { useAppStore } from '../store/appStore.js';
+
 // In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -11,6 +13,10 @@ export async function loadSwaggerUrl(
     const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
     if (token) {
         requestHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    const csrfToken = useAppStore.getState().csrfToken;
+    if (csrfToken) {
+        requestHeaders['X-CSRF-Token'] = csrfToken;
     }
 
     const res = await fetch(`${PROXY_URL}/api/parse`, {

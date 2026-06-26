@@ -38,13 +38,18 @@ export function UserSettings() {
         setSetupSuccess('');
         setIs2faLoading(true);
         const token = localStorage.getItem('swazz_token');
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
         try {
             const res = await fetch(`${PROXY_URL}/api/auth/2fa/setup`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify({ password: confirmPassword })
             });
             const data = await res.json();
@@ -68,13 +73,18 @@ export function UserSettings() {
         setSetupSuccess('');
         setIs2faLoading(true);
         const token = localStorage.getItem('swazz_token');
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
         try {
             const res = await fetch(`${PROXY_URL}/api/auth/2fa/verify`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify({ code: totpCode, password: confirmPassword })
             });
             const data = await res.json();
@@ -108,13 +118,18 @@ export function UserSettings() {
         setSetupSuccess('');
         setIs2faLoading(true);
         const token = localStorage.getItem('swazz_token');
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
         try {
             const res = await fetch(`${PROXY_URL}/api/auth/2fa/disable`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify({ code: totpCode, password: confirmPassword })
             });
             const data = await res.json();
@@ -149,12 +164,17 @@ export function UserSettings() {
             setDeleteState('deleting');
             setDeleteError('');
             const token = localStorage.getItem('swazz_token');
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = {
+                'Authorization': `Bearer ${token}`
+            };
+            if (csrfToken) {
+                headers['X-CSRF-Token'] = csrfToken;
+            }
             try {
                 const res = await fetch(`${PROXY_URL}/api/users/me`, {
                     method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers
                 });
                 if (!res.ok) {
                     const data = await res.json();

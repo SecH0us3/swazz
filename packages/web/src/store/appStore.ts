@@ -59,10 +59,12 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
 
 export interface UserSlice {
     userProfile: { username: string; apiKey: string; publicKey?: string | null; isGuest?: boolean; deleteRequestedAt?: string | null; twoFactorEnabled?: boolean } | null;
+    csrfToken: string | null;
 }
 
 const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
     userProfile: null,
+    csrfToken: null,
 });
 
 export interface ProjectSlice {
