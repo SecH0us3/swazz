@@ -1,5 +1,29 @@
+export async function cleanupSecurityTables(db: any): Promise<void> {
+  try {
+    const challengesRes = await db.prepare(
+      "DELETE FROM login_challenges WHERE expires_at < datetime('now')"
+    ).run();
+    if (challengesRes.meta?.changes > 0) {
+      console.log(`Cleaned up ${challengesRes.meta?.changes || 0} expired login challenges.`);
+    }
+
+
+    const rateLimitsRes = await db.prepare(
+      "DELETE FROM rate_limits WHERE reset_at < datetime('now')"
+    ).run();
+    if (rateLimitsRes.meta?.changes > 0) {
+      console.log(`Cleaned up ${rateLimitsRes.meta?.changes || 0} expired rate limits.`);
+    }
+  } catch (err) {
+    console.error("Failed to clean up security tables:", err);
+  }
+}
+
 export async function cleanupExpiredGuests(db: any): Promise<void> {
   try {
+    // Run security tables cleanup at the same time
+    await cleanupSecurityTables(db);
+
     // 1. Find all expired guest users
     const expiredGuests = await db.prepare(
       "SELECT id, username FROM users WHERE is_guest = 1 AND expires_at < datetime('now') LIMIT 20"

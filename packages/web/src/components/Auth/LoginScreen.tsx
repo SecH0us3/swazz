@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useAppStore } from '../../store/appStore.js';
+import { useAuth } from '../../hooks/useAuth.js';
 import './LoginScreen.css';
 
 interface LoginScreenProps {
-    onLogin: (username: string, password: string, twoFactorCode?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
-    onRegister: (username: string, password: string) => Promise<void>;
-    onGuest?: () => Promise<void>;
+    onLogin: (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
+    onRegister: (username: string, password: string, email?: string, turnstileToken?: string) => Promise<void>;
+    onGuest?: (turnstileToken?: string) => Promise<void>;
 }
 
 const FEATURE_DETAILS = {
@@ -67,9 +69,14 @@ const FEATURE_DETAILS = {
 };
 
 export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) {
+    const turnstileSiteKey = useAppStore(state => state.turnstileSiteKey);
+    const [turnstileResponse, setTurnstileResponse] = useState('');
+    const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
+
     const [isRegistering, setIsRegistering] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -82,6 +89,70 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         // Auto-open modal for E2E tests to keep them compatible
         return typeof window !== 'undefined' && (window.navigator?.webdriver || window.location.search.includes('e2e'));
     });
+
+    // Initialize Turnstile script dynamically
+    useEffect(() => {
+        if (!turnstileSiteKey) return;
+        const scriptId = 'cf-turnstile-script';
+        let script = document.getElementById(scriptId) as HTMLScriptElement;
+        if (!script) {
+            script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+            script.async = true;
+            script.defer = true;
+            document.body.appendChild(script);
+        }
+    }, [turnstileSiteKey]);
+
+    // Explicitly render Turnstile when container is available
+    useEffect(() => {
+        if (!turnstileSiteKey) return;
+        
+        let active = true;
+        let widgetId: string | null = null;
+        
+        const checkAndRender = () => {
+            if (!active) return;
+            const container = document.getElementById('cf-turnstile-container');
+            if (container && (window as any).turnstile) {
+                try {
+                    // Clear the container first to avoid double rendering issues
+                    container.innerHTML = '';
+                    
+                    widgetId = (window as any).turnstile.render('#cf-turnstile-container', {
+                        sitekey: turnstileSiteKey,
+                        callback: (token: string) => {
+                            setTurnstileResponse(token);
+                        },
+                        'expired-callback': () => {
+                            setTurnstileResponse('');
+                        },
+                        'error-callback': () => {
+                            setTurnstileResponse('');
+                        }
+                    });
+                    setTurnstileWidgetId(widgetId);
+                } catch (e) {
+                    console.error("Turnstile render error:", e);
+                }
+            } else {
+                setTimeout(checkAndRender, 100);
+            }
+        };
+
+        checkAndRender();
+
+        return () => {
+            active = false;
+            setTurnstileResponse('');
+            if (widgetId && (window as any).turnstile) {
+                try {
+                    (window as any).turnstile.remove(widgetId);
+                } catch (e) {}
+            }
+        };
+    }, [turnstileSiteKey, isRegistering]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,15 +170,37 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [fullscreenImageUrl, selectedFeature]);
 
+    const calculatePasswordStrength = (pwd: string) => {
+        const feedback: string[] = [];
+        let score = 0;
+        if (pwd.length >= 12) {
+            score = 4;
+        } else {
+            feedback.push('At least 12 characters');
+            if (pwd.length >= 8) {
+                score = 2;
+            } else if (pwd.length >= 4) {
+                score = 1;
+            } else {
+                score = 0;
+            }
+        }
+        return { score, feedback };
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
         try {
             if (isRegistering) {
-                await onRegister(username, password);
+                const { score } = calculatePasswordStrength(password);
+                if (score < 4) {
+                    throw new Error('Password must be at least 12 characters long.');
+                }
+                await onRegister(username, password, email || undefined, turnstileResponse);
             } else {
-                const res = await onLogin(username, password, twoFactorRequired ? twoFactorCode : undefined);
+                const res = await onLogin(username, password, twoFactorRequired ? twoFactorCode : undefined, turnstileResponse);
                 if (res && res.twoFactorRequired) {
                     setTwoFactorRequired(true);
                     setTwoFactorCode('');
@@ -115,6 +208,12 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             }
         } catch (err: any) {
             setError(err.message);
+            if ((window as any).turnstile && turnstileWidgetId) {
+                try {
+                    (window as any).turnstile.reset(turnstileWidgetId);
+                    setTurnstileResponse('');
+                } catch (e) {}
+            }
         } finally {
             setIsLoading(false);
         }
@@ -122,21 +221,37 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
     const handleRegisterClick = async (e: React.MouseEvent) => {
         e.preventDefault();
-        const form = (e.currentTarget as HTMLElement).closest('form');
-        if (form && !form.reportValidity()) {
-            return;
+        
+        if (username && password) {
+            const form = (e.currentTarget as HTMLElement).closest('form');
+            if (form && form.reportValidity()) {
+                setError('');
+                setIsRegistering(true);
+                setIsLoading(true);
+                try {
+                    const { score } = calculatePasswordStrength(password);
+                    if (score < 4) {
+                        throw new Error('Password must be at least 12 characters long.');
+                    }
+                    await onRegister(username, password, email || undefined, turnstileResponse);
+                    return;
+                } catch (err: any) {
+                    setError(err.message);
+                    if ((window as any).turnstile && turnstileWidgetId) {
+                        try {
+                            (window as any).turnstile.reset(turnstileWidgetId);
+                            setTurnstileResponse('');
+                        } catch (e) {}
+                    }
+                    setIsRegistering(false);
+                    setIsLoading(false);
+                    return;
+                }
+            }
         }
+        
         setError('');
         setIsRegistering(true);
-        setIsLoading(true);
-        try {
-            await onRegister(username, password);
-        } catch (err: any) {
-            setError(err.message);
-            setIsRegistering(false);
-        } finally {
-            setIsLoading(false);
-        }
     };
 
     const handleGuestClick = async () => {
@@ -144,9 +259,15 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         setError('');
         setIsLoading(true);
         try {
-            await onGuest();
+            await onGuest(turnstileResponse);
         } catch (err: any) {
             setError(err.message || 'Failed to enter as guest');
+            if ((window as any).turnstile && turnstileWidgetId) {
+                try {
+                    (window as any).turnstile.reset(turnstileWidgetId);
+                    setTurnstileResponse('');
+                } catch (e) {}
+            }
         } finally {
             setIsLoading(false);
         }
@@ -545,6 +666,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                         <p>Register to start fuzzing</p>
                                     )}
                                 </div>
+
                                 {error && (
                                     <div className="login-error">
                                         <div className="error-content">
@@ -557,102 +679,148 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                         </div>
                                     </div>
                                 )}
+
                                 <form className="login-form" onSubmit={handleSubmit}>
-                                    <div className="form-group">
-                                        <label htmlFor="username">Username</label>
-                                        <input
-                                            key={isRegistering ? "signup-username" : "signin-username"}
-                                            type="text"
-                                            id="username"
-                                            name="username"
-                                            value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
-                                            placeholder="Enter username"
-                                            autoComplete="username"
-                                            required
-                                            pattern="^[a-zA-Z0-9_\-]{3,20}$"
-                                            title="3 to 20 characters, alphanumeric, including hyphen or underscore"
-                                            autoFocus
-                                        />
-                                        <span id="username-hint" className="field-hint">3-20 characters (letters, numbers, _ or -)</span>
-                                    </div>
-                                    <div className="form-group">
-                                        <label htmlFor="password">Password</label>
-                                        <div className="password-input-wrapper">
+                                        <div className="form-group">
+                                            <label htmlFor="username">Username</label>
                                             <input
-                                                key={isRegistering ? "signup-password" : "signin-password"}
-                                                type={showPassword ? "text" : "password"}
-                                                id="password"
-                                                name="password"
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                placeholder="••••••••"
-                                                autoComplete={isRegistering ? "new-password" : "current-password"}
+                                                key={isRegistering ? "signup-username" : "signin-username"}
+                                                type="text"
+                                                id="username"
+                                                name="username"
+                                                value={username}
+                                                onChange={(e) => setUsername(e.target.value)}
+                                                placeholder="Enter username"
+                                                autoComplete="username"
                                                 required
-                                                minLength={8}
+                                                pattern="^[a-zA-Z0-9_\-]{3,20}$"
+                                                title="3 to 20 characters, alphanumeric, including hyphen or underscore"
+                                                autoFocus
                                             />
-                                            <button
-                                                type="button"
-                                                className="password-toggle-btn"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                aria-label={showPassword ? "Hide password" : "Show password"}
-                                            >
-                                                {showPassword ? (
-                                                    <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                                                        <line x1="1" y1="1" x2="23" y2="23"></line>
-                                                    </svg>
-                                                ) : (
-                                                    <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                                        <circle cx="12" cy="12" r="3"></circle>
-                                                    </svg>
-                                                )}
-                                            </button>
+                                            <span id="username-hint" className="field-hint">3-20 characters (letters, numbers, _ or -)</span>
                                         </div>
-                                        {isRegistering && <span className="field-hint">At least 8 characters</span>}
-                                    </div>
-                                    
-                                    <div className="login-actions">
-                                        <button type="submit" disabled={isLoading} className="login-btn">
-                                            {isLoading && !isRegistering ? (
-                                                <span className="spinner"></span>
-                                            ) : (
-                                                isRegistering ? 'Get Started' : 'Enter'
+
+                                        {isRegistering && (
+                                            <div className="form-group">
+                                                <label htmlFor="email">Email Address (Optional)</label>
+                                                <input
+                                                    type="email"
+                                                    id="email"
+                                                    name="email"
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    placeholder="you@example.com"
+                                                    autoComplete="email"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="form-group">
+                                            <label htmlFor="password">Password</label>
+                                            <div className="password-input-wrapper">
+                                                <input
+                                                    key={isRegistering ? "signup-password" : "signin-password"}
+                                                    type={showPassword ? "text" : "password"}
+                                                    id="password"
+                                                    name="password"
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    placeholder="••••••••••••"
+                                                    autoComplete={isRegistering ? "new-password" : "current-password"}
+                                                    required
+                                                    minLength={12}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="password-toggle-btn"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    aria-label={showPassword ? "Hide password" : "Show password"}
+                                                >
+                                                    {showPassword ? (
+                                                        <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                        </svg>
+                                                    ) : (
+                                                        <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                            <circle cx="12" cy="12" r="3"></circle>
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            </div>
+                                            {isRegistering && (
+                                                <div className="password-strength-container">
+                                                    <div className="password-strength-row">
+                                                        <span className="password-strength-label">Strength:</span>
+                                                        <span className={`password-strength-value strength-${calculatePasswordStrength(password).score}`}>
+                                                            {['Weak', 'Fair', 'Good', 'Strong', 'Excellent'][calculatePasswordStrength(password).score]}
+                                                        </span>
+                                                    </div>
+                                                    <div className="password-strength-bar">
+                                                        <div className={`password-strength-fill strength-${calculatePasswordStrength(password).score}`}></div>
+                                                        <ul className="password-requirements">
+                                                            <li className={`password-req-item ${password.length >= 12 ? 'met' : ''}`}>
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                                    {password.length >= 12 ? (
+                                                                        <polyline points="20 6 9 17 4 12" />
+                                                                    ) : (
+                                                                        <>
+                                                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                                        </>
+                                                                    )}
+                                                                </svg>
+                                                                At least 12 characters
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
                                             )}
-                                        </button>
-                                        {!isRegistering && (
-                                            <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
-                                                {isLoading && isRegistering ? (
+                                        </div>
+
+                                        {turnstileSiteKey && (
+                                            <div style={{ margin: 'var(--space-4) 0', display: 'flex', justifyContent: 'center' }}>
+                                                <div id="cf-turnstile-container" className="cf-turnstile"></div>
+                                            </div>
+                                        )}
+
+                                        <div className="login-actions">
+                                            <button type="submit" disabled={isLoading} className="login-btn">
+                                                {isLoading ? (
                                                     <span className="spinner"></span>
                                                 ) : (
-                                                    'Create'
+                                                    isRegistering ? 'Get Started' : 'Enter'
                                                 )}
                                             </button>
-                                        )}
-                                    </div>
-
-                                    {onGuest && (
-                                        <div className="guest-action-wrapper">
-                                            <span className="guest-divider">or</span>
-                                            <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
-                                                Continue as Guest
-                                            </button>
-                                            <p className="guest-warning">
-                                                * Temporary account. All guest data will be permanently deleted after 24 hours.
-                                            </p>
+                                            {!isRegistering && (
+                                                <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
+                                                    {isLoading && isRegistering ? (
+                                                        <span className="spinner"></span>
+                                                    ) : (
+                                                        'Create'
+                                                    )}
+                                                </button>
+                                            )}
+                                            {isRegistering && (
+                                                <button type="button" onClick={() => { setIsRegistering(false); setError(''); }} disabled={isLoading} className="register-btn">
+                                                    Back to Login
+                                                </button>
+                                            )}
                                         </div>
-                                    )}
-                                </form>
-                                <div className="login-footer">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => { setIsRegistering(true); setError(''); }} 
-                                        className="e2e-signup-btn"
-                                    >
-                                        Sign up
-                                    </button>
-                                </div>
+
+                                        {onGuest && (
+                                            <div className="guest-action-wrapper">
+                                                <span className="guest-divider">or</span>
+                                                <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
+                                                    Continue as Guest
+                                                </button>
+                                                <p className="guest-warning">
+                                                    * Temporary account. All guest data will be permanently deleted after 24 hours.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </form>
                             </>
                         )}
                     </div>

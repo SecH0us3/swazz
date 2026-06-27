@@ -154,6 +154,35 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
     - Add a "Sign in with GitHub" button to the frontend authentication modals.
 
+- [ ] **Task 96: Implement Content Negotiation for Landing Page**
+  - **Design Goal:** Support content negotiation on the landing page so that when a client sends an `Accept: text/markdown` header, the server returns the page content in clean Markdown instead of HTML.
+  - **Implementation Details:**
+    - Check the `Accept` header of incoming requests to the landing page routes.
+    - If the client requests `text/markdown`, return the landing page layout and copy in clean Markdown.
+    - For standard browser requests (requesting `text/html`), continue returning the rich HTML/JS frontend application.
+    - For reference, consult the MDN Content Negotiation specification (https://developer.mozilla.org/en-US/docs/Web/HTTP/Content_negotiation).
+
+- [ ] **Task 97: Closed Beta Launch & Infrastructure Capacity Control**
+  - **Design Goal:** Establish a closed beta registration limit (max 50 users) to progressively scale and stress-test target coordination infrastructure without running into capacity exhaustion.
+  - **Implementation Details:**
+    - Implement a registration counter check in `POST /api/auth/register` to reject new signups once the user registry count reaches 50.
+    - Support admin invites or bypass codes to register extra users manually during the beta phase.
+    - Design status banners in the web client dashboard alerting users about the current beta limits.
+
+- [ ] **Task 98: RSS Feed Integration**
+  - **Design Goal:** Provide a standard RSS feed for product updates, security disclosures, or public scan releases.
+  - **Implementation Details:**
+    - Create a public route (`GET /api/feed.xml` or `/feed.rss`) serving well-formatted RSS XML content.
+    - Render posts, updates, or public releases with proper XML namespaces, publishing dates, and author credits.
+
+- [ ] **Task 99: Secondary Product Blog**
+  - **Design Goal:** Design and mount a realistic secondary blog section/layout to publish technical articles, vulnerability writeups, and security research related to Swazz fuzzer findings.
+  - **Implementation Details:**
+    - Set up a clean, modern blog index and article layout in the frontend web application.
+    - Support markdown article rendering and sharing actions to drive organic technical traffic.
+
+
+
 
 
 

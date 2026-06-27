@@ -44,6 +44,7 @@ invocation_logs = true
 AUTH_ENABLED = "true"
 LIMIT_ANONYMOUS = "true"
 ALLOWED_ORIGINS = "*"
+TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
 
 [triggers]
 crons = [ "0 * * * *" ]

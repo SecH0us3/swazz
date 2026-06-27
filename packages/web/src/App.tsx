@@ -470,6 +470,8 @@ export default function App() {
         } as FuzzResult });
     };
 
+
+
     if (isLoading) {
         return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
     }

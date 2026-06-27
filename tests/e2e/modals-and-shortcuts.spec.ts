@@ -5,11 +5,11 @@ test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
 
-    await page.getByRole('button', { name: 'Sign up' }).click();
+    await page.getByRole('button', { name: 'Create' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('password123');
+    await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });

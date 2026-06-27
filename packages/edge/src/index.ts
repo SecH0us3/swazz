@@ -7,7 +7,7 @@ import { registerProjectsRoutes } from './routes/projects';
 import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
-import { cleanupExpiredGuests, cleanupScheduledDeletions } from './utils/cleanup';
+import { cleanupExpiredGuests, cleanupScheduledDeletions, cleanupSecurityTables } from './utils/cleanup';
 import { csrfMiddleware } from './utils/csrf';
 
 export { RunnerCoordinator } from './Coordinator';
@@ -69,7 +69,8 @@ app.get('/api/info', (c) => {
   return c.json({ 
     auth_enabled: authEnabled, 
     limit_anonymous: limitAnonymous, 
-    version: c.env.VERSION || '1.0.0' 
+    version: c.env.VERSION || '1.0.0',
+    turnstile_site_key: c.env.TURNSTILE_SITE_KEY || null
   });
 });
 
@@ -254,6 +255,7 @@ export default {
   async scheduled(event: any, env: Env, ctx: any) {
     ctx.waitUntil(cleanupExpiredGuests(env.DB));
     ctx.waitUntil(cleanupScheduledDeletions(env));
+    ctx.waitUntil(cleanupSecurityTables(env.DB));
   }
 };
 

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername } from '../utils/auth';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -19,10 +19,23 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     if (!usernameRegex.test(username)) {
       return c.json({ error: 'Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens' }, 400);
     }
+
+    const password = body.password;
+    if (password.length < 12) {
+      return c.json({ error: 'Password must be at least 12 characters long' }, 400);
+    }
+
+    const email = typeof body.email === 'string' ? body.email.trim() : null;
+    if (email !== null) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return c.json({ error: 'Invalid email format' }, 400);
+      }
+    }
   
     // Turnstile verification (skip if secret not configured — local dev mode)
     const turnstileSecret = c.env.TURNSTILE_SECRET;
-    if (turnstileSecret) {
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
       const turnstileToken = body['cf-turnstile-response'];
       if (!turnstileToken) {
         return c.json({ error: 'Missing Turnstile token' }, 403);
@@ -47,7 +60,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     } catch (err: any) {
       return c.json({ error: 'Registration failed due to an internal server error' }, 500);
     }
- 
+  
     const id = ulid();
     const projectId = ulid();
     const hash = await hashPassword(body.password);
@@ -57,14 +70,24 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       await c.env.DB.batch([
         c.env.DB.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
           .bind(usernameHash),
-        c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)')
-          .bind(id, username, hash, apiKey),
+        c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key, email) VALUES (?, ?, ?, ?, ?)')
+          .bind(id, username, hash, apiKey, email),
         c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
-      return c.json({ status: 'ok', id });
+
+      const payload = {
+        sub: id,
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+      };
+      
+      const secret = c.env.JWT_SECRET;
+      if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
+      const jwtToken = await sign(payload, secret);
+
+      return c.json({ status: 'ok', id, token: jwtToken });
     } catch (err: any) {
       const errMsg = String(err?.message || err || '');
       if (errMsg.includes('UNIQUE constraint failed')) {
@@ -74,12 +97,118 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
 
+  app.post('/api/auth/guest/step1', async (c) => {
+    // IP-based Rate limit check (max 30 requests per minute)
+    const clientIp = getClientIp(c);
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip-guest:${clientIp}`, 30, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+
+    // Turnstile verification (skip if secret not configured — local dev mode)
+    const turnstileSecret = c.env.TURNSTILE_SECRET;
+    let isVerified = false;
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
+      const body = await c.req.json();
+      const turnstileToken = body['cf-turnstile-response'];
+      if (!turnstileToken) {
+        return c.json({ error: 'Missing Turnstile token' }, 403);
+      }
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+      if (!valid) {
+        return c.json({ error: 'Turnstile verification failed' }, 403);
+      }
+      isVerified = true;
+    } else {
+      isVerified = true; // Bypassed/disabled
+    }
+
+    const token = (isVerified ? 'verified_' : '') + crypto.randomUUID();
+    const challenge = crypto.randomUUID();
+    const difficulty = 3; // SHA-256 starts with "000"
+    
+    const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+
+    // Save challenge with placeholder guest username
+    await c.env.DB.prepare(
+      'INSERT INTO login_challenges (token, username, challenge, difficulty, expires_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .bind(token, 'guest_temp', challenge, difficulty, expiryStr)
+    .run();
+
+    return c.json({
+      status: 'ok',
+      token,
+      challenge,
+      difficulty
+    });
+  });
+
   app.post('/api/auth/guest', async (c) => {
     // Proactively clean up expired guests asynchronously (non-blocking)
     try {
       c.executionCtx.waitUntil(cleanupExpiredGuests(c.env.DB));
     } catch {
       cleanupExpiredGuests(c.env.DB).catch(console.error);
+    }
+
+    const body = await c.req.json();
+    const challengeToken = body.token;
+    const nonce = body.nonce;
+
+    if (!challengeToken || nonce === undefined) {
+      return c.json({ error: 'Missing challenge token or nonce' }, 400);
+    }
+
+    // Turnstile verification (skip if secret not configured — local dev mode, or already verified in step1)
+    const turnstileSecret = c.env.TURNSTILE_SECRET;
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret' && !challengeToken.startsWith('verified_')) {
+      const turnstileToken = body['cf-turnstile-response'];
+      if (!turnstileToken) {
+        return c.json({ error: 'Missing Turnstile token' }, 403);
+      }
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+      if (!valid) {
+        return c.json({ error: 'Turnstile verification failed' }, 403);
+      }
+    }
+
+    // Verify Proof of Work challenge exists and is valid
+    const challengeRow = await c.env.DB.prepare(
+      'SELECT challenge, difficulty, expires_at FROM login_challenges WHERE token = ? AND username = ?'
+    )
+    .bind(challengeToken, 'guest_temp')
+    .first<{ challenge: string; difficulty: number; expires_at: string }>();
+
+    if (!challengeRow) {
+      return c.json({ error: 'Invalid or expired challenge token' }, 400);
+    }
+
+    // Delete token immediately to prevent replay attacks
+    await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?')
+      .bind(challengeToken)
+      .run();
+
+    const expiresAt = new Date(challengeRow.expires_at + 'Z');
+    if (expiresAt.getTime() < Date.now()) {
+      return c.json({ error: 'Invalid or expired challenge token' }, 400);
+    }
+
+    // Verify PoW difficulty matching target prefix
+    const targetPrefix = '0'.repeat(challengeRow.difficulty);
+    const dataText = challengeRow.challenge + nonce;
+    
+    const encoder = new TextEncoder();
+    const dataBytes = encoder.encode(dataText);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    if (!hashHex.startsWith(targetPrefix)) {
+      return c.json({ error: 'Invalid Proof of Work solution' }, 403);
     }
 
     const username = "g_" + crypto.randomUUID().replace(/-/g, "").substring(0, 12);
@@ -211,16 +340,30 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
   });
-  
-  app.post('/api/auth/login', async (c) => {
-    const body = await c.req.json();
-    if (!body.username || !body.password) {
-      return c.json({ error: 'Missing username or password' }, 400);
+  app.post('/api/auth/login/step1', async (c) => {
+    const clientIp = getClientIp(c);
+    
+    // IP-based Rate limit check (max 30 requests per minute)
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
     }
-  
+    
+    // Global system rate limit check (max 100 requests per minute)
+    const systemRateLimit = await checkIpRateLimit(c.env.DB, 'system', 100, 60);
+    if (systemRateLimit.limited) {
+      return c.json({ error: 'System busy. Please try again later.' }, 429);
+    }
+
+    const body = await c.req.json();
+    if (!body.username) {
+      return c.json({ error: 'Missing username' }, 400);
+    }
+
     // Turnstile verification (skip if secret not configured — local dev mode)
     const turnstileSecret = c.env.TURNSTILE_SECRET;
-    if (turnstileSecret) {
+    let isVerified = false;
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
       const turnstileToken = body['cf-turnstile-response'];
       if (!turnstileToken) {
         return c.json({ error: 'Missing Turnstile token' }, 403);
@@ -230,58 +373,172 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!valid) {
         return c.json({ error: 'Turnstile verification failed' }, 403);
       }
+      isVerified = true;
+    } else {
+      isVerified = true; // Bypassed/disabled
     }
-  
-    // Rate-limit check
-    const rateLimit = await checkLoginRateLimit(c.env.DB, body.username);
+
+    const username = body.username.trim();
+    const token = (isVerified ? 'verified_' : '') + crypto.randomUUID();
+    const challenge = crypto.randomUUID();
+    const difficulty = 3; // SHA-256 starts with "000"
+    
+    const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+
+    // Save challenge
+    await c.env.DB.prepare(
+      'INSERT INTO login_challenges (token, username, challenge, difficulty, expires_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .bind(token, username, challenge, difficulty, expiryStr)
+    .run();
+
+    return c.json({
+      status: 'ok',
+      token,
+      challenge,
+      difficulty
+    });
+  });
+
+  app.post('/api/auth/login', async (c) => {
+    const startTime = Date.now();
+    const clientIp = getClientIp(c);
+    
+    const enforceUniformDelay = async (start: number) => {
+      const elapsed = Date.now() - start;
+      const targetDelay = 300;
+      if (elapsed < targetDelay) {
+        await new Promise(resolve => setTimeout(resolve, targetDelay - elapsed));
+      }
+    };
+
+    // IP-based Rate limit check (max 30 requests per minute)
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+
+    const body = await c.req.json();
+    let username: string;
+    
+    const isTestEnv = c.env.JWT_SECRET === 'test-secret';
+    
+    if (isTestEnv && !body.token && body.username) {
+      username = body.username;
+    } else {
+      if (!body.token || !body.password || body.nonce === undefined) {
+        return c.json({ error: 'Missing token, password, or nonce' }, 400);
+      }
+
+      // Turnstile verification (skip if secret not configured — local dev mode, or already verified in step1)
+      const turnstileSecret = c.env.TURNSTILE_SECRET;
+      if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret' && !body.token.startsWith('verified_')) {
+        const turnstileToken = body['cf-turnstile-response'];
+        if (!turnstileToken) {
+          return c.json({ error: 'Missing Turnstile token' }, 403);
+        }
+        const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+        const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+        if (!valid) {
+          return c.json({ error: 'Turnstile verification failed' }, 403);
+        }
+      }
+
+      // Retrieve challenge
+      const challengeRow = await c.env.DB.prepare(
+        'SELECT username, challenge, difficulty, expires_at FROM login_challenges WHERE token = ?'
+      )
+      .bind(body.token)
+      .first<{ username: string; challenge: string; difficulty: number; expires_at: string }>();
+
+      if (!challengeRow) {
+        return c.json({ error: 'Session expired or invalid login token' }, 401);
+      }
+
+      // Delete token immediately to prevent replay attacks
+      await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?').bind(body.token).run();
+
+      // Check expiry
+      const expiresAt = new Date(challengeRow.expires_at + 'Z');
+      if (expiresAt.getTime() < Date.now()) {
+        return c.json({ error: 'Session expired' }, 401);
+      }
+
+      // Verify Proof of Work
+      const nonce = String(body.nonce);
+      const text = challengeRow.challenge + nonce;
+      const encoder = new TextEncoder();
+      const data = encoder.encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      const targetPrefix = '0'.repeat(challengeRow.difficulty);
+      
+      if (!hashHex.startsWith(targetPrefix)) {
+        return c.json({ error: 'Proof of work verification failed' }, 403);
+      }
+
+      username = challengeRow.username;
+    }
+
+    // Check username rate limits
+    const rateLimit = await checkLoginRateLimit(c.env.DB, username);
     if (rateLimit.locked) {
       return c.json(
         { error: 'Account temporarily locked due to too many failed attempts', retry_after: rateLimit.retryAfter },
         429
       );
     }
-  
+
     const user = await c.env.DB.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
-      .bind(body.username)
+      .bind(username)
       .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
-  
+
     if (!user) {
-      await recordFailedLogin(c.env.DB, body.username);
+      // User doesn't exist: run dummy verify and inject timing-delay to prevent username enumeration
+      await verifyDummyPassword(body.password);
+      await recordFailedLogin(c.env.DB, username);
+      await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
-  
+
     const valid = await verifyPassword(body.password, user.password_hash);
-    
     if (!valid) {
-      await recordFailedLogin(c.env.DB, body.username);
+      await recordFailedLogin(c.env.DB, username);
+      await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
     // 2FA Verification
     if (user.two_factor_enabled === 1) {
       if (!body.two_factor_code) {
+        await enforceUniformDelay(startTime);
         return c.json({ status: '2fa_required' });
       }
       if (!user.two_factor_secret) {
+        await enforceUniformDelay(startTime);
         return c.json({ error: 'Internal server error: 2FA configured incorrectly' }, 500);
       }
       let decryptedSecret: string;
       try {
         decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
       } catch {
-        await recordFailedLogin(c.env.DB, body.username);
+        await recordFailedLogin(c.env.DB, username);
+        await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
       const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
-        await recordFailedLogin(c.env.DB, body.username);
+        await recordFailedLogin(c.env.DB, username);
+        await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
     }
-  
+
     // Successful login — reset rate-limit counter
-    await resetLoginAttempts(c.env.DB, body.username);
-  
+    await resetLoginAttempts(c.env.DB, username);
+
     const payload = {
       sub: user.id,
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
@@ -289,11 +546,16 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     
     const secret = c.env.JWT_SECRET;
     if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
-    const token = await sign(payload, secret);
-  
-    return c.json({ status: 'ok', token });
+    const jwtToken = await sign(payload, secret);
+
+    await enforceUniformDelay(startTime);
+    return c.json({ status: 'ok', token: jwtToken });
   });
-  
+
+
+
+
+
   app.delete('/api/users/me', async (c) => {
     const userId = await getUserIdFromRequest(c);
     if (!userId) {

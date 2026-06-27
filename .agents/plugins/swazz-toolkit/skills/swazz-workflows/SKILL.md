@@ -33,3 +33,12 @@ When handling a Task N, delegate to specialized subagents:
 7. Update `README.md` or files in `docs/` to reflect any new configurations or features.
 8. Mark task as `[/]` in ROADMAP.md, generate `walkthrough.md`, wait for review.
 9. Only check off `[x]` upon explicit human consent.
+10. SELF-CRITICAL REVIEW: Before final review, invoke the `self-critical-review` skill to systematically check for dead code, unused CSS styles, UTC timezone compliance, resource/memory leaks, and rule integrations.
+
+## 📋 Code Quality & PR Constraints (AGENTS.md rules)
+* **PR Merges**: NEVER merge a PR without explicit user approval. Do NOT run `gh pr merge` or use the `--auto` flag. Report the PR URL and wait.
+* **Go URL Parameters**: Avoid manual query parameter formatting via string concatenation or `fmt.Sprintf`. Always parse with `net/url` and use the `Query()` API.
+* **Frontend Styles**: No inline layout styles (e.g. `padding`, `margin`, `width`, `height`, `display`) in React component files. Define them in a CSS stylesheet instead.
+* **E2E Test Usernames**: Username registration length is limited to **3 to 20 characters** (`^[a-zA-Z0-9_\-]{3,20}$`). Always generate random test usernames under 20 characters (e.g. using `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`).
+* **1Password Popups**: Ignore sensitive inputs in modals/settings using `data-1p-ignore`.
+

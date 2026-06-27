@@ -180,7 +180,7 @@ beforeAll(async () => {
   }
 });
 
-const testEnv = { ...env, JWT_SECRET: 'test-secret' };
+const testEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
 
 describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {
@@ -198,7 +198,7 @@ describe("Swazz Worker (Hono)", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0" });
+    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0", turnstile_site_key: null });
   });
 });
 
@@ -217,7 +217,7 @@ describe("D1 Database Migrations & API", () => {
     const req = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "newuser", password: "password123" })
+      body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     
     const res = await app.fetch(req, testEnv);
@@ -233,7 +233,7 @@ describe("D1 Database Migrations & API", () => {
     const resShort = await app.fetch(new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "ab", password: "password123" })
+      body: JSON.stringify({ username: "ab", password: "Password123!" })
     }), testEnv);
     expect(resShort.status).toBe(400);
     expect((await resShort.json() as any).error).toContain("Username must be 3-20 characters long");
@@ -242,7 +242,7 @@ describe("D1 Database Migrations & API", () => {
     const resLong = await app.fetch(new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "a".repeat(21), password: "password123" })
+      body: JSON.stringify({ username: "a".repeat(21), password: "Password123!" })
     }), testEnv);
     expect(resLong.status).toBe(400);
     expect((await resLong.json() as any).error).toContain("Username must be 3-20 characters long");
@@ -251,7 +251,7 @@ describe("D1 Database Migrations & API", () => {
     const resChars = await app.fetch(new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "user@name", password: "password123" })
+      body: JSON.stringify({ username: "user@name", password: "Password123!" })
     }), testEnv);
     expect(resChars.status).toBe(400);
     expect((await resChars.json() as any).error).toContain("Username must be 3-20 characters long");
@@ -260,7 +260,7 @@ describe("D1 Database Migrations & API", () => {
     const resNonString = await app.fetch(new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: 123, password: "password123" })
+      body: JSON.stringify({ username: 123, password: "Password123!" })
     }), testEnv);
     expect(resNonString.status).toBe(400);
     expect((await resNonString.json() as any).error).toContain("Missing username or password");
@@ -270,7 +270,7 @@ describe("D1 Database Migrations & API", () => {
     const req = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "newuser", password: "password123" })
+      body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     
     const res = await app.fetch(req, testEnv);
@@ -284,7 +284,7 @@ describe("D1 Database Migrations & API", () => {
     const reqCase = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "NewUser", password: "password123" })
+      body: JSON.stringify({ username: "NewUser", password: "Password123!" })
     });
     const resCase = await app.fetch(reqCase, testEnv);
     expect(resCase.status).toBe(400);
@@ -295,7 +295,7 @@ describe("D1 Database Migrations & API", () => {
     const reqSpace = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "  newuser  ", password: "password123" })
+      body: JSON.stringify({ username: "  newuser  ", password: "Password123!" })
     });
     const resSpace = await app.fetch(reqSpace, testEnv);
     expect(resSpace.status).toBe(400);
@@ -310,7 +310,7 @@ describe("D1 Database Migrations & API", () => {
     const regReq = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const regRes = await app.fetch(regReq, testEnv);
     expect(regRes.status).toBe(200);
@@ -327,7 +327,7 @@ describe("D1 Database Migrations & API", () => {
     const regReq2 = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const regRes2 = await app.fetch(regReq2, testEnv);
     expect(regRes2.status).toBe(400);
@@ -339,7 +339,7 @@ describe("D1 Database Migrations & API", () => {
     const req = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "newuser", password: "password123" })
+      body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     
     const res = await app.fetch(req, testEnv);
@@ -351,10 +351,45 @@ describe("D1 Database Migrations & API", () => {
   });
 
   it("can login as guest, fetch profile with guest flag, and triggers cleanup", async () => {
-    // 1. Login as guest
-    const guestReq = new Request("http://localhost/api/auth/guest", {
+    // Helper to solve PoW in tests
+    const solvePoWTest = async (challenge: string, difficulty: number): Promise<number> => {
+      const prefix = '0'.repeat(difficulty);
+      let nonce = 0;
+      while (true) {
+        const encoder = new TextEncoder();
+        const dataBytes = encoder.encode(challenge + nonce);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        if (hashHex.startsWith(prefix)) {
+          return nonce;
+        }
+        nonce++;
+      }
+    };
+
+    // 1. Get challenge via step1
+    const step1Req = new Request("http://localhost/api/auth/guest/step1", {
       method: "POST",
       headers: { "Content-Type": "application/json" }
+    });
+    const step1Res = await app.fetch(step1Req, testEnv);
+    expect(step1Res.status).toBe(200);
+    const step1Body = await step1Res.json() as any;
+    expect(step1Body.status).toBe("ok");
+    expect(typeof step1Body.token).toBe("string");
+
+    // 2. Solve challenge
+    const nonce = await solvePoWTest(step1Body.challenge, step1Body.difficulty);
+
+    // 3. Login as guest
+    const guestReq = new Request("http://localhost/api/auth/guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: step1Body.token,
+        nonce
+      })
     });
     const guestRes = await app.fetch(guestReq, testEnv);
     expect(guestRes.status).toBe(200);
@@ -413,7 +448,7 @@ describe("D1 Database Migrations & API", () => {
     const req = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "newuser", password: "password123" })
+      body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     const res = await app.fetch(req, testEnv);
 
@@ -427,7 +462,7 @@ describe("D1 Database Migrations & API", () => {
     const regReq = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "deluser", password: "password123" })
+      body: JSON.stringify({ username: "deluser", password: "Password123!" })
     });
     const regRes = await app.fetch(regReq, testEnv);
     expect(regRes.status).toBe(200);
@@ -438,7 +473,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "deluser", password: "password123" })
+      body: JSON.stringify({ username: "deluser", password: "Password123!" })
     });
     const loginRes = await app.fetch(loginReq, testEnv);
     expect(loginRes.status).toBe(200);
@@ -614,7 +649,7 @@ describe("D1 Database Migrations & API", () => {
     const regReq = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const regRes = await app.fetch(regReq, testEnv);
     expect(regRes.status).toBe(200);
@@ -622,7 +657,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq1 = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const loginRes1 = await app.fetch(loginReq1, testEnv);
     const { token } = await loginRes1.json() as any;
@@ -633,7 +668,7 @@ describe("D1 Database Migrations & API", () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({ password: "password123" })
+      body: JSON.stringify({ password: "Password123!" })
     });
     const setupRes = await app.fetch(setupReq, testEnv);
     expect(setupRes.status).toBe(200);
@@ -645,7 +680,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq2 = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const loginRes2 = await app.fetch(loginReq2, testEnv);
     expect(loginRes2.status).toBe(200);
@@ -658,7 +693,7 @@ describe("D1 Database Migrations & API", () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({ code: "000000", password: "password123" })
+      body: JSON.stringify({ code: "000000", password: "Password123!" })
     });
     const verifyRes1 = await app.fetch(verifyReq1, testEnv);
     expect(verifyRes1.status).toBe(401);
@@ -672,7 +707,7 @@ describe("D1 Database Migrations & API", () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({ code: validCode, password: "password123" })
+      body: JSON.stringify({ code: validCode, password: "Password123!" })
     });
     const verifyRes2 = await app.fetch(verifyReq2, testEnv);
     expect(verifyRes2.status).toBe(200);
@@ -680,7 +715,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq3 = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const loginRes3 = await app.fetch(loginReq3, testEnv);
     expect(loginRes3.status).toBe(200);
@@ -690,7 +725,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq4 = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123", two_factor_code: "111111" })
+      body: JSON.stringify({ username, password: "Password123!", two_factor_code: "111111" })
     });
     const loginRes4 = await app.fetch(loginReq4, testEnv);
     expect(loginRes4.status).toBe(401);
@@ -699,7 +734,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq5 = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123", two_factor_code: freshCode })
+      body: JSON.stringify({ username, password: "Password123!", two_factor_code: freshCode })
     });
     const loginRes5 = await app.fetch(loginReq5, testEnv);
     expect(loginRes5.status).toBe(200);
@@ -713,7 +748,7 @@ describe("D1 Database Migrations & API", () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({ code: "000000", password: "password123" })
+      body: JSON.stringify({ code: "000000", password: "Password123!" })
     });
     const disableRes1 = await app.fetch(disableReq1, testEnv);
     expect(disableRes1.status).toBe(401);
@@ -725,7 +760,7 @@ describe("D1 Database Migrations & API", () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify({ code: disableCode, password: "password123" })
+      body: JSON.stringify({ code: disableCode, password: "Password123!" })
     });
     const disableRes2 = await app.fetch(disableReq2, testEnv);
     expect(disableRes2.status).toBe(200);
@@ -733,7 +768,7 @@ describe("D1 Database Migrations & API", () => {
     const loginReq6 = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "password123" })
+      body: JSON.stringify({ username, password: "Password123!" })
     });
     const loginRes6 = await app.fetch(loginReq6, testEnv);
     expect(loginRes6.status).toBe(200);
@@ -744,21 +779,21 @@ describe("D1 Database Migrations & API", () => {
 
 describe("Anonymous Limits", () => {
   let userToken: string;
-  const testEnv = { ...env, AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret' };
+  const testEnv = { ...env, AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
 
   beforeAll(async () => {
     // Register and login to get a valid token
     const regReq = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "limituser", password: "password123" })
+      body: JSON.stringify({ username: "limituser", password: "Password123!" })
     });
     await app.fetch(regReq, testEnv);
 
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "limituser", password: "password123" })
+      body: JSON.stringify({ username: "limituser", password: "Password123!" })
     });
     const loginRes = await app.fetch(loginReq, testEnv);
     const body = await loginRes.json() as { token: string };
@@ -901,14 +936,14 @@ describe("Projects & Runners API", () => {
     const regReq = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "projuser", password: "password123" })
+      body: JSON.stringify({ username: "projuser", password: "Password123!" })
     });
     await app.fetch(regReq, testEnv);
 
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "projuser", password: "password123" })
+      body: JSON.stringify({ username: "projuser", password: "Password123!" })
     });
     const loginRes = await app.fetch(loginReq, testEnv);
     const body = await loginRes.json() as { token: string };
@@ -1135,7 +1170,7 @@ describe("CSRF Protection", () => {
         "Content-Type": "application/json",
         "X-Test-No-Csrf": "true"
       },
-      body: JSON.stringify({ username: "csrfuser", password: "password123" })
+      body: JSON.stringify({ username: "csrfuser", password: "Password123!" })
     });
     const res = await app.fetch(req, testEnv);
     expect(res.status).toBe(403);
@@ -1152,7 +1187,7 @@ describe("CSRF Protection", () => {
         "Cookie": "csrf_token=valid-token",
         "X-Test-No-Csrf": "true"
       },
-      body: JSON.stringify({ username: "csrfuser", password: "password123" })
+      body: JSON.stringify({ username: "csrfuser", password: "Password123!" })
     });
     const res = await app.fetch(req, testEnv);
     expect(res.status).toBe(403);
@@ -1172,5 +1207,85 @@ describe("CSRF Protection", () => {
     });
     const res = await app.fetch(req, testEnv);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
+  it("enforces password length on registration", async () => {
+    // 1. Too short (11 chars)
+    const regReqTooShort = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "weakuser1", password: "Password123" })
+    });
+    const resTooShort = await app.fetch(regReqTooShort, testEnv);
+    expect(resTooShort.status).toBe(400);
+    const bodyTooShort = await resTooShort.json() as any;
+    expect(bodyTooShort.error).toContain("Password must be at least 12 characters long");
+
+    // 2. Valid length (12 chars)
+    const regReqStrong = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "stronguser", password: "Password123!" })
+    });
+    const resStrong = await app.fetch(regReqStrong, testEnv);
+    expect(resStrong.status).toBe(200);
+  });
+
+  it("completes the full Proof of Work login flow (step1 + step2)", async () => {
+    // Register unique user
+    const username = "powuser";
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "Password123!" })
+    });
+    await app.fetch(regReq, testEnv);
+
+    // 1. Get challenge (step 1)
+    const step1Req = new Request("http://localhost/api/auth/login/step1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const step1Res = await app.fetch(step1Req, testEnv);
+    expect(step1Res.status).toBe(200);
+    const step1Body = await step1Res.json() as { token: string; challenge: string; difficulty: number };
+    expect(step1Body.token).toBeDefined();
+    expect(step1Body.challenge).toBeDefined();
+
+    // 2. Solve Proof of Work
+    let nonce = 0;
+    let hashHex = '';
+    const targetPrefix = '0'.repeat(step1Body.difficulty);
+    while (true) {
+      const text = step1Body.challenge + nonce;
+      const encoder = new TextEncoder();
+      const data = encoder.encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      if (hashHex.startsWith(targetPrefix)) {
+        break;
+      }
+      nonce++;
+    }
+
+    // 3. Authenticate (step 2)
+    const step2Req = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: step1Body.token,
+        password: "Password123!",
+        nonce: nonce
+      })
+    });
+    const step2Res = await app.fetch(step2Req, testEnv);
+    expect(step2Res.status).toBe(200);
+    const step2Body = await step2Res.json() as { status: string; token: string };
+    expect(step2Body.status).toBe("ok");
+    expect(step2Body.token).toBeDefined();
   });
 });

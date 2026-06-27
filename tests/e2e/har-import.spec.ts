@@ -6,12 +6,12 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.goto('/');
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Sign up' }).click();
+    await page.getByRole('button', { name: 'Create' }).click();
 
     // Username limit is 3-20 characters
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('password123');
+    await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
@@ -81,11 +81,11 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.goto('/');
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Sign up' }).click();
+    await page.getByRole('button', { name: 'Create' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('password123');
+    await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
