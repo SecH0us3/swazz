@@ -1118,6 +1118,26 @@ describe("Projects & Runners API", () => {
       expect(res.status).toBe(401);
     });
 
+    it("returns 500 when database query fails during restart", async () => {
+      const originalPrepare = testEnv.DB.prepare;
+      testEnv.DB.prepare = () => {
+        throw new Error("DB Query Error");
+      };
+
+      try {
+        const req = new Request("http://localhost/api/runners/some-conn-id/restart", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${userToken}` }
+        });
+        const res = await app.fetch(req, testEnv);
+        expect(res.status).toBe(500);
+        const body = await res.json() as { error: string };
+        expect(body.error).toBe("Internal Server Error");
+      } finally {
+        testEnv.DB.prepare = originalPrepare;
+      }
+    });
+
     it("returns 403 when trying to restart shared runner or owned runner without public_key", async () => {
       const id = env.COORDINATOR_DO.idFromName('global-coordinator');
       const stub = env.COORDINATOR_DO.get(id);

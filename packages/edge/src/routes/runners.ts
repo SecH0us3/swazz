@@ -270,6 +270,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Fetch user public key
     let userPublicKey = "";
+    let dbFailed = false;
     try {
       const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
         .bind(userId)
@@ -279,6 +280,11 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       }
     } catch (dbErr) {
       console.error("Failed to query user public key in /api/runners/.../restart:", dbErr);
+      dbFailed = true;
+    }
+
+    if (dbFailed) {
+      return c.json({ error: 'Internal Server Error' }, 500);
     }
 
     if (!userPublicKey) {

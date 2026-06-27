@@ -277,7 +277,14 @@ func startAgent(args []string) {
 
 		switch wsMsg.Type {
 		case "agent_restart":
-			logInfo("Received remote restart request. Exiting...")
+			logInfo("Received remote restart request. Stopping active jobs...")
+			activeRunnersMu.Lock()
+			for _, r := range activeRunners {
+				r.Stop()
+			}
+			activeRunnersMu.Unlock()
+			// Allow a brief grace period for runners to stop and send final events
+			time.Sleep(1 * time.Second)
 			os.Exit(0)
 
 		case "job_dispatch":
