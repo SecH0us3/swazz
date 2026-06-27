@@ -30,6 +30,14 @@ We have implemented Content Security Policy (CSP) security analysis to detect mi
 - **[packages/container/internal/classifier/owasp_test.go](file:///Users/alex/src/swazz/packages/container/internal/classifier/owasp_test.go)**:
   - Added OWASP category assertion tests.
 
+### 5. Swazz Strict CSP Setup
+- **[packages/web/worker.ts](file:///Users/alex/src/swazz/packages/web/worker.ts)**:
+  - Replaced `addContentSignalHeader` with `addSecurityHeaders` to inject a strict Content Security Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin` on all served frontend assets.
+- **[packages/edge/src/index.ts](file:///Users/alex/src/swazz/packages/edge/src/index.ts)**:
+  - Configured Hono middleware to set identical strict security headers (including CSP) on all Edge Coordinator HTTP API and markdown/HTML responses.
+
 ## 🧪 Verification Results
-- All Go backend unit tests pass: **654 tests passed**.
+- All Go backend unit tests pass: **656 tests passed**.
+- All Edge Coordinator unit tests pass: **42 tests passed**.
+- Playwright E2E login-ux and Turnstile integration checks are completely green.
 - `go vet` and `gosec` pass without any warnings.
