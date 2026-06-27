@@ -1289,3 +1289,199 @@
         transform: scale(1);
     }
 }
+
+/* ─── Modernized Auth Tabs, Strength Meter & Magic Link Styles ─── */
+
+.auth-tabs {
+    display: flex;
+    gap: var(--space-4);
+    border-bottom: 1px solid var(--border-tech);
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-5);
+    justify-content: center;
+}
+
+.auth-tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-tech-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--duration-base) var(--ease-out);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.02em;
+    position: relative;
+}
+
+.auth-tab-btn:hover {
+    color: #ffffff;
+}
+
+.auth-tab-btn.active {
+    color: var(--accent-neon);
+}
+
+.auth-tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--accent-neon);
+    box-shadow: 0 0 8px var(--accent-neon-glow);
+}
+
+/* Password Strength Meter */
+.password-strength-container {
+    margin-top: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.password-strength-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--font-size-xs);
+}
+
+.password-strength-label {
+    color: var(--text-tech-muted);
+}
+
+.password-strength-value {
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.password-strength-value.strength-0 { color: #f43f5e; } /* Weak */
+.password-strength-value.strength-1 { color: #f59e0b; } /* Fair */
+.password-strength-value.strength-2 { color: #eab308; } /* Good */
+.password-strength-value.strength-3 { color: #10b981; } /* Strong */
+.password-strength-value.strength-4 { color: var(--accent-neon); } /* Excellent */
+
+.password-strength-bar {
+    width: 100%;
+    height: 4px;
+    background-color: var(--bg-tech);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    border: 1px solid var(--border-tech);
+}
+
+.password-strength-fill {
+    height: 100%;
+    width: 0%;
+    transition: width var(--duration-base) var(--ease-out), background-color var(--duration-base) var(--ease-out);
+    border-radius: var(--radius-full);
+}
+
+.password-strength-fill.strength-0 { width: 10%; background-color: #f43f5e; }
+.password-strength-fill.strength-1 { width: 25%; background-color: #f43f5e; }
+.password-strength-fill.strength-2 { width: 50%; background-color: #f59e0b; }
+.password-strength-fill.strength-3 { width: 75%; background-color: #10b981; }
+.password-strength-fill.strength-4 { width: 100%; background-color: var(--accent-neon); box-shadow: 0 0 8px var(--accent-neon-glow); }
+
+.password-requirements {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-2) 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.password-req-item {
+    font-size: var(--font-size-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-tech-muted);
+    transition: color var(--duration-base) var(--ease-out);
+}
+
+.password-req-item.met {
+    color: rgba(34, 211, 160, 0.85);
+}
+
+.password-req-item svg {
+    flex-shrink: 0;
+}
+
+/* Magic Link Success View */
+.magic-link-success {
+    text-align: center;
+    padding: var(--space-4) 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.magic-link-icon-container {
+    width: 56px;
+    height: 56px;
+    background-color: var(--accent-neon-subtle);
+    color: var(--accent-neon);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(212, 252, 52, 0.2);
+    box-shadow: 0 0 20px var(--accent-neon-glow);
+}
+
+.magic-link-success h3 {
+    margin: 0;
+    font-size: var(--font-size-md);
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.magic-link-success p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-tech-secondary);
+    line-height: 1.5;
+}
+
+.magic-link-test-container {
+    margin-top: var(--space-6);
+    background-color: var(--bg-tech);
+    border: 1px solid var(--border-tech);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.magic-link-test-title {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    color: var(--accent-neon);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-2);
+}
+
+.magic-link-test-url {
+    display: inline-block;
+    word-break: break-all;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: #c084fc;
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color var(--duration-fast) var(--ease-out);
+}
+
+.magic-link-test-url:hover {
+    color: #a855f7;
+}
+

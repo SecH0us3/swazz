@@ -26,10 +26,29 @@ import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export default function App() {
-    const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
+    const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout, verifyMagicLink } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
     const userProfile = useAppStore(state => state.userProfile);
+    const [isVerifyingMagicLink, setIsVerifyingMagicLink] = useState(false);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const magicToken = params.get('token');
+        if (magicToken) {
+            setIsVerifyingMagicLink(true);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            verifyMagicLink(magicToken)
+                .then(() => {
+                    setIsVerifyingMagicLink(false);
+                    showToast('Successfully logged in via magic link!', 'success');
+                })
+                .catch((err) => {
+                    setIsVerifyingMagicLink(false);
+                    showToast(err.message || 'Failed to verify magic link', 'error');
+                });
+        }
+    }, [verifyMagicLink, showToast]);
 
     useEffect(() => {
         if (token) {
@@ -469,6 +488,15 @@ export default function App() {
             responseBody: row.responsePreview || undefined,
         } as FuzzResult });
     };
+
+    if (isVerifyingMagicLink) {
+        return (
+            <div className="app-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem', background: 'radial-gradient(circle at center, #1e1b4b, #09090b)' }}>
+                <div style={{ width: '40px', height: '40px', border: '3px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                <div style={{ color: '#a1a1aa', fontSize: '18px', fontWeight: 'bold' }}>Verifying Magic Link...</div>
+            </div>
+        );
+    }
 
     if (isLoading) {
         return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
