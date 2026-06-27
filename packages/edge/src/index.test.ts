@@ -1288,4 +1288,44 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
     expect(step2Body.status).toBe("ok");
     expect(step2Body.token).toBeDefined();
   });
+
+  describe("GET / Content Negotiation", () => {
+    it("returns markdown when Accept is text/markdown", async () => {
+      const req = new Request("http://localhost/", {
+        method: "GET",
+        headers: { "Accept": "text/markdown" }
+      });
+      const res = await app.fetch(req, testEnv);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("text/markdown");
+      const bodyText = await res.text();
+      expect(bodyText).toContain("# Swazz: Smart API Fuzzer ⚡️");
+    });
+
+    it("returns HTML when Accept is text/html", async () => {
+      const req = new Request("http://localhost/", {
+        method: "GET",
+        headers: { "Accept": "text/html" }
+      });
+      const res = await app.fetch(req, testEnv);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("text/html");
+      const bodyText = await res.text();
+      expect(bodyText).toContain("<!DOCTYPE html>");
+      expect(bodyText).toContain("swazz — Smart API Fuzzer");
+    });
+
+    it("returns JSON by default or when Accept is application/json", async () => {
+      const req = new Request("http://localhost/", {
+        method: "GET",
+        headers: { "Accept": "application/json" }
+      });
+      const res = await app.fetch(req, testEnv);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("application/json");
+      const bodyJson = await res.json() as { service: string; status: string };
+      expect(bodyJson.service).toBe("swazz-edge");
+      expect(bodyJson.status).toBe("ok");
+    });
+  });
 });

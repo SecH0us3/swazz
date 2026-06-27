@@ -85,7 +85,74 @@ app.use('*', async (c, next) => {
 });
 
 
-app.get('/', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
+app.get('/', (c) => {
+  const accept = c.req.header('Accept') || '';
+  if (accept.includes('text/markdown')) {
+    return c.text(`# Swazz: Smart API Fuzzer ⚡️
+
+Swazz is an advanced, high-performance Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (such as XSS, SQL injection, and boundary bypassing) by automatically parsing your Swagger/OpenAPI specifications.
+
+## 🌟 Key Features
+
+- **Smart Payload Generation**: Automatically generates context-aware payloads based on API schema definitions (e.g., proper UUIDs, massive strings, malicious payloads).
+- **Hybrid Architecture**: Fast Go-based execution engine (\`packages/container\`) paired with a modern React 19 web dashboard (\`packages/web\`).
+- **Interactive Web UI**: Features a real-time Endpoint × Status heatmap, dynamic request inspector, and easy configuration management.
+- **Robust CLI**: Run headless CI/CD integrations with high concurrency and detailed reporting.
+- **Cloudflare Ready**: Built-in support for Edge deployment.
+
+## 🚀 Key Commands
+
+### Root Commands
+- \`npm install\`: Install frontend dependencies.
+- \`npm run dev\`: Starts the Go backend and Vite frontend concurrently.
+- \`npm run build\`: Build the web dashboard.
+- \`npm run deploy:web\`: Deploy the dashboard to Cloudflare Pages.
+
+### Backend Commands (in \`packages/container\`)
+- \`go run main.go serve\`: Start the HTTP API server.
+- \`go run main.go start --config <path>\`: Run the fuzzer in CLI mode.
+- \`go test ./...\`: Run all backend tests.
+
+---
+*Find 500 errors before your users do. Smart API fuzzing with boundary, malicious, and random payload profiles.*
+`, 200, {
+      'Content-Type': 'text/markdown; charset=utf-8'
+    });
+  }
+
+  if (accept.includes('text/html')) {
+    const requestUrl = new URL(c.req.url);
+    let dashboardUrl = '/';
+    if (requestUrl.port === '8787') {
+      dashboardUrl = 'http://localhost:5173/';
+    } else {
+      const referer = c.req.header('Referer');
+      if (referer) {
+        try {
+          const refererUrl = new URL(referer);
+          dashboardUrl = `${refererUrl.protocol}//${refererUrl.host}/`;
+        } catch {}
+      }
+    }
+
+    c.header('Content-Type', 'text/html; charset=utf-8');
+    return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>swazz — Smart API Fuzzer</title>
+</head>
+<body>
+  <h1>swazz — Smart API Fuzzer</h1>
+  <p>To view the full interactive dashboard, please visit <a href="${dashboardUrl}">our dashboard</a>.</p>
+</body>
+</html>`);
+  }
+
+  return c.json({ service: 'swazz-edge', status: 'ok' });
+});
 app.get('/health', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
 
 app.get('/api/payload-catalog', (c) => {
