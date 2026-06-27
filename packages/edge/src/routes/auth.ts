@@ -187,8 +187,13 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Invalid or expired challenge token' }, 400);
     }
 
+    // Delete token immediately to prevent replay attacks
+    await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?')
+      .bind(challengeToken)
+      .run();
+
     const expiresAt = new Date(challengeRow.expires_at + 'Z');
-    if (expiresAt < new Date()) {
+    if (expiresAt.getTime() < Date.now()) {
       return c.json({ error: 'Invalid or expired challenge token' }, 400);
     }
 
@@ -205,11 +210,6 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     if (!hashHex.startsWith(targetPrefix)) {
       return c.json({ error: 'Invalid Proof of Work solution' }, 403);
     }
-
-    // Clear challenge token from database
-    await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?')
-      .bind(challengeToken)
-      .run();
 
     const username = "g_" + crypto.randomUUID().replace(/-/g, "").substring(0, 12);
     const password = `guest_pass_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -456,15 +456,14 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Session expired or invalid login token' }, 401);
       }
 
+      // Delete token immediately to prevent replay attacks
+      await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?').bind(body.token).run();
+
       // Check expiry
       const expiresAt = new Date(challengeRow.expires_at + 'Z');
-      if (expiresAt < new Date()) {
-        await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?').bind(body.token).run();
+      if (expiresAt.getTime() < Date.now()) {
         return c.json({ error: 'Session expired' }, 401);
       }
-
-      // Delete token to prevent replay attacks
-      await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?').bind(body.token).run();
 
       // Verify Proof of Work
       const nonce = String(body.nonce);
@@ -550,6 +549,104 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const jwtToken = await sign(payload, secret);
 
     await enforceUniformDelay(startTime);
+    return c.json({ status: 'ok', token: jwtToken });
+  });
+
+  app.post('/api/auth/magic-link/request', async (c) => {
+    const startTime = Date.now();
+    const clientIp = getClientIp(c);
+    
+    // IP-based Rate limit check (max 5 requests per minute)
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `magic-ip:${clientIp}`, 5, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+
+    const body = await c.req.json();
+    if (!body.username) {
+      return c.json({ error: 'Missing username' }, 400);
+    }
+
+    const username = body.username.trim();
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?')
+      .bind(username)
+      .first<{ id: string }>();
+
+    const enforceUniformDelay = async (start: number) => {
+      const elapsed = Date.now() - start;
+      const targetDelay = 300;
+      if (elapsed < targetDelay) {
+        await new Promise(resolve => setTimeout(resolve, targetDelay - elapsed));
+      }
+    };
+
+    if (!user) {
+      await enforceUniformDelay(startTime);
+      return c.json({ status: 'ok', message: 'If the username exists, a magic link has been generated.' });
+    }
+
+    const token = crypto.randomUUID();
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+    const userAgent = c.req.header('User-Agent') || 'unknown';
+
+    await c.env.DB.prepare(
+      'INSERT INTO magic_links (token, user_id, client_ip, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .bind(token, user.id, clientIp, userAgent, expiryStr)
+    .run();
+
+    const magicLinkUrl = `${c.req.url.split('/api/')[0]}/auth/magic-link?token=${token}`;
+    const isLocalOrTest = c.env.JWT_SECRET === 'test-secret' || c.env.JWT_SECRET === 'local-secret-key-123456';
+
+    // Log the link in server console for admins/developers
+    console.log(`[Magic Link] Generated for user ${username}: ${magicLinkUrl}`);
+
+    await enforceUniformDelay(startTime);
+    return c.json({
+      status: 'ok',
+      message: 'If the username exists, a magic link has been generated.',
+      ...(isLocalOrTest ? { magic_link: magicLinkUrl } : {})
+    });
+  });
+
+  app.post('/api/auth/magic-link/verify', async (c) => {
+    const clientIp = getClientIp(c);
+    const body = await c.req.json();
+    if (!body.token) {
+      return c.json({ error: 'Missing token' }, 400);
+    }
+
+    const link = await c.env.DB.prepare(
+      'SELECT user_id, client_ip, expires_at, used FROM magic_links WHERE token = ?'
+    )
+    .bind(body.token)
+    .first<{ user_id: string; client_ip: string; expires_at: string; used: number }>();
+
+    if (!link || link.used === 1) {
+      return c.json({ error: 'Invalid or expired magic link' }, 401);
+    }
+
+    const expiresAt = new Date(link.expires_at + 'Z');
+    if (expiresAt.getTime() < Date.now()) {
+      return c.json({ error: 'Invalid or expired magic link' }, 401);
+    }
+
+    // Mark as used immediately to prevent replay attacks
+    await c.env.DB.prepare('UPDATE magic_links SET used = 1 WHERE token = ?')
+      .bind(body.token)
+      .run();
+
+    // Sign JWT
+    const payload = {
+      sub: link.user_id,
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+    };
+    
+    const secret = c.env.JWT_SECRET;
+    if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
+    const jwtToken = await sign(payload, secret);
+
     return c.json({ status: 'ok', token: jwtToken });
   });
 
