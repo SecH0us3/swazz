@@ -357,6 +357,8 @@ Swazz emits SARIF 2.1.0. Each result has a `ruleId` that maps to a specific find
 | `swazz/status-2xx` (e.g., `swazz/status-200`) | A 2xx was returned for a normally-ignored code. May indicate a logic flaw where a malicious payload was accepted. | **warning** |
 | `swazz/timeout` | The request exceeded `timeout_ms`. Possible DoS vector or resource exhaustion. | **error** |
 | `swazz/network-error` | The request failed at the network layer (connection refused, DNS failure). | **error** |
+| `swazz/csp-missing` | Missing Content Security Policy (CSP) header on HTML responses. | **warning** |
+| `swazz/csp-unsafe-directive` | Overly permissive or insecure CSP directive (e.g. `'unsafe-inline'`, `'unsafe-eval'`, or `*`). | **error** |
 
 These rule IDs are surfaced in the GitHub Code Scanning UI under **Security → Code scanning alerts**, grouped by rule and filterable by severity.
 

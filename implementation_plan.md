@@ -1,25 +1,36 @@
-# Implementation Plan - Task 96: Content Negotiation for Landing Page
+# Implementation Plan - Task 58: Content Security Policy (CSP) Security Analysis
 
 ## 🎯 Goal
-Support content negotiation on the landing page route (`/`) of the Edge coordinator. When a client sends an `Accept: text/markdown` header, the server should return the page content in clean Markdown. For `Accept: text/html` (standard browser requests), return the landing page HTML. Default to the standard JSON status response for other types.
+Implement Content Security Policy (CSP) security analysis to detect missing, insecure, or overly permissive policies in target HTTP responses.
 
 ## 🛠 Proposed Changes
 
-### 1. Edge Coordinator (`packages/edge/src/index.ts`)
-- Modify `app.get('/')` handler to read the `Accept` request header.
-- If `Accept` includes `text/markdown`, return the markdown layout of the landing page with `Content-Type: text/markdown; charset=utf-8` and `Access-Control-Allow-Origin: *`.
-- If `Accept` includes `text/html`, return the basic HTML landing page structure.
-- Otherwise, default to returning `c.json({ service: 'swazz-edge', status: 'ok' })`.
+### 1. Go Backend: CSP Response Analyzer (`packages/container/internal/analyzer/csp.go`)
+- Create a new `CSPAnalyzer` struct implementing `ResponseAnalyzer` interface:
+  - Parse headers: `Content-Security-Policy` and `Content-Security-Policy-Report-Only`.
+  - **`swazz/csp-missing`** (Level: `warning`): Flagged if the response is an HTML page (`Content-Type` contains `text/html`) and both CSP headers are absent.
+  - **`swazz/csp-unsafe-directive`** (Level: `error`): Flagged if directives within either CSP header contains:
+    - Wildcard sources (`*`)
+    - `'unsafe-inline'`
+    - `'unsafe-eval'`
+- Register the new `CSPAnalyzer` in the central analyzer registry (`packages/container/internal/analyzer/registry.go`).
 
-### 2. Test Coverage (`packages/edge/src/index.test.ts`)
-- Add tests for `GET /` with different `Accept` headers:
-  - `Accept: text/markdown` -> returns status 200, markdown content type, containing the title `# Swazz: Smart API Fuzzer ⚡️`.
-  - `Accept: text/html` -> returns status 200, html content type, containing the HTML structure.
-  - `Accept: application/json` (or default) -> returns status 200, json content type with `{ service: 'swazz-edge', status: 'ok' }`.
+### 2. OWASP Top 10 (2025) Classification (`packages/container/internal/classifier/owasp.go`)
+- Map `swazz/csp-missing` and `swazz/csp-unsafe-directive` to `"A02:2025 Security Misconfiguration"`.
+- Update classification tests in `packages/container/internal/classifier/owasp_test.go`.
 
 ### 3. Documentation
-- Verify that [packages/web/public/index.md](file:///Users/alex/src/swazz/packages/web/public/index.md) matches the landing page copy returned by Hono's markdown content negotiation.
+- Document the new rule IDs in:
+  - [docs/usage.md](file:///Users/alex/src/swazz/docs/usage.md) (Vulnerability Types section)
+  - [docs/ci_cd.md](file:///Users/alex/src/swazz/docs/ci_cd.md) (Rule IDs table)
 
 ## 🧪 Verification Plan
-- Run unit tests: `npm run test --workspace=packages/edge`
-- Rebuild frontend: `npm run build`
+- **Unit Tests**:
+  - Add `packages/container/internal/analyzer/csp_test.go` covering:
+    - Missing CSP on HTML responses.
+    - Valid CSP (no findings).
+    - Unsafe directives (`*`, `'unsafe-inline'`, `'unsafe-eval'`) in both standard and Report-Only headers.
+    - Non-HTML responses (no missing CSP alert).
+  - Run all Go backend tests: `scripts/test-backend.sh`
+- **E2E / Integration Checks**:
+  - Verify overall compilation and build.
