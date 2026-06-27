@@ -108,29 +108,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
 
-- [/] **Task 90: Implement CSRF Protection Middleware in Coordinator**
-  - **Design Goal:** Protect state-changing HTTP endpoints (POST, PUT, DELETE, PATCH) on the edge coordinator from Cross-Site Request Forgery attacks, establishing double-submit cookie validation.
-  - **Implementation Details:**
-    - Implement a custom CSRF protection middleware in Hono (or integrate `hono/csrf`).
-    - Verify that requests with credentials validate the `X-CSRF-Token` HTTP request header against a cryptographically secure token stored in a HTTP-only session cookie.
-    - Ensure that safe methods (GET, HEAD, OPTIONS) bypass CSRF checks.
-    - Update frontend request hooks (`useRunner`, `useFuzzSession`, auth actions) to dynamically parse the CSRF token from the DOM/cookies and attach it to state-changing API request headers.
-
-- [ ] **Task 91: Modernize Login Page & Form Security Features**
-  - **Design Goal:** Enhance the login form and backend authentication logic to match modern security best practices, protecting against brute-force, credentials stuffing, and username enumeration while maintaining a frictionless user experience.
-  - **Implementation Details:**
-    - **Split Data Entry:** Split the login process into two steps: Step 1 collects the username/email and returns a short-lived temporary session token (regardless of user existence). Step 2 accepts the token and password to finalize authentication.
-    - **Adaptive/Dynamic CAPTCHA:** Integrate Cloudflare Turnstile, but configure it dynamically. Only show/require CAPTCHA when auth failure rates or login request volume exceed baseline thresholds.
-    - **Defensive Delays (Anti-Enumeration):** Introduce dynamic response delays. If a user does not exist, inject a random delay (e.g., 150-250ms) to ensure overall request latency matches database-heavy lookups of valid users.
-    - **Rate Limiting:** Implement IP-based and overall system rate limiting for authentication endpoints, returning HTTP 429 when limits are breached.
-    - **Weak Password Rejection & Strength Meter:** Reject weak passwords during registration using a blacklist or k-Anonymity (Pwned Passwords). Add a dynamic password strength meter on the UI, encouraging password manager usage.
-    - **Passwordless Option:** Support magic link authentication via short-lived, single-use email tokens verified against the client IP/device.
-
-- [/] **Task 92: Modern Landing Page with Popup Authentication**
-  - **Design Goal:** Replace the current login/registration screen with a high-converting, premium-looking sales landing page, opening the login/registration forms inside a modern, glassmorphic popup modal.
-  - **Implementation Details:**
-    - Design a modern landing page showcasing Swazz features, benefits, and call-to-actions.
-    - Implement a modal dialog for authentication, replacing the full-screen LoginScreen with a responsive popup window.
 
 - [ ] **Task 93: Runner Launch Security Review & Target Sandboxing**
   - **Design Goal:** Prevent runner misuse (such as unauthorized external network scanning, SSRF, or local container escape) by performing a comprehensive security review and implementing target validation filters and sandboxing constraints on runner execution.
@@ -154,13 +131,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
     - Add a "Sign in with GitHub" button to the frontend authentication modals.
 
-- [/] **Task 96: Implement Content Negotiation for Landing Page**
-  - **Design Goal:** Support content negotiation on the landing page so that when a client sends an `Accept: text/markdown` header, the server returns the page content in clean Markdown instead of HTML.
-  - **Implementation Details:**
-    - Check the `Accept` header of incoming requests to the landing page routes.
-    - If the client requests `text/markdown`, return the landing page layout and copy in clean Markdown.
-    - For standard browser requests (requesting `text/html`), continue returning the rich HTML/JS frontend application.
-    - For reference, consult the MDN Content Negotiation specification (https://developer.mozilla.org/en-US/docs/Web/HTTP/Content_negotiation).
 
 - [ ] **Task 97: Closed Beta Launch & Infrastructure Capacity Control**
   - **Design Goal:** Establish a closed beta registration limit (max 50 users) to progressively scale and stress-test target coordination infrastructure without running into capacity exhaustion.
