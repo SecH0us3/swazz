@@ -19,6 +19,8 @@ func TestOWASPCategories(t *testing.T) {
 		{"swazz/response-size-anomaly", []string{"A06:2025 Insecure Design"}},
 		{"swazz/oob-interaction", []string{"A08:2025 Software or Data Integrity Failures"}},
 		{"swazz/cors-misconfig", []string{"A02:2025 Security Misconfiguration"}},
+		{"swazz/csp-missing", []string{"A02:2025 Security Misconfiguration"}},
+		{"swazz/csp-unsafe-directive", []string{"A02:2025 Security Misconfiguration"}},
 		{"swazz/crlf-injection", []string{"A05:2025 Injection"}},
 		{"swazz/header-injection", []string{"A05:2025 Injection"}},
 		{"swazz/reflected-xss", []string{"A05:2025 Injection"}},

@@ -77,11 +77,15 @@ app.get('/api/info', (c) => {
 app.get('/api/version', (c) => {
   return c.json({ version: c.env.VERSION || '1.0.0' });
 });
-// Add Content-Signal header middleware
+// Add Security Headers middleware
 
 app.use('*', async (c, next) => {
   await next();
   c.header('Content-Signal', 'ai-train=no, search=yes');
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' ws: wss: http: https: https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';");
+  c.header('X-Frame-Options', 'DENY');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
 });
 
 

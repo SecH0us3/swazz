@@ -331,6 +331,8 @@ When specifying a `"rule_id"` in `swazz.ignore.json`, you can target any of the 
 * **`swazz/sensitive-data-leak`**: Leaks of AWS credentials, JWTs, SSH private keys, or API tokens.
 * **`swazz/crlf-injection`**: Response header splitting vulnerabilities.
 * **`swazz/cors-misconfig`**: Insecure CORS headers (wildcards or reflected origins).
+* **`swazz/csp-missing`**: Missing Content Security Policy (CSP) header on HTML pages.
+* **`swazz/csp-unsafe-directive`**: Insecure or overly permissive CSP directives (e.g. `'unsafe-inline'`, `'unsafe-eval'`, or wildcard `*`).
 * **`swazz/response-size-anomaly`**: Anomalous response size differences indicating potential unauthorized data access.
 
 

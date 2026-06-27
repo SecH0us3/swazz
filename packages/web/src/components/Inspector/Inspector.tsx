@@ -196,7 +196,15 @@ export function Inspector({
     const groupedFindings = useMemo(() => {
         if (!findingsOnly) return [];
 
-        const groups: Record<string, { title: string; color: string; items: { result: ResultSummary; finding?: AnalysisFinding }[] }> = {};
+        const groups: Record<
+            string,
+            {
+                title: string;
+                color: string;
+                items: { result: ResultSummary; finding?: AnalysisFinding }[];
+                seen: Set<string>;
+            }
+        > = {};
 
         for (const row of rows) {
             let placed = false;
@@ -206,9 +214,13 @@ export function Inspector({
                     const { title, color, key: groupKey } = categorizeFinding(f, row.responsePreview);
 
                     if (!groups[groupKey]) {
-                        groups[groupKey] = { title, color, items: [] };
+                        groups[groupKey] = { title, color, items: [], seen: new Set() };
                     }
-                    groups[groupKey].items.push({ result: row, finding: f });
+                    const dedupeKey = `${row.method} ${row.endpoint}::${f.ruleId}::${f.message}`;
+                    if (!groups[groupKey].seen.has(dedupeKey)) {
+                        groups[groupKey].seen.add(dedupeKey);
+                        groups[groupKey].items.push({ result: row, finding: f });
+                    }
                 }
             }
 
@@ -234,9 +246,13 @@ export function Inspector({
                     }
 
                     if (!groups[groupKey]) {
-                        groups[groupKey] = { title: categoryTitle, color, items: [] };
+                        groups[groupKey] = { title: categoryTitle, color, items: [], seen: new Set() };
                     }
-                    groups[groupKey].items.push({ result: row });
+                    const dedupeKey = `${row.method} ${row.endpoint}::${row.status}::${row.error || ''}`;
+                    if (!groups[groupKey].seen.has(dedupeKey)) {
+                        groups[groupKey].seen.add(dedupeKey);
+                        groups[groupKey].items.push({ result: row });
+                    }
                 }
             }
         }
