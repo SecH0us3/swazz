@@ -308,6 +308,7 @@ export function UserSettings() {
                                             className="input settings-input-monospace" 
                                             value={apiKey} 
                                             readOnly 
+                                            data-1p-ignore
                                         />
                                         <button 
                                             className="btn btn-secondary btn-sm"
@@ -369,6 +370,7 @@ export function UserSettings() {
                                             onChange={(e) => setConfirmPassword(e.target.value)}
                                             placeholder="••••••••"
                                             required
+                                            data-1p-ignore
                                         />
                                         <button
                                             type="submit"
@@ -457,6 +459,7 @@ export function UserSettings() {
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                                 placeholder="••••••••"
                                                 required
+                                                data-1p-ignore
                                             />
                                             <label htmlFor="totp-disable-code" className="settings-form-label">
                                                 Enter 6-digit code from your app

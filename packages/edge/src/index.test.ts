@@ -351,10 +351,45 @@ describe("D1 Database Migrations & API", () => {
   });
 
   it("can login as guest, fetch profile with guest flag, and triggers cleanup", async () => {
-    // 1. Login as guest
-    const guestReq = new Request("http://localhost/api/auth/guest", {
+    // Helper to solve PoW in tests
+    const solvePoWTest = async (challenge: string, difficulty: number): Promise<number> => {
+      const prefix = '0'.repeat(difficulty);
+      let nonce = 0;
+      while (true) {
+        const encoder = new TextEncoder();
+        const dataBytes = encoder.encode(challenge + nonce);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        if (hashHex.startsWith(prefix)) {
+          return nonce;
+        }
+        nonce++;
+      }
+    };
+
+    // 1. Get challenge via step1
+    const step1Req = new Request("http://localhost/api/auth/guest/step1", {
       method: "POST",
       headers: { "Content-Type": "application/json" }
+    });
+    const step1Res = await app.fetch(step1Req, testEnv);
+    expect(step1Res.status).toBe(200);
+    const step1Body = await step1Res.json() as any;
+    expect(step1Body.status).toBe("ok");
+    expect(typeof step1Body.token).toBe("string");
+
+    // 2. Solve challenge
+    const nonce = await solvePoWTest(step1Body.challenge, step1Body.difficulty);
+
+    // 3. Login as guest
+    const guestReq = new Request("http://localhost/api/auth/guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: step1Body.token,
+        nonce
+      })
     });
     const guestRes = await app.fetch(guestReq, testEnv);
     expect(guestRes.status).toBe(200);
@@ -1176,30 +1211,19 @@ describe("CSRF Protection", () => {
 });
 
 describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
-  it("enforces strong password complexity on registration", async () => {
-    // 1. Too short
+  it("enforces password length on registration", async () => {
+    // 1. Too short (11 chars)
     const regReqTooShort = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "weakuser1", password: "123" })
+      body: JSON.stringify({ username: "weakuser1", password: "Password123" })
     });
     const resTooShort = await app.fetch(regReqTooShort, testEnv);
     expect(resTooShort.status).toBe(400);
     const bodyTooShort = await resTooShort.json() as any;
-    expect(bodyTooShort.error).toContain("Password must be at least 8 characters long");
+    expect(bodyTooShort.error).toContain("Password must be at least 12 characters long");
 
-    // 2. Length ok but weak
-    const regReqWeak = new Request("http://localhost/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "weakuser2", password: "password123" })
-    });
-    const resWeak = await app.fetch(regReqWeak, testEnv);
-    expect(resWeak.status).toBe(400);
-    const bodyWeak = await resWeak.json() as any;
-    expect(bodyWeak.error).toContain("Password must contain uppercase, lowercase, numbers, and special characters");
-
-    // 3. Strong and valid
+    // 2. Valid length (12 chars)
     const regReqStrong = new Request("http://localhost/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1263,45 +1287,5 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
     const step2Body = await step2Res.json() as { status: string; token: string };
     expect(step2Body.status).toBe("ok");
     expect(step2Body.token).toBeDefined();
-  });
-
-  it("can generate and verify passwordless magic links", async () => {
-    // Register unique user
-    const username = "magicuser";
-    const regReq = new Request("http://localhost/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: "Password123!" })
-    });
-    await app.fetch(regReq, testEnv);
-
-    // 1. Request magic link
-    const requestReq = new Request("http://localhost/api/auth/magic-link/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username })
-    });
-    const requestRes = await app.fetch(requestReq, testEnv);
-    expect(requestRes.status).toBe(200);
-    const requestBody = await requestRes.json() as { status: string; magic_link?: string };
-    expect(requestBody.status).toBe("ok");
-    expect(requestBody.magic_link).toBeDefined();
-
-    // 2. Extract token from magic link URL
-    const url = new URL(requestBody.magic_link!);
-    const magicToken = url.searchParams.get("token");
-    expect(magicToken).toBeDefined();
-
-    // 3. Verify magic link
-    const verifyReq = new Request("http://localhost/api/auth/magic-link/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: magicToken })
-    });
-    const verifyRes = await app.fetch(verifyReq, testEnv);
-    expect(verifyRes.status).toBe(200);
-    const verifyBody = await verifyRes.json() as { status: string; token: string };
-    expect(verifyBody.status).toBe("ok");
-    expect(verifyBody.token).toBeDefined();
   });
 });

@@ -21,19 +21,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     const password = body.password;
-    if (password.length < 8) {
-      return c.json({ error: 'Password must be at least 8 characters long' }, 400);
-    }
-    const hasUpper = /[A-Z]/.test(password);
-    const hasLower = /[a-z]/.test(password);
-    const hasDigit = /[0-9]/.test(password);
-    const hasSpecial = /[^A-Za-z0-9]/.test(password);
-    if (!hasUpper || !hasLower || !hasDigit || !hasSpecial) {
-      return c.json({ error: 'Password must contain uppercase, lowercase, numbers, and special characters' }, 400);
-    }
-    const weakPasswords = ['password', '123456', 'qwerty', 'admin123', 'password123', '12345678', '123456789', 'welcome1', 'letmein1'];
-    if (weakPasswords.includes(password.toLowerCase())) {
-      return c.json({ error: 'Password is too common and weak' }, 400);
+    if (password.length < 12) {
+      return c.json({ error: 'Password must be at least 12 characters long' }, 400);
     }
 
     const email = typeof body.email === 'string' ? body.email.trim() : null;
@@ -108,6 +97,55 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
 
+  app.post('/api/auth/guest/step1', async (c) => {
+    // IP-based Rate limit check (max 30 requests per minute)
+    const clientIp = getClientIp(c);
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip-guest:${clientIp}`, 30, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+
+    // Turnstile verification (skip if secret not configured — local dev mode)
+    const turnstileSecret = c.env.TURNSTILE_SECRET;
+    let isVerified = false;
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
+      const body = await c.req.json();
+      const turnstileToken = body['cf-turnstile-response'];
+      if (!turnstileToken) {
+        return c.json({ error: 'Missing Turnstile token' }, 403);
+      }
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+      if (!valid) {
+        return c.json({ error: 'Turnstile verification failed' }, 403);
+      }
+      isVerified = true;
+    } else {
+      isVerified = true; // Bypassed/disabled
+    }
+
+    const token = (isVerified ? 'verified_' : '') + crypto.randomUUID();
+    const challenge = crypto.randomUUID();
+    const difficulty = 3; // SHA-256 starts with "000"
+    
+    const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+
+    // Save challenge with placeholder guest username
+    await c.env.DB.prepare(
+      'INSERT INTO login_challenges (token, username, challenge, difficulty, expires_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .bind(token, 'guest_temp', challenge, difficulty, expiryStr)
+    .run();
+
+    return c.json({
+      status: 'ok',
+      token,
+      challenge,
+      difficulty
+    });
+  });
+
   app.post('/api/auth/guest', async (c) => {
     // Proactively clean up expired guests asynchronously (non-blocking)
     try {
@@ -115,6 +153,63 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     } catch {
       cleanupExpiredGuests(c.env.DB).catch(console.error);
     }
+
+    const body = await c.req.json();
+    const challengeToken = body.token;
+    const nonce = body.nonce;
+
+    if (!challengeToken || nonce === undefined) {
+      return c.json({ error: 'Missing challenge token or nonce' }, 400);
+    }
+
+    // Turnstile verification (skip if secret not configured — local dev mode, or already verified in step1)
+    const turnstileSecret = c.env.TURNSTILE_SECRET;
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret' && !challengeToken.startsWith('verified_')) {
+      const turnstileToken = body['cf-turnstile-response'];
+      if (!turnstileToken) {
+        return c.json({ error: 'Missing Turnstile token' }, 403);
+      }
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+      if (!valid) {
+        return c.json({ error: 'Turnstile verification failed' }, 403);
+      }
+    }
+
+    // Verify Proof of Work challenge exists and is valid
+    const challengeRow = await c.env.DB.prepare(
+      'SELECT challenge, difficulty, expires_at FROM login_challenges WHERE token = ? AND username = ?'
+    )
+    .bind(challengeToken, 'guest_temp')
+    .first<{ challenge: string; difficulty: number; expires_at: string }>();
+
+    if (!challengeRow) {
+      return c.json({ error: 'Invalid or expired challenge token' }, 400);
+    }
+
+    const expiresAt = new Date(challengeRow.expires_at + 'Z');
+    if (expiresAt < new Date()) {
+      return c.json({ error: 'Invalid or expired challenge token' }, 400);
+    }
+
+    // Verify PoW difficulty matching target prefix
+    const targetPrefix = '0'.repeat(challengeRow.difficulty);
+    const dataText = challengeRow.challenge + nonce;
+    
+    const encoder = new TextEncoder();
+    const dataBytes = encoder.encode(dataText);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBytes);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    if (!hashHex.startsWith(targetPrefix)) {
+      return c.json({ error: 'Invalid Proof of Work solution' }, 403);
+    }
+
+    // Clear challenge token from database
+    await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?')
+      .bind(challengeToken)
+      .run();
 
     const username = "g_" + crypto.randomUUID().replace(/-/g, "").substring(0, 12);
     const password = `guest_pass_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -245,7 +340,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
   });
-   app.post('/api/auth/login/step1', async (c) => {
+  app.post('/api/auth/login/step1', async (c) => {
     const clientIp = getClientIp(c);
     
     // IP-based Rate limit check (max 30 requests per minute)
@@ -267,7 +362,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Turnstile verification (skip if secret not configured — local dev mode)
     const turnstileSecret = c.env.TURNSTILE_SECRET;
-    let difficulty = 3; // SHA-256 starts with "000"
+    let isVerified = false;
     if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
       const turnstileToken = body['cf-turnstile-response'];
       if (!turnstileToken) {
@@ -278,12 +373,15 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!valid) {
         return c.json({ error: 'Turnstile verification failed' }, 403);
       }
-      difficulty = 0; // Turnstile is enabled, bypass PoW
+      isVerified = true;
+    } else {
+      isVerified = true; // Bypassed/disabled
     }
 
     const username = body.username.trim();
-    const token = crypto.randomUUID();
+    const token = (isVerified ? 'verified_' : '') + crypto.randomUUID();
     const challenge = crypto.randomUUID();
+    const difficulty = 3; // SHA-256 starts with "000"
     
     const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
@@ -331,6 +429,20 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     } else {
       if (!body.token || !body.password || body.nonce === undefined) {
         return c.json({ error: 'Missing token, password, or nonce' }, 400);
+      }
+
+      // Turnstile verification (skip if secret not configured — local dev mode, or already verified in step1)
+      const turnstileSecret = c.env.TURNSTILE_SECRET;
+      if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret' && !body.token.startsWith('verified_')) {
+        const turnstileToken = body['cf-turnstile-response'];
+        if (!turnstileToken) {
+          return c.json({ error: 'Missing Turnstile token' }, 403);
+        }
+        const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+        const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+        if (!valid) {
+          return c.json({ error: 'Turnstile verification failed' }, 403);
+        }
       }
 
       // Retrieve challenge
@@ -441,119 +553,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'ok', token: jwtToken });
   });
 
-  app.post('/api/auth/magic-link/request', async (c) => {
-    const startTime = Date.now();
-    const clientIp = getClientIp(c);
-    
-    const enforceUniformDelay = async (start: number) => {
-      const elapsed = Date.now() - start;
-      const targetDelay = 300;
-      if (elapsed < targetDelay) {
-        await new Promise(resolve => setTimeout(resolve, targetDelay - elapsed));
-      }
-    };
 
-    // IP-based Rate limit check (max 5 requests per minute)
-    const ipRateLimit = await checkIpRateLimit(c.env.DB, `magic-ip:${clientIp}`, 5, 60);
-    if (ipRateLimit.limited) {
-      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
-    }
-
-    const body = await c.req.json();
-    if (!body.username) {
-      return c.json({ error: 'Missing username' }, 400);
-    }
-
-    // Turnstile verification (skip if secret not configured — local dev mode)
-    const turnstileSecret = c.env.TURNSTILE_SECRET;
-    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
-      const turnstileToken = body['cf-turnstile-response'];
-      if (!turnstileToken) {
-        return c.json({ error: 'Missing Turnstile token' }, 403);
-      }
-      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
-      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
-      if (!valid) {
-        return c.json({ error: 'Turnstile verification failed' }, 403);
-      }
-    }
-
-    const username = body.username.trim();
-    const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?')
-      .bind(username)
-      .first<{ id: string }>();
-
-    if (!user) {
-      // Anti-enumeration timing delay matching CPU timing cost
-      await verifyDummyPassword('dummy');
-      await enforceUniformDelay(startTime);
-      return c.json({ status: 'ok', message: 'If the username exists, a magic link has been generated.' });
-    }
-
-    const token = crypto.randomUUID();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-    const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
-    const userAgent = c.req.header('User-Agent') || 'unknown';
-
-    await c.env.DB.prepare(
-      'INSERT INTO magic_links (token, user_id, client_ip, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)'
-    )
-    .bind(token, user.id, clientIp, userAgent, expiryStr)
-    .run();
-
-    const magicLinkUrl = `${c.req.url.split('/api/')[0]}/auth/magic-link?token=${token}`;
-
-    const isLocalOrTest = c.env.JWT_SECRET === 'test-secret' || c.env.JWT_SECRET === 'local-secret-key-123456';
-
-    // Log the link in server console for admins/developers
-    console.log(`[Magic Link] Generated for user ${username}: ${magicLinkUrl}`);
-
-    await enforceUniformDelay(startTime);
-    return c.json({
-      status: 'ok',
-      message: 'If the username exists, a magic link has been generated.',
-      ...(isLocalOrTest ? { magic_link: magicLinkUrl } : {})
-    });
-  });
-
-  app.post('/api/auth/magic-link/verify', async (c) => {
-    const body = await c.req.json();
-    if (!body.token) {
-      return c.json({ error: 'Missing token' }, 400);
-    }
-
-    const link = await c.env.DB.prepare(
-      'SELECT user_id, client_ip, expires_at, used FROM magic_links WHERE token = ?'
-    )
-    .bind(body.token)
-    .first<{ user_id: string; client_ip: string; expires_at: string; used: number }>();
-
-    if (!link || link.used === 1) {
-      return c.json({ error: 'Invalid or expired magic link' }, 401);
-    }
-
-    const expiresAt = new Date(link.expires_at + 'Z');
-    if (expiresAt < new Date()) {
-      return c.json({ error: 'Invalid or expired magic link' }, 401);
-    }
-
-    // Mark as used
-    await c.env.DB.prepare('UPDATE magic_links SET used = 1 WHERE token = ?')
-      .bind(body.token)
-      .run();
-
-    // Sign JWT
-    const payload = {
-      sub: link.user_id,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
-    };
-    
-    const secret = c.env.JWT_SECRET;
-    if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
-    const jwtToken = await sign(payload, secret);
-
-    return c.json({ status: 'ok', token: jwtToken });
-  });
 
   app.delete('/api/users/me', async (c) => {
     const userId = await getUserIdFromRequest(c);

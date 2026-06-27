@@ -3,11 +3,8 @@ export async function cleanupSecurityTables(db: any): Promise<void> {
     const challengesRes = await db.prepare(
       "DELETE FROM login_challenges WHERE expires_at < datetime('now')"
     ).run();
-    const magicLinksRes = await db.prepare(
-      "DELETE FROM magic_links WHERE expires_at < datetime('now')"
-    ).run();
-    if (challengesRes.meta?.changes > 0 || magicLinksRes.meta?.changes > 0) {
-      console.log(`Cleaned up ${challengesRes.meta?.changes || 0} expired login challenges and ${magicLinksRes.meta?.changes || 0} expired magic links.`);
+    if (challengesRes.meta?.changes > 0) {
+      console.log(`Cleaned up ${challengesRes.meta?.changes || 0} expired login challenges.`);
     }
   } catch (err) {
     console.error("Failed to clean up security tables:", err);

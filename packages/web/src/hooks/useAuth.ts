@@ -95,7 +95,7 @@ export function useAuth() {
         // Solve Proof of Work
         const nonce = await solvePoW(challenge, difficulty);
 
-        // Step 2: Submit password & nonce
+        // Step 2: Submit credentials, nonce, and Turnstile response
         const res = await fetch(`${PROXY_URL}/api/auth/login`, {
             method: 'POST',
             headers,
@@ -103,7 +103,8 @@ export function useAuth() {
                 token: challengeToken,
                 password,
                 nonce,
-                two_factor_code: twoFactorCode
+                two_factor_code: twoFactorCode,
+                'cf-turnstile-response': turnstileToken
             })
         });
         const data = await res.json();
@@ -148,57 +149,38 @@ export function useAuth() {
         }
     };
 
-    const requestMagicLink = async (username: string, turnstileToken?: string) => {
+    const continueAsGuest = async (turnstileToken?: string) => {
         const csrfToken = useAppStore.getState().csrfToken;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrfToken) {
             headers['X-CSRF-Token'] = csrfToken;
         }
 
-        const res = await fetch(`${PROXY_URL}/api/auth/magic-link/request`, {
+        // Step 1: Request challenge token for Guest login
+        const step1Res = await fetch(`${PROXY_URL}/api/auth/guest/step1`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ 
-                username,
                 'cf-turnstile-response': turnstileToken
             })
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to request magic link');
-        return data;
-    };
+        const step1Data = await step1Res.json();
+        if (!step1Res.ok) throw new Error(step1Data.error || 'Guest login failed (Step 1)');
 
-    const verifyMagicLink = async (token: string) => {
-        const csrfToken = useAppStore.getState().csrfToken;
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
+        const { token: challengeToken, challenge, difficulty } = step1Data;
 
-        const res = await fetch(`${PROXY_URL}/api/auth/magic-link/verify`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ token })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Magic link verification failed');
-        setToken(data.token);
-        localStorage.setItem('swazz_token', data.token);
-        setIsGuest(false);
-        sessionStorage.removeItem('swazz_guest');
-        return { success: true };
-    };
+        // Solve Proof of Work
+        const nonce = await solvePoW(challenge, difficulty);
 
-    const continueAsGuest = async () => {
-        const csrfToken = useAppStore.getState().csrfToken;
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
-
+        // Step 2: Finalize guest session creation with Turnstile response
         const res = await fetch(`${PROXY_URL}/api/auth/guest`, {
             method: 'POST',
-            headers
+            headers,
+            body: JSON.stringify({
+                token: challengeToken,
+                nonce,
+                'cf-turnstile-response': turnstileToken
+            })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Guest login failed');
@@ -215,5 +197,5 @@ export function useAuth() {
         sessionStorage.removeItem('swazz_guest');
     };
 
-    return { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout, requestMagicLink, verifyMagicLink };
+    return { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout };
 }

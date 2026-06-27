@@ -11,6 +11,12 @@ cd "$ROOT_DIR"
 echo "=== Swazz E2E Automated Test Runner ==="
 echo "Project Root: $ROOT_DIR"
 
+# Backup packages/edge/.dev.vars if it exists, and configure bypass secret
+if [ -f packages/edge/.dev.vars ]; then
+  cp packages/edge/.dev.vars packages/edge/.dev.vars.bak
+fi
+echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
+
 # Create dummy wordlist folder and file for E2E tests
 mkdir -p wordlists
 echo "dummy-xss-payload" > wordlists/xss-custom.txt
@@ -24,6 +30,10 @@ cleanup() {
       pkill -P "$pid" 2>/dev/null || true
       kill "$pid" 2>/dev/null || true
     done
+  fi
+  # Restore .dev.vars if backup exists
+  if [ -f packages/edge/.dev.vars.bak ]; then
+    mv packages/edge/.dev.vars.bak packages/edge/.dev.vars
   fi
   # Clean up dummy wordlist
   rm -rf wordlists
@@ -71,7 +81,7 @@ if check_port 8787; then
   echo "✓ Edge Coordinator is already running on port 8787."
 else
   echo "→ Starting Edge Coordinator..."
-  NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="local-secret-key-123456" npx wrangler dev --cwd packages/edge > edge.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge > edge.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8787 "Edge Coordinator"
 fi
