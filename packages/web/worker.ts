@@ -3,9 +3,14 @@ interface Env {
   ASSETS: Fetcher;
 }
 
-function addContentSignalHeader(response: Response): Response {
+function addSecurityHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
   headers.set('Content-Signal', 'ai-train=no, search=yes');
+  headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' ws: wss: http: https: https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';");
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -68,6 +73,6 @@ export default {
       }
     }
 
-    return addContentSignalHeader(response);
+    return addSecurityHeaders(response);
   }
 };
