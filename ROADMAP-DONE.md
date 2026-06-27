@@ -218,6 +218,12 @@ This file contains completed tasks.
     - **Dashboard:** In [StatsBar.tsx](./packages/web/src/components/Dashboard/StatsBar.tsx), add "Total Data Received" and "Max Response" metrics. In `FuzzingSlice` of [appStore.ts](./packages/web/src/store/appStore.ts), map the new stats fields.
     - **Config:** Add `ResponseSizeAnomalyMultiplier float64` to `Settings` (default `5.0`).
 
+- [x] **Task 58: Content Security Policy (CSP) Security Analysis**
+  - **Design Goal:** Detect insecure, overly permissive, or missing Content Security Policies in target API and web application HTTP responses.
+  - **Implementation Details:**
+    - Parse headers like `Content-Security-Policy` and `Content-Security-Policy-Report-Only` in the response analyzer.
+    - Flag unsafe directives such as `unsafe-inline`, `unsafe-eval`, or wildcard sources (`*`) that weaken protection against XSS and data injection.
+
 ## 🔐 Authorization & Access Control Testing
 
 - [x] **Task 28:** Implement BOLA/IDOR (Broken Object-Level Authorization) testing with multi-identity support.
