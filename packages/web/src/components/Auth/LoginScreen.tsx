@@ -77,10 +77,6 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [email, setEmail] = useState('');
-    const [isMagicLinkMode, setIsMagicLinkMode] = useState(false);
-    const [magicLinkSent, setMagicLinkSent] = useState(false);
-    const [magicLinkUrl, setMagicLinkUrl] = useState('');
-    const { requestMagicLink } = useAuth();
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -156,7 +152,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                 } catch (e) {}
             }
         };
-    }, [turnstileSiteKey, isRegistering, isMagicLinkMode]);
+    }, [turnstileSiteKey, isRegistering]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -197,13 +193,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         setError('');
         setIsLoading(true);
         try {
-            if (isMagicLinkMode) {
-                const res = await requestMagicLink(username);
-                setMagicLinkSent(true);
-                if (res.magic_link) {
-                    setMagicLinkUrl(res.magic_link);
-                }
-            } else if (isRegistering) {
+            if (isRegistering) {
                 const { score } = calculatePasswordStrength(password);
                 if (score < 4) {
                     throw new Error('Password must be at least 12 characters long.');
@@ -666,37 +656,16 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                         ) : (
                             <>
                                 <div className="login-header">
-                                    <h2>{isRegistering ? 'Create Account' : (isMagicLinkMode ? 'Passwordless Login' : 'Welcome to Swazz')}</h2>
-                                    {!isRegistering && !isMagicLinkMode ? (
+                                    <h2>{isRegistering ? 'Create Account' : 'Welcome to Swazz'}</h2>
+                                    {!isRegistering ? (
                                         <p className="login-subtitle">
                                             Enter your credentials to access your workspace. <br />
                                             New user? Click <strong>Create</strong> to sign up.
                                         </p>
-                                    ) : isMagicLinkMode ? (
-                                        <p className="login-subtitle">Enter your username to request a magic login link.</p>
                                     ) : (
                                         <p>Register to start fuzzing</p>
                                     )}
                                 </div>
-
-                                {!isRegistering && (
-                                    <div className="auth-tabs">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => { setIsMagicLinkMode(false); setError(''); setMagicLinkSent(false); }}
-                                            className={`auth-tab-btn ${!isMagicLinkMode ? 'active' : ''}`}
-                                        >
-                                            Password
-                                        </button>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => { setIsMagicLinkMode(true); setError(''); setMagicLinkSent(false); }}
-                                            className={`auth-tab-btn ${isMagicLinkMode ? 'active' : ''}`}
-                                        >
-                                            Magic Link
-                                        </button>
-                                    </div>
-                                )}
 
                                 {error && (
                                     <div className="login-error">
@@ -711,39 +680,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     </div>
                                 )}
 
-                                {isMagicLinkMode && magicLinkSent ? (
-                                    <div className="magic-link-success">
-                                        <div className="magic-link-icon-container">
-                                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="20 6 9 17 4 12" />
-                                            </svg>
-                                        </div>
-                                        <h3>Magic Link Sent</h3>
-                                        <p>If username <strong>{username}</strong> exists, a magic link has been generated.</p>
-                                        
-                                        {magicLinkUrl && (
-                                            <div className="magic-link-test-container">
-                                                <div className="magic-link-test-title">Developer Mode URL:</div>
-                                                <a href={magicLinkUrl} className="magic-link-test-url">
-                                                    {magicLinkUrl}
-                                                </a>
-                                            </div>
-                                        )}
-                                        
-                                        <button 
-                                            type="button" 
-                                            onClick={() => {
-                                                setMagicLinkSent(false);
-                                                setMagicLinkUrl('');
-                                                setIsMagicLinkMode(false);
-                                            }} 
-                                            className="register-btn"
-                                        >
-                                            Back to Login
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <form className="login-form" onSubmit={handleSubmit}>
+                                <form className="login-form" onSubmit={handleSubmit}>
                                         <div className="form-group">
                                             <label htmlFor="username">Username</label>
                                             <input
@@ -778,71 +715,69 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                             </div>
                                         )}
 
-                                        {!isMagicLinkMode && (
-                                            <div className="form-group">
-                                                <label htmlFor="password">Password</label>
-                                                <div className="password-input-wrapper">
-                                                    <input
-                                                        key={isRegistering ? "signup-password" : "signin-password"}
-                                                        type={showPassword ? "text" : "password"}
-                                                        id="password"
-                                                        name="password"
-                                                        value={password}
-                                                        onChange={(e) => setPassword(e.target.value)}
-                                                        placeholder="••••••••••••"
-                                                        autoComplete={isRegistering ? "new-password" : "current-password"}
-                                                        required
-                                                        minLength={12}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        className="password-toggle-btn"
-                                                        onClick={() => setShowPassword(!showPassword)}
-                                                        aria-label={showPassword ? "Hide password" : "Show password"}
-                                                    >
-                                                        {showPassword ? (
-                                                            <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                                                                <line x1="1" y1="1" x2="23" y2="23"></line>
-                                                            </svg>
-                                                        ) : (
-                                                            <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                                                <circle cx="12" cy="12" r="3"></circle>
-                                                            </svg>
-                                                        )}
-                                                    </button>
-                                                </div>
-                                                {isRegistering && (
-                                                    <div className="password-strength-container">
-                                                        <div className="password-strength-row">
-                                                            <span className="password-strength-label">Strength:</span>
-                                                            <span className={`password-strength-value strength-${calculatePasswordStrength(password).score}`}>
-                                                                {['Weak', 'Fair', 'Good', 'Strong', 'Excellent'][calculatePasswordStrength(password).score]}
-                                                            </span>
-                                                        </div>
-                                                        <div className="password-strength-bar">
-                                                            <div className={`password-strength-fill strength-${calculatePasswordStrength(password).score}`}></div>
-                                                            <ul className="password-requirements">
-                                                                <li className={`password-req-item ${password.length >= 12 ? 'met' : ''}`}>
-                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                                        {password.length >= 12 ? (
-                                                                            <polyline points="20 6 9 17 4 12" />
-                                                                        ) : (
-                                                                            <>
-                                                                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                                                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                                                                            </>
-                                                                        )}
-                                                                    </svg>
-                                                                    At least 12 characters
-                                                                </li>
-                                                            </ul>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                        <div className="form-group">
+                                            <label htmlFor="password">Password</label>
+                                            <div className="password-input-wrapper">
+                                                <input
+                                                    key={isRegistering ? "signup-password" : "signin-password"}
+                                                    type={showPassword ? "text" : "password"}
+                                                    id="password"
+                                                    name="password"
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    placeholder="••••••••••••"
+                                                    autoComplete={isRegistering ? "new-password" : "current-password"}
+                                                    required
+                                                    minLength={12}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="password-toggle-btn"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    aria-label={showPassword ? "Hide password" : "Show password"}
+                                                >
+                                                    {showPassword ? (
+                                                        <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                        </svg>
+                                                    ) : (
+                                                        <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                            <circle cx="12" cy="12" r="3"></circle>
+                                                        </svg>
+                                                    )}
+                                                </button>
                                             </div>
-                                        )}
+                                            {isRegistering && (
+                                                <div className="password-strength-container">
+                                                    <div className="password-strength-row">
+                                                        <span className="password-strength-label">Strength:</span>
+                                                        <span className={`password-strength-value strength-${calculatePasswordStrength(password).score}`}>
+                                                            {['Weak', 'Fair', 'Good', 'Strong', 'Excellent'][calculatePasswordStrength(password).score]}
+                                                        </span>
+                                                    </div>
+                                                    <div className="password-strength-bar">
+                                                        <div className={`password-strength-fill strength-${calculatePasswordStrength(password).score}`}></div>
+                                                        <ul className="password-requirements">
+                                                            <li className={`password-req-item ${password.length >= 12 ? 'met' : ''}`}>
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                                    {password.length >= 12 ? (
+                                                                        <polyline points="20 6 9 17 4 12" />
+                                                                    ) : (
+                                                                        <>
+                                                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                                        </>
+                                                                    )}
+                                                                </svg>
+                                                                At least 12 characters
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         {turnstileSiteKey && (
                                             <div style={{ margin: 'var(--space-4) 0', display: 'flex', justifyContent: 'center' }}>
@@ -855,10 +790,10 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                 {isLoading ? (
                                                     <span className="spinner"></span>
                                                 ) : (
-                                                    isRegistering ? 'Get Started' : (isMagicLinkMode ? 'Send Link' : 'Enter')
+                                                    isRegistering ? 'Get Started' : 'Enter'
                                                 )}
                                             </button>
-                                            {!isRegistering && !isMagicLinkMode && (
+                                            {!isRegistering && (
                                                 <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
                                                     {isLoading && isRegistering ? (
                                                         <span className="spinner"></span>
@@ -867,8 +802,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                     )}
                                                 </button>
                                             )}
-                                            {(isRegistering || isMagicLinkMode) && (
-                                                <button type="button" onClick={() => { setIsRegistering(false); setIsMagicLinkMode(false); setError(''); }} disabled={isLoading} className="register-btn">
+                                            {isRegistering && (
+                                                <button type="button" onClick={() => { setIsRegistering(false); setError(''); }} disabled={isLoading} className="register-btn">
                                                     Back to Login
                                                 </button>
                                             )}
@@ -886,7 +821,6 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                             </div>
                                         )}
                                     </form>
-                                )}
                             </>
                         )}
                     </div>

@@ -17,12 +17,4 @@ CREATE TABLE IF NOT EXISTS login_challenges (
     expires_at DATETIME NOT NULL
 );
 
--- Table for passwordless magic link login tokens
-CREATE TABLE IF NOT EXISTS magic_links (
-    token TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    client_ip TEXT NOT NULL,
-    user_agent TEXT NOT NULL,
-    expires_at DATETIME NOT NULL,
-    used INTEGER DEFAULT 0
-);
+

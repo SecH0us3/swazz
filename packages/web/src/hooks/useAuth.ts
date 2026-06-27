@@ -200,43 +200,5 @@ export function useAuth() {
         sessionStorage.removeItem('swazz_guest');
     };
 
-    const requestMagicLink = async (username: string) => {
-        const csrfToken = useAppStore.getState().csrfToken;
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
-
-        const res = await fetch(`${PROXY_URL}/api/auth/magic-link/request`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ username })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to request magic link');
-        return data;
-    };
-
-    const verifyMagicLink = async (token: string) => {
-        const csrfToken = useAppStore.getState().csrfToken;
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
-
-        const res = await fetch(`${PROXY_URL}/api/auth/magic-link/verify`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ token })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Magic link verification failed');
-        setToken(data.token);
-        localStorage.setItem('swazz_token', data.token);
-        setIsGuest(false);
-        sessionStorage.removeItem('swazz_guest');
-        return { success: true };
-    };
-
-    return { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout, requestMagicLink, verifyMagicLink };
+    return { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout };
 }

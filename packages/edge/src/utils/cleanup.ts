@@ -6,13 +6,7 @@ export async function cleanupSecurityTables(db: any): Promise<void> {
     if (challengesRes.meta?.changes > 0) {
       console.log(`Cleaned up ${challengesRes.meta?.changes || 0} expired login challenges.`);
     }
-    
-    const magicLinksRes = await db.prepare(
-      "DELETE FROM magic_links WHERE expires_at < datetime('now')"
-    ).run();
-    if (magicLinksRes.meta?.changes > 0) {
-      console.log(`Cleaned up ${magicLinksRes.meta?.changes || 0} expired magic links.`);
-    }
+
 
     const rateLimitsRes = await db.prepare(
       "DELETE FROM rate_limits WHERE reset_at < datetime('now')"
