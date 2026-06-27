@@ -33,3 +33,4 @@ When handling a Task N, delegate to specialized subagents:
 7. Update `README.md` or files in `docs/` to reflect any new configurations or features.
 8. Mark task as `[/]` in ROADMAP.md, generate `walkthrough.md`, wait for review.
 9. Only check off `[x]` upon explicit human consent.
+10. SELF-CRITICAL REVIEW: Before final review, invoke the `self-critical-review` skill to systematically check for dead code, unused CSS styles, UTC timezone compliance, resource/memory leaks, and rule integrations.
