@@ -4,6 +4,7 @@ export interface Env {
   COORDINATOR_DO: DurableObjectNamespace;
   JWT_SECRET: string;
   TURNSTILE_SECRET?: string;
+  TURNSTILE_SITE_KEY?: string;
   AUTH_ENABLED?: string; // 'true' | 'false'
   LIMIT_ANONYMOUS?: string; // 'true' | 'false'
   ALLOWED_ORIGINS?: string; // Comma-separated list of origins

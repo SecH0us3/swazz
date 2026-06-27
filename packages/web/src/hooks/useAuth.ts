@@ -20,6 +20,9 @@ export function useAuth() {
             })
             .then(data => {
                 setAuthEnabled(!!data.auth_enabled);
+                if (data.turnstile_site_key) {
+                    useAppStore.setState({ turnstileSiteKey: data.turnstile_site_key });
+                }
                 setIsLoading(false);
             })
             .catch(() => {
@@ -29,25 +32,46 @@ export function useAuth() {
     }, []);
 
     const solvePoW = async (challenge: string, difficulty: number): Promise<number> => {
-        const targetPrefix = '0'.repeat(difficulty);
-        let nonce = 0;
-        const encoder = new TextEncoder();
-        
-        while (true) {
-            const text = challenge + nonce;
-            const data = encoder.encode(text);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return new Promise((resolve, reject) => {
+            const workerCode = `
+                self.onmessage = async (e) => {
+                    const { challenge, difficulty } = e.data;
+                    const targetPrefix = '0'.repeat(difficulty);
+                    let nonce = 0;
+                    const encoder = new TextEncoder();
+                    while (true) {
+                        const text = challenge + nonce;
+                        const data = encoder.encode(text);
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                        
+                        if (hashHex.startsWith(targetPrefix)) {
+                            self.postMessage(nonce);
+                            break;
+                        }
+                        nonce++;
+                    }
+                };
+            `;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            const worker = new Worker(URL.createObjectURL(blob));
             
-            if (hashHex.startsWith(targetPrefix)) {
-                return nonce;
-            }
-            nonce++;
-        }
+            worker.onmessage = (event) => {
+                resolve(event.data);
+                worker.terminate();
+            };
+            
+            worker.onerror = (error) => {
+                reject(error);
+                worker.terminate();
+            };
+            
+            worker.postMessage({ challenge, difficulty });
+        });
     };
 
-    const login = async (username: string, password: string, twoFactorCode?: string) => {
+    const login = async (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => {
         const csrfToken = useAppStore.getState().csrfToken;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrfToken) {
@@ -58,7 +82,10 @@ export function useAuth() {
         const step1Res = await fetch(`${PROXY_URL}/api/auth/login/step1`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ username })
+            body: JSON.stringify({ 
+                username,
+                'cf-turnstile-response': turnstileToken
+            })
         });
         const step1Data = await step1Res.json();
         if (!step1Res.ok) throw new Error(step1Data.error || 'Login failed (Step 1)');
@@ -91,7 +118,7 @@ export function useAuth() {
         return { success: true };
     };
 
-    const register = async (username: string, password: string, email?: string) => {
+    const register = async (username: string, password: string, email?: string, turnstileToken?: string) => {
         const csrfToken = useAppStore.getState().csrfToken;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrfToken) {
@@ -101,16 +128,27 @@ export function useAuth() {
         const res = await fetch(`${PROXY_URL}/api/auth/register`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ username, password, email })
+            body: JSON.stringify({ 
+                username, 
+                password, 
+                email,
+                'cf-turnstile-response': turnstileToken
+            })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Registration failed');
         
-        // Auto-login after registration
-        await login(username, password);
+        if (data.token) {
+            setToken(data.token);
+            localStorage.setItem('swazz_token', data.token);
+            setIsGuest(false);
+            sessionStorage.removeItem('swazz_guest');
+        } else {
+            await login(username, password);
+        }
     };
 
-    const requestMagicLink = async (username: string) => {
+    const requestMagicLink = async (username: string, turnstileToken?: string) => {
         const csrfToken = useAppStore.getState().csrfToken;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrfToken) {
@@ -120,7 +158,10 @@ export function useAuth() {
         const res = await fetch(`${PROXY_URL}/api/auth/magic-link/request`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ username })
+            body: JSON.stringify({ 
+                username,
+                'cf-turnstile-response': turnstileToken
+            })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to request magic link');

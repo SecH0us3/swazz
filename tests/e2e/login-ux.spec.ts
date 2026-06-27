@@ -17,7 +17,7 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     // 2. Perform direct registration
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('password123');
+    await page.locator('#password').fill('Password123!');
 
     // Register by clicking Create
     const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);

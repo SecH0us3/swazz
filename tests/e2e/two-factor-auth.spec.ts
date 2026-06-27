@@ -76,7 +76,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     // 2. Perform direct registration
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('password123');
+    await page.locator('#password').fill('Password123!');
     await createAccountBtn.click();
 
     // Wait for main dashboard to load
@@ -104,7 +104,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     await expect(twoFactorHeader).toBeVisible();
 
     // Fill password to confirm identity for 2FA Setup
-    await page.locator('#totp-setup-password').fill('password123');
+    await page.locator('#totp-setup-password').fill('Password123!');
 
     // 4. Click Set Up 2FA
     const setUp2faBtn = page.getByRole('button', { name: 'Set Up 2FA' });
@@ -138,7 +138,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
 
     // 7. Login (should trigger 2FA)
     await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('password123');
+    await page.locator('#password').fill('Password123!');
     await enterWorkspaceBtn.click();
 
     // Verify 2FA screen shows up
@@ -167,7 +167,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     await expect(twoFactorHeader).toBeVisible();
 
     // Disable 2FA
-    await page.locator('#totp-disable-password').fill('password123');
+    await page.locator('#totp-disable-password').fill('Password123!');
 
     const disableCode = await generateTOTP(secret!);
     await page.locator('#totp-disable-code').fill(disableCode);

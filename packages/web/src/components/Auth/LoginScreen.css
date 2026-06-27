@@ -923,27 +923,6 @@
     to { transform: rotate(360deg); }
 }
 
-.login-footer {
-    text-align: center;
-    margin-top: var(--space-4);
-    font-size: var(--font-size-sm);
-    color: var(--text-tech-secondary);
-}
-
-.e2e-signup-btn {
-    background: none;
-    border: none;
-    color: transparent;
-    font-size: 1px;
-    padding: 0;
-    margin: 0;
-    cursor: default;
-    opacity: 0.001;
-    display: inline-block;
-    width: 1px;
-    height: 1px;
-}
-
 .link-btn {
     background: none;
     border: none;

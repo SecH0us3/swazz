@@ -358,7 +358,7 @@ export async function checkIpRateLimit(
  * Run a dummy verification using a fake hash to match the CPU timing cost of real password checks.
  */
 export async function verifyDummyPassword(password: string): Promise<boolean> {
-  const dummyHash = '600000:0102030405060708090a0b0c0d0e0f10:0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20';
+  const dummyHash = '100000:0102030405060708090a0b0c0d0e0f10:0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20';
   await verifyPassword(password, dummyHash);
   return false;
 }

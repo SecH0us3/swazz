@@ -198,7 +198,7 @@ describe("Swazz Worker (Hono)", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0" });
+    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0", turnstile_site_key: null });
   });
 });
 

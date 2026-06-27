@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useAppStore } from '../../store/appStore.js';
 import './LoginScreen.css';
 
 interface LoginScreenProps {
-    onLogin: (username: string, password: string, twoFactorCode?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
-    onRegister: (username: string, password: string, email?: string) => Promise<void>;
+    onLogin: (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
+    onRegister: (username: string, password: string, email?: string, turnstileToken?: string) => Promise<void>;
     onGuest?: () => Promise<void>;
 }
 
@@ -68,6 +69,10 @@ const FEATURE_DETAILS = {
 };
 
 export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) {
+    const turnstileSiteKey = useAppStore(state => state.turnstileSiteKey);
+    const [turnstileResponse, setTurnstileResponse] = useState('');
+    const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
+
     const [isRegistering, setIsRegistering] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -88,6 +93,60 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         // Auto-open modal for E2E tests to keep them compatible
         return typeof window !== 'undefined' && (window.navigator?.webdriver || window.location.search.includes('e2e'));
     });
+
+    // Initialize Turnstile script dynamically
+    useEffect(() => {
+        if (!turnstileSiteKey) return;
+        const scriptId = 'cf-turnstile-script';
+        let script = document.getElementById(scriptId) as HTMLScriptElement;
+        if (!script) {
+            script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+            script.async = true;
+            script.defer = true;
+            document.body.appendChild(script);
+        }
+    }, [turnstileSiteKey]);
+
+    // Explicitly render Turnstile when container is available
+    useEffect(() => {
+        if (!turnstileSiteKey) return;
+        
+        let active = true;
+        const checkAndRender = () => {
+            if (!active) return;
+            const container = document.getElementById('cf-turnstile-container');
+            if (container && (window as any).turnstile) {
+                try {
+                    const widgetId = (window as any).turnstile.render('#cf-turnstile-container', {
+                        sitekey: turnstileSiteKey,
+                        callback: (token: string) => {
+                            setTurnstileResponse(token);
+                        },
+                        'expired-callback': () => {
+                            setTurnstileResponse('');
+                        },
+                        'error-callback': () => {
+                            setTurnstileResponse('');
+                        }
+                    });
+                    setTurnstileWidgetId(widgetId);
+                } catch (e) {
+                    console.error("Turnstile render error:", e);
+                }
+            } else {
+                setTimeout(checkAndRender, 100);
+            }
+        };
+
+        checkAndRender();
+
+        return () => {
+            active = false;
+            setTurnstileResponse('');
+        };
+    }, [turnstileSiteKey, isRegistering, isMagicLinkMode]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -143,7 +202,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         setIsLoading(true);
         try {
             if (isMagicLinkMode) {
-                const res = await requestMagicLink(username);
+                const res = await requestMagicLink(username, turnstileResponse);
                 setMagicLinkSent(true);
                 if (res.magic_link) {
                     setMagicLinkUrl(res.magic_link);
@@ -153,9 +212,9 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                 if (score < 4) {
                     throw new Error('Please choose a stronger password matching all complexity requirements.');
                 }
-                await onRegister(username, password, email || undefined);
+                await onRegister(username, password, email || undefined, turnstileResponse);
             } else {
-                const res = await onLogin(username, password, twoFactorRequired ? twoFactorCode : undefined);
+                const res = await onLogin(username, password, twoFactorRequired ? twoFactorCode : undefined, turnstileResponse);
                 if (res && res.twoFactorRequired) {
                     setTwoFactorRequired(true);
                     setTwoFactorCode('');
@@ -163,6 +222,12 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             }
         } catch (err: any) {
             setError(err.message);
+            if ((window as any).turnstile && turnstileWidgetId) {
+                try {
+                    (window as any).turnstile.reset(turnstileWidgetId);
+                    setTurnstileResponse('');
+                } catch (e) {}
+            }
         } finally {
             setIsLoading(false);
         }
@@ -170,25 +235,37 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
     const handleRegisterClick = async (e: React.MouseEvent) => {
         e.preventDefault();
-        const form = (e.currentTarget as HTMLElement).closest('form');
-        if (form && !form.reportValidity()) {
-            return;
+        
+        if (username && password) {
+            const form = (e.currentTarget as HTMLElement).closest('form');
+            if (form && form.reportValidity()) {
+                setError('');
+                setIsRegistering(true);
+                setIsLoading(true);
+                try {
+                    const { score } = calculatePasswordStrength(password);
+                    if (score < 4) {
+                        throw new Error('Please choose a stronger password matching all complexity requirements.');
+                    }
+                    await onRegister(username, password, email || undefined, turnstileResponse);
+                    return;
+                } catch (err: any) {
+                    setError(err.message);
+                    if ((window as any).turnstile && turnstileWidgetId) {
+                        try {
+                            (window as any).turnstile.reset(turnstileWidgetId);
+                            setTurnstileResponse('');
+                        } catch (e) {}
+                    }
+                    setIsRegistering(false);
+                    setIsLoading(false);
+                    return;
+                }
+            }
         }
+        
         setError('');
         setIsRegistering(true);
-        setIsLoading(true);
-        try {
-            const { score } = calculatePasswordStrength(password);
-            if (score < 4) {
-                throw new Error('Please choose a stronger password matching all complexity requirements.');
-            }
-            await onRegister(username, password, email || undefined);
-        } catch (err: any) {
-            setError(err.message);
-            setIsRegistering(false);
-        } finally {
-            setIsLoading(false);
-        }
     };
 
     const handleGuestClick = async () => {
@@ -817,6 +894,12 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                             </div>
                                         )}
 
+                                        {turnstileSiteKey && (
+                                            <div style={{ margin: 'var(--space-4) 0', display: 'flex', justifyContent: 'center' }}>
+                                                <div id="cf-turnstile-container" className="cf-turnstile"></div>
+                                            </div>
+                                        )}
+
                                         <div className="login-actions">
                                             <button type="submit" disabled={isLoading} className="login-btn">
                                                 {isLoading && !isRegistering ? (
@@ -834,6 +917,11 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                     )}
                                                 </button>
                                             )}
+                                            {isRegistering && (
+                                                <button type="button" onClick={() => { setIsRegistering(false); setError(''); }} disabled={isLoading} className="register-btn">
+                                                    Back to Login
+                                                </button>
+                                            )}
                                         </div>
 
                                         {onGuest && (
@@ -849,15 +937,6 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                         )}
                                     </form>
                                 )}
-                                <div className="login-footer">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => { setIsRegistering(true); setError(''); setIsMagicLinkMode(false); }} 
-                                        className="e2e-signup-btn"
-                                    >
-                                        Sign up
-                                    </button>
-                                </div>
                             </>
                         )}
                     </div>

@@ -88,7 +88,17 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
-      return c.json({ status: 'ok', id });
+
+      const payload = {
+        sub: id,
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+      };
+      
+      const secret = c.env.JWT_SECRET;
+      if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
+      const jwtToken = await sign(payload, secret);
+
+      return c.json({ status: 'ok', id, token: jwtToken });
     } catch (err: any) {
       const errMsg = String(err?.message || err || '');
       if (errMsg.includes('UNIQUE constraint failed')) {
@@ -255,10 +265,25 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Missing username' }, 400);
     }
 
+    // Turnstile verification (skip if secret not configured — local dev mode)
+    const turnstileSecret = c.env.TURNSTILE_SECRET;
+    let difficulty = 3; // SHA-256 starts with "000"
+    if (turnstileSecret) {
+      const turnstileToken = body['cf-turnstile-response'];
+      if (!turnstileToken) {
+        return c.json({ error: 'Missing Turnstile token' }, 403);
+      }
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+      if (!valid) {
+        return c.json({ error: 'Turnstile verification failed' }, 403);
+      }
+      difficulty = 0; // Turnstile is enabled, bypass PoW
+    }
+
     const username = body.username.trim();
     const token = crypto.randomUUID();
     const challenge = crypto.randomUUID();
-    const difficulty = 3; // SHA-256 starts with "000"
     
     const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
@@ -279,8 +304,17 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.post('/api/auth/login', async (c) => {
+    const startTime = Date.now();
     const clientIp = getClientIp(c);
     
+    const enforceUniformDelay = async (start: number) => {
+      const elapsed = Date.now() - start;
+      const targetDelay = 300;
+      if (elapsed < targetDelay) {
+        await new Promise(resolve => setTimeout(resolve, targetDelay - elapsed));
+      }
+    };
+
     // IP-based Rate limit check (max 30 requests per minute)
     const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) {
@@ -354,23 +388,25 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       // User doesn't exist: run dummy verify and inject timing-delay to prevent username enumeration
       await verifyDummyPassword(body.password);
       await recordFailedLogin(c.env.DB, username);
-      const randomDelay = 150 + Math.floor(Math.random() * 100);
-      await new Promise(resolve => setTimeout(resolve, randomDelay));
+      await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
       await recordFailedLogin(c.env.DB, username);
+      await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
     // 2FA Verification
     if (user.two_factor_enabled === 1) {
       if (!body.two_factor_code) {
+        await enforceUniformDelay(startTime);
         return c.json({ status: '2fa_required' });
       }
       if (!user.two_factor_secret) {
+        await enforceUniformDelay(startTime);
         return c.json({ error: 'Internal server error: 2FA configured incorrectly' }, 500);
       }
       let decryptedSecret: string;
@@ -378,11 +414,13 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
       } catch {
         await recordFailedLogin(c.env.DB, username);
+        await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
       const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
         await recordFailedLogin(c.env.DB, username);
+        await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
     }
@@ -399,12 +437,22 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
     const jwtToken = await sign(payload, secret);
 
+    await enforceUniformDelay(startTime);
     return c.json({ status: 'ok', token: jwtToken });
   });
 
   app.post('/api/auth/magic-link/request', async (c) => {
+    const startTime = Date.now();
     const clientIp = getClientIp(c);
     
+    const enforceUniformDelay = async (start: number) => {
+      const elapsed = Date.now() - start;
+      const targetDelay = 300;
+      if (elapsed < targetDelay) {
+        await new Promise(resolve => setTimeout(resolve, targetDelay - elapsed));
+      }
+    };
+
     // IP-based Rate limit check (max 5 requests per minute)
     const ipRateLimit = await checkIpRateLimit(c.env.DB, `magic-ip:${clientIp}`, 5, 60);
     if (ipRateLimit.limited) {
@@ -416,15 +464,29 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Missing username' }, 400);
     }
 
+    // Turnstile verification (skip if secret not configured — local dev mode)
+    const turnstileSecret = c.env.TURNSTILE_SECRET;
+    if (turnstileSecret) {
+      const turnstileToken = body['cf-turnstile-response'];
+      if (!turnstileToken) {
+        return c.json({ error: 'Missing Turnstile token' }, 403);
+      }
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteip);
+      if (!valid) {
+        return c.json({ error: 'Turnstile verification failed' }, 403);
+      }
+    }
+
     const username = body.username.trim();
     const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?')
       .bind(username)
       .first<{ id: string }>();
 
     if (!user) {
-      // Anti-enumeration timing delay
-      const randomDelay = 150 + Math.floor(Math.random() * 100);
-      await new Promise(resolve => setTimeout(resolve, randomDelay));
+      // Anti-enumeration timing delay matching CPU timing cost
+      await verifyDummyPassword('dummy');
+      await enforceUniformDelay(startTime);
       return c.json({ status: 'ok', message: 'If the username exists, a magic link has been generated.' });
     }
 
@@ -441,15 +503,15 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     const magicLinkUrl = `${c.req.url.split('/api/')[0]}/auth/magic-link?token=${token}`;
 
+    await enforceUniformDelay(startTime);
     return c.json({
       status: 'ok',
-      message: 'Magic link generated successfully.',
+      message: 'If the username exists, a magic link has been generated.',
       magic_link: magicLinkUrl
     });
   });
 
   app.post('/api/auth/magic-link/verify', async (c) => {
-    const clientIp = getClientIp(c);
     const body = await c.req.json();
     if (!body.token) {
       return c.json({ error: 'Missing token' }, 400);
@@ -468,11 +530,6 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const expiresAt = new Date(link.expires_at + 'Z');
     if (expiresAt < new Date()) {
       return c.json({ error: 'Invalid or expired magic link' }, 401);
-    }
-
-    // client IP verification
-    if (link.client_ip !== clientIp) {
-      return c.json({ error: 'Magic link must be opened from the requesting device' }, 403);
     }
 
     // Mark as used
