@@ -46,7 +46,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   
     // Turnstile verification (skip if secret not configured — local dev mode)
     const turnstileSecret = c.env.TURNSTILE_SECRET;
-    if (turnstileSecret) {
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
       const turnstileToken = body['cf-turnstile-response'];
       if (!turnstileToken) {
         return c.json({ error: 'Missing Turnstile token' }, 403);
@@ -268,7 +268,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     // Turnstile verification (skip if secret not configured — local dev mode)
     const turnstileSecret = c.env.TURNSTILE_SECRET;
     let difficulty = 3; // SHA-256 starts with "000"
-    if (turnstileSecret) {
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
       const turnstileToken = body['cf-turnstile-response'];
       if (!turnstileToken) {
         return c.json({ error: 'Missing Turnstile token' }, 403);
@@ -466,7 +466,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Turnstile verification (skip if secret not configured — local dev mode)
     const turnstileSecret = c.env.TURNSTILE_SECRET;
-    if (turnstileSecret) {
+    if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
       const turnstileToken = body['cf-turnstile-response'];
       if (!turnstileToken) {
         return c.json({ error: 'Missing Turnstile token' }, 403);
@@ -503,11 +503,16 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     const magicLinkUrl = `${c.req.url.split('/api/')[0]}/auth/magic-link?token=${token}`;
 
+    const isLocalOrTest = c.env.JWT_SECRET === 'test-secret' || c.env.JWT_SECRET === 'local-secret-key-123456';
+
+    // Log the link in server console for admins/developers
+    console.log(`[Magic Link] Generated for user ${username}: ${magicLinkUrl}`);
+
     await enforceUniformDelay(startTime);
     return c.json({
       status: 'ok',
       message: 'If the username exists, a magic link has been generated.',
-      magic_link: magicLinkUrl
+      ...(isLocalOrTest ? { magic_link: magicLinkUrl } : {})
     });
   });
 

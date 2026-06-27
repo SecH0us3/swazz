@@ -180,7 +180,7 @@ beforeAll(async () => {
   }
 });
 
-const testEnv = { ...env, JWT_SECRET: 'test-secret' };
+const testEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
 
 describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {
@@ -744,7 +744,7 @@ describe("D1 Database Migrations & API", () => {
 
 describe("Anonymous Limits", () => {
   let userToken: string;
-  const testEnv = { ...env, AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret' };
+  const testEnv = { ...env, AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
 
   beforeAll(async () => {
     // Register and login to get a valid token
