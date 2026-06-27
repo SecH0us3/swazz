@@ -260,5 +260,46 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     await stub.fetch(doReq);
     return c.json({ status: 'resumed' });
   });
+
+  app.post('/api/runners/:connectionId/restart', async (c) => {
+    const connectionId = c.req.param('connectionId');
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    // Fetch user public key
+    let userPublicKey = "";
+    try {
+      const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ public_key: string | null }>();
+      if (user && user.public_key) {
+        userPublicKey = user.public_key;
+      }
+    } catch (dbErr) {
+      console.error("Failed to query user public key in /api/runners/.../restart:", dbErr);
+    }
+
+    if (!userPublicKey) {
+      return c.json({ error: 'Forbidden: You do not own any runners' }, 403);
+    }
+
+    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+    const stub = c.env.COORDINATOR_DO.get(id);
+    const doRes = await stub.fetch(
+      new Request(`http://do/runners/restart?connectionId=${encodeURIComponent(connectionId)}&userPublicKey=${encodeURIComponent(userPublicKey)}`, {
+        method: 'POST'
+      })
+    );
+
+    if (!doRes.ok) {
+      const errMsg = await doRes.text();
+      const status = doRes.status;
+      return c.json({ error: errMsg || 'Failed to restart runner' }, status);
+    }
+
+    return c.json({ status: 'restarted' });
+  });
   
 }

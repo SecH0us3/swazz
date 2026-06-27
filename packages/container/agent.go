@@ -276,6 +276,10 @@ func startAgent(args []string) {
 		}
 
 		switch wsMsg.Type {
+		case "agent_restart":
+			logInfo("Received remote restart request. Exiting...")
+			os.Exit(0)
+
 		case "job_dispatch":
 			var dispatch JobDispatchPayload
 			if err := json.Unmarshal(wsMsg.Payload, &dispatch); err != nil {

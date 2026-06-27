@@ -9,6 +9,7 @@ import { ChainingTab } from './ProjectSettings/ChainingTab.js';
 import { RawConfigTab } from './ProjectSettings/RawConfigTab.js';
 
 interface Runner {
+    connectionId: string | null;
     name: string;
     publicKey: string | null;
     status: 'authenticating' | 'connected';
