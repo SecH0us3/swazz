@@ -1269,49 +1269,7 @@
     }
 }
 
-/* ─── Modernized Auth Tabs, Strength Meter & Magic Link Styles ─── */
-
-.auth-tabs {
-    display: flex;
-    gap: var(--space-4);
-    border-bottom: 1px solid var(--border-tech);
-    padding-bottom: var(--space-2);
-    margin-bottom: var(--space-5);
-    justify-content: center;
-}
-
-.auth-tab-btn {
-    background: none;
-    border: none;
-    color: var(--text-tech-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all var(--duration-base) var(--ease-out);
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-sm);
-    letter-spacing: 0.02em;
-    position: relative;
-}
-
-.auth-tab-btn:hover {
-    color: #ffffff;
-}
-
-.auth-tab-btn.active {
-    color: var(--accent-neon);
-}
-
-.auth-tab-btn.active::after {
-    content: '';
-    position: absolute;
-    bottom: -9px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: var(--accent-neon);
-    box-shadow: 0 0 8px var(--accent-neon-glow);
-}
+/* ─── Password Strength Meter Styles ─── */
 
 /* Password Strength Meter */
 .password-strength-container {
@@ -1392,75 +1350,5 @@
     flex-shrink: 0;
 }
 
-/* Magic Link Success View */
-.magic-link-success {
-    text-align: center;
-    padding: var(--space-4) 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
-}
 
-.magic-link-icon-container {
-    width: 56px;
-    height: 56px;
-    background-color: var(--accent-neon-subtle);
-    color: var(--accent-neon);
-    border-radius: var(--radius-full);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(212, 252, 52, 0.2);
-    box-shadow: 0 0 20px var(--accent-neon-glow);
-}
-
-.magic-link-success h3 {
-    margin: 0;
-    font-size: var(--font-size-md);
-    font-weight: 700;
-    color: #ffffff;
-}
-
-.magic-link-success p {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--text-tech-secondary);
-    line-height: 1.5;
-}
-
-.magic-link-test-container {
-    margin-top: var(--space-6);
-    background-color: var(--bg-tech);
-    border: 1px solid var(--border-tech);
-    padding: var(--space-4);
-    border-radius: var(--radius-md);
-    text-align: left;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.magic-link-test-title {
-    font-size: var(--font-size-xs);
-    font-weight: 700;
-    color: var(--accent-neon);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: var(--space-2);
-}
-
-.magic-link-test-url {
-    display: inline-block;
-    word-break: break-all;
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    color: #c084fc;
-    text-decoration: underline;
-    cursor: pointer;
-    transition: color var(--duration-fast) var(--ease-out);
-}
-
-.magic-link-test-url:hover {
-    color: #a855f7;
-}
 
