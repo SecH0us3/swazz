@@ -154,7 +154,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
     - Add a "Sign in with GitHub" button to the frontend authentication modals.
 
-- [ ] **Task 96: Implement Content Negotiation for Landing Page**
+- [/] **Task 96: Implement Content Negotiation for Landing Page**
   - **Design Goal:** Support content negotiation on the landing page so that when a client sends an `Accept: text/markdown` header, the server returns the page content in clean Markdown instead of HTML.
   - **Implementation Details:**
     - Check the `Accept` header of incoming requests to the landing page routes.
