@@ -33,7 +33,10 @@ describe('useRunner', () => {
             await result.current.stop();
         });
 
-        expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/runs/123/stop`, { method: 'POST' });
+        expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/runs/123/stop`, {
+            method: 'POST',
+            headers: {}
+        });
         expect(useAppStore.getState().isRunning).toBe(false);
     });
 
@@ -73,7 +76,10 @@ describe('useRunner', () => {
             await result.current.pause();
         });
 
-        expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/runs/123/pause`, { method: 'POST' });
+        expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/runs/123/pause`, {
+            method: 'POST',
+            headers: {}
+        });
         expect(useAppStore.getState().isPaused).toBe(true);
     });
 
@@ -113,7 +119,10 @@ describe('useRunner', () => {
             await result.current.resume();
         });
 
-        expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/runs/123/resume`, { method: 'POST' });
+        expect(globalThis.fetch).toHaveBeenCalledWith(`${proxyUrl}/api/runs/123/resume`, {
+            method: 'POST',
+            headers: {}
+        });
         expect(useAppStore.getState().isPaused).toBe(false);
     });
 });
