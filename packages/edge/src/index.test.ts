@@ -4,6 +4,47 @@ import { Env } from "./env";
 import app from "./index";
 import { cleanupScheduledDeletions } from "./utils/cleanup";
 
+const originalFetch = app.fetch;
+// @ts-ignore
+app.fetch = async (req: Request, env?: any, ctx?: any) => {
+  if (req.headers.has("X-Test-No-Csrf")) {
+    const headers = new Headers(req.headers);
+    headers.delete("X-Test-No-Csrf");
+    const newReq = new Request(req.url, {
+      method: req.method,
+      headers,
+      body: req.body,
+      // @ts-ignore
+      duplex: 'half'
+    });
+    return originalFetch(newReq, env, ctx);
+  }
+
+  const isStateChanging = ["POST", "PUT", "DELETE", "PATCH"].includes(req.method);
+  const hasAuth = req.headers.has("Authorization") || req.headers.has("X-Upload-Token");
+  const hasCsrf = req.headers.has("X-CSRF-Token");
+
+  if (isStateChanging && !hasAuth && !hasCsrf) {
+    const infoRes = await originalFetch(new Request("http://localhost/api/info"), env, ctx);
+    const csrfToken = infoRes.headers.get("X-CSRF-Token");
+    if (csrfToken) {
+      const headers = new Headers(req.headers);
+      headers.set("X-CSRF-Token", csrfToken);
+      headers.set("Cookie", `csrf_token=${csrfToken}`);
+      const newReq = new Request(req.url, {
+        method: req.method,
+        headers,
+        body: req.body,
+        // @ts-ignore
+        duplex: 'half'
+      });
+      return originalFetch(newReq, env, ctx);
+    }
+  }
+
+  return originalFetch(req, env, ctx);
+};
+
 const env = rawEnv as unknown as Env;
 
 export function splitSql(sql: string): string[] {
@@ -1070,5 +1111,66 @@ describe("splitSql helper", () => {
       "SELECT 1",
       "SELECT 2"
     ]);
+  });
+});
+
+describe("CSRF Protection", () => {
+  it("safe requests (GET) return the X-CSRF-Token header and set csrf_token cookie", async () => {
+    const req = new Request("http://localhost/api/info");
+    const res = await originalFetch(req, testEnv);
+    expect(res.status).toBe(200);
+    const csrfTokenHeader = res.headers.get("X-CSRF-Token");
+    expect(csrfTokenHeader).toBeDefined();
+    expect(csrfTokenHeader).not.toBeNull();
+    expect(csrfTokenHeader!.length).toBeGreaterThan(0);
+
+    const setCookieHeader = res.headers.get("Set-Cookie");
+    expect(setCookieHeader).toContain("csrf_token=");
+  });
+
+  it("state-changing requests without X-CSRF-Token header are rejected with 403", async () => {
+    const req = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Test-No-Csrf": "true"
+      },
+      body: JSON.stringify({ username: "csrfuser", password: "password123" })
+    });
+    const res = await app.fetch(req, testEnv);
+    expect(res.status).toBe(403);
+    const body = await res.json() as any;
+    expect(body.error).toBe("Invalid or missing CSRF token");
+  });
+
+  it("state-changing requests with invalid X-CSRF-Token header are rejected with 403", async () => {
+    const req = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "invalid-token",
+        "Cookie": "csrf_token=valid-token",
+        "X-Test-No-Csrf": "true"
+      },
+      body: JSON.stringify({ username: "csrfuser", password: "password123" })
+    });
+    const res = await app.fetch(req, testEnv);
+    expect(res.status).toBe(403);
+    const body = await res.json() as any;
+    expect(body.error).toBe("Invalid or missing CSRF token");
+  });
+
+  it("requests with Authorization: Bearer <token> bypass CSRF verification", async () => {
+    const req = new Request("http://localhost/api/projects", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer invalid_or_dummy_token",
+        "X-Test-No-Csrf": "true"
+      },
+      body: JSON.stringify({ name: "Bypass Project", description: "Bypassed" })
+    });
+    const res = await app.fetch(req, testEnv);
+    expect(res.status).toBe(401);
   });
 });

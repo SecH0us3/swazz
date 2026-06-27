@@ -1,28 +1,54 @@
-# Walkthrough: Modern Landing Page with Popup Authentication (Task 92)
+# Walkthrough - Task 90: CSRF Protection Middleware in Coordinator
 
-We have completed the redesign of the sales landing page and authentication UI to match the Google Stitch design project `11574532577631757210`.
+This walkthrough summarizes the implementation of **Task 90: Implement CSRF Protection Middleware in Coordinator**.
 
-## 🎨 Implemented Features & Design Specs
-1. **Design System & Aesthetics**:
-   - Re-themed matching Stitch v2.0 styles: dark tech background, neon yellow-green accent (`#d4fc34`), rounded-border card shapes, and radial glowing grid background.
-   - Zero inline layout styles inside React components.
-2. **Landing Page Structure**:
-   - Sticky navigation header with new "Register" button (preventing test locator collision).
-   - Hero section with badge, typography scale, and "Get Started" solid accent button.
-   - Walkthrough Video showcase.
-   - Key Features Bento Grid (2x2 + 1 wide card layout).
-   - "How it Works" interactive switcher (Docker & Cloudflare Worker code views).
-   - Community Plans & Github Sponsorship cards.
-   - Warning banner (visible for sponsorship when not authenticated).
-   - Footer links and social icons.
-3. **Popup Auth Modal**:
-   - A modern pop-up overlay with password hide/show toggle, clean form inputs, and 2FA flow support.
-   - Prevents 1Password autofill loop by mounting username/password fields with unique React keys.
+The coordinator now protects state-changing endpoints (`POST`, `PUT`, `DELETE`, `PATCH`) from Cross-Site Request Forgery (CSRF) using double-submit cookie validation, while automatically permitting runner agents and external APIs.
 
-## 🧪 E2E Test Verification
-- **Locator Collision Fix**: E2E tests initially failed due to Playwright's `getByRole('button', { name: 'Sign up' })` matching both the nav header "Sign Up" button and the modal footer "Sign up" button. Changing the nav header text to "Register" resolved the collision.
-- **Result**: Checked and confirmed that all **33/33 tests** successfully passed.
+---
 
+## 🛠️ Implemented Changes
+
+### 1. Backend Protection (`packages/edge`)
+- **Custom CSRF Middleware**: Created [csrf.ts](file:///Users/alex/src/swazz/packages/edge/src/utils/csrf.ts) which:
+  - Generates a secure CSRF token (UUID) and sets it in an `HttpOnly`, `SameSite=Lax` cookie named `csrf_token`.
+  - For safe HTTP methods (`GET`, `HEAD`, `OPTIONS`), it appends `X-CSRF-Token` to the response headers.
+  - Bypasses validation if requests carry `Authorization` or `X-Upload-Token` headers (since token-based auth is immune to CSRF).
+  - For cookie-based state-changing requests, validates that the `X-CSRF-Token` header matches the `csrf_token` cookie.
+- **Middleware Application**: Registered the middleware globally on `/api/*` in [index.ts](file:///Users/alex/src/swazz/packages/edge/src/index.ts).
+- **CORS Support**: Added `X-CSRF-Token` to exposed and allowed CORS headers in [index.ts](file:///Users/alex/src/swazz/packages/edge/src/index.ts).
+
+### 2. Frontend State & Requests (`packages/web`)
+- **Global Token Store**: Added a `csrfToken` state in [appStore.ts](file:///Users/alex/src/swazz/packages/web/src/store/appStore.ts).
+- **Token Capture**: Updated [useAuth.ts](file:///Users/alex/src/swazz/packages/web/src/hooks/useAuth.ts) to parse the token from the `/api/info` GET response header on startup and save it.
+- **Request Interception**: Updated the following state-changing hooks and components to dynamically append the `X-CSRF-Token` header:
+  - [useAuth.ts](file:///Users/alex/src/swazz/packages/web/src/hooks/useAuth.ts) (login, register, guest)
+  - [useRunner.ts](file:///Users/alex/src/swazz/packages/web/src/hooks/useRunner.ts) (start, stop, pause, resume, and proxy requests)
+  - [projectService.ts](file:///Users/alex/src/swazz/packages/web/src/services/projectService.ts) (createProject)
+  - [swaggerService.ts](file:///Users/alex/src/swazz/packages/web/src/services/swaggerService.ts) (loadSwaggerUrl)
+  - [UserSettings.tsx](file:///Users/alex/src/swazz/packages/web/src/components/UserSettings.tsx) (2FA setup, verify, disable, and delete account)
+  - [DeletionOverlay.tsx](file:///Users/alex/src/swazz/packages/web/src/components/Auth/DeletionOverlay.tsx) (cancel-deletion)
+  - [RunnersTab.tsx](file:///Users/alex/src/swazz/packages/web/src/components/ProjectSettings/RunnersTab.tsx) (public key save)
+
+### 3. Architecture Documentation & Roadmap
+- Updated [architecture.md](file:///Users/alex/src/swazz/docs/architecture.md) to document the details of the CSRF pattern.
+- Updated the status of Task 90 in [ROADMAP.md](file:///Users/alex/src/swazz/ROADMAP.md) to `[/]` for review.
+
+---
+
+## 🧪 Verification & Test Results
+
+### 1. Edge Integration Tests
+Unit tests in [index.test.ts](file:///Users/alex/src/swazz/packages/edge/src/index.test.ts) were added to check:
+- Safe methods correctly generating tokens and headers.
+- Unsafe requests without tokens failing with `403 Forbidden` (`Invalid or missing CSRF token`).
+- Requests with `Authorization` headers bypassing the check.
+
+All 37/37 tests passed:
 ```bash
-=== All Tests Passed Successfully! (33 passed) ===
+ ✓ src/index.test.ts (27 tests) 536ms
+ Test Files  3 passed (3)
+      Tests  37 passed (37)
 ```
+
+### 2. Playwright E2E Integration Tests
+Successfully ran the E2E suite and verified the full pipeline works seamlessly without interruption.

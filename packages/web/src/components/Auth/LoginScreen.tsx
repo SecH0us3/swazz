@@ -411,6 +411,12 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     </svg>
                                     Open Source Access
                                 </li>
+                                <li>
+                                    <svg className="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    Private Runners
+                                </li>
                             </ul>
                             <button type="button" onClick={() => openAuthModal(true)} className="btn-pricing-secondary">
                                 Get Started

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAppStore } from '../store/appStore.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -10,7 +11,13 @@ export function useAuth() {
 
     useEffect(() => {
         fetch(`${PROXY_URL}/api/info`)
-            .then(res => res.json())
+            .then(res => {
+                const csrf = res.headers.get('X-CSRF-Token');
+                if (csrf) {
+                    useAppStore.setState({ csrfToken: csrf });
+                }
+                return res.json();
+            })
             .then(data => {
                 setAuthEnabled(!!data.auth_enabled);
                 setIsLoading(false);
@@ -22,9 +29,15 @@ export function useAuth() {
     }, []);
 
     const login = async (username: string, password: string, twoFactorCode?: string) => {
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         const res = await fetch(`${PROXY_URL}/api/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ username, password, two_factor_code: twoFactorCode })
         });
         const data = await res.json();
@@ -40,9 +53,15 @@ export function useAuth() {
     };
 
     const register = async (username: string, password: string) => {
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         const res = await fetch(`${PROXY_URL}/api/auth/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ username, password })
         });
         const data = await res.json();
@@ -51,7 +70,7 @@ export function useAuth() {
         // Auto-login after registration
         const loginRes = await fetch(`${PROXY_URL}/api/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ username, password })
         });
         const loginData = await loginRes.json();
@@ -64,9 +83,15 @@ export function useAuth() {
     };
 
     const continueAsGuest = async () => {
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         const res = await fetch(`${PROXY_URL}/api/auth/guest`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Guest login failed');

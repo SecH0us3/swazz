@@ -69,12 +69,18 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                 }
             }
 
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            };
+            if (csrfToken) {
+                headers['X-CSRF-Token'] = csrfToken;
+            }
+
             const res = await fetch(`${PROXY_URL}/api/auth/public-key`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
-                },
+                headers,
                 body: JSON.stringify({ public_key: cleanKey || null })
             });
 

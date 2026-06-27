@@ -108,7 +108,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
 
-- [ ] **Task 90: Implement CSRF Protection Middleware in Coordinator**
+- [/] **Task 90: Implement CSRF Protection Middleware in Coordinator**
   - **Design Goal:** Protect state-changing HTTP endpoints (POST, PUT, DELETE, PATCH) on the edge coordinator from Cross-Site Request Forgery attacks, establishing double-submit cookie validation.
   - **Implementation Details:**
     - Implement a custom CSRF protection middleware in Hono (or integrate `hono/csrf`).
@@ -145,6 +145,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
     - Set the default plan to 'Free' during new user registration in the Edge Coordinator.
     - Implement a mechanism (database script or coordinator admin endpoint) for manually updating user plans to 'Supporter Plan'.
+
+- [ ] **Task 95: Implement GitHub OAuth Authentication**
+  - **Design Goal:** Allow users to log in or register using their GitHub accounts.
+  - **Implementation Details:**
+    - Set up OAuth 2.0 configuration for GitHub on the edge coordinator.
+    - Implement callback handling routes (`GET /api/auth/callback/github`) to exchange code for access tokens and fetch user profiles.
+    - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
+    - Add a "Sign in with GitHub" button to the frontend authentication modals.
 
 
 

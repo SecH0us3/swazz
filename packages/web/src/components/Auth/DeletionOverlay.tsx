@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAppStore } from '../../store/appStore.js';
 
 interface DeletionOverlayProps {
     deleteRequestedAt: string;
@@ -55,12 +56,18 @@ export function DeletionOverlay({ deleteRequestedAt, onCancelSuccess, onLogout }
         const token = localStorage.getItem('swazz_token');
         const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
+        const csrfToken = useAppStore.getState().csrfToken;
+        const headers: Record<string, string> = {
+            'Authorization': `Bearer ${token}`
+        };
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         try {
             const res = await fetch(`${PROXY_URL}/api/users/me/cancel-deletion`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers
             });
 
             if (!res.ok) {

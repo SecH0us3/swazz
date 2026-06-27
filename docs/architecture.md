@@ -48,6 +48,15 @@ To protect the fuzzing runner from excessive memory usage (OOM) on very large, d
 
 For a comprehensive analysis of Swazz's security controls, network isolation mechanisms (including SSRF protection and DNS pinning), agent cryptographic challenge-response authentication, and user access policies, please refer to the [Security Review & Threat Model](./security_review.html).
 
+## CSRF Protection Strategy
+
+Swazz implements a double-submit cookie validation pattern to protect all state-changing endpoints (`POST`, `PUT`, `DELETE`, `PATCH`) under `/api/*` on the coordinator edge server:
+- **Token Generation**: On every safe request (`GET`), a cryptographically secure random token (UUID) is generated if not already present in the `csrf_token` cookie. The cookie is marked as `HttpOnly`, `SameSite=Lax`, and `Secure` (when running over HTTPS or localhost).
+- **Double-Submit Validation**: The token is copied to the `X-CSRF-Token` response header on safe requests. The frontend reads and stores this token in memory (Zustand state). For all state-changing requests, the client must attach the token in the `X-CSRF-Token` request header.
+- **Bypass Patterns**:
+  - Safe methods (`GET`, `HEAD`, `OPTIONS`) bypass CSRF validation.
+  - Requests authenticated via custom headers, such as `Authorization: Bearer <token>` (the primary auth flow for runners and CLI clients) or `X-Upload-Token` (used by runners for report uploads), bypass CSRF validation since cross-site requests cannot set custom headers.
+
 [← Back to Usage](./usage.html)
 
 
