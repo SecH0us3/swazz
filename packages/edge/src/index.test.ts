@@ -1108,6 +1108,187 @@ describe("Projects & Runners API", () => {
     const p = checkBody.projects.find(x => x.id === projectId);
     expect(p).toBeUndefined();
   });
+
+  describe("POST /api/runners/:connectionId/restart", () => {
+    it("returns 401 for unauthorized user", async () => {
+      const req = new Request("http://localhost/api/runners/conn1/restart", {
+        method: "POST"
+      });
+      const res = await app.fetch(req, testEnv);
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 500 when database query fails during restart", async () => {
+      const originalPrepare = testEnv.DB.prepare;
+      testEnv.DB.prepare = () => {
+        throw new Error("DB Query Error");
+      };
+
+      try {
+        const req = new Request("http://localhost/api/runners/some-conn-id/restart", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${userToken}` }
+        });
+        const res = await app.fetch(req, testEnv);
+        expect(res.status).toBe(500);
+        const body = await res.json() as { error: string };
+        expect(body.error).toBe("Internal Server Error");
+      } finally {
+        testEnv.DB.prepare = originalPrepare;
+      }
+    });
+
+    it("returns 403 when trying to restart shared runner or owned runner without public_key", async () => {
+      const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+      const stub = env.COORDINATOR_DO.get(id);
+
+      // Connect shared runner
+      const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunnerRestart", {
+        headers: { "Upgrade": "websocket" }
+      });
+      const connectSharedRes = await stub.fetch(connectSharedReq);
+      const sharedWs = connectSharedRes.webSocket!;
+      sharedWs.accept();
+
+      // Get connectionId
+      const listReq = new Request("http://localhost/api/runners", {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      const listRes = await app.fetch(listReq, testEnv);
+      const listBody = await listRes.json() as { runners: any[] };
+      const sharedRunner = listBody.runners.find(r => r.name === 'SharedRunnerRestart');
+      expect(sharedRunner).toBeDefined();
+      expect(sharedRunner.connectionId).toBeDefined();
+
+      // Attempt restart (user has no public key in database by default, and runner is shared anyway)
+      const restartReq = new Request(`http://localhost/api/runners/${sharedRunner.connectionId}/restart`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      const restartRes = await app.fetch(restartReq, testEnv);
+      expect(restartRes.status).toBe(403);
+    });
+
+    it("successfully restarts owned private runner and fails for non-owned", async () => {
+      const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+      const stub = env.COORDINATOR_DO.get(id);
+
+      // Fetch dynamic user ID for projuser
+      const projUser = await env.DB.prepare("SELECT id FROM users WHERE username = ?")
+        .bind("projuser")
+        .first<{ id: string }>();
+      const projUserId = projUser.id;
+
+      // 1. Register a public key for our test user
+      const keyPair = await crypto.subtle.generateKey(
+        { name: "Ed25519" },
+        true,
+        ["sign", "verify"]
+      );
+      const rawPubKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+      const pubKeyHex = Array.from(new Uint8Array(rawPubKey))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      await env.DB.prepare("UPDATE users SET public_key = ? WHERE id = ?")
+        .bind(pubKeyHex, projUserId)
+        .run();
+
+      // 2. Connect private runner for this user
+      const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunnerRestart&public_key=${pubKeyHex}&user_id=${projUserId}`, {
+        headers: { "Upgrade": "websocket" }
+      });
+      const connectPrivateRes = await stub.fetch(connectPrivateReq);
+      const privateWs = connectPrivateRes.webSocket!;
+      privateWs.accept();
+
+      // Authenticate runner
+      await new Promise<void>((resolve, reject) => {
+        privateWs.addEventListener("message", async (evt) => {
+          try {
+            const msg = JSON.parse(evt.data as string);
+            if (msg.type === "challenge") {
+              const nonce = msg.nonce;
+              const nonceBuffer = new TextEncoder().encode(nonce);
+              const signatureBuffer = await crypto.subtle.sign(
+                "Ed25519",
+                keyPair.privateKey,
+                nonceBuffer
+              );
+              const signatureHex = Array.from(new Uint8Array(signatureBuffer))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+              privateWs.send(JSON.stringify({
+                type: "challenge_response",
+                signature: signatureHex
+              }));
+            } else if (msg.type === "auth_ok") {
+              resolve();
+            }
+          } catch (err) { reject(err); }
+        });
+      });
+
+      // 3. Get connectionId
+      const listReq = new Request("http://localhost/api/runners", {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      const listRes = await app.fetch(listReq, testEnv);
+      const listBody = await listRes.json() as { runners: any[] };
+      const privateRunner = listBody.runners.find(r => r.name === 'PrivateRunnerRestart');
+      expect(privateRunner).toBeDefined();
+
+      // 4. Try to restart from another user (no matching public key / unauthorized token)
+      // First register and login another user
+      const registerReq = new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "otheruserrestart", password: "Password123!" })
+      });
+      const registerRes = await app.fetch(registerReq, testEnv);
+      expect(registerRes.status).toBe(200);
+
+      const loginReq = new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "otheruserrestart", password: "Password123!" })
+      });
+      const loginRes = await app.fetch(loginReq, testEnv);
+      expect(loginRes.status).toBe(200);
+      const loginBody = await loginRes.json() as { token: string };
+      const otherToken = loginBody.token;
+
+      const restartOtherReq = new Request(`http://localhost/api/runners/${privateRunner.connectionId}/restart`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${otherToken}` }
+      });
+      const restartOtherRes = await app.fetch(restartOtherReq, testEnv);
+      expect(restartOtherRes.status).toBe(403); // Since otheruserrestart has no public key/doesn't own it
+
+      // 5. Restart with correct owner
+      let restartMessageReceived = false;
+      privateWs.addEventListener("message", (evt) => {
+        try {
+          const msg = JSON.parse(evt.data as string);
+          if (msg.type === "agent_restart") {
+            restartMessageReceived = true;
+          }
+        } catch {}
+      });
+
+      const restartOwnerReq = new Request(`http://localhost/api/runners/${privateRunner.connectionId}/restart`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}` }
+      });
+      const restartOwnerRes = await app.fetch(restartOwnerReq, testEnv);
+      expect(restartOwnerRes.status).toBe(200);
+      const restartBody = await restartOwnerRes.json() as { status: string };
+      expect(restartBody.status).toBe("restarted");
+
+      // Verify WebSocket message received by the agent client
+      expect(restartMessageReceived).toBe(true);
+    });
+  });
 });
 
 describe("splitSql helper", () => {

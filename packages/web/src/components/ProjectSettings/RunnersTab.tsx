@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/appStore.js';
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 interface Runner {
+    connectionId: string | null;
     name: string;
     publicKey: string | null;
     status: 'authenticating' | 'connected';
@@ -21,6 +22,7 @@ interface RunnersTabProps {
 export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTabProps) {
     const userProfile = useAppStore(state => state.userProfile);
     const apiKey = userProfile?.apiKey || '';
+    const [restartingId, setRestartingId] = useState<string | null>(null);
 
     // Registration controls & Guide states
     const [pubKeyInput, setPubKeyInput] = useState(userProfile?.publicKey || '');
@@ -101,6 +103,40 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
             setSaveError(err.message || 'Failed to save public key');
         } finally {
             setIsSavingPubKey(false);
+        }
+    };
+
+    const handleRestartRunner = async (connectionId: string | null) => {
+        if (!connectionId) return;
+        const token = localStorage.getItem('swazz_token');
+        if (!token) return;
+
+        setRestartingId(connectionId);
+        try {
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = {
+                'Authorization': `Bearer ${token}`
+            };
+            if (csrfToken) {
+                headers['X-CSRF-Token'] = csrfToken;
+            }
+
+            const res = await fetch(`${PROXY_URL}/api/runners/${connectionId}/restart`, {
+                method: 'POST',
+                headers
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to restart runner');
+            }
+
+            alert('Restart command sent successfully');
+        } catch (err: any) {
+            console.error(err);
+            alert(err.message || 'Failed to restart runner');
+        } finally {
+            setRestartingId(null);
         }
     };
 
@@ -193,6 +229,7 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                                     <th className="runners-th">Mode</th>
                                     <th className="runners-th">Owner</th>
                                     <th className="runners-th">Status</th>
+                                    <th className="runners-th">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -230,6 +267,18 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                                                 <span className={`runners-status-dot-cell ${r.status === 'connected' ? 'pulse' : ''} ${r.status === 'connected' ? 'runners-status-dot-connected' : 'runners-status-dot-other'}`} />
                                                 <span className={`runners-status-text ${r.status === 'connected' ? 'runners-status-text-connected' : 'runners-status-text-other'}`}>{r.status}</span>
                                             </div>
+                                        </td>
+                                        <td className="runners-td">
+                                            {r.isMine && !r.isShared && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={() => handleRestartRunner(r.connectionId)}
+                                                    disabled={restartingId === r.connectionId}
+                                                >
+                                                    {restartingId === r.connectionId ? 'Restarting...' : 'Restart'}
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
