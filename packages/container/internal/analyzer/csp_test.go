@@ -83,6 +83,22 @@ func TestCSPAnalyzer(t *testing.T) {
 			},
 			expectedRules: []string{"swazz/csp-unsafe-directive"},
 		},
+		{
+			name: "Multiple Content-Security-Policy headers",
+			headers: http.Header{
+				"Content-Type":            []string{"text/html"},
+				"Content-Security-Policy": []string{"default-src 'self'", "script-src 'self' 'unsafe-inline'"},
+			},
+			expectedRules: []string{"swazz/csp-unsafe-directive"},
+		},
+		{
+			name: "Empty Content-Security-Policy header value",
+			headers: http.Header{
+				"Content-Type":            []string{"text/html"},
+				"Content-Security-Policy": []string{""},
+			},
+			expectedRules: []string{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -103,4 +119,13 @@ func TestCSPAnalyzer(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Nil checks", func(t *testing.T) {
+		if findings := a.Analyze(nil); findings != nil {
+			t.Errorf("expected nil findings for nil input, got %v", findings)
+		}
+		if findings := a.Analyze(&AnalysisInput{ResponseHeaders: nil}); findings != nil {
+			t.Errorf("expected nil findings for nil headers, got %v", findings)
+		}
+	})
 }

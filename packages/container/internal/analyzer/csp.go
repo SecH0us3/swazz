@@ -11,16 +11,22 @@ type CSPAnalyzer struct{}
 
 // Analyze parses Content-Security-Policy headers and checks for missing or insecure directives.
 func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if input == nil || input.ResponseHeaders == nil {
+		return nil
+	}
+
 	var findings []swagger.AnalysisFinding
 
-	csp := input.ResponseHeaders.Get("Content-Security-Policy")
-	cspReportOnly := input.ResponseHeaders.Get("Content-Security-Policy-Report-Only")
+	cspHeaders := input.ResponseHeaders.Values("Content-Security-Policy")
+	cspReportOnlyHeaders := input.ResponseHeaders.Values("Content-Security-Policy-Report-Only")
 
 	contentType := strings.ToLower(input.ResponseHeaders.Get("Content-Type"))
 	isHTML := strings.Contains(contentType, "text/html")
 
+	hasCSP := len(cspHeaders) > 0 || len(cspReportOnlyHeaders) > 0
+
 	// 1. Missing CSP on HTML responses
-	if isHTML && csp == "" && cspReportOnly == "" {
+	if isHTML && !hasCSP {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:        "swazz/csp-missing",
 			Level:         "warning",
@@ -63,7 +69,7 @@ func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 					findings = append(findings, swagger.AnalysisFinding{
 						RuleID:        "swazz/csp-unsafe-directive",
 						Level:         "error",
-						Message:       fmt.Sprintf("Insecure source ''unsafe-inline'' found in %s directive '%s'.", headerName, directiveName),
+						Message:       fmt.Sprintf("Insecure source 'unsafe-inline' found in %s directive '%s'.", headerName, directiveName),
 						Evidence:      fmt.Sprintf("%s: %s", headerName, d),
 						OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
 					})
@@ -71,7 +77,7 @@ func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 					findings = append(findings, swagger.AnalysisFinding{
 						RuleID:        "swazz/csp-unsafe-directive",
 						Level:         "error",
-						Message:       fmt.Sprintf("Insecure source ''unsafe-eval'' found in %s directive '%s'.", headerName, directiveName),
+						Message:       fmt.Sprintf("Insecure source 'unsafe-eval' found in %s directive '%s'.", headerName, directiveName),
 						Evidence:      fmt.Sprintf("%s: %s", headerName, d),
 						OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
 					})
@@ -80,9 +86,13 @@ func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		}
 	}
 
-	// 2. Analyze directives
-	analyzeHeader("Content-Security-Policy", csp)
-	analyzeHeader("Content-Security-Policy-Report-Only", cspReportOnly)
+	// 2. Analyze directives in all headers
+	for _, val := range cspHeaders {
+		analyzeHeader("Content-Security-Policy", val)
+	}
+	for _, val := range cspReportOnlyHeaders {
+		analyzeHeader("Content-Security-Policy-Report-Only", val)
+	}
 
 	return findings
 }
