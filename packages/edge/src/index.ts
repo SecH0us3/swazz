@@ -116,12 +116,25 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 ---
 *Find 500 errors before your users do. Smart API fuzzing with boundary, malicious, and random payload profiles.*
 `, 200, {
-      'Content-Type': 'text/markdown; charset=utf-8',
-      'Access-Control-Allow-Origin': '*'
+      'Content-Type': 'text/markdown; charset=utf-8'
     });
   }
 
   if (accept.includes('text/html')) {
+    const requestUrl = new URL(c.req.url);
+    let dashboardUrl = '/';
+    if (requestUrl.port === '8787') {
+      dashboardUrl = 'http://localhost:5173/';
+    } else {
+      const referer = c.req.header('Referer');
+      if (referer) {
+        try {
+          const refererUrl = new URL(referer);
+          dashboardUrl = `${refererUrl.protocol}//${refererUrl.host}/`;
+        } catch {}
+      }
+    }
+
     c.header('Content-Type', 'text/html; charset=utf-8');
     return c.html(`<!DOCTYPE html>
 <html lang="en">
@@ -133,7 +146,7 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 </head>
 <body>
   <h1>swazz — Smart API Fuzzer</h1>
-  <p>To view the full interactive dashboard, please visit <a href="/">our dashboard</a>.</p>
+  <p>To view the full interactive dashboard, please visit <a href="${dashboardUrl}">our dashboard</a>.</p>
 </body>
 </html>`);
   }
