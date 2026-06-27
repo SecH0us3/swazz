@@ -20,7 +20,9 @@ This skill guides the agent in conducting a thorough, unbiased, and critical rev
 * **Unused Helpers & Hooks**: Verify that hooks, interfaces, state variables, or API routes created during earlier iterations are not left as dead code.
 * **Imports & Types**: Clean up unused imports, types, and dependencies using compiler checks (`npm run build` or `tsc`).
 
-### 2. Timezones & Safety
+### 2. Security & Threat Model Integrity
+* **No Security Regression**: Ensure that the new implementation does NOT lower the existing security bounds of the application. Do not bypass or disable verification checks (Turnstile, CSRF, TOTP, rate-limiting) in new endpoints or UI views.
+* **Credential Safety**: Do not relax password constraints (always require at least 12 characters) or expose sensitive tokens, raw secrets, or keys in client payloads or server logs.
 * **UTC/Timezone Resilience**: Never use local-timezone comparison. Always enforce timezone-agnostic epoch timestamps like `expiresAt.getTime() < Date.now()` for security validations.
 * **Immediate State/Token Deletion**: When verifying single-use tokens (like challenges or session secrets), delete them from the database *immediately upon retrieval* rather than at the end of the handler to prevent concurrent replay attacks.
 
