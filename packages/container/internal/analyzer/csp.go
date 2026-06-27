@@ -41,46 +41,57 @@ func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		if headerVal == "" {
 			return
 		}
-		// Directives are separated by semicolons
-		directives := strings.Split(headerVal, ";")
-		for _, d := range directives {
-			d = strings.TrimSpace(d)
-			if d == "" {
-				continue
-			}
-			parts := strings.Fields(d)
-			if len(parts) < 2 {
-				continue
-			}
-			directiveName := parts[0]
-			sources := parts[1:]
+		// Multiple policies can be combined in a single header separated by commas
+		policies := strings.Split(headerVal, ",")
+		for _, policy := range policies {
+			// Directives are separated by semicolons
+			directives := strings.Split(policy, ";")
+			for _, d := range directives {
+				d = strings.TrimSpace(d)
+				if d == "" {
+					continue
+				}
+				parts := strings.Fields(d)
+				if len(parts) < 2 {
+					continue
+				}
+				directiveName := parts[0]
+				directiveNameLower := strings.ToLower(directiveName)
+				sources := parts[1:]
 
-			for _, src := range sources {
-				srcLower := strings.ToLower(src)
-				if src == "*" {
-					findings = append(findings, swagger.AnalysisFinding{
-						RuleID:        "swazz/csp-unsafe-directive",
-						Level:         "error",
-						Message:       fmt.Sprintf("Overly permissive wildcard '*' source found in %s directive '%s'.", headerName, directiveName),
-						Evidence:      fmt.Sprintf("%s: %s", headerName, d),
-						OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
-					})
-				} else if srcLower == "'unsafe-inline'" {
-					findings = append(findings, swagger.AnalysisFinding{
-						RuleID:        "swazz/csp-unsafe-directive",
-						Level:         "error",
-						Message:       fmt.Sprintf("Insecure source 'unsafe-inline' found in %s directive '%s'.", headerName, directiveName),
-						Evidence:      fmt.Sprintf("%s: %s", headerName, d),
-						OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
-					})
-				} else if srcLower == "'unsafe-eval'" {
-					findings = append(findings, swagger.AnalysisFinding{
-						RuleID:        "swazz/csp-unsafe-directive",
-						Level:         "error",
-						Message:       fmt.Sprintf("Insecure source 'unsafe-eval' found in %s directive '%s'.", headerName, directiveName),
-						Evidence:      fmt.Sprintf("%s: %s", headerName, d),
-						OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
-					})
+				for _, src := range sources {
+					srcLower := strings.ToLower(src)
+					if src == "*" {
+						findings = append(findings, swagger.AnalysisFinding{
+							RuleID:        "swazz/csp-unsafe-directive",
+							Level:         "error",
+							Message:       fmt.Sprintf("Overly permissive wildcard '*' source found in %s directive '%s'.", headerName, directiveName),
+							Evidence:      fmt.Sprintf("%s: %s", headerName, d),
+							OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+						})
+					} else if srcLower == "'unsafe-inline'" {
+						// 'unsafe-inline' is standard and generally acceptable for style-src, but highly dangerous for script-src
+						if directiveNameLower == "default-src" || strings.HasPrefix(directiveNameLower, "script-src") {
+							findings = append(findings, swagger.AnalysisFinding{
+								RuleID:        "swazz/csp-unsafe-directive",
+								Level:         "error",
+								Message:       fmt.Sprintf("Insecure source 'unsafe-inline' found in %s directive '%s'.", headerName, directiveName),
+								Evidence:      fmt.Sprintf("%s: %s", headerName, d),
+								OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+							})
+						}
+					} else if srcLower == "'unsafe-eval'" {
+						// 'unsafe-eval' is only valid/dangerous for script-src and default-src
+						if directiveNameLower == "default-src" || strings.HasPrefix(directiveNameLower, "script-src") {
+							findings = append(findings, swagger.AnalysisFinding{
+								RuleID:        "swazz/csp-unsafe-directive",
+								Level:         "error",
+								Message:       fmt.Sprintf("Insecure source 'unsafe-eval' found in %s directive '%s'.", headerName, directiveName),
+								Evidence:      fmt.Sprintf("%s: %s", headerName, d),
+								OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+							})
+						}
+					}
 				}
 			}
 		}

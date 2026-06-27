@@ -99,6 +99,22 @@ func TestCSPAnalyzer(t *testing.T) {
 			},
 			expectedRules: []string{},
 		},
+		{
+			name: "Comma-separated multiple CSP policies",
+			headers: http.Header{
+				"Content-Type":            []string{"text/html"},
+				"Content-Security-Policy": []string{"default-src 'self', script-src 'self' 'unsafe-inline'"},
+			},
+			expectedRules: []string{"swazz/csp-unsafe-directive"},
+		},
+		{
+			name: "Style-src with unsafe-inline and unsafe-eval (should bypass error check)",
+			headers: http.Header{
+				"Content-Type":            []string{"text/html"},
+				"Content-Security-Policy": []string{"style-src 'self' 'unsafe-inline' 'unsafe-eval'"},
+			},
+			expectedRules: []string{},
+		},
 	}
 
 	for _, tt := range tests {
