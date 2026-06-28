@@ -26,7 +26,7 @@ A React 19 Single Page Application built with Vite.
 - **Service Layer**: All external API calls to the Go backend are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
 
 ### 3. `packages/edge` (Optional)
-Reserved for Cloudflare Workers integration and edge-deployments.
+Reserved for Cloudflare Workers integration and edge-deployments. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.html).
 
 ## Smart Fuzzing Workflow
 
