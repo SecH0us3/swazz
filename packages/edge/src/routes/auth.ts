@@ -353,7 +353,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
           if (oldUser?.api_key) {
             await kv.delete(`apikey:${oldUser.api_key}`);
           }
-          await kv.put(`apikey:${newApiKey}`, JSON.stringify({ userId: decoded.sub }), { expirationTtl: 300 });
+          await kv.put(`apikey:${newApiKey}`, JSON.stringify({ userId: String(decoded.sub) }), { expirationTtl: 300 });
         } catch {
           // KV operations failed — non-critical
         }

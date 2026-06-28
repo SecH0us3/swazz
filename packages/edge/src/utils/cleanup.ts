@@ -179,12 +179,13 @@ export async function cleanupScheduledDeletions(env: any): Promise<void> {
     await env.DB.batch(queries);
 
     // 6. Invalidate deleted users' API keys from KV session cache
-    if (env.SESSION_CACHE && apiKeysToInvalidate.length > 0) {
+    const kv = env.SESSION_CACHE;
+    if (kv && apiKeysToInvalidate.length > 0) {
       try {
         const chunkSize = 10;
         for (let i = 0; i < apiKeysToInvalidate.length; i += chunkSize) {
           const chunk = apiKeysToInvalidate.slice(i, i + chunkSize);
-          await Promise.all(chunk.map(key => env.SESSION_CACHE.delete(`apikey:${key}`)));
+          await Promise.all(chunk.map(key => kv.delete(`apikey:${key}`)));
         }
       } catch {
         // KV cleanup failed — non-critical

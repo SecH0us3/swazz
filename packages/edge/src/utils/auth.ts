@@ -26,8 +26,10 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
       try {
         const cached = await kv.get(cacheKey);
         if (cached !== null) {
-          const parsed = JSON.parse(cached) as { userId: string | null };
-          return parsed.userId;
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === 'object' && 'userId' in parsed) {
+            return parsed.userId;
+          }
         }
       } catch {
         // KV read failed — fall through to D1
