@@ -145,7 +145,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Set up a clean, modern blog index and article layout in the frontend web application.
     - Support markdown article rendering and sharing actions to drive organic technical traffic.
 
-- [ ] **Task 100: Actualize Landing Page Content & Valuable Capabilities**
+- [/] **Task 100: Actualize Landing Page Content & Valuable Capabilities**
   - **Design Goal:** Update the landing page copy to explicitly list all supported API spec formats (OpenAPI, GraphQL, SOAP, Swagger files) and highlight the most valuable features and capabilities of the Swazz platform.
   - **Implementation Details:**
     - Update the marketing copy on the landing page to mention SOAP and Swagger support alongside OpenAPI and GraphQL.
