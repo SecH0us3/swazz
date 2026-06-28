@@ -51,7 +51,7 @@ Currently, the Swazz Edge Coordinator (`packages/edge`) utilizes:
 * **Implementation Plan**:
   * Serve payload files via `/api/wordlists/*` endpoints.
   * Apply `Cache-Control: public, max-age=604800` headers.
-  * Use Cloudflare's `caches.default` to cache responses regionally at edge POPs.
+  * Use Cloudflare's `caches.default` to cache responses regionally at edge POPs (note that the Cache API requires a custom domain and is not active on default workers.dev subdomains).
   * **Result**: Zero cost on R2 download operations, reducing fuzzer boot time from seconds to milliseconds.
 
 ### C. Global Session Blacklists & API Key Verification
@@ -73,7 +73,9 @@ Currently, the Swazz Edge Coordinator (`packages/edge`) utilizes:
   * Edge workers read KV to determine which runners are active.
 * **Trade-Off Analysis**:
   * **Cost**: If 10 private runners write heartbeats every 5 seconds, that translates to:
+
     $$\frac{10 \text{ runners} \times 12 \text{ heartbeats/min} \times 60 \text{ min} \times 24 \text{ hours} \times 30 \text{ days}}{1,000,000} \approx 5.18 \text{ million KV writes/month}$$
+
     At $\$5.00$ per million KV writes, this costs **$\$25.90\text{/month}$** just for idle heartbeats.
   * **Consistency**: KV's eventual consistency (up to 60s replication delay) means the dashboard will display stale runner statuses (e.g., indicating a runner is connected when it has crashed, or vice versa).
 * **Conclusion**: Storing heartbeats in KV is **inefficient** and **costly**. Stateful WebSocket connections are naturally handled in the memory of the Durable Object coordinator, which remains the most real-time and cost-effective approach for runner tracking.
