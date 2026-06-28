@@ -93,11 +93,6 @@ export class RunnerCoordinator {
     }
 
     if (url.pathname === '/dispatch') {
-      const activeRunners = Array.from(this.runners);
-      if (activeRunners.length === 0) {
-        return new Response('No runners available', { status: 503 });
-      }
-      
       let payload: any = null;
       try {
         payload = await request.json();
@@ -108,6 +103,15 @@ export class RunnerCoordinator {
         return new Response('Missing payload', { status: 400 });
       }
 
+      // Save the config and user public key to DO storage
+      await this.state.storage.put(`config:${payload.runId}`, payload.config || {});
+      await this.state.storage.put(`user_public_key:${payload.runId}`, payload.userPublicKey || "");
+
+      const activeRunners = Array.from(this.runners);
+      if (activeRunners.length === 0) {
+        return new Response('No runners available', { status: 503 });
+      }
+      
       const dispatchMsg = JSON.stringify({
         type: 'job_dispatch',
         payload,
@@ -136,6 +140,9 @@ export class RunnerCoordinator {
         }
         try {
           runner.send(dispatchMsg);
+          // Successfully dispatched, clean up temporary storage
+          await this.state.storage.delete(`config:${payload.runId}`);
+          await this.state.storage.delete(`user_public_key:${payload.runId}`);
           return new Response('Dispatched', { status: 200 });
         } catch (err) {
           this.runners.delete(runner);
@@ -437,6 +444,9 @@ export class RunnerCoordinator {
         const connectionId = ulid();
         server.serializeAttachment({ authenticated: true, connectionId });
         this.runners.add(server);
+
+        // Check for queued scans to dispatch
+        await this.checkAndDispatchQueuedScans(server);
       }
 
       return new Response(null, {
@@ -512,6 +522,9 @@ export class RunnerCoordinator {
             const attachment = ws.deserializeAttachment() as { connectionId?: string } | null || {};
             ws.serializeAttachment({ ...attachment, authenticated: true });
             ws.send(JSON.stringify({ type: 'auth_ok' }));
+            
+            // Check for queued scans to dispatch
+            await this.checkAndDispatchQueuedScans(ws);
           } else {
             ws.send(JSON.stringify({ type: 'auth_failed', error: 'Invalid challenge signature' }));
             ws.close(1008, "Authentication failed");
@@ -592,8 +605,19 @@ export class RunnerCoordinator {
             resolve(new Response(JSON.stringify(clientPayload), { status: 200, headers: { 'Content-Type': 'application/json' } }));
           }
         }
-        if (msg.type === 'event' || msg.type === 'error') {
+         if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
+          
+          this.state.waitUntil(
+            this.env.FINDINGS_QUEUE.send({
+              scanId: runId,
+              type: msg.type,
+              payload: msg.payload
+            }).catch(qErr => {
+              console.error("Failed to send to FINDINGS_QUEUE:", qErr);
+            })
+          );
+
           const clientSet = this.clients.get(runId);
           if (clientSet) {
             const outMsg = JSON.stringify(msg.payload);
@@ -628,6 +652,123 @@ export class RunnerCoordinator {
       } catch (e) {
         console.error("Failed to parse runner message", e);
       }
+    }
+  }
+
+  async checkAndDispatchQueuedScans(ws: WebSocket) {
+    try {
+      const tags = this.state.getTags(ws);
+      const runnerPubKey = tags.find(t => 
+        t !== 'runner-pending' && 
+        t !== 'runner' && 
+        !t.startsWith('name:') && 
+        !t.startsWith('version:') && 
+        !t.startsWith('user_id:')
+      ) || null;
+
+      const queuedScans = await this.env.DB.prepare(`
+        SELECT scans.*, users.public_key AS userPublicKey
+        FROM scans
+        LEFT JOIN users ON scans.user_id = users.id
+        WHERE scans.status = 'queued'
+        ORDER BY scans.created_at ASC
+      `).all<{
+        id: string;
+        project_id: string;
+        target_url: string;
+        profile: string;
+        status: string;
+        user_id: string | null;
+        userPublicKey: string | null;
+      }>();
+
+      if (!queuedScans.results || queuedScans.results.length === 0) {
+        return;
+      }
+
+      const keys = queuedScans.results.flatMap(scan => [
+        `config:${scan.id}`,
+        `user_public_key:${scan.id}`
+      ]);
+      const storedData = await this.state.storage.get<any>(keys);
+
+      for (const scan of queuedScans.results) {
+        // Get config and userPublicKey from DO storage, or scan_configs / fallback
+        const storedConfig = storedData.get(`config:${scan.id}`);
+        const storedPubKey = storedData.get(`user_public_key:${scan.id}`);
+        
+        const scanUserPubKey = storedPubKey || scan.userPublicKey || "";
+        let config = storedConfig;
+        
+        if (!config && scan.project_id) {
+          try {
+            const row = await this.env.DB.prepare(
+              'SELECT config_json FROM scan_configs WHERE project_id = ? AND name = ?'
+            )
+              .bind(scan.project_id, scan.profile)
+              .first<{ config_json: string }>();
+            if (row && row.config_json) {
+              config = JSON.parse(row.config_json);
+            }
+          } catch (err) {
+            console.error("Failed to fetch config from scan_configs:", err);
+          }
+        }
+        if (!config) {
+          config = {};
+        }
+        if (!config.base_url) {
+          config.base_url = scan.target_url;
+        }
+
+        let isCompatible = false;
+        if (runnerPubKey) {
+          // If runner has a public_key tag, pick the oldest queued scan with user_id/userPublicKey matching it.
+          if (scanUserPubKey === runnerPubKey) {
+            isCompatible = true;
+          }
+        } else {
+          // If runner has no public_key tag (shared runner), pick the oldest queued scan that is public (no userPublicKey) and doesn't disable shared runners.
+          const disableShared = config.settings?.disable_shared_runners || false;
+          if (!scanUserPubKey && !disableShared) {
+            isCompatible = true;
+          }
+        }
+
+        if (isCompatible) {
+          const runId = scan.id;
+          this.jobs.set(runId, ws);
+          const attachment = ws.deserializeAttachment() as { authenticated?: boolean; activeJobs?: string[] } | null || {};
+          const activeJobs = attachment.activeJobs ? [...attachment.activeJobs] : [];
+          if (!activeJobs.includes(runId)) {
+            activeJobs.push(runId);
+            ws.serializeAttachment({ ...attachment, activeJobs });
+          }
+
+          const dispatchMsg = JSON.stringify({
+            type: 'job_dispatch',
+            payload: {
+              runId,
+              config,
+              userPublicKey: runnerPubKey || "",
+            },
+          });
+
+          ws.send(dispatchMsg);
+
+          // Update scan status to 'dispatched' in D1
+          await this.env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
+            .bind('dispatched', runId)
+            .run();
+
+          // Clean up DO storage
+          await this.state.storage.delete(`config:${runId}`);
+          await this.state.storage.delete(`user_public_key:${runId}`);
+          break;
+        }
+      }
+    } catch (err) {
+      console.error("Error in checkAndDispatchQueuedScans:", err);
     }
   }
 

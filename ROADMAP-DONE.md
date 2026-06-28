@@ -721,4 +721,10 @@ This file contains completed tasks.
     - Update the marketing copy on the landing page to mention SOAP and Swagger support alongside OpenAPI and GraphQL.
     - Highlight core capabilities like OWASP Top 10 mapping, request mutation visual diffs, private runner Ed25519 authentication, and real-time fuzzer metrics.
 
+- [x] **Task 60: DefectDojo Integration Enhancements**
+  - **Design Goal:** Improve metadata richness when importing Swazz reports into DefectDojo by correctly mapping vulnerabilities, scopes, and payloads.
+  - **Implementation Details:**
+    - Ensure correct mapping of severity levels, grouping, service names, and URL paths.
+    - Embed fuzzed payloads, request/response bodies, and corresponding MITRE CWE identifiers into exported report formats.
+
 

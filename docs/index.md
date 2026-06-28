@@ -32,6 +32,7 @@ Explore the documentation to get started and master Swazz:
 - [DefectDojo Integration](./defectdojo.html) - Import Swazz SARIF reports into DefectDojo with rich HTTP and CWE metadata.
 - [Architecture & Internals](./architecture.html) - Deep dive into the hybrid architecture and source code structure.
 - [Cloudflare KV & Cache Research](./cloudflare_kv_cache_research.html) - Technical analysis of Cloudflare edge caching, KV optimizations, and runner heartbeat tracking.
+- [Cloudflare Queues Integration](./queues.html) - Scale fuzzer scans and buffer findings asynchronously using Cloudflare Queues.
 - [Security Review & Threat Model](./security_review.html) - Read the security analysis, SSRF defenses, and authentication designs.
 - [Contributing Guidelines](./contributing.html) - Learn how to set up the dev environment, write tests, and contribute.
 

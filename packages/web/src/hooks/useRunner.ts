@@ -156,7 +156,7 @@ export function useRunner(proxyUrl: string) {
         ) => {
             if (useAppStore.getState().isRunning) return;
 
-            useAppStore.setState({ isRunning: true, isPaused: false });
+            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false });
 
             let runId = '';
             try {
@@ -190,14 +190,14 @@ export function useRunner(proxyUrl: string) {
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
-                    useAppStore.setState({ isRunning: false });
+                    useAppStore.setState({ isRunning: false, isQueued: false });
                     throw new Error(err.error || 'Failed to start run');
                 }
                 const data = await res.json();
                 runId = data.id;
                 runIdRef.current = runId;
             } catch (err) {
-                useAppStore.setState({ isRunning: false });
+                useAppStore.setState({ isRunning: false, isQueued: false });
                 throw err;
             }
 
@@ -214,9 +214,13 @@ export function useRunner(proxyUrl: string) {
                 try {
                     const msg = JSON.parse(e.data);
                     
-                    if (msg.type === 'result') {
+                    if (msg.type === 'queued') {
+                        useAppStore.setState({ isQueued: true });
+                    } else if (msg.type === 'result') {
+                        useAppStore.setState({ isQueued: false });
                         onResult(msg.data);
                     } else if (msg.type === 'progress') {
+                        useAppStore.setState({ isQueued: false });
                         const now = Date.now();
                         if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
                             lastProgressTime = now;
@@ -224,7 +228,7 @@ export function useRunner(proxyUrl: string) {
                         }
                     } else if (msg.type === 'complete') {
                         const finalStats = msg.data;
-                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false });
+                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false, isQueued: false });
                         ws.close();
                         wsRef.current = null;
                         onComplete(finalStats);
@@ -237,7 +241,7 @@ export function useRunner(proxyUrl: string) {
             ws.onerror = () => {
                 ws.close();
                 wsRef.current = null;
-                useAppStore.setState({ isRunning: false });
+                useAppStore.setState({ isRunning: false, isQueued: false });
             };
         },
         [proxyUrl],
@@ -263,7 +267,7 @@ export function useRunner(proxyUrl: string) {
         } finally {
             wsRef.current?.close();
             wsRef.current = null;
-            useAppStore.setState({ isRunning: false, isPaused: false });
+            useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
         }
     }, [proxyUrl]);
 

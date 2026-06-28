@@ -44,6 +44,7 @@ export interface StatsSlice {
     historyStats: RunStats | null;
     isRunning: boolean;
     isPaused: boolean;
+    isQueued: boolean;
     isLoadingSpecs: boolean;
     specCacheDates: Record<string, string>;
 }
@@ -53,6 +54,7 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
     historyStats: null,
     isRunning: false,
     isPaused: false,
+    isQueued: false,
     isLoadingSpecs: false,
     specCacheDates: {},
 });

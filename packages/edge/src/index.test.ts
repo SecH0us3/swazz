@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { env as rawEnv } from "cloudflare:test";
 import { Env } from "./env";
 import app from "./index";
@@ -882,7 +882,7 @@ describe("Anonymous Limits", () => {
     const bodyAnonLarge = await resAnonLarge.json() as any;
     expect(bodyAnonLarge.error).toContain("Anonymous limit reached");
 
-    // 2. Anonymous browser request with <=50 endpoints - should bypass limits check, proceed to dispatch, and fail with 500/503 (no runners)
+    // 2. Anonymous browser request with <=50 endpoints - should bypass limits check, proceed to dispatch, and return 201 queued
     const smallConfig = {
       endpoints: new Array(50).fill("/api/item")
     };
@@ -896,9 +896,11 @@ describe("Anonymous Limits", () => {
       body: JSON.stringify({ config: smallConfig })
     });
     const resAnonSmall = await app.fetch(reqAnonSmall, testEnv);
-    expect([500, 503]).toContain(resAnonSmall.status);
+    expect(resAnonSmall.status).toBe(201);
+    const bodyAnonSmall = await resAnonSmall.json() as any;
+    expect(bodyAnonSmall.status).toBe("queued");
 
-    // 3. CLI client with >50 endpoints - should bypass limits check and fail with 500/503 (no runners)
+    // 3. CLI client with >50 endpoints - should bypass limits check and return 201 queued
     const reqCLILarge = new Request("http://localhost/api/runs", {
       method: "POST",
       headers: {
@@ -909,9 +911,11 @@ describe("Anonymous Limits", () => {
       body: JSON.stringify({ config: largeConfig })
     });
     const resCLILarge = await app.fetch(reqCLILarge, testEnv);
-    expect([500, 503]).toContain(resCLILarge.status);
+    expect(resCLILarge.status).toBe(201);
+    const bodyCLILarge = await resCLILarge.json() as any;
+    expect(bodyCLILarge.status).toBe("queued");
 
-    // 4. Logged-in user with >50 endpoints - should bypass limits check and fail with 500/503 (no runners)
+    // 4. Logged-in user with >50 endpoints - should bypass limits check and return 201 queued
     const reqAuthLarge = new Request("http://localhost/api/runs", {
       method: "POST",
       headers: {
@@ -923,7 +927,9 @@ describe("Anonymous Limits", () => {
       body: JSON.stringify({ config: largeConfig })
     });
     const resAuthLarge = await app.fetch(reqAuthLarge, testEnv);
-    expect([500, 503]).toContain(resAuthLarge.status);
+    expect(resAuthLarge.status).toBe(201);
+    const bodyAuthLarge = await resAuthLarge.json() as any;
+    expect(bodyAuthLarge.status).toBe("queued");
   });
 });
 
@@ -1717,6 +1723,294 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const bodyJson = await res.json() as { service: string; status: string };
       expect(bodyJson.service).toBe("swazz-edge");
       expect(bodyJson.status).toBe("ok");
+    });
+  });
+
+  describe("Cloudflare Queues Integration", () => {
+    it("verifies scan_events migration and DB inserting", async () => {
+      const eventId = "test-event-id";
+      const scanId = "test-scan-id";
+      const type = "event";
+      const payload = JSON.stringify({ type: "progress", message: "Fuzzing endpoint..." });
+
+      await env.DB.prepare(
+        `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
+      )
+        .bind(eventId, scanId, type, payload)
+        .run();
+
+      const row = await env.DB.prepare("SELECT * FROM scan_events WHERE id = ?").bind(eventId).first<any>();
+      expect(row).toBeDefined();
+      expect(row.scan_id).toBe(scanId);
+      expect(row.type).toBe(type);
+      expect(row.payload).toBe(payload);
+    });
+
+    it("processes FINDINGS_QUEUE messages correctly in bulk", async () => {
+      const scanId = "findings-scan-id";
+      const mockMessages = [
+        {
+          body: { scanId, type: "event", payload: { type: "progress", progress: 50 } },
+          ack: vi.fn(),
+        },
+        {
+          body: { scanId, type: "error", payload: "Fuzzer connection failed" },
+          ack: vi.fn(),
+        }
+      ];
+
+      const batch = {
+        queue: "swazz-findings-queue",
+        messages: mockMessages,
+      } as any;
+
+      await app.queue(batch, testEnv as any, {} as any);
+
+      expect(mockMessages[0].ack).toHaveBeenCalled();
+      expect(mockMessages[1].ack).toHaveBeenCalled();
+
+      const { results } = await env.DB.prepare("SELECT * FROM scan_events WHERE scan_id = ?").bind(scanId).all<any>();
+      expect(results.length).toBe(2);
+      expect(results[0].type).toBe("event");
+      expect(results[1].type).toBe("error");
+    });
+
+    it("handles SCAN_QUEUE flow and updates D1 status to dispatched or keeps queued", async () => {
+      const scanId = "scan-queue-id";
+
+      await env.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+      )
+        .bind(scanId, "test-project", "http://test-url.com", "default", "queued")
+        .run();
+
+      const mockMessages = [
+        {
+          body: {
+            runId: scanId,
+            config: { base_url: "http://test-url.com" },
+            userPublicKey: "",
+            targetUrl: "http://test-url.com",
+            profile: "default",
+            projectId: "test-project",
+            userId: null
+          },
+          ack: vi.fn(),
+        }
+      ];
+
+      const batch = {
+        queue: "swazz-scan-queue",
+        messages: mockMessages,
+      } as any;
+
+      await app.queue(batch, testEnv as any, {} as any);
+
+      expect(mockMessages[0].ack).toHaveBeenCalled();
+
+      const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
+      expect(["queued", "dispatched"]).toContain(scanRow?.status);
+    });
+
+    describe("checkAndDispatchQueuedScans Coordinator Logic", () => {
+      beforeEach(async () => {
+        await env.DB.prepare("UPDATE scans SET status = 'dispatched' WHERE status = 'queued'").run();
+      });
+
+      it("dispatches queued public scans to shared runner on connection", async () => {
+        const scanId = "qscan-" + crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+        )
+          .bind(scanId, "proj-shared-1", "http://target1.com", "default", "queued")
+          .run();
+
+        const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+        const stub = env.COORDINATOR_DO.get(id);
+
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerShared", {
+          headers: { "Upgrade": "websocket" }
+        });
+        const connectRes = await stub.fetch(connectReq);
+        expect(connectRes.status).toBe(101);
+        const ws = connectRes.webSocket!;
+        ws.accept();
+
+        const dispatchMsg = await new Promise<any>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Timeout waiting for dispatch")), 2000);
+          ws.addEventListener("message", (evt) => {
+            const msg = JSON.parse(evt.data as string);
+            if (msg.type === "job_dispatch") {
+              clearTimeout(timeout);
+              resolve(msg);
+            }
+          });
+        });
+
+        expect(dispatchMsg.payload.runId).toBe(scanId);
+        
+        const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
+        expect(scanRow?.status).toBe("dispatched");
+
+        ws.close();
+      });
+
+      it("does not dispatch private scans to shared runner", async () => {
+        const scanId = "qscan-" + crypto.randomUUID();
+        const testUsername = "u" + Date.now().toString().slice(-6) + "_" + Math.floor(Math.random() * 1000);
+        const userId = crypto.randomUUID();
+        const userPubKey = "pubkey-" + crypto.randomUUID();
+
+        await env.DB.prepare(
+          "INSERT INTO users (id, username, password_hash, public_key) VALUES (?, ?, ?, ?)"
+        ).bind(userId, testUsername, "hashed", userPubKey).run();
+
+        await env.DB.prepare(
+          "INSERT INTO scans (id, project_id, target_url, profile, status, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+          .bind(scanId, "proj-private-1", "http://target2.com", "default", "queued", userId)
+          .run();
+
+        const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+        const stub = env.COORDINATOR_DO.get(id);
+
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedPrivateCheck", {
+          headers: { "Upgrade": "websocket" }
+        });
+        const connectRes = await stub.fetch(connectReq);
+        expect(connectRes.status).toBe(101);
+        const ws = connectRes.webSocket!;
+        ws.accept();
+
+        // Wait a bit to ensure it is NOT dispatched
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
+        expect(scanRow?.status).toBe("queued");
+
+        ws.close();
+      });
+
+      it("does not dispatch public scans with disable_shared_runners setting to shared runner", async () => {
+        const scanId = "qscan-" + crypto.randomUUID();
+        const projectId = "proj-disabled-shared";
+        const profileName = "high-security";
+
+        await env.DB.prepare(
+          "INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+        )
+          .bind(scanId, projectId, "http://target3.com", profileName, "queued")
+          .run();
+
+        await env.DB.prepare(
+          "INSERT INTO scan_configs (project_id, name, config_json) VALUES (?, ?, ?)"
+        ).bind(projectId, profileName, JSON.stringify({ settings: { disable_shared_runners: true } })).run();
+
+        const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+        const stub = env.COORDINATOR_DO.get(id);
+
+        const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedDisabledCheck", {
+          headers: { "Upgrade": "websocket" }
+        });
+        const connectRes = await stub.fetch(connectReq);
+        expect(connectRes.status).toBe(101);
+        const ws = connectRes.webSocket!;
+        ws.accept();
+
+        // Wait a bit to ensure it is NOT dispatched
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
+        expect(scanRow?.status).toBe("queued");
+
+        ws.close();
+      });
+
+      it("dispatches private scans to matching private runner", async () => {
+        const scanId = "qscan-" + crypto.randomUUID();
+        const testUsername = "u" + Date.now().toString().slice(-6) + "_" + Math.floor(Math.random() * 1000);
+        const userId = crypto.randomUUID();
+
+        const keyPair = await crypto.subtle.generateKey(
+          { name: "Ed25519" },
+          true,
+          ["sign", "verify"]
+        );
+        const rawPubKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+        const pubKeyHex = Array.from(new Uint8Array(rawPubKey))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        await env.DB.prepare(
+          "INSERT INTO users (id, username, password_hash, public_key) VALUES (?, ?, ?, ?)"
+        ).bind(userId, testUsername, "hashed", pubKeyHex).run();
+
+        await env.DB.prepare(
+          "INSERT INTO scans (id, project_id, target_url, profile, status, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+          .bind(scanId, "proj-private-2", "http://target4.com", "default", "queued", userId)
+          .run();
+
+        const id = env.COORDINATOR_DO.idFromName('global-coordinator');
+        const stub = env.COORDINATOR_DO.get(id);
+
+        const connectReq = new Request(`http://localhost/connect-runner?name=QueueRunnerPrivate&public_key=${pubKeyHex}`, {
+          headers: { "Upgrade": "websocket" }
+        });
+        const connectRes = await stub.fetch(connectReq);
+        expect(connectRes.status).toBe(101);
+        const ws = connectRes.webSocket!;
+        ws.accept();
+
+        // Challenge-response auth logic for private runner
+        await new Promise<void>((resolve, reject) => {
+          ws.addEventListener("message", async (evt) => {
+            try {
+              const msg = JSON.parse(evt.data as string);
+              if (msg.type === "challenge") {
+                const nonce = msg.nonce;
+                const nonceBuffer = new TextEncoder().encode(nonce);
+                const signatureBuffer = await crypto.subtle.sign(
+                  "Ed25519",
+                  keyPair.privateKey,
+                  nonceBuffer
+                );
+                const signatureHex = Array.from(new Uint8Array(signatureBuffer))
+                  .map(b => b.toString(16).padStart(2, '0'))
+                  .join('');
+                ws.send(JSON.stringify({
+                  type: "challenge_response",
+                  signature: signatureHex
+                }));
+              } else if (msg.type === "auth_ok") {
+                resolve();
+              } else if (msg.type === "auth_failed") {
+                reject(new Error(msg.error));
+              }
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
+
+        const dispatchMsg = await new Promise<any>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Timeout waiting for dispatch")), 2000);
+          ws.addEventListener("message", (evt) => {
+            const msg = JSON.parse(evt.data as string);
+            if (msg.type === "job_dispatch") {
+              clearTimeout(timeout);
+              resolve(msg);
+            }
+          });
+        });
+
+        expect(dispatchMsg.payload.runId).toBe(scanId);
+
+        const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
+        expect(scanRow?.status).toBe("dispatched");
+
+        ws.close();
+      });
     });
   });
 });

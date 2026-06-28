@@ -18,7 +18,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   
     const id = ulid();
-    const status = 'pending';
+    const status = 'queued';
   
     await c.env.DB.prepare(
       `INSERT INTO scans (id, project_id, target_url, profile, status)
@@ -41,35 +41,18 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
 
-    // Dispatch to coordinator
-    try {
-      const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-      const stub = c.env.COORDINATOR_DO.get(doId);
-      const doReq = new Request('http://do/dispatch', {
-        method: 'POST',
-        body: JSON.stringify({
-          runId: id,
-          config: body.config || {},
-          userPublicKey
-        }),
-      });
-      const doRes = await stub.fetch(doReq);
-      if (!doRes.ok) {
-        // Update status if dispatch fails (no runners)
-        await c.env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
-          .bind('dispatch_failed', id)
-          .run();
-        return c.json({ id, status: 'dispatch_failed', error: 'No runners available' }, 503);
-      }
-    } catch {
-      // Coordinator may be unavailable; scan is still created
-      await c.env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
-        .bind('dispatch_failed', id)
-        .run();
-      return c.json({ id, status: 'dispatch_failed', error: 'Failed to reach coordinator' }, 503);
-    }
+    // Send to SCAN_QUEUE instead of immediately fetching /dispatch on COORDINATOR_DO
+    await c.env.SCAN_QUEUE.send({
+      runId: id,
+      config: body.config || {},
+      userPublicKey,
+      targetUrl: body.target_url,
+      profile: body.profile,
+      projectId: body.project_id,
+      userId
+    });
   
-    return c.json({ id, status: 'dispatched' }, 201);
+    return c.json({ id, status: 'queued' }, 201);
   });
   
   app.get('/api/scans', async (c) => {
