@@ -331,10 +331,34 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
+
+      // Fetch old API key for KV cache invalidation
+      const oldUser = await c.env.DB.prepare('SELECT api_key FROM users WHERE id = ?')
+        .bind(decoded.sub)
+        .first<{ api_key: string | null }>();
+
+      if (!oldUser) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+
       const newApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
       await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
         .bind(newApiKey, decoded.sub)
         .run();
+
+      // Invalidate old key and proactively cache new key in KV
+      const kv = c.env.SESSION_CACHE;
+      if (kv) {
+        try {
+          if (oldUser?.api_key) {
+            await kv.delete(`apikey:${oldUser.api_key}`);
+          }
+          await kv.put(`apikey:${newApiKey}`, JSON.stringify({ userId: String(decoded.sub) }), { expirationTtl: 300 });
+        } catch {
+          // KV operations failed — non-critical
+        }
+      }
+
       return c.json({ api_key: newApiKey });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);

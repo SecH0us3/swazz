@@ -110,8 +110,8 @@ Currently, the Swazz Edge Coordinator (`packages/edge`) utilizes:
 ---
 
 ## 5. Next Steps & Recommendations
-1. **Enable Session and API Key Caching in KV**:
-   * Migrate API token lookup from direct D1 reads to KV read-through caching.
+1. **Enable Session and API Key Caching in KV** *(Implemented in Task 96)*:
+   * Migrated API token lookup from direct D1 reads to KV read-through caching with positive/negative cache entries and cache invalidation on key regeneration.
 2. **Leverage Cache API for Static Assets**:
    * Route `/api/wordlists` through the Cache API with edge caching enabled.
 3. **Retain Durable Objects for WebSocket Stateful Connections**:

@@ -138,7 +138,20 @@ export async function cleanupScheduledDeletions(env: any): Promise<void> {
       }
     }));
 
-    // 4. Cascading batch delete from D1 database
+    // 4. Fetch API keys for KV cache invalidation before deleting users
+    let apiKeysToInvalidate: string[] = [];
+    try {
+      const { results: apiKeyRows } = await env.DB.prepare(
+        `SELECT api_key FROM users WHERE id IN (${userPlaceholders}) AND api_key IS NOT NULL`
+      ).bind(...userIds).all<{ api_key: string }>();
+      if (apiKeyRows) {
+        apiKeysToInvalidate = apiKeyRows.map(r => r.api_key);
+      }
+    } catch {
+      // Non-critical — proceed with deletion even if key fetch fails
+    }
+
+    // 5. Cascading batch delete from D1 database
     const queries = [];
     const usernamePlaceholders = usernames.map(() => '?').join(',');
 
@@ -164,6 +177,21 @@ export async function cleanupScheduledDeletions(env: any): Promise<void> {
     );
 
     await env.DB.batch(queries);
+
+    // 6. Invalidate deleted users' API keys from KV session cache
+    const kv = env.SESSION_CACHE;
+    if (kv && apiKeysToInvalidate.length > 0) {
+      try {
+        const chunkSize = 10;
+        for (let i = 0; i < apiKeysToInvalidate.length; i += chunkSize) {
+          const chunk = apiKeysToInvalidate.slice(i, i + chunkSize);
+          await Promise.all(chunk.map(key => kv.delete(`apikey:${key}`)));
+        }
+      } catch {
+        // KV cleanup failed — non-critical
+      }
+    }
+
     console.log(`Permanently deleted ${userIds.length} users after grace period.`);
   } catch (err) {
     console.error("Failed to process scheduled account deletions:", err);

@@ -1291,6 +1291,216 @@ describe("Projects & Runners API", () => {
   });
 });
 
+describe("KV Session Cache", () => {
+  const userToken = (() => {
+    let token = '';
+    return {
+      get: () => token,
+      set: (t: string) => { token = t; },
+    };
+  })();
+
+  let testUserId: string;
+  let testApiKey: string;
+
+  // Helper: create a mock KV store
+  function createMockKV() {
+    const store = new Map<string, { value: string; expiration?: number }>();
+    return {
+      store,
+      get: async (key: string) => {
+        const entry = store.get(key);
+        if (!entry) return null;
+        if (entry.expiration && Date.now() / 1000 > entry.expiration) {
+          store.delete(key);
+          return null;
+        }
+        return entry.value;
+      },
+      put: async (key: string, value: string, opts?: { expirationTtl?: number }) => {
+        const expiration = opts?.expirationTtl ? Date.now() / 1000 + opts.expirationTtl : undefined;
+        store.set(key, { value, expiration });
+      },
+      delete: async (key: string) => {
+        store.delete(key);
+      },
+    } as unknown as KVNamespace & { store: Map<string, { value: string; expiration?: number }> };
+  }
+
+  beforeAll(async () => {
+    // Register a test user
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "kvtestuser", password: "TestPass123!" }),
+    });
+    const regRes = await app.fetch(regReq, { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null });
+    const regBody = await regRes.json() as any;
+    userToken.set(regBody.token);
+    testUserId = regBody.id;
+
+    // Get the user's API key via JWT-authed /api/auth/me
+    const meReq = new Request("http://localhost/api/auth/me", {
+      headers: { "Authorization": `Bearer ${regBody.token}` },
+    });
+    const meRes = await app.fetch(meReq, { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null });
+    const meBody = await meRes.json() as any;
+    testApiKey = meBody.api_key;
+  });
+
+  it("authenticates via API key and populates KV cache on first request", async () => {
+    const mockKV = createMockKV();
+    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+
+    // Use /api/projects which relies on getUserIdFromRequest middleware
+    const req = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${testApiKey}` },
+    });
+    const res = await app.fetch(req, kvEnv);
+    expect(res.status).toBe(200);
+
+    // Verify KV was populated with the userId
+    const cached = await mockKV.get(`apikey:${testApiKey}`);
+    expect(cached).not.toBeNull();
+    const parsed = JSON.parse(cached!);
+    expect(parsed.userId).toBe(testUserId);
+  });
+
+  it("serves from KV cache on subsequent requests without querying D1 for api_key", async () => {
+    const mockKV = createMockKV();
+    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+
+    // Pre-populate the KV cache
+    await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
+
+    // Spy on DB.prepare to verify D1 is NOT called for the api_key lookup
+    const originalPrepare = env.DB.prepare.bind(env.DB);
+    let apiKeyQueryCalled = false;
+    kvEnv.DB = {
+      ...env.DB,
+      prepare: (sql: string) => {
+        if (sql.includes('WHERE api_key')) {
+          apiKeyQueryCalled = true;
+        }
+        return originalPrepare(sql);
+      },
+    } as any;
+
+    const req = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${testApiKey}` },
+    });
+    const res = await app.fetch(req, kvEnv);
+    expect(res.status).toBe(200);
+
+    // D1 should NOT have been queried for api_key (served from KV)
+    expect(apiKeyQueryCalled).toBe(false);
+  });
+
+  it("negatively caches invalid API keys to prevent cache-miss storms", async () => {
+    const mockKV = createMockKV();
+    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+
+    const fakeKey = "swazz_live_invalidkey123456789";
+    const req = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${fakeKey}` },
+    });
+    const res = await app.fetch(req, kvEnv);
+    expect(res.status).toBe(401);
+
+    // Verify negative cache entry was written
+    const cached = await mockKV.get(`apikey:${fakeKey}`);
+    expect(cached).not.toBeNull();
+    const parsed = JSON.parse(cached!);
+    expect(parsed.userId).toBeNull();
+  });
+
+  it("gracefully falls back to D1 when SESSION_CACHE is not bound", async () => {
+    const noKvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
+    const req = new Request("http://localhost/api/projects", {
+      headers: { "Authorization": `Bearer ${testApiKey}` },
+    });
+    const res = await app.fetch(req, noKvEnv);
+    expect(res.status).toBe(200);
+  });
+
+  it("invalidates old KV cache entry when API key is regenerated", async () => {
+    const mockKV = createMockKV();
+    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+
+    // Pre-populate KV with the current API key
+    await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
+    expect(await mockKV.get(`apikey:${testApiKey}`)).not.toBeNull();
+
+    // Regenerate the API key
+    const regenReq = new Request("http://localhost/api/auth/regenerate-key", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${userToken.get()}` },
+    });
+    const regenRes = await app.fetch(regenReq, kvEnv);
+    expect(regenRes.status).toBe(200);
+    const regenBody = await regenRes.json() as { api_key: string };
+
+    // Old key should be invalidated from KV
+    expect(await mockKV.get(`apikey:${testApiKey}`)).toBeNull();
+
+    // New key should be proactively cached
+    const newCached = await mockKV.get(`apikey:${regenBody.api_key}`);
+    expect(newCached).not.toBeNull();
+    const parsed = JSON.parse(newCached!);
+    expect(parsed.userId).toBe(testUserId);
+
+    testApiKey = regenBody.api_key;
+  });
+
+  it("cleanupScheduledDeletions invalidates deleted users' API keys from KV", async () => {
+    const mockKV = createMockKV();
+    const cleanupEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+
+    // Register a throwaway user for deletion
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "kvdeluser", password: "TestPass123!" }),
+    });
+    const regRes = await app.fetch(regReq, cleanupEnv);
+    const regBody = await regRes.json() as any;
+    const delUserId = regBody.id;
+    const delToken = regBody.token;
+
+    // Get the user's API key
+    const meReq = new Request("http://localhost/api/auth/me", {
+      headers: { "Authorization": `Bearer ${delToken}` },
+    });
+    const meRes = await app.fetch(meReq, cleanupEnv);
+    const meBody = await meRes.json() as any;
+    const delApiKey = meBody.api_key;
+
+    // Pre-populate KV with this API key
+    await mockKV.put(`apikey:${delApiKey}`, JSON.stringify({ userId: delUserId }), { expirationTtl: 300 });
+    expect(await mockKV.get(`apikey:${delApiKey}`)).not.toBeNull();
+
+    // Schedule deletion
+    const delReq = new Request("http://localhost/api/users/me", {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${delToken}` },
+    });
+    await app.fetch(delReq, cleanupEnv);
+
+    // Age the deletion timestamp past the 7-day grace period
+    await env.DB.prepare("UPDATE users SET delete_requested_at = datetime('now', '-8 days') WHERE id = ?").bind(delUserId).run();
+
+    // Run the cleanup
+    await cleanupScheduledDeletions(cleanupEnv);
+
+    // Verify the API key was invalidated from KV
+    expect(await mockKV.get(`apikey:${delApiKey}`)).toBeNull();
+
+    // Verify the user was actually deleted from D1
+    const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(delUserId).first();
+    expect(userPost).toBeNull();
+  });
+});
+
 describe("splitSql helper", () => {
   it("splits simple statements by semicolon", () => {
     const sql = "SELECT * FROM users; SELECT * FROM projects;";

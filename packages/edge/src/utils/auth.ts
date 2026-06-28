@@ -2,6 +2,9 @@ import { verify } from 'hono/jwt';
 import { Env } from '../env';
 import { Context } from 'hono';
 
+const KV_POSITIVE_TTL = 300; // 5 minutes
+const KV_NEGATIVE_TTL = 60;  // 1 minute
+
 export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promise<string | null> {
   let token = null;
   const authHeader = c.req.header('Authorization');
@@ -15,11 +18,42 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
   }
 
   if (token.startsWith('swazz_live_')) {
+    const kv = c.env.SESSION_CACHE;
+    const cacheKey = `apikey:${token}`;
+
+    // 1. Try KV cache first (if available)
+    if (kv) {
+      try {
+        const cached = await kv.get(cacheKey);
+        if (cached !== null) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === 'object' && 'userId' in parsed) {
+            return parsed.userId;
+          }
+        }
+      } catch {
+        // KV read failed — fall through to D1
+      }
+    }
+
+    // 2. Cache miss — query D1
     try {
       const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
         .bind(token)
         .first<{ id: string }>();
-      return user ? user.id : null;
+      const userId = user ? user.id : null;
+
+      // 3. Write to KV (positive or negative cache)
+      if (kv) {
+        try {
+          const ttl = userId ? KV_POSITIVE_TTL : KV_NEGATIVE_TTL;
+          await kv.put(cacheKey, JSON.stringify({ userId }), { expirationTtl: ttl });
+        } catch {
+          // KV write failed — non-critical, continue
+        }
+      }
+
+      return userId;
     } catch {
       return null;
     }
