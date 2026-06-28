@@ -12,7 +12,7 @@ interface LoginScreenProps {
 const FEATURE_DETAILS = {
     fuzzing: {
         title: "Smart Fuzzing & Mutation Diffs",
-        details: "Swazz parses your OpenAPI/Swagger/SOAP/GraphQL specification to understand parameters, types, and constraints. It then dynamically generates targeted fuzzing payloads and shows request mutation visual diffs highlighting the exact payload modifications.",
+        details: "Swazz parses your OpenAPI/Swagger/SOAP/GraphQL specifications to understand parameters, types, and constraints. It then dynamically generates targeted fuzzing payloads and shows request mutation visual diffs highlighting the exact payload modifications.",
         goal: "Discover injection vulnerabilities, parser crashes, and edge-case exceptions by sending semantically valid but payload-corrupted requests.",
         benefit: "Discover bugs deep inside business logic that standard scanners (which get blocked by early input validation) completely miss.",
         image: "/screenshots/smart_fuzzing.png"
@@ -353,7 +353,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <polyline points="2 12 12 17 22 12"></polyline>
                                 </svg>
                             </div>
-                            <h3>Fuzzing & Mutation Diffs</h3>
+                            <h3>Smart Fuzzing & Mutation Diffs</h3>
                             <p>Context-aware payload generation and visual diffs of request mutations.</p>
                         </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.har)}>
@@ -407,7 +407,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                                 </svg>
                             </div>
-                            <h3>OpenAPI, GraphQL, SOAP & Swagger</h3>
+                            <h3>OpenAPI, Swagger, GraphQL & SOAP</h3>
                             <p>Native parsing for all Swagger, Postman, WSDL, and GraphQL specs.</p>
                         </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.integration)}>
@@ -429,7 +429,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <line x1="6" y1="18" x2="6.01" y2="18"></line>
                                 </svg>
                             </div>
-                            <h3>Private Runners (Ed25519)</h3>
+                            <h3>Private Runners (Ed25519 Auth)</h3>
                             <p>Secure Ed25519-authenticated agents to scan private APIs safely.</p>
                         </div>
                     </div>
