@@ -103,7 +103,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
-- [/] **Task 93: Runner Launch Security Review & Target Sandboxing**
+- [x] **Task 93: Runner Launch Security Review & Target Sandboxing**
   - **Design Goal:** Prevent runner misuse (such as unauthorized external network scanning, SSRF, or local container escape) by performing a comprehensive security review and implementing target validation filters and sandboxing constraints on runner execution.
   - **Implementation Details:**
     - Implement a strict destination whitelist/blacklist check in the fuzzer runner to prevent scanning internal cloud/private endpoints (e.g. metadata service `169.254.169.254` or local loopback `127.0.0.1`).
