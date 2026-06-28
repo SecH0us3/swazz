@@ -76,7 +76,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Store credential public keys and signature counters in the users D1 database.
     - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
 
-- [ ] **Task 86: Cloudflare KV and Cache API Optimization Research**
+- [/] **Task 86: Cloudflare KV and Cache API Optimization Research**
   - **Design Goal:** Identify parts of the coordinator and runner architectures that would benefit from global, low-latency Cloudflare KV or regional Cache API storage (e.g., global API rate limiting, scan fuzzer payload catalog caching, global session blacklists, or feature flags).
   - **Implementation Details:**
     - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.

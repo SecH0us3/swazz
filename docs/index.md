@@ -30,6 +30,7 @@ Explore the documentation to get started and master Swazz:
 - [Usage & Configuration](./usage.html) - Discover CLI and Web UI usage.
 - [CI/CD Integration](./ci_cd.html) - Integrate Swazz into GitHub Actions, GitLab CI, and more with SARIF reporting.
 - [Architecture & Internals](./architecture.html) - Deep dive into the hybrid architecture and source code structure.
+- [Cloudflare KV & Cache Research](./cloudflare_kv_cache_research.html) - Technical analysis of Cloudflare edge caching, KV optimizations, and runner heartbeat tracking.
 - [Security Review & Threat Model](./security_review.html) - Read the security analysis, SSRF defenses, and authentication designs.
 - [Contributing Guidelines](./contributing.html) - Learn how to set up the dev environment, write tests, and contribute.
 
