@@ -125,4 +125,55 @@ describe('useRunner', () => {
         });
         expect(useAppStore.getState().isPaused).toBe(false);
     });
+
+    it('should handle websocket events and update isQueued, running, complete states', async () => {
+        (globalThis.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({ id: '123' }) });
+
+        let wsInstance: any = null;
+        (globalThis as any).WebSocket = vi.fn().mockImplementation(function() {
+            wsInstance = {
+                close: vi.fn(),
+                send: vi.fn(),
+            };
+            return wsInstance;
+        });
+
+        const { result } = renderHook(() => useRunner(proxyUrl));
+        const onResult = vi.fn();
+        const onComplete = vi.fn();
+
+        await act(async () => {
+            await result.current.start({}, onResult, onComplete);
+        });
+
+        expect(wsInstance).not.toBeNull();
+        expect(wsInstance.onmessage).toBeDefined();
+
+        // 1. Send queued event
+        act(() => {
+            wsInstance.onmessage({ data: JSON.stringify({ type: 'queued' }) });
+        });
+        expect(useAppStore.getState().isQueued).toBe(true);
+
+        // 2. Send result event
+        act(() => {
+            wsInstance.onmessage({ data: JSON.stringify({ type: 'result', data: 'some_data' }) });
+        });
+        expect(useAppStore.getState().isQueued).toBe(false);
+        expect(onResult).toHaveBeenCalledWith('some_data');
+
+        // 3. Send progress event
+        act(() => {
+            wsInstance.onmessage({ data: JSON.stringify({ type: 'progress', data: 'progress_data' }) });
+        });
+        expect(useAppStore.getState().isQueued).toBe(false);
+
+        // 4. Send complete event
+        act(() => {
+            wsInstance.onmessage({ data: JSON.stringify({ type: 'complete', data: 'final_stats' }) });
+        });
+        expect(useAppStore.getState().isQueued).toBe(false);
+        expect(useAppStore.getState().isRunning).toBe(false);
+        expect(onComplete).toHaveBeenCalledWith('final_stats');
+    });
 });

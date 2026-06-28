@@ -54,3 +54,21 @@ TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
 [triggers]
 crons = [ "0 * * * *" ]
 
+[[queues.producers]]
+binding = "SCAN_QUEUE"
+queue = "swazz-scan-queue"
+
+[[queues.consumers]]
+queue = "swazz-scan-queue"
+max_batch_size = 1
+max_batch_timeout = 0
+
+[[queues.producers]]
+binding = "FINDINGS_QUEUE"
+queue = "swazz-findings-queue"
+
+[[queues.consumers]]
+queue = "swazz-findings-queue"
+max_batch_size = 100
+max_batch_timeout = 2
+

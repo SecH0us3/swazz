@@ -36,13 +36,14 @@ export function Header({
     isGuest = false,
     onLogout,
 }: Props) {
-    const { isRunning, isPaused, isLoadingSpecs } = useAppStore(useShallow(state => ({
+    const { isRunning, isPaused, isLoadingSpecs, isQueued } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
+        isQueued: state.isQueued,
     })));
 
-    const isBusy = isRunning || isLoadingSpecs;
+    const isBusy = isRunning || isLoadingSpecs || isQueued;
 
     const [localUrl, setLocalUrl] = useState(baseUrl);
 
@@ -133,7 +134,7 @@ export function Header({
 
                 {/* Running status pill */}
                 {isBusy && (
-                    <div className={`header-status${isLoadingSpecs ? ' loading' : isPaused ? ' paused' : ''}`}>
+                    <div className={`header-status${isLoadingSpecs ? ' loading' : isPaused ? ' paused' : isQueued ? ' queued' : ''}`}>
                         {isLoadingSpecs ? (
                             <>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation:'spin 1s linear infinite' }}>
@@ -147,6 +148,11 @@ export function Header({
                                     <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
                                 </svg>
                                 Paused
+                            </>
+                        ) : isQueued ? (
+                            <>
+                                <span className="queued-dot" />
+                                Queued
                             </>
                         ) : (
                             <>

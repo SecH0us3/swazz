@@ -166,7 +166,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = body.projectId || "";
     const targetUrl = body.config?.base_url || "";
     const profile = (body.config?.profiles && body.config.profiles[0]) || "default";
-    const status = 'pending';
+    const status = 'queued';
 
     try {
       await c.env.DB.prepare(
@@ -179,32 +179,18 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       console.error("Failed to insert scan into D1 in /api/runs:", dbErr);
     }
 
-    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = c.env.COORDINATOR_DO.get(id);
-    const doReq = new Request('http://do/dispatch', {
-      method: 'POST',
-      body: JSON.stringify({
-        runId,
-        config: body.config,
-        userPublicKey,
-      }),
+    // Send to SCAN_QUEUE instead of immediately fetching /dispatch on COORDINATOR_DO
+    await c.env.SCAN_QUEUE.send({
+      runId,
+      config: body.config || {},
+      userPublicKey,
+      targetUrl,
+      profile,
+      projectId,
+      userId: userId ?? null
     });
-    
-    const doRes = await stub.fetch(doReq);
-    if (!doRes.ok) {
-      if (projectId) {
-        try {
-          await c.env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
-            .bind('dispatch_failed', runId)
-            .run();
-        } catch (dbErr) {
-          console.error("Failed to update scan status in /api/runs:", dbErr);
-        }
-      }
-      return c.json({ error: 'Failed to dispatch job to runner' }, 500);
-    }
   
-    return c.json({ id: runId, status: 'dispatched' });
+    return c.json({ id: runId, status: 'queued' }, 201);
   });
   
   app.post('/api/runs/:id/stop', async (c) => {

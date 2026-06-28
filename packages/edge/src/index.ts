@@ -322,11 +322,65 @@ registerRunnersRoutes(app);
 registerMiscRoutes(app);
 
 export default {
-  fetch: app.fetch,
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return app.fetch(request, env, ctx);
+  },
   async scheduled(event: any, env: Env, ctx: any) {
     ctx.waitUntil(cleanupExpiredGuests(env.DB));
     ctx.waitUntil(cleanupScheduledDeletions(env));
     ctx.waitUntil(cleanupSecurityTables(env.DB));
+  },
+  async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (batch.queue === 'swazz-scan-queue') {
+      for (const msg of batch.messages) {
+        try {
+          const doId = env.COORDINATOR_DO.idFromName('global-coordinator');
+          const stub = env.COORDINATOR_DO.get(doId);
+          const doReq = new Request('http://do/dispatch', {
+            method: 'POST',
+            body: JSON.stringify({
+              runId: msg.body.runId,
+              config: msg.body.config || {},
+              userPublicKey: msg.body.userPublicKey || ""
+            }),
+          });
+          const doRes = await stub.fetch(doReq);
+          if (doRes.ok) {
+            await env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
+              .bind('dispatched', msg.body.runId)
+              .run();
+            msg.ack();
+          } else if (doRes.status === 503) {
+            // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
+            msg.ack();
+          } else {
+            console.error(`SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
+          }
+        } catch (err) {
+          console.error(`SCAN_QUEUE dispatch failed for run ${msg.body.runId}:`, err);
+        }
+      }
+    } else if (batch.queue === 'swazz-findings-queue') {
+      const statements = batch.messages.map(msg => {
+        const id = crypto.randomUUID();
+        const { scanId, type, payload } = msg.body;
+        const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+        return env.DB.prepare(
+          `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
+        ).bind(id, scanId, type, payloadStr);
+      });
+      if (statements.length > 0) {
+        try {
+          await env.DB.batch(statements);
+          for (const msg of batch.messages) {
+            msg.ack();
+          }
+        } catch (err) {
+          console.error("Failed to bulk insert findings:", err);
+          throw err;
+        }
+      }
+    }
   }
 };
 
