@@ -307,7 +307,7 @@ func runCLI(args []string) {
 	printSummary(findings, &stats)
 
 	if *sarifOut != "" {
-		report := output.ToSARIF(findings, "0.1.0")
+		report := output.ToSARIF(findings, "0.1.0", runCfg.BaseURL)
 		if err := writeJSON(*sarifOut, report); err != nil {
 			log.Printf("Failed to save SARIF: %v", err)
 		} else {
