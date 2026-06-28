@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler d1 migrations apply swazz_db --remote && wrangler deploy",
+    "deploy": "wrangler queues create swazz-scan-queue || true && wrangler queues create swazz-findings-queue || true && wrangler d1 migrations apply swazz_db --remote && wrangler deploy",
     "test": "vitest run"
   },
   "devDependencies": {
