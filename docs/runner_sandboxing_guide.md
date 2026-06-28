@@ -33,22 +33,19 @@ To achieve defense-in-depth, we apply a multi-layered sandboxing approach:
 By default, Docker containers run as the `root` user inside the container namespace. If a container breakout occurs, the attacker may gain root access to the host.
 
 ### Solution: Run as Non-Root User
-Ensure the container runs as a non-privileged user (e.g., UID/GID `10001`). 
+Ensure the container runs as a non-privileged user (such as `nonroot` with UID/GID `65532`).
 
 #### Dockerfile Configuration
-The official Swazz Runner Dockerfile is configured with a dedicated non-privileged user:
+The official Swazz Runner Dockerfile is built on top of the secure `gcr.io/distroless/static-debian12:nonroot` base image, which contains no shell, no package manager, and is pre-configured with a dedicated non-privileged user:
 ```dockerfile
-# Create a system user
-RUN addgroup -S -g 10001 swazz && \
-    adduser -S -u 10001 -G swazz swazz
-
-USER swazz:swazz
+# Run as non-root user (uid 65532)
+USER nonroot:nonroot
 ```
 
 #### Run-time Enforcement
-Even if the image does not enforce it, you can override the user at runtime:
+Even if the image does not enforce it, you can override the user at runtime (specifying the distroless nonroot UID/GID):
 ```bash
-docker run --user 10001:10001 swazz-engine:latest
+docker run --user 65532:65532 swazz-engine:latest
 ```
 
 ---
@@ -111,7 +108,7 @@ Combine all of these controls into a single, production-ready invocation:
 ```bash
 docker run -d \
   --name swazz-runner \
-  --user 10001:10001 \
+  --user 65532:65532 \
   --read-only \
   --cap-drop=ALL \
   --memory="512m" \
@@ -125,7 +122,7 @@ docker run -d \
 ### Explanations of Security Flags:
 | Flag | Security Benefit |
 | :--- | :--- |
-| `--user 10001:10001` | Runs the process under a non-root UID/GID. |
+| `--user 65532:65532` | Runs the process under a non-root UID/GID (default distroless nonroot user). |
 | `--read-only` | Mounts the container's root filesystem as read-only. |
 | `--cap-drop=ALL` | Removes all Linux kernel capabilities. |
 | `--memory="512m"` | Restricts RAM usage to 512MB to prevent OOM/DoS. |

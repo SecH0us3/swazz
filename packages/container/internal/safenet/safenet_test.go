@@ -80,6 +80,9 @@ func TestIsBlocked_PrivateRanges(t *testing.T) {
 
 		// IPv6 Site-Local
 		{"fec0::1", "fec0::1", true},
+
+		// IPv6 Multicast
+		{"ff02::1", "ff02::1", true},
 	}
 
 	for _, tt := range tests {
@@ -153,6 +156,6 @@ func TestNewSafeHTTPClient_NotNil(t *testing.T) {
 func TestBlockedCIDRs_Initialised(t *testing.T) {
 	t.Parallel()
 
-	// We expect exactly 15 CIDR entries from init()
-	assert.Len(t, blockedCIDRs, 15)
+	// We expect exactly 16 CIDR entries from init()
+	assert.Len(t, blockedCIDRs, 16)
 }

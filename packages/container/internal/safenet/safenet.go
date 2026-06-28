@@ -57,6 +57,9 @@ func init() {
 
 		// IPv6 Site-Local (RFC 3879 - deprecated but still reserved)
 		"fec0::/10",
+
+		// IPv6 Multicast (RFC 4291)
+		"ff00::/8",
 	}
 
 	for _, cidr := range cidrs {
