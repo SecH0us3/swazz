@@ -355,9 +355,11 @@ export default {
             msg.ack();
           } else {
             console.error(`SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
+            msg.retry();
           }
         } catch (err) {
           console.error(`SCAN_QUEUE dispatch failed for run ${msg.body.runId}:`, err);
+          msg.retry();
         }
       }
     } else if (batch.queue === 'swazz-findings-queue') {

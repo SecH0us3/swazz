@@ -608,15 +608,15 @@ export class RunnerCoordinator {
          if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
           
-          try {
-            await this.env.FINDINGS_QUEUE.send({
+          this.state.waitUntil(
+            this.env.FINDINGS_QUEUE.send({
               scanId: runId,
               type: msg.type,
               payload: msg.payload
-            });
-          } catch (qErr) {
-            console.error("Failed to send to FINDINGS_QUEUE:", qErr);
-          }
+            }).catch(qErr => {
+              console.error("Failed to send to FINDINGS_QUEUE:", qErr);
+            })
+          );
 
           const clientSet = this.clients.get(runId);
           if (clientSet) {
@@ -686,10 +686,16 @@ export class RunnerCoordinator {
         return;
       }
 
+      const keys = queuedScans.results.flatMap(scan => [
+        `config:${scan.id}`,
+        `user_public_key:${scan.id}`
+      ]);
+      const storedData = await this.state.storage.get<any>(keys);
+
       for (const scan of queuedScans.results) {
         // Get config and userPublicKey from DO storage, or scan_configs / fallback
-        const storedConfig = await this.state.storage.get<any>(`config:${scan.id}`);
-        const storedPubKey = await this.state.storage.get<string>(`user_public_key:${scan.id}`);
+        const storedConfig = storedData.get(`config:${scan.id}`);
+        const storedPubKey = storedData.get(`user_public_key:${scan.id}`);
         
         const scanUserPubKey = storedPubKey || scan.userPublicKey || "";
         let config = storedConfig;
