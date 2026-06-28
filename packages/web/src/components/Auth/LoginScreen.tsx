@@ -11,8 +11,8 @@ interface LoginScreenProps {
 
 const FEATURE_DETAILS = {
     fuzzing: {
-        title: "Smart Fuzzing",
-        details: "Swazz parses your OpenAPI/Swagger specification or sniffed traffic to understand parameters, types, and constraints. It then dynamically generates targeted fuzzing payloads.",
+        title: "Smart Fuzzing & Mutation Diffs",
+        details: "Swazz parses your OpenAPI/Swagger/SOAP/GraphQL specifications to understand parameters, types, and constraints. It then dynamically generates targeted fuzzing payloads and shows request mutation visual diffs highlighting the exact payload modifications.",
         goal: "Discover injection vulnerabilities, parser crashes, and edge-case exceptions by sending semantically valid but payload-corrupted requests.",
         benefit: "Discover bugs deep inside business logic that standard scanners (which get blocked by early input validation) completely miss.",
         image: "/screenshots/smart_fuzzing.png"
@@ -25,15 +25,15 @@ const FEATURE_DETAILS = {
         image: "/screenshots/har_replay.png"
     },
     pipelines: {
-        title: "CI/CD Audit Pipelines",
-        details: "Run Swazz scans natively in GitHub Actions, GitLab CI, or any container runner environment. Block insecure code before it hits production.",
-        goal: "Automate security tests on every commit, pull request, or release build to enforce compliance rules.",
-        benefit: "Catch vulnerabilities early in the development lifecycle when they are cheapest to fix, ensuring continuous security defaults.",
+        title: "CI/CD & Real-Time Metrics",
+        details: "Run Swazz scans natively in GitHub Actions, GitLab CI, or any container environment. Stream real-time fuzzer metrics, status codes, and request mutation rates directly to your dashboard.",
+        goal: "Automate security tests on every commit, pull request, or release build with real-time performance observability.",
+        benefit: "Catch vulnerabilities early in the development lifecycle and monitor fuzzer throughput instantly.",
         image: "/screenshots/audit_pipelines.png"
     },
     compliance: {
-        title: "Compliance Mapping",
-        details: "Every discovered crash, anomaly, or security issue is automatically mapped to the OWASP Top 10 API Security Risks and industry-standard Common Weakness Enumeration (CWE) patterns.",
+        title: "OWASP Top 10 Mapping",
+        details: "Every discovered crash, anomaly, or security issue is automatically mapped to the OWASP Top 10 API Security Risks (such as BOLA, Broken Auth, or Rate Limiting) and industry-standard Common Weakness Enumeration (CWE) patterns.",
         goal: "Generate compliant audit evidence and prioritize vulnerabilities based on standardized security classifications.",
         benefit: "Developers can resolve issues faster by directly viewing remediation links, tutorials, and vulnerability context maps.",
         image: "/screenshots/compliance_mapping.png"
@@ -53,15 +53,15 @@ const FEATURE_DETAILS = {
         image: "/screenshots/response_grouping.png"
     },
     multispec: {
-        title: "OpenAPI & GraphQL",
-        details: "Full native support for parsing OpenAPI v2/v3 specs, Postman collections, and interactive GraphQL schemas.",
-        goal: "Automatically explore all query parameters, mutations, and deep request endpoints.",
-        benefit: "No manual endpoint mapping. Drop in any standard API definition format and start scanning instantly.",
+        title: "OpenAPI, Swagger, GraphQL & SOAP",
+        details: "Full native support for parsing OpenAPI v2/v3, Swagger, GraphQL schemas, Postman collections, and SOAP WSDL specifications.",
+        goal: "Automatically explore and fuzz all query parameters, mutations, SOAP actions, and deep request endpoints.",
+        benefit: "No manual endpoint mapping. Drop in any standard API definition format (JSON, YAML, WSDL, GraphQL) and start scanning instantly.",
         image: "/screenshots/openapi_graphql.png"
     },
     privaterunners: {
-        title: "Private Runners",
-        details: "Run scanning agents inside your secure VPC or private network. Only metadata is sent back to the coordinator.",
+        title: "Private Runners (Ed25519 Auth)",
+        details: "Run scanning agents inside your secure VPC or private network. Runners use secure Ed25519 public-key signatures for coordinator authentication. Only metadata is sent back to the coordinator.",
         goal: "Scan internal pre-production environments without opening firewall ports or exposing private APIs.",
         benefit: "Strict security boundaries. Your target application traffic never leaves your trusted network.",
         image: "/screenshots/private_runners.png"
@@ -353,8 +353,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <polyline points="2 12 12 17 22 12"></polyline>
                                 </svg>
                             </div>
-                            <h3>Smart Fuzzing</h3>
-                            <p>Context-aware payload generation based on API schemas.</p>
+                            <h3>Smart Fuzzing & Mutation Diffs</h3>
+                            <p>Context-aware payload generation and visual diffs of request mutations.</p>
                         </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.har)}>
                             <div className="bento-icon-wrapper">
@@ -372,8 +372,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                                 </svg>
                             </div>
-                            <h3>Audit Pipelines</h3>
-                            <p>Seamless integration into CI/CD for continuous security.</p>
+                            <h3>CI/CD & Real-Time Metrics</h3>
+                            <p>Stream live metrics and integrate security audits into CI/CD pipelines.</p>
                         </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.compliance)}>
                             <div className="bento-icon-wrapper">
@@ -385,8 +385,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <polyline points="10 9 9 9 8 9"></polyline>
                                 </svg>
                             </div>
-                            <h3>Compliance Mapping</h3>
-                            <p>Map vulnerabilities to OWASP and industry standards.</p>
+                            <h3>OWASP Top 10 Mapping</h3>
+                            <p>Map vulnerabilities to OWASP API Security Top 10 risks and CWEs.</p>
                         </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.grouping)}>
                             <div className="bento-icon-wrapper">
@@ -407,8 +407,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                                 </svg>
                             </div>
-                            <h3>OpenAPI & GraphQL</h3>
-                            <p>Native parsing for all Swagger, Postman, and GraphQL specs.</p>
+                            <h3>OpenAPI, Swagger, GraphQL & SOAP</h3>
+                            <p>Native parsing for all Swagger, Postman, WSDL, and GraphQL specs.</p>
                         </div>
                         <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.integration)}>
                             <div className="bento-icon-wrapper">
@@ -429,8 +429,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     <line x1="6" y1="18" x2="6.01" y2="18"></line>
                                 </svg>
                             </div>
-                            <h3>Private Runners</h3>
-                            <p>Scan internal environments safely by deploying runner agents inside your own secure network infrastructure.</p>
+                            <h3>Private Runners (Ed25519 Auth)</h3>
+                            <p>Secure Ed25519-authenticated agents to scan private APIs safely.</p>
                         </div>
                     </div>
                 </section>
