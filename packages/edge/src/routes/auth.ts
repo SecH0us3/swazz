@@ -337,6 +337,10 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         .bind(decoded.sub)
         .first<{ api_key: string | null }>();
 
+      if (!oldUser) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+
       const newApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
       await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
         .bind(newApiKey, decoded.sub)
