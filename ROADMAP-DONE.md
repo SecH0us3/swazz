@@ -700,3 +700,25 @@ This file contains completed tasks.
     - For standard browser requests (requesting `text/html`), continue returning the rich HTML/JS frontend application.
     - For reference, consult the MDN Content Negotiation specification (https://developer.mozilla.org/en-US/docs/Web/HTTP/Content_negotiation).
 
+- [x] **Task 93: Runner Launch Security Review & Target Sandboxing**
+  - **Design Goal:** Prevent runner misuse (such as unauthorized external network scanning, SSRF, or local container escape) by performing a comprehensive security review and implementing target validation filters and sandboxing constraints on runner execution.
+  - **Implementation Details:**
+    - Implement a strict destination whitelist/blacklist check in the fuzzer runner to prevent scanning internal cloud/private endpoints (e.g. metadata service `169.254.169.254` or local loopback `127.0.0.1`).
+    - Audit how the runner executes shell commands, binds keys, or mounts filesystems during runner execution.
+    - Provide a security guide for sandboxing runners in Docker containers (e.g., using `--cap-drop`, rootless mode, and CPU/memory constraints).
+
+- [x] **Task 96: KV Read-Through Cache for API Key & Session Token Verification**
+  - **Design Goal:** Reduce D1 database read transaction costs by ~90% and cut API request authentication latency from 150ms to ~15ms by introducing a Cloudflare KV read-through cache for API key verification in `getUserIdFromRequest()`.
+  - **Implementation Details:**
+    - Add `SESSION_CACHE` KV namespace binding to `wrangler.toml` and `Env` interface (optional — graceful fallback to D1-only when not bound).
+    - Implement KV read-through cache with positive (5 min TTL) and negative (1 min TTL) caching for `swazz_live_*` API key tokens.
+    - Add cache invalidation on API key regeneration (`POST /api/auth/regenerate-key`) and scheduled account deletion (`cleanupScheduledDeletions`).
+    - JWT tokens remain unaffected (verified locally via HMAC without D1 queries).
+
+- [x] **Task 100: Actualize Landing Page Content & Valuable Capabilities**
+  - **Design Goal:** Update the landing page copy to explicitly list all supported API spec formats (OpenAPI, GraphQL, SOAP, Swagger files) and highlight the most valuable features and capabilities of the Swazz platform.
+  - **Implementation Details:**
+    - Update the marketing copy on the landing page to mention SOAP and Swagger support alongside OpenAPI and GraphQL.
+    - Highlight core capabilities like OWASP Top 10 mapping, request mutation visual diffs, private runner Ed25519 authentication, and real-time fuzzer metrics.
+
+
