@@ -55,6 +55,31 @@ func TestIsBlocked_PrivateRanges(t *testing.T) {
 
 		// IPv6 public — must NOT be blocked
 		{"2001:4860:4860::8888 Google", "2001:4860:4860::8888", false},
+
+		// Carrier-Grade NAT
+		{"100.64.0.1", "100.64.0.1", true},
+		{"100.127.255.255", "100.127.255.255", true},
+		{"100.63.255.255", "100.63.255.255", false},
+
+		// Benchmark/Testing
+		{"198.18.0.1", "198.18.0.1", true},
+		{"198.19.255.255", "198.19.255.255", true},
+		{"198.20.0.1", "198.20.0.1", false},
+
+		// Multicast
+		{"224.0.0.1", "224.0.0.1", true},
+		{"239.255.255.255", "239.255.255.255", true},
+
+		// Reserved/Future Use
+		{"240.0.0.1", "240.0.0.1", true},
+		{"255.255.255.254", "255.255.255.254", true},
+
+		// IPv6 Unique Local / ULA
+		{"fc00::1", "fc00::1", true},
+		{"fd00::1", "fd00::1", true},
+
+		// IPv6 Site-Local
+		{"fec0::1", "fec0::1", true},
 	}
 
 	for _, tt := range tests {
@@ -128,6 +153,6 @@ func TestNewSafeHTTPClient_NotNil(t *testing.T) {
 func TestBlockedCIDRs_Initialised(t *testing.T) {
 	t.Parallel()
 
-	// We expect exactly 9 CIDR entries from init()
-	assert.Len(t, blockedCIDRs, 9)
+	// We expect exactly 15 CIDR entries from init()
+	assert.Len(t, blockedCIDRs, 15)
 }

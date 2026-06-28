@@ -39,6 +39,24 @@ func init() {
 		// Unspecified addresses (bypasses to localhost on many systems)
 		"0.0.0.0/8",
 		"::/128",
+
+		// Carrier-Grade NAT / Shared Space (RFC 6598)
+		"100.64.0.0/10",
+
+		// Benchmark/Testing (RFC 2544 / RFC 5180)
+		"198.18.0.0/15",
+
+		// Multicast (RFC 5771 / RFC 1112)
+		"224.0.0.0/4",
+
+		// Reserved/Future Use (RFC 1112 / RFC 6890)
+		"240.0.0.0/4",
+
+		// IPv6 Unique Local / ULA (RFC 4193)
+		"fc00::/7",
+
+		// IPv6 Site-Local (RFC 3879 - deprecated but still reserved)
+		"fec0::/10",
 	}
 
 	for _, cidr := range cidrs {
