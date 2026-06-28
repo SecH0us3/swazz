@@ -18,8 +18,8 @@ bucket_name = "swazz-reports"
 
 [[kv_namespaces]]
 binding = "SESSION_CACHE"
-id = "session-cache-kv"
-preview_id = "session-cache-kv-preview"
+id = "12a1d05930f94f3698557707a85874ba"
+preview_id = "2ef7afd5df23486c8430f03b3068ce59"
 
 [[durable_objects.bindings]]
 name = "COORDINATOR_DO"
