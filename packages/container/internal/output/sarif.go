@@ -3,7 +3,6 @@ package output
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -82,15 +81,15 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string, baseURL string)
 
 		// Reconstruct target full URL
 		fullURL := ""
-		if baseURL != "" {
-			if u, err := url.Parse(baseURL); err == nil {
-				if ref, err := url.Parse(f.ResolvedPath); err == nil {
-					fullURL = u.ResolveReference(ref).String()
-				} else {
-					fullURL = baseURL + f.ResolvedPath
-				}
+		if strings.HasPrefix(f.ResolvedPath, "http://") || strings.HasPrefix(f.ResolvedPath, "https://") {
+			fullURL = f.ResolvedPath
+		} else if baseURL != "" {
+			if f.ResolvedPath == "" {
+				fullURL = baseURL
 			} else {
-				fullURL = baseURL + f.ResolvedPath
+				base := strings.TrimSuffix(baseURL, "/")
+				path := strings.TrimPrefix(f.ResolvedPath, "/")
+				fullURL = base + "/" + path
 			}
 		} else {
 			fullURL = f.ResolvedPath
@@ -105,10 +104,13 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string, baseURL string)
 
 		respBodyStr := ""
 		if f.ResponseBody != nil {
-			if s, ok := f.ResponseBody.(string); ok {
-				respBodyStr = s
-			} else {
-				respBodyStr = fmt.Sprintf("%v", f.ResponseBody)
+			switch v := f.ResponseBody.(type) {
+			case string:
+				respBodyStr = v
+			case []byte:
+				respBodyStr = string(v)
+			default:
+				respBodyStr = fmt.Sprintf("%v", v)
 			}
 		}
 
@@ -142,17 +144,33 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string, baseURL string)
 		// Construct markdown message overview
 		payloadStr := ""
 		if f.Payload != nil {
-			if jsonBytes, err := json.MarshalIndent(f.Payload, "", "  "); err == nil {
-				payloadStr = string(jsonBytes)
+			if s, ok := f.Payload.(string); ok {
+				var js any
+				if err := json.Unmarshal([]byte(s), &js); err == nil {
+					if jsonBytes, err := json.MarshalIndent(js, "", "  "); err == nil {
+						payloadStr = string(jsonBytes)
+					} else {
+						payloadStr = s
+					}
+				} else {
+					payloadStr = s
+				}
 			} else {
-				payloadStr = fmt.Sprintf("%v", f.Payload)
+				if jsonBytes, err := json.MarshalIndent(f.Payload, "", "  "); err == nil {
+					payloadStr = string(jsonBytes)
+				} else {
+					payloadStr = fmt.Sprintf("%v", f.Payload)
+				}
 			}
 		}
 
-		// Truncate response body if it's longer than 2000 characters
+		// Truncate response body if it's longer than 2000 characters (rune-safe)
 		truncatedRespBodyStr := respBodyStr
 		if len(truncatedRespBodyStr) > 2000 {
-			truncatedRespBodyStr = truncatedRespBodyStr[:2000] + "\n... [TRUNCATED]"
+			runes := []rune(truncatedRespBodyStr)
+			if len(runes) > 2000 {
+				truncatedRespBodyStr = string(runes[:2000]) + "\n... [TRUNCATED]"
+			}
 		}
 
 		var markdownLines []string
