@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   STORAGE: R2Bucket;
+  SESSION_CACHE?: KVNamespace;
   COORDINATOR_DO: DurableObjectNamespace;
   JWT_SECRET: string;
   TURNSTILE_SECRET?: string;

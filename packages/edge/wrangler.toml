@@ -16,6 +16,11 @@ database_id = "0b09f6b6-8188-4172-9710-04c3798553af"
 binding = "STORAGE"
 bucket_name = "swazz-reports"
 
+[[kv_namespaces]]
+binding = "SESSION_CACHE"
+id = "session-cache-kv"
+preview_id = "session-cache-kv-preview"
+
 [[durable_objects.bindings]]
 name = "COORDINATOR_DO"
 class_name = "RunnerCoordinator"
