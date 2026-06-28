@@ -137,6 +137,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Set up a clean, modern blog index and article layout in the frontend web application.
     - Support markdown article rendering and sharing actions to drive organic technical traffic.
 
+- [ ] **Task 101: Deploy & Publish Live Vulnerable Demo API**
+  - **Design Goal:** Deploy a publicly accessible instance of the Vulnerable Demo API, enabling new users to immediately run their first fuzzing scan against a live, interactive target.
+  - **Implementation Details:**
+    - Deploy the Go-based Vulnerable Demo API to a cloud platform (e.g. fly.io, AWS, or Cloudflare Workers) as a public host.
+    - Set up demo CORS, API specs access, and pre-seeded database content (users, products, logs).
+    - Update the onboarding flow and landing page copy to provide the live demo URL.
+    - Add a "Scan Demo Target" button in the Web UI to launch a pre-configured scan against the live demo with a single click.
+
 
 
 
