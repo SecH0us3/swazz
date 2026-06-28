@@ -27,7 +27,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Spin up a headless browser to crawl target pages.
     - Intercept network request traffic (AJAX, fetch requests, form submissions) and convert them to internal API specifications for fuzzing.
 
-- [ ] **Task 60: DefectDojo Integration Enhancements**
+- [/] **Task 60: DefectDojo Integration Enhancements**
   - **Design Goal:** Improve metadata richness when importing Swazz reports into DefectDojo by correctly mapping vulnerabilities, scopes, and payloads.
   - **Implementation Details:**
     - Ensure correct mapping of severity levels, grouping, service names, and URL paths.
