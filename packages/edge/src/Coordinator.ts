@@ -301,13 +301,28 @@ export class RunnerCoordinator {
       for (const ws of this.runners) {
         const tags = this.state.getTags(ws);
         const isPending = tags.includes('runner-pending');
-        const pubKey = tags.find(t => t !== 'runner-pending' && t !== 'runner' && !t.startsWith('name:') && !t.startsWith('version:')) || null;
+        const pubKey = tags.find(t => 
+          t !== 'runner-pending' && 
+          t !== 'runner' && 
+          !t.startsWith('name:') && 
+          !t.startsWith('version:') && 
+          !t.startsWith('user_id:')
+        ) || null;
         const nameTag = tags.find(t => t.startsWith('name:'));
         const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
         const versionTag = tags.find(t => t.startsWith('version:'));
         const version = versionTag ? versionTag.substring(8) : 'v0.0.0';
+        
+        let connectionId = null;
+        try {
+          const attachment = ws.deserializeAttachment() as { connectionId?: string } | null;
+          if (attachment && attachment.connectionId) {
+            connectionId = attachment.connectionId;
+          }
+        } catch {}
 
         runnerList.push({
+          connectionId,
           name,
           publicKey: pubKey,
           status: isPending ? 'authenticating' : 'connected',
@@ -319,6 +334,56 @@ export class RunnerCoordinator {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    if (url.pathname === '/runners/restart') {
+      const connectionId = url.searchParams.get('connectionId');
+      const userPublicKey = url.searchParams.get('userPublicKey');
+      if (!connectionId) {
+        return new Response('Missing connectionId', { status: 400 });
+      }
+
+      // Locate active runner
+      let runnerWs = null;
+      for (const ws of this.runners) {
+        try {
+          const attachment = ws.deserializeAttachment() as { connectionId?: string } | null;
+          if (attachment && attachment.connectionId === connectionId) {
+            runnerWs = ws;
+            break;
+          }
+        } catch {}
+      }
+
+      if (!runnerWs) {
+        return new Response('Runner not found', { status: 404 });
+      }
+
+      const tags = this.state.getTags(runnerWs);
+      const pubKey = tags.find(t => 
+        t !== 'runner-pending' && 
+        t !== 'runner' && 
+        !t.startsWith('name:') && 
+        !t.startsWith('version:') && 
+        !t.startsWith('user_id:')
+      ) || null;
+
+      // 1. Check if shared runner
+      if (!pubKey) {
+        return new Response('Forbidden: Shared runners cannot be restarted', { status: 403 });
+      }
+
+      // 2. Check if owner matching userPublicKey
+      if (pubKey !== userPublicKey) {
+        return new Response('Forbidden: You do not own this runner', { status: 403 });
+      }
+
+      try {
+        runnerWs.send(JSON.stringify({ type: 'agent_restart' }));
+        return new Response('Restart command sent', { status: 200 });
+      } catch (err) {
+        return new Response('Failed to send restart command', { status: 500 });
+      }
     }
 
     if (url.pathname === '/connect-runner') {
@@ -347,7 +412,8 @@ export class RunnerCoordinator {
           this.pendingChallenges = new Map();
         }
         this.pendingChallenges.set(server, nonce);
-        server.serializeAttachment({ authenticated: false, nonce });
+        const connectionId = ulid();
+        server.serializeAttachment({ authenticated: false, nonce, connectionId });
         
         // Send challenge after a tiny delay to ensure client is ready to receive messages
         setTimeout(() => {
@@ -368,7 +434,8 @@ export class RunnerCoordinator {
         const tags = ["runner", nameTag, versionTag];
         if (userIdTag) tags.push(userIdTag);
         this.state.acceptWebSocket(server, tags);
-        server.serializeAttachment({ authenticated: true });
+        const connectionId = ulid();
+        server.serializeAttachment({ authenticated: true, connectionId });
         this.runners.add(server);
       }
 
@@ -442,7 +509,8 @@ export class RunnerCoordinator {
           if (isValid) {
             this.pendingChallenges?.delete(ws);
             this.runners.add(ws);
-            ws.serializeAttachment({ authenticated: true });
+            const attachment = ws.deserializeAttachment() as { connectionId?: string } | null || {};
+            ws.serializeAttachment({ ...attachment, authenticated: true });
             ws.send(JSON.stringify({ type: 'auth_ok' }));
           } else {
             ws.send(JSON.stringify({ type: 'auth_failed', error: 'Invalid challenge signature' }));

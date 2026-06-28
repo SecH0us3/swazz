@@ -39,7 +39,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
-- [ ] **Task 67: Restart Runner Agent Command in Web UI**
+- [x] **Task 67: Restart Runner Agent Command in Web UI**
   - **Design Goal:** Allow remote management of runners by providing a button in the Web UI dashboard to restart connected runner agent processes.
 
 - [ ] **Task 68: Agent Update Notifications**
@@ -144,6 +144,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Set up a clean, modern blog index and article layout in the frontend web application.
     - Support markdown article rendering and sharing actions to drive organic technical traffic.
+
+- [ ] **Task 95: Actualize Landing Page Content & Valuable Capabilities**
+  - **Design Goal:** Update the landing page copy to explicitly list all supported API spec formats (OpenAPI, GraphQL, SOAP, Swagger files) and highlight the most valuable features and capabilities of the Swazz platform.
+  - **Implementation Details:**
+    - Update the marketing copy on the landing page to mention SOAP and Swagger support alongside OpenAPI and GraphQL.
+    - Highlight core capabilities like OWASP Top 10 mapping, request mutation visual diffs, private runner Ed25519 authentication, and real-time fuzzer metrics.
 
 
 
