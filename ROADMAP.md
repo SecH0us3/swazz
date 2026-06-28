@@ -14,7 +14,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a concurrent, recursive crawler in Go with rate-limiting, depth-limits, and domain scoping to build a dynamic Sitemap.
     - Feed discovered URLs and form inputs into the fuzzing execution pipeline.
 
-- [ ] **Task 57: Cloudflare Queues Integration for Scaling Scans & Buffering Findings**
+- [/] **Task 57: Cloudflare Queues Integration for Scaling Scans & Buffering Findings**
   - **Design Goal:** Improve the system's scalability, reliability, and resilience by decoupling task dispatch and result ingestion from synchronous request/WebSocket paths, mitigating D1 database pressure under high concurrency.
   - **Implementation Details:**
     - **Scan Queue:** Create a Cloudflare Queue for incoming scans. Instead of returning `503 No runners available` when no runners are online, push scan configurations to the queue. Have the coordinator pull and assign them when a runner connects.
@@ -27,11 +27,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Spin up a headless browser to crawl target pages.
     - Intercept network request traffic (AJAX, fetch requests, form submissions) and convert them to internal API specifications for fuzzing.
 
-- [/] **Task 60: DefectDojo Integration Enhancements**
-  - **Design Goal:** Improve metadata richness when importing Swazz reports into DefectDojo by correctly mapping vulnerabilities, scopes, and payloads.
-  - **Implementation Details:**
-    - Ensure correct mapping of severity levels, grouping, service names, and URL paths.
-    - Embed fuzzed payloads, request/response bodies, and corresponding MITRE CWE identifiers into exported report formats.
 
 - [ ] **Task 62: Browser Extension for Real-Time Traffic Capturing & Request Recording**
   - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints and capturing client requests directly into the Swazz configuration profile. This can serve as a more optimal, zero-setup alternative to exporting/uploading HAR files.
