@@ -152,6 +152,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Move the GitHub link and the hotkeys help menu to the footer.
     - Create an "About the project" page and add a link to it in the footer.
 
+- [ ] **Task 104: UI/UX Right Column Cleanup**
+  - **Design Goal:** Review and declutter the right-hand column/sidebar of the UI.
+  - **Implementation Details:**
+    - Identify controls in the right column that are redundant or rarely used.
+    - Move these rarely used controls exclusively to the Project Settings page to streamline the main workspace view.
+
 
 
 
