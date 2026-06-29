@@ -554,7 +554,7 @@ export default function App() {
         return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
     }
 
-    if (authEnabled && !token && !isGuest) {
+    if (!token && !isGuest) {
         return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
     }
 

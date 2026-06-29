@@ -13,6 +13,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) {
+    const { authEnabled } = useAuth();
     const turnstileSiteKey = useAppStore(state => state.turnstileSiteKey);
     const [turnstileResponse, setTurnstileResponse] = useState('');
     const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
@@ -301,13 +302,17 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     </nav>
                 </div>
                 <div className="landing-nav-right">
-                    <button type="button" onClick={() => openAuthModal(false)} className="btn-nav-accent">
-                        Let's go
+                    <button type="button" onClick={() => authEnabled ? openAuthModal(false) : onGuest?.()} className="btn-nav-accent">
+                        {authEnabled ? "Let's go" : "Launch App"}
                     </button>
                 </div>
             </header>
 
-            <LandingShowcase actionText="Register Free" onActionClick={() => openAuthModal(true)} showPricing={true} />
+            <LandingShowcase 
+                actionText={authEnabled ? "Register Free" : "Launch App"} 
+                onActionClick={() => authEnabled ? openAuthModal(true) : onGuest?.()} 
+                showPricing={authEnabled} 
+            />
 
 
 
