@@ -5120,3 +5120,22 @@ kbd {
   gap: 12px;
   margin-top: 24px;
 }
+
+.rbac-empty-state {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+.rbac-modal-title {
+  margin-bottom: 16px;
+}
+
+.rbac-input-full {
+  width: 100%;
+}
+
+.rbac-checkbox-grid-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+}

@@ -7,7 +7,7 @@ import { getUserIdFromRequest } from '../utils/auth';
 
 export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   
-  app.get('/api/projects/:id/permissions', async (c) => {
+  app.get('/api/projects/:id/permissions', requirePermission('get:/api/projects/:id'), async (c) => {
     return c.json({ permissions: PERMISSIONS });
   });
 
@@ -51,18 +51,57 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
     const roleId = 'c_' + ulid();
 
-    const permissions = body.permissions || [];
-    const includedRoles = body.included_roles || [];
+    const permissions: string[] = body.permissions || [];
+    const includedRoles: string[] = body.included_roles || [];
     
-    if (!body.name || typeof body.name !== 'string') return c.json({ error: 'Role name is required' }, 400);
+    // Validate role name: required, string, non-whitespace
+    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
+      return c.json({ error: 'Role name is required and must be a non-empty string' }, 400);
+    }
+    const roleName = body.name.trim();
 
-    const existingRole = await c.env.DB.prepare('SELECT id FROM project_custom_roles WHERE project_id = ? AND name = ?').bind(projectId, body.name).first();
+    // Validate permission keys against known permissions
+    const validKeys = Object.keys(PERMISSIONS);
+    const invalidPerms = permissions.filter(p => !validKeys.includes(p));
+    if (invalidPerms.length > 0) {
+      return c.json({ error: `Unknown permission keys: ${invalidPerms.join(', ')}` }, 400);
+    }
+
+    // Validate included_roles exist (must be default roles or custom roles in this project)
+    if (includedRoles.length > 0) {
+      const defaultRoleIds = Object.keys(DEFAULT_ROLES);
+      const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
+      if (customCandidates.length > 0) {
+        const placeholders = customCandidates.map(() => '?').join(',');
+        const { results: found } = await c.env.DB.prepare(
+          `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
+        ).bind(projectId, ...customCandidates).all<{ id: string }>();
+        const foundIds = new Set((found || []).map(r => r.id));
+        const missing = customCandidates.filter(id => !foundIds.has(id));
+        if (missing.length > 0) {
+          return c.json({ error: `Unknown role IDs: ${missing.join(', ')}` }, 400);
+        }
+      }
+
+      // Circular inheritance check: ensure none of the included roles
+      // would transitively include the new role (which doesn't exist yet, so
+      // we only need to check that included roles don't form a cycle among themselves).
+      // Since the new role has no parents yet, a cycle is impossible on creation.
+      // However, we still guard against self-inclusion.
+      if (includedRoles.includes(roleId)) {
+        return c.json({ error: 'A role cannot include itself' }, 400);
+      }
+    }
+
+    const existingRole = await c.env.DB.prepare(
+      'SELECT id FROM project_custom_roles WHERE project_id = ? AND name = ?'
+    ).bind(projectId, roleName).first();
     if (existingRole) {
       return c.json({ error: 'A role with this name already exists' }, 400);
     }
 
     const stmts = [
-      c.env.DB.prepare('INSERT INTO project_custom_roles (id, project_id, name) VALUES (?, ?, ?)').bind(roleId, projectId, body.name)
+      c.env.DB.prepare('INSERT INTO project_custom_roles (id, project_id, name) VALUES (?, ?, ?)').bind(roleId, projectId, roleName)
     ];
 
     permissions.forEach((perm: string) => {

@@ -157,7 +157,7 @@ export function MembersRolesTab() {
                             ))}
                             {members.length === 0 && (
                                 <tr>
-                                    <td colSpan={2} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>No members found.</td>
+                                    <td colSpan={2} className="rbac-empty-state">No members found.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -196,23 +196,22 @@ export function MembersRolesTab() {
             {isInviteModalOpen && (
                 <div className="modal-overlay">
                     <div className="rbac-modal-content invite-modal">
-                        <h3 className="rbac-tab-title" style={{ marginBottom: '16px' }}>Invite User</h3>
+                        <h3 className="rbac-tab-title rbac-modal-title">Invite User</h3>
                         
                         <div className="rbac-form-group">
                             <label className="rbac-form-label">Email or Username</label>
                             <input 
                                 type="text" 
-                                className="input" 
+                                className="input rbac-input-full" 
                                 value={inviteInput} 
                                 onChange={e => setInviteInput(e.target.value)} 
                                 placeholder="user@example.com"
-                                style={{ width: '100%' }}
                             />
                         </div>
 
                         <div className="rbac-form-group">
                             <label className="rbac-form-label">Roles to Assign</label>
-                            <div className="rbac-checkbox-grid" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                            <div className="rbac-checkbox-grid rbac-checkbox-grid-scroll">
                                 {roles.map(r => (
                                     <label key={r.id} className="rbac-checkbox-item">
                                         <input 
@@ -241,17 +240,16 @@ export function MembersRolesTab() {
             {isRoleModalOpen && (
                 <div className="modal-overlay">
                     <div className="rbac-modal-content">
-                        <h3 className="rbac-tab-title" style={{ marginBottom: '16px' }}>Create Custom Role</h3>
+                        <h3 className="rbac-tab-title rbac-modal-title">Create Custom Role</h3>
                         
                         <div className="rbac-form-group">
                             <label className="rbac-form-label">Role Name</label>
                             <input 
                                 type="text" 
-                                className="input" 
+                                className="input rbac-input-full" 
                                 value={roleName} 
                                 onChange={e => setRoleName(e.target.value)} 
                                 placeholder="e.g. Audit Viewer"
-                                style={{ width: '100%' }}
                             />
                         </div>
 
