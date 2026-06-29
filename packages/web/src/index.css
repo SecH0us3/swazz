@@ -4907,6 +4907,21 @@ kbd {
   gap: 24px;
 }
 
+.project-settings-nav .tab-bar-btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border-bottom: none;
+  top: 0;
+}
+
+.project-settings-nav .tab-bar-btn.active {
+  background: var(--accent-subtle);
+  color: var(--accent-light);
+  border-bottom-color: transparent;
+}
+
 .rbac-tab-container {
   display: flex;
   flex-direction: column;
