@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './UserMenu.js';
+import { useToast } from '../hooks/useToast.js';
 
 interface Props {
     baseUrl: string;
@@ -45,6 +46,8 @@ export function Header({
 
     const isBusy = isRunning || isLoadingSpecs || isQueued;
 
+    const { showToast } = useToast();
+
     const [localUrl, setLocalUrl] = useState(baseUrl);
     const [invitations, setInvitations] = useState<any[]>([]);
 
@@ -86,10 +89,10 @@ export function Header({
                 window.dispatchEvent(new CustomEvent('swazz:invite-accepted', { detail: { projectId: data.project_id } }));
             } else {
                 const data = await res.json();
-                alert(`Failed to accept invitation: ${data.error}`);
+                showToast(`Failed to accept invitation: ${data.error}`, 'error');
             }
         } catch (err) {
-            alert('Failed to accept invitation');
+            showToast('Failed to accept invitation', 'error');
         }
     };
 
@@ -146,9 +149,8 @@ export function Header({
                 </button>
 
                 <div 
-                    className="header-logo" 
+                    className="header-nav-logo header-cursor-pointer"
                     onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
-                    style={{ cursor: 'pointer' }}
                 >
                     <div className="header-logo-icon">⚡</div>
                     <span className="header-logo-text">swazz</span>
@@ -183,7 +185,7 @@ export function Header({
                     <div className={`header-status${isLoadingSpecs ? ' loading' : isPaused ? ' paused' : isQueued ? ' queued' : ''}`}>
                         {isLoadingSpecs ? (
                             <>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation:'spin 1s linear infinite' }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="header-spin-icon">
                                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                                 </svg>
                                 Loading specs…
@@ -235,7 +237,7 @@ export function Header({
                     />
                     {isBusy && !isLoadingSpecs && (
                         <span
-                            style={{ width:6, height:6, borderRadius:'50%', background:'var(--color-success)', flexShrink:0, boxShadow:'0 0 6px var(--color-success)', animation:'pulse-success 1.5s infinite' }}
+                            className="header-status-indicator"
                         />
                     )}
                 </div>
@@ -297,11 +299,11 @@ export function Header({
                 </button>
 
                 {authEnabled && token && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div className="header-flex-center">
                         {invitations.length > 0 && (
                             <div className="header-invitation-banner">
                                 <span>You've been invited to <strong>{invitations[0].project_name}</strong></span>
-                                <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '11px', height: '26px' }} onClick={() => handleAcceptInvite(invitations[0].token)}>Accept</button>
+                                <button className="btn btn-primary header-accept-btn" onClick={() => handleAcceptInvite(invitations[0].token)}>Accept</button>
                             </div>
                         )}
                         <UserMenu onLogout={onLogout || (() => {})} />
@@ -337,8 +339,8 @@ export function Header({
             </div>
 
             {isBusy && !isLoadingSpecs && (
-                <div style={{ height: '2px', width: '100%', background: 'var(--bg-surface)', overflow: 'hidden', position: 'absolute', bottom: 0, left: 0 }}>
-                    <div style={{ width: '30%', height: '100%', background: 'var(--color-success)', animation: 'progress-indeterminate 1.5s infinite linear', transformOrigin: '0% 50%' }} />
+                <div className="header-progress-container">
+                    <div className="header-progress-bar" />
                 </div>
             )}
             <style>

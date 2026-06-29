@@ -38,8 +38,23 @@ CREATE TABLE IF NOT EXISTS project_invitations (
     status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Accepted', 'Expired', 'Revoked')),
     token TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NOT NULL
+    expires_at DATETIME NOT NULL,
+    CHECK (email IS NOT NULL OR username IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON project_invitations(token);
 CREATE INDEX IF NOT EXISTS idx_invitations_project ON project_invitations(project_id);
+
+CREATE TRIGGER IF NOT EXISTS prevent_last_owner_delete
+BEFORE DELETE ON project_member_roles
+FOR EACH ROW
+WHEN OLD.role_id = 'owner' AND (
+  SELECT COUNT(DISTINCT user_id) FROM (
+    SELECT user_id FROM project_member_roles WHERE project_id = OLD.project_id AND role_id = 'owner' AND user_id != OLD.user_id
+    UNION
+    SELECT user_id FROM project_members WHERE project_id = OLD.project_id AND role = 'owner' AND user_id != OLD.user_id
+  )
+) = 0
+BEGIN
+  SELECT RAISE(ABORT, 'Cannot remove the last owner of the project');
+END;
