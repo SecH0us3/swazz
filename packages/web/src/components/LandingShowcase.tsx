@@ -367,82 +367,59 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
 
             {/* Feature Detail Modal */}
             {selectedFeature && (
-                <div className="feature-modal-overlay" onClick={() => setSelectedFeature(null)}>
-                    <div className="feature-modal-content" onClick={e => e.stopPropagation()}>
-                        <button className="feature-modal-close" onClick={() => setSelectedFeature(null)}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <div className="feature-modal-backdrop" onClick={() => setSelectedFeature(null)}>
+                    <div className="feature-modal feature-modal-split" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="auth-modal-close" onClick={() => setSelectedFeature(null)} aria-label="Close modal">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
                             </svg>
                         </button>
-                        
-                        <div className="feature-modal-grid">
-                            <div className="feature-modal-info">
-                                <h2 className="feature-modal-title">{selectedFeature.title}</h2>
-                                <p className="feature-modal-desc">{selectedFeature.details}</p>
-                                
-                                <div className="feature-modal-specs">
-                                    <div className="spec-block">
-                                        <div className="spec-label">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <circle cx="12" cy="12" r="10"></circle>
-                                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                            </svg>
-                                            The Goal
-                                        </div>
-                                        <p>{selectedFeature.goal}</p>
-                                    </div>
-                                    <div className="spec-block">
-                                        <div className="spec-label">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                            </svg>
-                                            Why it matters
-                                        </div>
-                                        <p>{selectedFeature.benefit}</p>
-                                    </div>
+                        <div className="feature-modal-left">
+                            <h3>{selectedFeature.title}</h3>
+                            <div className="feature-modal-body">
+                                <div className="feature-detail-section">
+                                    <h4>What it is</h4>
+                                    <p>{selectedFeature.details}</p>
+                                </div>
+                                <div className="feature-detail-section">
+                                    <h4>The Goal</h4>
+                                    <p>{selectedFeature.goal}</p>
+                                </div>
+                                <div className="feature-detail-section">
+                                    <h4>Why you need it</h4>
+                                    <p>{selectedFeature.benefit}</p>
                                 </div>
                             </div>
-                            
-                            <div className="feature-modal-visual">
-                                <img 
-                                    src={selectedFeature.image} 
-                                    alt={selectedFeature.title} 
-                                    className="feature-modal-image"
-                                    onClick={() => setFullscreenImageUrl(selectedFeature.image)}
-                                />
-                                <div className="image-zoom-hint">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <circle cx="11" cy="11" r="8"></circle>
-                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                        <line x1="11" y1="8" x2="11" y2="14"></line>
-                                        <line x1="8" y1="11" x2="14" y2="11"></line>
-                                    </svg>
-                                    Click to expand
+                        </div>
+                        <div className="feature-modal-right">
+                            {selectedFeature.image && (
+                                <div className="feature-modal-screenshot-wrapper">
+                                    <img 
+                                        src={selectedFeature.image} 
+                                        alt={selectedFeature.title} 
+                                        className="feature-modal-screenshot clickable-screenshot" 
+                                        onClick={() => setFullscreenImageUrl(selectedFeature.image || null)}
+                                    />
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Fullscreen Image Overlay */}
+            {/* Fullscreen Image Zoom Overlay */}
             {fullscreenImageUrl && (
-                <div className="fullscreen-image-overlay" onClick={() => setFullscreenImageUrl(null)}>
-                    <button className="fullscreen-image-close" onClick={() => setFullscreenImageUrl(null)}>
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
-                    <img 
-                        src={fullscreenImageUrl} 
-                        alt="Expanded view" 
-                        className="fullscreen-image"
-                        onClick={e => e.stopPropagation()} 
-                    />
+                <div className="fullscreen-image-backdrop" onClick={() => setFullscreenImageUrl(null)}>
+                    <div className="fullscreen-image-container" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="auth-modal-close" onClick={() => setFullscreenImageUrl(null)} aria-label="Close fullscreen view">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                        <img src={fullscreenImageUrl} alt="Fullscreen View" className="fullscreen-image" />
+                    </div>
                 </div>
             )}
         </main>
