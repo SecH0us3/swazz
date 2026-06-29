@@ -60,7 +60,7 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     await inheritCheckbox.check();
 
     // Assign "Start new scans" permission
-    const scanPermCheckbox = page.locator('.rbac-checkbox-item:has-text("Start new scans") input[type="checkbox"]');
+    const scanPermCheckbox = page.locator('.rbac-permissions-checkbox-item:has-text("Start new scans") input[type="checkbox"]');
     await expect(scanPermCheckbox).toBeVisible();
     await scanPermCheckbox.check();
 
