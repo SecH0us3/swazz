@@ -118,6 +118,31 @@ export default function App() {
         }
     }, [token]);
 
+    useEffect(() => {
+        const handleInviteAccepted = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            showToast('Invitation accepted successfully', 'success');
+            fetchProjects().then(projs => {
+                useAppStore.setState({ projects: projs });
+                const acceptedProj = projs.find(p => p.id === detail.projectId);
+                if (acceptedProj) {
+                    useAppStore.setState({
+                        activeProject: acceptedProj,
+                        loadedRunId: null,
+                        liveRunId: null,
+                        historyStats: null,
+                        stats: null,
+                        liveCount: 0,
+                        selectedResult: null,
+                        heatmapFilter: null,
+                    });
+                }
+            });
+        };
+        window.addEventListener('swazz:invite-accepted', handleInviteAccepted);
+        return () => window.removeEventListener('swazz:invite-accepted', handleInviteAccepted);
+    }, []);
+
     // Only subscribe to what App.tsx needs for rendering
     const {
         activeTab,
