@@ -2067,4 +2067,236 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       });
     });
   });
+
+  describe("RBAC & Invitations Security & Validation", () => {
+    let tokenOwner: string;
+    let tokenInvitee: string;
+    let tokenOutsider: string;
+    let projectId: string;
+
+    beforeAll(async () => {
+      // 1. Register/Login Owner (userA)
+      const nameA = "u_owner_" + Date.now().toString().slice(-4);
+      await app.fetch(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameA, password: "Password123!" })
+      }), testEnv);
+      const resA = await app.fetch(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameA, password: "Password123!" })
+      }), testEnv);
+      tokenOwner = ((await resA.json()) as any).token;
+
+      // 2. Register/Login Invitee (userB)
+      const nameB = "u_invitee_" + Date.now().toString().slice(-4);
+      await app.fetch(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameB, password: "Password123!" })
+      }), testEnv);
+      const resB = await app.fetch(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameB, password: "Password123!" })
+      }), testEnv);
+      tokenInvitee = ((await resB.json()) as any).token;
+
+      // 3. Register/Login Outsider (userC)
+      const nameC = "u_outsider_" + Date.now().toString().slice(-4);
+      await app.fetch(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameC, password: "Password123!" })
+      }), testEnv);
+      const resC = await app.fetch(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameC, password: "Password123!" })
+      }), testEnv);
+      tokenOutsider = ((await resC.json()) as any).token;
+
+      // 4. Create a project under Owner
+      const projRes = await app.fetch(new Request("http://localhost/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenOwner}`
+        },
+        body: JSON.stringify({ name: "RBAC Project" })
+      }), testEnv);
+      projectId = ((await projRes.json()) as any).id;
+    });
+
+    describe("Role Creation Validation & Edge Cases", () => {
+      it("fails to create role with empty or whitespace-only name", async () => {
+        const res = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "   ", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Role name is required");
+      });
+
+      it("fails to create role with unknown permissions", async () => {
+        const res = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Auditor", permissions: ["invalid-perm-key"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Unknown permission keys");
+      });
+
+      it("fails to create role inheriting unknown role IDs", async () => {
+        const res = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Auditor", included_roles: ["non-existent-role-id"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Unknown role IDs");
+      });
+
+      it("successfully creates custom role and rejects duplicate name", async () => {
+        // Create first time
+        const res1 = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Custom Auditor", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res1.status).toBe(200);
+
+        // Try duplicate creation (exact name)
+        const res2 = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Custom Auditor", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res2.status).toBe(400);
+        expect(((await res2.json()) as any).error).toContain("already exists");
+
+        // Try duplicate creation (trailing/leading whitespace)
+        const res3 = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "  Custom Auditor  ", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res3.status).toBe(400);
+        expect(((await res3.json()) as any).error).toContain("already exists");
+      });
+    });
+
+    describe("Access Restrictions (requirePermission)", () => {
+      it("restricts GET /permissions to authenticated project members", async () => {
+        // 1. Owner succeeds
+        const resOwner = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/permissions`, {
+          headers: { "Authorization": `Bearer ${tokenOwner}` }
+        }), testEnv);
+        expect(resOwner.status).toBe(200);
+
+        // 2. Outsider fails (403 Forbidden)
+        const resOutsider = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/permissions`, {
+          headers: { "Authorization": `Bearer ${tokenOutsider}` }
+        }), testEnv);
+        expect(resOutsider.status).toBe(403);
+      });
+
+      it("restricts POST /invitations to authorized roles", async () => {
+        // Outsider fails (403 Forbidden)
+        const res = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/invitations`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOutsider}`
+          },
+          body: JSON.stringify({ username: "someuser", roles: ["viewer"] })
+        }), testEnv);
+        expect(res.status).toBe(403);
+      });
+    });
+
+    describe("Invitation System Security & Flow", () => {
+      it("fails to invite with empty roles array", async () => {
+        const res = await app.fetch(new Request(`http://localhost/api/projects/${projectId}/invitations`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ username: "someuser", roles: [] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("At least one role must be specified");
+      });
+
+      it("prevents acceptance of expired invitations", async () => {
+        // Insert an expired invitation directly in DB
+        const expiredToken = "expired-token-" + crypto.randomUUID();
+        const expiresAt = new Date(Date.now() - 3600 * 1000).toISOString(); // 1 hour ago
+        await testEnv.DB.prepare(`
+          INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
+          VALUES (?, ?, NULL, NULL, ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, JSON.stringify(["viewer"]), expiredToken, expiresAt).run();
+
+        const acceptRes = await app.fetch(new Request("http://localhost/api/auth/invitations/accept", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenInvitee}`
+          },
+          body: JSON.stringify({ token: expiredToken })
+        }), testEnv);
+        expect(acceptRes.status).toBe(400);
+        expect(((await acceptRes.json()) as any).error).toContain("Invalid or expired invitation");
+      });
+
+      it("prevents user mismatch when username/email is targeted", async () => {
+        // Create invitation targeted to "specific_user"
+        const targetToken = "target-token-" + crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+        await testEnv.DB.prepare(`
+          INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
+          VALUES (?, ?, NULL, 'specific_user', ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, JSON.stringify(["viewer"]), targetToken, expiresAt).run();
+
+        // Attempt to accept using tokenInvitee (who is NOT "specific_user")
+        const acceptRes = await app.fetch(new Request("http://localhost/api/auth/invitations/accept", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenInvitee}`
+          },
+          body: JSON.stringify({ token: targetToken })
+        }), testEnv);
+
+        expect(acceptRes.status).toBe(403);
+        expect(((await acceptRes.json()) as any).error).toContain("Invitation is for a different username");
+
+        // Verify the invitation status rolled back to 'Pending'
+        const row = await testEnv.DB.prepare("SELECT status FROM project_invitations WHERE token = ?").bind(targetToken).first<any>();
+        expect(row?.status).toBe("Pending");
+      });
+    });
+  });
 });

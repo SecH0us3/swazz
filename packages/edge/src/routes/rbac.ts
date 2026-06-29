@@ -168,7 +168,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const inv = await c.env.DB.prepare(`
       UPDATE project_invitations 
       SET status = 'Accepted' 
-      WHERE token = ? AND status = 'Pending' AND expires_at > datetime('now')
+      WHERE token = ? AND status = 'Pending' AND strftime('%s', expires_at) > strftime('%s', 'now')
       RETURNING *
     `).bind(body.token).first<any>();
 
