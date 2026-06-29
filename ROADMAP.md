@@ -158,6 +158,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Identify controls in the right column that are redundant or rarely used.
     - Move these rarely used controls exclusively to the Project Settings page to streamline the main workspace view.
 
+- [ ] **Task 105: Automated Project Swagger Generation**
+  - **Design Goal:** Each project should have its own automatically generated Swagger/OpenAPI documentation. In the future, this will allow Swazz to test the project's API directly.
+  - **Implementation Details:**
+    - Generate dynamic OpenAPI specifications for user projects.
+    - Expose a UI element to view the auto-generated Swagger UI.
+    - Build the foundation for automated fuzzing driven by this generated spec.
+
 
 
 
