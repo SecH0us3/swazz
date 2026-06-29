@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
+import { useToast } from '../../hooks/useToast.js';
 
 interface Role {
     id: string;
@@ -18,6 +19,7 @@ interface Member {
 
 export function MembersRolesTab() {
     const activeProject = useAppStore(state => state.activeProject);
+    const { showToast } = useToast();
     const [view, setView] = useState<'members' | 'roles'>('members');
     const [members, setMembers] = useState<Member[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
@@ -85,9 +87,9 @@ export function MembersRolesTab() {
             setIsInviteModalOpen(false);
             setInviteInput('');
             setSelectedInviteRoles([]);
-            alert('Invitation sent (Check server logs for token)');
+            showToast('Invitation sent (Check server logs for token)', 'success');
         } else {
-            alert('Failed to send invitation');
+            showToast('Failed to send invitation', 'error');
         }
     };
 
@@ -107,8 +109,9 @@ export function MembersRolesTab() {
             setSelectedPermissions([]);
             setSelectedInheritedRoles([]);
             fetchRoles();
+            showToast('Custom role created', 'success');
         } else {
-            alert('Failed to create role');
+            showToast('Failed to create role', 'error');
         }
     };
 

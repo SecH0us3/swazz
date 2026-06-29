@@ -113,18 +113,31 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const inv = await c.env.DB.prepare('SELECT * FROM project_invitations WHERE token = ? AND status = ?').bind(body.token, 'Pending').first<any>();
+    // Atomically claim the token if it's valid and not expired
+    const inv = await c.env.DB.prepare(`
+      UPDATE project_invitations 
+      SET status = 'Accepted' 
+      WHERE token = ? AND status = 'Pending' AND expires_at > datetime('now')
+      RETURNING *
+    `).bind(body.token).first<any>();
+
     if (!inv) return c.json({ error: 'Invalid or expired invitation' }, 400);
 
     // Ensure it matches the user if username/email was specified
     const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
-    if (inv.username && inv.username !== user?.username) return c.json({ error: 'Invitation is for a different username' }, 403);
-    if (inv.email && inv.email !== user?.email) return c.json({ error: 'Invitation is for a different email' }, 403);
+    if (inv.username && inv.username !== user?.username) {
+      // Revert if mismatch
+      await c.env.DB.prepare("UPDATE project_invitations SET status = 'Pending' WHERE id = ?").bind(inv.id).run();
+      return c.json({ error: 'Invitation is for a different username' }, 403);
+    }
+    if (inv.email && inv.email !== user?.email) {
+      // Revert if mismatch
+      await c.env.DB.prepare("UPDATE project_invitations SET status = 'Pending' WHERE id = ?").bind(inv.id).run();
+      return c.json({ error: 'Invitation is for a different email' }, 403);
+    }
 
     const roles = JSON.parse(inv.target_role_ids);
-    const stmts = [
-      c.env.DB.prepare('UPDATE project_invitations SET status = ? WHERE id = ?').bind('Accepted', inv.id)
-    ];
+    const stmts: any[] = [];
 
     roles.forEach((r: string) => {
       stmts.push(c.env.DB.prepare('INSERT OR IGNORE INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(inv.project_id, userId, r));

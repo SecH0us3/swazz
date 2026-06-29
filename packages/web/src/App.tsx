@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
@@ -65,10 +65,13 @@ export default function App() {
         }
     }, [token]);
 
+    const inviteProcessingRef = useRef(false);
+
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const inviteToken = urlParams.get('token');
-        if (inviteToken && token) {
+        if (inviteToken && token && !inviteProcessingRef.current) {
+            inviteProcessingRef.current = true;
             fetch(`${PROXY_URL}/api/auth/invitations/accept`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
