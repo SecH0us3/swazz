@@ -3,6 +3,8 @@ import { useAppStore } from '../../store/appStore.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import './LoginScreen.css';
 
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
+
 interface LoginScreenProps {
     onLogin: (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
     onRegister: (username: string, password: string, email?: string, turnstileToken?: string) => Promise<void>;
@@ -268,6 +270,53 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     setTurnstileResponse('');
                 } catch (e) {}
             }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handlePasskeyLogin = async () => {
+        if (!username) {
+            setError('Please enter a username to sign in with Passkey.');
+            return;
+        }
+        setError('');
+        setIsLoading(true);
+        try {
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            // 1. Get options
+            const optsRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/generate-options`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ username })
+            });
+            if (!optsRes.ok) throw new Error('Failed to start passkey authentication');
+            const opts = await optsRes.json();
+
+            // 2. Start authentication
+            const { startAuthentication } = await import('@simplewebauthn/browser');
+            const authResp = await startAuthentication(opts);
+
+            // 3. Verify
+            const verifyRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/verify`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(authResp)
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok) throw new Error(verifyData.error || 'Passkey verification failed');
+
+            if (verifyData.token) {
+                localStorage.setItem('swazz_token', verifyData.token);
+                window.location.reload();
+            } else {
+                throw new Error('Authentication failed');
+            }
+        } catch (err: any) {
+            setError(err.message);
         } finally {
             setIsLoading(false);
         }
@@ -808,6 +857,14 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                 </button>
                                             )}
                                         </div>
+
+                                        {!isRegistering && (
+                                            <div className="passkey-login-container">
+                                                <button type="button" onClick={handlePasskeyLogin} disabled={isLoading} className="btn-secondary passkey-login-btn">
+                                                    {isLoading ? <span className="spinner"></span> : 'Sign in with Passkey'}
+                                                </button>
+                                            </div>
+                                        )}
 
                                         {onGuest && (
                                             <div className="guest-action-wrapper">
