@@ -263,7 +263,7 @@ export function MembersRolesTab() {
                                     </td>
                                     <td>
                                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                            {m.id !== userProfile?.id && (
+                                            {m.username !== userProfile?.username && (
                                                 <>
                                                     <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEditMemberModal(m)}>Edit Roles</button>
                                                     <button className="btn btn-danger btn-sm" onClick={() => handleRemoveMember(m.id)}>Remove</button>
