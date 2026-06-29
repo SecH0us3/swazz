@@ -53,6 +53,13 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
 
     const permissions = body.permissions || [];
     const includedRoles = body.included_roles || [];
+    
+    if (!body.name || typeof body.name !== 'string') return c.json({ error: 'Role name is required' }, 400);
+
+    const existingRole = await c.env.DB.prepare('SELECT id FROM project_custom_roles WHERE project_id = ? AND name = ?').bind(projectId, body.name).first();
+    if (existingRole) {
+      return c.json({ error: 'A role with this name already exists' }, 400);
+    }
 
     const stmts = [
       c.env.DB.prepare('INSERT INTO project_custom_roles (id, project_id, name) VALUES (?, ?, ?)').bind(roleId, projectId, body.name)
@@ -95,6 +102,11 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json(); // { username, email, roles: [] }
+    
+    if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
+      return c.json({ error: 'At least one role must be specified' }, 400);
+    }
+
     const id = ulid();
     const token = ulid() + ulid();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
