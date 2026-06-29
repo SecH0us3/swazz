@@ -140,7 +140,17 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Update the onboarding flow and landing page copy to provide the live demo URL.
     - Add a "Scan Demo Target" button in the Web UI to launch a pre-configured scan against the live demo with a single click.
 
+- [ ] **Task 102: Custom Session Expiration per Project**
+  - **Design Goal:** Allow users to choose a custom session expiration time for members participating in a project.
+  - **Implementation Details:**
+    - Add a project setting for member session expiration length.
+    - Enforce this expiration on the edge backend when validating user sessions scoped to the project.
 
+- [ ] **Task 103: Footer and Navigation Reorganization**
+  - **Design Goal:** Clean up the navigation structure by moving external links and help menus.
+  - **Implementation Details:**
+    - Move the GitHub link and the hotkeys help menu to the footer.
+    - Create an "About the project" page and add a link to it in the footer.
 
 
 
