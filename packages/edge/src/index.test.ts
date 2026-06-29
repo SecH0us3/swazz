@@ -775,6 +775,60 @@ describe("D1 Database Migrations & API", () => {
     const loginBody6 = await loginRes6.json() as any;
     expect(loginBody6.status).toBe("ok");
   });
+
+  it("can generate registration and authentication options for passkeys", async () => {
+    const username = "pku" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
+    const regReq = new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "Password123!" })
+    });
+    const regRes = await app.fetch(regReq, testEnv);
+    expect(regRes.status).toBe(200);
+    const regBody = await regRes.json() as any;
+    const token = regBody.token;
+
+    // 1. Generate Registration Options
+    const genRegReq = new Request("http://localhost/api/auth/passkeys/register/generate-options", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const genRegRes = await app.fetch(genRegReq, testEnv);
+    expect(genRegRes.status).toBe(200);
+    const genRegBody = await genRegRes.json() as any;
+    expect(genRegBody.rp.name).toBe("Swazz");
+    expect(typeof genRegBody.challenge).toBe("string");
+
+    // 2. Verify Registration Response (invalid body)
+    const verRegReq = new Request("http://localhost/api/auth/passkeys/register/verify", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}` 
+      },
+      body: JSON.stringify({ id: "invalid", rawId: "invalid", response: { clientDataJSON: "invalid", attestationObject: "invalid" }, type: "public-key" })
+    });
+    const verRegRes = await app.fetch(verRegReq, testEnv);
+    expect(verRegRes.status).toBe(400); // Should fail validation
+
+    // 3. Generate Login Options
+    const genLogReq = new Request("http://localhost/api/auth/passkeys/login/generate-options", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const genLogRes = await app.fetch(genLogReq, testEnv);
+    expect(genLogRes.status).toBe(404); // Fails because no passkeys registered yet for this user
+
+    // 4. Verify Login Response (invalid)
+    const verLogReq = new Request("http://localhost/api/auth/passkeys/login/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "invalid" })
+    });
+    const verLogRes = await app.fetch(verLogReq, testEnv);
+    expect(verLogRes.status).toBe(404); // Credential not found
+  });
 });
 
 describe("Anonymous Limits", () => {

@@ -14,6 +14,10 @@ export function UserSettings() {
     const [deleteState, setDeleteState] = useState<'idle' | 'warning' | 'deleting'>('idle');
     const [deleteError, setDeleteError] = useState('');
 
+    const [passkeys, setPasskeys] = useState<any[]>([]);
+    const [passkeysLoading, setPasskeysLoading] = useState(false);
+    const [passkeysError, setPasskeysError] = useState('');
+
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(userProfile?.twoFactorEnabled || false);
     const [setup2faData, setSetup2faData] = useState<{ secret: string; otpauth_url: string } | null>(null);
     const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
@@ -29,6 +33,91 @@ export function UserSettings() {
             setTwoFactorEnabled(!!userProfile.twoFactorEnabled);
         }
     }, [userProfile]);
+
+    useEffect(() => {
+        if (activeSubTab === 'security' && userProfile && !userProfile.isGuest) {
+            fetchPasskeys();
+        }
+    }, [activeSubTab, userProfile]);
+
+    const fetchPasskeys = async () => {
+        setPasskeysLoading(true);
+        try {
+            const token = localStorage.getItem('swazz_token');
+            const res = await fetch(`${PROXY_URL}/api/auth/passkeys`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPasskeys(data.credentials || data || []);
+            }
+        } catch (e) {
+            console.error('Failed to fetch passkeys', e);
+        } finally {
+            setPasskeysLoading(false);
+        }
+    };
+
+    const handleRegisterPasskey = async () => {
+        setPasskeysError('');
+        try {
+            const token = localStorage.getItem('swazz_token');
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            const optsRes = await fetch('/api/auth/passkeys/register/generate-options', {
+                method: 'POST',
+                headers
+            });
+            const optsData = await optsRes.json().catch(() => ({}));
+            if (!optsRes.ok) throw new Error(optsData.error || 'Failed to get registration options');
+            const opts = optsData;
+
+            const { startRegistration } = await import('@simplewebauthn/browser');
+            const authResp = await startRegistration(opts);
+
+            const verifyRes = await fetch(`${PROXY_URL}/api/auth/passkeys/register/verify`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(authResp)
+            });
+            if (!verifyRes.ok) {
+                const errData = await verifyRes.json();
+                throw new Error(errData.error || 'Failed to verify passkey');
+            }
+
+            await fetchPasskeys();
+        } catch (err: any) {
+            setPasskeysError(err.message);
+        }
+    };
+
+    const handleDeletePasskey = async (id: string) => {
+        try {
+            const token = localStorage.getItem('swazz_token');
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = {
+                'Authorization': `Bearer ${token}`
+            };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            const res = await fetch(`/api/auth/passkeys/${id}`, {
+                method: 'DELETE',
+                headers
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Failed to delete passkey');
+            }
+            await fetchPasskeys();
+        } catch (err) {
+            console.error('Failed to delete passkey', err);
+        }
+    };
 
     const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -484,6 +573,46 @@ export function UserSettings() {
                                         </form>
                                     </div>
                                 )}
+
+                                <div className="settings-card passkeys-section">
+                                    <h2 className="two-factor-header-title">Passkeys</h2>
+                                    <p className="two-factor-instructions">Sign in quickly and securely using your device's passkey (Face ID, Touch ID, or Windows Hello).</p>
+                                    
+                                    {passkeysError && <div className="two-factor-error-alert">{passkeysError}</div>}
+                                    
+                                    <div className="passkeys-list-container">
+                                        {passkeysLoading ? (
+                                            <p>Loading passkeys...</p>
+                                        ) : passkeys.length === 0 ? (
+                                            <p className="passkeys-empty">No passkeys registered yet.</p>
+                                        ) : (
+                                            <ul className="passkeys-list">
+                                                {passkeys.map((pk: any) => (
+                                                    <li key={pk.id} className="passkey-item">
+                                                        <span>{pk.name || 'Passkey'} {pk.created_at && <small className="passkey-date">({(() => {
+                                                            const isoStr = pk.created_at.replace(' ', 'T') + 'Z';
+                                                            const d = new Date(isoStr);
+                                                            return isNaN(d.getTime()) ? 'Unknown Date' : d.toLocaleDateString();
+                                                        })()})</small>}</span>
+                                                        <button 
+                                                            className="btn btn-danger btn-sm"
+                                                            onClick={() => handleDeletePasskey(pk.id)}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={handleRegisterPasskey}
+                                    >
+                                        Register New Passkey
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="settings-card">

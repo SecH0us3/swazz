@@ -4816,3 +4816,35 @@ kbd {
   align-items: center;
   gap: 6px;
 }
+/* Passkeys Settings */
+.passkeys-section {
+  margin-top: 2rem;
+}
+.passkeys-empty {
+  color: var(--text-secondary);
+}
+.passkeys-list-container {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+.passkeys-list {
+  list-style: none;
+  padding: 0;
+}
+.passkey-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.passkey-date {
+  color: var(--text-muted);
+}
+.passkey-login-container {
+  margin-top: 1rem;
+  text-align: center;
+}
+.passkey-login-btn {
+  width: 100%;
+}

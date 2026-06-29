@@ -64,7 +64,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [ ] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
+- [/] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
   - **Design Goal:** Provide a modern, passwordless authentication alternative using biometric sensors (FaceID, TouchID, Windows Hello) or physical security keys via the WebAuthn API.
   - **Implementation Details:**
     - Implement WebAuthn registration and authentication flows in the edge coordinator backend.

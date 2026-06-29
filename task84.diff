@@ -1,0 +1,520 @@
+package-lock.json                                | 273 ++++++++++++++++++++++-
+ packages/edge/package.json                       |   2 +
+ packages/edge/src/index.test.ts                  |  54 +++++
+ packages/edge/src/routes/auth.ts                 | 255 +++++++++++++++++++++
+ packages/web/package.json                        |   1 +
+ packages/web/src/components/Auth/LoginScreen.tsx |  57 +++++
+ packages/web/src/components/UserSettings.tsx     | 120 ++++++++++
+ 7 files changed, 761 insertions(+), 1 deletion(-)
+
+Changes:
+
+package-lock.json
+  @@ -940,6 +940,12 @@
+  +    "node_modules/@hexagon/base64": {
+  +      "version": "1.1.28",
+  +      "resolved": "https://registry.npmjs.org/@hexagon/base64/-/base64-1.1.28.tgz",
+  +      "integrity": "sha512-lhqDEAvWixy3bZ+UOYbPwUbBkwBq5C1LAJ/xPC8Oi+lL54oyakv/npbA0aU2hgCsx/1NUd4IBvV03+aUBWxerw==",
+  +      "license": "MIT"
+  +    },
+       "node_modules/@huggingface/jinja": {
+         "version": "0.5.9",
+         "resolved": "https://registry.npmjs.org/@huggingface/jinja/-/jinja-0.5.9.tgz",
+  @@ -1474,6 +1480,12 @@
+  +    "node_modules/@levischuck/tiny-cbor": {
+  +      "version": "0.2.11",
+  +      "resolved": "https://registry.npmjs.org/@levischuck/tiny-cbor/-/tiny-cbor-0.2.11.tgz",
+  +      "integrity": "sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==",
+  +      "license": "MIT"
+  +    },
+       "node_modules/@napi-rs/wasm-runtime": {
+         "version": "1.1.4",
+         "resolved": "https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-1.1.4.tgz",
+  @@ -1503,6 +1515,174 @@
+  +    "node_modules/@peculiar/asn1-android": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-android/-/asn1-android-2.8.0.tgz",
+  +      "integrity": "sha512-skLbS+IOGv1lUgDqtChr8xvtvEr3HMse/JGBaL2r1J1o/n7a8wqOrovMtlRq/UXLhxvmLaONP67hwtshgzwfzA==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-cms": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-cms/-/asn1-cms-2.8.0.tgz",
+  +      "integrity": "sha512-NgekZOrSJFSBFLFoLfwePguAWAx7z1+f2TEsWFUMyiqqfntZ4+S/S5hzqME3q4pCA0iOsFKdwiQ35dwY24eVqA==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "@peculiar/asn1-x509": "^2.8.0",
+  +        "@peculiar/asn1-x509-attr": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-csr": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-csr/-/asn1-csr-2.8.0.tgz",
+  +      "integrity": "sha512-akbF8+uvleHs8sejNPQxwmVFuInAg6FMNHOwMILXfP518YfFJwdR3jr6oNUPOaEJfuEhn/vkNOCIT6ASUd4mbg==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "@peculiar/asn1-x509": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-ecc": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-ecc/-/asn1-ecc-2.8.0.tgz",
+  +      "integrity": "sha512-ohwlk+u9Rv2NOAY1c6MfHj45ATVF8R1DUN/WCgABiRtLi2ZftlZWZX7KvpAbU8v9xPcmoILfELeEABj/rn18AQ==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "@peculiar/asn1-x509": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-pfx": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-pfx/-/asn1-pfx-2.8.0.tgz",
+  +      "integrity": "sha512-5yof1ytoB++RQtaFbqSUJ8pxDJtZT6vbVqZ8XoJ61ph7UjNVvfFwAilnCodqkNsAodpy13gDhoxZXw00pghnyg==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-cms": "^2.8.0",
+  +        "@peculiar/asn1-pkcs8": "^2.8.0",
+  +        "@peculiar/asn1-rsa": "^2.8.0",
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-pkcs8": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-pkcs8/-/asn1-pkcs8-2.8.0.tgz",
+  +      "integrity": "sha512-qAKXtLpBEw9LqhKpjw3ajZSXlBur+ipW+y2ivVBQAG6F6qRx94yO+1ZR4mvw+YaCfKSaOzLeYEzsPaBp4SJELA==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "@peculiar/asn1-x509": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-pkcs9": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-pkcs9/-/asn1-pkcs9-2.8.0.tgz",
+  +      "integrity": "sha512-b5nDWCnkV60+cQ141D6sVVwK9nz64R5n3zSVnklGd+ECdkW2Ol3U1a6yYFlalpSOaD557yuJB64A+q42jG7lUQ==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-cms": "^2.8.0",
+  +        "@peculiar/asn1-pfx": "^2.8.0",
+  +        "@peculiar/asn1-pkcs8": "^2.8.0",
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "@peculiar/asn1-x509": "^2.8.0",
+  +        "@peculiar/asn1-x509-attr": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/@peculiar/asn1-rsa": {
+  +      "version": "2.8.0",
+  +      "resolved": "https://registry.npmjs.org/@peculiar/asn1-rsa/-/asn1-rsa-2.8.0.tgz",
+  +      "integrity": "sha512-zHEUlCqB2mk7x2lxDwHHJy7hWZOPdGHVlsmITWKB5/PbQo61atbu9PJ/0r9dQNMwFzbKPXZ8uK8/91eUhRznSg==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@peculiar/asn1-schema": "^2.8.0",
+  +        "@peculiar/asn1-x509": "^2.8.0",
+  +        "asn1js": "^3.0.10",
+  +        "tslib": "^2.8.1"
+  ... (68 lines truncated)
+  @@ -1869,6 +2049,39 @@
+  +    "node_modules/@simplewebauthn/browser": {
+  +      "version": "13.3.0",
+  +      "resolved": "https://registry.npmjs.org/@simplewebauthn/browser/-/browser-13.3.0.tgz",
+  +      "integrity": "sha512-BE/UWv6FOToAdVk0EokzkqQQDOWtNydYlY6+OrmiZ5SCNmb41VehttboTetUM3T/fr6EAFYVXjz4My2wg230rQ==",
+  +      "license": "MIT"
+  +    },
+  +    "node_modules/@simplewebauthn/server": {
+  +      "version": "13.3.2",
+  +      "resolved": "https://registry.npmjs.org/@simplewebauthn/server/-/server-13.3.2.tgz",
+  +      "integrity": "sha512-KEDhfcGP1PAKRVSDjA3npTQFqS2b/srm+ipoNBNHdkzrHAlaRQUTE+a5f4ywsx6thxAw1NU2rYcLEY1949RGbQ==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "@hexagon/base64": "^1.1.27",
+  +        "@levischuck/tiny-cbor": "^0.2.2",
+  +        "@peculiar/asn1-android": "^2.6.0",
+  +        "@peculiar/asn1-ecc": "^2.6.1",
+  +        "@peculiar/asn1-rsa": "^2.6.1",
+  +        "@peculiar/asn1-schema": "^2.6.0",
+  +        "@peculiar/asn1-x509": "^2.6.1",
+  +        "@peculiar/x509": "^1.14.3"
+  +      },
+  +      "engines": {
+  +        "node": ">=20.0.0"
+  +      }
+  +    },
+  +    "node_modules/@simplewebauthn/types": {
+  +      "version": "12.0.0",
+  +      "resolved": "https://registry.npmjs.org/@simplewebauthn/types/-/types-12.0.0.tgz",
+  +      "integrity": "sha512-q6y8MkoV8V8jB4zzp18Uyj2I7oFp2/ONL8c3j8uT06AOWu3cIChc1au71QYHrP2b+xDapkGTiv+9lX7xkTlAsA==",
+  +      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+  +      "dev": true,
+  +      "license": "MIT"
+  +    },
+       "node_modules/@sinclair/typebox": {
+         "version": "0.34.49",
+         "resolved": "https://registry.npmjs.org/@sinclair/typebox/-/typebox-0.34.49.tgz",
+  @@ -2199,6 +2412,20 @@
+  +    "node_modules/asn1js": {
+  +      "version": "3.0.10",
+  +      "resolved": "https://registry.npmjs.org/asn1js/-/asn1js-3.0.10.tgz",
+  +      "integrity": "sha512-S2s3aOytiKdFRdulw2qPE51MzjzVOisppcVv7jVFR+Kw0kxwvFrDcYA0h7Ndqbmj0HkMIXYWaoj7fli8kgx1eg==",
+  +      "license": "BSD-3-Clause",
+  +      "dependencies": {
+  +        "pvtsutils": "^1.3.6",
+  +        "pvutils": "^1.1.5",
+  +        "tslib": "^2.8.1"
+  +      },
+  +      "engines": {
+  +        "node": ">=12.0.0"
+  +      }
+  +    },
+       "node_modules/assertion-error": {
+         "version": "2.0.1",
+         "resolved": "https://registry.npmjs.org/assertion-error/-/assertion-error-2.0.1.tgz",
+  @@ -3535,6 +3762,24 @@
+  +    "node_modules/pvtsutils": {
+  +      "version": "1.3.6",
+  +      "resolved": "https://registry.npmjs.org/pvtsutils/-/pvtsutils-1.3.6.tgz",
+  +      "integrity": "sha512-PLgQXQ6H2FWCaeRak8vvk1GW462lMxB5s3Jm673N82zI4vqtVUPuZdffdZbPDFRoU8kAhItWFtPCWiPpp4/EDg==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "tslib": "^2.8.1"
+  +      }
+  +    },
+  +    "node_modules/pvutils": {
+  +      "version": "1.1.5",
+  +      "resolved": "https://registry.npmjs.org/pvutils/-/pvutils-1.1.5.tgz",
+  +      "integrity": "sha512-KTqnxsgGiQ6ZAzZCVlJH5eOjSnvlyEgx1m8bkRJfOhmGRqfo5KLvmAlACQkrjEtOQ4B7wF9TdSLIs9O90MX9xA==",
+  +      "license": "MIT",
+  +      "engines": {
+  +        "node": ">=16.0.0"
+  +      }
+  +    },
+       "node_modules/qrcode": {
+         "version": "1.5.4",
+         "resolved": "https://registry.npmjs.org/qrcode/-/qrcode-1.5.4.tgz",
+  @@ -3719,6 +3964,12 @@
+  +    "node_modules/reflect-metadata": {
+  +      "version": "0.2.2",
+  +      "resolved": "https://registry.npmjs.org/reflect-metadata/-/reflect-metadata-0.2.2.tgz",
+  +      "integrity": "sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==",
+  +      "license": "Apache-2.0"
+  +    },
+       "node_modules/require-directory": {
+         "version": "2.1.1",
+         "resolved": "https://registry.npmjs.org/require-directory/-/require-directory-2.1.1.tgz",
+  @@ -4128,7 +4379,24 @@
+  -      "devOptional": true,
+  +      "license": "0BSD"
+  +    },
+  +    "node_modules/tsyringe": {
+  +      "version": "4.10.0",
+  +      "resolved": "https://registry.npmjs.org/tsyringe/-/tsyringe-4.10.0.tgz",
+  +      "integrity": "sha512-axr3IdNuVIxnaK5XGEUFTu3YmAQ6lllgrvqfEoR16g/HGnYY/6We4oWENtAnzK6/LpJ2ur9PAb80RBt7/U4ugw==",
+  +      "license": "MIT",
+  +      "dependencies": {
+  +        "tslib": "^1.9.3"
+  +      },
+  +      "engines": {
+  +        "node": ">= 6.0.0"
+  +      }
+  +    },
+  +    "node_modules/tsyringe/node_modules/tslib": {
+  +      "version": "1.14.1",
+  +      "resolved": "https://registry.npmjs.org/tslib/-/tslib-1.14.1.tgz",
+  +      "integrity": "sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==",
+         "license": "0BSD"
+       },
+       "node_modules/type-fest": {
+  @@ -5310,6 +5578,7 @@
+  +        "@simplewebauthn/server": "^13.3.2",
+           "hono": "^4.12.26",
+           "ulidx": "^2.4.1",
+           "zod": "^4.4.3"
+  @@ -5317,6 +5586,7 @@
+  +        "@simplewebauthn/types": "^12.0.0",
+           "@vitest/snapshot": "^4.1.9",
+           "miniflare": "^4.20260609.0",
+           "pretty-format": "^30.4.1",
+  @@ -5470,6 +5740,7 @@
+  +        "@simplewebauthn/browser": "^13.3.0",
+           "qrcode": "^1.5.4",
+           "react": "^19.0.0",
+           "react-dom": "^19.2.7",
+  +272 -1
+
+packages/edge/package.json
+  @@ -11,6 +11,7 @@
+  +    "@simplewebauthn/types": "^12.0.0",
+       "@vitest/snapshot": "^4.1.9",
+       "miniflare": "^4.20260609.0",
+       "pretty-format": "^30.4.1",
+  @@ -18,6 +19,7 @@
+  +    "@simplewebauthn/server": "^13.3.2",
+       "hono": "^4.12.26",
+       "ulidx": "^2.4.1",
+       "zod": "^4.4.3"
+  +2 -0
+
+packages/edge/src/index.test.ts
+  @@ -775,6 +775,60 @@ describe("D1 Database Migrations & API", () => {
+  +
+  +  it("can generate registration and authentication options for passkeys", async () => {
+  +    const username = "pku" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
+  +    const regReq = new Request("http://localhost/api/auth/register", {
+  +      method: "POST",
+  +      headers: { "Content-Type": "application/json" },
+  +      body: JSON.stringify({ username, password: "Password123!" })
+  +    });
+  +    const regRes = await app.fetch(regReq, testEnv);
+  +    expect(regRes.status).toBe(200);
+  +    const regBody = await regRes.json() as any;
+  +    const token = regBody.token;
+  +
+  +    // 1. Generate Registration Options
+  +    const genRegReq = new Request("http://localhost/api/auth/passkeys/register/generate-options", {
+  +      method: "POST",
+  +      headers: { "Authorization": `Bearer ${token}` }
+  +    });
+  +    const genRegRes = await app.fetch(genRegReq, testEnv);
+  +    expect(genRegRes.status).toBe(200);
+  +    const genRegBody = await genRegRes.json() as any;
+  +    expect(genRegBody.rp.name).toBe("Swazz");
+  +    expect(typeof genRegBody.challenge).toBe("string");
+  +
+  +    // 2. Verify Registration Response (invalid body)
+  +    const verRegReq = new Request("http://localhost/api/auth/passkeys/register/verify", {
+  +      method: "POST",
+  +      headers: { 
+  +        "Content-Type": "application/json",
+  +        "Authorization": `Bearer ${token}` 
+  +      },
+  +      body: JSON.stringify({ id: "invalid", rawId: "invalid", response: { clientDataJSON: "invalid", attestationObject: "invalid" }, type: "public-key" })
+  +    });
+  +    const verRegRes = await app.fetch(verRegReq, testEnv);
+  +    expect(verRegRes.status).toBe(400); // Should fail validation
+  +
+  +    // 3. Generate Login Options
+  +    const genLogReq = new Request("http://localhost/api/auth/passkeys/login/generate-options", {
+  +      method: "POST",
+  +      headers: { "Content-Type": "application/json" },
+  +      body: JSON.stringify({ username })
+  +    });
+  +    const genLogRes = await app.fetch(genLogReq, testEnv);
+  +    expect(genLogRes.status).toBe(404); // Fails because no passkeys registered yet for this user
+  +
+  +    // 4. Verify Login Response (invalid)
+  +    const verLogReq = new Request("http://localhost/api/auth/passkeys/login/verify", {
+  +      method: "POST",
+  +      headers: { "Content-Type": "application/json" },
+  +      body: JSON.stringify({ id: "invalid" })
+  +    });
+  +    const verLogRes = await app.fetch(verLogReq, testEnv);
+  +    expect(verLogRes.status).toBe(404); // Credential not found
+  +  });
+   });
+   
+   describe("Anonymous Limits", () => {
+  +54 -0
+
+packages/edge/src/routes/auth.ts
+  @@ -6,6 +6,31 @@ import { sign, verify } from 'hono/jwt';
+  +import {
+  +  generateRegistrationOptions,
+  +  verifyRegistrationResponse,
+  +  generateAuthenticationOptions,
+  +  verifyAuthenticationResponse,
+  +} from '@simplewebauthn/server';
+  +
+  +function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array) {
+  +  let binary = '';
+  +  const bytes = new Uint8Array(buffer);
+  +  const len = bytes.byteLength;
+  +  for (let i = 0; i < len; i++) {
+  +    binary += String.fromCharCode(bytes[i]);
+  +  }
+  +  return btoa(binary);
+  +}
+  +function base64ToArrayBuffer(base64: string) {
+  +  const binary_string = atob(base64);
+  +  const len = binary_string.length;
+  +  const bytes = new Uint8Array(len);
+  +  for (let i = 0; i < len; i++) {
+  +    bytes[i] = binary_string.charCodeAt(i);
+  +  }
+  +  return bytes;
+  +}
+   
+   export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
+     app.post('/api/auth/register', async (c) => {
+  @@ -804,4 +829,234 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
+  +
+  +  app.post('/api/auth/passkeys/register/generate-options', async (c) => {
+  +    const userId = await getUserIdFromRequest(c);
+  +    if (!userId) {
+  +      return c.json({ error: 'Unauthorized' }, 401);
+  +    }
+  +    const user = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first<{username: string}>();
+  +    if (!user) {
+  +      return c.json({ error: 'User not found' }, 404);
+  +    }
+  +
+  +    const rpID = new URL(c.req.url).hostname;
+  +    const encoder = new TextEncoder();
+  +    const userIDBytes = encoder.encode(userId);
+  +
+  +    const passkeys = await c.env.DB.prepare('SELECT credential_id FROM passkeys WHERE user_id = ?').bind(userId).all<{credential_id: string}>();
+  +    const excludeCredentials = passkeys.results.map(pk => ({
+  +      id: pk.credential_id,
+  +      type: 'public-key' as const,
+  +      transports: [],
+  +    }));
+  +
+  +    const options = await generateRegistrationOptions({
+  +      rpName: 'Swazz',
+  +      rpID,
+  +      userID: userIDBytes,
+  +      userName: user.username,
+  +      userDisplayName: user.username,
+  +      excludeCredentials,
+  +      authenticatorSelection: {
+  +        residentKey: 'preferred',
+  +        userVerification: 'preferred',
+  +        authenticatorAttachment: 'platform',
+  +      },
+  +    });
+  +
+  +    if (c.env.SESSION_CACHE) {
+  +      await c.env.SESSION_CACHE.put("passkey_challenge:" + userId, options.challenge, { expirationTtl: 300 });
+  +    }
+  +
+  +    return c.json(options);
+  +  });
+  +
+  +  app.post('/api/auth/passkeys/register/verify', async (c) => {
+  +    const userId = await getUserIdFromRequest(c);
+  +    if (!userId) {
+  +      return c.json({ error: 'Unauthorized' }, 401);
+  +    }
+  +    const body = await c.req.json();
+  +
+  +    let expectedChallenge = '';
+  +    if (c.env.SESSION_CACHE) {
+  +      expectedChallenge = await c.env.SESSION_CACHE.get("passkey_challenge:" + userId) || '';
+  +      await c.env.SESSION_CACHE.delete("passkey_challenge:" + userId);
+  +    }
+  +
+  +    if (!expectedChallenge) {
+  +      return c.json({ error: 'Challenge expired or not found' }, 400);
+  +    }
+  +
+  +    const expectedOrigin = new URL(c.req.url).origin;
+  +    const rpID = new URL(c.req.url).hostname;
+  +
+  +    try {
+  +      const verification = await verifyRegistrationResponse({
+  +        response: body,
+  +        expectedChallenge,
+  +        expectedOrigin,
+  +        expectedRPID: rpID,
+  +      });
+  +
+  +      if (verification.verified && verification.registrationInfo) {
+  +        const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+  +        
+  +        const credential_id = credential.id;
+  +        const public_key = arrayBufferToBase64(credential.publicKey);
+  +        const counter = credential.counter;
+  +        const device_type = credentialDeviceType;
+  +        const backed_up = credentialBackedUp ? 1 : 0;
+  +        const transports = body.response.transports ? body.response.transports.join(',') : '';
+  +
+  +        const webauthn_user_id = arrayBufferToBase64(new TextEncoder().encode(userId));
+  +
+  +        await c.env.DB.prepare(`
+  +          INSERT INTO passkeys (credential_id, user_id, public_key, webauthn_user_id, counter, device_type, backed_up, transports)
+  +          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  +        `).bind(credential_id, userId, public_key, webauthn_user_id, counter, device_type, backed_up, transports).run();
+  +
+  +        return c.json({ status: 'ok', verified: true });
+  +      } else {
+  +        return c.json({ error: 'Verification failed' }, 400);
+  +      }
+  +    } catch (err: any) {
+  +      return c.json({ error: err.message }, 400);
+  +    }
+  +  });
+  +
+  +  app.post('/api/auth/passkeys/login/generate-options', async (c) => {
+  +    const clientIp = getClientIp(c);
+  +    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+  ... (130 lines truncated)
+  +255 -0
+
+packages/web/package.json
+  @@ -14,6 +14,7 @@
+  +        "@simplewebauthn/browser": "^13.3.0",
+           "qrcode": "^1.5.4",
+           "react": "^19.0.0",
+           "react-dom": "^19.2.7",
+  +1 -0
+
+packages/web/src/components/Auth/LoginScreen.tsx
+  @@ -3,6 +3,8 @@ import { useAppStore } from '../../store/appStore.js';
+  +const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
+  +
+   interface LoginScreenProps {
+       onLogin: (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
+       onRegister: (username: string, password: string, email?: string, turnstileToken?: string) => Promise<void>;
+  @@ -273,6 +275,53 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps)
+  +    const handlePasskeyLogin = async () => {
+  +        if (!username) {
+  +            setError('Please enter a username to sign in with Passkey.');
+  +            return;
+  +        }
+  +        setError('');
+  +        setIsLoading(true);
+  +        try {
+  +            const csrfToken = useAppStore.getState().csrfToken;
+  +            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  +            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  +
+  +            // 1. Get options
+  +            const optsRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/generate-options`, {
+  +                method: 'POST',
+  +                headers,
+  +                body: JSON.stringify({ username })
+  +            });
+  +            if (!optsRes.ok) throw new Error('Failed to start passkey authentication');
+  +            const opts = await optsRes.json();
+  +
+  +            // 2. Start authentication
+  +            const { startAuthentication } = await import('@simplewebauthn/browser');
+  +            const authResp = await startAuthentication(opts);
+  +
+  +            // 3. Verify
+  +            const verifyRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/verify`, {
+  +                method: 'POST',
+  +                headers,
+  +                body: JSON.stringify({ username, response: authResp })
+  +            });
+
+... (more changes truncated)
+  +33 -0
+[full diff: rtk git diff --no-compact]

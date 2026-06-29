@@ -6,6 +6,31 @@ import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
 import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
 
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
+
+function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+function base64ToArrayBuffer(base64: string) {
+  const binary_string = atob(base64);
+  const len = binary_string.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes;
+}
 
 export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/auth/register', async (c) => {
@@ -804,4 +829,241 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: err.message || 'Failed to disable 2FA' }, 500);
     }
   });
+
+  app.post('/api/auth/passkeys/register/generate-options', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const user = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first<{username: string}>();
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const rpID = new URL(requestOrigin).hostname;
+    const encoder = new TextEncoder();
+    const userIDBytes = encoder.encode(userId);
+
+    const passkeys = await c.env.DB.prepare('SELECT credential_id FROM passkeys WHERE user_id = ?').bind(userId).all<{credential_id: string}>();
+    const excludeCredentials = passkeys.results.map(pk => ({
+      id: pk.credential_id,
+      type: 'public-key' as const,
+      transports: [],
+    }));
+
+    const options = await generateRegistrationOptions({
+      rpName: 'Swazz',
+      rpID,
+      userID: userIDBytes,
+      userName: user.username,
+      userDisplayName: user.username,
+      excludeCredentials,
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'preferred',
+        authenticatorAttachment: 'platform',
+      },
+    });
+
+    if (!c.env.SESSION_CACHE) {
+      return c.json({ error: 'Internal server error: SESSION_CACHE is not configured' }, 500);
+    }
+    await c.env.SESSION_CACHE.put("passkey_challenge:" + userId, options.challenge, { expirationTtl: 300 });
+
+    return c.json(options);
+  });
+
+  app.post('/api/auth/passkeys/register/verify', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const body = await c.req.json();
+
+    let expectedChallenge = '';
+    if (c.env.SESSION_CACHE) {
+      expectedChallenge = await c.env.SESSION_CACHE.get("passkey_challenge:" + userId) || '';
+      await c.env.SESSION_CACHE.delete("passkey_challenge:" + userId);
+    }
+
+    if (!expectedChallenge) {
+      return c.json({ error: 'Challenge expired or not found' }, 400);
+    }
+
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const expectedOrigin = requestOrigin;
+    const rpID = new URL(requestOrigin).hostname;
+
+    try {
+      const verification = await verifyRegistrationResponse({
+        response: body,
+        expectedChallenge,
+        expectedOrigin,
+        expectedRPID: rpID,
+      });
+
+      if (verification.verified && verification.registrationInfo) {
+        const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+        
+        const credential_id = credential.id;
+        const public_key = arrayBufferToBase64(credential.publicKey);
+        const counter = credential.counter;
+        const device_type = credentialDeviceType;
+        const backed_up = credentialBackedUp ? 1 : 0;
+        const transports = body.response.transports ? body.response.transports.join(',') : '';
+
+        const webauthn_user_id = arrayBufferToBase64(new TextEncoder().encode(userId));
+
+        await c.env.DB.prepare(`
+          INSERT INTO passkeys (credential_id, user_id, public_key, webauthn_user_id, counter, device_type, backed_up, transports)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(credential_id, userId, public_key, webauthn_user_id, counter, device_type, backed_up, transports).run();
+
+        return c.json({ status: 'ok', verified: true });
+      } else {
+        return c.json({ error: 'Verification failed' }, 400);
+      }
+    } catch (err: any) {
+      return c.json({ error: err.message }, 400);
+    }
+  });
+
+  app.post('/api/auth/passkeys/login/generate-options', async (c) => {
+    const clientIp = getClientIp(c);
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+
+    const body = await c.req.json();
+    if (typeof body.username !== 'string') {
+      return c.json({ error: 'Invalid or missing username' }, 400);
+    }
+    const username = body.username.trim();
+
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first<{id: string}>();
+    if (!user) {
+      await new Promise(r => setTimeout(r, 200));
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const passkeys = await c.env.DB.prepare('SELECT credential_id, transports FROM passkeys WHERE user_id = ?').bind(user.id).all<{credential_id: string, transports: string}>();
+    
+    if (!passkeys.results || passkeys.results.length === 0) {
+      await new Promise(r => setTimeout(r, 200));
+      return c.json({ error: 'No passkeys found for user' }, 404);
+    }
+
+    const allowCredentials = passkeys.results.map(pk => ({
+      id: pk.credential_id,
+      type: 'public-key' as const,
+      transports: pk.transports ? (pk.transports.split(',')) as any : undefined,
+    }));
+
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const rpID = new URL(requestOrigin).hostname;
+    
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials,
+      userVerification: 'preferred',
+    });
+
+    if (!c.env.SESSION_CACHE) {
+      return c.json({ error: 'Internal server error: SESSION_CACHE is not configured' }, 500);
+    }
+    await c.env.SESSION_CACHE.put("passkey_login:" + user.id, options.challenge, { expirationTtl: 300 });
+
+    return c.json(options);
+  });
+
+  app.post('/api/auth/passkeys/login/verify', async (c) => {
+    const clientIp = getClientIp(c);
+    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    if (ipRateLimit.limited) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+
+    const body = await c.req.json();
+    const credential_id = body.id;
+    if (typeof credential_id !== 'string') {
+       return c.json({ error: 'Invalid or missing credential ID' }, 400);
+    }
+
+    const pk = await c.env.DB.prepare('SELECT user_id, public_key, counter, transports FROM passkeys WHERE credential_id = ?').bind(credential_id).first<{user_id: string, public_key: string, counter: number, transports: string}>();
+    
+    if (!pk) {
+      return c.json({ error: 'Credential not found' }, 404);
+    }
+
+    let expectedChallenge = '';
+    if (c.env.SESSION_CACHE) {
+      expectedChallenge = await c.env.SESSION_CACHE.get("passkey_login:" + pk.user_id) || '';
+      await c.env.SESSION_CACHE.delete("passkey_login:" + pk.user_id);
+    }
+
+    if (!expectedChallenge) {
+      return c.json({ error: 'Challenge expired or not found' }, 400);
+    }
+
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const expectedOrigin = requestOrigin;
+    const rpID = new URL(requestOrigin).hostname;
+
+    try {
+      const verification = await verifyAuthenticationResponse({
+        response: body,
+        expectedChallenge,
+        expectedOrigin,
+        expectedRPID: rpID,
+        credential: {
+          id: credential_id,
+          publicKey: base64ToArrayBuffer(pk.public_key),
+          counter: pk.counter,
+          transports: pk.transports ? pk.transports.split(',') as any : undefined,
+        }
+      });
+
+      if (verification.verified && verification.authenticationInfo) {
+        const { newCounter } = verification.authenticationInfo;
+        await c.env.DB.prepare('UPDATE passkeys SET counter = ? WHERE credential_id = ?').bind(newCounter, credential_id).run();
+
+        const user = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(pk.user_id).first<{username: string}>();
+        if (user) {
+            await resetLoginAttempts(c.env.DB, user.username);
+        }
+
+        const payload = {
+          sub: pk.user_id,
+          exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+        };
+        const secret = c.env.JWT_SECRET;
+        if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
+        const jwtToken = await sign(payload, secret);
+
+        return c.json({ status: 'ok', token: jwtToken });
+      } else {
+        return c.json({ error: 'Verification failed' }, 400);
+      }
+    } catch (err: any) {
+      return c.json({ error: err.message }, 400);
+    }
+  });
+
+  app.get('/api/auth/passkeys', async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+  const { results } = await c.env.DB.prepare('SELECT credential_id as id, device_type, created_at FROM passkeys WHERE user_id = ?').bind(userId).all();
+  return c.json(results);
+});
+
+app.delete('/api/auth/passkeys/:id', async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+  const id = c.req.param('id');
+  const { success } = await c.env.DB.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').bind(id, userId).run();
+  if (!success) return c.json({ error: 'Failed to delete' }, 500);
+  return c.json({ status: 'ok' });
+});
 }
