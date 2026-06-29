@@ -2,20 +2,23 @@ import { DEFAULT_ROLES, PermissionKey } from '../config/rbac';
 import { Env } from '../env';
 
 export async function invalidateProjectRBAC(env: Env, projectId: string) {
+  if (!env.SESSION_CACHE) return;
   const prefix = `rbac:${projectId}:`;
   let cursor: string | undefined;
   do {
-    const list = await env.SESSION_CACHE.list({ prefix, cursor });
+    const list = await env.SESSION_CACHE!.list({ prefix, cursor });
     const keys = list.keys.map(k => k.name);
     if (keys.length > 0) {
-      await Promise.all(keys.map(k => env.SESSION_CACHE.delete(k)));
+      await Promise.all(keys.map(k => env.SESSION_CACHE!.delete(k)));
     }
-    cursor = list.cursor;
+    cursor = (list as any).cursor;
   } while (cursor);
 }
 
 export async function invalidateUserRBAC(env: Env, projectId: string, userId: string) {
-  await env.SESSION_CACHE.delete(`rbac:${projectId}:${userId}`);
+  if (env.SESSION_CACHE) {
+    await env.SESSION_CACHE!.delete(`rbac:${projectId}:${userId}`);
+  }
 }
 
 export async function checkPermission(
@@ -26,9 +29,11 @@ export async function checkPermission(
 ): Promise<boolean> {
   const cacheKey = `rbac:${projectId}:${userId}`;
   
-  const cached = await env.SESSION_CACHE.get<{permissions: string[]}>(cacheKey, 'json');
-  if (cached) {
-    return cached.permissions.includes(requiredPermission);
+  if (env.SESSION_CACHE) {
+    const cached = await env.SESSION_CACHE!.get<{permissions: string[]}>(cacheKey, 'json');
+    if (cached) {
+      return cached.permissions.includes(requiredPermission);
+    }
   }
 
   // Use a recursive CTE to get all role IDs for the user, including inherited ones up to depth 3
@@ -51,7 +56,9 @@ export async function checkPermission(
   `).bind(projectId, userId).all<{ role_id: string }>();
 
   if (!roleResults || roleResults.length === 0) {
-    await env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: [] }), { expirationTtl: 300 });
+    if (env.SESSION_CACHE) {
+      await env.SESSION_CACHE!.put(cacheKey, JSON.stringify({ permissions: [] }), { expirationTtl: 300 });
+    }
     return false;
   }
 
@@ -76,7 +83,9 @@ export async function checkPermission(
 
   const permsArray = Array.from(permissions);
   // Cache for 24 hours. Will be actively invalidated on role/member changes.
-  await env.SESSION_CACHE.put(cacheKey, JSON.stringify({ permissions: permsArray }), { expirationTtl: 86400 });
+  if (env.SESSION_CACHE) {
+    await env.SESSION_CACHE!.put(cacheKey, JSON.stringify({ permissions: permsArray }), { expirationTtl: 86400 });
+  }
 
   return permissions.has(requiredPermission);
 }

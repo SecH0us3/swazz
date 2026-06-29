@@ -1,4 +1,6 @@
-export async function cleanupSecurityTables(db: any): Promise<void> {
+import type { D1Database } from '@cloudflare/workers-types';
+
+export async function cleanupSecurityTables(db: D1Database): Promise<void> {
   try {
     const challengesRes = await db.prepare(
       "DELETE FROM login_challenges WHERE expires_at < datetime('now')"
@@ -19,7 +21,7 @@ export async function cleanupSecurityTables(db: any): Promise<void> {
   }
 }
 
-export async function cleanupExpiredGuests(db: any): Promise<void> {
+export async function cleanupExpiredGuests(db: D1Database): Promise<void> {
   try {
     // Run security tables cleanup at the same time
     await cleanupSecurityTables(db);
@@ -72,7 +74,9 @@ export async function cleanupExpiredGuests(db: any): Promise<void> {
   }
 }
 
-export async function cleanupScheduledDeletions(env: any): Promise<void> {
+import type { Env } from '../env';
+
+export async function cleanupScheduledDeletions(env: Env): Promise<void> {
   try {
     // Find all users whose account deletion was requested more than 7 days ago (168 hours)
     const expiredDeletions = await env.DB.prepare(
@@ -129,7 +133,7 @@ export async function cleanupScheduledDeletions(env: any): Promise<void> {
         const stub = env.COORDINATOR_DO.get(doId);
         const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
           method: 'POST'
-        }));
+        }) as any);
         if (!doRes.ok) {
           console.error(`Failed to revoke runner connections in DO for user ${userId}:`, await doRes.text());
         }

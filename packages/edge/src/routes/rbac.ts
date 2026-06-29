@@ -13,7 +13,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.get('/api/projects/:id/roles', requirePermission('get:/api/projects/:id/roles'), async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = (c.req.param('id') as string);
     const { results: customRoles } = await c.env.DB.prepare(
       'SELECT id, name, created_at FROM project_custom_roles WHERE project_id = ?'
     ).bind(projectId).all();
@@ -48,7 +48,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = (c.req.param('id') as string);
     const body = await c.req.json();
     const roleId = 'c_' + ulid();
 
@@ -122,7 +122,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.get('/api/projects/:id/members', requirePermission('get:/api/projects/:id/members'), async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = (c.req.param('id') as string);
     
     const { results } = await c.env.DB.prepare(`
       SELECT u.id, u.username, u.email, m.role_id 
@@ -163,8 +163,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), async (c) => {
-    const projectId = c.req.param('id');
-    const memberId = c.req.param('user_id');
+    const projectId = (c.req.param('id') as string);
+    const memberId = (c.req.param('user_id') as string);
     const body = await c.req.json(); // { roles: [] }
 
     const userId = await getUserIdFromRequest(c);
@@ -176,19 +176,18 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'At least one role must be specified' }, 400);
     }
 
-    const currentIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_member_roles WHERE project_id = ? AND user_id = ? AND role_id = 'owner'").bind(projectId, memberId).first();
-    const legacyIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? AND role = 'owner'").bind(projectId, memberId).first();
-
-    if ((currentIsOwner || legacyIsOwner) && !body.roles.includes('owner')) {
-      const otherOwners = await c.env.DB.prepare(`
-        SELECT COUNT(DISTINCT user_id) as count FROM (
-          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner' AND user_id != ?
-          UNION
-          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner' AND user_id != ?
-        )
-      `).bind(projectId, memberId, projectId, memberId).first<{count: number}>();
-      if (!otherOwners || otherOwners.count === 0) {
-        return c.json({ error: 'Cannot remove the owner role from the last owner' }, 400);
+    // Validate roles exist
+    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
+    const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
+    if (customRoles.length > 0) {
+      const placeholders = customRoles.map(() => '?').join(',');
+      const { results } = await c.env.DB.prepare(
+        `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
+      ).bind(projectId, ...customRoles).all<{id: string}>();
+      const foundRoles = new Set((results || []).map(r => r.id));
+      const missing = customRoles.filter((r: string) => !foundRoles.has(r));
+      if (missing.length > 0) {
+        return c.json({ error: `Invalid role(s): ${missing.join(', ')}` }, 400);
       }
     }
 
@@ -208,7 +207,14 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       stmts.push(c.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, memberId, r));
     });
 
-    await c.env.DB.batch(stmts);
+    try {
+      await c.env.DB.batch(stmts);
+    } catch (e: any) {
+      if (e.message && e.message.includes('Cannot remove the last owner')) {
+        return c.json({ error: 'Cannot remove the owner role from the last owner' }, 400);
+      }
+      throw e;
+    }
     
     // Invalidate user RBAC cache
     await(invalidateUserRBAC(c.env, projectId, memberId));
@@ -217,28 +223,12 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), async (c) => {
-    const projectId = c.req.param('id');
-    const memberId = c.req.param('user_id');
+    const projectId = (c.req.param('id') as string);
+    const memberId = (c.req.param('user_id') as string);
 
     const userId = await getUserIdFromRequest(c);
     if (memberId === userId) {
       return c.json({ error: 'You cannot remove yourself from the project' }, 400);
-    }
-
-    const currentIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_member_roles WHERE project_id = ? AND user_id = ? AND role_id = 'owner'").bind(projectId, memberId).first();
-    const legacyIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? AND role = 'owner'").bind(projectId, memberId).first();
-
-    if (currentIsOwner || legacyIsOwner) {
-      const otherOwners = await c.env.DB.prepare(`
-        SELECT COUNT(DISTINCT user_id) as count FROM (
-          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner' AND user_id != ?
-          UNION
-          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner' AND user_id != ?
-        )
-      `).bind(projectId, memberId, projectId, memberId).first<{count: number}>();
-      if (!otherOwners || otherOwners.count === 0) {
-        return c.json({ error: 'Cannot remove the last owner of the project' }, 400);
-      }
     }
 
     const isInvite = await c.env.DB.prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
@@ -247,10 +237,17 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ status: 'revoked' });
     }
 
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
-      c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
-    ]);
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
+        c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
+      ]);
+    } catch (e: any) {
+      if (e.message && e.message.includes('Cannot remove the last owner')) {
+        return c.json({ error: 'Cannot remove the last owner of the project' }, 400);
+      }
+      throw e;
+    }
 
     // Invalidate user RBAC cache
     await(invalidateUserRBAC(c.env, projectId, memberId));
@@ -259,8 +256,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), async (c) => {
-    const projectId = c.req.param('id');
-    const roleId = c.req.param('role_id');
+    const projectId = (c.req.param('id') as string);
+    const roleId = c.req.param('role_id') as string;
     const body = await c.req.json(); // { name, permissions: [], included_roles: [] }
 
     if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
@@ -323,8 +320,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), async (c) => {
-    const projectId = c.req.param('id');
-    const roleId = c.req.param('role_id');
+    const projectId = (c.req.param('id') as string);
+    const roleId = c.req.param('role_id') as string;
 
     if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
       return c.json({ error: 'Default roles cannot be deleted' }, 400);
@@ -364,11 +361,26 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
 
 
   app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = (c.req.param('id') as string);
     const body = await c.req.json(); // { username, email, roles: [] }
     
     if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
       return c.json({ error: 'At least one role must be specified' }, 400);
+    }
+
+    // Validate roles exist
+    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
+    const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
+    if (customRoles.length > 0) {
+      const placeholders = customRoles.map(() => '?').join(',');
+      const { results } = await c.env.DB.prepare(
+        `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
+      ).bind(projectId, ...customRoles).all<{id: string}>();
+      const foundRoles = new Set((results || []).map(r => r.id));
+      const missing = customRoles.filter((r: string) => !foundRoles.has(r));
+      if (missing.length > 0) {
+        return c.json({ error: `Invalid role(s): ${missing.join(', ')}` }, 400);
+      }
     }
 
     const id = ulid();

@@ -235,7 +235,7 @@ export class RunnerCoordinator {
       }
 
       try {
-        runnerWs.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
+        runnerWs?.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
       } catch (err) {
         this.pendingParseUrls.delete(reqId);
         return new Response(JSON.stringify({ error: "Failed to send parse request to runner" }), { status: 500 });
@@ -273,7 +273,7 @@ export class RunnerCoordinator {
       }
       const parsedConfig = JSON.parse(configText).config;
       try {
-        runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
+        runnerWs?.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
       } catch (err) {
         this.runners.delete(runnerWs);
         this.jobs.delete(runId);
@@ -295,7 +295,7 @@ export class RunnerCoordinator {
       const runnerWs = this.jobs.get(runId);
       if (runnerWs) {
         try {
-          runnerWs.send(JSON.stringify({ type: action, runId }));
+          runnerWs?.send(JSON.stringify({ type: action, runId }));
         } catch (err) {
           // ignore or log
         }
@@ -386,7 +386,7 @@ export class RunnerCoordinator {
       }
 
       try {
-        runnerWs.send(JSON.stringify({ type: 'agent_restart' }));
+        runnerWs?.send(JSON.stringify({ type: 'agent_restart' }));
         return new Response('Restart command sent', { status: 200 });
       } catch (err) {
         return new Response('Failed to send restart command', { status: 500 });

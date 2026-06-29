@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getUserIdFromRequest } from '../utils/auth';

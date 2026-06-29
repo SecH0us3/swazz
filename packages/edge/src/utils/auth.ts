@@ -262,7 +262,10 @@ export async function checkProjectMembership(c: Context<{ Bindings: Env }>, proj
   return { authorized: true };
 }
 
-export async function checkScanMembership(c: Context<{ Bindings: Env }>, scanId: string, userId: string): Promise<{ authorized: boolean; error?: any }> {
+import { checkPermission } from './rbac';
+import { PermissionKey } from '../config/rbac';
+
+export async function checkScanMembership(c: Context<{ Bindings: Env }>, scanId: string, userId: string, requiredPermission?: PermissionKey): Promise<{ authorized: boolean; error?: any }> {
   const scan = await c.env.DB.prepare('SELECT project_id, user_id FROM scans WHERE id = ?')
     .bind(scanId)
     .first<{ project_id: string; user_id: string | null }>();
@@ -275,6 +278,12 @@ export async function checkScanMembership(c: Context<{ Bindings: Env }>, scanId:
   if (!scan.project_id) {
     if (scan.user_id === userId) return { authorized: true };
     return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
+  }
+
+  if (requiredPermission) {
+    const hasAccess = await checkPermission(c.env, userId, scan.project_id, requiredPermission);
+    if (!hasAccess) return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
+    return { authorized: true };
   }
 
   return checkProjectMembership(c, scan.project_id, userId);
@@ -309,7 +318,7 @@ export function getClientIp(c: Context<{ Bindings: Env }>): string {
 
 export const deletionCache = new Map<string, { deleteRequestedAt: string | null; expiry: number }>();
 
-export async function getDeleteRequestedAt(db: any, userId: string): Promise<string | null> {
+export async function getDeleteRequestedAt(db: D1Database, userId: string): Promise<string | null> {
   const now = Date.now();
   const cached = deletionCache.get(userId);
   if (cached && cached.expiry > now) {

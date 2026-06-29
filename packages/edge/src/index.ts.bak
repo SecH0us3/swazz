@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';

@@ -77,12 +77,16 @@ export function splitSql(sql: string): string[] {
     }
     if (inInlineComment) {
       if (char === "\n") inInlineComment = false;
+      current += char;
       continue;
     }
     if (inMultiLineComment) {
       if (char === "*" && nextChar === "/") {
         inMultiLineComment = false;
+        current += "*/";
         i++;
+      } else {
+        current += char;
       }
       continue;
     }
@@ -99,22 +103,25 @@ export function splitSql(sql: string): string[] {
     }
     if (char === "-" && nextChar === "-") {
       inInlineComment = true;
+      current += "--";
       i++;
       continue;
     }
     if (char === "/" && nextChar === "*") {
       inMultiLineComment = true;
+      current += "/*";
       i++;
       continue;
     }
 
+    current += char;
+    
     const uppercaseCurrent = current.trim().toUpperCase();
     if (uppercaseCurrent.startsWith("CREATE TRIGGER") || uppercaseCurrent.startsWith("CREATE OR REPLACE TRIGGER")) {
       inTrigger = true;
     }
 
     if (inTrigger && uppercaseCurrent.endsWith("END;")) {
-      current += char;
       statements.push(current.trim());
       current = "";
       inTrigger = false;
@@ -122,23 +129,19 @@ export function splitSql(sql: string): string[] {
     }
 
     if (char === ";" && !inTrigger) {
-      if (current.trim().length > 0) {
+      if (current.trim().length > 1) {
         statements.push(current.trim());
       }
       current = "";
-      continue;
     }
-
-    current += char;
   }
 
   if (current.trim().length > 0) {
     statements.push(current.trim());
   }
 
-  return statements.filter(s => s.trim() !== "");
+  return statements;
 }
-
 
 beforeAll(async () => {
   // Use Vite's import.meta.glob to bundle SQL migrations as raw strings
@@ -159,8 +162,11 @@ beforeAll(async () => {
       try {
         await env.DB.prepare(statement).run();
       } catch (err: any) {
+        // Tolerate idempotent ALTER TABLE ADD COLUMN statements: in test environments
+        // the column may already exist in the base CREATE TABLE definition while the
+        // ALTER TABLE migration is also present for the production upgrade path.
         const msg = String(err?.message ?? err);
-        if (msg.includes('duplicate column name') || msg.includes('SQL code did not contain a statement')) continue;
+        if (msg.includes('duplicate column name')) continue;
         throw err;
       }
     }
