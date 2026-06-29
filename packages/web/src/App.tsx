@@ -65,6 +65,34 @@ export default function App() {
         }
     }, [token]);
 
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const inviteToken = urlParams.get('token');
+        if (inviteToken && token) {
+            fetch(`${PROXY_URL}/api/auth/invitations/accept`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: inviteToken })
+            })
+            .then(res => {
+                if (res.ok) {
+                    showToast('Invitation accepted successfully', 'success');
+                    // Remove token from url
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.delete('token');
+                    window.history.replaceState({}, '', newUrl);
+                } else {
+                    res.json().then(data => {
+                        showToast(`Failed to accept invitation: ${data.error}`, 'error');
+                    });
+                }
+            })
+            .catch(err => {
+                showToast(`Failed to accept invitation`, 'error');
+            });
+        }
+    }, [token]);
+
     // Only subscribe to what App.tsx needs for rendering
     const {
         activeTab,

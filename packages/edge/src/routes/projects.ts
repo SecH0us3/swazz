@@ -23,6 +23,8 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
           c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
             .bind(projectId),
           c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+            .bind(projectId, userId),
+          c.env.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
             .bind(projectId, userId)
         ]);
         
@@ -47,6 +49,8 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       c.env.DB.prepare('INSERT INTO projects (id, name, description) VALUES (?, ?, ?)')
         .bind(id, body.name, body.description || ''),
       c.env.DB.prepare('INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)')
+        .bind(id, userId, 'owner'),
+      c.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)')
         .bind(id, userId, 'owner')
     ]);
   

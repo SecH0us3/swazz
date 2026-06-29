@@ -4,6 +4,7 @@ import { Env } from './env';
 import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
+import { registerRbacRoutes } from './routes/rbac';
 import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
@@ -317,6 +318,7 @@ app.get('/api/payload-catalog', (c) => {
 
 registerAuthRoutes(app);
 registerProjectsRoutes(app);
+registerRbacRoutes(app);
 registerScansRoutes(app);
 registerRunnersRoutes(app);
 registerMiscRoutes(app);

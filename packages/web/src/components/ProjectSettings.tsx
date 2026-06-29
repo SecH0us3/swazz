@@ -7,6 +7,7 @@ import { RunnersTab } from './ProjectSettings/RunnersTab.js';
 import { WordlistsTab } from './ProjectSettings/WordlistsTab.js';
 import { ChainingTab } from './ProjectSettings/ChainingTab.js';
 import { RawConfigTab } from './ProjectSettings/RawConfigTab.js';
+import { MembersRolesTab } from './ProjectSettings/MembersRolesTab.js';
 
 interface Runner {
     connectionId: string | null;
@@ -19,7 +20,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'raw_config'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'raw_config'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -139,6 +140,23 @@ export function ProjectSettings() {
                         General & Target
                     </button>
                     <button
+                        className={`tab-bar-btn ${activeSubTab === 'members' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('members')}
+                        style={{
+                            width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                            background: activeSubTab === 'members' ? 'var(--accent-subtle)' : 'transparent',
+                            color: activeSubTab === 'members' ? 'var(--accent-light)' : 'var(--text-secondary)'
+                        }}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        Members & Roles
+                    </button>
+                    <button
                         className={`tab-bar-btn ${activeSubTab === 'performance' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('performance')}
                         style={{
@@ -246,6 +264,7 @@ export function ProjectSettings() {
                 {/* Tab Content Cards */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                     {activeSubTab === 'general' && <GeneralTab />}
+                    {activeSubTab === 'members' && <MembersRolesTab />}
                     {activeSubTab === 'performance' && <PerformanceTab />}
                     {activeSubTab === 'anomalies' && <AnomaliesTab />}
                     {activeSubTab === 'wordlists' && <WordlistsTab />}
