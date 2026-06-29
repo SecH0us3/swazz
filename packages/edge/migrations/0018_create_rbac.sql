@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS project_invitations (
     email TEXT,
     username TEXT,
     target_role_ids TEXT NOT NULL, -- JSON array of role_ids
-    status TEXT NOT NULL DEFAULT 'Pending', -- Pending, Accepted, Expired, Revoked
+    status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Accepted', 'Expired', 'Revoked')),
     token TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     expires_at DATETIME NOT NULL

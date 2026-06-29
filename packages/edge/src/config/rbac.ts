@@ -31,6 +31,7 @@ export const DEFAULT_ROLES: Record<string, { name: string; permissions: Permissi
       'get:/api/projects/:id/config',
       'post:/api/projects/:id/config',
       'get:/api/projects/:id/members',
+      'post:/api/projects/:id/invitations',
       'delete:/api/projects/:id/members/:user_id',
       'put:/api/projects/:id/members/:user_id',
       'get:/api/projects/:id/roles',

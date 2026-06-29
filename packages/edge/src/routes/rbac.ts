@@ -323,6 +323,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), async (c) => {
+    const projectId = c.req.param('id');
     const roleId = c.req.param('role_id');
 
     if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
