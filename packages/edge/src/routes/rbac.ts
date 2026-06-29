@@ -171,6 +171,22 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'At least one role must be specified' }, 400);
     }
 
+    const currentIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_member_roles WHERE project_id = ? AND user_id = ? AND role_id = 'owner'").bind(projectId, memberId).first();
+    const legacyIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? AND role = 'owner'").bind(projectId, memberId).first();
+
+    if ((currentIsOwner || legacyIsOwner) && !body.roles.includes('owner')) {
+      const otherOwners = await c.env.DB.prepare(`
+        SELECT COUNT(DISTINCT user_id) as count FROM (
+          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner' AND user_id != ?
+          UNION
+          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner' AND user_id != ?
+        )
+      `).bind(projectId, memberId, projectId, memberId).first<{count: number}>();
+      if (!otherOwners || otherOwners.count === 0) {
+        return c.json({ error: 'Cannot remove the owner role from the last owner' }, 400);
+      }
+    }
+
     // Check if invitation
     const isInvite = await c.env.DB.prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
     if (isInvite) {
@@ -198,6 +214,22 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (memberId === userId) {
       return c.json({ error: 'You cannot remove yourself from the project' }, 400);
+    }
+
+    const currentIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_member_roles WHERE project_id = ? AND user_id = ? AND role_id = 'owner'").bind(projectId, memberId).first();
+    const legacyIsOwner = await c.env.DB.prepare("SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? AND role = 'owner'").bind(projectId, memberId).first();
+
+    if (currentIsOwner || legacyIsOwner) {
+      const otherOwners = await c.env.DB.prepare(`
+        SELECT COUNT(DISTINCT user_id) as count FROM (
+          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner' AND user_id != ?
+          UNION
+          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner' AND user_id != ?
+        )
+      `).bind(projectId, memberId, projectId, memberId).first<{count: number}>();
+      if (!otherOwners || otherOwners.count === 0) {
+        return c.json({ error: 'Cannot remove the last owner of the project' }, 400);
+      }
     }
 
     const isInvite = await c.env.DB.prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
@@ -337,27 +369,29 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    // Atomically claim the token if it's valid and not expired
+    const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
+    if (!user) return c.json({ error: 'User not found' }, 404);
+
+    // Atomically claim the token if it's valid, not expired, and matches user (or is open)
     const inv = await c.env.DB.prepare(`
       UPDATE project_invitations 
       SET status = 'Accepted' 
-      WHERE token = ? AND status = 'Pending' AND strftime('%s', expires_at) > strftime('%s', 'now')
+      WHERE token = ?1 
+        AND status = 'Pending' 
+        AND strftime('%s', expires_at) > strftime('%s', 'now')
+        AND (username IS NULL OR username = ?2)
+        AND (email IS NULL OR email = ?3)
       RETURNING *
-    `).bind(body.token).first<any>();
+    `).bind(body.token, user.username, user.email).first<any>();
 
-    if (!inv) return c.json({ error: 'Invalid or expired invitation' }, 400);
-
-    // Ensure it matches the user if username/email was specified
-    const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
-    if (inv.username && inv.username !== user?.username) {
-      // Revert if mismatch
-      await c.env.DB.prepare("UPDATE project_invitations SET status = 'Pending' WHERE id = ?").bind(inv.id).run();
-      return c.json({ error: 'Invitation is for a different username' }, 403);
-    }
-    if (inv.email && inv.email !== user?.email) {
-      // Revert if mismatch
-      await c.env.DB.prepare("UPDATE project_invitations SET status = 'Pending' WHERE id = ?").bind(inv.id).run();
-      return c.json({ error: 'Invitation is for a different email' }, 403);
+    if (!inv) {
+      // Check why it failed to provide better error
+      const existing = await c.env.DB.prepare("SELECT username, email FROM project_invitations WHERE token = ? AND status = 'Pending'").bind(body.token).first<{username: string|null, email: string|null}>();
+      if (existing) {
+        if (existing.username && existing.username !== user.username) return c.json({ error: 'Invitation is for a different username' }, 403);
+        if (existing.email && existing.email !== user.email) return c.json({ error: 'Invitation is for a different email' }, 403);
+      }
+      return c.json({ error: 'Invalid or expired invitation' }, 400);
     }
 
     const roles = JSON.parse(inv.target_role_ids);
