@@ -348,23 +348,6 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 </section>
             )}
 
-            <footer className="landing-footer">
-                <div className="footer-content">
-                    <div className="footer-logo">
-                        <svg className="landing-logo-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                        </svg>
-                        <span>Swazz DAST</span>
-                    </div>
-                    <div className="footer-links">
-                        <a href="https://github.com/SecH0us3/swazz" target="_blank" rel="noopener noreferrer">GitHub</a>
-                        <a href="https://yoursec.substack.com/" target="_blank" rel="noopener noreferrer">Blog</a>
-                        <a href="#">Terms of Service</a>
-                        <a href="#">Privacy Policy</a>
-                    </div>
-                </div>
-            </footer>
-
             {/* Feature Detail Modal */}
             {selectedFeature && (
                 <div className="feature-modal-backdrop" onClick={() => setSelectedFeature(null)}>
