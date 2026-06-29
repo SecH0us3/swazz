@@ -162,6 +162,11 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const memberId = c.req.param('user_id');
     const body = await c.req.json(); // { roles: [] }
 
+    const userId = await getUserIdFromRequest(c);
+    if (memberId === userId) {
+      return c.json({ error: 'You cannot modify your own roles' }, 400);
+    }
+
     if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
       return c.json({ error: 'At least one role must be specified' }, 400);
     }
@@ -189,6 +194,11 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), async (c) => {
     const projectId = c.req.param('id');
     const memberId = c.req.param('user_id');
+
+    const userId = await getUserIdFromRequest(c);
+    if (memberId === userId) {
+      return c.json({ error: 'You cannot remove yourself from the project' }, 400);
+    }
 
     const isInvite = await c.env.DB.prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
     if (isInvite) {
