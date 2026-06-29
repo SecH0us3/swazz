@@ -16,7 +16,7 @@ export const requirePermission = (permission: PermissionKey) => {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const hasAccess = await checkPermission(c.env.DB, userId, projectId, permission);
+    const hasAccess = await checkPermission(c.env, userId, projectId, permission);
     if (!hasAccess) {
       return c.json({ error: 'Forbidden: Missing permission ' + permission }, 403);
     }

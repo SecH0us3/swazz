@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/rbac';
 import { PERMISSIONS, DEFAULT_ROLES, PermissionKey } from '../config/rbac';
 import { ulid } from 'ulidx';
 import { getUserIdFromRequest } from '../utils/auth';
+import { invalidateUserRBAC, invalidateProjectRBAC } from '../utils/rbac';
 
 export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   
@@ -113,6 +114,10 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     });
 
     await c.env.DB.batch(stmts);
+    
+    // Invalidate project RBAC cache
+    await invalidateProjectRBAC(c.env, projectId);
+
     return c.json({ status: 'created', id: roleId });
   });
 
@@ -204,6 +209,10 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     });
 
     await c.env.DB.batch(stmts);
+    
+    // Invalidate user RBAC cache
+    await(invalidateUserRBAC(c.env, projectId, memberId));
+
     return c.json({ status: 'updated' });
   });
 
@@ -242,6 +251,9 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
       c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
     ]);
+
+    // Invalidate user RBAC cache
+    await(invalidateUserRBAC(c.env, projectId, memberId));
 
     return c.json({ status: 'removed' });
   });
@@ -303,6 +315,10 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     includedRoles.forEach(child => stmts.push(c.env.DB.prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, child)));
 
     await c.env.DB.batch(stmts);
+    
+    // Invalidate project RBAC cache since role definition changed
+    await invalidateProjectRBAC(c.env, projectId);
+
     return c.json({ status: 'updated' });
   });
 
@@ -319,6 +335,9 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       c.env.DB.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ? OR child_role_id = ?').bind(roleId, roleId),
       c.env.DB.prepare('DELETE FROM project_member_roles WHERE role_id = ?').bind(roleId)
     ]);
+
+    // Invalidate project RBAC cache since a role was deleted
+    await invalidateProjectRBAC(c.env, projectId);
 
     return c.json({ status: 'deleted' });
   });
@@ -404,6 +423,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     stmts.push(c.env.DB.prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')").bind(inv.project_id, userId));
 
     await c.env.DB.batch(stmts);
+    await invalidateUserRBAC(c.env, inv.project_id, userId);
+
     return c.json({ status: 'accepted', project_id: inv.project_id });
   });
 }
