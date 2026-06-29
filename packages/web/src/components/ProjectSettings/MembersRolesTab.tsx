@@ -38,6 +38,7 @@ export function MembersRolesTab() {
     const [roleName, setRoleName] = useState('');
     const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
     const [selectedInheritedRoles, setSelectedInheritedRoles] = useState<string[]>([]);
+    const [permissionSearch, setPermissionSearch] = useState('');
 
     // Edit Member State
     const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -115,6 +116,7 @@ export function MembersRolesTab() {
         setRoleName('');
         setSelectedPermissions([]);
         setSelectedInheritedRoles([]);
+        setPermissionSearch('');
     };
 
     const handleSaveRole = async () => {
@@ -371,24 +373,46 @@ export function MembersRolesTab() {
                         </div>
 
                         <div className="rbac-form-group">
-                            <label className="rbac-form-label">Assign Permissions</label>
-                            <div className="rbac-checkbox-grid">
-                                {Object.entries(permissions).map(([key, desc]) => (
-                                    <label key={key} className="rbac-checkbox-item">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={selectedPermissions.includes(key)}
-                                            onChange={e => {
-                                                if (e.target.checked) setSelectedPermissions([...selectedPermissions, key]);
-                                                else setSelectedPermissions(selectedPermissions.filter(k => k !== key));
-                                            }}
-                                        />
-                                        <div className="rbac-checkbox-item-desc">
-                                            <strong>{desc}</strong>
-                                            <code>{key}</code>
-                                        </div>
-                                    </label>
-                                ))}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label className="rbac-form-label" style={{ margin: 0 }}>Assign Permissions</label>
+                                <input 
+                                    type="text" 
+                                    className="input" 
+                                    style={{ width: '220px', height: '28px', fontSize: '12px', padding: '4px 8px' }}
+                                    placeholder="Search permissions..."
+                                    value={permissionSearch}
+                                    onChange={e => setPermissionSearch(e.target.value)}
+                                />
+                            </div>
+                            <div className="rbac-permissions-checkbox-grid">
+                                {Object.entries(permissions)
+                                    .filter(([key, desc]) => 
+                                        desc.toLowerCase().includes(permissionSearch.toLowerCase()) || 
+                                        key.toLowerCase().includes(permissionSearch.toLowerCase())
+                                    )
+                                    .map(([key, desc]) => (
+                                        <label key={key} className="rbac-permissions-checkbox-item">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedPermissions.includes(key)}
+                                                onChange={e => {
+                                                    if (e.target.checked) setSelectedPermissions([...selectedPermissions, key]);
+                                                    else setSelectedPermissions(selectedPermissions.filter(k => k !== key));
+                                                }}
+                                            />
+                                            <div className="rbac-permissions-checkbox-desc">
+                                                <strong>{desc}</strong>
+                                                <code>{key}</code>
+                                            </div>
+                                        </label>
+                                    ))
+                                }
+                                {Object.entries(permissions).filter(([key, desc]) => 
+                                    desc.toLowerCase().includes(permissionSearch.toLowerCase()) || 
+                                    key.toLowerCase().includes(permissionSearch.toLowerCase())
+                                ).length === 0 && (
+                                    <div className="rbac-empty-state" style={{ padding: '20px 0' }}>No matching permissions found.</div>
+                                )}
                             </div>
                         </div>
 
