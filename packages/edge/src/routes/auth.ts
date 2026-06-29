@@ -840,7 +840,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'User not found' }, 404);
     }
 
-    const rpID = new URL(c.req.url).hostname;
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const rpID = new URL(requestOrigin).hostname;
     const encoder = new TextEncoder();
     const userIDBytes = encoder.encode(userId);
 
@@ -865,9 +866,10 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       },
     });
 
-    if (c.env.SESSION_CACHE) {
-      await c.env.SESSION_CACHE.put("passkey_challenge:" + userId, options.challenge, { expirationTtl: 300 });
+    if (!c.env.SESSION_CACHE) {
+      return c.json({ error: 'Internal server error: SESSION_CACHE is not configured' }, 500);
     }
+    await c.env.SESSION_CACHE.put("passkey_challenge:" + userId, options.challenge, { expirationTtl: 300 });
 
     return c.json(options);
   });
@@ -889,8 +891,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Challenge expired or not found' }, 400);
     }
 
-    const expectedOrigin = new URL(c.req.url).origin;
-    const rpID = new URL(c.req.url).hostname;
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const expectedOrigin = requestOrigin;
+    const rpID = new URL(requestOrigin).hostname;
 
     try {
       const verification = await verifyRegistrationResponse({
@@ -934,11 +937,12 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     const body = await c.req.json();
-    if (!body.username) {
-      return c.json({ error: 'Missing username' }, 400);
+    if (typeof body.username !== 'string') {
+      return c.json({ error: 'Invalid or missing username' }, 400);
     }
+    const username = body.username.trim();
 
-    const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(body.username).first<{id: string}>();
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first<{id: string}>();
     if (!user) {
       await new Promise(r => setTimeout(r, 200));
       return c.json({ error: 'User not found' }, 404);
@@ -957,7 +961,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       transports: pk.transports ? (pk.transports.split(',')) as any : undefined,
     }));
 
-    const rpID = new URL(c.req.url).hostname;
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const rpID = new URL(requestOrigin).hostname;
     
     const options = await generateAuthenticationOptions({
       rpID,
@@ -965,9 +970,10 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       userVerification: 'preferred',
     });
 
-    if (c.env.SESSION_CACHE) {
-      await c.env.SESSION_CACHE.put("passkey_login:" + user.id, options.challenge, { expirationTtl: 300 });
+    if (!c.env.SESSION_CACHE) {
+      return c.json({ error: 'Internal server error: SESSION_CACHE is not configured' }, 500);
     }
+    await c.env.SESSION_CACHE.put("passkey_login:" + user.id, options.challenge, { expirationTtl: 300 });
 
     return c.json(options);
   });
@@ -981,8 +987,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     const body = await c.req.json();
     const credential_id = body.id;
-    if (!credential_id) {
-       return c.json({ error: 'Missing credential ID' }, 400);
+    if (typeof credential_id !== 'string') {
+       return c.json({ error: 'Invalid or missing credential ID' }, 400);
     }
 
     const pk = await c.env.DB.prepare('SELECT user_id, public_key, counter, transports FROM passkeys WHERE credential_id = ?').bind(credential_id).first<{user_id: string, public_key: string, counter: number, transports: string}>();
@@ -1001,8 +1007,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Challenge expired or not found' }, 400);
     }
 
-    const expectedOrigin = new URL(c.req.url).origin;
-    const rpID = new URL(c.req.url).hostname;
+    const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
+    const expectedOrigin = requestOrigin;
+    const rpID = new URL(requestOrigin).hostname;
 
     try {
       const verification = await verifyAuthenticationResponse({
@@ -1047,7 +1054,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/passkeys', async (c) => {
   const userId = await getUserIdFromRequest(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
-  const { results } = await c.env.DB.prepare('SELECT id, device_type, created_at FROM passkeys WHERE user_id = ?').bind(userId).all();
+  const { results } = await c.env.DB.prepare('SELECT credential_id as id, device_type, created_at FROM passkeys WHERE user_id = ?').bind(userId).all();
   return c.json(results);
 });
 
@@ -1055,7 +1062,7 @@ app.delete('/api/auth/passkeys/:id', async (c) => {
   const userId = await getUserIdFromRequest(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
   const id = c.req.param('id');
-  const { success } = await c.env.DB.prepare('DELETE FROM passkeys WHERE id = ? AND user_id = ?').bind(id, userId).run();
+  const { success } = await c.env.DB.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').bind(id, userId).run();
   if (!success) return c.json({ error: 'Failed to delete' }, 500);
   return c.json({ status: 'ok' });
 });

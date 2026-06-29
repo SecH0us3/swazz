@@ -288,13 +288,14 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
             // 1. Get options
-            const optsRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/generate-options`, {
+            const optsRes = await fetch('/api/auth/passkeys/login/generate-options', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ username })
             });
-            if (!optsRes.ok) throw new Error('Failed to start passkey authentication');
-            const opts = await optsRes.json();
+            const optsData = await optsRes.json().catch(() => ({}));
+            if (!optsRes.ok) throw new Error(optsData.error || 'Failed to start passkey authentication');
+            const opts = optsData;
 
             // 2. Start authentication
             const { startAuthentication } = await import('@simplewebauthn/browser');

@@ -69,12 +69,13 @@ export function UserSettings() {
             };
             if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
-            const optsRes = await fetch(`${PROXY_URL}/api/auth/passkeys/register/generate-options`, {
+            const optsRes = await fetch('/api/auth/passkeys/register/generate-options', {
                 method: 'POST',
                 headers
             });
-            if (!optsRes.ok) throw new Error('Failed to get registration options');
-            const opts = await optsRes.json();
+            const optsData = await optsRes.json().catch(() => ({}));
+            if (!optsRes.ok) throw new Error(optsData.error || 'Failed to get registration options');
+            const opts = optsData;
 
             const { startRegistration } = await import('@simplewebauthn/browser');
             const authResp = await startRegistration(opts);
@@ -104,10 +105,14 @@ export function UserSettings() {
             };
             if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
-            await fetch(`${PROXY_URL}/api/auth/passkeys/${id}`, {
+            const res = await fetch(`/api/auth/passkeys/${id}`, {
                 method: 'DELETE',
                 headers
             });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Failed to delete passkey');
+            }
             await fetchPasskeys();
         } catch (err) {
             console.error('Failed to delete passkey', err);
@@ -584,7 +589,11 @@ export function UserSettings() {
                                             <ul className="passkeys-list">
                                                 {passkeys.map((pk: any) => (
                                                     <li key={pk.id} className="passkey-item">
-                                                        <span>{pk.name || 'Passkey'} {pk.created_at && <small className="passkey-date">({new Date(pk.created_at).toLocaleDateString()})</small>}</span>
+                                                        <span>{pk.name || 'Passkey'} {pk.created_at && <small className="passkey-date">({(() => {
+                                                            const isoStr = pk.created_at.replace(' ', 'T') + 'Z';
+                                                            const d = new Date(isoStr);
+                                                            return isNaN(d.getTime()) ? 'Unknown Date' : d.toLocaleDateString();
+                                                        })()})</small>}</span>
                                                         <button 
                                                             className="btn btn-danger btn-sm"
                                                             onClick={() => handleDeletePasskey(pk.id)}
