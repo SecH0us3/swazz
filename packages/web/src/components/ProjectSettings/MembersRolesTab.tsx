@@ -51,6 +51,31 @@ export function MembersRolesTab() {
         fetchMembers();
     }, [activeProject]);
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (isInviteModalOpen) {
+                    setIsInviteModalOpen(false);
+                    setInviteInput('');
+                    setSelectedInviteRoles([]);
+                    e.stopPropagation();
+                    e.preventDefault();
+                } else if (isRoleModalOpen) {
+                    handleCloseRoleModal();
+                    e.stopPropagation();
+                    e.preventDefault();
+                } else if (editingMember) {
+                    setEditingMember(null);
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [isInviteModalOpen, isRoleModalOpen, editingMember]);
+
     const getHeaders = () => {
         const token = localStorage.getItem('swazz_token');
         return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -282,9 +307,16 @@ export function MembersRolesTab() {
                                     {r.included_roles && r.included_roles.length > 0 && ` • Includes ${r.included_roles.length} roles`}
                                 </div>
                                 <div className="rbac-permissions-list">
-                                    {r.permissions.map(p => (
-                                        <span key={p} className="rbac-permission-pill" title={p}>{permissions[p] || p}</span>
-                                    ))}
+                                    {r.permissions.map(p => {
+                                        let pillClass = 'rbac-permission-pill-view';
+                                        if (p.startsWith('delete:')) pillClass = 'rbac-permission-pill-delete';
+                                        else if (p.startsWith('post:') || p.startsWith('put:') || p.startsWith('patch:')) pillClass = 'rbac-permission-pill-edit';
+                                        return (
+                                            <span key={p} className={`rbac-permission-pill ${pillClass}`} title={p}>
+                                                {permissions[p] || p}
+                                            </span>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
@@ -402,7 +434,11 @@ export function MembersRolesTab() {
                                             />
                                             <div className="rbac-permissions-checkbox-desc">
                                                 <strong>{desc}</strong>
-                                                <code>{key}</code>
+                                                <code className={
+                                                    key.startsWith('delete:') ? 'rbac-code-delete' :
+                                                    (key.startsWith('post:') || key.startsWith('put:') || key.startsWith('patch:')) ? 'rbac-code-edit' :
+                                                    'rbac-code-view'
+                                                }>{key}</code>
                                             </div>
                                         </label>
                                     ))
