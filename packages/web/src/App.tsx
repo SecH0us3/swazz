@@ -22,6 +22,7 @@ import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
+import { fetchProjects } from './services/projectService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -77,13 +78,34 @@ export default function App() {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: inviteToken })
             })
-            .then(res => {
+            .then(async res => {
                 if (res.ok) {
+                    const data = await res.json();
                     showToast('Invitation accepted successfully', 'success');
                     // Remove token from url
                     const newUrl = new URL(window.location.href);
                     newUrl.searchParams.delete('token');
                     window.history.replaceState({}, '', newUrl);
+
+                    try {
+                        const projs = await fetchProjects();
+                        useAppStore.setState({ projects: projs });
+                        const acceptedProj = projs.find(p => p.id === data.project_id);
+                        if (acceptedProj) {
+                            useAppStore.setState({
+                                activeProject: acceptedProj,
+                                loadedRunId: null,
+                                liveRunId: null,
+                                historyStats: null,
+                                stats: null,
+                                liveCount: 0,
+                                selectedResult: null,
+                                heatmapFilter: null,
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Failed to refresh projects after accept', err);
+                    }
                 } else {
                     res.json().then(data => {
                         showToast(`Failed to accept invitation: ${data.error}`, 'error');
