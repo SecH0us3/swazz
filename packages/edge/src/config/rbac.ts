@@ -6,6 +6,8 @@ export const PERMISSIONS = {
   'post:/api/projects/:id/config': 'Edit scan configuration',
   'get:/api/projects/:id/members': 'View project members',
   'post:/api/projects/:id/invitations': 'Invite new members',
+  'delete:/api/projects/:id/members/:user_id': 'Remove project members',
+  'put:/api/projects/:id/members/:user_id': 'Edit member roles',
   'get:/api/projects/:id/roles': 'View project roles',
   'post:/api/projects/:id/roles': 'Create custom roles',
   'put:/api/projects/:id/roles/:role_id': 'Edit custom roles',
@@ -29,7 +31,12 @@ export const DEFAULT_ROLES: Record<string, { name: string; permissions: Permissi
       'get:/api/projects/:id/config',
       'post:/api/projects/:id/config',
       'get:/api/projects/:id/members',
+      'delete:/api/projects/:id/members/:user_id',
+      'put:/api/projects/:id/members/:user_id',
       'get:/api/projects/:id/roles',
+      'post:/api/projects/:id/roles',
+      'put:/api/projects/:id/roles/:role_id',
+      'delete:/api/projects/:id/roles/:role_id',
       'post:/api/projects/:id/scans',
       'get:/api/projects/:id/scans'
     ]

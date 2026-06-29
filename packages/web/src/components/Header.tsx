@@ -46,6 +46,52 @@ export function Header({
     const isBusy = isRunning || isLoadingSpecs || isQueued;
 
     const [localUrl, setLocalUrl] = useState(baseUrl);
+    const [invitations, setInvitations] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (!authEnabled || !token || isGuest) return;
+
+        const fetchInvitations = async () => {
+            try {
+                const res = await fetch('/api/auth/invitations', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setInvitations(data.invitations || []);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        fetchInvitations();
+        const interval = setInterval(fetchInvitations, 10000);
+        return () => clearInterval(interval);
+    }, [authEnabled, token, isGuest]);
+
+    const handleAcceptInvite = async (inviteToken: string) => {
+        try {
+            const res = await fetch('/api/auth/invitations/accept', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ token: inviteToken })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setInvitations(invs => invs.filter(i => i.token !== inviteToken));
+                window.dispatchEvent(new CustomEvent('swazz:invite-accepted', { detail: { projectId: data.project_id } }));
+            } else {
+                const data = await res.json();
+                alert(`Failed to accept invitation: ${data.error}`);
+            }
+        } catch (err) {
+            alert('Failed to accept invitation');
+        }
+    };
 
     useEffect(() => {
         setLocalUrl(baseUrl);
@@ -251,7 +297,15 @@ export function Header({
                 </button>
 
                 {authEnabled && token && (
-                    <UserMenu onLogout={onLogout || (() => {})} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        {invitations.length > 0 && (
+                            <div className="header-invitation-banner">
+                                <span>You've been invited to <strong>{invitations[0].project_name}</strong></span>
+                                <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '11px', height: '26px' }} onClick={() => handleAcceptInvite(invitations[0].token)}>Accept</button>
+                            </div>
+                        )}
+                        <UserMenu onLogout={onLogout || (() => {})} />
+                    </div>
                 )}
 
                 {authEnabled && isGuest && (

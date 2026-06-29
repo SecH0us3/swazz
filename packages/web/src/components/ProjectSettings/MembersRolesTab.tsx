@@ -15,6 +15,7 @@ interface Member {
     username: string;
     email: string;
     roles: string[];
+    is_pending?: boolean;
 }
 
 export function MembersRolesTab() {
@@ -32,9 +33,14 @@ export function MembersRolesTab() {
     
     // Custom Role State
     const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+    const [editingRole, setEditingRole] = useState<Role | null>(null);
     const [roleName, setRoleName] = useState('');
     const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
     const [selectedInheritedRoles, setSelectedInheritedRoles] = useState<string[]>([]);
+
+    // Edit Member State
+    const [editingMember, setEditingMember] = useState<Member | null>(null);
+    const [selectedMemberRoles, setSelectedMemberRoles] = useState<string[]>([]);
 
     useEffect(() => {
         if (!activeProject) return;
@@ -87,15 +93,37 @@ export function MembersRolesTab() {
             setIsInviteModalOpen(false);
             setInviteInput('');
             setSelectedInviteRoles([]);
-            showToast('Invitation sent (Check server logs for token)', 'success');
+            fetchMembers();
+            showToast('Invitation sent successfully', 'success');
         } else {
             showToast('Failed to send invitation', 'error');
         }
     };
 
-    const handleCreateRole = async () => {
-        const res = await fetch(`/api/projects/${activeProject?.id}/roles`, {
-            method: 'POST',
+    const handleOpenEditRoleModal = (r: Role) => {
+        setEditingRole(r);
+        setRoleName(r.name);
+        setSelectedPermissions(r.permissions);
+        setSelectedInheritedRoles(r.included_roles || []);
+        setIsRoleModalOpen(true);
+    };
+
+    const handleCloseRoleModal = () => {
+        setIsRoleModalOpen(false);
+        setEditingRole(null);
+        setRoleName('');
+        setSelectedPermissions([]);
+        setSelectedInheritedRoles([]);
+    };
+
+    const handleSaveRole = async () => {
+        const url = editingRole 
+            ? `/api/projects/${activeProject?.id}/roles/${editingRole.id}`
+            : `/api/projects/${activeProject?.id}/roles`;
+        const method = editingRole ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+            method,
             headers: getHeaders(),
             body: JSON.stringify({
                 name: roleName,
@@ -103,15 +131,63 @@ export function MembersRolesTab() {
                 included_roles: selectedInheritedRoles
             })
         });
+
         if (res.ok) {
-            setIsRoleModalOpen(false);
-            setRoleName('');
-            setSelectedPermissions([]);
-            setSelectedInheritedRoles([]);
+            handleCloseRoleModal();
             fetchRoles();
-            showToast('Custom role created', 'success');
+            showToast(editingRole ? 'Custom role updated successfully' : 'Custom role created successfully', 'success');
         } else {
-            showToast('Failed to create role', 'error');
+            showToast(editingRole ? 'Failed to update custom role' : 'Failed to create custom role', 'error');
+        }
+    };
+
+    const handleDeleteCustomRole = async (roleId: string) => {
+        if (!confirm('Are you sure you want to delete this custom role? This will also remove it from any members.')) return;
+        const res = await fetch(`/api/projects/${activeProject?.id}/roles/${roleId}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        if (res.ok) {
+            fetchRoles();
+            fetchMembers();
+            showToast('Custom role deleted successfully', 'success');
+        } else {
+            showToast('Failed to delete custom role', 'error');
+        }
+    };
+
+    const handleOpenEditMemberModal = (m: Member) => {
+        setEditingMember(m);
+        setSelectedMemberRoles(m.roles);
+    };
+
+    const handleSaveMemberRoles = async () => {
+        if (!editingMember) return;
+        const res = await fetch(`/api/projects/${activeProject?.id}/members/${editingMember.id}`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify({ roles: selectedMemberRoles })
+        });
+        if (res.ok) {
+            setEditingMember(null);
+            fetchMembers();
+            showToast('Member roles updated successfully', 'success');
+        } else {
+            showToast('Failed to update member roles', 'error');
+        }
+    };
+
+    const handleRemoveMember = async (memberId: string) => {
+        if (!confirm('Are you sure you want to remove this member / invitation?')) return;
+        const res = await fetch(`/api/projects/${activeProject?.id}/members/${memberId}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        if (res.ok) {
+            fetchMembers();
+            showToast('Member/Invitation removed successfully', 'success');
+        } else {
+            showToast('Failed to remove member/invitation', 'error');
         }
     };
 
@@ -141,23 +217,33 @@ export function MembersRolesTab() {
                             <tr>
                                 <th>User</th>
                                 <th>Roles</th>
+                                <th style={{ textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {members.map(m => (
                                 <tr key={m.id}>
-                                    <td>{m.username || m.email}</td>
+                                    <td>
+                                        {m.username || m.email}
+                                        {m.is_pending && <span className="rbac-pending-badge">Invited</span>}
+                                    </td>
                                     <td>
                                         {m.roles.map(rid => {
                                             const role = roles.find(r => r.id === rid);
                                             return <span key={rid} className="rbac-role-badge">{role?.name || rid}</span>;
                                         })}
                                     </td>
+                                    <td>
+                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEditMemberModal(m)}>Edit Roles</button>
+                                            <button className="btn btn-danger btn-sm" onClick={() => handleRemoveMember(m.id)}>Remove</button>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                             {members.length === 0 && (
                                 <tr>
-                                    <td colSpan={2} className="rbac-empty-state">No members found.</td>
+                                    <td colSpan={3} className="rbac-empty-state">No members found.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -175,7 +261,14 @@ export function MembersRolesTab() {
                             <div key={r.id} className="rbac-role-card">
                                 <div className="rbac-role-card-header">
                                     <h4 className="rbac-role-card-title">{r.name}</h4>
-                                    {r.is_default && <span className="rbac-role-default-badge">Default</span>}
+                                    {r.is_default ? (
+                                        <span className="rbac-role-default-badge">Default</span>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleOpenEditRoleModal(r)}>Edit</button>
+                                            <button className="btn btn-danger btn-sm" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleDeleteCustomRole(r.id)}>Delete</button>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="rbac-role-stats">
                                     {r.permissions.length} permissions
@@ -183,7 +276,7 @@ export function MembersRolesTab() {
                                 </div>
                                 <div className="rbac-permissions-list">
                                     {r.permissions.map(p => (
-                                        <span key={p} className="rbac-permission-pill">{p.split(':')[1] || p}</span>
+                                        <span key={p} className="rbac-permission-pill" title={p}>{permissions[p] || p}</span>
                                     ))}
                                 </div>
                             </div>
@@ -194,7 +287,7 @@ export function MembersRolesTab() {
 
             {/* Invite Modal */}
             {isInviteModalOpen && (
-                <div className="modal-overlay">
+                <div className="modal-container">
                     <div className="rbac-modal-content invite-modal">
                         <h3 className="rbac-tab-title rbac-modal-title">Invite User</h3>
                         
@@ -236,11 +329,11 @@ export function MembersRolesTab() {
                 </div>
             )}
 
-            {/* Create Custom Role Modal */}
+            {/* Create / Edit Custom Role Modal */}
             {isRoleModalOpen && (
-                <div className="modal-overlay">
+                <div className="modal-container">
                     <div className="rbac-modal-content">
-                        <h3 className="rbac-tab-title rbac-modal-title">Create Custom Role</h3>
+                        <h3 className="rbac-tab-title rbac-modal-title">{editingRole ? 'Edit Custom Role' : 'Create Custom Role'}</h3>
                         
                         <div className="rbac-form-group">
                             <label className="rbac-form-label">Role Name</label>
@@ -256,7 +349,7 @@ export function MembersRolesTab() {
                         <div className="rbac-form-group">
                             <label className="rbac-form-label">Inherit from existing roles (Optional)</label>
                             <div className="rbac-checkbox-grid">
-                                {roles.map(r => (
+                                {roles.filter(r => !editingRole || r.id !== editingRole.id).map(r => (
                                     <label key={r.id} className="rbac-checkbox-item">
                                         <input 
                                             type="checkbox" 
@@ -295,8 +388,43 @@ export function MembersRolesTab() {
                         </div>
 
                         <div className="rbac-modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setIsRoleModalOpen(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleCreateRole} disabled={!roleName || (selectedPermissions.length === 0 && selectedInheritedRoles.length === 0)}>Create Role</button>
+                            <button className="btn btn-secondary" onClick={handleCloseRoleModal}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleSaveRole} disabled={!roleName || (selectedPermissions.length === 0 && selectedInheritedRoles.length === 0)}>
+                                {editingRole ? 'Save Changes' : 'Create Role'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Member Roles Modal */}
+            {editingMember && (
+                <div className="modal-container">
+                    <div className="rbac-modal-content invite-modal">
+                        <h3 className="rbac-tab-title rbac-modal-title">Edit Roles for {editingMember.username || editingMember.email}</h3>
+
+                        <div className="rbac-form-group">
+                            <label className="rbac-form-label">Select Roles</label>
+                            <div className="rbac-checkbox-grid rbac-checkbox-grid-scroll">
+                                {roles.map(r => (
+                                    <label key={r.id} className="rbac-checkbox-item">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedMemberRoles.includes(r.id)}
+                                            onChange={e => {
+                                                if (e.target.checked) setSelectedMemberRoles([...selectedMemberRoles, r.id]);
+                                                else setSelectedMemberRoles(selectedMemberRoles.filter(id => id !== r.id));
+                                            }}
+                                        />
+                                        <span>{r.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="rbac-modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setEditingMember(null)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleSaveMemberRoles} disabled={selectedMemberRoles.length === 0}>Save Changes</button>
                         </div>
                     </div>
                 </div>
