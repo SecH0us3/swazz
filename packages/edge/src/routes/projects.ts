@@ -3,6 +3,7 @@ import { Env } from '../env';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
+import { Project } from '../types';
 
 export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/projects', async (c) => {
@@ -14,7 +15,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
         JOIN project_members m ON p.id = m.project_id 
         WHERE m.user_id = ? 
         ORDER BY p.created_at DESC
-      `).bind(userId).all<{ id: string; name: string; description: string }>();
+      `).bind(userId).all<Project>();
   
       // Auto-create a default project if the user has none
       if (!results || results.length === 0) {
@@ -26,7 +27,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
             .bind(projectId, userId)
         ]);
         
-        const newProject = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<{ id: string; name: string; description: string }>();
+        const newProject = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<Project>();
         results = newProject ? [newProject] : [];
       }
   
@@ -44,8 +45,8 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const id = ulid();
     
     await c.env.DB.batch([
-      c.env.DB.prepare('INSERT INTO projects (id, name, description) VALUES (?, ?, ?)')
-        .bind(id, body.name, body.description || ''),
+      c.env.DB.prepare('INSERT INTO projects (id, name, description, url_mappings, ai_prompts, propose_fixes, custom_cli_command) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, body.name, body.description || '', body.url_mappings || null, body.ai_prompts || null, body.propose_fixes ? 1 : 0, body.custom_cli_command || null),
       c.env.DB.prepare('INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)')
         .bind(id, userId, 'owner')
     ]);
@@ -114,11 +115,23 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       if (!member || member.role !== 'owner') return c.json({ error: 'Forbidden' }, 403);
     }
   
-    await c.env.DB.prepare(
-      'UPDATE projects SET name = ?, description = ? WHERE id = ?'
-    )
-    .bind(body.name, body.description || '', projectId)
-    .run();
+    const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command'];
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        setClauses.push(`${field} = ?`);
+        values.push(field === 'propose_fixes' ? (body[field] ? 1 : 0) : body[field]);
+      }
+    }
+
+    if (setClauses.length > 0) {
+      values.push(projectId);
+      await c.env.DB.prepare(`UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?`)
+        .bind(...values)
+        .run();
+    }
   
     return c.json({ status: 'updated' });
   });

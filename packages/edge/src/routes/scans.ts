@@ -258,4 +258,60 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   
+  // ---------------------------------------------------------------------------
+  // Findings endpoints
+  // ---------------------------------------------------------------------------
+
+  app.get('/api/findings/:id', async (c) => {
+    const findingId = c.req.param('id');
+    const finding = await c.env.DB.prepare('SELECT * FROM findings WHERE id = ?')
+      .bind(findingId)
+      .first();
+  
+    if (!finding) {
+      return c.json({ error: 'Finding not found' }, 404);
+    }
+  
+    return c.json({ finding });
+  });
+
+  app.patch('/api/findings/:id', async (c) => {
+    const findingId = c.req.param('id');
+    const body = await c.req.json();
+  
+    const allowedFields = [
+      'ai_status',
+      'ai_relevance',
+      'ai_explanation',
+      'ai_remediation',
+      'ai_proposed_patch',
+      'pr_link'
+    ] as const;
+
+    const setClauses: string[] = [];
+    const values: (string | null)[] = [];
+  
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        setClauses.push(`${field} = ?`);
+        values.push(body[field]);
+      }
+    }
+  
+    if (setClauses.length === 0) {
+      return c.json({ error: 'No valid fields to update' }, 400);
+    }
+  
+    values.push(findingId);
+    await c.env.DB.prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
+      .bind(...values)
+      .run();
+  
+    const updated = await c.env.DB.prepare('SELECT * FROM findings WHERE id = ?')
+      .bind(findingId)
+      .first();
+  
+    return c.json({ finding: updated });
+  });
+  
 }
