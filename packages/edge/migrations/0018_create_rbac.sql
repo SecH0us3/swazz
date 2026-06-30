@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS project_invitations (
     token TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     expires_at DATETIME NOT NULL,
-    CHECK (email IS NOT NULL OR username IS NOT NULL)
+    CHECK (email IS NOT NULL OR username IS NOT NULL),
+    CHECK (json_valid(target_role_ids) AND json_array_length(target_role_ids) > 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON project_invitations(token);
