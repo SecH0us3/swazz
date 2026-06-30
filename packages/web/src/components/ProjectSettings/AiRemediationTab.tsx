@@ -55,6 +55,7 @@ export function AiRemediationTab() {
 
     const [expandedPrompt, setExpandedPrompt] = useState<'pass1_prompt' | 'pass2_prompt' | null>(null);
     const [showRulesModal, setShowRulesModal] = useState(false);
+    const [selectedTool, setSelectedTool] = useState<'claude' | 'agy' | 'custom'>('claude');
 
     useEffect(() => {
         if (activeProject) {
@@ -155,6 +156,16 @@ export function AiRemediationTab() {
         setAutoFixRules(JSON.stringify(newRules, null, 2));
     };
 
+    const getPlaceholder = (pass: 1 | 2) => {
+        if (selectedTool === 'claude') {
+            return pass === 1 ? 'claude -m haiku -p {{prompt_file}}' : 'claude -m sonnet -p {{prompt_file}}';
+        }
+        if (selectedTool === 'agy') {
+            return pass === 1 ? 'agy -m gemini-2.5-flash "{{prompt_file}}"' : 'agy -m gemini-2.5-pro "{{prompt_file}}"';
+        }
+        return 'your-cli-command "{{prompt_file}}"';
+    };
+
     return (
         <div className="card settings-card">
             <h2 className="settings-header">
@@ -176,6 +187,20 @@ export function AiRemediationTab() {
                     </span>
                 </div>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'var(--space-4)' }}>
+                    <label className="settings-label" style={{ margin: 0 }}>Preferred AI Tool:</label>
+                    <select 
+                        className="input" 
+                        value={selectedTool} 
+                        onChange={(e) => setSelectedTool(e.target.value as any)}
+                        style={{ width: '250px', padding: '6px 12px' }}
+                    >
+                        <option value="claude">Anthropic Claude CLI</option>
+                        <option value="agy">Google Antigravity CLI (agy)</option>
+                        <option value="custom">Custom CLI</option>
+                    </select>
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginTop: 'var(--space-4)', padding: 'var(--space-4)', background: 'rgba(0,0,0,0.1)', borderRadius: 'var(--radius-md)' }}>
                     <h3 style={{ margin: 0, fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Pass 1: Triage Model (Fast / Cheap)</h3>
                     <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
@@ -187,7 +212,7 @@ export function AiRemediationTab() {
                         <input 
                             type="text" 
                             className="input settings-input-full" 
-                            placeholder="claude -m haiku -p {{prompt_file}}"
+                            placeholder={getPlaceholder(1)}
                             value={aiPrompts.pass1_cmd} 
                             onChange={(e) => updatePromptField('pass1_cmd', e.target.value)}
                             style={{ fontFamily: 'monospace' }} 
@@ -226,7 +251,7 @@ export function AiRemediationTab() {
                         <input 
                             type="text" 
                             className="input settings-input-full" 
-                            placeholder="claude -m sonnet -p {{prompt_file}}"
+                            placeholder={getPlaceholder(2)}
                             value={aiPrompts.pass2_cmd} 
                             onChange={(e) => updatePromptField('pass2_cmd', e.target.value)}
                             style={{ fontFamily: 'monospace' }} 
