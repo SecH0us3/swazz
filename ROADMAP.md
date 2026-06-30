@@ -77,7 +77,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
     - Research using KV for keeping track of active runner heartbeat state to avoid Durable Object lookups.
 
-- [ ] **Task 87: Project Invitations and Collaboration (via Email/Username)**
+- [x] **Task 87: Project Invitations and Collaboration (via Email/Username)**
   - **Design Goal:** Enable multi-user collaboration inside projects by allowing project owners to invite other users to join their projects with structured Role-Based Access Control (RBAC).
   - **Implementation Details:**
     - Define a formal permission set mapping combinations of HTTP Verbs and Endpoint paths (e.g., `READ: /api/projects/:id/runs`, `WRITE: /api/projects/:id/settings`).
@@ -152,18 +152,42 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Move the GitHub link and the hotkeys help menu to the footer.
     - Create an "About the project" page and add a link to it in the footer.
 
-- [ ] **Task 104: UI/UX Right Column Cleanup**
+- [x] **Task 104: UI/UX Right Column Cleanup**
   - **Design Goal:** Review and declutter the right-hand column/sidebar of the UI.
   - **Implementation Details:**
     - Identify controls in the right column that are redundant or rarely used.
     - Move these rarely used controls exclusively to the Project Settings page to streamline the main workspace view.
 
-- [ ] **Task 105: Automated Project Swagger Generation**
-  - **Design Goal:** Each project should have its own automatically generated Swagger/OpenAPI documentation. In the future, this will allow Swazz to test the project's API directly.
+- [ ] **Task 106: Streamline Scan Progress Header Panel**
+  - **Design Goal:** Reduce the height of the top header panel that displays the scan progress, as it currently consumes too much vertical space.
   - **Implementation Details:**
-    - Generate dynamic OpenAPI specifications for user projects.
-    - Expose a UI element to view the auto-generated Swagger UI.
-    - Build the foundation for automated fuzzing driven by this generated spec.
+    - Streamline layout and typography of the active scan header, merging metadata into compact badges.
+
+- [ ] **Task 107: Scans History Tab Layout Reorganization**
+  - **Design Goal:** Redesign the scans history list to use a tabbed interface for clearer navigation and visual organization.
+  - **Implementation Details:**
+    - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
+
+- [ ] **Task 108: Multi-Scan Comparison Mode**
+  - **Design Goal:** Implement a comparison view allowing users to select and compare finding statistics, coverage metrics, and diffs between two separate scans.
+  - **Implementation Details:**
+    - Design a comparison utility to side-by-side analyze changes, new findings, and fixed issues between scan runs.
+
+- [ ] **Task 109: Project Settings API Specifications Sub-Tab**
+  - **Design Goal:** Duplicate API specs configurations and import tools directly into the project settings menu for improved target configuration.
+  - **Implementation Details:**
+    - Add a sub-tab under Project Settings to view, edit, and upload API specs (Swagger/HAR/Postman).
+
+- [ ] **Task 110: RBAC Guest Role Restrictive Policy**
+  - **Design Goal:** Enforce strict RBAC constraints on guest/viewer roles, disabling member and role modification permissions in both the UI elements and the Edge coordinator API.
+  - **Implementation Details:**
+    - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
+
+- [ ] **Task 111: Fix Logo Alignment in Authenticated Header**
+  - **Design Goal:** Adjust header layout alignments to fix the logo image displacement that occurs when a user is logged in.
+  - **Implementation Details:**
+    - Fix the CSS styling rules in the header component for logo placement under authenticated user states.
+
 
 
 

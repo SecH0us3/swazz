@@ -8,6 +8,8 @@ import { WordlistsTab } from './ProjectSettings/WordlistsTab.js';
 import { ChainingTab } from './ProjectSettings/ChainingTab.js';
 import { RawConfigTab } from './ProjectSettings/RawConfigTab.js';
 import { MembersRolesTab } from './ProjectSettings/MembersRolesTab.js';
+import { DictionariesTab } from './ProjectSettings/DictionariesTab.js';
+
 
 interface Runner {
     connectionId: string | null;
@@ -20,7 +22,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'raw_config'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'raw_config'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -153,6 +155,17 @@ export function ProjectSettings() {
                         Wordlist Files
                     </button>
                     <button
+                        className={`tab-bar-btn ${activeSubTab === 'dictionaries' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('dictionaries')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        </svg>
+                        Fuzzing Dictionaries
+                    </button>
+
+                    <button
                         className={`tab-bar-btn ${activeSubTab === 'chaining' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('chaining')}
                     >
@@ -198,7 +211,9 @@ export function ProjectSettings() {
                     {activeSubTab === 'performance' && <PerformanceTab />}
                     {activeSubTab === 'anomalies' && <AnomaliesTab />}
                     {activeSubTab === 'wordlists' && <WordlistsTab />}
+                    {activeSubTab === 'dictionaries' && <DictionariesTab />}
                     {activeSubTab === 'chaining' && <ChainingTab />}
+
                     {activeSubTab === 'runners' && (
                         <RunnersTab 
                             runners={runners} 
