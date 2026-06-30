@@ -119,6 +119,89 @@ export function ConfigSidebar({
                 />
             </Section>
 
+            {/* BOLA / Multi-Identity */}
+            <Section title="BOLA / Multi-Identity" count={config.settings.bola_testing ? 1 : 0}>
+                <label className="premium-checkbox-label">
+                    <input
+                        type="checkbox"
+                        className="premium-checkbox"
+                        checked={config.settings.bola_testing ?? false}
+                        onChange={() => onUpdateConfig({
+                            settings: {
+                                ...config.settings,
+                                bola_testing: !(config.settings.bola_testing ?? false)
+                            }
+                        })}
+                    />
+                    <strong style={{ fontSize: 'var(--font-size-sm)' }}>Enable BOLA Checking</strong>
+                </label>
+                <div className="bola-description">
+                    Compare primary user endpoints against credentials of User B to detect access control bypasses.
+                </div>
+
+                {(config.settings.bola_testing ?? false) && (
+                    <div className="bola-editors-container">
+                        {/* Lock warning */}
+                        {(!config.settings.auth_headers || config.settings.auth_headers.length === 0) &&
+                         (!config.settings.auth_cookies || config.settings.auth_cookies.length === 0) && (
+                            <div className="bola-warning-box">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="bola-warning-icon">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                                <span>No authentication credentials marked above. Click headers/cookies lock icons to identify tokens to switch.</span>
+                            </div>
+                        )}
+
+                        {/* User B Card */}
+                        <div className="bola-identity-card">
+                            <div className="bola-identity-badge">User B (Secondary)</div>
+                            
+                            <div className="bola-sub-title-top">Headers (User B)</div>
+                            <KVEditor
+                                entries={config.auth_identities?.userB?.headers || {}}
+                                onChange={(h) => {
+                                    const currentIdentities = config.auth_identities || {};
+                                    const currentB = currentIdentities.userB || { headers: {}, cookies: {} };
+                                    onUpdateConfig({
+                                        auth_identities: {
+                                            ...currentIdentities,
+                                            userB: {
+                                                ...currentB,
+                                                headers: h
+                                            }
+                                        }
+                                    });
+                                }}
+                                keyPlaceholder="Header"
+                                valuePlaceholder="Value"
+                            />
+
+                            <div className="bola-sub-title">Cookies (User B)</div>
+                            <KVEditor
+                                entries={config.auth_identities?.userB?.cookies || {}}
+                                onChange={(c) => {
+                                    const currentIdentities = config.auth_identities || {};
+                                    const currentB = currentIdentities.userB || { headers: {}, cookies: {} };
+                                    onUpdateConfig({
+                                        auth_identities: {
+                                            ...currentIdentities,
+                                            userB: {
+                                                ...currentB,
+                                                cookies: c
+                                            }
+                                        }
+                                    });
+                                }}
+                                keyPlaceholder="Name"
+                                valuePlaceholder="Value"
+                            />
+                        </div>
+                    </div>
+                )}
+            </Section>
+
             <div style={{ padding: '16px 0 0 0', borderTop: '1px solid var(--border-default)', marginTop: '16px', display: 'flex', flexDirection: 'column' }}>
                 <button
                     className="btn btn-secondary"

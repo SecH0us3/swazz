@@ -22,16 +22,23 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await expect(sidebar.locator('text=Profiles')).toBeVisible();
     await expect(sidebar.locator('text=Headers (User A / Primary Session)')).toBeVisible();
     await expect(sidebar.locator('text=Cookies (User A / Primary Session)')).toBeVisible();
+    await expect(sidebar.locator('text=BOLA / Multi-Identity')).toBeVisible();
 
     // ConfigSidebar must NOT contain old redundant/moved sections
     await expect(sidebar.locator('text=Config')).not.toBeVisible();
     await expect(sidebar.locator('text=Import Config')).not.toBeVisible();
     await expect(sidebar.locator('text=Export Config')).not.toBeVisible();
     await expect(sidebar.locator('text=Intensity')).not.toBeVisible();
-    await expect(sidebar.locator('text=BOLA / Multi-Identity')).not.toBeVisible();
     await expect(sidebar.locator('text=Dictionaries')).not.toBeVisible();
     await expect(sidebar.locator('text=Concurrency')).not.toBeVisible();
     await expect(sidebar.locator('text=Timeout (ms)')).not.toBeVisible();
+
+    // Toggle BOLA in sidebar
+    const bolaCheckboxSidebar = sidebar.locator('label:has-text("Enable BOLA Checking") >> input[type="checkbox"]');
+    await expect(bolaCheckboxSidebar).toBeVisible();
+    await bolaCheckboxSidebar.check();
+    await expect(bolaCheckboxSidebar).toBeChecked();
+    await expect(sidebar.locator('text=User B (Secondary)')).toBeVisible();
 
     // 3. Navigate to More Project Settings
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -51,19 +58,20 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await expect(page.locator('label:has-text("Enable Rate Limit Detection")')).toBeVisible();
     await expect(page.locator('label:has-text("HAR Domain Filter")')).toBeVisible();
 
-    // 5. Verify "Anomalies & Security" tab has the moved BOLA identity config
+    // 5. Verify "Anomalies & Security" tab has the BOLA identity config
     const anomaliesTabBtn = page.locator('button.tab-bar-btn:has-text("Anomalies & Security")');
     await expect(anomaliesTabBtn).toBeVisible();
     await anomaliesTabBtn.click();
 
     const bolaCheckbox = page.locator('label:has-text("Enable Broken Object Level Authorization (BOLA) checking") >> input[type="checkbox"]');
     await expect(bolaCheckbox).toBeVisible();
+
     await bolaCheckbox.check();
     await expect(bolaCheckbox).toBeChecked();
 
-    // User B identity card should appear now
-    await expect(page.locator('text=User B (Secondary)')).toBeVisible();
-    await expect(page.locator('text=Headers (User B)')).toBeVisible();
+    // User B identity card should appear now in settings content
+    await expect(page.locator('.project-settings-content').locator('text=User B (Secondary)')).toBeVisible();
+    await expect(page.locator('.project-settings-content').locator('text=Headers (User B)')).toBeVisible();
 
     // 6. Verify "Fuzzing Dictionaries" tab has Custom Fuzzing Dictionaries JSON and help text
     const dictionariesTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing Dictionaries")');
