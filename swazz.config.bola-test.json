@@ -34,6 +34,8 @@
   "settings": {
     "iterations_per_profile": 1,
     "concurrency": 1,
+    "max_nodes_budget": 50000,
+    "max_depth_limit": 64,
     "profiles": ["RANDOM"],
     "bola_testing": true,
     "auth_headers": ["Authorization"],

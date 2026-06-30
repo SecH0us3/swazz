@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
+import { requirePermission } from '../middleware/rbac';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
 import { Project } from '../types';
@@ -24,6 +25,8 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
           c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
             .bind(projectId),
           c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+            .bind(projectId, userId),
+          c.env.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
             .bind(projectId, userId)
         ]);
         
@@ -48,23 +51,16 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       c.env.DB.prepare('INSERT INTO projects (id, name, description, url_mappings, ai_prompts, propose_fixes, custom_cli_command) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .bind(id, body.name, body.description || '', body.url_mappings || null, body.ai_prompts || null, body.propose_fixes ? 1 : 0, body.custom_cli_command || null),
       c.env.DB.prepare('INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)')
+        .bind(id, userId, 'owner'),
+      c.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)')
         .bind(id, userId, 'owner')
     ]);
   
     return c.json({ id, status: 'created' });
   });
   
-  app.get('/api/projects/:id/config', async (c) => {
+  app.get('/api/projects/:id/config', requirePermission('get:/api/projects/:id/config'), async (c) => {
     const projectId = c.req.param('id');
-    const userId = await getUserIdFromRequest(c);
-    if (userId) {
-      const member = await c.env.DB.prepare(
-        'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?'
-      )
-      .bind(projectId, userId)
-      .first();
-      if (!member) return c.json({ error: 'Forbidden' }, 403);
-    }
   
     const result = await c.env.DB.prepare(
       "SELECT config_json FROM scan_configs WHERE project_id = ? AND name = 'default'"
@@ -78,18 +74,9 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ config: JSON.parse(result.config_json) });
   });
   
-  app.post('/api/projects/:id/config', async (c) => {
+  app.post('/api/projects/:id/config', requirePermission('post:/api/projects/:id/config'), async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json();
-    const userId = await getUserIdFromRequest(c);
-    if (userId) {
-      const member = await c.env.DB.prepare(
-        'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?'
-      )
-      .bind(projectId, userId)
-      .first();
-      if (!member) return c.json({ error: 'Forbidden' }, 403);
-    }
   
     const configJson = JSON.stringify(body.config);
     const id = ulid();
@@ -102,18 +89,9 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'saved' });
   });
   
-  app.patch('/api/projects/:id', async (c) => {
+  app.patch('/api/projects/:id', requirePermission('patch:/api/projects/:id'), async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json();
-    const userId = await getUserIdFromRequest(c);
-    if (userId) {
-      const member = await c.env.DB.prepare(
-        'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
-      )
-      .bind(projectId, userId)
-      .first<{ role: string }>();
-      if (!member || member.role !== 'owner') return c.json({ error: 'Forbidden' }, 403);
-    }
   
     const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command', 'auto_fix_rules'];
     const setClauses: string[] = [];
@@ -136,17 +114,8 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'updated' });
   });
   
-  app.delete('/api/projects/:id', async (c) => {
+  app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), async (c) => {
     const projectId = c.req.param('id');
-    const userId = await getUserIdFromRequest(c);
-    if (userId) {
-      const member = await c.env.DB.prepare(
-        'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
-      )
-      .bind(projectId, userId)
-      .first<{ role: string }>();
-      if (!member || member.role !== 'owner') return c.json({ error: 'Forbidden' }, 403);
-    }
   
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectId),

@@ -138,7 +138,8 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-severity error
+        --fail-on-severity error \
+        --progress-on-change
   artifacts:
     when: always
     reports:
@@ -168,7 +169,8 @@ swazz-fuzz:
       ./swazz-engine start \
         --config ../../swazz.config.json \
         --sarif  swazz.sarif \
-        --fail-on-severity error
+        --fail-on-severity error \
+        --progress-on-change
   artifacts:
     when: always
     paths:
@@ -194,6 +196,9 @@ convert-sast:
 ```
 
 > **Supply-chain note:** In both options above, base images are pinned to specific SHA-256 digests (`golang@sha256:...` and `sarif-converter@sha256:...`) to defend against supply-chain compromise. Always verify these digests when updating CI dependencies.
+
+> [!TIP]
+> Use the `--progress-on-change` flag in CI environments like GitLab. This prints a single clean progress line only when the active fuzzing endpoint changes, preventing the multi-line interactive terminal progress bar from spamming and cluttering the pipeline log.
 
 ### Validating and Testing GitLab Configurations
 
@@ -287,7 +292,7 @@ Running a fuzzer in CI requires a slightly different configuration profile than 
 | `iterations_per_profile` | `1` | One iteration per profile is enough for a CI signal; exhaustive testing belongs in nightly scheduled runs. |
 | `concurrency` | `5–10` | Keeps the test server responsive; prevents false timeouts from self-inflicted overload. |
 | `timeout_ms` | `3000` | Low enough to catch hanging endpoints quickly; high enough to avoid noise from slow CI runners. |
-| `endpoints.exclude` | `/health`, `/metrics`, `/readyz` | Probes are not business logic — exclude them to keep the findings signal clean. |
+| `endpoints.exclude` | `/health`, `/metrics`, `/readyz` | Probes are not business logic — exclude them to keep the findings signal clean. Matching is case-insensitive and supports glob wildcards (`*` and `**`). |
 | `rules.ignore` | `401`, `403`, `404`, `405`, `429` | Expected defensive responses are not findings. |
 
 ### Supply Chain Security (Commit-Level Pinning)
@@ -352,6 +357,8 @@ Swazz emits SARIF 2.1.0. Each result has a `ruleId` that maps to a specific find
 | `swazz/status-2xx` (e.g., `swazz/status-200`) | A 2xx was returned for a normally-ignored code. May indicate a logic flaw where a malicious payload was accepted. | **warning** |
 | `swazz/timeout` | The request exceeded `timeout_ms`. Possible DoS vector or resource exhaustion. | **error** |
 | `swazz/network-error` | The request failed at the network layer (connection refused, DNS failure). | **error** |
+| `swazz/csp-missing` | Missing Content Security Policy (CSP) header on HTML responses. | **warning** |
+| `swazz/csp-unsafe-directive` | Overly permissive or insecure CSP directive (e.g. `'unsafe-inline'`, `'unsafe-eval'`, or `*`). | **error** |
 
 These rule IDs are surfaced in the GitHub Code Scanning UI under **Security → Code scanning alerts**, grouped by rule and filterable by severity.
 

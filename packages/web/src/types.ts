@@ -134,6 +134,13 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
 
 // ─── Full Config ────────────────────────────────────────
 
+export interface IgnoreRule {
+    rule_id?: string;
+    endpoint?: string;
+    method?: string;
+    payload?: string;
+}
+
 export interface SwazzConfig {
     base_url: string;
     global_headers: Record<string, string>;
@@ -151,6 +158,9 @@ export interface SwazzConfig {
     };
     rules?: {
         ignore?: number[];
+        severity?: Record<string, string>;
+        defaults?: Record<string, string>;
+        ignore_rules?: IgnoreRule[];
     };
     /** Project this scan belongs to. Stripped before sending to the Go agent. */
     projectId?: string;

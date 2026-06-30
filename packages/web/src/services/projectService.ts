@@ -1,4 +1,6 @@
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
+import { useAppStore } from '../store/appStore.js';
+
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export interface Project {
     id: string;
@@ -27,6 +29,10 @@ export async function createProject(name: string): Promise<{ id: string; status:
     };
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
+    }
+    const csrfToken = useAppStore.getState().csrfToken;
+    if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
     }
     const res = await fetch(`${PROXY_URL}/api/projects`, {
         method: 'POST',

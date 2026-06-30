@@ -1,6 +1,9 @@
 package swagger
 
-import "net/http"
+import (
+	"net/http"
+	"regexp"
+)
 
 // FuzzingProfile represents the type of payload generation strategy.
 type FuzzingProfile string
@@ -58,9 +61,19 @@ type Config struct {
 
 // RulesConfig configures how results are classified.
 type RulesConfig struct {
-	Ignore   []int             `json:"ignore,omitempty"`
-	Severity map[string]string `json:"severity,omitempty"` // map status code or range (e.g. "5xx") to severity
-	Defaults map[string]string `json:"defaults,omitempty"`
+	Ignore      []int             `json:"ignore,omitempty"`
+	Severity    map[string]string `json:"severity,omitempty"` // map status code or range (e.g. "5xx") to severity
+	Defaults    map[string]string `json:"defaults,omitempty"`
+	IgnoreRules []IgnoreRule      `json:"ignore_rules,omitempty"`
+}
+
+// IgnoreRule defines matching criteria to suppress false positive or noise findings.
+type IgnoreRule struct {
+	RuleID    string         `json:"rule_id,omitempty"`
+	Endpoint  string         `json:"endpoint,omitempty"`
+	Method    string         `json:"method,omitempty"`
+	Payload   string         `json:"payload,omitempty"`
+	PayloadRx *regexp.Regexp `json:"-"`
 }
 
 // AuthStep describes a request to be made before fuzzing to establish a session.
@@ -102,8 +115,12 @@ type Settings struct {
 	BOLASimilarityThreshold       float64                     `json:"bola_similarity_threshold"`
 	AuthHeaders                   []string                    `json:"auth_headers,omitempty"`
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
+	AuthProbeURL                  string                      `json:"auth_probe_url,omitempty"`
 	ChainingRules                 []ChainingRule              `json:"chaining_rules,omitempty"`
+
 	HarDomainFilter               string                      `json:"har_domain_filter,omitempty"`
+	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
+	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -124,6 +141,8 @@ func DefaultSettings() Settings {
 		BOLASimilarityThreshold:       0.85,
 		AuthHeaders:                   []string{"Authorization", "X-API-Key"},
 		AuthCookies:                   []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"},
+		MaxNodesBudget:                50000,
+		MaxDepthLimit:                 64,
 	}
 }
 

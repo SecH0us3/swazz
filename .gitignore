@@ -13,6 +13,7 @@ packages/container/web/dist/*
 .idea/
 *.swp
 *.swo
+*.bak
 *~
 
 # OS
@@ -68,3 +69,10 @@ packages/web/public/llms-full.txt
 
 # Temporary scratch directory
 scratch/
+
+# Playwright test results & reports
+test-results/
+playwright-report/
+
+# Agent customizations/skills
+.agents/skills/ui-ux-pro-max/

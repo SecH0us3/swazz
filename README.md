@@ -14,12 +14,22 @@
 
 ---
 
+## 📺 Live Demo Walkthrough
+
+Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, fuzzes target endpoints, expands grouped findings, inspects a detailed SQL Injection error with mutation diff, and navigates project and user settings:
+
+<p align="center">
+  <video src="./docs/assets/swazz_demo.webm" width="800" controls autoplay muted loop></video>
+</p>
+
+---
+
 ## 🚀 Key Features
 
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
 - **🔄 Zero-Setup HAR Replay**: Import browser `.har` files directly for instant fuzzing of undocumented APIs and real-world workflows without needing an OpenAPI spec.
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
-- **🛡️ Compliance Mapping**: Automatically map all discovered vulnerabilities to the **OWASP API Security Top 10 (2023)** standard in reports and the Web Dashboard.
+- **🛡️ Compliance Mapping**: Automatically map all discovered vulnerabilities to the **OWASP Top 10 (2025)** standard in reports and the Web Dashboard.
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
 - **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
@@ -56,6 +66,14 @@ docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config 
 ```
 
 If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
+
+#### Cloudflare Pages Frontend & External Backend (GCP / Cloud)
+If you run the backend container on a cloud platform like GCP (Google Cloud Platform), you can host the client dashboard on Cloudflare Pages and proxy API requests to the cloud container.
+
+To configure this:
+1. Deploy the frontend to Cloudflare Pages using `npm run deploy:web`.
+2. Configure the `API_URL` environment variable (or variable binding in your Cloudflare Pages dashboard) to point to your GCP backend instance (e.g., `https://swazz-api.yourdomain.com`).
+3. The Cloudflare Pages worker will automatically proxy `/api/*` and `/health` requests to the configured `API_URL` to avoid CORS issues.
 
 ### Build from Source
 ```bash
@@ -111,6 +129,25 @@ Swazz can extract variables from previous responses and inject them into subsequ
 If you want to quickly test Swazz's capabilities, we provide a built-in vulnerable API simulated as a Cloudflare Worker in the `demo/` folder.
 > **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (like SQL injection) for testing Swazz. It should **NOT** be used in production or audited for security issues.
 
+### 6. End-to-End (E2E) Browser Testing
+We have a suite of Playwright E2E browser automation tests that verify integration between the frontend dashboard, the Cloudflare coordinator, the Go runner agent, and the Vulnerable Demo API.
+
+To run Playwright tests locally:
+```bash
+# Apply migrations for local D1 coordinator DB
+npx --workspace=packages/edge wrangler d1 migrations apply swazz_db --local
+
+# Start services (run each in background or separate shell session)
+npm run dev --prefix demo -- --port 8788
+npm run dev:backend
+npm run dev:frontend
+cd packages/container && go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --dangerous-no-container
+
+# Run the test suite
+npx playwright install chromium
+npm run test:e2e
+```
+
 ---
 
 ## 🔄 CI/CD Integration
@@ -126,7 +163,7 @@ For detailed setup instructions, including advanced configuration, caching, and 
 
 ## ⚙️ Configuration Example
 
-`swazz` uses a flexible JSON configuration for fine-grained control:
+`swazz` uses a flexible JSONC configuration (JSON with comments) for fine-grained control, allowing both single-line (`//`) and multi-line (`/* */`) comments:
 
 ```json
 {
@@ -163,7 +200,7 @@ For detailed setup instructions, including advanced configuration, caching, and 
 
 ## 🙈 Ignore Rules & Suppressions
 
-To suppress false positives and filter noisy findings, Swazz supports ignore rules. You can triage findings in the Web Dashboard and download the rules config, or manually create `swazz.ignore.json` in your project root.
+To suppress false positives and filter noisy findings, Swazz supports ignore rules. You can triage findings in the Web Dashboard and download the rules config, or manually create `swazz.ignore.json` (which also supports JSONC comments) in your project root.
 
 ### Example `swazz.ignore.json`
 
@@ -197,6 +234,14 @@ To suppress false positives and filter noisy findings, Swazz supports ignore rul
 
 Comprehensive documentation, including installation guides, usage instructions, and architecture details, is available at the [Official Swazz Documentation](https://SecH0us3.github.io/swazz/).
 
+Key pages to explore:
+*   [Installation Guide](docs/installation.md)
+*   [Deployment Guidelines](docs/deployment.md)
+*   [Usage & Configuration](docs/usage.md)
+*   [CI/CD Integration Guide](docs/ci_cd.md)
+*   [Architecture & Internals](docs/architecture.md)
+*   [Security Review & Threat Model](docs/security_review.md)
+
 ---
 
 ## 🧩 Adding Custom Error Detectors
@@ -222,6 +267,12 @@ The engine automatically runs these rules against all HTTP responses and routes 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 🔒 Privacy & Data Deletion (GDPR)
+
+Swazz supports self-service data deletion. Users can permanently and immediately delete their account, associated projects, scan histories, scan report files, and active runner connections directly from the **Danger Zone** section in the **Settings** panel. This ensures compliance with GDPR "Right to be Forgotten" policies.
 
 ---
 

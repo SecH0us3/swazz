@@ -44,6 +44,7 @@ export interface StatsSlice {
     historyStats: RunStats | null;
     isRunning: boolean;
     isPaused: boolean;
+    isQueued: boolean;
     isLoadingSpecs: boolean;
     specCacheDates: Record<string, string>;
 }
@@ -53,16 +54,21 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
     historyStats: null,
     isRunning: false,
     isPaused: false,
+    isQueued: false,
     isLoadingSpecs: false,
     specCacheDates: {},
 });
 
 export interface UserSlice {
-    userProfile: { username: string; apiKey: string; publicKey?: string | null } | null;
+    userProfile: { username: string; apiKey: string; publicKey?: string | null; isGuest?: boolean; deleteRequestedAt?: string | null; twoFactorEnabled?: boolean } | null;
+    csrfToken: string | null;
+    turnstileSiteKey: string | null;
 }
 
 const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
     userProfile: null,
+    csrfToken: null,
+    turnstileSiteKey: null,
 });
 
 export interface ProjectSlice {

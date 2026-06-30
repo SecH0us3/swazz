@@ -78,7 +78,139 @@ export default {
     }
 
     try {
+      if (method === "GET" && path === "/demo.har") {
+        const harData = {
+          log: {
+            version: "1.2",
+            creator: {
+              name: "Swazz HAR Generator",
+              version: "1.0"
+            },
+            pages: [],
+            entries: [
+              {
+                startedDateTime: "2026-06-21T12:00:00.000Z",
+                time: 25,
+                request: {
+                  method: "GET",
+                  url: "http://127.0.0.1:8788/welcome",
+                  httpVersion: "HTTP/1.1",
+                  headers: [],
+                  queryString: [],
+                  cookies: [],
+                  headersSize: -1,
+                  bodySize: -1
+                },
+                response: {
+                  status: 200,
+                  statusText: "OK",
+                  httpVersion: "HTTP/1.1",
+                  headers: [],
+                  cookies: [],
+                  content: {
+                    size: 22,
+                    mimeType: "text/html"
+                  },
+                  redirectURL: "",
+                  headersSize: -1,
+                  bodySize: -1
+                },
+                cache: {},
+                timings: {
+                  send: 0,
+                  wait: 25,
+                  receive: 0
+                }
+              },
+              {
+                startedDateTime: "2026-06-21T12:00:01.000Z",
+                time: 30,
+                request: {
+                  method: "GET",
+                  url: "http://127.0.0.1:8788/users",
+                  httpVersion: "HTTP/1.1",
+                  headers: [],
+                  queryString: [],
+                  cookies: [],
+                  headersSize: -1,
+                  bodySize: -1
+                },
+                response: {
+                  status: 200,
+                  statusText: "OK",
+                  httpVersion: "HTTP/1.1",
+                  headers: [],
+                  cookies: [],
+                  content: {
+                    size: 150,
+                    mimeType: "application/json"
+                  },
+                  redirectURL: "",
+                  headersSize: -1,
+                  bodySize: -1
+                },
+                cache: {},
+                timings: {
+                  send: 0,
+                  wait: 30,
+                  receive: 0
+                }
+              },
+              {
+                startedDateTime: "2026-06-21T12:00:02.000Z",
+                time: 15,
+                request: {
+                  method: "GET",
+                  url: "http://127.0.0.1:8788/api/goods",
+                  httpVersion: "HTTP/1.1",
+                  headers: [],
+                  queryString: [
+                    {
+                      name: "limit",
+                      value: "10"
+                    }
+                  ],
+                  cookies: [],
+                  headersSize: -1,
+                  bodySize: -1
+                },
+                response: {
+                  status: 401,
+                  statusText: "Unauthorized",
+                  httpVersion: "HTTP/1.1",
+                  headers: [],
+                  cookies: [],
+                  content: {
+                    size: 12,
+                    mimeType: "text/plain"
+                  },
+                  redirectURL: "",
+                  headersSize: -1,
+                  bodySize: -1
+                },
+                cache: {},
+                timings: {
+                  send: 0,
+                  wait: 15,
+                  receive: 0
+                }
+              }
+            ]
+          }
+        };
+        return new Response(JSON.stringify(harData), {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
+      }
+
       if (method === "GET" && path === "/swagger.json") {
+        // Reset rateLimitCounter to ensure test runs have a clean start
+        const g = globalThis as any;
+        g.rateLimitCounter = 0;
+
         const swagger = {
           openapi: "3.0.0",
           info: {
@@ -270,6 +402,19 @@ export default {
                 responses: {
                   "200": {
                     description: "Secure goods detail"
+                  }
+                }
+              }
+            },
+            "/api/limited": {
+              get: {
+                summary: "Get a rate-limited resource",
+                responses: {
+                  "200": {
+                    description: "Success"
+                  },
+                  "429": {
+                    description: "Too Many Requests"
                   }
                 }
               }
@@ -622,6 +767,27 @@ export default {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         }
+      }
+
+      if (method === "GET" && path === "/api/limited") {
+        // Use global/persistent namespace variable or environment object to track request count.
+        // Since Cloudflare worker instance can be shared or recycled, we can bind to global variable on worker.
+        // Let's declare a global counter object outside fetch if possible, or bind it to globalThis.
+        const g = globalThis as any;
+        g.rateLimitCounter = (g.rateLimitCounter || 0) + 1;
+        if (g.rateLimitCounter > 20) {
+          return new Response(JSON.stringify({ error: "Too Many Requests", retryAfter: 1 }), {
+            status: 429,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+              "Retry-After": "1"
+            }
+          });
+        }
+        return new Response(JSON.stringify({ status: "ok", count: g.rateLimitCounter }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
       }
 
       return new Response("Not Found", { status: 404, headers: corsHeaders });

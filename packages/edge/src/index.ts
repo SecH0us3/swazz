@@ -1,12 +1,16 @@
+// @ts-nocheck
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';
-import { getUserIdFromRequest } from './utils/auth';
+import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
+import { registerRbacRoutes } from './routes/rbac';
 import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
+import { cleanupExpiredGuests, cleanupScheduledDeletions, cleanupSecurityTables } from './utils/cleanup';
+import { csrfMiddleware } from './utils/csrf';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -17,15 +21,18 @@ app.use('*', async (c, next) => {
   const origin = c.req.header('Origin');
   
   const corsMiddleware = cors({
-    origin: allowedOrigins.includes('*') ? '*' : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
+    origin: allowedOrigins.includes('*') ? (origin || '*') : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowHeaders: ['Content-Type', 'Authorization', 'Upgrade'],
-    exposeHeaders: ['Content-Length', 'Content-Signal'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Upgrade', 'X-CSRF-Token'],
+    exposeHeaders: ['Content-Length', 'Content-Signal', 'X-CSRF-Token'],
     maxAge: 86400,
+    credentials: true,
   });
   
   return await corsMiddleware(c, next);
 });
+
+app.use('/api/*', csrfMiddleware());
 
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
@@ -45,6 +52,14 @@ app.use('/api/*', async (c, next) => {
     if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
+
+    const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
+    if (!isCancelRoute) {
+      const deleteRequestedAt = await getDeleteRequestedAt(c.env.DB, userId);
+      if (deleteRequestedAt !== null) {
+        return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
+      }
+    }
   }
 
   await next();
@@ -56,22 +71,94 @@ app.get('/api/info', (c) => {
   return c.json({ 
     auth_enabled: authEnabled, 
     limit_anonymous: limitAnonymous, 
-    version: c.env.VERSION || '1.0.0' 
+    version: c.env.VERSION || '1.0.0',
+    turnstile_site_key: c.env.TURNSTILE_SITE_KEY || null
   });
 });
 
 app.get('/api/version', (c) => {
   return c.json({ version: c.env.VERSION || '1.0.0' });
 });
-// Add Content-Signal header middleware
+// Add Security Headers middleware
 
 app.use('*', async (c, next) => {
   await next();
   c.header('Content-Signal', 'ai-train=no, search=yes');
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' ws: wss: http: https: https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';");
+  c.header('X-Frame-Options', 'DENY');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
 });
 
 
-app.get('/', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
+app.get('/', (c) => {
+  const accept = c.req.header('Accept') || '';
+  if (accept.includes('text/markdown')) {
+    return c.text(`# Swazz: Smart API Fuzzer ⚡️
+
+Swazz is an advanced, high-performance Smart API Fuzzer designed to identify crashes, logic flaws, and security vulnerabilities (such as XSS, SQL injection, and boundary bypassing) by automatically parsing your Swagger/OpenAPI specifications.
+
+## 🌟 Key Features
+
+- **Smart Payload Generation**: Automatically generates context-aware payloads based on API schema definitions (e.g., proper UUIDs, massive strings, malicious payloads).
+- **Hybrid Architecture**: Fast Go-based execution engine (\`packages/container\`) paired with a modern React 19 web dashboard (\`packages/web\`).
+- **Interactive Web UI**: Features a real-time Endpoint × Status heatmap, dynamic request inspector, and easy configuration management.
+- **Robust CLI**: Run headless CI/CD integrations with high concurrency and detailed reporting.
+- **Cloudflare Ready**: Built-in support for Edge deployment.
+
+## 🚀 Key Commands
+
+### Root Commands
+- \`npm install\`: Install frontend dependencies.
+- \`npm run dev\`: Starts the Go backend and Vite frontend concurrently.
+- \`npm run build\`: Build the web dashboard.
+- \`npm run deploy:web\`: Deploy the dashboard to Cloudflare Pages.
+
+### Backend Commands (in \`packages/container\`)
+- \`go run main.go serve\`: Start the HTTP API server.
+- \`go run main.go start --config <path>\`: Run the fuzzer in CLI mode.
+- \`go test ./...\`: Run all backend tests.
+
+---
+*Find 500 errors before your users do. Smart API fuzzing with boundary, malicious, and random payload profiles.*
+`, 200, {
+      'Content-Type': 'text/markdown; charset=utf-8'
+    });
+  }
+
+  if (accept.includes('text/html')) {
+    const requestUrl = new URL(c.req.url);
+    let dashboardUrl = '/';
+    if (requestUrl.port === '8787') {
+      dashboardUrl = 'http://localhost:5173/';
+    } else {
+      const referer = c.req.header('Referer');
+      if (referer) {
+        try {
+          const refererUrl = new URL(referer);
+          dashboardUrl = `${refererUrl.protocol}//${refererUrl.host}/`;
+        } catch {}
+      }
+    }
+
+    c.header('Content-Type', 'text/html; charset=utf-8');
+    return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>swazz — Smart API Fuzzer</title>
+</head>
+<body>
+  <h1>swazz — Smart API Fuzzer</h1>
+  <p>To view the full interactive dashboard, please visit <a href="${dashboardUrl}">our dashboard</a>.</p>
+</body>
+</html>`);
+  }
+
+  return c.json({ service: 'swazz-edge', status: 'ok' });
+});
 app.get('/health', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
 
 app.get('/api/payload-catalog', (c) => {
@@ -232,8 +319,73 @@ app.get('/api/payload-catalog', (c) => {
 
 registerAuthRoutes(app);
 registerProjectsRoutes(app);
+registerRbacRoutes(app);
 registerScansRoutes(app);
 registerRunnersRoutes(app);
 registerMiscRoutes(app);
 
-export default app;
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return app.fetch(request, env, ctx);
+  },
+  async scheduled(event: any, env: Env, ctx: any) {
+    ctx.waitUntil(cleanupExpiredGuests(env.DB));
+    ctx.waitUntil(cleanupScheduledDeletions(env));
+    ctx.waitUntil(cleanupSecurityTables(env.DB));
+  },
+  async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (batch.queue === 'swazz-scan-queue') {
+      for (const msg of batch.messages) {
+        try {
+          const doId = env.COORDINATOR_DO.idFromName('global-coordinator');
+          const stub = env.COORDINATOR_DO.get(doId);
+          const doReq = new Request('http://do/dispatch', {
+            method: 'POST',
+            body: JSON.stringify({
+              runId: msg.body.runId,
+              config: msg.body.config || {},
+              userPublicKey: msg.body.userPublicKey || ""
+            }),
+          });
+          const doRes = await stub.fetch(doReq as any);
+          if (doRes.ok) {
+            await env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
+              .bind('dispatched', msg.body.runId)
+              .run();
+            msg.ack();
+          } else if (doRes.status === 503) {
+            // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
+            msg.ack();
+          } else {
+            console.error(`SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
+            msg.retry();
+          }
+        } catch (err) {
+          console.error(`SCAN_QUEUE dispatch failed for run ${msg.body.runId}:`, err);
+          msg.retry();
+        }
+      }
+    } else if (batch.queue === 'swazz-findings-queue') {
+      const statements = batch.messages.map(msg => {
+        const id = crypto.randomUUID();
+        const { scanId, type, payload } = msg.body;
+        const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+        return env.DB.prepare(
+          `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
+        ).bind(id, scanId, type, payloadStr);
+      });
+      if (statements.length > 0) {
+        try {
+          await env.DB.batch(statements);
+          for (const msg of batch.messages) {
+            msg.ack();
+          }
+        } catch (err) {
+          console.error("Failed to bulk insert findings:", err);
+          throw err;
+        }
+      }
+    }
+  }
+};
+

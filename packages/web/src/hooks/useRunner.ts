@@ -133,9 +133,14 @@ export function useRunner(proxyUrl: string) {
             cookies: Record<string, string>;
             body: any;
         }) => {
+            const csrfToken = useAppStore.getState().csrfToken;
+            const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (csrfToken) {
+                requestHeaders['X-CSRF-Token'] = csrfToken;
+            }
             const res = await fetch(`${proxyUrl}/api/proxy`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: requestHeaders,
                 body: JSON.stringify(req),
             });
             return res.json() as Promise<{ status: number; body: any; headers?: Record<string, string>; duration: number }>;
@@ -151,7 +156,7 @@ export function useRunner(proxyUrl: string) {
         ) => {
             if (useAppStore.getState().isRunning) return;
 
-            useAppStore.setState({ isRunning: true, isPaused: false });
+            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false });
 
             let runId = '';
             try {
@@ -170,6 +175,10 @@ export function useRunner(proxyUrl: string) {
                 if (token) {
                     requestHeaders['Authorization'] = `Bearer ${token}`;
                 }
+                const csrfToken = useAppStore.getState().csrfToken;
+                if (csrfToken) {
+                    requestHeaders['X-CSRF-Token'] = csrfToken;
+                }
 
                 // Extract projectId from config — keep agent config clean, send at top level
                 const { projectId, ...agentConfig } = configToSend;
@@ -181,14 +190,14 @@ export function useRunner(proxyUrl: string) {
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
-                    useAppStore.setState({ isRunning: false });
+                    useAppStore.setState({ isRunning: false, isQueued: false });
                     throw new Error(err.error || 'Failed to start run');
                 }
                 const data = await res.json();
                 runId = data.id;
                 runIdRef.current = runId;
             } catch (err) {
-                useAppStore.setState({ isRunning: false });
+                useAppStore.setState({ isRunning: false, isQueued: false });
                 throw err;
             }
 
@@ -205,9 +214,13 @@ export function useRunner(proxyUrl: string) {
                 try {
                     const msg = JSON.parse(e.data);
                     
-                    if (msg.type === 'result') {
+                    if (msg.type === 'queued') {
+                        useAppStore.setState({ isQueued: true });
+                    } else if (msg.type === 'result') {
+                        useAppStore.setState({ isQueued: false });
                         onResult(msg.data);
                     } else if (msg.type === 'progress') {
+                        useAppStore.setState({ isQueued: false });
                         const now = Date.now();
                         if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
                             lastProgressTime = now;
@@ -215,7 +228,7 @@ export function useRunner(proxyUrl: string) {
                         }
                     } else if (msg.type === 'complete') {
                         const finalStats = msg.data;
-                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false });
+                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false, isQueued: false });
                         ws.close();
                         wsRef.current = null;
                         onComplete(finalStats);
@@ -228,7 +241,7 @@ export function useRunner(proxyUrl: string) {
             ws.onerror = () => {
                 ws.close();
                 wsRef.current = null;
-                useAppStore.setState({ isRunning: false });
+                useAppStore.setState({ isRunning: false, isQueued: false });
             };
         },
         [proxyUrl],
@@ -240,10 +253,12 @@ export function useRunner(proxyUrl: string) {
             const headers: Record<string, string> = {};
             const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
             if (token) headers['Authorization'] = `Bearer ${token}`;
+            const csrfToken = useAppStore.getState().csrfToken;
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
             const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/stop`, { 
                 method: 'POST',
-                ...(token ? { headers } : {})
+                headers
             });
             if (!res.ok) throw new Error('Failed to stop run');
         } catch (err) {
@@ -252,7 +267,7 @@ export function useRunner(proxyUrl: string) {
         } finally {
             wsRef.current?.close();
             wsRef.current = null;
-            useAppStore.setState({ isRunning: false, isPaused: false });
+            useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
         }
     }, [proxyUrl]);
 
@@ -261,10 +276,12 @@ export function useRunner(proxyUrl: string) {
         const headers: Record<string, string> = {};
         const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
         if (token) headers['Authorization'] = `Bearer ${token}`;
+        const csrfToken = useAppStore.getState().csrfToken;
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
         const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/pause`, { 
             method: 'POST',
-            ...(token ? { headers } : {})
+            headers
         });
         if (!res.ok) throw new Error('Failed to pause');
         useAppStore.setState({ isPaused: true });
@@ -275,10 +292,12 @@ export function useRunner(proxyUrl: string) {
         const headers: Record<string, string> = {};
         const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
         if (token) headers['Authorization'] = `Bearer ${token}`;
+        const csrfToken = useAppStore.getState().csrfToken;
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
         const res = await fetch(`${proxyUrl}/api/runs/${runIdRef.current}/resume`, { 
             method: 'POST',
-            ...(token ? { headers } : {})
+            headers
         });
         if (!res.ok) throw new Error('Failed to resume');
         useAppStore.setState({ isPaused: false });

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useConfig } from '../../hooks/useConfig.js';
+import { useToast } from '../../hooks/useToast.js';
+import { KVEditor } from '../Sidebar/Shared.js';
 
 export function AnomaliesTab() {
     const { config, updateConfig, updateSettings } = useConfig();
+    const { showToast } = useToast();
     const [newIgnoreCode, setNewIgnoreCode] = useState('');
 
     const ignoredCodes = config.rules?.ignore || [];
@@ -12,11 +15,13 @@ export function AnomaliesTab() {
         const trimmed = newIgnoreCode.trim();
         if (!/^\d{3}$/.test(trimmed)) {
             alert('Please enter a valid 3-digit HTTP status code (100-599).');
+            showToast('Please enter a valid 3-digit HTTP status code (100-599).', 'error');
             return;
         }
         const codeNum = parseInt(trimmed, 10);
         if (!/^\d+$/.test(trimmed) || isNaN(codeNum) || codeNum < 100 || codeNum > 599) {
             alert('Please enter a valid HTTP status code (100-599).');
+            showToast('Please enter a valid HTTP status code (100-599).', 'error');
             return;
         }
         if (ignoredCodes.includes(codeNum)) {
@@ -92,7 +97,7 @@ export function AnomaliesTab() {
                             />
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
                                 Classify size changes larger than this multiplier of standard deviations as structural body size anomalies.
-                            </span>
+                              </span>
                         </div>
                     </div>
                 )}
@@ -149,6 +154,129 @@ export function AnomaliesTab() {
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '24px', lineHeight: '1.4' }}>
                         Compare primary user endpoints against credentials for a secondary user profile (User B) to detect improper access control settings.
                     </span>
+
+                    {(config.settings.bola_testing ?? false) && (
+                        <div style={{ marginLeft: '24px', paddingLeft: '16px', borderLeft: '2px solid var(--border-default)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {/* Selected Auth Credentials Summary */}
+                            <div className="auth-keys-selection">
+                                <div className="bola-sub-title">Marked Authentication Credentials:</div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: 6 }}>
+                                    Toggle lock icons in headers/cookies on the right sidebar to mark authentication tokens.
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                    {/* Headers */}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: 55, flexShrink: 0 }}>Headers:</span>
+                                        {Object.keys(config.global_headers || {}).length === 0 ? (
+                                            <span style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>No headers configured</span>
+                                        ) : (
+                                            Object.keys(config.global_headers || {}).map(h => {
+                                                const isAuth = (config.settings.auth_headers || []).some(x => x.toLowerCase() === h.toLowerCase());
+                                                return (
+                                                    <button
+                                                        key={h}
+                                                        className={`tag-btn ${isAuth ? 'active' : ''}`}
+                                                        onClick={() => {
+                                                            const current = config.settings.auth_headers || [];
+                                                            const lower = h.toLowerCase();
+                                                            const next = isAuth ? current.filter(x => x.toLowerCase() !== lower) : [...current, h];
+                                                            updateSettings({ auth_headers: next });
+                                                        }}
+                                                        type="button"
+                                                    >
+                                                        {isAuth ? '🔒 ' : '🔓 '}{h}
+                                                    </button>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                    {/* Cookies */}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', width: 55, flexShrink: 0 }}>Cookies:</span>
+                                        {Object.keys(config.cookies || {}).length === 0 ? (
+                                            <span style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>No cookies configured</span>
+                                        ) : (
+                                            Object.keys(config.cookies || {}).map(c => {
+                                                const isAuth = (config.settings.auth_cookies || []).some(x => x.toLowerCase() === c.toLowerCase());
+                                                return (
+                                                    <button
+                                                        key={c}
+                                                        className={`tag-btn ${isAuth ? 'active' : ''}`}
+                                                        onClick={() => {
+                                                            const current = config.settings.auth_cookies || [];
+                                                            const lower = c.toLowerCase();
+                                                            const next = isAuth ? current.filter(x => x.toLowerCase() !== lower) : [...current, c];
+                                                            updateSettings({ auth_cookies: next });
+                                                        }}
+                                                        type="button"
+                                                    >
+                                                        {isAuth ? '🔒 ' : '🔓 '}{c}
+                                                      </button>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Warning if no credentials selected */}
+                            {(!config.settings.auth_headers || config.settings.auth_headers.length === 0) &&
+                             (!config.settings.auth_cookies || config.settings.auth_cookies.length === 0) && (
+                                <div className="bola-warning-box">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                        <line x1="12" y1="9" x2="12" y2="13"/>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    </svg>
+                                    <span>Warning: No authentication credentials are marked. Access control check might not know what to drop or switch.</span>
+                                </div>
+                            )}
+                            {/* User B Panel */}
+                            <div className="bola-identity-card">
+                                <div className="bola-identity-badge">User B (Secondary)</div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                                    Session credentials representing User B:
+                                </div>
+                                <div className="bola-sub-title">Headers (User B)</div>
+                                <KVEditor
+                                    entries={config.auth_identities?.userB?.headers || {}}
+                                    onChange={(h) => {
+                                        const currentIdentities = config.auth_identities || {};
+                                        const currentB = currentIdentities.userB || { headers: {}, cookies: {} };
+                                        updateConfig({
+                                            auth_identities: {
+                                                ...currentIdentities,
+                                                userB: {
+                                                    ...currentB,
+                                                    headers: h
+                                                }
+                                            }
+                                        });
+                                    }}
+                                    keyPlaceholder="Header"
+                                    valuePlaceholder="Value"
+                                />
+                                <div className="bola-sub-title" style={{ marginTop: 8 }}>Cookies (User B)</div>
+                                <KVEditor
+                                    entries={config.auth_identities?.userB?.cookies || {}}
+                                    onChange={(c) => {
+                                        const currentIdentities = config.auth_identities || {};
+                                        const currentB = currentIdentities.userB || { headers: {}, cookies: {} };
+                                        updateConfig({
+                                            auth_identities: {
+                                                ...currentIdentities,
+                                                userB: {
+                                                    ...currentB,
+                                                    cookies: c
+                                                }
+                                            }
+                                        });
+                                    }}
+                                    keyPlaceholder="Name"
+                                    valuePlaceholder="Value"
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Ignored status codes */}

@@ -1,0 +1,93 @@
+{
+    // The URLs pointing to OpenAPI/Swagger specifications or GraphQL Introspection endpoints
+    "swagger_urls": [
+        "https://api.example.com/swagger.json"
+    ],
+    // The target API URL where generated requests will be sent
+    "base_url": "https://api.example.com",
+    "headers": {
+        "Authorization": "Bearer YOUR_AUTH_TOKEN_HERE"
+    },
+    "cookies": {
+        "session_id": "YOUR_SESSION_ID_HERE"
+    },
+    "dictionaries": {
+        "username": ["admin", "test", "root"],
+        "email": ["admin@test.com", "a@b.c"]
+    },
+    "settings": {
+        /*
+           iterations_per_profile defines how many fuzz attempts to perform per payload category,
+           and concurrency specifies the number of concurrent worker goroutines.
+        */
+        "iterations_per_profile": 2,
+        "concurrency": 2,
+        "timeout_ms": 2000,
+        "max_nodes_budget": 50000, // Safety limit: maximum nodes resolved in a schema to prevent OOM on dense/complex specs
+        "max_depth_limit": 64,     // Safety limit: maximum recursion depth in schema resolution to prevent stack overflow/excessive memory usage
+        "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"],
+        "payload_categories": {
+            "BOUNDARY": [
+                "boundary_strings",
+                "boundary_integers",
+                "boundary_numbers",
+                "boundary_dates",
+                "boundary_booleans",
+                "boundary_arrays",
+                "boundary_uuids"
+            ],
+            "MALICIOUS": [
+                "malicious_sqli",
+                "malicious_xss",
+                "malicious_path_traversal",
+                "malicious_encoding",
+                "malicious_numbers",
+                "malicious_dates",
+                "malicious_booleans",
+                "malicious_type_confusion",
+                "malicious_host_injection",
+                "malicious_cors_misconfig",
+                "malicious_ip_spoofing",
+                "malicious_jwt_manipulation"
+            ]
+        }
+    },
+    "endpoints": {
+        "include": [],
+        "exclude": ["/health", "/metrics"]
+    },
+    "auth_sequence": [
+        {
+            "method": "POST",
+            "url": "/api/login",
+            "body": {
+                "username": "admin",
+                "password": "password"
+            }
+        },
+        {
+            "method": "GET",
+            "url": "/api/session/verify"
+        }
+    ],
+    "rules": {
+        "ignore": [401, 403, 404, 405, 422, 429, 520],
+        "severity": {
+            "200": "warning",
+            "400": "warning",
+            "406": "warning"
+        },
+        "defaults": {
+            "1xx": "ignore",
+            "2xx": "ignore",
+            "3xx": "ignore",
+            "4xx": "error",
+            "5xx": "error",
+            "timeout": "error",
+            "network_error": "error"
+        }
+    },
+    "security": {
+        "allow_private_ips": true
+    }
+}

@@ -13,7 +13,10 @@ import (
 	"os"
 	"strings"
 	"swazz-engine/internal/classifier"
+	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/har"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
@@ -28,20 +31,21 @@ import (
 func startAgent(args []string) {
 	var coordinatorURL, token, name, keyPathOrHex, logLevelStr, logFilterStr string
 	var dangerousNoContainer bool
-	logLevelStr = "info"
-	logger.SetLevel(logger.LevelInfo)
+	var hasQuiet, hasLogLevel bool
 
 	// Simple arg parsing
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--dangerous-no-container":
 			dangerousNoContainer = true
-		case "--log-level":
+		case "--log-level", "-log-level":
 			if i+1 < len(args) {
 				logLevelStr = args[i+1]
-				logger.SetLevelByName(logLevelStr)
+				hasLogLevel = true
 				i++
 			}
+		case "--quiet", "-quiet", "-q", "--q":
+			hasQuiet = true
 		case "--log-filter":
 			if i+1 < len(args) {
 				logFilterStr = args[i+1]
@@ -73,6 +77,23 @@ func startAgent(args []string) {
 			os.Exit(0)
 		}
 	}
+
+	var finalLevel string
+	envLevel := os.Getenv("SWAZZ_LOG_LEVEL")
+	if envLevel != "" {
+		finalLevel = envLevel
+	} else {
+		finalLevel = "info"
+	}
+
+	if hasQuiet {
+		finalLevel = "error"
+	}
+	if hasLogLevel {
+		finalLevel = logLevelStr
+	}
+
+	logger.SetLevelByName(finalLevel)
 
 	safenet.AssertRunningInContainer(dangerousNoContainer)
 
@@ -122,14 +143,19 @@ func startAgent(args []string) {
 	ctx := context.Background()
 
 	headers := make(http.Header)
-	urlWithParams := coordinatorURL
-	encodedName := url.QueryEscape(name)
-	
-	if !strings.Contains(urlWithParams, "?") {
-		urlWithParams += fmt.Sprintf("?name=%s", encodedName)
-	} else {
-		urlWithParams += fmt.Sprintf("&name=%s", encodedName)
+	u, err := url.Parse(coordinatorURL)
+	if err != nil {
+		log.Fatalf("Failed to parse coordinator URL: %v", err)
 	}
+	q := u.Query()
+	q.Set("name", name)
+	agentVer := Version
+	if agentVer == "dev" {
+		agentVer = "v1.0.0"
+	}
+	q.Set("version", agentVer)
+	u.RawQuery = q.Encode()
+	urlWithParams := u.String()
 
 	if useSignatureAuth {
 		headers.Set("X-Runner-Public-Key", pubKeyHex)
@@ -199,7 +225,16 @@ func startAgent(args []string) {
 	outChan := make(chan interface{}, 50000)
 	go func() {
 		for msg := range outChan {
-			if err := wsjson.Write(ctx, c, msg); err != nil {
+			b, err := json.Marshal(msg)
+			if err != nil {
+				logError("Failed to marshal WS message: %v", err)
+				continue
+			}
+			if len(b) > 1*1024*1024 {
+				logError("WS message is too large: %d bytes. Dropping message to prevent WebSocket close.", len(b))
+				continue
+			}
+			if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 				logError("Failed to write to WS: %v", err)
 				_ = c.Close(websocket.StatusInternalError, "write error")
 				return
@@ -241,6 +276,17 @@ func startAgent(args []string) {
 		}
 
 		switch wsMsg.Type {
+		case "agent_restart":
+			logInfo("Received remote restart request. Stopping active jobs...")
+			activeRunnersMu.Lock()
+			for _, r := range activeRunners {
+				r.Stop()
+			}
+			activeRunnersMu.Unlock()
+			// Allow a brief grace period for runners to stop and send final events
+			time.Sleep(1 * time.Second)
+			os.Exit(0)
+
 		case "job_dispatch":
 			var dispatch JobDispatchPayload
 			if err := json.Unmarshal(wsMsg.Payload, &dispatch); err != nil {
@@ -281,6 +327,9 @@ func startAgent(args []string) {
 						liveClsRules.Defaults[k] = classifier.Severity(v)
 					}
 				}
+				if len(runCfg.Rules.IgnoreRules) > 0 {
+					liveClsRules.IgnoreRules = runCfg.Rules.IgnoreRules
+				}
 			}
 			liveCls := classifier.New(liveClsRules)
 
@@ -290,7 +339,13 @@ func startAgent(args []string) {
 				defer r.Unsubscribe(sub)
 				for ev := range sub {
 					if ev.Type == "result" {
-						if res, ok := ev.Data.(*swagger.FuzzResult); ok {
+						var res *swagger.FuzzResult
+						if rPtr, ok := ev.Data.(*swagger.FuzzResult); ok {
+							res = rPtr
+						} else if rVal, ok := ev.Data.(swagger.FuzzResult); ok {
+							res = &rVal
+						}
+						if res != nil {
 							severity := "ignore"
 							description := fmt.Sprintf("HTTP %d", res.Status)
 							if len(res.AnalyzerFindings) > 0 {
@@ -385,7 +440,7 @@ func startAgent(args []string) {
 				// Parse swagger
 				var result interface{}
 				
-				client := safenet.NewSafeHTTPClient(30 * time.Second)
+				client := safenet.NewSafeHTTPClient(15 * time.Second)
 				resp, err := client.Get(reqPayload.URL)
 				if err != nil {
 					logError("[Parser] Failed to fetch spec: %v", err)
@@ -402,10 +457,32 @@ func startAgent(args []string) {
 						logError("[Parser] Spec exceeds 10MB limit")
 						result = map[string]string{"error": "specification file exceeds the 10MB limit"}
 					} else {
-						parseResult, err := swagger.ParseRawSpec(data)
-						if err != nil {
-							logError("[Parser] Failed to parse spec: %v", err)
-							result = map[string]string{"error": err.Error()}
+						var parseResult *swagger.ParseResult
+						var parseErr error
+						parseResult, parseErr = swagger.ParseRawSpec(data)
+						if parseErr != nil {
+							originalErr := parseErr
+							if swagger.IsHAR(data) {
+								parseResult, parseErr = har.ParseHAR(data, "")
+							} else if swagger.IsPostman(data) {
+								parseResult, parseErr = postman.ParsePostman(data)
+							} else {
+								defaultPath := "/graphql"
+								if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
+									if parsedURL.Path != "" && parsedURL.Path != "/" {
+										defaultPath = parsedURL.Path
+									}
+								}
+								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+								if parseErr != nil {
+									parseErr = originalErr
+								}
+							}
+						}
+
+						if parseErr != nil {
+							logError("[Parser] Failed to parse spec: %v", parseErr)
+							result = map[string]string{"error": parseErr.Error()}
 						} else {
 							// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
 							for i := range parseResult.Endpoints {
@@ -430,11 +507,25 @@ func startAgent(args []string) {
 					}
 				}
 
-				outChan <- map[string]interface{}{
+				msgPayload := map[string]interface{}{
 					"type":    "parse_result",
 					"reqId":   reqID,
 					"payload": result,
 				}
+				if b, err := json.Marshal(msgPayload); err == nil && len(b) > 1*1024*1024 {
+					logWarn("[Parser] Parse result size (%d bytes) exceeds 1MB limit. Retrying without rawSpec...", len(b))
+					if resultMap, ok := result.(map[string]interface{}); ok {
+						resultMap["rawSpec"] = ""
+						msgPayload["payload"] = resultMap
+						if b2, err2 := json.Marshal(msgPayload); err2 == nil && len(b2) > 1*1024*1024 {
+							logError("[Parser] Parse result endpoints schema is still too large (%d bytes). Returning error.", len(b2))
+							msgPayload["payload"] = map[string]string{
+								"error": "The parsed endpoints schema is too large to transmit over the 1MB WebSocket limit.",
+							}
+						}
+					}
+				}
+				outChan <- msgPayload
 			}()
 		}
 	}

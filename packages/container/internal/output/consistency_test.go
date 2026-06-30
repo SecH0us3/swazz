@@ -52,7 +52,7 @@ func TestCrossFormatConsistency(t *testing.T) {
 	// 1. Generate reports
 	htmlReport := ToHTML(findings, stats)
 	jsonReport := ToJSON(findings, stats, "1.2.3")
-	sarifReport := ToSARIF(findings, "1.2.3")
+	sarifReport := ToSARIF(findings, "1.2.3", "http://localhost:8080")
 
 	// 2. Assert finding counts match across all formats
 	// JSON count: len(jsonReport["findings"])
@@ -153,6 +153,6 @@ func TestCrossFormatConsistency(t *testing.T) {
 
 		ToHTML(edgeFindings, edgeStats)
 		ToJSON(edgeFindings, edgeStats, "edge")
-		ToSARIF(edgeFindings, "edge")
+		ToSARIF(edgeFindings, "edge", "http://localhost:8080")
 	})
 }

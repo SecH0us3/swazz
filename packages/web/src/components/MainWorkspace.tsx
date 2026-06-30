@@ -7,6 +7,7 @@ import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
 import { UserSettings } from './UserSettings.js';
 import { ProjectSettings } from './ProjectSettings.js';
 import { HistoryPage } from './HistoryPage.js';
+import { LandingShowcase } from './LandingShowcase.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';

@@ -39,6 +39,27 @@ func init() {
 		// Unspecified addresses (bypasses to localhost on many systems)
 		"0.0.0.0/8",
 		"::/128",
+
+		// Carrier-Grade NAT / Shared Space (RFC 6598)
+		"100.64.0.0/10",
+
+		// Benchmark/Testing (RFC 2544 / RFC 5180)
+		"198.18.0.0/15",
+
+		// Multicast (RFC 5771 / RFC 1112)
+		"224.0.0.0/4",
+
+		// Reserved/Future Use (RFC 1112 / RFC 6890)
+		"240.0.0.0/4",
+
+		// IPv6 Unique Local / ULA (RFC 4193)
+		"fc00::/7",
+
+		// IPv6 Site-Local (RFC 3879 - deprecated but still reserved)
+		"fec0::/10",
+
+		// IPv6 Multicast (RFC 4291)
+		"ff00::/8",
 	}
 
 	for _, cidr := range cidrs {
@@ -60,8 +81,15 @@ func (e *ErrBlockedAddress) Error() string {
 	return fmt.Sprintf("safenet: connection to %s (%s) blocked — target is a private/reserved address", e.Host, e.IP)
 }
 
+// AllowLocalNetwork bypasses private/reserved IP checks when true.
+var AllowLocalNetwork bool
+
 // IsBlocked reports whether the given IP falls into any blocked CIDR range.
 func IsBlocked(ip net.IP) bool {
+	if AllowLocalNetwork {
+		return false
+	}
+
 	// Normalize to 4-byte representation if it's an IPv4 address
 	// (handles IPv4-mapped IPv6 addresses like ::ffff:127.0.0.1)
 	if v4 := ip.To4(); v4 != nil {
@@ -86,6 +114,10 @@ func SafeDialContext(timeout time.Duration) func(ctx context.Context, network, a
 	}
 
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if AllowLocalNetwork {
+			return dialer.DialContext(ctx, network, addr)
+		}
+
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, fmt.Errorf("safenet: invalid address %q: %w", addr, err)
@@ -104,12 +136,21 @@ func SafeDialContext(timeout time.Duration) func(ctx context.Context, network, a
 			}
 		}
 
-		// All resolved IPs are safe — dial the original address.
-		// We dial with the resolved IP to prevent TOCTOU DNS rebinding.
-		// Use the first resolved IP.
+		// All resolved IPs are safe — dial the resolved IPs.
+		// We dial with the resolved IPs to prevent TOCTOU DNS rebinding,
+		// trying them in order (e.g. dual-stack fallback).
+		var lastErr error
+		for _, ipAddr := range ips {
+			safeAddr := net.JoinHostPort(ipAddr.IP.String(), port)
+			conn, err := dialer.DialContext(ctx, network, safeAddr)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+
 		if len(ips) > 0 {
-			safeAddr := net.JoinHostPort(ips[0].IP.String(), port)
-			return dialer.DialContext(ctx, network, safeAddr)
+			return nil, lastErr
 		}
 
 		return dialer.DialContext(ctx, network, addr)

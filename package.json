@@ -5,7 +5,8 @@
   "description": "Smart API Fuzzer — find crashes before your users do",
   "workspaces": [
     "packages/web",
-    "packages/edge"
+    "packages/edge",
+    "packages/rag"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=packages/edge",
@@ -14,12 +15,14 @@
     "build": "npm run build --workspace=packages/web",
     "deploy:api": "npm run deploy --workspace=packages/edge",
     "deploy:web": "npm run deploy --workspace=packages/web",
-    "deploy:all": "npm run deploy:web && npm run deploy:api"
+    "deploy:all": "npm run deploy:web",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "concurrently": "^10.0.3",
     "jsdom": "^29.1.1",
-    "wrangler": "^4.100.0"
+    "wrangler": "^4.103.0"
   },
   "dependencies": {
     "fake-indexeddb": "^6.2.5"

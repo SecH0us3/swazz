@@ -79,6 +79,7 @@ func TestStatefulChaining(t *testing.T) {
 	}
 
 	runner := New(config, ts.Client())
+	defer runner.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

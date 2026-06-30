@@ -1,3 +1,4 @@
-Deploy the CORS proxy worker to Cloudflare Workers.
+[DEPRECATED] Deploy the CORS proxy worker to Cloudflare Workers (unused since migrating container backend to GCP).
 
-Run `npm run deploy:worker` and report the deployment URL and version ID.
+Do not run this command. Deploy to GCP instead.
+

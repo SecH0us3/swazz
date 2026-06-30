@@ -9,8 +9,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PLUGIN_SRC="$REPO_ROOT/.gemini/plugins/swazz-toolkit"
-PLUGIN_DST="$HOME/.gemini/config/plugins/swazz-toolkit"
+PLUGIN_SRC="$REPO_ROOT/.agents/plugins/swazz-toolkit"
+PLUGIN_DST="$HOME/.agents/plugins/swazz-toolkit"
 
 echo "🔧 swazz dev setup"
 echo ""

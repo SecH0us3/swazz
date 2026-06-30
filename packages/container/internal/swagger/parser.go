@@ -6,17 +6,52 @@ import (
 	"strings"
 )
 
-// ParseRawSpec checks if the data is YAML, converts it to JSON if needed, and delegates to ParseSpec.
-func ParseRawSpec(data []byte) (*ParseResult, error) {
-	if converted, err := ConvertYAMLToJSON(data); err == nil {
-		data = converted
+// parserOptions holds parsed options for the swagger parser.
+type parserOptions struct {
+	maxNodes int
+	maxDepth int
+}
+
+// ParserOption defines an option function for ParseSpec/ParseRawSpec.
+type ParserOption func(*parserOptions)
+
+// WithMaxNodes configures the maximum node resolution budget.
+func WithMaxNodes(n int) ParserOption {
+	return func(o *parserOptions) {
+		o.maxNodes = n
 	}
-	return ParseSpec(json.RawMessage(data))
+}
+
+// WithMaxDepth configures the maximum recursion depth limit.
+func WithMaxDepth(d int) ParserOption {
+	return func(o *parserOptions) {
+		o.maxDepth = d
+	}
+}
+
+// ParseRawSpec checks if the data is YAML, converts it to JSON if needed, and delegates to ParseSpec.
+func ParseRawSpec(data []byte, opts ...ParserOption) (*ParseResult, error) {
+	if IsYAML(data) {
+		jsonData, err := ConvertYAMLToJSON(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert YAML to JSON: %w", err)
+		}
+		data = jsonData
+	}
+	return ParseSpec(json.RawMessage(data), opts...)
 }
 
 // ParseSpec parses a Swagger/OpenAPI JSON spec into a ParseResult.
 // Supports both OpenAPI 3.x and Swagger 2.0.
-func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
+func ParseSpec(raw json.RawMessage, opts ...ParserOption) (*ParseResult, error) {
+	o := &parserOptions{
+		maxNodes: 50000,
+		maxDepth: 64,
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+
 	var spec map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &spec); err != nil {
 		return nil, fmt.Errorf("invalid spec: not a JSON object: %w", err)
@@ -72,8 +107,10 @@ func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
 			// Merge path-level + operation-level parameters
 			allParams := mergeParams(pathLevelParams, operation)
 
+			endpointHint := strings.ToUpper(method) + " " + path
+
 			// Extract request body schema
-			bodyResult := extractRequestSchema(operation, fullSpec)
+			bodyResult := extractRequestSchema(operation, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
 
 			var schema SchemaProperty
 			if bodyResult != nil {
@@ -94,7 +131,7 @@ func ParseSpec(raw json.RawMessage) (*ParseResult, error) {
 			}
 
 			pathParams := extractPathParams(allParams)
-			headerParams := extractHeaderParams(allParams, fullSpec)
+			headerParams := extractHeaderParams(allParams, fullSpec, endpointHint, o.maxNodes, o.maxDepth)
 
 			ep := EndpointConfig{
 				Path:   path,
@@ -183,7 +220,7 @@ type bodyResult struct {
 }
 
 // extractRequestSchema extracts the request body schema from an operation.
-func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyResult {
+func extractRequestSchema(operation map[string]any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) *bodyResult {
 	// OpenAPI 3.x: requestBody → content → <mime> → schema
 	if rb, ok := operation["requestBody"].(map[string]any); ok {
 		if content, ok := rb["content"].(map[string]any); ok {
@@ -253,7 +290,7 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 							}
 						}
 						return &bodyResult{
-							schema:      resolveSchema(s, spec, nil),
+							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
 							contentType: ct,
 							example:     example,
 						}
@@ -284,7 +321,7 @@ func extractRequestSchema(operation map[string]any, spec map[string]any) *bodyRe
 							}
 						}
 						return &bodyResult{
-							schema:      resolveSchema(s, spec, nil),
+							schema:      resolveSchemaWithHint(s, spec, nil, endpointHint, maxNodes, maxDepth),
 							contentType: "application/json",
 							example:     example,
 						}
@@ -394,7 +431,7 @@ func extractPathParams(params []any) map[string]*SchemaProperty {
 }
 
 // extractHeaderParams extracts header parameters for injection fuzzing.
-func extractHeaderParams(params []any, spec map[string]any) map[string]*SchemaProperty {
+func extractHeaderParams(params []any, spec map[string]any, endpointHint string, maxNodes, maxDepth int) map[string]*SchemaProperty {
 	result := make(map[string]*SchemaProperty)
 
 	for _, p := range params {
@@ -411,7 +448,7 @@ func extractHeaderParams(params []any, spec map[string]any) map[string]*SchemaPr
 		}
 
 		if schema, ok := pm["schema"]; ok {
-			resolved := resolveSchema(schema, spec, nil)
+			resolved := resolveSchemaWithHint(schema, spec, nil, endpointHint, maxNodes, maxDepth)
 			result[name] = &resolved
 		} else {
 			result[name] = &SchemaProperty{

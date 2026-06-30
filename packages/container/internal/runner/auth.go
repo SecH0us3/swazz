@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -32,7 +33,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		return headers, cookies, nil
 	}
 
-	fmt.Printf("Running authentication sequence (%d steps)...\n", len(sequence))
+	logger.Info("Running authentication sequence (%d steps)...", len(sequence))
 
 	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
@@ -74,7 +75,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				cfg.Variables[varName] = result
 				r.configMu.Unlock()
 
-				fmt.Printf("    [Auth] set_variables: {{%s}} = %q\n", varName, result)
+				logger.Debug("[Auth] set_variables: {{%s}} = %q", varName, result)
 			}
 
 			r.updateReplacer()
@@ -126,7 +127,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		if cfg.Settings.Debug {
 			// codeql[go/request-forgery] false positive: fuzzer auth
 			dump, _ := httputil.DumpRequestOut(req, true) //lgtm[go/request-forgery]
-			fmt.Printf("--- [DEBUG] Auth Request ---\n%s\n----------------------------\n", string(dump))
+			logger.Debug("--- [DEBUG] Auth Request ---\n%s\n----------------------------", string(dump))
 		}
 
 		// codeql[go/request-forgery] false positive: fuzzer auth process needs to request user-specified URLs
@@ -138,10 +139,10 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		if cfg.Settings.Debug {
 			// codeql[go/request-forgery] false positive: fuzzer auth
 			dump, _ := httputil.DumpResponse(resp, false) //lgtm[go/request-forgery]
-			fmt.Printf("\n--- [DEBUG] Auth Response ---\n%s\n-----------------------------\n", string(dump))
+			logger.Debug("--- [DEBUG] Auth Response ---\n%s\n-----------------------------", string(dump))
 		}
 
-		fmt.Printf("  Step %d: %s %s -> %d\n", i+1, step.Method, fullURL, resp.StatusCode)
+		logger.Debug("[Auth] Step %d: %s %s -> %d", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -168,7 +169,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 			if shouldSave {
 				cookies[cookie.Name] = cookie.Value
-				fmt.Printf("    [Auth] Saved cookie: %s\n", cookie.Name)
+				logger.Debug("[Auth] Saved cookie: %s", cookie.Name)
 			}
 		}
 
@@ -189,7 +190,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				if val != nil {
 					strVal := fmt.Sprintf("%v", val)
 					headers[headerName] = strVal
-					fmt.Printf("    [Auth] Extracted %s -> Header %s\n", jsonKey, headerName)
+					logger.Debug("[Auth] Extracted %s -> Header %s", jsonKey, headerName)
 				}
 			}
 
@@ -198,7 +199,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				val := extractJSONPath(parsed, jsonKey)
 				if val != nil {
 					cfg.Variables[varName] = val
-					fmt.Printf("    [Auth] Extracted %s -> Variable {{%s}}\n", jsonKey, varName)
+					logger.Debug("[Auth] Extracted %s -> Variable {{%s}}", jsonKey, varName)
 					varsUpdated = true
 				}
 			}
@@ -210,7 +211,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		}
 	}
 
-	fmt.Println("Authentication sequence complete.")
+	logger.Info("Authentication sequence complete.")
 	return headers, cookies, nil
 }
 
@@ -385,7 +386,28 @@ func (r *Runner) extractAndSaveCSRFToken(resp *http.Response, bodyBytes []byte) 
 		}
 	}
 
-	// 2. Check HTML body meta tags or inputs
+	// 2. Check response headers
+	if token == "" {
+		var keys []string
+		for k := range resp.Header {
+			kLower := strings.ToLower(k)
+			if strings.Contains(kLower, "csrf") || strings.Contains(kLower, "xsrf") {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) > 0 {
+			slices.Sort(keys)
+			for _, k := range keys {
+				values := resp.Header[k]
+				if len(values) > 0 && values[0] != "" {
+					token = values[0]
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Check HTML body meta tags or inputs
 	if token == "" && len(bodyBytes) > 0 {
 		if matches := csrfMetaRegex.FindSubmatch(bodyBytes); len(matches) > 0 {
 			for i := 1; i < len(matches); i++ {
@@ -456,12 +478,84 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 	}
 	r.configMu.RUnlock()
 
-	fmt.Println("[Session] Session expired. Initiating automatic re-authentication...")
+	// Check if probe is configured and session is still alive
+	r.configMu.RLock()
+	hasProbe := r.config.Settings.AuthProbeURL != ""
+	r.configMu.RUnlock()
+
+	if hasProbe {
+		if time.Since(r.lastProbeTime) < 5*time.Second {
+			logger.Debug("[Auth] Session considered alive (cached probe check within 5s).")
+			return nil, nil, false, nil
+		}
+
+		if r.isSessionAliveViaProbe(ctx) {
+			logger.Debug("[Auth] Session is still alive via probe, skipping re-authentication.")
+			r.lastProbeTime = time.Now()
+			return nil, nil, false, nil
+		}
+	}
+
+	logger.Info("[Session] Session expired. Initiating automatic re-authentication...")
 	if err := r.RunAuthSequence(ctx); err != nil {
 		return nil, nil, false, fmt.Errorf("re-authentication failed: %w", err)
 	}
+	r.lastProbeTime = time.Now()
 
 	r.configMu.RLock()
 	defer r.configMu.RUnlock()
 	return maps.Clone(r.config.GlobalHeaders), maps.Clone(r.config.Cookies), true, nil
+
 }
+
+func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
+	r.configMu.RLock()
+	probePath := r.config.Settings.AuthProbeURL
+	baseURL := r.config.BaseURL
+	globalHeaders := maps.Clone(r.config.GlobalHeaders)
+	cookies := maps.Clone(r.config.Cookies)
+	r.configMu.RUnlock()
+
+	if probePath == "" {
+		return false
+	}
+
+	probeURL := probePath
+	if !strings.HasPrefix(probeURL, "http://") && !strings.HasPrefix(probeURL, "https://") {
+		probeURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(probeURL, "/")
+	}
+
+	reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer reqCancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "GET", probeURL, nil)
+	if err != nil {
+		logger.Debug("[Auth] Failed to create auth probe request: %v", err)
+		return false
+	}
+
+	for k, v := range globalHeaders {
+		req.Header.Set(k, v)
+	}
+	for k, v := range cookies {
+		req.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
+	}
+
+
+	logger.Debug("[Auth] Sending probe request to %s to check session validity...", probeURL)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		logger.Debug("[Auth] Probe request failed: %v", err)
+		return false
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close() // #nosec G104
+	}()
+
+
+	logger.Debug("[Auth] Probe response status: %d", resp.StatusCode)
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
+
+}
+

@@ -12,9 +12,11 @@ import (
 	"strings"
 	"swazz-engine/internal/swagger"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 )
 
 func TestRunAuthSequence(t *testing.T) {
@@ -85,6 +87,7 @@ func TestRunAuthSequence(t *testing.T) {
 
 	// 3. Run runner
 	r := New(cfg, nil)
+	defer r.Close()
 	err := r.RunAuthSequence(context.Background())
 
 	if err != nil {
@@ -121,6 +124,7 @@ func TestRunAuthSequenceFailures(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 	err := r.RunAuthSequence(context.Background())
 
 	if err == nil {
@@ -299,6 +303,7 @@ func TestRunAuthSequenceSetVariables(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 	err := r.RunAuthSequence(context.Background())
 	require.NoError(t, err)
 
@@ -360,6 +365,7 @@ func TestSetVariablesErrors(t *testing.T) {
 				},
 			}
 			r := New(cfg, nil)
+			defer r.Close()
 			err := r.RunAuthSequence(context.Background())
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErrMsg)
@@ -374,6 +380,7 @@ func TestUUIDProducesDifferentValues(t *testing.T) {
 		Variables: make(map[string]any),
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	cache := make(map[string]string)
 	nodeA := &exprNode{name: "uuid", args: []*exprNode{}}
@@ -407,6 +414,7 @@ func TestDeterministicFunctionCacheHit(t *testing.T) {
 		},
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	cache := make(map[string]string)
 	node := &exprNode{
@@ -434,6 +442,7 @@ func TestBuiltinFunctions(t *testing.T) {
 		Variables: make(map[string]any),
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	call := func(name string, args ...string) (string, error) {
 		return r.callBuiltin(name, args)
@@ -587,6 +596,7 @@ func TestIsSessionExpired(t *testing.T) {
 		Cookies:       map[string]string{"session_cookie": "current-session-id"},
 	}
 	r := New(cfg, nil)
+	defer r.Close()
 
 	// 1. HTTP 401 using current active session -> expired
 	reqHeaders := map[string]string{"Authorization": "Bearer current-token"}
@@ -618,6 +628,7 @@ func TestIsSessionExpired(t *testing.T) {
 
 func TestExtractCSRFToken(t *testing.T) {
 	r := New(&swagger.Config{}, nil)
+	defer r.Close()
 
 	// 1. Extract from Cookie
 	cookieResp := &http.Response{
@@ -660,6 +671,33 @@ func TestExtractCSRFToken(t *testing.T) {
 	htmlReversedMeta := []byte(`<html><head><meta content="reversed-xsrf-val" name="xsrf-token"></head></html>`)
 	r.extractAndSaveCSRFToken(resp, htmlReversedMeta)
 	assert.Equal(t, "reversed-xsrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 6. Extract from response headers (e.g. X-CSRF-Token)
+	headerResp := &http.Response{
+		Header: http.Header{
+			"X-CSRF-Token": []string{"header-csrf-val"},
+		},
+	}
+	r.extractAndSaveCSRFToken(headerResp, nil)
+	assert.Equal(t, "header-csrf-val", r.activeCSRFToken)
+
+	// Reset
+	r.activeCSRFToken = ""
+
+	// 7. Extract from response headers deterministically when multiple match (sorting keys)
+	// Keys are: "X-XSRF-Token" and "X-CSRF-Token". Sorted: "X-CSRF-Token", "X-XSRF-Token"
+	// So "X-CSRF-Token" should be picked first.
+	multiHeaderResp := &http.Response{
+		Header: http.Header{
+			"X-XSRF-Token": []string{"xsrf-val"},
+			"X-CSRF-Token": []string{"csrf-val"},
+		},
+	}
+	r.extractAndSaveCSRFToken(multiHeaderResp, nil)
+	assert.Equal(t, "csrf-val", r.activeCSRFToken)
 }
 
 func TestMaybeReauthenticate(t *testing.T) {
@@ -695,6 +733,7 @@ func TestMaybeReauthenticate(t *testing.T) {
 	}
 
 	r := New(cfg, nil)
+	defer r.Close()
 
 	// 1. Initial call should trigger re-authentication
 	reqHeaders := map[string]string{"Authorization": "old-token"}
@@ -712,3 +751,80 @@ func TestMaybeReauthenticate(t *testing.T) {
 	assert.Equal(t, "fresh-token-1", newH2["Authorization"])
 	assert.Equal(t, 1, authCount) // authCount should remain 1!
 }
+
+func TestMaybeReauthenticateWithProbe(t *testing.T) {
+	authCount := 0
+	probeCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/probe" {
+			probeCount++
+			if r.Header.Get("Authorization") == "valid-token" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/auth" {
+			authCount++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"token": "valid-token",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Method: "POST",
+				URL:    "/auth",
+				ExtractJSON: map[string]string{
+					"token": "Authorization",
+				},
+			},
+		},
+		Settings: swagger.Settings{
+			AuthHeaders:  []string{"Authorization"},
+			AuthProbeURL: "/probe",
+		},
+		GlobalHeaders: map[string]string{"Authorization": "valid-token"},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+
+	reqHeaders := map[string]string{"Authorization": "valid-token"}
+	newH, _, refreshed, err := r.MaybeReauthenticate(context.Background(), reqHeaders, nil)
+	require.NoError(t, err)
+	assert.False(t, refreshed)
+	assert.Nil(t, newH)
+
+	assert.Equal(t, "valid-token", r.config.GlobalHeaders["Authorization"])
+	assert.Equal(t, 0, authCount)
+	assert.Equal(t, 1, probeCount)
+
+
+	// 2. Session is expired.
+	// Set global token to "expired-token". Now probe will fail, and it should run the auth sequence.
+	r.configMu.Lock()
+	r.config.GlobalHeaders["Authorization"] = "expired-token"
+	r.configMu.Unlock()
+	r.lastProbeTime = time.Time{} // Clear cache to force probe
+
+	reqHeaders2 := map[string]string{"Authorization": "expired-token"}
+	newH2, _, refreshed2, err2 := r.MaybeReauthenticate(context.Background(), reqHeaders2, nil)
+	require.NoError(t, err2)
+	assert.True(t, refreshed2)
+	assert.Equal(t, "valid-token", newH2["Authorization"])
+	assert.Equal(t, 1, authCount)
+	assert.Equal(t, 2, probeCount)
+}
+

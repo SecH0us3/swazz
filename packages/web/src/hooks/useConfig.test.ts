@@ -254,6 +254,28 @@ describe('useConfig', () => {
         expect(result.current.config.settings).toEqual(DEFAULT_SETTINGS);
     });
 
+    it('should import config with comments (JSONC) correctly', () => {
+        const { result } = renderHook(() => useConfig());
+
+        const jsoncStr = `{
+            // Set base URL
+            "base_url": "https://imported-jsonc.com",
+            /*
+              Global headers
+            */
+            "headers": {
+                "Imported": "true"
+            }
+        }`;
+
+        act(() => {
+            result.current.importConfig(jsoncStr);
+        });
+
+        expect(result.current.config.base_url).toBe('https://imported-jsonc.com');
+        expect(result.current.config.global_headers).toEqual({ 'Imported': 'true' });
+    });
+
     it('should throw an error on invalid config import', () => {
         const { result } = renderHook(() => useConfig());
 

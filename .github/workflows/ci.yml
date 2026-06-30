@@ -29,7 +29,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
     steps:
       # v6.0.2
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       # v4.0.1
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         id: filter
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # v6.0.2
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Set up Node.js
         # v6.4.0
@@ -71,11 +71,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # v6.0.2
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Set up Go
         # v6.4.0
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version: '1.26.4'
           cache-dependency-path: packages/container/go.sum

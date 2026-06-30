@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
@@ -21,13 +21,16 @@ import { useShallow } from 'zustand/react/shallow';
 import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
+import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
+import { fetchProjects } from './services/projectService.js';
 
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export default function App() {
     const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
+    const userProfile = useAppStore(state => state.userProfile);
 
     useEffect(() => {
         if (token) {
@@ -35,11 +38,24 @@ export default function App() {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             .then(res => {
+                if (res.status === 401) {
+                    logout();
+                    throw new Error('Session expired');
+                }
                 if (res.ok) return res.json();
                 throw new Error('Failed to fetch profile');
             })
             .then(data => {
-                useAppStore.setState({ userProfile: { username: data.username, apiKey: data.api_key, publicKey: data.public_key } });
+                useAppStore.setState({ 
+                    userProfile: { 
+                        username: data.username, 
+                        apiKey: data.api_key, 
+                        publicKey: data.public_key,
+                        isGuest: data.is_guest,
+                        deleteRequestedAt: data.delete_requested_at,
+                        twoFactorEnabled: data.two_factor_enabled
+                    } 
+                });
             })
             .catch(err => {
                 console.error(err);
@@ -49,6 +65,83 @@ export default function App() {
             useAppStore.setState({ userProfile: null, activeProject: null });
         }
     }, [token]);
+
+    const inviteProcessingRef = useRef(false);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const inviteToken = urlParams.get('token');
+        if (inviteToken && token && !inviteProcessingRef.current) {
+            inviteProcessingRef.current = true;
+            fetch(`${PROXY_URL}/api/auth/invitations/accept`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: inviteToken })
+            })
+            .then(async res => {
+                if (res.ok) {
+                    const data = await res.json();
+                    showToast('Invitation accepted successfully', 'success');
+                    // Remove token from url
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.delete('token');
+                    window.history.replaceState({}, '', newUrl);
+
+                    try {
+                        const projs = await fetchProjects();
+                        useAppStore.setState({ projects: projs });
+                        const acceptedProj = projs.find(p => p.id === data.project_id);
+                        if (acceptedProj) {
+                            useAppStore.setState({
+                                activeProject: acceptedProj,
+                                loadedRunId: null,
+                                liveRunId: null,
+                                historyStats: null,
+                                stats: null,
+                                liveCount: 0,
+                                selectedResult: null,
+                                heatmapFilter: null,
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Failed to refresh projects after accept', err);
+                    }
+                } else {
+                    res.json().then(data => {
+                        showToast(`Failed to accept invitation: ${data.error}`, 'error');
+                    });
+                }
+            })
+            .catch(err => {
+                showToast(`Failed to accept invitation`, 'error');
+            });
+        }
+    }, [token]);
+
+    useEffect(() => {
+        const handleInviteAccepted = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            showToast('Invitation accepted successfully', 'success');
+            fetchProjects().then(projs => {
+                useAppStore.setState({ projects: projs });
+                const acceptedProj = projs.find(p => p.id === detail.projectId);
+                if (acceptedProj) {
+                    useAppStore.setState({
+                        activeProject: acceptedProj,
+                        loadedRunId: null,
+                        liveRunId: null,
+                        historyStats: null,
+                        stats: null,
+                        liveCount: 0,
+                        selectedResult: null,
+                        heatmapFilter: null,
+                    });
+                }
+            });
+        };
+        window.addEventListener('swazz:invite-accepted', handleInviteAccepted);
+        return () => window.removeEventListener('swazz:invite-accepted', handleInviteAccepted);
+    }, []);
 
     // Only subscribe to what App.tsx needs for rendering
     const {
@@ -73,6 +166,16 @@ export default function App() {
         config, updateConfig, updateHeaders, updateCookies,
         updateDictionaries, updateProfiles, importConfig, exportConfig
     } = useConfig();
+
+    const [triagePrompt, setTriagePrompt] = useState<{
+        id: string;
+        triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none';
+        ruleId: string;
+        endpoint: string;
+        method: string;
+        payload?: string;
+    } | null>(null);
+    const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
     const { start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
 
@@ -140,18 +243,123 @@ export default function App() {
         }
     }, [importConfig, loadEndpoints, showToast]);
 
+    const handleConfirmTriageIgnore = useCallback(() => {
+        if (!triagePrompt) return;
+
+        const newRule: any = {
+            rule_id: triagePrompt.ruleId,
+        };
+
+        if (triageScope === 'finding') {
+            newRule.endpoint = triagePrompt.endpoint;
+            newRule.method = triagePrompt.method;
+        } else if (triageScope === 'endpoint') {
+            newRule.endpoint = triagePrompt.endpoint;
+        } else if (triageScope === 'all') {
+            newRule.endpoint = '**';
+        }
+
+        // Clean payload if present and short enough
+        if (triagePrompt.payload && triagePrompt.payload.length > 0 && triagePrompt.payload.length < 150) {
+            let cleanPayload = triagePrompt.payload.trim();
+            if (cleanPayload.includes('…')) {
+                cleanPayload = cleanPayload.split('…')[0].trim();
+            }
+            if (!cleanPayload.startsWith('{') && !cleanPayload.startsWith('[')) {
+                if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
+                    try {
+                        const parsed = JSON.parse(cleanPayload);
+                        if (typeof parsed === 'string') {
+                            cleanPayload = parsed;
+                        }
+                    } catch { /* */ }
+                }
+                if (typeof cleanPayload === 'string' && cleanPayload.trim().length > 0) {
+                    newRule.payload = cleanPayload;
+                }
+            }
+        }
+
+        const currentIgnoreRules = config.rules?.ignore_rules || [];
+        // Check if identical rule already exists to avoid duplication
+        const exists = currentIgnoreRules.some(r => 
+            r.rule_id === newRule.rule_id && 
+            r.endpoint === newRule.endpoint && 
+            r.method === newRule.method && 
+            r.payload === newRule.payload
+        );
+
+        if (!exists) {
+            updateConfig({
+                rules: {
+                    ...config.rules,
+                    ignore_rules: [...currentIgnoreRules, newRule],
+                }
+            });
+            showToast(`Added ignore rule for ${newRule.rule_id}`, 'success');
+        } else {
+            showToast(`Ignore rule already exists in config`, 'info');
+        }
+
+        setTriagePrompt(null);
+    }, [triagePrompt, triageScope, config, updateConfig, showToast]);
+
     const handleTriage = useCallback(async (id: string, triage: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => {
         await updateTriage(id, triage);
         const current = useAppStore.getState().selectedResult;
-        if (current && current.id === id) {
+        const matchesCurrent = current && current.id === id;
+        if (matchesCurrent) {
             useAppStore.setState({
                 selectedResult: { ...current, triage } as any
             });
         }
         // Force refresh of the results list in Inspector
         useAppStore.setState(state => ({ liveCount: state.liveCount + 1 }));
-        showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
-    }, [updateTriage, showToast]);
+
+        if (triage === 'ignored' || triage === 'false_positive') {
+            if (current && current.id === id) {
+                const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+                setTriagePrompt({
+                    id,
+                    triage,
+                    ruleId,
+                    endpoint: current.endpoint || '',
+                    method: current.method || '',
+                    payload: typeof current.payload === 'string' ? current.payload : (current.payload ? JSON.stringify(current.payload) : ''),
+                });
+                setTriageScope('finding');
+            } else {
+                showToast(`Result triaged as: ${triage}`, 'info');
+            }
+        } else {
+            if (triage === 'none' || triage === 'acknowledged') {
+                if (current && current.id === id) {
+                    const ruleId = current.analyzerFindings?.[0]?.ruleId || (current.status && current.status > 0 ? `swazz/status-${current.status}` : 'swazz/network-error');
+                    const currentIgnoreRules = config.rules?.ignore_rules || [];
+                    const filteredRules = currentIgnoreRules.filter(r => 
+                        !(r.rule_id === ruleId && 
+                          (r.endpoint === current.endpoint || r.endpoint === '**') && 
+                          (r.method === current.method || !r.method))
+                    );
+                    if (filteredRules.length !== currentIgnoreRules.length) {
+                        updateConfig({
+                            rules: {
+                                ...config.rules,
+                                ignore_rules: filteredRules,
+                            }
+                        });
+                        showToast(`Removed matching ignore rule for ${ruleId}`, 'info');
+                    } else {
+                        showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+                    }
+                } else {
+                    showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+                }
+            } else {
+                showToast(`Result triaged as: ${triage === 'none' ? 'No Triage' : triage}`, 'info');
+            }
+        }
+    }, [updateTriage, showToast, config, updateConfig]);
 
     const handleExportIgnoreRules = useCallback(async () => {
         const triaged = await getAllTriaged();
@@ -175,10 +383,13 @@ export default function App() {
                 if (!cleanPayload.startsWith('{') && !cleanPayload.startsWith('[')) {
                     if (cleanPayload.startsWith('"') && cleanPayload.endsWith('"')) {
                         try {
-                            cleanPayload = JSON.parse(cleanPayload);
+                            const parsed = JSON.parse(cleanPayload);
+                            if (typeof parsed === 'string') {
+                                cleanPayload = parsed;
+                            }
                         } catch { /* */ }
                     }
-                    if (cleanPayload.trim().length > 0) {
+                    if (typeof cleanPayload === 'string' && cleanPayload.trim().length > 0) {
                         rule.payload = cleanPayload;
                     }
                 }
@@ -337,12 +548,32 @@ export default function App() {
         } as FuzzResult });
     };
 
+
+
     if (isLoading) {
         return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
     }
 
-    if (authEnabled && !token && !isGuest) {
+    if (!token && !isGuest) {
         return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
+    }
+
+    if (userProfile?.deleteRequestedAt) {
+        return (
+            <DeletionOverlay
+                deleteRequestedAt={userProfile.deleteRequestedAt}
+                onCancelSuccess={() => {
+                    useAppStore.setState(state => ({
+                        userProfile: state.userProfile ? {
+                            ...state.userProfile,
+                            deleteRequestedAt: null
+                        } : null
+                    }));
+                    showToast('Account deletion cancelled successfully', 'success');
+                }}
+                onLogout={logout}
+            />
+        );
     }
 
     return (
@@ -437,13 +668,8 @@ export default function App() {
                     config={config}
                     onUpdateHeaders={updateHeaders}
                     onUpdateCookies={updateCookies}
-                    onUpdateDictionaries={updateDictionaries}
                     onUpdateProfiles={updateProfiles}
                     onUpdateConfig={updateConfig}
-                    onImportConfig={handleImportConfig}
-                    onExportConfig={exportConfig}
-                    onExportIgnoreRules={handleExportIgnoreRules}
-                    onToast={showToast}
                 />
             </main>
 
@@ -458,6 +684,80 @@ export default function App() {
                     config={config}
                     onTriage={handleTriage}
                 />
+            )}
+
+            {triagePrompt && (
+                <div className="modal-container">
+                    <div className="modal-overlay" onClick={() => setTriagePrompt(null)} />
+                    <div className="ignore-modal-content">
+                        <div className="modal-header">
+                            <h2>Add Ignore Rule</h2>
+                            <button className="modal-close" onClick={() => setTriagePrompt(null)}>✕</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="ignore-modal-form">
+                                <div className="ignore-modal-field">
+                                    <label className="ignore-modal-label">Rule ID</label>
+                                    <input className="input" type="text" value={triagePrompt.ruleId} readOnly />
+                                </div>
+                                <div className="ignore-modal-field">
+                                    <label className="ignore-modal-label">Select Scope</label>
+                                    <div className="ignore-modal-radio-group">
+                                        <label className="ignore-modal-radio-label">
+                                            <input 
+                                                type="radio" 
+                                                name="ignore-scope" 
+                                                value="finding" 
+                                                checked={triageScope === 'finding'} 
+                                                onChange={() => setTriageScope('finding')} 
+                                            />
+                                            <div>
+                                                <div>Only this finding</div>
+                                                <div className="ignore-modal-radio-desc">
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.method} {triagePrompt.endpoint}</strong>
+                                                </div>
+                                            </div>
+                                        </label>
+                                        <label className="ignore-modal-radio-label">
+                                            <input 
+                                                type="radio" 
+                                                name="ignore-scope" 
+                                                value="endpoint" 
+                                                checked={triageScope === 'endpoint'} 
+                                                onChange={() => setTriageScope('endpoint')} 
+                                            />
+                                            <div>
+                                                <div>All methods on this endpoint</div>
+                                                <div className="ignore-modal-radio-desc">
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.endpoint}</strong> for any method
+                                                </div>
+                                            </div>
+                                        </label>
+                                        <label className="ignore-modal-radio-label">
+                                            <input 
+                                                type="radio" 
+                                                name="ignore-scope" 
+                                                value="all" 
+                                                checked={triageScope === 'all'} 
+                                                onChange={() => setTriageScope('all')} 
+                                            />
+                                            <div>
+                                                <div>Everywhere</div>
+                                                <div className="ignore-modal-radio-desc">
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> across all endpoints
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div className="ignore-modal-footer">
+                                    <button className="btn btn-ghost" onClick={() => setTriagePrompt(null)}>Cancel</button>
+                                    <button className="btn btn-primary" onClick={handleConfirmTriageIgnore}>Ignore Finding</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {isHotkeysHelpOpen && (

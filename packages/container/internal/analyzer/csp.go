@@ -1,0 +1,109 @@
+package analyzer
+
+import (
+	"fmt"
+	"strings"
+	"swazz-engine/internal/swagger"
+)
+
+// CSPAnalyzer detects missing or weak Content Security Policy headers.
+type CSPAnalyzer struct{}
+
+// Analyze parses Content-Security-Policy headers and checks for missing or insecure directives.
+func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
+	if input == nil || input.ResponseHeaders == nil {
+		return nil
+	}
+
+	var findings []swagger.AnalysisFinding
+
+	cspHeaders := input.ResponseHeaders.Values("Content-Security-Policy")
+	cspReportOnlyHeaders := input.ResponseHeaders.Values("Content-Security-Policy-Report-Only")
+
+	contentType := strings.ToLower(input.ResponseHeaders.Get("Content-Type"))
+	isHTML := strings.Contains(contentType, "text/html")
+
+	hasCSP := len(cspHeaders) > 0 || len(cspReportOnlyHeaders) > 0
+
+	// 1. Missing CSP on HTML responses
+	if isHTML && !hasCSP {
+		findings = append(findings, swagger.AnalysisFinding{
+			RuleID:        "swazz/csp-missing",
+			Level:         "warning",
+			Message:       "Content Security Policy (CSP) header is missing on HTML response.",
+			Evidence:      fmt.Sprintf("Content-Type: %s", input.ResponseHeaders.Get("Content-Type")),
+			OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+		})
+	}
+
+	// Helper function to check directives in a CSP header
+	analyzeHeader := func(headerName, headerVal string) {
+		if headerVal == "" {
+			return
+		}
+		// Multiple policies can be combined in a single header separated by commas
+		policies := strings.Split(headerVal, ",")
+		for _, policy := range policies {
+			// Directives are separated by semicolons
+			directives := strings.Split(policy, ";")
+			for _, d := range directives {
+				d = strings.TrimSpace(d)
+				if d == "" {
+					continue
+				}
+				parts := strings.Fields(d)
+				if len(parts) < 2 {
+					continue
+				}
+				directiveName := parts[0]
+				directiveNameLower := strings.ToLower(directiveName)
+				sources := parts[1:]
+
+				for _, src := range sources {
+					srcLower := strings.ToLower(src)
+					if src == "*" {
+						findings = append(findings, swagger.AnalysisFinding{
+							RuleID:        "swazz/csp-unsafe-directive",
+							Level:         "error",
+							Message:       fmt.Sprintf("Overly permissive wildcard '*' source found in %s directive '%s'.", headerName, directiveName),
+							Evidence:      fmt.Sprintf("%s: %s", headerName, d),
+							OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+						})
+					} else if srcLower == "'unsafe-inline'" {
+						// 'unsafe-inline' is standard and generally acceptable for style-src, but highly dangerous for script-src
+						if directiveNameLower == "default-src" || strings.HasPrefix(directiveNameLower, "script-src") {
+							findings = append(findings, swagger.AnalysisFinding{
+								RuleID:        "swazz/csp-unsafe-directive",
+								Level:         "error",
+								Message:       fmt.Sprintf("Insecure source 'unsafe-inline' found in %s directive '%s'.", headerName, directiveName),
+								Evidence:      fmt.Sprintf("%s: %s", headerName, d),
+								OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+							})
+						}
+					} else if srcLower == "'unsafe-eval'" {
+						// 'unsafe-eval' is only valid/dangerous for script-src and default-src
+						if directiveNameLower == "default-src" || strings.HasPrefix(directiveNameLower, "script-src") {
+							findings = append(findings, swagger.AnalysisFinding{
+								RuleID:        "swazz/csp-unsafe-directive",
+								Level:         "error",
+								Message:       fmt.Sprintf("Insecure source 'unsafe-eval' found in %s directive '%s'.", headerName, directiveName),
+								Evidence:      fmt.Sprintf("%s: %s", headerName, d),
+								OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Analyze directives in all headers
+	for _, val := range cspHeaders {
+		analyzeHeader("Content-Security-Policy", val)
+	}
+	for _, val := range cspReportOnlyHeaders {
+		analyzeHeader("Content-Security-Policy-Report-Only", val)
+	}
+
+	return findings
+}

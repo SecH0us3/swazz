@@ -27,7 +27,11 @@ func TestLoadIgnoreRules(t *testing.T) {
 	// 2. Valid ignore JSON file
 	validPath := filepath.Join(tempDir, "swazz.ignore.json")
 	validJSON := `[
+		// This is a line comment
 		{"rule_id": "swazz/reflected-xss", "endpoint": "/api/users/*"},
+		/*
+		  This is a block comment
+		*/
 		{"method": "POST", "payload": ".*select.*"}
 	]`
 	if err := os.WriteFile(validPath, []byte(validJSON), 0600); err != nil {
@@ -73,7 +77,7 @@ func TestIsIgnored(t *testing.T) {
 	}
 	for i := range rules {
 		if rules[i].Payload != "" {
-			rules[i].payloadRx, _ = regexp.Compile(rules[i].Payload)
+			rules[i].PayloadRx, _ = regexp.Compile(rules[i].Payload)
 		}
 	}
 

@@ -92,16 +92,16 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 	}
 
 	owaspCategories := []string{
-		"API1:2023 Broken Object Level Authorization",
-		"API2:2023 Broken Authentication",
-		"API3:2023 Broken Object Property Level Authorization",
-		"API4:2023 Unrestricted Resource Consumption",
-		"API5:2023 Broken Function Level Authorization",
-		"API6:2023 Unrestricted Access to Sensitive Business Flows",
-		"API7:2023 Server-Side Request Forgery",
-		"API8:2023 Security Misconfiguration",
-		"API9:2023 Improper Inventory Management",
-		"API10:2023 Unsafe Consumption of APIs",
+		"A01:2025 Broken Access Control",
+		"A02:2025 Security Misconfiguration",
+		"A03:2025 Software Supply Chain Failures",
+		"A04:2025 Cryptographic Failures",
+		"A05:2025 Injection",
+		"A06:2025 Insecure Design",
+		"A07:2025 Authentication Failures",
+		"A08:2025 Software or Data Integrity Failures",
+		"A09:2025 Security Logging & Alerting Failures",
+		"A10:2025 Mishandling of Exceptional Conditions",
 	}
 
 	var owaspGrid strings.Builder
@@ -309,7 +309,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
             <div class="stat-card"><span class="stat-value">%d</span><span class="stat-label">Endpoints</span></div>
         </div>
 
-        <h2>OWASP API Security Top 10 (2023) Summary</h2>
+        <h2>OWASP Top 10 (2025) Summary</h2>
         <div class="owasp-section">
             <div class="owasp-grid">
                 %s

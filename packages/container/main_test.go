@@ -3,13 +3,19 @@ package main
 import (
 	"encoding/json"
 	"testing"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestCliConfigAliasesAndValidation(t *testing.T) {
 	configJSON := `{
+		// global headers
 		"global_headers": {
 			"X-Test-Global": "value1"
 		},
+		/*
+		  local headers override
+		*/
 		"headers": {
 			"X-Test-Local": "value2"
 		},
@@ -36,7 +42,8 @@ func TestCliConfigAliasesAndValidation(t *testing.T) {
 	}`
 
 	var cliCfg CliConfig
-	if err := json.Unmarshal([]byte(configJSON), &cliCfg); err != nil {
+	stripped := swagger.StripJSONC([]byte(configJSON))
+	if err := json.Unmarshal(stripped, &cliCfg); err != nil {
 		t.Fatalf("Failed to unmarshal config JSON: %v", err)
 	}
 
@@ -120,5 +127,191 @@ func TestCliConfigAliasesAndValidation(t *testing.T) {
 	// Verify HAR domain filter parsing
 	if cliCfg.Settings.HarDomainFilter != "example\\.com" {
 		t.Errorf("Expected HarDomainFilter 'example\\.com', got %v", cliCfg.Settings.HarDomainFilter)
+	}
+}
+
+func TestValidatePprofAddr(t *testing.T) {
+	tests := []struct {
+		name    string
+		addr    string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "empty address",
+			addr:    "",
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name:    "localhost only",
+			addr:    "localhost",
+			want:    "localhost:6060",
+			wantErr: false,
+		},
+		{
+			name:    "127.0.0.1 only",
+			addr:    "127.0.0.1",
+			want:    "127.0.0.1:6060",
+			wantErr: false,
+		},
+		{
+			name:    "localhost with port",
+			addr:    "localhost:8080",
+			want:    "localhost:8080",
+			wantErr: false,
+		},
+		{
+			name:    "127.0.0.1 with port",
+			addr:    "127.0.0.1:8080",
+			want:    "127.0.0.1:8080",
+			wantErr: false,
+		},
+		{
+			name:    "port only",
+			addr:    ":6060",
+			want:    "127.0.0.1:6060",
+			wantErr: false,
+		},
+		{
+			name:    "ipv6 loopback",
+			addr:    "::1",
+			want:    "[::1]:6060",
+			wantErr: false,
+		},
+		{
+			name:    "ipv6 loopback brackets",
+			addr:    "[::1]",
+			want:    "[::1]:6060",
+			wantErr: false,
+		},
+		{
+			name:    "ipv6 loopback with port",
+			addr:    "[::1]:8080",
+			want:    "[::1]:8080",
+			wantErr: false,
+		},
+		{
+			name:    "unsafe bind 0.0.0.0",
+			addr:    "0.0.0.0:6060",
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "unsafe bind other IP",
+			addr:    "192.168.1.100:6060",
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "unsafe bind external hostname",
+			addr:    "example.com:6060",
+			want:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := validatePprofAddr(tt.addr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validatePprofAddr() error = %v, wantErr = %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("validatePprofAddr() got = %q, want = %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParsePprofAddr(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		envVal   string
+		wantAddr string
+		wantArgs []string
+		wantErr  bool
+	}{
+		{
+			name:     "no env, no flag",
+			args:     []string{"swazz-engine", "start"},
+			envVal:   "",
+			wantAddr: "",
+			wantArgs: []string{"swazz-engine", "start"},
+			wantErr:  false,
+		},
+		{
+			name:     "env set, no flag",
+			args:     []string{"swazz-engine", "start"},
+			envVal:   "localhost:6060",
+			wantAddr: "localhost:6060",
+			wantArgs: []string{"swazz-engine", "start"},
+			wantErr:  false,
+		},
+		{
+			name:     "flag set space style",
+			args:     []string{"swazz-engine", "start", "--pprof-addr", "localhost:7070"},
+			envVal:   "",
+			wantAddr: "localhost:7070",
+			wantArgs: []string{"swazz-engine", "start"},
+			wantErr:  false,
+		},
+		{
+			name:     "flag set equal style",
+			args:     []string{"swazz-engine", "start", "--pprof-addr=localhost:7070", "--config", "conf.json"},
+			envVal:   "",
+			wantAddr: "localhost:7070",
+			wantArgs: []string{"swazz-engine", "start", "--config", "conf.json"},
+			wantErr:  false,
+		},
+		{
+			name:     "flag overrides env",
+			args:     []string{"swazz-engine", "start", "--pprof-addr", "localhost:7070"},
+			envVal:   "localhost:6060",
+			wantAddr: "localhost:7070",
+			wantArgs: []string{"swazz-engine", "start"},
+			wantErr:  false,
+		},
+		{
+			name:     "flag missing value",
+			args:     []string{"swazz-engine", "start", "--pprof-addr"},
+			envVal:   "",
+			wantAddr: "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(key string) string {
+				if key == "SWAZZ_PPROF_ADDR" {
+					return tt.envVal
+				}
+				return ""
+			}
+			addr, gotArgs, err := parsePprofAddr(tt.args, getenv)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parsePprofAddr() error = %v, wantErr = %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if addr != tt.wantAddr {
+				t.Errorf("parsePprofAddr() addr = %q, want = %q", addr, tt.wantAddr)
+			}
+			if len(gotArgs) != len(tt.wantArgs) {
+				t.Errorf("parsePprofAddr() args len = %d, want = %d (got = %v, want = %v)", len(gotArgs), len(tt.wantArgs), gotArgs, tt.wantArgs)
+				return
+			}
+			for i := range gotArgs {
+				if gotArgs[i] != tt.wantArgs[i] {
+					t.Errorf("parsePprofAddr() args[%d] = %q, want = %q", i, gotArgs[i], tt.wantArgs[i])
+				}
+			}
+		})
 	}
 }

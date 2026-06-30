@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { fetchProjects, createProject } from '../services/projectService.js';
+import { useToast } from '../hooks/useToast.js';
 
 interface Project {
     id: string;
@@ -26,6 +27,7 @@ export function ProjectSelector() {
     };
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const { showToast } = useToast();
 
     const handleCreateProject = async (name: string) => {
         try {
@@ -37,7 +39,7 @@ export function ProjectSelector() {
                 setActiveProject(newProj);
             }
         } catch {
-            alert('Failed to create project');
+            showToast('Failed to create project', 'error');
         }
     };
 

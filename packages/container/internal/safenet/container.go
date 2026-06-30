@@ -60,6 +60,7 @@ func IsRunningInContainer() bool {
 func AssertRunningInContainer(allowBypass bool) {
 	if allowBypass || os.Getenv("SWAZZ_DEV") == "1" {
 		log.Println("WARNING: Bypassing container check (running in dangerous/development host mode)")
+		AllowLocalNetwork = true
 		return
 	}
 	if !IsRunningInContainer() {

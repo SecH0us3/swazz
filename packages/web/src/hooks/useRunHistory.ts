@@ -178,34 +178,38 @@ function getOwaspCategories(ruleId: string): string[] {
     switch (ruleId) {
         case 'swazz/bola-idor':
         case 'swazz/tenant-isolation-bypass':
-            return ['API1:2023 Broken Object Level Authorization'];
+            return ['A01:2025 Broken Access Control'];
         case 'swazz/unauthorized-access':
             return [
-                'API2:2023 Broken Authentication',
-                'API5:2023 Broken Function Level Authorization'
+                'A07:2025 Authentication Failures',
+                'A01:2025 Broken Access Control'
             ];
         case 'swazz/sensitive-data-leak':
-            return ['API3:2023 Broken Object Property Level Authorization'];
+            return ['A01:2025 Broken Access Control'];
         case 'swazz/no-rate-limit':
         case 'swazz/rate-limit-active':
         case 'swazz/response-size-anomaly':
-            return ['API4:2023 Unrestricted Resource Consumption'];
+            return ['A06:2025 Insecure Design'];
         case 'swazz/oob-interaction':
-            return ['API10:2023 Unsafe Consumption of APIs'];
+            return ['A08:2025 Software or Data Integrity Failures'];
         case 'swazz/cors-misconfig':
+            return ['A02:2025 Security Misconfiguration'];
         case 'swazz/crlf-injection':
         case 'swazz/header-injection':
         case 'swazz/reflected-xss':
+        case 'swazz/rce-leak':
+        case 'swazz/time-based-sqli':
+        case 'swazz/time-based-cmdi':
+            return ['A05:2025 Injection'];
         case 'swazz/stack-trace-leak':
         case 'swazz/null-pointer-exception':
         case 'swazz/sql-error-leak':
-        case 'swazz/rce-leak':
         case 'swazz/timeout':
         case 'swazz/network-error':
-            return ['API8:2023 Security Misconfiguration'];
+            return ['A10:2025 Mishandling of Exceptional Conditions'];
         default:
             if (ruleId.startsWith('swazz/status-5')) {
-                return ['API8:2023 Security Misconfiguration'];
+                return ['A10:2025 Mishandling of Exceptional Conditions'];
             }
             return [];
     }
@@ -319,16 +323,16 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
     }
 
     const owaspCategories = [
-        "API1:2023 Broken Object Level Authorization",
-        "API2:2023 Broken Authentication",
-        "API3:2023 Broken Object Property Level Authorization",
-        "API4:2023 Unrestricted Resource Consumption",
-        "API5:2023 Broken Function Level Authorization",
-        "API6:2023 Unrestricted Access to Sensitive Business Flows",
-        "API7:2023 Server-Side Request Forgery",
-        "API8:2023 Security Misconfiguration",
-        "API9:2023 Improper Inventory Management",
-        "API10:2023 Unsafe Consumption of APIs",
+        "A01:2025 Broken Access Control",
+        "A02:2025 Security Misconfiguration",
+        "A03:2025 Software Supply Chain Failures",
+        "A04:2025 Cryptographic Failures",
+        "A05:2025 Injection",
+        "A06:2025 Insecure Design",
+        "A07:2025 Authentication Failures",
+        "A08:2025 Software or Data Integrity Failures",
+        "A09:2025 Security Logging & Alerting Failures",
+        "A10:2025 Mishandling of Exceptional Conditions",
     ];
 
     let owaspGrid = '';
@@ -568,7 +572,7 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
             <div class="stat-card"><span class="stat-value">${totalEndpoints}</span><span class="stat-label">Endpoints</span></div>
         </div>
 
-        <h2>OWASP API Security Top 10 (2023) Summary</h2>
+        <h2>OWASP Top 10 (2025) Summary</h2>
         <div class="owasp-section">
             <div class="owasp-grid">
                 ${owaspGrid}

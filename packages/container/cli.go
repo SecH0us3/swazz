@@ -17,6 +17,7 @@ import (
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/har"
 	"swazz-engine/internal/runner"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"strings"
 	"sync"
@@ -70,9 +71,13 @@ func runCLI(args []string) {
 	ignoreConfig := flags.String("ignore-config", "swazz.ignore.json", "Path to ignore rules JSON file")
 	allowPrivateIps := flags.Bool("allow-private-ips", true, "Allow requests to private IP addresses (default: true for CLI mode)")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
+	logLevelFlag := flags.String("log-level", "", "Log level: debug, info, warn, error")
+	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")
+	qFlag := flags.Bool("q", false, "Silence all progress output (alias of -quiet)")
+	progressOnChangeFlag := flags.Bool("progress-on-change", false, "Only print progress when the active endpoint changes")
 
 	if err := flags.Parse(args); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -83,11 +88,16 @@ func runCLI(args []string) {
 		}
 	})
 
+	hasDebug := *debugMode
+	hasQuiet := *quietFlag || *qFlag
+	hasLogLevel := *logLevelFlag != ""
+
 	// 1. Read config
 	configData, err := os.ReadFile(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to read config file %s: %v", *configPath, err)
 	}
+	configData = swagger.StripJSONC(configData)
 
 	cliCfg := CliConfig{
 		Security: swagger.SecurityConfig{
@@ -102,12 +112,29 @@ func runCLI(args []string) {
 		cliCfg.Security.AllowPrivateIPs = *allowPrivateIps
 	}
 
-	if *debugMode {
-		cliCfg.Settings.Debug = true
-		logger.SetLevel(logger.LevelDebug)
+	var finalLevel string
+	envLevel := os.Getenv("SWAZZ_LOG_LEVEL")
+	if envLevel != "" {
+		finalLevel = envLevel
 	} else {
-		logger.SetLevel(logger.LevelWarn)
+		finalLevel = "info"
 	}
+
+	if hasDebug {
+		finalLevel = "debug"
+	}
+	if hasQuiet {
+		finalLevel = "error"
+	}
+	if hasLogLevel {
+		if hasDebug {
+			fmt.Fprintf(os.Stderr, "Warning: both -debug and -log-level specified, using -log-level %s\n", *logLevelFlag)
+		}
+		finalLevel = *logLevelFlag
+	}
+
+	logger.SetLevelByName(finalLevel)
+	cliCfg.Settings.Debug = (logger.GetLevel() == logger.LevelDebug)
 
 	runCfg, err := BuildRunnerConfig(&cliCfg)
 	if err != nil {
@@ -140,6 +167,8 @@ func runCLI(args []string) {
 	var resultsMu sync.Mutex
 
 	go func() {
+		var lastEndpoint string
+		var lastProfile string
 		for evt := range resultsCh {
 			if evt.Type == runner.EventResult {
 				if res, ok := evt.Data.(*swagger.FuzzResult); ok {
@@ -149,7 +178,17 @@ func runCLI(args []string) {
 				}
 			} else if evt.Type == runner.EventProgress {
 				if stats, ok := evt.Data.(swagger.RunStats); ok {
-					printProgress(stats)
+					if *progressOnChangeFlag {
+						currEp := stats.Progress.CurrentEndpoint
+						currProf := stats.Progress.CurrentProfile
+						if (currEp != "" && currEp != lastEndpoint) || (currProf != "" && currProf != lastProfile) {
+							lastEndpoint = currEp
+							lastProfile = currProf
+							printProgressClean(stats)
+						}
+					} else {
+						printProgress(stats)
+					}
 				}
 			}
 		}
@@ -211,7 +250,7 @@ func runCLI(args []string) {
 		}()
 	}
 
-	fmt.Printf("Starting fuzz run on %d endpoints across %d profiles...\n", len(runCfg.Endpoints), len(runCfg.Settings.Profiles))
+	logger.Info("Starting fuzz run on %d endpoints across %d profiles...", len(runCfg.Endpoints), len(runCfg.Settings.Profiles))
 	if err := r.Start(ctx); err != nil {
 		restoreTerm()
 		log.Fatalf("Run failed: %v", err)
@@ -219,7 +258,7 @@ func runCLI(args []string) {
 
 	restoreTerm()
 	r.Unsubscribe(resultsCh)
-	fmt.Println("\nRun complete.")
+	logger.Info("Run complete.")
 
 	// 5. Generate outputs
 	resultsMu.Lock()
@@ -232,9 +271,15 @@ func runCLI(args []string) {
 		log.Fatalf("Failed to load ignore rules: %v", err)
 	}
 
+	var combinedIgnoreRules []classifier.IgnoreRule
+	combinedIgnoreRules = append(combinedIgnoreRules, ignoreRules...)
+	if runCfg.Rules != nil && len(runCfg.Rules.IgnoreRules) > 0 {
+		combinedIgnoreRules = append(combinedIgnoreRules, runCfg.Rules.IgnoreRules...)
+	}
+
 	// Map swagger.RulesConfig to classifier.RulesConfig
 	clsRules := &classifier.RulesConfig{
-		IgnoreRules: ignoreRules,
+		IgnoreRules: combinedIgnoreRules,
 	}
 	if runCfg.Rules != nil {
 		clsRules.Ignore = runCfg.Rules.Ignore
@@ -262,11 +307,11 @@ func runCLI(args []string) {
 	printSummary(findings, &stats)
 
 	if *sarifOut != "" {
-		report := output.ToSARIF(findings, "0.1.0")
+		report := output.ToSARIF(findings, "0.1.0", runCfg.BaseURL)
 		if err := writeJSON(*sarifOut, report); err != nil {
 			log.Printf("Failed to save SARIF: %v", err)
 		} else {
-			fmt.Printf("Saved SARIF to %s\n", *sarifOut)
+			logger.Info("Saved SARIF to %s", *sarifOut)
 		}
 	}
 	if *jsonOut != "" {
@@ -274,7 +319,7 @@ func runCLI(args []string) {
 		if err := writeJSON(*jsonOut, report); err != nil {
 			log.Printf("Failed to save JSON: %v", err)
 		} else {
-			fmt.Printf("Saved JSON to %s\n", *jsonOut)
+			logger.Info("Saved JSON to %s", *jsonOut)
 		}
 	}
 	if *htmlOut != "" {
@@ -282,7 +327,7 @@ func runCLI(args []string) {
 		if err := os.WriteFile(*htmlOut, []byte(html), 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
 			log.Printf("Failed to write HTML report: %v", err)
 		} else {
-			fmt.Printf("Saved HTML to %s\n", *htmlOut)
+			logger.Info("Saved HTML to %s", *htmlOut)
 		}
 	}
 	if *junitOut != "" {
@@ -290,7 +335,7 @@ func runCLI(args []string) {
 		if err := os.WriteFile(*junitOut, junitData, 0600); err != nil { // #nosec G306
 			log.Printf("Failed to write JUnit report: %v", err)
 		} else {
-			fmt.Printf("Saved JUnit XML to %s\n", *junitOut)
+			logger.Info("Saved JUnit XML to %s", *junitOut)
 		}
 	}
 	if *markdownOut != "" {
@@ -298,17 +343,20 @@ func runCLI(args []string) {
 		if err := os.WriteFile(*markdownOut, mdData, 0600); err != nil { // #nosec G306
 			log.Printf("Failed to write Markdown report: %v", err)
 		} else {
-			fmt.Printf("Saved Markdown to %s\n", *markdownOut)
+			logger.Info("Saved Markdown to %s", *markdownOut)
 		}
 	}
 
 	if classifier.FindingsExceedThreshold(findings, *failOnSeverity) {
-		fmt.Printf("\n\033[1;31m[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.\033[0m\n", *failOnSeverity)
+		fmt.Fprintf(os.Stderr, "\n\033[1;31m[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.\033[0m\n", *failOnSeverity)
 		os.Exit(2)
 	}
 }
 
 func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
+	if safenet.AllowLocalNetwork {
+		cliCfg.Security.AllowPrivateIPs = true
+	}
 	// Standardize compatibility aliases and merge them:
 	if len(cliCfg.GlobalHeaders) > 0 {
 		if cliCfg.Headers == nil {
@@ -388,7 +436,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		wg.Add(1)
 		go func(urlStr string) {
 			defer wg.Done()
-			fmt.Printf("[Config] Fetching spec: %s\n", urlStr)
+			logger.Debug("[Config] Fetching spec: %s", urlStr)
 			startFetch := time.Now()
 
 			headersCopy := make(map[string]string)
@@ -410,9 +458,17 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 			}
 
 			fetchDur := time.Since(startFetch)
-			fmt.Printf("[Config] Fetched spec %s (size: %d bytes, took: %v)\n", urlStr, len(specRaw), fetchDur)
+			logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
 
-			parsed, err := swagger.ParseRawSpec(specRaw)
+			var parseOpts []swagger.ParserOption
+			if cliCfg.Settings.MaxNodesBudget > 0 {
+				parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
+			}
+			if cliCfg.Settings.MaxDepthLimit > 0 {
+				parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
+			}
+
+			parsed, err := swagger.ParseRawSpec(specRaw, parseOpts...)
 			if err != nil {
 				if swagger.IsHAR(specRaw) {
 					parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
@@ -452,7 +508,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 				bp = parsed.BasePath
 			}
 
-			fmt.Printf("[Config] Parsed spec %s: %d endpoints found\n", urlStr, len(parsed.Endpoints))
+			logger.Debug("[Config] Parsed spec %s: %d endpoints found", urlStr, len(parsed.Endpoints))
 
 			resChan <- specResult{
 				urlStr:    urlStr,
@@ -489,11 +545,11 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		return nil, fmt.Errorf("no base_url found in config or specs")
 	}
 
-	fmt.Printf("[Config] Aggregated total endpoints: %d\n", len(allEndpoints))
+	logger.Debug("[Config] Aggregated total endpoints: %d", len(allEndpoints))
 
 	// 3. Filter endpoints
 	if cliCfg.Endpoints != nil {
-		fmt.Printf("[Config] Filtering endpoints (Include: %d patterns, Exclude: %d patterns)\n",
+		logger.Debug("[Config] Filtering endpoints (Include: %d patterns, Exclude: %d patterns)",
 			len(cliCfg.Endpoints.Include), len(cliCfg.Endpoints.Exclude))
 		var filtered []swagger.EndpointConfig
 		for _, ep := range allEndpoints {
@@ -512,7 +568,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 			}
 		}
 		allEndpoints = filtered
-		fmt.Printf("[Config] Endpoints after filtering: %d\n", len(allEndpoints))
+		logger.Debug("[Config] Endpoints after filtering: %d", len(allEndpoints))
 	}
 
 	if len(allEndpoints) == 0 {
