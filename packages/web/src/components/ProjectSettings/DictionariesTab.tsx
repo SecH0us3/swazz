@@ -11,12 +11,35 @@ export function DictionariesTab() {
     }, [config.dictionaries]);
 
     const handleDictBlur = () => {
+        const trimmed = dictText.trim();
+        if (trimmed === '') {
+            updateConfig({ dictionaries: {} });
+            setDictError('');
+            return;
+        }
+
         try {
-            const parsed = JSON.parse(dictText);
+            const parsed = JSON.parse(trimmed);
+            if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                throw new Error('Dictionary configuration must be a JSON object');
+            }
+            
+            // Validate that all values are arrays of strings/numbers
+            for (const [key, val] of Object.entries(parsed)) {
+                if (!Array.isArray(val)) {
+                    throw new Error(`Value for key "${key}" must be an array of strings/numbers`);
+                }
+                for (const item of val) {
+                    if (typeof item !== 'string' && typeof item !== 'number') {
+                        throw new Error(`Items in array "${key}" must be strings or numbers`);
+                    }
+                }
+            }
+
             updateConfig({ dictionaries: parsed });
             setDictError('');
-        } catch {
-            setDictError('Invalid JSON format');
+        } catch (err: any) {
+            setDictError(err.message || 'Invalid JSON format');
         }
     };
 

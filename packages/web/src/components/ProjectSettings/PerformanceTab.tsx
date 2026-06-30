@@ -51,8 +51,9 @@ export function PerformanceTab() {
                     <input 
                         type="number" 
                         className="input" 
+                        min="1"
                         value={config.settings.timeout_ms} 
-                        onChange={(e) => updateSettings({ timeout_ms: parseInt(e.target.value) || 2000 })}
+                        onChange={(e) => updateSettings({ timeout_ms: Math.max(1, parseInt(e.target.value) || 2000) })}
                         style={{ width: '120px' }} 
                     />
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
@@ -65,8 +66,9 @@ export function PerformanceTab() {
                     <input 
                         type="number" 
                         className="input" 
+                        min="0"
                         value={config.settings.delay_between_requests_ms} 
-                        onChange={(e) => updateSettings({ delay_between_requests_ms: parseInt(e.target.value) || 0 })}
+                        onChange={(e) => updateSettings({ delay_between_requests_ms: Math.max(0, parseInt(e.target.value) || 0) })}
                         style={{ width: '120px' }} 
                     />
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
@@ -79,8 +81,9 @@ export function PerformanceTab() {
                     <input 
                         type="number" 
                         className="input" 
+                        min="1"
                         value={config.settings.iterations_per_profile} 
-                        onChange={(e) => updateSettings({ iterations_per_profile: parseInt(e.target.value) || 10 })}
+                        onChange={(e) => updateSettings({ iterations_per_profile: Math.max(1, parseInt(e.target.value) || 10) })}
                         style={{ width: '120px' }} 
                     />
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
@@ -115,7 +118,7 @@ export function PerformanceTab() {
                                     min={1}
                                     max={1000}
                                     value={config.settings.rate_limit_burst_size ?? 50}
-                                    onChange={(e) => updateSettings({ rate_limit_burst_size: parseInt(e.target.value) || 50 })}
+                                    onChange={(e) => updateSettings({ rate_limit_burst_size: Math.min(1000, Math.max(1, parseInt(e.target.value) || 50)) })}
                                     style={{ width: '120px' }}
                                 />
                             </div>
