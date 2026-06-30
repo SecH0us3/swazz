@@ -117,10 +117,12 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 	}
 	prCmd.Dir = worktreePath
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	prCmd.Stdout = &stdout
+	prCmd.Stderr = &stderr
 
 	if err := prCmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to create pull request: %w", err)
+		return "", fmt.Errorf("failed to create pull request: %v, stderr: %s", err, stderr.String())
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
