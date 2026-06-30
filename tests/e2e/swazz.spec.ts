@@ -55,6 +55,13 @@ test.describe('Swazz Integration E2E Test', () => {
     const targetVal = await targetInput.inputValue();
     expect(targetVal).toContain('127.0.0.1:8788');
 
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    await expect(boundaryToggle).toBeVisible();
+    await expect(boundaryToggle).toHaveClass(/active/);
+    await boundaryToggle.click();
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     // 6. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
