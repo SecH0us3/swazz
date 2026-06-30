@@ -94,9 +94,10 @@ Build the AI engine interface to invoke cheap and expensive LLM models, or custo
 ## 🐙 Step 4: Automated Git Worktree, Patching & PR Creation
 Provide automated code patching and repository synchronization, configured by a new "Propose Fixes" feature toggle.
 
-1. **Git Credentials & Setup:**
-   - Provide UI/config options in Project Settings to specify SSH keys or API tokens for GitHub/GitLab.
-   - The runner uses these credentials to authenticate.
+1. **Git Credentials & Local Setup (Zero-Liability):**
+   - Git and LLM credentials MUST NOT be stored in the Edge database or configured via the UI.
+   - The user must launch the local runner with pre-configured environment variables (`GITHUB_TOKEN`, `GITLAB_TOKEN`, `ANTHROPIC_API_KEY`) or SSH keys existing in the host's `.ssh` directory.
+   - The runner relies entirely on the local environment for permissions.
 2. **Worktree-based Branching & Fixing:**
    - If "Propose Fixes" is enabled, the CLI runner will clone the relevant repository (based on the URL mapping).
    - Use `git worktree add` to create an isolated workspace for the fix without polluting the main clone.
@@ -116,7 +117,6 @@ Build the dashboard panels to interact with AI-based reviews and configure agent
 1. **Project Config Updates (`packages/web/src/components/ProjectSettings/`):**
    - **AI Configuration Tab:** Add a dedicated tab to configure:
      - URL to Repository mappings.
-     - SSH Keys / Git API tokens for GitHub/GitLab.
      - Prompt definitions and settings for the two-pass models (cheap vs expensive).
      - Custom CLI command strings (e.g. `claude -p {{prompt_file}}`).
      - "Propose Fixes" checkbox toggle.
