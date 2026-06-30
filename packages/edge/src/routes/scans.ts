@@ -249,28 +249,34 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.get('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
-    const finding = await c.env.DB.prepare('SELECT * FROM findings WHERE id = ?')
+    // JOIN with scans to retrieve project_id (findings table has no project_id column)
+    const row = await c.env.DB.prepare(
+      'SELECT f.*, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
+    )
       .bind(findingId)
-      .first<{ id: string; project_id: string }>();
-  
-    if (!finding) {
+      .first<{ project_id: string }>();
+
+    if (!row) {
       return c.json({ error: 'Finding not found' }, 404);
     }
-  
+
     const userId = await getUserIdFromRequest(c);
     if (userId) {
-      const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'get:/api/projects/:id/scans');
+      const hasAccess = await checkPermission(c.env, userId, row.project_id, 'get:/api/projects/:id/scans');
       if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
     }
 
-    return c.json({ finding });
+    return c.json({ finding: row });
   });
 
   app.patch('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
     const body = await c.req.json();
-  
-    const finding = await c.env.DB.prepare('SELECT id, project_id FROM findings WHERE id = ?')
+
+    // JOIN with scans to retrieve project_id (findings table has no project_id column)
+    const finding = await c.env.DB.prepare(
+      'SELECT f.id, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
+    )
       .bind(findingId)
       .first<{ id: string; project_id: string }>();
 

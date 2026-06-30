@@ -4922,6 +4922,27 @@ kbd {
   border-bottom-color: transparent;
 }
 
+/* Back-to-Dashboard button */
+.btn-back-dashboard {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Icon inside tab-bar buttons */
+.tab-bar-icon {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+/* Runners count badge accent override */
+.tab-bar-count--accent {
+  margin-left: auto;
+  background-color: var(--accent);
+  color: white;
+}
+
+
 .rbac-tab-container {
   display: flex;
   flex-direction: column;

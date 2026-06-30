@@ -130,6 +130,9 @@ func main() {
 	runGit(t, remoteRepoDir, "init", "--bare")
 
 	runGit(t, repoDir, "remote", "add", "origin", remoteRepoDir)
+	// Push master to the bare remote so origin/master ref exists, then set origin/HEAD
+	runGit(t, repoDir, "push", "origin", "master")
+	runGit(t, repoDir, "remote", "set-head", "origin", "master")
 
 	// Prepend the stub directory to the system PATH so our custom "gh" is invoked
 	oldPath := os.Getenv("PATH")

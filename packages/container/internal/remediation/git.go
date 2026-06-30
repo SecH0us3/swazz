@@ -14,6 +14,24 @@ func NewGitPatcher() *GitPatcher {
 	return &GitPatcher{}
 }
 
+// defaultBranch detects the default branch from origin/HEAD.
+// Falls back to "main" if detection fails.
+func defaultBranch(repoPath string) string {
+	// #nosec G204 -- command uses no user-supplied input
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "origin/HEAD")
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err == nil {
+		// output is e.g. "origin/main\n" — strip the "origin/" prefix
+		branch := strings.TrimSpace(string(out))
+		if after, ok := strings.CutPrefix(branch, "origin/"); ok {
+			return after
+		}
+		return branch
+	}
+	return "main"
+}
+
 // CreateFixPR creates a branch, applies a patch, commits, pushes, and opens a PR.
 func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent string, title string, body string) (prUrl string, err error) {
 	worktreePath := fmt.Sprintf("%s-fix-%s", repoPath, findingID)
@@ -28,8 +46,9 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 	}()
 
 	// Step A: Create worktree
+	baseBranch := defaultBranch(repoPath)
 	// #nosec G204 -- The command is intentionally constructed from safe variables
-	worktreeCmd := exec.Command("git", "worktree", "add", "-b", branchName, worktreePath, "master")
+	worktreeCmd := exec.Command("git", "worktree", "add", "-b", branchName, worktreePath, baseBranch)
 	worktreeCmd.Dir = repoPath
 	if out, err := worktreeCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %v, output: %s", err, string(out))
@@ -91,10 +110,10 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 	var prCmd *exec.Cmd
 	if strings.Contains(remoteUrl, "gitlab") {
 		// #nosec G204 -- The command is intentionally constructed from safe variables
-		prCmd = exec.Command("glab", "mr", "create", "--title", title, "--description", body, "--source-branch", branchName, "--target-branch", "master", "--yes")
+		prCmd = exec.Command("glab", "mr", "create", "--title", title, "--description", body, "--source-branch", branchName, "--target-branch", baseBranch, "--yes")
 	} else {
 		// #nosec G204 -- The command is intentionally constructed from safe variables
-		prCmd = exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--head", branchName, "--base", "master")
+		prCmd = exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--head", branchName, "--base", baseBranch)
 	}
 	prCmd.Dir = worktreePath
 	var stdout bytes.Buffer
