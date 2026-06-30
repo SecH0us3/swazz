@@ -1,5 +1,4 @@
-import { ChangeEvent, useRef } from 'react';
-import type { SwazzConfig, FuzzingProfile, Dictionary } from '../../types.js';
+import type { SwazzConfig, FuzzingProfile } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 import { useAppStore } from '../../store/appStore.js';
 
@@ -8,13 +7,8 @@ interface Props {
     config: SwazzConfig;
     onUpdateHeaders: (h: Record<string, string>) => void;
     onUpdateCookies: (c: Record<string, string>) => void;
-    onUpdateDictionaries?: (d: Dictionary) => void;
     onUpdateProfiles: (p: FuzzingProfile[]) => void;
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
-    onImportConfig: (json: string) => void;
-    onExportConfig: () => string;
-    onExportIgnoreRules?: () => void;
-    onToast: (message: string, type?: 'info' | 'success' | 'error') => void;
     className?: string;
 }
 
@@ -32,34 +26,14 @@ export function ConfigSidebar({
     onUpdateCookies,
     onUpdateProfiles,
     onUpdateConfig,
-    onImportConfig,
-    onExportConfig,
-    onExportIgnoreRules,
-    onToast,
     className,
 }: Props) {
-    const fileRef = useRef<HTMLInputElement>(null);
     const activeProfiles = config.settings.profiles || [];
 
     const toggleProfile = (p: FuzzingProfile) => {
         const isActive = activeProfiles.includes(p);
         const next = isActive ? activeProfiles.filter((x) => x !== p) : [...activeProfiles, p];
         if (next.length > 0) onUpdateProfiles(next);
-    };
-
-    const handleImport = (e: ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            try {
-                onImportConfig(reader.result as string);
-                onToast('Config imported', 'success');
-            } catch {
-                onToast('Invalid config file', 'error');
-            }
-        };
-        reader.readAsText(file);
     };
 
     return (
@@ -91,7 +65,7 @@ export function ConfigSidebar({
                                 )}
                             </div>
                         );
-                      })}
+                    })}
                 </div>
             </Section>
 
@@ -143,53 +117,6 @@ export function ConfigSidebar({
                         });
                     }}
                 />
-            </Section>
-
-            {/* Import / Export */}
-            <Section title="Config">
-                <input ref={fileRef} type="file" accept=".json,.yaml,.yml,.har" style={{ display: 'none' }} onChange={handleImport} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }} onClick={() => fileRef.current?.click()}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/>
-                        </svg>
-                        Import Config
-                    </button>
-                    <button
-                        className="btn btn-ghost"
-                        style={{ width: '100%', justifyContent: 'center' }}
-                        onClick={() => {
-                            const json = onExportConfig();
-                            const blob = new Blob([json], { type: 'application/json' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = 'swazz.config.json';
-                            a.click();
-                            URL.revokeObjectURL(url);
-                            onToast('Config exported', 'success');
-                        }}
-                    >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        Export Config
-                    </button>
-                    {onExportIgnoreRules && (
-                        <button
-                            className="btn btn-ghost"
-                            style={{ width: '100%', justifyContent: 'center' }}
-                            onClick={onExportIgnoreRules}
-                        >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                <line x1="9" y1="9" x2="15" y2="15"/>
-                                <line x1="15" y1="9" x2="9" y2="15"/>
-                            </svg>
-                            Export Ignore Rules
-                        </button>
-                    )}
-                </div>
             </Section>
 
             <div style={{ padding: '16px 0 0 0', borderTop: '1px solid var(--border-default)', marginTop: '16px', display: 'flex', flexDirection: 'column' }}>

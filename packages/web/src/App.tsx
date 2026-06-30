@@ -668,13 +668,8 @@ export default function App() {
                     config={config}
                     onUpdateHeaders={updateHeaders}
                     onUpdateCookies={updateCookies}
-                    onUpdateDictionaries={updateDictionaries}
                     onUpdateProfiles={updateProfiles}
                     onUpdateConfig={updateConfig}
-                    onImportConfig={handleImportConfig}
-                    onExportConfig={exportConfig}
-                    onExportIgnoreRules={handleExportIgnoreRules}
-                    onToast={showToast}
                 />
             </main>
 

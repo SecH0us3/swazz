@@ -5376,6 +5376,22 @@ kbd {
   margin-top: var(--space-4);
 }
 
+.raw-config-actions-bar {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.raw-config-actions-right {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+
 
 
 

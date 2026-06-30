@@ -77,7 +77,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
     - Research using KV for keeping track of active runner heartbeat state to avoid Durable Object lookups.
 
-- [ ] **Task 87: Project Invitations and Collaboration (via Email/Username)**
+- [x] **Task 87: Project Invitations and Collaboration (via Email/Username)**
   - **Design Goal:** Enable multi-user collaboration inside projects by allowing project owners to invite other users to join their projects with structured Role-Based Access Control (RBAC).
   - **Implementation Details:**
     - Define a formal permission set mapping combinations of HTTP Verbs and Endpoint paths (e.g., `READ: /api/projects/:id/runs`, `WRITE: /api/projects/:id/settings`).

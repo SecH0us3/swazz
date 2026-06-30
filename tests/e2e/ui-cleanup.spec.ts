@@ -22,9 +22,11 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await expect(sidebar.locator('text=Profiles')).toBeVisible();
     await expect(sidebar.locator('text=Headers (User A / Primary Session)')).toBeVisible();
     await expect(sidebar.locator('text=Cookies (User A / Primary Session)')).toBeVisible();
-    await expect(sidebar.locator('text=Import Config')).toBeVisible();
 
     // ConfigSidebar must NOT contain old redundant/moved sections
+    await expect(sidebar.locator('text=Config')).not.toBeVisible();
+    await expect(sidebar.locator('text=Import Config')).not.toBeVisible();
+    await expect(sidebar.locator('text=Export Config')).not.toBeVisible();
     await expect(sidebar.locator('text=Intensity')).not.toBeVisible();
     await expect(sidebar.locator('text=BOLA / Multi-Identity')).not.toBeVisible();
     await expect(sidebar.locator('text=Dictionaries')).not.toBeVisible();
@@ -71,5 +73,14 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await expect(page.locator('text=Custom Fuzzing Dictionaries')).toBeVisible();
     await expect(page.locator('text=How Dictionaries Work')).toBeVisible();
     await expect(page.locator('textarea[placeholder*="email"]')).toBeVisible();
+
+    // 7. Verify "Raw JSON Config" tab has Import/Export buttons
+    const rawConfigTabBtn = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
+    await expect(rawConfigTabBtn).toBeVisible();
+    await rawConfigTabBtn.click();
+
+    await expect(page.locator('button:has-text("Import File")')).toBeVisible();
+    await expect(page.locator('button:has-text("Export File")')).toBeVisible();
   });
 });
+
