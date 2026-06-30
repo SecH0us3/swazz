@@ -1,0 +1,18 @@
+# === DOCKERFILE FOR NODE.JS PROJECTS ===
+# Inherits from the CI image, so you must build Dockerfile.ci first:
+# docker build -t swazz-runner:ci -f packages/container/Dockerfile.ci .
+
+FROM swazz-runner:ci
+
+USER root
+
+# Install Node.js and Yarn for executing local scripts during fixes
+RUN apk update && apk add --no-cache \
+    nodejs \
+    npm \
+    yarn
+
+USER swazz:swazz
+
+ENTRYPOINT ["/swazz-engine"]
+CMD ["serve"]

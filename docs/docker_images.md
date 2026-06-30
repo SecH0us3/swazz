@@ -48,30 +48,31 @@ docker run -e SWAZZ_API_KEY="your-key" swazz-runner:ci
 
 ---
 
-## 3. AI Remediation & Auto-Fix (Fat Image)
+## 3. Specialized AI & Remediation Images (Inheritance)
 
-**File:** `packages/container/Dockerfile.ai`
-**Base Image:** `alpine:latest`
+For Auto-Fix and Remediation capabilities, we use **Docker Inheritance**. Instead of copying the base CI tools into every file, our specialized images (`Dockerfile.ai`, `Dockerfile.node`, `Dockerfile.dotnet`) inherit from `swazz-runner:ci`.
 
-This is a "Fat Image" designed specifically for the AI Auto-Fix feature. It bundles multiple runtimes (Node.js, Python 3) and CLI tools (`gh`, `glab`, `claude-cli`, `agy`) so that the Go Runner can execute AI commands locally and open Pull Requests automatically.
-
-**Use Case:**
-- You enabled **"Propose Fixes Automatically"** in the Swazz dashboard.
-- You configured custom AI commands (e.g., `claude -m sonnet`) that require Node or Python.
-- The runner needs to create Branches, commit fixes, and open PRs using GitHub (`gh`) or GitLab (`glab`) CLIs.
-
-**How to build & run:**
+**Important Requirement:** You MUST build the CI image first before building these:
 ```bash
-# Build the AI-capable image
-docker build -t swazz-runner:ai -f packages/container/Dockerfile.ai packages/container/
-
-# Run it, providing both Swazz credentials AND your AI/Git tokens
-docker run \
-  -e SWAZZ_API_KEY="your-swazz-key" \
-  -e ANTHROPIC_API_KEY="sk-ant-..." \
-  -e GITHUB_TOKEN="ghp_..." \
-  swazz-runner:ai
+docker build -t swazz-runner:ci -f packages/container/Dockerfile.ci packages/container/
 ```
+
+### 3a. AI Remediation (Fat Image)
+**File:** `packages/container/Dockerfile.ai`
+Bundles multiple runtimes (Node.js, Python 3) and CLI tools (`gh`, `glab`, `claude-cli`, `agy`). Use this if you have custom AI prompts using Python or Node CLIs.
+
+**How to build:**
+```bash
+docker build -t swazz-runner:ai -f packages/container/Dockerfile.ai packages/container/
+```
+
+### 3b. Node.js Environment
+**File:** `packages/container/Dockerfile.node`
+Adds Node.js and Yarn to the CI image. Ideal if your project relies on Node and you want the runner to be able to execute `npm run build` or `npm run test` as part of the auto-remediation workflow.
+
+### 3c. .NET Environment
+**File:** `packages/container/Dockerfile.dotnet`
+Adds the .NET 8 SDK to the CI image for compiling or testing C# projects during remediation.
 
 ---
 
