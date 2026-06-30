@@ -225,3 +225,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Introduce a `getDB(env, shardId?: number): D1Database` helper that resolves the right D1 binding — today it always returns `env.DB`, but tomorrow it can select `env.DB_SHARD_1`, etc. All query sites go through this helper.
     - Keep using standard UUIDv4 for IDs for now. If UUIDv8 shard-embedding is chosen later, it can be introduced as an opt-in generator without breaking existing data.
     - Document the chosen routing strategy decision in `docs/sharding.md` before data grows large enough to matter.
+
+
+- [ ] **Task 114: Slow Query Monitoring**
+  - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
+  - **Implementation Details:**
+    - Wrap all D1 `prepare().bind().run() / .first() / .all()` calls in a thin timing helper (e.g. `timedQuery(stmt, label, env)`) that records wall-clock duration.
+    - Emit a structured log line (via `console.warn` or a dedicated logger) whenever a query exceeds a configurable threshold (default: 200 ms).
+    - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
+    - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
