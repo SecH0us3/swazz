@@ -64,14 +64,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
-- [/] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
+- [x] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
   - **Design Goal:** Provide a modern, passwordless authentication alternative using biometric sensors (FaceID, TouchID, Windows Hello) or physical security keys via the WebAuthn API.
   - **Implementation Details:**
     - Implement WebAuthn registration and authentication flows in the edge coordinator backend.
     - Store credential public keys and signature counters in the users D1 database.
     - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
 
-- [/] **Task 86: Cloudflare KV and Cache API Optimization Research**
+- [x] **Task 86: Cloudflare KV and Cache API Optimization Research**
   - **Design Goal:** Identify parts of the coordinator and runner architectures that would benefit from global, low-latency Cloudflare KV or regional Cache API storage (e.g., global API rate limiting, scan fuzzer payload catalog caching, global session blacklists, or feature flags).
   - **Implementation Details:**
     - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
