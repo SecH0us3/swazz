@@ -2,6 +2,47 @@
 
 This plan details the step-by-step implementation for automatically analyzing, explaining, and fixing fuzzing findings using AI models (e.g., Claude, Gemini, or custom CLI agents) with context from the client's local repository.
 
+## 📊 Data Flow & Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant UI as Web Dashboard
+    participant D1 as Edge D1 (DB)
+    participant Run as Go Runner (Agent)
+    participant Git as Local Git Repo
+    participant LLM1 as Cheap LLM (Pass 1)
+    participant LLM2 as Expensive LLM / CLI (Pass 2)
+    participant GH as GitHub/GitLab
+
+    UI->>D1: Trigger Analysis for Finding ID
+    D1-->>Run: Receive Finding Data & AI Config
+    Run->>Git: Match URL to Repository Map
+    Git-->>Run: Return Local Code Snippets
+    
+    note over Run,LLM1: First Pass: Triage
+    Run->>LLM1: Send Prompt 1 + Context (Code + Payloads)
+    LLM1-->>Run: Return relevance (Confirmed / False Positive)
+    
+    alt is False Positive
+        Run->>D1: Update ai_status="completed", ai_relevance="false_positive"
+    else is Confirmed
+        note over Run,LLM2: Second Pass: Remediation
+        Run->>LLM2: Send Prompt 2 + Full Context
+        LLM2-->>Run: Return Explanation + Diff Patch
+        Run->>D1: Save Explanation & Proposed Patch
+        
+        opt Propose Fixes = true
+            Run->>Git: git worktree add branch swazz/fix-ID
+            Run->>Git: apply diff patch
+            Run->>Git: git commit & push (SSH/Token)
+            Run->>GH: Open Pull Request
+            GH-->>Run: Return PR Link
+            Run->>D1: Save PR Link
+        end
+    end
+    D1-->>UI: Live Update via WebSocket
+```
+
 ---
 
 ## 🛠️ Step 1: Database Schema Migration (Cloudflare Edge D1)
