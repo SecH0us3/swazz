@@ -21,6 +21,8 @@ export function AiRemediationTab() {
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [saveError, setSaveError] = useState('');
 
+    const [expandedPrompt, setExpandedPrompt] = useState<'pass1_prompt' | 'pass2_prompt' | null>(null);
+
     useEffect(() => {
         if (activeProject) {
             setUrlMappings(activeProject.url_mappings || '');
@@ -143,12 +145,22 @@ export function AiRemediationTab() {
                     </div>
                     <div>
                         <label className="settings-label">Triage Prompt Template</label>
-                        <textarea 
-                            className="input settings-textarea" 
-                            value={aiPrompts.pass1_prompt} 
-                            onChange={(e) => updatePromptField('pass1_prompt', e.target.value)}
-                            data-1p-ignore
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <textarea 
+                                className="input settings-textarea" 
+                                value={aiPrompts.pass1_prompt} 
+                                onChange={(e) => updatePromptField('pass1_prompt', e.target.value)}
+                                data-1p-ignore
+                            />
+                            <button 
+                                type="button" 
+                                onClick={() => setExpandedPrompt('pass1_prompt')}
+                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.5, fontSize: '14px' }}
+                                title="Expand to full screen"
+                            >
+                                ⛶
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -172,13 +184,23 @@ export function AiRemediationTab() {
                     </div>
                     <div>
                         <label className="settings-label">Remediation Prompt Template</label>
-                        <textarea 
-                            className="input settings-textarea" 
-                            style={{ minHeight: '120px' }}
-                            value={aiPrompts.pass2_prompt} 
-                            onChange={(e) => updatePromptField('pass2_prompt', e.target.value)}
-                            data-1p-ignore
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <textarea 
+                                className="input settings-textarea" 
+                                style={{ minHeight: '120px' }}
+                                value={aiPrompts.pass2_prompt} 
+                                onChange={(e) => updatePromptField('pass2_prompt', e.target.value)}
+                                data-1p-ignore
+                            />
+                            <button 
+                                type="button" 
+                                onClick={() => setExpandedPrompt('pass2_prompt')}
+                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.5, fontSize: '14px' }}
+                                title="Expand to full screen"
+                            >
+                                ⛶
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -223,6 +245,43 @@ export function AiRemediationTab() {
                     )}
                 </div>
             </form>
+
+            {expandedPrompt && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(10, 10, 15, 0.95)', display: 'flex', flexDirection: 'column', padding: '32px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h3 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '18px', fontWeight: 600 }}>
+                            {expandedPrompt === 'pass1_prompt' ? 'Triage Prompt Template' : 'Remediation Prompt Template'}
+                        </h3>
+                        <button 
+                            type="button" 
+                            onClick={() => setExpandedPrompt(null)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', fontSize: '24px', lineHeight: 1 }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <textarea
+                        style={{ 
+                            flex: 1, 
+                            width: '100%', 
+                            resize: 'none', 
+                            padding: '24px', 
+                            fontSize: '15px', 
+                            fontFamily: 'monospace', 
+                            borderRadius: '8px', 
+                            background: '#1e1e1e', 
+                            color: '#e0e0e0', 
+                            border: '1px solid #333',
+                            outline: 'none',
+                            lineHeight: '1.5'
+                        }}
+                        value={aiPrompts[expandedPrompt]}
+                        onChange={(e) => updatePromptField(expandedPrompt, e.target.value)}
+                        data-1p-ignore
+                        autoFocus
+                    />
+                </div>
+            )}
         </div>
     );
 }
