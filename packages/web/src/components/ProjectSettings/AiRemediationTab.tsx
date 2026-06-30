@@ -166,6 +166,29 @@ export function AiRemediationTab() {
         return 'your-cli-command "{{prompt_file}}"';
     };
 
+    const handleToolChange = (tool: 'claude' | 'agy' | 'custom') => {
+        setSelectedTool(tool);
+        if (tool === 'claude') {
+            setAiPrompts(prev => ({
+                ...prev,
+                pass1_cmd: 'claude -m haiku -p {{prompt_file}}',
+                pass2_cmd: 'claude -m sonnet -p {{prompt_file}}'
+            }));
+        } else if (tool === 'agy') {
+            setAiPrompts(prev => ({
+                ...prev,
+                pass1_cmd: 'agy -m gemini-2.5-flash "{{prompt_file}}"',
+                pass2_cmd: 'agy -m gemini-2.5-pro "{{prompt_file}}"'
+            }));
+        } else if (tool === 'custom') {
+            setAiPrompts(prev => ({
+                ...prev,
+                pass1_cmd: '',
+                pass2_cmd: ''
+            }));
+        }
+    };
+
     return (
         <div className="card settings-card">
             <h2 className="settings-header">
@@ -192,7 +215,7 @@ export function AiRemediationTab() {
                     <select 
                         className="input" 
                         value={selectedTool} 
-                        onChange={(e) => setSelectedTool(e.target.value as any)}
+                        onChange={(e) => handleToolChange(e.target.value as any)}
                         style={{ width: '250px', padding: '6px 12px' }}
                     >
                         <option value="claude">Anthropic Claude CLI</option>
