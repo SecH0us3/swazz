@@ -221,4 +221,8 @@ export interface Project {
     id: string;
     name: string;
     description: string;
+    url_mappings?: string;
+    ai_prompts?: string;
+    propose_fixes?: number;
+    custom_cli_command?: string;
 }

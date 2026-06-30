@@ -3590,3 +3590,52 @@ kbd {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
 }
+/* ─── Settings Shared Styles ─────────────────────────────────────────── */
+.settings-card {
+  background-color: var(--bg-elevated);
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.settings-header {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 12px;
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.settings-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.settings-input-full {
+  width: 100%;
+}
+.settings-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  font-family: monospace;
+}
+.settings-help-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}

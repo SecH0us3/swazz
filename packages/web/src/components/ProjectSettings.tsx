@@ -7,6 +7,7 @@ import { RunnersTab } from './ProjectSettings/RunnersTab.js';
 import { WordlistsTab } from './ProjectSettings/WordlistsTab.js';
 import { ChainingTab } from './ProjectSettings/ChainingTab.js';
 import { RawConfigTab } from './ProjectSettings/RawConfigTab.js';
+import { AiRemediationTab } from './ProjectSettings/AiRemediationTab.js';
 
 interface Runner {
     name: string;
@@ -17,7 +18,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'raw_config'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'chaining' | 'ai_remediation' | 'raw_config'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -225,6 +226,22 @@ export function ProjectSettings() {
                         )}
                     </button>
                     <button
+                        className={`tab-bar-btn ${activeSubTab === 'ai_remediation' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('ai_remediation')}
+                        style={{
+                            width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                            background: activeSubTab === 'ai_remediation' ? 'var(--accent-subtle)' : 'transparent',
+                            color: activeSubTab === 'ai_remediation' ? 'var(--accent-light)' : 'var(--text-secondary)'
+                        }}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                            <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+                            <path d="M12 12L2.1 7.1"></path>
+                            <path d="M12 12l9.9 4.9"></path>
+                        </svg>
+                        AI Remediation
+                    </button>
+                    <button
                         className={`tab-bar-btn ${activeSubTab === 'raw_config' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('raw_config')}
                         style={{
@@ -255,6 +272,7 @@ export function ProjectSettings() {
                             runnerError={runnerError} 
                         />
                     )}
+                    {activeSubTab === 'ai_remediation' && <AiRemediationTab />}
                     {activeSubTab === 'raw_config' && <RawConfigTab />}
                 </div>
             </div>
