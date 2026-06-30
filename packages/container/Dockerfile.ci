@@ -1,0 +1,38 @@
+# === DOCKERFILE FOR CI/CD ENVIRONMENTS ===
+# Uses Alpine Linux instead of Distroless to provide a shell (/bin/sh).
+# This is required by runners like GitLab CI which inject pipeline scripts via shell.
+
+# Stage 1: Build Go Application
+FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine3.23@sha256:f23e8b227fb4493eabe03bede4d5a32d04092da71962f1fb79b5f7d1e6c2a17f AS builder
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG DOCKER_TAG=dev
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w -X main.Version=${DOCKER_TAG}" -o swazz-engine .
+
+# Stage 2: Minimal CI-friendly image
+FROM alpine:3.21
+
+ENV GOMEMLIMIT=230MiB
+
+# Install basic CI tools (git, curl, jq, bash) that pipelines often expect
+RUN apk update && apk add --no-cache \
+    git \
+    curl \
+    ca-certificates \
+    bash \
+    jq
+
+# Security: Run as non-root user
+RUN addgroup -S swazz && adduser -S swazz -G swazz
+USER swazz:swazz
+
+COPY --from=builder /app/swazz-engine /swazz-engine
+WORKDIR /
+EXPOSE 8080
+
+ENTRYPOINT ["/swazz-engine"]
+CMD ["serve"]
