@@ -106,10 +106,15 @@ export function MembersRolesTab() {
     };
 
     const handleInvite = async () => {
-        const isEmail = inviteInput.includes('@');
+        const trimmed = inviteInput.trim();
+        if (!trimmed) {
+            showToast('Username or email is required', 'error');
+            return;
+        }
+        const isEmail = trimmed.includes('@');
         const payload = {
             roles: selectedInviteRoles,
-            ...(isEmail ? { email: inviteInput } : { username: inviteInput })
+            ...(isEmail ? { email: trimmed } : { username: trimmed })
         };
         const res = await fetch(`/api/projects/${activeProject?.id}/invitations`, {
             method: 'POST',

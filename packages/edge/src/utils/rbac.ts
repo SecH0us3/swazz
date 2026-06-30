@@ -3,16 +3,19 @@ import { Env } from '../env';
 
 export async function invalidateProjectRBAC(env: Env, projectId: string) {
   if (!env.SESSION_CACHE) return;
-  const prefix = `rbac:${projectId}:`;
-  let cursor: string | undefined;
-  do {
-    const list = await env.SESSION_CACHE!.list({ prefix, cursor });
-    const keys = list.keys.map(k => k.name);
-    if (keys.length > 0) {
-      await Promise.all(keys.map(k => env.SESSION_CACHE!.delete(k)));
-    }
-    cursor = (list as any).cursor;
-  } while (cursor);
+  
+  // Get all members of the project to invalidate their cache keys directly
+  const { results } = await env.DB.prepare(`
+    SELECT DISTINCT user_id FROM (
+      SELECT user_id FROM project_member_roles WHERE project_id = ?
+      UNION
+      SELECT user_id FROM project_members WHERE project_id = ?
+    )
+  `).bind(projectId, projectId).all<{ user_id: string }>();
+
+  if (results && results.length > 0) {
+    await Promise.all(results.map(r => env.SESSION_CACHE!.delete(`rbac:${projectId}:${r.user_id}`)));
+  }
 }
 
 export async function invalidateUserRBAC(env: Env, projectId: string, userId: string) {
@@ -72,13 +75,18 @@ export async function checkPermission(
     }
   }
 
-  // 2. Resolve custom roles in DB
-  const placeholders = roleIds.map(() => '?').join(',');
-  const query = `SELECT permission_key FROM custom_role_permissions WHERE role_id IN (${placeholders})`;
-  const { results: permResults } = await env.DB.prepare(query).bind(...roleIds).all<{ permission_key: string }>();
-  
-  if (permResults) {
-    permResults.forEach(r => permissions.add(r.permission_key));
+  // 2. Resolve custom roles in DB only if there are custom role IDs
+  const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
+  const customRoleIds = roleIds.filter(rid => !defaultRoles.includes(rid));
+
+  if (customRoleIds.length > 0) {
+    const placeholders = customRoleIds.map(() => '?').join(',');
+    const query = `SELECT permission_key FROM custom_role_permissions WHERE role_id IN (${placeholders})`;
+    const { results: permResults } = await env.DB.prepare(query).bind(...customRoleIds).all<{ permission_key: string }>();
+    
+    if (permResults) {
+      permResults.forEach(r => permissions.add(r.permission_key));
+    }
   }
 
   const permsArray = Array.from(permissions);

@@ -5321,6 +5321,20 @@ kbd {
   height: 26px !important;
 }
 
+.header-decline-btn {
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  height: 26px !important;
+  background: transparent !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.header-decline-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-primary) !important;
+}
+
 .header-progress-container {
   height: 2px;
   width: 100%;

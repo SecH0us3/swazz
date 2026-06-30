@@ -4,6 +4,7 @@ import { env as rawEnv } from "cloudflare:test";
 import { Env } from "./env";
 import app from "./index";
 import { cleanupScheduledDeletions } from "./utils/cleanup";
+import { splitSql } from "./splitSql";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -52,92 +53,6 @@ const appFetchWrapper = async (req: any, e?: any, ctx?: any) => {
   return app.fetch(req, e as any, (ctx || testCtx) as any);
 };
 
-export function splitSql(sql: string): string[] {
-  const statements: string[] = [];
-  let current = "";
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inInlineComment = false;
-  let inMultiLineComment = false;
-  let inTrigger = false;
-
-  for (let i = 0; i < sql.length; i++) {
-    const char = sql[i];
-    const nextChar = sql[i + 1] || "";
-
-    if (inSingleQuote) {
-      if (char === "'") inSingleQuote = false;
-      current += char;
-      continue;
-    }
-    if (inDoubleQuote) {
-      if (char === '"') inDoubleQuote = false;
-      current += char;
-      continue;
-    }
-    if (inInlineComment) {
-      if (char === "\n") inInlineComment = false;
-      continue;
-    }
-    if (inMultiLineComment) {
-      if (char === "*" && nextChar === "/") {
-        inMultiLineComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (char === "'" && !inTrigger) {
-      inSingleQuote = true;
-      current += char;
-      continue;
-    }
-    if (char === '"' && !inTrigger) {
-      inDoubleQuote = true;
-      current += char;
-      continue;
-    }
-    if (char === "-" && nextChar === "-") {
-      inInlineComment = true;
-      i++;
-      continue;
-    }
-    if (char === "/" && nextChar === "*") {
-      inMultiLineComment = true;
-      i++;
-      continue;
-    }
-
-    const uppercaseCurrent = current.trim().toUpperCase();
-    if (uppercaseCurrent.startsWith("CREATE TRIGGER") || uppercaseCurrent.startsWith("CREATE OR REPLACE TRIGGER")) {
-      inTrigger = true;
-    }
-
-    if (inTrigger && uppercaseCurrent.endsWith("END;")) {
-      current += char;
-      statements.push(current.trim());
-      current = "";
-      inTrigger = false;
-      continue;
-    }
-
-    if (char === ";" && !inTrigger) {
-      if (current.trim().length > 0) {
-        statements.push(current.trim());
-      }
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current.trim().length > 0) {
-    statements.push(current.trim());
-  }
-
-  return statements.filter(s => s.trim() !== "");
-}
 
 
 beforeAll(async () => {
@@ -2058,6 +1973,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
   describe("RBAC & Invitations Security & Validation", () => {
     let tokenOwner: string;
     let tokenInvitee: string;
+    let inviteeUsername: string;
     let tokenOutsider: string;
     let projectId: string;
 
@@ -2078,6 +1994,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
       // 2. Register/Login Invitee (userB)
       const nameB = "u_invitee_" + Date.now().toString().slice(-4);
+      inviteeUsername = nameB;
       await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2243,8 +2160,8 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const expiresAt = new Date(Date.now() - 3600 * 1000).toISOString(); // 1 hour ago
         await testEnv.DB.prepare(`
           INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
-          VALUES (?, ?, NULL, NULL, ?, 'Pending', ?, ?)
-        `).bind(crypto.randomUUID(), projectId, JSON.stringify(["viewer"]), expiredToken, expiresAt).run();
+          VALUES (?, ?, NULL, ?, ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, inviteeUsername, JSON.stringify(["viewer"]), expiredToken, expiresAt).run();
 
         const acceptRes = await appFetchWrapper(new Request("http://localhost/api/auth/invitations/accept" as any, {
           method: "POST",
@@ -2283,6 +2200,43 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         // Verify the invitation status rolled back to 'Pending'
         const row = await testEnv.DB.prepare("SELECT status FROM project_invitations WHERE token = ?").bind(targetToken).first<any>();
         expect(row?.status).toBe("Pending");
+      });
+
+      it("allows declining a pending invitation", async () => {
+        const declineToken = "decline-token-" + crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+        await testEnv.DB.prepare(`
+          INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
+          VALUES (?, ?, NULL, ?, ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, inviteeUsername, JSON.stringify(["viewer"]), declineToken, expiresAt).run();
+
+        const declineRes = await appFetchWrapper(new Request("http://localhost/api/auth/invitations/decline" as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenInvitee}`
+          },
+          body: JSON.stringify({ token: declineToken })
+        }), testEnv);
+
+        expect(declineRes.status).toBe(200);
+        expect(((await declineRes.json()) as any).status).toBe("declined");
+
+        const row = await testEnv.DB.prepare("SELECT status FROM project_invitations WHERE token = ?").bind(declineToken).first<any>();
+        expect(row?.status).toBe("Revoked");
+      });
+
+      it("fails to invite when both email and username are missing", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ roles: ["viewer"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Either email or username must be specified");
       });
     });
   });

@@ -5,26 +5,18 @@ export function splitSql(sql: string): string[] {
   let inDoubleQuote = false;
   let inInlineComment = false;
   let inMultiLineComment = false;
-  let inTrigger = false;
 
   for (let i = 0; i < sql.length; i++) {
     const char = sql[i];
     const nextChar = sql[i + 1] || "";
 
-    if (inSingleQuote) {
-      if (char === "'") inSingleQuote = false;
-      current += char;
-      continue;
-    }
-    if (inDoubleQuote) {
-      if (char === '"') inDoubleQuote = false;
-      current += char;
-      continue;
-    }
     if (inInlineComment) {
-      if (char === "\n") inInlineComment = false;
+      if (char === "\n") {
+        inInlineComment = false;
+      }
       continue;
     }
+
     if (inMultiLineComment) {
       if (char === "*" && nextChar === "/") {
         inMultiLineComment = false;
@@ -33,41 +25,57 @@ export function splitSql(sql: string): string[] {
       continue;
     }
 
-    if (char === "'" && !inTrigger) {
-      inSingleQuote = true;
+    if (inSingleQuote) {
       current += char;
+      if (char === "'") {
+        if (nextChar === "'") {
+          current += "'";
+          i++;
+        } else {
+          inSingleQuote = false;
+        }
+      }
       continue;
     }
-    if (char === '"' && !inTrigger) {
-      inDoubleQuote = true;
+
+    if (inDoubleQuote) {
       current += char;
+      if (char === '"') {
+        if (nextChar === '"') {
+          current += '"';
+          i++;
+        } else {
+          inDoubleQuote = false;
+        }
+      }
       continue;
     }
+
     if (char === "-" && nextChar === "-") {
       inInlineComment = true;
       i++;
       continue;
     }
+
     if (char === "/" && nextChar === "*") {
       inMultiLineComment = true;
       i++;
       continue;
     }
 
-    const uppercaseCurrent = current.trim().toUpperCase();
-    if (uppercaseCurrent.startsWith("CREATE TRIGGER") || uppercaseCurrent.startsWith("CREATE OR REPLACE TRIGGER")) {
-      inTrigger = true;
-    }
-
-    if (inTrigger && uppercaseCurrent.endsWith("END;")) {
+    if (char === "'") {
+      inSingleQuote = true;
       current += char;
-      statements.push(current.trim());
-      current = "";
-      inTrigger = false;
       continue;
     }
 
-    if (char === ";" && !inTrigger) {
+    if (char === '"') {
+      inDoubleQuote = true;
+      current += char;
+      continue;
+    }
+
+    if (char === ";") {
       if (current.trim().length > 0) {
         statements.push(current.trim());
       }

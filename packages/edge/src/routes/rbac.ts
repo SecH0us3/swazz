@@ -199,6 +199,30 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     // Update active member roles atomically
+    const currentMemberRoles = await c.env.DB.prepare(
+      'SELECT role_id FROM project_member_roles WHERE project_id = ? AND user_id = ?'
+    )
+      .bind(projectId, memberId)
+      .all<{ role_id: string }>();
+    
+    const hasOwner = currentMemberRoles.results.some(r => r.role_id === 'owner');
+
+    if (hasOwner && !body.roles.includes('owner')) {
+      const ownersCount = await c.env.DB.prepare(`
+        SELECT COUNT(DISTINCT user_id) as count FROM (
+          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
+          UNION
+          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner'
+        )
+      `)
+        .bind(projectId, projectId)
+        .first<{ count: number }>();
+      
+      if (ownersCount && ownersCount.count <= 1) {
+        return c.json({ error: 'Cannot remove the owner role from the last owner' }, 400);
+      }
+    }
+
     const stmts = [
       c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
     ];
@@ -207,14 +231,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       stmts.push(c.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, memberId, r));
     });
 
-    try {
-      await c.env.DB.batch(stmts);
-    } catch (e: any) {
-      if (e.message && e.message.includes('Cannot remove the last owner')) {
-        return c.json({ error: 'Cannot remove the owner role from the last owner' }, 400);
-      }
-      throw e;
-    }
+    await c.env.DB.batch(stmts);
     
     // Invalidate user RBAC cache
     await(invalidateUserRBAC(c.env, projectId, memberId));
@@ -237,17 +254,34 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ status: 'revoked' });
     }
 
-    try {
-      await c.env.DB.batch([
-        c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
-        c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
-      ]);
-    } catch (e: any) {
-      if (e.message && e.message.includes('Cannot remove the last owner')) {
+    const currentMemberRoles = await c.env.DB.prepare(
+      'SELECT role_id FROM project_member_roles WHERE project_id = ? AND user_id = ?'
+    )
+      .bind(projectId, memberId)
+      .all<{ role_id: string }>();
+    
+    const hasOwner = currentMemberRoles.results.some(r => r.role_id === 'owner');
+
+    if (hasOwner) {
+      const ownersCount = await c.env.DB.prepare(`
+        SELECT COUNT(DISTINCT user_id) as count FROM (
+          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
+          UNION
+          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner'
+        )
+      `)
+        .bind(projectId, projectId)
+        .first<{ count: number }>();
+      
+      if (ownersCount && ownersCount.count <= 1) {
         return c.json({ error: 'Cannot remove the last owner of the project' }, 400);
       }
-      throw e;
     }
+
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
+      c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
+    ]);
 
     // Invalidate user RBAC cache
     await(invalidateUserRBAC(c.env, projectId, memberId));
@@ -364,6 +398,11 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = (c.req.param('id') as string);
     const body = await c.req.json(); // { username, email, roles: [] }
     
+    if ((!body.email || typeof body.email !== 'string' || body.email.trim() === '') &&
+        (!body.username || typeof body.username !== 'string' || body.username.trim() === '')) {
+      return c.json({ error: 'Either email or username must be specified' }, 400);
+    }
+
     if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
       return c.json({ error: 'At least one role must be specified' }, 400);
     }
@@ -439,5 +478,29 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     await invalidateUserRBAC(c.env, inv.project_id, userId);
 
     return c.json({ status: 'accepted', project_id: inv.project_id });
+  });
+
+  app.post('/api/auth/invitations/decline', async (c) => {
+    const body = await c.req.json(); // { token }
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+    const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
+    if (!user) return c.json({ error: 'User not found' }, 404);
+
+    const res = await c.env.DB.prepare(`
+      UPDATE project_invitations 
+      SET status = 'Revoked' 
+      WHERE token = ?1 
+        AND status = 'Pending' 
+        AND (username IS NULL OR username = ?2)
+        AND (email IS NULL OR email = ?3)
+    `).bind(body.token, user.username, user.email).run();
+
+    if (res.meta.changes === 0) {
+      return c.json({ error: 'Invalid or expired invitation' }, 400);
+    }
+
+    return c.json({ status: 'declined' });
   });
 }

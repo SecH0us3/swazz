@@ -96,6 +96,28 @@ export function Header({
         }
     };
 
+    const handleDeclineInvite = async (inviteToken: string) => {
+        try {
+            const res = await fetch('/api/auth/invitations/decline', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ token: inviteToken })
+            });
+            if (res.ok) {
+                setInvitations(invs => invs.filter(i => i.token !== inviteToken));
+                showToast('Invitation declined', 'success');
+            } else {
+                const data = await res.json();
+                showToast(`Failed to decline invitation: ${data.error}`, 'error');
+            }
+        } catch (err) {
+            showToast('Failed to decline invitation', 'error');
+        }
+    };
+
     useEffect(() => {
         setLocalUrl(baseUrl);
     }, [baseUrl]);
@@ -304,6 +326,7 @@ export function Header({
                             <div className="header-invitation-banner">
                                 <span>You've been invited to <strong>{invitations[0].project_name}</strong></span>
                                 <button className="btn btn-primary header-accept-btn" onClick={() => handleAcceptInvite(invitations[0].token)}>Accept</button>
+                                <button className="btn btn-secondary header-decline-btn" onClick={() => handleDeclineInvite(invitations[0].token)}>Decline</button>
                             </div>
                         )}
                         <UserMenu onLogout={onLogout || (() => {})} />
