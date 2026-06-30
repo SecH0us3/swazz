@@ -211,3 +211,17 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - The edge backend stores the original reports in the D1 database, but the webhook delivery must dispatch the reports out to the client's destination URL asynchronously (e.g. using Cloudflare Workers outbound fetch, decoupled via findings queues).
 
 
+- [ ] **Task 113: D1 Vertical Sharding Architecture**
+  - **Design Goal:** Lay the groundwork for scaling beyond the Cloudflare D1 10 GB per-database limit by enabling manual vertical sharding across multiple D1 databases. The system should operate with a single D1 database today, but the architecture must not prevent future shard expansion.
+  - **Current State:** Single D1 database. No sharding needed yet — this task is purely a forward-compatibility design investment.
+  - **Open Design Questions:**
+    - **How to route to the correct shard?**
+      - Option A — **UUIDv8 shard-tagged IDs**: Encode the shard number into the first nibble/byte of newly generated IDs (e.g. `shard_id | random_bits`). The edge coordinator extracts the shard number from the entity ID and selects the matching D1 binding at query time. Zero extra lookups. Risk: collisions and non-standard UUID parsing.
+      - Option B — **Separate shard routing table**: A small, dedicated "meta" D1 (or KV namespace) maps `project_id → shard_id`. The coordinator does one KV lookup per request to find the shard, then queries the right D1. Standard IDs everywhere. Slight overhead per request.
+      - Option C — **Range/tenant-based sharding**: Shard by tenant (project owner). All data for a given user lives on one shard. Simplifies cross-entity JOINs within a project. Harder to rebalance if a single tenant grows very large.
+    - **Which tables to shard?** Likely candidates: `findings`, `scan_events`, `scans`. Hot-path lookup tables (`users`, `projects`, `sessions`) might stay on shard 0 (the primary).
+    - **Migration path**: How to move existing rows to a new shard without downtime? Dual-write phase? Background job?
+  - **Proposed Short-Term Action (non-breaking, implement now):**
+    - Introduce a `getDB(env, shardId?: number): D1Database` helper that resolves the right D1 binding — today it always returns `env.DB`, but tomorrow it can select `env.DB_SHARD_1`, etc. All query sites go through this helper.
+    - Keep using standard UUIDv4 for IDs for now. If UUIDv8 shard-embedding is chosen later, it can be introduced as an opt-in generator without breaking existing data.
+    - Document the chosen routing strategy decision in `docs/sharding.md` before data grows large enough to matter.
