@@ -45,15 +45,38 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
       return false;
     }, { timeout: 15000 });
 
-    // Set Intensity to 1 to speed up fuzzer run and make E2E test reliable/fast
-    const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
-    await expect(profilesSection).toBeVisible();
-    const intensityInput = profilesSection.locator('input[type="number"]').first();
-    await expect(intensityInput).toBeVisible();
-    await intensityInput.fill('1');
-    await expect(intensityInput).toHaveValue('1');
+    // Go to More Project Settings to set intensity
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
+
+    const fuzzingTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing & Performance")');
+    await expect(fuzzingTabBtn).toBeVisible();
+    await fuzzingTabBtn.click();
+
+    const iterationsInput = page.locator('label:has-text("Fuzzing Intensity") + input');
+    await expect(iterationsInput).toBeVisible();
+    await iterationsInput.fill('1');
+
+    const rawConfigTabBtn = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
+    await expect(rawConfigTabBtn).toBeVisible();
+    await rawConfigTabBtn.click();
+
+    const saveBtn = page.locator('button:has-text("Save Configuration")');
+    await expect(saveBtn).toBeVisible();
+    await saveBtn.click();
+
+    const successMsg = page.locator('text=/Configuration updated successfully/');
+    await expect(successMsg).toBeVisible();
+
+    const backBtn = page.locator('button:has-text("Back to Dashboard")');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
 
     // Disable BOUNDARY and MALICIOUS profiles, leaving only RANDOM profile active to keep request counts minimal
+    const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
+    await expect(profilesSection).toBeVisible();
+
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
     await expect(boundaryToggle).toHaveClass(/active/);
     await boundaryToggle.click();
@@ -90,7 +113,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     // 4. Configure BOLA / Multi-Identity Settings and User B (Secondary Session)
     await expandSection(page, 'BOLA / Multi-Identity');
     const bolaSection = page.locator('.sidebar-section:has-text("BOLA / Multi-Identity")');
-    const bolaCheckbox = bolaSection.locator('label:has(span:has-text("Enable BOLA & Bypass Testing")) >> input[type="checkbox"]');
+    const bolaCheckbox = bolaSection.locator('label:has-text("Enable BOLA Checking") >> input[type="checkbox"]');
     await expect(bolaCheckbox).toBeVisible();
     await bolaCheckbox.check();
     await expect(bolaCheckbox).toBeChecked();
@@ -100,11 +123,11 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     await expect(warningBox).not.toBeVisible();
 
     // Configure headers for User B
-    const userBHeaders = page.locator('div.bola-sub-title:has-text("Headers (User B)") + .kv-editor');
-    await expect(userBHeaders.locator('.kv-add')).toBeVisible();
-    await userBHeaders.locator('.kv-add').click();
+    const userBAddBtn = page.locator('.bola-identity-card >> button:has-text("+ Add Header")');
+    await expect(userBAddBtn).toBeVisible();
+    await userBAddBtn.click();
 
-    const lastRowB = userBHeaders.locator('.kv-row').last();
+    const lastRowB = page.locator('.bola-identity-card >> .kv-row').last();
     await fillKVRow(lastRowB, 'Authorization', 'Bearer user2-token');
 
     // 5. Add the Swagger spec of our local Vulnerable Demo API

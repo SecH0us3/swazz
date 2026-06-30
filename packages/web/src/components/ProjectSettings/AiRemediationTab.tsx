@@ -67,11 +67,21 @@ export function AiRemediationTab() {
                 try {
                     const parsed = JSON.parse(activeProject.ai_prompts);
                     setAiPrompts({ ...DEFAULT_AI_PROMPTS, ...parsed });
+                    const p1 = parsed.pass1_cmd || DEFAULT_AI_PROMPTS.pass1_cmd;
+                    if (p1.startsWith('agy')) {
+                        setSelectedTool('agy');
+                    } else if (p1.startsWith('claude')) {
+                        setSelectedTool('claude');
+                    } else {
+                        setSelectedTool('custom');
+                    }
                 } catch {
                     setAiPrompts(DEFAULT_AI_PROMPTS);
+                    setSelectedTool('claude');
                 }
             } else {
                 setAiPrompts(DEFAULT_AI_PROMPTS);
+                setSelectedTool('claude');
             }
         }
     }, [activeProject]);

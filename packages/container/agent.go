@@ -231,7 +231,14 @@ func startAgent(args []string) {
 				continue
 			}
 			if len(b) > 1*1024*1024 {
-				logError("WS message is too large: %d bytes. Dropping message to prevent WebSocket close.", len(b))
+				payloadType := "unknown"
+				if eventOut, ok := msg.(WSEventOut); ok {
+					payloadType = fmt.Sprintf("%T", eventOut.Payload)
+					if eventPayload, ok := eventOut.Payload.(WSEventPayload); ok {
+						payloadType = fmt.Sprintf("WSEventPayload with Data: %T", eventPayload.Data)
+					}
+				}
+				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
 				continue
 			}
 			if err := c.Write(ctx, websocket.MessageText, b); err != nil {
@@ -361,6 +368,8 @@ func startAgent(args []string) {
 							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s", 
 								runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 							ev.Data = runner.ToSSE(res)
+						} else {
+							logError("Received result event but ev.Data is not a recognized FuzzResult type: %T", ev.Data)
 						}
 					} else if ev.Type == "progress" {
 						if stats, ok := ev.Data.(swagger.RunStats); ok {

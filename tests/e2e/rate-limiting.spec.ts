@@ -16,26 +16,50 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // 3. Define selectors for Rate Limit Detection settings
-    const rateLimitCheckbox = page.locator('label:has-text("Rate Limit Detection") >> input[type="checkbox"]');
-    const burstSizeInput = page.locator('span:has-text("Burst Size") + input');
+    // 3. Go to More Project Settings to configure rate limiting and intensity
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
+
+    const fuzzingTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing & Performance")');
+    await expect(fuzzingTabBtn).toBeVisible();
+    await fuzzingTabBtn.click();
+
+    const rateLimitCheckbox = page.locator('label:has-text("Enable Rate Limit Detection") >> input[type="checkbox"]');
+    await expect(rateLimitCheckbox).toBeVisible();
+    await rateLimitCheckbox.check();
+    await expect(rateLimitCheckbox).toBeChecked();
+
+    const burstSizeInput = page.locator('label:has-text("Burst Size") + input');
+    await expect(burstSizeInput).toBeVisible();
+    await burstSizeInput.fill('25');
+
+    const iterationsInput = page.locator('label:has-text("Fuzzing Intensity") + input');
+    await expect(iterationsInput).toBeVisible();
+    await iterationsInput.fill('1');
+
+    const rawConfigTabBtn = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
+    await expect(rawConfigTabBtn).toBeVisible();
+    await rawConfigTabBtn.click();
+
+    const saveBtn = page.locator('button:has-text("Save Configuration")');
+    await expect(saveBtn).toBeVisible();
+    await saveBtn.click();
+
+    const successMsg = page.locator('text=/Configuration updated successfully/');
+    await expect(successMsg).toBeVisible();
+
+    const backBtn = page.locator('button:has-text("Back to Dashboard")');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+
     const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
-    const intensityInput = profilesSection.locator('input[type="number"]').first();
+    await expect(profilesSection).toBeVisible();
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
     const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
 
     try {
-      // Move all state-modifying setup steps inside the try block to guarantee finally cleanup runs
-      await expect(rateLimitCheckbox).toBeVisible();
-      await rateLimitCheckbox.check();
-      await expect(rateLimitCheckbox).toBeChecked();
-
-      await expect(burstSizeInput).toBeVisible();
-      await burstSizeInput.fill('25'); // Send 25 requests concurrently to trigger the limit (since demo API limits at > 20)
-
-      // Disable regular profiles to speed up testing
-      await intensityInput.fill('1');
-
+      // Disable boundary and malicious profiles
       await boundaryToggle.click();
       await expect(boundaryToggle).not.toHaveClass(/active/);
 
@@ -93,18 +117,15 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       // Dismiss any open Request Detail modal/inspector panels so they do not block pointer events on the sidebar
       await page.keyboard.press('Escape');
       
-      await rateLimitCheckbox.uncheck();
-      await expect(rateLimitCheckbox).not.toBeChecked();
-
-      await intensityInput.fill('5');
-      
-      const boundaryClass = await boundaryToggle.getAttribute('class');
-      if (boundaryClass && !boundaryClass.includes('active')) {
-        await boundaryToggle.click();
-      }
-      const maliciousClass = await maliciousToggle.getAttribute('class');
-      if (maliciousClass && !maliciousClass.includes('active')) {
-        await maliciousToggle.click();
+      if (await backBtn.isVisible()) {
+        const boundaryClass = await boundaryToggle.getAttribute('class');
+        if (boundaryClass && !boundaryClass.includes('active')) {
+          await boundaryToggle.click();
+        }
+        const maliciousClass = await maliciousToggle.getAttribute('class');
+        if (maliciousClass && !maliciousClass.includes('active')) {
+          await maliciousToggle.click();
+        }
       }
     }
   });

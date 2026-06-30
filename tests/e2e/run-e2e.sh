@@ -18,7 +18,7 @@ fi
 echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
 echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
-echo 'TURNSTILE_SITE_KEY="0x4AAAAAADry7cDPHW8cvNuC"' >> packages/edge/.dev.vars
+echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
 
 # Create dummy wordlist folder and file for E2E tests
 mkdir -p wordlists
@@ -74,7 +74,7 @@ if check_port 8788; then
   echo "✓ Vulnerable Demo API is already running on port 8788."
 else
   echo "→ Starting Vulnerable Demo API..."
-  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo > demo.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo --log-level error > demo.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8788 "Vulnerable Demo API"
 fi
@@ -83,8 +83,10 @@ fi
 if check_port 8787; then
   echo "✓ Edge Coordinator is already running on port 8787."
 else
+  echo "→ Applying local database migrations..."
+  npx wrangler d1 migrations apply swazz_db --local --cwd packages/edge || true
   echo "→ Starting Edge Coordinator..."
-  NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge > edge.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --log-level error > edge.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8787 "Edge Coordinator"
 fi

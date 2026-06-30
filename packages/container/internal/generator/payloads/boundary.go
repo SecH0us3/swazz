@@ -21,11 +21,8 @@ var BoundaryStrings = []any{
 	strings.Repeat(" ", 10_000),      // Spaces only
 	strings.Repeat("あ", 5000),        // Multi-byte Unicode (Japanese)
 	strings.Repeat("🔥", 2500),        // 4-byte emoji sequence
-	strings.Repeat("A", 1_048_576),   // 1MB string (stress test)
-	strings.Repeat("A", 5_242_880),   // 5MB string
-	strings.Repeat("A", 10_485_760),  // 10MB string
-	strings.Repeat("A", 52_428_800),  // 50MB string
-	strings.Repeat("A", 104_857_600), // 100MB string
+	strings.Repeat("A", 262_144),     // 256KB string (stress test)
+	strings.Repeat("A", 524_288),     // 512KB string
 }
 
 // ─── Integer boundaries ─────────────────────────────────

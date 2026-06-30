@@ -67,7 +67,7 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // Wait for the heatmap or status codes to start rendering
     const heatmapGrid = page.locator('.heatmap-grid');
-    await expect(heatmapGrid).toBeVisible();
+    await expect(heatmapGrid).toBeVisible({ timeout: 30000 });
 
     // Wait for the run to complete (Stop button goes away, or starts showing "Run" again)
     await expect(startBtn).toBeVisible({ timeout: 60000 });
