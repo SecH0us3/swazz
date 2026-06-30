@@ -152,11 +152,27 @@ export function MainWorkspace({
                     onExportMD={handleExportMD}
                 />
             ) : !hasActivity ? (
-                <LandingShowcase 
-                    actionText="Try Petstore Demo"
-                    onActionClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
-                    showPricing={false}
-                />
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="empty-state">
+                        <div className="empty-state-icon">⚡</div>
+                        <div className="empty-state-title">Ready to fuzz</div>
+                        <div className="empty-state-text">
+                            Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
+                        </div>
+                        <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <button
+                                className="btn btn-primary"
+                                style={{ padding: '8px 16px', fontSize: '14px' }}
+                                onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
+                            >
+                                Try Petstore Demo
+                            </button>
+                            <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
+                                Automatically loads endpoints and runs a quick fuzz test
+                            </div>
+                        </div>
+                    </div>
+                </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">

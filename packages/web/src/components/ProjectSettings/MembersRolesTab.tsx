@@ -245,7 +245,7 @@ export function MembersRolesTab() {
                             <tr>
                                 <th>User</th>
                                 <th>Roles</th>
-                                <th style={{ textAlign: 'right' }}>Actions</th>
+                                <th className="rbac-text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -262,7 +262,7 @@ export function MembersRolesTab() {
                                         })}
                                     </td>
                                     <td>
-                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                        <div className="rbac-actions-group">
                                             {m.username !== userProfile?.username && (
                                                 <>
                                                     <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEditMemberModal(m)}>Edit Roles</button>
@@ -296,9 +296,9 @@ export function MembersRolesTab() {
                                     {r.is_default ? (
                                         <span className="rbac-role-default-badge">Default</span>
                                     ) : (
-                                        <div style={{ display: 'flex', gap: '6px' }}>
-                                            <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleOpenEditRoleModal(r)}>Edit</button>
-                                            <button className="btn btn-danger btn-sm" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleDeleteCustomRole(r.id)}>Delete</button>
+                                        <div className="rbac-role-actions">
+                                            <button className="btn btn-ghost btn-sm rbac-role-btn" onClick={() => handleOpenEditRoleModal(r)}>Edit</button>
+                                            <button className="btn btn-danger btn-sm rbac-role-btn" onClick={() => handleDeleteCustomRole(r.id)}>Delete</button>
                                         </div>
                                     )}
                                 </div>
@@ -405,12 +405,11 @@ export function MembersRolesTab() {
                         </div>
 
                         <div className="rbac-form-group">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <label className="rbac-form-label" style={{ margin: 0 }}>Assign Permissions</label>
+                            <div className="rbac-flex-between">
+                                <label className="rbac-form-label rbac-m-0">Assign Permissions</label>
                                 <input 
                                     type="text" 
-                                    className="input" 
-                                    style={{ width: '220px', height: '28px', fontSize: '12px', padding: '4px 8px' }}
+                                    className="input rbac-search-input"
                                     placeholder="Search permissions..."
                                     value={permissionSearch}
                                     onChange={e => setPermissionSearch(e.target.value)}
@@ -447,7 +446,7 @@ export function MembersRolesTab() {
                                     desc.toLowerCase().includes(permissionSearch.toLowerCase()) || 
                                     key.toLowerCase().includes(permissionSearch.toLowerCase())
                                 ).length === 0 && (
-                                    <div className="rbac-empty-state" style={{ padding: '20px 0' }}>No matching permissions found.</div>
+                                    <div className="rbac-empty-state rbac-p-20">No matching permissions found.</div>
                                 )}
                             </div>
                         </div>

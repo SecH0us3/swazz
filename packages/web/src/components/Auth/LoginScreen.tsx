@@ -309,8 +309,6 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
             </header>
 
             <LandingShowcase 
-                actionText={authEnabled ? "Register Free" : "Launch App"} 
-                onActionClick={() => authEnabled ? openAuthModal(true) : onGuest?.()} 
                 showPricing={true} 
             />
 

@@ -61,8 +61,8 @@ export const FEATURE_DETAILS = {
 };
 
 interface LandingShowcaseProps {
-    onActionClick: () => void;
-    actionText: string;
+    onActionClick?: () => void;
+    actionText?: string;
     showPricing?: boolean;
 }
 
@@ -92,11 +92,13 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 <p className="landing-hero-subtitle">
                     Supercharge your API security with intelligent, high-performance fuzzing for developers and researchers. Swazz is a Modern, User-Friendly DAST
                 </p>
-                <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
-                    <button type="button" onClick={onActionClick} className="btn-cloud-cta" style={{ fontSize: '1.2rem', padding: '12px 32px' }}>
-                        {actionText}
-                    </button>
-                </div>
+                {actionText && onActionClick && (
+                    <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+                        <button type="button" onClick={onActionClick} className="btn-cloud-cta" style={{ fontSize: '1.2rem', padding: '12px 32px' }}>
+                            {actionText}
+                        </button>
+                    </div>
+                )}
             </section>
 
             <section id="demo" className="landing-video-section">

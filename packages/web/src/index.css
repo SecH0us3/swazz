@@ -5247,4 +5247,97 @@ kbd {
   background: rgba(245, 158, 11, 0.1) !important;
 }
 
+/* Extracted Inline Styles */
+.rbac-text-right {
+  text-align: right;
+}
+
+.rbac-actions-group {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.rbac-role-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.rbac-role-btn {
+  padding: 2px 8px !important;
+  height: 24px !important;
+  font-size: 11px !important;
+}
+
+.rbac-flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rbac-m-0 {
+  margin: 0 !important;
+}
+
+.rbac-search-input {
+  width: 220px;
+  height: 28px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.rbac-p-20 {
+  padding: 20px 0 !important;
+}
+
+.header-cursor-pointer {
+  cursor: pointer;
+}
+
+.header-spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+.header-status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--color-success);
+  animation: pulse-success 1.5s infinite;
+}
+
+.header-flex-center {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-accept-btn {
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  height: 26px !important;
+}
+
+.header-progress-container {
+  height: 2px;
+  width: 100%;
+  background: var(--bg-surface);
+  overflow: hidden;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+.header-progress-bar {
+  width: 30%;
+  height: 100%;
+  background: var(--color-success);
+  animation: progress-indeterminate 1.5s infinite linear;
+  transform-origin: 0% 50%;
+}
+
+
 
