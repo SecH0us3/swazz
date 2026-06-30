@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';

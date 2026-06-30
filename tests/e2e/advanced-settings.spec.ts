@@ -3,6 +3,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () => {
   // Helper to register and log in before each test case
   test.beforeEach(async ({ page }) => {
+    page.on("console", msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
+    page.on("pageerror", exception => console.log(`BROWSER EXCEPTION: ${exception}`));
+    page.on("requestfailed", req => console.log(`BROWSER REQUEST FAILED: ${req.url()} - ${req.failure()?.errorText}`));
+
     await page.goto('/');
     await page.getByRole('button', { name: 'Create' }).click();
 

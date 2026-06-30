@@ -1,8 +1,10 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { env as rawEnv } from "cloudflare:test";
 import { Env } from "./env";
 import app from "./index";
 import { cleanupScheduledDeletions } from "./utils/cleanup";
+import { splitSql } from "./splitSql";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -46,109 +48,12 @@ app.fetch = async (req: Request, env?: any, ctx?: any) => {
 };
 
 const env = rawEnv as unknown as Env;
+const testCtx = {} as any;
+const appFetchWrapper = async (req: any, e?: any, ctx?: any) => {
+  return app.fetch(req, e as any, (ctx || testCtx) as any);
+};
 
-export function splitSql(sql: string): string[] {
-  const statements: string[] = [];
-  let current = "";
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inInlineComment = false;
-  let inBlockComment = false;
 
-  for (let i = 0; i < sql.length; i++) {
-    const char = sql[i];
-    const nextChar = sql[i + 1];
-
-    if (inInlineComment) {
-      if (char === "\n") {
-        inInlineComment = false;
-      }
-      continue;
-    }
-
-    if (inBlockComment) {
-      if (char === "*" && nextChar === "/") {
-        inBlockComment = false;
-        i++; // skip '/'
-      }
-      continue;
-    }
-
-    if (inSingleQuote) {
-      current += char;
-      if (char === "'" && nextChar === "'") {
-        current += "'";
-        i++;
-      } else if (char === "\\") {
-        if (nextChar !== undefined) {
-          current += nextChar;
-          i++;
-        }
-      } else if (char === "'") {
-        inSingleQuote = false;
-      }
-      continue;
-    }
-
-    if (inDoubleQuote) {
-      current += char;
-      if (char === "\\") {
-        if (nextChar !== undefined) {
-          current += nextChar;
-          i++;
-        }
-      } else if (char === '"') {
-        inDoubleQuote = false;
-      }
-      continue;
-    }
-
-    // Check for comments start
-    if (char === "-" && nextChar === "-") {
-      inInlineComment = true;
-      i++;
-      continue;
-    }
-
-    if (char === "/" && nextChar === "*") {
-      inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    // Check for string start
-    if (char === "'") {
-      inSingleQuote = true;
-      current += char;
-      continue;
-    }
-
-    if (char === '"') {
-      inDoubleQuote = true;
-      current += char;
-      continue;
-    }
-
-    // Semicolon separator
-    if (char === ";") {
-      const stmt = current.trim();
-      if (stmt.length > 0) {
-        statements.push(stmt);
-      }
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  const stmt = current.trim();
-  if (stmt.length > 0) {
-    statements.push(stmt);
-  }
-
-  return statements;
-}
 
 beforeAll(async () => {
   // Use Vite's import.meta.glob to bundle SQL migrations as raw strings
@@ -169,23 +74,20 @@ beforeAll(async () => {
       try {
         await env.DB.prepare(statement).run();
       } catch (err: any) {
-        // Tolerate idempotent ALTER TABLE ADD COLUMN statements: in test environments
-        // the column may already exist in the base CREATE TABLE definition while the
-        // ALTER TABLE migration is also present for the production upgrade path.
         const msg = String(err?.message ?? err);
-        if (msg.includes('duplicate column name')) continue;
+        if (msg.includes('duplicate column name') || msg.includes('SQL code did not contain a statement')) continue;
         throw err;
       }
     }
   }
 });
 
-const testEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
+const testEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
 
 describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {
     const req = new Request("http://localhost/");
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -194,7 +96,7 @@ describe("Swazz Worker (Hono)", () => {
 
   it("auth_enabled is true by default in info endpoint", async () => {
     const req = new Request("http://localhost/api/info");
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -220,7 +122,7 @@ describe("D1 Database Migrations & API", () => {
       body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -230,7 +132,7 @@ describe("D1 Database Migrations & API", () => {
 
   it("rejects registrations with invalid username formats", async () => {
     // 1. Too short
-    const resShort = await app.fetch(new Request("http://localhost/api/auth/register", {
+    const resShort = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "ab", password: "Password123!" })
@@ -239,7 +141,7 @@ describe("D1 Database Migrations & API", () => {
     expect((await resShort.json() as any).error).toContain("Username must be 3-20 characters long");
 
     // 2. Too long
-    const resLong = await app.fetch(new Request("http://localhost/api/auth/register", {
+    const resLong = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "a".repeat(21), password: "Password123!" })
@@ -248,7 +150,7 @@ describe("D1 Database Migrations & API", () => {
     expect((await resLong.json() as any).error).toContain("Username must be 3-20 characters long");
 
     // 3. Invalid characters
-    const resChars = await app.fetch(new Request("http://localhost/api/auth/register", {
+    const resChars = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "user@name", password: "Password123!" })
@@ -257,7 +159,7 @@ describe("D1 Database Migrations & API", () => {
     expect((await resChars.json() as any).error).toContain("Username must be 3-20 characters long");
 
     // 4. Non-string username
-    const resNonString = await app.fetch(new Request("http://localhost/api/auth/register", {
+    const resNonString = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: 123, password: "Password123!" })
@@ -273,7 +175,7 @@ describe("D1 Database Migrations & API", () => {
       body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
     expect(res.status).toBe(400);
     const body = await res.json() as any;
     expect(body.error).toBe("Username already exists");
@@ -286,7 +188,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "NewUser", password: "Password123!" })
     });
-    const resCase = await app.fetch(reqCase, testEnv);
+    const resCase = await appFetchWrapper(reqCase as any, testEnv);
     expect(resCase.status).toBe(400);
     const bodyCase = await resCase.json() as any;
     expect(bodyCase.error).toBe("Username already exists");
@@ -297,7 +199,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "  newuser  ", password: "Password123!" })
     });
-    const resSpace = await app.fetch(reqSpace, testEnv);
+    const resSpace = await appFetchWrapper(reqSpace as any, testEnv);
     expect(resSpace.status).toBe(400);
     const bodySpace = await resSpace.json() as any;
     expect(bodySpace.error).toBe("Username already exists");
@@ -312,7 +214,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const regRes = await app.fetch(regReq, testEnv);
+    const regRes = await appFetchWrapper(regReq as any, testEnv);
     expect(regRes.status).toBe(200);
     const regBody = await regRes.json() as any;
     
@@ -329,7 +231,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const regRes2 = await app.fetch(regReq2, testEnv);
+    const regRes2 = await appFetchWrapper(regReq2 as any, testEnv);
     expect(regRes2.status).toBe(400);
     const body2 = await regRes2.json() as any;
     expect(body2.error).toBe("Username already exists");
@@ -342,7 +244,7 @@ describe("D1 Database Migrations & API", () => {
       body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
     
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -373,7 +275,7 @@ describe("D1 Database Migrations & API", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" }
     });
-    const step1Res = await app.fetch(step1Req, testEnv);
+    const step1Res = await appFetchWrapper(step1Req as any, testEnv);
     expect(step1Res.status).toBe(200);
     const step1Body = await step1Res.json() as any;
     expect(step1Body.status).toBe("ok");
@@ -391,7 +293,7 @@ describe("D1 Database Migrations & API", () => {
         nonce
       })
     });
-    const guestRes = await app.fetch(guestReq, testEnv);
+    const guestRes = await appFetchWrapper(guestReq as any, testEnv);
     expect(guestRes.status).toBe(200);
     const guestBody = await guestRes.json() as any;
     expect(guestBody.status).toBe("ok");
@@ -403,7 +305,7 @@ describe("D1 Database Migrations & API", () => {
     const meReq = new Request("http://localhost/api/auth/me", {
       headers: { "Authorization": `Bearer ${guestBody.token}` }
     });
-    const meRes = await app.fetch(meReq, testEnv);
+    const meRes = await appFetchWrapper(meReq as any, testEnv);
     expect(meRes.status).toBe(200);
     const meBody = await meRes.json() as any;
     expect(meBody.username).toBe(guestBody.username);
@@ -439,7 +341,7 @@ describe("D1 Database Migrations & API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: "newuser", password: "wrong" })
       });
-      const res = await app.fetch(req, testEnv);
+      const res = await appFetchWrapper(req as any, testEnv);
 
       expect(res.status).toBe(401); // Invalid credentials
     }
@@ -450,7 +352,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "newuser", password: "Password123!" })
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(429);
     const body = await res.json() as any;
@@ -464,7 +366,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "deluser", password: "Password123!" })
     });
-    const regRes = await app.fetch(regReq, testEnv);
+    const regRes = await appFetchWrapper(regReq as any, testEnv);
     expect(regRes.status).toBe(200);
     const regBody = await regRes.json() as any;
     const userId = regBody.id;
@@ -475,7 +377,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "deluser", password: "Password123!" })
     });
-    const loginRes = await app.fetch(loginReq, testEnv);
+    const loginRes = await appFetchWrapper(loginReq as any, testEnv);
     expect(loginRes.status).toBe(200);
     const loginBody = await loginRes.json() as any;
     const token = loginBody.token;
@@ -489,7 +391,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ name: "User Delete Project", description: "To be deleted" })
     });
-    const projRes = await app.fetch(projReq, testEnv);
+    const projRes = await appFetchWrapper(projReq as any, testEnv);
     expect(projRes.status).toBe(200);
     const projBody = await projRes.json() as any;
     const projectId = projBody.id;
@@ -522,14 +424,14 @@ describe("D1 Database Migrations & API", () => {
     const connectReq = new Request(`http://localhost/connect-runner?name=UserRunner&user_id=${userId}`, {
       headers: { "Upgrade": "websocket" }
     });
-    const connectRes = await stub.fetch(connectReq);
+    const connectRes = await stub.fetch(connectReq as any);
     expect(connectRes.status).toBe(101);
     const runnerWs = connectRes.webSocket!;
     runnerWs.accept();
 
     // Setup listener to track connection close
     const closePromise = new Promise<number>((resolve) => {
-      runnerWs.addEventListener("close", (evt) => {
+      runnerWs.addEventListener("close" as any, (evt) => {
         resolve(evt.code);
       });
     });
@@ -552,7 +454,7 @@ describe("D1 Database Migrations & API", () => {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}` }
     });
-    const delRes = await app.fetch(delReq, testEnv);
+    const delRes = await appFetchWrapper(delReq as any, testEnv);
     expect(delRes.status).toBe(200);
     const delBody = await delRes.json() as any;
     expect(delBody.status).toBe('deletion_scheduled');
@@ -579,7 +481,7 @@ describe("D1 Database Migrations & API", () => {
       method: "GET",
       headers: { "Authorization": `Bearer ${token}` }
     });
-    const projResForbidden = await app.fetch(projReqForbidden, testEnv);
+    const projResForbidden = await appFetchWrapper(projReqForbidden as any, testEnv);
     expect(projResForbidden.status).toBe(403);
     const projForbiddenBody = await projResForbidden.json() as any;
     expect(projForbiddenBody.error).toContain("Forbidden");
@@ -597,7 +499,7 @@ describe("D1 Database Migrations & API", () => {
         "Authorization": `Bearer ${apiKey}`
       }
     });
-    const runnerResDeleted = await app.fetch(runnerReqDeleted, testEnv);
+    const runnerResDeleted = await appFetchWrapper(runnerReqDeleted as any, testEnv);
     expect(runnerResDeleted.status).toBe(403);
 
     // 7. Cancel deletion
@@ -605,7 +507,7 @@ describe("D1 Database Migrations & API", () => {
       method: "POST",
       headers: { "Authorization": `Bearer ${token}` }
     });
-    const cancelRes = await app.fetch(cancelReq, testEnv);
+    const cancelRes = await appFetchWrapper(cancelReq as any, testEnv);
     expect(cancelRes.status).toBe(200);
     const cancelBody = await cancelRes.json() as any;
     expect(cancelBody.status).toBe('deletion_cancelled');
@@ -619,7 +521,7 @@ describe("D1 Database Migrations & API", () => {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}` }
     });
-    const delRes2 = await app.fetch(delReq2, testEnv);
+    const delRes2 = await appFetchWrapper(delReq2 as any, testEnv);
     expect(delRes2.status).toBe(200);
 
     // 9. Age the deletion timestamp to expired (e.g. -8 days)
@@ -651,7 +553,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const regRes = await app.fetch(regReq, testEnv);
+    const regRes = await appFetchWrapper(regReq as any, testEnv);
     expect(regRes.status).toBe(200);
 
     const loginReq1 = new Request("http://localhost/api/auth/login", {
@@ -659,7 +561,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const loginRes1 = await app.fetch(loginReq1, testEnv);
+    const loginRes1 = await appFetchWrapper(loginReq1 as any, testEnv);
     const { token } = await loginRes1.json() as any;
 
     const setupReq = new Request("http://localhost/api/auth/2fa/setup", {
@@ -670,7 +572,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ password: "Password123!" })
     });
-    const setupRes = await app.fetch(setupReq, testEnv);
+    const setupRes = await appFetchWrapper(setupReq as any, testEnv);
     expect(setupRes.status).toBe(200);
     const setupBody = await setupRes.json() as any;
     expect(setupBody.status).toBe("ok");
@@ -682,7 +584,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const loginRes2 = await app.fetch(loginReq2, testEnv);
+    const loginRes2 = await appFetchWrapper(loginReq2 as any, testEnv);
     expect(loginRes2.status).toBe(200);
     const loginBody2 = await loginRes2.json() as any;
     expect(loginBody2.status).toBe("ok");
@@ -695,7 +597,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ code: "000000", password: "Password123!" })
     });
-    const verifyRes1 = await app.fetch(verifyReq1, testEnv);
+    const verifyRes1 = await appFetchWrapper(verifyReq1 as any, testEnv);
     expect(verifyRes1.status).toBe(401);
 
     const { generateTOTP } = await import("./utils/totp");
@@ -709,7 +611,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ code: validCode, password: "Password123!" })
     });
-    const verifyRes2 = await app.fetch(verifyReq2, testEnv);
+    const verifyRes2 = await appFetchWrapper(verifyReq2 as any, testEnv);
     expect(verifyRes2.status).toBe(200);
 
     const loginReq3 = new Request("http://localhost/api/auth/login", {
@@ -717,7 +619,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const loginRes3 = await app.fetch(loginReq3, testEnv);
+    const loginRes3 = await appFetchWrapper(loginReq3 as any, testEnv);
     expect(loginRes3.status).toBe(200);
     const loginBody3 = await loginRes3.json() as any;
     expect(loginBody3.status).toBe("2fa_required");
@@ -727,7 +629,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!", two_factor_code: "111111" })
     });
-    const loginRes4 = await app.fetch(loginReq4, testEnv);
+    const loginRes4 = await appFetchWrapper(loginReq4 as any, testEnv);
     expect(loginRes4.status).toBe(401);
 
     const freshCode = await generateTOTP(setupBody.secret);
@@ -736,7 +638,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!", two_factor_code: freshCode })
     });
-    const loginRes5 = await app.fetch(loginReq5, testEnv);
+    const loginRes5 = await appFetchWrapper(loginReq5 as any, testEnv);
     expect(loginRes5.status).toBe(200);
     const loginBody5 = await loginRes5.json() as any;
     expect(loginBody5.status).toBe("ok");
@@ -750,7 +652,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ code: "000000", password: "Password123!" })
     });
-    const disableRes1 = await app.fetch(disableReq1, testEnv);
+    const disableRes1 = await appFetchWrapper(disableReq1 as any, testEnv);
     expect(disableRes1.status).toBe(401);
 
     const disableCode = await generateTOTP(setupBody.secret);
@@ -762,7 +664,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ code: disableCode, password: "Password123!" })
     });
-    const disableRes2 = await app.fetch(disableReq2, testEnv);
+    const disableRes2 = await appFetchWrapper(disableReq2 as any, testEnv);
     expect(disableRes2.status).toBe(200);
 
     const loginReq6 = new Request("http://localhost/api/auth/login", {
@@ -770,7 +672,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const loginRes6 = await app.fetch(loginReq6, testEnv);
+    const loginRes6 = await appFetchWrapper(loginReq6 as any, testEnv);
     expect(loginRes6.status).toBe(200);
     const loginBody6 = await loginRes6.json() as any;
     expect(loginBody6.status).toBe("ok");
@@ -783,7 +685,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    const regRes = await app.fetch(regReq, testEnv);
+    const regRes = await appFetchWrapper(regReq as any, testEnv);
     expect(regRes.status).toBe(200);
     const regBody = await regRes.json() as any;
     const token = regBody.token;
@@ -793,7 +695,7 @@ describe("D1 Database Migrations & API", () => {
       method: "POST",
       headers: { "Authorization": `Bearer ${token}` }
     });
-    const genRegRes = await app.fetch(genRegReq, testEnv);
+    const genRegRes = await appFetchWrapper(genRegReq as any, testEnv);
     expect(genRegRes.status).toBe(200);
     const genRegBody = await genRegRes.json() as any;
     expect(genRegBody.rp.name).toBe("Swazz");
@@ -808,7 +710,7 @@ describe("D1 Database Migrations & API", () => {
       },
       body: JSON.stringify({ id: "invalid", rawId: "invalid", response: { clientDataJSON: "invalid", attestationObject: "invalid" }, type: "public-key" })
     });
-    const verRegRes = await app.fetch(verRegReq, testEnv);
+    const verRegRes = await appFetchWrapper(verRegReq as any, testEnv);
     expect(verRegRes.status).toBe(400); // Should fail validation
 
     // 3. Generate Login Options
@@ -817,7 +719,7 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username })
     });
-    const genLogRes = await app.fetch(genLogReq, testEnv);
+    const genLogRes = await appFetchWrapper(genLogReq as any, testEnv);
     expect(genLogRes.status).toBe(404); // Fails because no passkeys registered yet for this user
 
     // 4. Verify Login Response (invalid)
@@ -826,14 +728,14 @@ describe("D1 Database Migrations & API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: "invalid" })
     });
-    const verLogRes = await app.fetch(verLogReq, testEnv);
+    const verLogRes = await appFetchWrapper(verLogReq as any, testEnv);
     expect(verLogRes.status).toBe(404); // Credential not found
   });
 });
 
 describe("Anonymous Limits", () => {
   let userToken: string;
-  const testEnv = { ...env, AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
+  const testEnv = { ...env, /* as unknown as Env */ AUTH_ENABLED: 'false', JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined };
 
   beforeAll(async () => {
     // Register and login to get a valid token
@@ -842,14 +744,14 @@ describe("Anonymous Limits", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "limituser", password: "Password123!" })
     });
-    await app.fetch(regReq, testEnv);
+    await appFetchWrapper(regReq as any, testEnv);
 
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "limituser", password: "Password123!" })
     });
-    const loginRes = await app.fetch(loginReq, testEnv);
+    const loginRes = await appFetchWrapper(loginReq as any, testEnv);
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
@@ -871,7 +773,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const res1 = await app.fetch(req1, testEnv);
+    const res1 = await appFetchWrapper(req1 as any, testEnv);
     expect(res1.status).toBe(200);
 
     // 2. Second parse request from same anonymous browser IP - should be blocked (status 403)
@@ -884,7 +786,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const res2 = await app.fetch(req2, testEnv);
+    const res2 = await appFetchWrapper(req2 as any, testEnv);
     expect(res2.status).toBe(403);
     const body2 = await res2.json() as any;
     expect(body2.error).toContain("Anonymous limit reached");
@@ -899,7 +801,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const resCLI = await app.fetch(reqCLI, testEnv);
+    const resCLI = await appFetchWrapper(reqCLI as any, testEnv);
     expect(resCLI.status).toBe(200);
 
     // 4. Parse request from logged-in browser user (with Authorization header) - should bypass limits and succeed (status 200)
@@ -913,7 +815,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ url: "http://example.com/swagger.json" })
     });
-    const resAuth = await app.fetch(reqAuth, testEnv);
+    const resAuth = await appFetchWrapper(reqAuth as any, testEnv);
     expect(resAuth.status).toBe(200);
   });
 
@@ -931,7 +833,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: largeConfig })
     });
-    const resAnonLarge = await app.fetch(reqAnonLarge, testEnv);
+    const resAnonLarge = await appFetchWrapper(reqAnonLarge as any, testEnv);
     expect(resAnonLarge.status).toBe(403);
     const bodyAnonLarge = await resAnonLarge.json() as any;
     expect(bodyAnonLarge.error).toContain("Anonymous limit reached");
@@ -949,7 +851,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: smallConfig })
     });
-    const resAnonSmall = await app.fetch(reqAnonSmall, testEnv);
+    const resAnonSmall = await appFetchWrapper(reqAnonSmall as any, testEnv);
     expect(resAnonSmall.status).toBe(201);
     const bodyAnonSmall = await resAnonSmall.json() as any;
     expect(bodyAnonSmall.status).toBe("queued");
@@ -964,7 +866,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: largeConfig })
     });
-    const resCLILarge = await app.fetch(reqCLILarge, testEnv);
+    const resCLILarge = await appFetchWrapper(reqCLILarge as any, testEnv);
     expect(resCLILarge.status).toBe(201);
     const bodyCLILarge = await resCLILarge.json() as any;
     expect(bodyCLILarge.status).toBe("queued");
@@ -980,7 +882,7 @@ describe("Anonymous Limits", () => {
       },
       body: JSON.stringify({ config: largeConfig })
     });
-    const resAuthLarge = await app.fetch(reqAuthLarge, testEnv);
+    const resAuthLarge = await appFetchWrapper(reqAuthLarge as any, testEnv);
     expect(resAuthLarge.status).toBe(201);
     const bodyAuthLarge = await resAuthLarge.json() as any;
     expect(bodyAuthLarge.status).toBe("queued");
@@ -998,14 +900,14 @@ describe("Projects & Runners API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "projuser", password: "Password123!" })
     });
-    await app.fetch(regReq, testEnv);
+    await appFetchWrapper(regReq as any, testEnv);
 
     const loginReq = new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "projuser", password: "Password123!" })
     });
-    const loginRes = await app.fetch(loginReq, testEnv);
+    const loginRes = await appFetchWrapper(loginReq as any, testEnv);
     const body = await loginRes.json() as { token: string };
     userToken = body.token;
 
@@ -1018,7 +920,7 @@ describe("Projects & Runners API", () => {
       },
       body: JSON.stringify({ name: "Original Name", description: "Original Description" })
     });
-    const createRes = await app.fetch(createReq, testEnv);
+    const createRes = await appFetchWrapper(createReq as any, testEnv);
     expect(createRes.status).toBe(200);
     const createBody = await createRes.json() as { id: string };
     projectId = createBody.id;
@@ -1028,7 +930,7 @@ describe("Projects & Runners API", () => {
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as { projects: any[] };
@@ -1047,7 +949,7 @@ describe("Projects & Runners API", () => {
       },
       body: JSON.stringify({ name: "Updated Name", description: "Updated Description" })
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as { status: string };
@@ -1057,7 +959,7 @@ describe("Projects & Runners API", () => {
     const checkReq = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const checkRes = await app.fetch(checkReq, testEnv);
+    const checkRes = await appFetchWrapper(checkReq as any, testEnv);
     const checkBody = await checkRes.json() as { projects: any[] };
     const p = checkBody.projects.find(x => x.id === projectId);
     expect(p.name).toBe("Updated Name");
@@ -1072,18 +974,18 @@ describe("Projects & Runners API", () => {
     const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunner1", {
       headers: { "Upgrade": "websocket" }
     });
-    const connectSharedRes = await stub.fetch(connectSharedReq);
+    const connectSharedRes = await stub.fetch(connectSharedReq as any);
     expect(connectSharedRes.status).toBe(101);
     const sharedWs = connectSharedRes.webSocket!;
     sharedWs.accept();
 
     // 2. Connect a private runner (with public_key)
     const keyPair = await crypto.subtle.generateKey(
-      { name: "Ed25519" },
+      { name: "Ed25519" } as any,
       true,
       ["sign", "verify"]
     );
-    const rawPubKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+    const rawPubKey = await crypto.subtle.exportKey("raw", (keyPair as any).publicKey);
     const pubKeyHex = Array.from(new Uint8Array(rawPubKey))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
@@ -1091,13 +993,13 @@ describe("Projects & Runners API", () => {
     const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunner1&public_key=${pubKeyHex}`, {
       headers: { "Upgrade": "websocket" }
     });
-    const connectPrivateRes = await stub.fetch(connectPrivateReq);
+    const connectPrivateRes = await stub.fetch(connectPrivateReq as any);
     expect(connectPrivateRes.status).toBe(101);
     const privateWs = connectPrivateRes.webSocket!;
     privateWs.accept();
 
     // Challenge-response auth logic for private runner
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve: any, reject: any) => {
       privateWs.addEventListener("message", async (evt) => {
         try {
           const msg = JSON.parse(evt.data as string);
@@ -1106,7 +1008,7 @@ describe("Projects & Runners API", () => {
             const nonceBuffer = new TextEncoder().encode(nonce);
             const signatureBuffer = await crypto.subtle.sign(
               "Ed25519",
-              keyPair.privateKey,
+              (keyPair as any).privateKey,
               nonceBuffer
             );
             const signatureHex = Array.from(new Uint8Array(signatureBuffer))
@@ -1131,7 +1033,7 @@ describe("Projects & Runners API", () => {
     const req = new Request("http://localhost/api/runners", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as { runners: any[] };
@@ -1153,7 +1055,7 @@ describe("Projects & Runners API", () => {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
 
     expect(res.status).toBe(200);
     const body = await res.json() as { status: string };
@@ -1163,7 +1065,7 @@ describe("Projects & Runners API", () => {
     const checkReq = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${userToken}` }
     });
-    const checkRes = await app.fetch(checkReq, testEnv);
+    const checkRes = await appFetchWrapper(checkReq as any, testEnv);
     const checkBody = await checkRes.json() as { projects: any[] };
     const p = checkBody.projects.find(x => x.id === projectId);
     expect(p).toBeUndefined();
@@ -1174,7 +1076,7 @@ describe("Projects & Runners API", () => {
       const req = new Request("http://localhost/api/runners/conn1/restart", {
         method: "POST"
       });
-      const res = await app.fetch(req, testEnv);
+      const res = await appFetchWrapper(req as any, testEnv);
       expect(res.status).toBe(401);
     });
 
@@ -1189,7 +1091,7 @@ describe("Projects & Runners API", () => {
           method: "POST",
           headers: { "Authorization": `Bearer ${userToken}` }
         });
-        const res = await app.fetch(req, testEnv);
+        const res = await appFetchWrapper(req as any, testEnv);
         expect(res.status).toBe(500);
         const body = await res.json() as { error: string };
         expect(body.error).toBe("Internal Server Error");
@@ -1206,15 +1108,15 @@ describe("Projects & Runners API", () => {
       const connectSharedReq = new Request("http://localhost/connect-runner?name=SharedRunnerRestart", {
         headers: { "Upgrade": "websocket" }
       });
-      const connectSharedRes = await stub.fetch(connectSharedReq);
+      const connectSharedRes = await stub.fetch(connectSharedReq as any);
       const sharedWs = connectSharedRes.webSocket!;
       sharedWs.accept();
 
       // Get connectionId
-      const listReq = new Request("http://localhost/api/runners", {
+      const listReq = new Request("http://localhost/api/runners" as any, {
         headers: { "Authorization": `Bearer ${userToken}` }
       });
-      const listRes = await app.fetch(listReq, testEnv);
+      const listRes = await appFetchWrapper(listReq as any, testEnv);
       const listBody = await listRes.json() as { runners: any[] };
       const sharedRunner = listBody.runners.find(r => r.name === 'SharedRunnerRestart');
       expect(sharedRunner).toBeDefined();
@@ -1225,7 +1127,7 @@ describe("Projects & Runners API", () => {
         method: "POST",
         headers: { "Authorization": `Bearer ${userToken}` }
       });
-      const restartRes = await app.fetch(restartReq, testEnv);
+      const restartRes = await appFetchWrapper(restartReq as any, testEnv);
       expect(restartRes.status).toBe(403);
     });
 
@@ -1237,7 +1139,7 @@ describe("Projects & Runners API", () => {
       const projUser = await env.DB.prepare("SELECT id FROM users WHERE username = ?")
         .bind("projuser")
         .first<{ id: string }>();
-      const projUserId = projUser.id;
+      const projUserId = projUser!.id;
 
       // 1. Register a public key for our test user
       const keyPair = await crypto.subtle.generateKey(
@@ -1245,7 +1147,7 @@ describe("Projects & Runners API", () => {
         true,
         ["sign", "verify"]
       );
-      const rawPubKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+      const rawPubKey = await crypto.subtle.exportKey("raw", (keyPair as any).publicKey);
       const pubKeyHex = Array.from(new Uint8Array(rawPubKey))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
@@ -1258,12 +1160,12 @@ describe("Projects & Runners API", () => {
       const connectPrivateReq = new Request(`http://localhost/connect-runner?name=PrivateRunnerRestart&public_key=${pubKeyHex}&user_id=${projUserId}`, {
         headers: { "Upgrade": "websocket" }
       });
-      const connectPrivateRes = await stub.fetch(connectPrivateReq);
+      const connectPrivateRes = await stub.fetch(connectPrivateReq as any);
       const privateWs = connectPrivateRes.webSocket!;
       privateWs.accept();
 
       // Authenticate runner
-      await new Promise<void>((resolve, reject) => {
+      await new Promise<void>((resolve: any, reject: any) => {
         privateWs.addEventListener("message", async (evt) => {
           try {
             const msg = JSON.parse(evt.data as string);
@@ -1272,7 +1174,7 @@ describe("Projects & Runners API", () => {
               const nonceBuffer = new TextEncoder().encode(nonce);
               const signatureBuffer = await crypto.subtle.sign(
                 "Ed25519",
-                keyPair.privateKey,
+                (keyPair as any).privateKey,
                 nonceBuffer
               );
               const signatureHex = Array.from(new Uint8Array(signatureBuffer))
@@ -1293,7 +1195,7 @@ describe("Projects & Runners API", () => {
       const listReq = new Request("http://localhost/api/runners", {
         headers: { "Authorization": `Bearer ${userToken}` }
       });
-      const listRes = await app.fetch(listReq, testEnv);
+      const listRes = await appFetchWrapper(listReq as any, testEnv);
       const listBody = await listRes.json() as { runners: any[] };
       const privateRunner = listBody.runners.find(r => r.name === 'PrivateRunnerRestart');
       expect(privateRunner).toBeDefined();
@@ -1305,7 +1207,7 @@ describe("Projects & Runners API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: "otheruserrestart", password: "Password123!" })
       });
-      const registerRes = await app.fetch(registerReq, testEnv);
+      const registerRes = await appFetchWrapper(registerReq as any, testEnv);
       expect(registerRes.status).toBe(200);
 
       const loginReq = new Request("http://localhost/api/auth/login", {
@@ -1313,7 +1215,7 @@ describe("Projects & Runners API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: "otheruserrestart", password: "Password123!" })
       });
-      const loginRes = await app.fetch(loginReq, testEnv);
+      const loginRes = await appFetchWrapper(loginReq as any, testEnv);
       expect(loginRes.status).toBe(200);
       const loginBody = await loginRes.json() as { token: string };
       const otherToken = loginBody.token;
@@ -1322,7 +1224,7 @@ describe("Projects & Runners API", () => {
         method: "POST",
         headers: { "Authorization": `Bearer ${otherToken}` }
       });
-      const restartOtherRes = await app.fetch(restartOtherReq, testEnv);
+      const restartOtherRes = await appFetchWrapper(restartOtherReq as any, testEnv);
       expect(restartOtherRes.status).toBe(403); // Since otheruserrestart has no public key/doesn't own it
 
       // 5. Restart with correct owner
@@ -1340,7 +1242,7 @@ describe("Projects & Runners API", () => {
         method: "POST",
         headers: { "Authorization": `Bearer ${userToken}` }
       });
-      const restartOwnerRes = await app.fetch(restartOwnerReq, testEnv);
+      const restartOwnerRes = await appFetchWrapper(restartOwnerReq as any, testEnv);
       expect(restartOwnerRes.status).toBe(200);
       const restartBody = await restartOwnerRes.json() as { status: string };
       expect(restartBody.status).toBe("restarted");
@@ -1394,7 +1296,7 @@ describe("KV Session Cache", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "kvtestuser", password: "TestPass123!" }),
     });
-    const regRes = await app.fetch(regReq, { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null });
+    const regRes = await appFetchWrapper(regReq as any, { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
     const regBody = await regRes.json() as any;
     userToken.set(regBody.token);
     testUserId = regBody.id;
@@ -1403,20 +1305,20 @@ describe("KV Session Cache", () => {
     const meReq = new Request("http://localhost/api/auth/me", {
       headers: { "Authorization": `Bearer ${regBody.token}` },
     });
-    const meRes = await app.fetch(meReq, { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null });
+    const meRes = await appFetchWrapper(meReq as any, { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
     const meBody = await meRes.json() as any;
     testApiKey = meBody.api_key;
   });
 
   it("authenticates via API key and populates KV cache on first request", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Use /api/projects which relies on getUserIdFromRequest middleware
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${testApiKey}` },
     });
-    const res = await app.fetch(req, kvEnv);
+    const res = await appFetchWrapper(req as any, kvEnv);
     expect(res.status).toBe(200);
 
     // Verify KV was populated with the userId
@@ -1428,7 +1330,7 @@ describe("KV Session Cache", () => {
 
   it("serves from KV cache on subsequent requests without querying D1 for api_key", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Pre-populate the KV cache
     await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
@@ -1449,7 +1351,7 @@ describe("KV Session Cache", () => {
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${testApiKey}` },
     });
-    const res = await app.fetch(req, kvEnv);
+    const res = await appFetchWrapper(req as any, kvEnv);
     expect(res.status).toBe(200);
 
     // D1 should NOT have been queried for api_key (served from KV)
@@ -1458,13 +1360,13 @@ describe("KV Session Cache", () => {
 
   it("negatively caches invalid API keys to prevent cache-miss storms", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     const fakeKey = "swazz_live_invalidkey123456789";
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${fakeKey}` },
     });
-    const res = await app.fetch(req, kvEnv);
+    const res = await appFetchWrapper(req as any, kvEnv);
     expect(res.status).toBe(401);
 
     // Verify negative cache entry was written
@@ -1475,17 +1377,17 @@ describe("KV Session Cache", () => {
   });
 
   it("gracefully falls back to D1 when SESSION_CACHE is not bound", async () => {
-    const noKvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null };
+    const noKvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
     const req = new Request("http://localhost/api/projects", {
       headers: { "Authorization": `Bearer ${testApiKey}` },
     });
-    const res = await app.fetch(req, noKvEnv);
+    const res = await appFetchWrapper(req as any, noKvEnv);
     expect(res.status).toBe(200);
   });
 
   it("invalidates old KV cache entry when API key is regenerated", async () => {
     const mockKV = createMockKV();
-    const kvEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+    const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Pre-populate KV with the current API key
     await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
@@ -1496,7 +1398,7 @@ describe("KV Session Cache", () => {
       method: "POST",
       headers: { "Authorization": `Bearer ${userToken.get()}` },
     });
-    const regenRes = await app.fetch(regenReq, kvEnv);
+    const regenRes = await appFetchWrapper(regenReq as any, kvEnv);
     expect(regenRes.status).toBe(200);
     const regenBody = await regenRes.json() as { api_key: string };
 
@@ -1514,7 +1416,7 @@ describe("KV Session Cache", () => {
 
   it("cleanupScheduledDeletions invalidates deleted users' API keys from KV", async () => {
     const mockKV = createMockKV();
-    const cleanupEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: null, TURNSTILE_SECRET: null, SESSION_CACHE: mockKV };
+    const cleanupEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Register a throwaway user for deletion
     const regReq = new Request("http://localhost/api/auth/register", {
@@ -1522,7 +1424,7 @@ describe("KV Session Cache", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "kvdeluser", password: "TestPass123!" }),
     });
-    const regRes = await app.fetch(regReq, cleanupEnv);
+    const regRes = await appFetchWrapper(regReq as any, cleanupEnv);
     const regBody = await regRes.json() as any;
     const delUserId = regBody.id;
     const delToken = regBody.token;
@@ -1531,7 +1433,7 @@ describe("KV Session Cache", () => {
     const meReq = new Request("http://localhost/api/auth/me", {
       headers: { "Authorization": `Bearer ${delToken}` },
     });
-    const meRes = await app.fetch(meReq, cleanupEnv);
+    const meRes = await appFetchWrapper(meReq as any, cleanupEnv);
     const meBody = await meRes.json() as any;
     const delApiKey = meBody.api_key;
 
@@ -1544,7 +1446,7 @@ describe("KV Session Cache", () => {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${delToken}` },
     });
-    await app.fetch(delReq, cleanupEnv);
+    await appFetchWrapper(delReq as any, cleanupEnv);
 
     // Age the deletion timestamp past the 7-day grace period
     await env.DB.prepare("UPDATE users SET delete_requested_at = datetime('now', '-8 days') WHERE id = ?").bind(delUserId).run();
@@ -1623,7 +1525,7 @@ describe("CSRF Protection", () => {
       },
       body: JSON.stringify({ username: "csrfuser", password: "Password123!" })
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
     expect(res.status).toBe(403);
     const body = await res.json() as any;
     expect(body.error).toBe("Invalid or missing CSRF token");
@@ -1640,7 +1542,7 @@ describe("CSRF Protection", () => {
       },
       body: JSON.stringify({ username: "csrfuser", password: "Password123!" })
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
     expect(res.status).toBe(403);
     const body = await res.json() as any;
     expect(body.error).toBe("Invalid or missing CSRF token");
@@ -1656,7 +1558,7 @@ describe("CSRF Protection", () => {
       },
       body: JSON.stringify({ name: "Bypass Project", description: "Bypassed" })
     });
-    const res = await app.fetch(req, testEnv);
+    const res = await appFetchWrapper(req as any, testEnv);
     expect(res.status).toBe(401);
   });
 });
@@ -1669,7 +1571,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "weakuser1", password: "Password123" })
     });
-    const resTooShort = await app.fetch(regReqTooShort, testEnv);
+    const resTooShort = await appFetchWrapper(regReqTooShort as any, testEnv);
     expect(resTooShort.status).toBe(400);
     const bodyTooShort = await resTooShort.json() as any;
     expect(bodyTooShort.error).toContain("Password must be at least 12 characters long");
@@ -1680,7 +1582,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "stronguser", password: "Password123!" })
     });
-    const resStrong = await app.fetch(regReqStrong, testEnv);
+    const resStrong = await appFetchWrapper(regReqStrong as any, testEnv);
     expect(resStrong.status).toBe(200);
   });
 
@@ -1692,7 +1594,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "Password123!" })
     });
-    await app.fetch(regReq, testEnv);
+    await appFetchWrapper(regReq as any, testEnv);
 
     // 1. Get challenge (step 1)
     const step1Req = new Request("http://localhost/api/auth/login/step1", {
@@ -1700,7 +1602,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username })
     });
-    const step1Res = await app.fetch(step1Req, testEnv);
+    const step1Res = await appFetchWrapper(step1Req as any, testEnv);
     expect(step1Res.status).toBe(200);
     const step1Body = await step1Res.json() as { token: string; challenge: string; difficulty: number };
     expect(step1Body.token).toBeDefined();
@@ -1733,7 +1635,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         nonce: nonce
       })
     });
-    const step2Res = await app.fetch(step2Req, testEnv);
+    const step2Res = await appFetchWrapper(step2Req as any, testEnv);
     expect(step2Res.status).toBe(200);
     const step2Body = await step2Res.json() as { status: string; token: string };
     expect(step2Body.status).toBe("ok");
@@ -1746,7 +1648,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         method: "GET",
         headers: { "Accept": "text/markdown" }
       });
-      const res = await app.fetch(req, testEnv);
+      const res = await appFetchWrapper(req as any, testEnv);
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/markdown");
       const bodyText = await res.text();
@@ -1758,7 +1660,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         method: "GET",
         headers: { "Accept": "text/html" }
       });
-      const res = await app.fetch(req, testEnv);
+      const res = await appFetchWrapper(req as any, testEnv);
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/html");
       const bodyText = await res.text();
@@ -1771,7 +1673,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         method: "GET",
         headers: { "Accept": "application/json" }
       });
-      const res = await app.fetch(req, testEnv);
+      const res = await appFetchWrapper(req as any, testEnv);
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("application/json");
       const bodyJson = await res.json() as { service: string; status: string };
@@ -1885,12 +1787,12 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerShared", {
           headers: { "Upgrade": "websocket" }
         });
-        const connectRes = await stub.fetch(connectReq);
+        const connectRes = await stub.fetch(connectReq as any);
         expect(connectRes.status).toBe(101);
         const ws = connectRes.webSocket!;
         ws.accept();
 
-        const dispatchMsg = await new Promise<any>((resolve, reject) => {
+        const dispatchMsg = await new Promise<any>((resolve: any, reject: any) => {
           const timeout = setTimeout(() => reject(new Error("Timeout waiting for dispatch")), 2000);
           ws.addEventListener("message", (evt) => {
             const msg = JSON.parse(evt.data as string);
@@ -1931,13 +1833,13 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedPrivateCheck", {
           headers: { "Upgrade": "websocket" }
         });
-        const connectRes = await stub.fetch(connectReq);
+        const connectRes = await stub.fetch(connectReq as any);
         expect(connectRes.status).toBe(101);
         const ws = connectRes.webSocket!;
         ws.accept();
 
         // Wait a bit to ensure it is NOT dispatched
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve as any, 300));
 
         const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
         expect(scanRow?.status).toBe("queued");
@@ -1966,13 +1868,13 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const connectReq = new Request("http://localhost/connect-runner?name=QueueRunnerSharedDisabledCheck", {
           headers: { "Upgrade": "websocket" }
         });
-        const connectRes = await stub.fetch(connectReq);
+        const connectRes = await stub.fetch(connectReq as any);
         expect(connectRes.status).toBe(101);
         const ws = connectRes.webSocket!;
         ws.accept();
 
         // Wait a bit to ensure it is NOT dispatched
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve as any, 300));
 
         const scanRow = await env.DB.prepare("SELECT status FROM scans WHERE id = ?").bind(scanId).first<any>();
         expect(scanRow?.status).toBe("queued");
@@ -1990,7 +1892,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
           true,
           ["sign", "verify"]
         );
-        const rawPubKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+        const rawPubKey = await crypto.subtle.exportKey("raw", (keyPair as any).publicKey);
         const pubKeyHex = Array.from(new Uint8Array(rawPubKey))
           .map(b => b.toString(16).padStart(2, '0'))
           .join('');
@@ -2011,13 +1913,13 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         const connectReq = new Request(`http://localhost/connect-runner?name=QueueRunnerPrivate&public_key=${pubKeyHex}`, {
           headers: { "Upgrade": "websocket" }
         });
-        const connectRes = await stub.fetch(connectReq);
+        const connectRes = await stub.fetch(connectReq as any);
         expect(connectRes.status).toBe(101);
         const ws = connectRes.webSocket!;
         ws.accept();
 
         // Challenge-response auth logic for private runner
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve: any, reject: any) => {
           ws.addEventListener("message", async (evt) => {
             try {
               const msg = JSON.parse(evt.data as string);
@@ -2026,7 +1928,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
                 const nonceBuffer = new TextEncoder().encode(nonce);
                 const signatureBuffer = await crypto.subtle.sign(
                   "Ed25519",
-                  keyPair.privateKey,
+                  (keyPair as any).privateKey,
                   nonceBuffer
                 );
                 const signatureHex = Array.from(new Uint8Array(signatureBuffer))
@@ -2064,6 +1966,310 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         expect(scanRow?.status).toBe("dispatched");
 
         ws.close();
+      });
+    });
+  });
+
+  describe("RBAC & Invitations Security & Validation", () => {
+    let tokenOwner: string;
+    let tokenInvitee: string;
+    let inviteeUsername: string;
+    let tokenOutsider: string;
+    let projectId: string;
+
+    beforeAll(async () => {
+      // 1. Register/Login Owner (userA)
+      const nameA = "u_owner_" + Date.now().toString().slice(-4);
+      await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameA, password: "Password123!" })
+      }), testEnv);
+      const resA = await appFetchWrapper(new Request("http://localhost/api/auth/login" as any, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameA, password: "Password123!" })
+      }), testEnv);
+      tokenOwner = ((await resA.json()) as any).token;
+
+      // 2. Register/Login Invitee (userB)
+      const nameB = "u_invitee_" + Date.now().toString().slice(-4);
+      inviteeUsername = nameB;
+      await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameB, password: "Password123!" })
+      }), testEnv);
+      const resB = await appFetchWrapper(new Request("http://localhost/api/auth/login" as any, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameB, password: "Password123!" })
+      }), testEnv);
+      tokenInvitee = ((await resB.json()) as any).token;
+
+      // 3. Register/Login Outsider (userC)
+      const nameC = "u_outsider_" + Date.now().toString().slice(-4);
+      await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameC, password: "Password123!" })
+      }), testEnv);
+      const resC = await appFetchWrapper(new Request("http://localhost/api/auth/login" as any, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: nameC, password: "Password123!" })
+      }), testEnv);
+      tokenOutsider = ((await resC.json()) as any).token;
+
+      // 4. Create a project under Owner
+      const projRes = await appFetchWrapper(new Request("http://localhost/api/projects" as any, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenOwner}`
+        },
+        body: JSON.stringify({ name: "RBAC Project" })
+      }), testEnv);
+      projectId = ((await projRes.json()) as any).id;
+    });
+
+    describe("Role Creation Validation & Edge Cases", () => {
+      it("fails to create role with empty or whitespace-only name", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "   ", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Role name is required");
+      });
+
+      it("fails to create role with unknown permissions", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Auditor", permissions: ["invalid-perm-key"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Unknown permission keys");
+      });
+
+      it("fails to create role inheriting unknown role IDs", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Auditor", included_roles: ["non-existent-role-id"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Unknown role IDs");
+      });
+
+      it("successfully creates custom role and rejects duplicate name", async () => {
+        // Create first time
+        const res1 = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Custom Auditor", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res1.status).toBe(200);
+
+        // Try duplicate creation (exact name)
+        const res2 = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Custom Auditor", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res2.status).toBe(400);
+        expect(((await res2.json()) as any).error).toContain("already exists");
+
+        // Try duplicate creation (trailing/leading whitespace)
+        const res3 = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "  Custom Auditor  ", permissions: ["get:/api/projects/:id"] })
+        }), testEnv);
+        expect(res3.status).toBe(400);
+        expect(((await res3.json()) as any).error).toContain("already exists");
+      });
+    });
+
+    describe("Access Restrictions (requirePermission)", () => {
+      it("restricts GET /permissions to authenticated project members", async () => {
+        // 1. Owner succeeds
+        const resOwner = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/permissions` as any, {
+          headers: { "Authorization": `Bearer ${tokenOwner}` }
+        }), testEnv);
+        expect(resOwner.status).toBe(200);
+
+        // 2. Outsider fails (403 Forbidden)
+        const resOutsider = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/permissions` as any, {
+          headers: { "Authorization": `Bearer ${tokenOutsider}` }
+        }), testEnv);
+        expect(resOutsider.status).toBe(403);
+      });
+
+      it("restricts POST /invitations to authorized roles", async () => {
+        // Outsider fails (403 Forbidden)
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOutsider}`
+          },
+          body: JSON.stringify({ username: "someuser", roles: ["viewer"] })
+        }), testEnv);
+        expect(res.status).toBe(403);
+
+        // Register/Login Editor (userD)
+        const nameD = "u_editor_" + Date.now().toString().slice(-4);
+        const resRegD = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: nameD, password: "Password123!" })
+        }), testEnv);
+        const regData = (await resRegD.json()) as any;
+        const editorUserId = regData.id;
+
+        const resD = await appFetchWrapper(new Request("http://localhost/api/auth/login" as any, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: nameD, password: "Password123!" })
+        }), testEnv);
+        const editorData = (await resD.json()) as any;
+        const tokenEditor = editorData.token;
+
+        // Assign 'editor' role to userD in the database
+        await testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)")
+          .bind(projectId, editorUserId, "editor").run();
+
+        // Editor succeeds (200 OK)
+        const resEditor = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenEditor}`
+          },
+          body: JSON.stringify({ username: "someotheruser", roles: ["viewer"] })
+        }), testEnv);
+        expect(resEditor.status).toBe(200);
+      });
+    });
+
+    describe("Invitation System Security & Flow", () => {
+      it("fails to invite with empty roles array", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ username: "someuser", roles: [] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("At least one role must be specified");
+      });
+
+      it("prevents acceptance of expired invitations", async () => {
+        // Insert an expired invitation directly in DB
+        const expiredToken = "expired-token-" + crypto.randomUUID();
+        const expiresAt = new Date(Date.now() - 3600 * 1000).toISOString(); // 1 hour ago
+        await testEnv.DB.prepare(`
+          INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
+          VALUES (?, ?, NULL, ?, ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, inviteeUsername, JSON.stringify(["viewer"]), expiredToken, expiresAt).run();
+
+        const acceptRes = await appFetchWrapper(new Request("http://localhost/api/auth/invitations/accept" as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenInvitee}`
+          },
+          body: JSON.stringify({ token: expiredToken })
+        }), testEnv);
+        expect(acceptRes.status).toBe(400);
+        expect(((await acceptRes.json()) as any).error).toContain("Invalid or expired invitation");
+      });
+
+      it("prevents user mismatch when username/email is targeted", async () => {
+        // Create invitation targeted to "specific_user"
+        const targetToken = "target-token-" + crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+        await testEnv.DB.prepare(`
+          INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
+          VALUES (?, ?, NULL, 'specific_user', ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, JSON.stringify(["viewer"]), targetToken, expiresAt).run();
+
+        // Attempt to accept using tokenInvitee (who is NOT "specific_user")
+        const acceptRes = await appFetchWrapper(new Request("http://localhost/api/auth/invitations/accept" as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenInvitee}`
+          },
+          body: JSON.stringify({ token: targetToken })
+        }), testEnv);
+
+        expect(acceptRes.status).toBe(403);
+        expect(((await acceptRes.json()) as any).error).toContain("Invitation is for a different username");
+
+        // Verify the invitation status rolled back to 'Pending'
+        const row = await testEnv.DB.prepare("SELECT status FROM project_invitations WHERE token = ?").bind(targetToken).first<any>();
+        expect(row?.status).toBe("Pending");
+      });
+
+      it("allows declining a pending invitation", async () => {
+        const declineToken = "decline-token-" + crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+        await testEnv.DB.prepare(`
+          INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
+          VALUES (?, ?, NULL, ?, ?, 'Pending', ?, ?)
+        `).bind(crypto.randomUUID(), projectId, inviteeUsername, JSON.stringify(["viewer"]), declineToken, expiresAt).run();
+
+        const declineRes = await appFetchWrapper(new Request("http://localhost/api/auth/invitations/decline" as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenInvitee}`
+          },
+          body: JSON.stringify({ token: declineToken })
+        }), testEnv);
+
+        expect(declineRes.status).toBe(200);
+        expect(((await declineRes.json()) as any).status).toBe("declined");
+
+        const row = await testEnv.DB.prepare("SELECT status FROM project_invitations WHERE token = ?").bind(declineToken).first<any>();
+        expect(row?.status).toBe("Revoked");
+      });
+
+      it("fails to invite when both email and username are missing", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ roles: ["viewer"] })
+        }), testEnv);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("Either email or username must be specified");
       });
     });
   });

@@ -140,7 +140,30 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Update the onboarding flow and landing page copy to provide the live demo URL.
     - Add a "Scan Demo Target" button in the Web UI to launch a pre-configured scan against the live demo with a single click.
 
+- [ ] **Task 102: Custom Session Expiration per Project**
+  - **Design Goal:** Allow users to choose a custom session expiration time for members participating in a project.
+  - **Implementation Details:**
+    - Add a project setting for member session expiration length.
+    - Enforce this expiration on the edge backend when validating user sessions scoped to the project.
 
+- [ ] **Task 103: Footer and Navigation Reorganization**
+  - **Design Goal:** Clean up the navigation structure by moving external links and help menus.
+  - **Implementation Details:**
+    - Move the GitHub link and the hotkeys help menu to the footer.
+    - Create an "About the project" page and add a link to it in the footer.
+
+- [ ] **Task 104: UI/UX Right Column Cleanup**
+  - **Design Goal:** Review and declutter the right-hand column/sidebar of the UI.
+  - **Implementation Details:**
+    - Identify controls in the right column that are redundant or rarely used.
+    - Move these rarely used controls exclusively to the Project Settings page to streamline the main workspace view.
+
+- [ ] **Task 105: Automated Project Swagger Generation**
+  - **Design Goal:** Each project should have its own automatically generated Swagger/OpenAPI documentation. In the future, this will allow Swazz to test the project's API directly.
+  - **Implementation Details:**
+    - Generate dynamic OpenAPI specifications for user projects.
+    - Expose a UI element to view the auto-generated Swagger UI.
+    - Build the foundation for automated fuzzing driven by this generated spec.
 
 
 

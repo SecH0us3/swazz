@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
+import { useToast } from '../../hooks/useToast.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -21,6 +22,7 @@ interface RunnersTabProps {
 
 export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTabProps) {
     const userProfile = useAppStore(state => state.userProfile);
+    const { showToast } = useToast();
     const apiKey = userProfile?.apiKey || '';
     const [restartingId, setRestartingId] = useState<string | null>(null);
 
@@ -131,10 +133,10 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
                 throw new Error(data.error || 'Failed to restart runner');
             }
 
-            alert('Restart command sent successfully');
+            showToast('Restart command sent successfully', 'success');
         } catch (err: any) {
             console.error(err);
-            alert(err.message || 'Failed to restart runner');
+            showToast(err.message || 'Failed to restart runner', 'error');
         } finally {
             setRestartingId(null);
         }

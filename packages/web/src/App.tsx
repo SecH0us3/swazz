@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import type { FuzzResult } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
@@ -22,6 +22,7 @@ import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
+import { fetchProjects } from './services/projectService.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -64,6 +65,83 @@ export default function App() {
             useAppStore.setState({ userProfile: null, activeProject: null });
         }
     }, [token]);
+
+    const inviteProcessingRef = useRef(false);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const inviteToken = urlParams.get('token');
+        if (inviteToken && token && !inviteProcessingRef.current) {
+            inviteProcessingRef.current = true;
+            fetch(`${PROXY_URL}/api/auth/invitations/accept`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: inviteToken })
+            })
+            .then(async res => {
+                if (res.ok) {
+                    const data = await res.json();
+                    showToast('Invitation accepted successfully', 'success');
+                    // Remove token from url
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.delete('token');
+                    window.history.replaceState({}, '', newUrl);
+
+                    try {
+                        const projs = await fetchProjects();
+                        useAppStore.setState({ projects: projs });
+                        const acceptedProj = projs.find(p => p.id === data.project_id);
+                        if (acceptedProj) {
+                            useAppStore.setState({
+                                activeProject: acceptedProj,
+                                loadedRunId: null,
+                                liveRunId: null,
+                                historyStats: null,
+                                stats: null,
+                                liveCount: 0,
+                                selectedResult: null,
+                                heatmapFilter: null,
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Failed to refresh projects after accept', err);
+                    }
+                } else {
+                    res.json().then(data => {
+                        showToast(`Failed to accept invitation: ${data.error}`, 'error');
+                    });
+                }
+            })
+            .catch(err => {
+                showToast(`Failed to accept invitation`, 'error');
+            });
+        }
+    }, [token]);
+
+    useEffect(() => {
+        const handleInviteAccepted = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            showToast('Invitation accepted successfully', 'success');
+            fetchProjects().then(projs => {
+                useAppStore.setState({ projects: projs });
+                const acceptedProj = projs.find(p => p.id === detail.projectId);
+                if (acceptedProj) {
+                    useAppStore.setState({
+                        activeProject: acceptedProj,
+                        loadedRunId: null,
+                        liveRunId: null,
+                        historyStats: null,
+                        stats: null,
+                        liveCount: 0,
+                        selectedResult: null,
+                        heatmapFilter: null,
+                    });
+                }
+            });
+        };
+        window.addEventListener('swazz:invite-accepted', handleInviteAccepted);
+        return () => window.removeEventListener('swazz:invite-accepted', handleInviteAccepted);
+    }, []);
 
     // Only subscribe to what App.tsx needs for rendering
     const {
@@ -476,7 +554,7 @@ export default function App() {
         return <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
     }
 
-    if (authEnabled && !token && !isGuest) {
+    if (!token && !isGuest) {
         return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
     }
 

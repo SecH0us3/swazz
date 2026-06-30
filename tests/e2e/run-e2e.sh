@@ -16,6 +16,9 @@ if [ -f packages/edge/.dev.vars ]; then
   cp packages/edge/.dev.vars packages/edge/.dev.vars.bak
 fi
 echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
+echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
+echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
+echo 'TURNSTILE_SITE_KEY="0x4AAAAAADry7cDPHW8cvNuC"' >> packages/edge/.dev.vars
 
 # Create dummy wordlist folder and file for E2E tests
 mkdir -p wordlists

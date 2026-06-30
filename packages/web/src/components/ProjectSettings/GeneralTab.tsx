@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useConfig } from '../../hooks/useConfig.js';
+import { useToast } from '../../hooks/useToast.js';
 
 export function GeneralTab() {
     const activeProject = useAppStore(state => state.activeProject);
     const projects = useAppStore(state => state.projects);
 
     const { config, updateConfig, updateSettings } = useConfig();
+    const { showToast } = useToast();
 
     // General Project Info state
     const [projectName, setProjectName] = useState(activeProject?.name || '');
@@ -84,7 +86,7 @@ export function GeneralTab() {
         if (!activeProject) return;
         const confirmName = prompt(`Type "${activeProject.name}" to delete this project. This is permanent and deletes all scan runs:`);
         if (confirmName !== activeProject.name) {
-            if (confirmName !== null) alert('Project name mismatch. Deletion cancelled.');
+            if (confirmName !== null) showToast('Project name mismatch. Deletion cancelled.', 'error');
             return;
         }
 
@@ -112,9 +114,9 @@ export function GeneralTab() {
                 historyStats: null,
             });
 
-            alert('Project deleted successfully.');
+            showToast('Project deleted successfully.', 'success');
         } catch (err: any) {
-            alert(err.message || 'Failed to delete project');
+            showToast(err.message || 'Failed to delete project', 'error');
         }
     };
 

@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import type { ScanRun } from '../hooks/useDb.js';
+import { useToast } from '../hooks/useToast.js';
 
 interface HistoryPageProps {
     runs: ScanRun[];
@@ -33,6 +34,7 @@ export function HistoryPage({
 }: HistoryPageProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const loadedRunId = useAppStore(state => state.loadedRunId);
+    const { showToast } = useToast();
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -48,7 +50,7 @@ export function HistoryPage({
                     onLoadRun(runId, run);
                 }
             } catch (err: any) {
-                alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+                showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
             }
         };
         reader.readAsText(file);
