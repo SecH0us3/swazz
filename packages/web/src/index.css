@@ -5355,7 +5355,7 @@ kbd {
 
 .alert-banner.alert-info {
   border-left: 4px solid var(--accent);
-  background: rgba(124, 58, 237, 0.08);
+  background: var(--accent-subtle);
 }
 
 .dictionary-help-list {
@@ -5374,6 +5374,10 @@ kbd {
   flex-direction: column;
   gap: var(--space-2);
   margin-top: var(--space-4);
+}
+
+.dictionary-textarea {
+  min-height: 220px;
 }
 
 .raw-config-actions-bar {

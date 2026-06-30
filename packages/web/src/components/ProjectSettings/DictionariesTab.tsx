@@ -74,13 +74,12 @@ export function DictionariesTab() {
             <div className="dictionary-textarea-container">
                 <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Dictionaries JSON Configuration</label>
                 <textarea
-                    className="textarea"
+                    className="textarea dictionary-textarea"
                     value={dictText}
                     onChange={(e) => setDictText(e.target.value)}
                     onBlur={handleDictBlur}
                     placeholder={`{\n  "email": ["test@test.com"],\n  "role": ["admin", "member"]\n}`}
                     spellCheck={false}
-                    style={{ width: '100%', minHeight: '220px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                 />
                 {dictError && (
                     <div style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: 2 }}>
