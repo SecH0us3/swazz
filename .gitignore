@@ -13,6 +13,7 @@ packages/container/web/dist/*
 .idea/
 *.swp
 *.swo
+*.bak
 *~
 
 # OS
