@@ -206,7 +206,7 @@ export function AiRemediationTab() {
                             <button 
                                 type="button" 
                                 onClick={() => setExpandedPrompt('pass1_prompt')}
-                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.5, fontSize: '14px' }}
+                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.7, fontSize: '20px', padding: '4px' }}
                                 title="Expand to full screen"
                             >
                                 ⛶
@@ -246,7 +246,7 @@ export function AiRemediationTab() {
                             <button 
                                 type="button" 
                                 onClick={() => setExpandedPrompt('pass2_prompt')}
-                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.5, fontSize: '14px' }}
+                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.7, fontSize: '20px', padding: '4px' }}
                                 title="Expand to full screen"
                             >
                                 ⛶
