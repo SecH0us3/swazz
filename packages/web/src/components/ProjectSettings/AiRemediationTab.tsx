@@ -236,13 +236,12 @@ export function AiRemediationTab() {
                     </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'var(--space-4)' }}>
+                <div className="settings-field-group" style={{ marginTop: 'var(--space-4)' }}>
                     <label className="settings-label" style={{ margin: 0 }}>Preferred AI Tool:</label>
                     <select 
-                        className="input" 
+                        className="input settings-tool-select" 
                         value={selectedTool} 
                         onChange={(e) => handleToolChange(e.target.value as any)}
-                        style={{ width: '250px', padding: '6px 12px' }}
                     >
                         <option value="claude">Anthropic Claude CLI</option>
                         <option value="agy">Google Antigravity CLI (agy)</option>
@@ -250,9 +249,9 @@ export function AiRemediationTab() {
                     </select>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginTop: 'var(--space-4)', padding: 'var(--space-4)', background: 'rgba(0,0,0,0.1)', borderRadius: 'var(--radius-md)' }}>
-                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Pass 1: Triage Model (Fast / Cheap)</h3>
-                    <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
+                <div className="settings-pass-container">
+                    <h3 className="settings-pass-title">Pass 1: Triage Model (Fast / Cheap)</h3>
+                    <p className="settings-pass-desc">
                         This model acts as a fast filter to reject obvious false positives (e.g. BOLA findings that are intended behavior).
                     </p>
                     
@@ -270,7 +269,7 @@ export function AiRemediationTab() {
                     </div>
                     <div>
                         <label className="settings-label">Triage Prompt Template</label>
-                        <div style={{ position: 'relative' }}>
+                        <div className="settings-prompt-wrapper">
                             <textarea 
                                 className="input settings-textarea" 
                                 value={aiPrompts.pass1_prompt} 
@@ -279,8 +278,8 @@ export function AiRemediationTab() {
                             />
                             <button 
                                 type="button" 
+                                className="settings-prompt-expand"
                                 onClick={() => setExpandedPrompt('pass1_prompt')}
-                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.7, fontSize: '20px', padding: '4px' }}
                                 title="Expand to full screen"
                             >
                                 ⛶
@@ -289,9 +288,9 @@ export function AiRemediationTab() {
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginTop: 'var(--space-4)', padding: 'var(--space-4)', background: 'rgba(0,0,0,0.1)', borderRadius: 'var(--radius-md)' }}>
-                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Pass 2: Remediation Model (Deep / Expensive)</h3>
-                    <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)' }}>
+                <div className="settings-pass-container">
+                    <h3 className="settings-pass-title">Pass 2: Remediation Model (Deep / Expensive)</h3>
+                    <p className="settings-pass-desc">
                         This model generates a thorough explanation and a code patch for findings that pass the triage stage.
                     </p>
                     
@@ -309,7 +308,7 @@ export function AiRemediationTab() {
                     </div>
                     <div>
                         <label className="settings-label">Remediation Prompt Template</label>
-                        <div style={{ position: 'relative' }}>
+                        <div className="settings-prompt-wrapper">
                             <textarea 
                                 className="input settings-textarea" 
                                 style={{ minHeight: '120px' }}
@@ -319,8 +318,8 @@ export function AiRemediationTab() {
                             />
                             <button 
                                 type="button" 
+                                className="settings-prompt-expand"
                                 onClick={() => setExpandedPrompt('pass2_prompt')}
-                                style={{ position: 'absolute', right: '8px', bottom: '8px', background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', opacity: 0.7, fontSize: '20px', padding: '4px' }}
                                 title="Expand to full screen"
                             >
                                 ⛶
@@ -329,24 +328,22 @@ export function AiRemediationTab() {
                     </div>
                 </div>
 
-                <div style={{ marginTop: 'var(--space-4)' }}>
+                <div className="settings-field-margin">
                     <label className="settings-label">Rules to Auto-Fix</label>
                     <textarea 
-                        className="input settings-textarea" 
+                        className="input settings-textarea settings-textarea-min" 
                         value={autoFixRules} 
                         onChange={(e) => setAutoFixRules(e.target.value)}
                         placeholder={DEFAULT_AUTO_FIX_RULES}
-                        style={{ minHeight: '100px' }}
                         data-1p-ignore
                     />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                    <div className="settings-help-container">
                         <span className="settings-help-text" style={{ margin: 0 }}>
                             JSON array of rule IDs that should be automatically fixed.
                         </span>
                         <button 
                             type="button" 
-                            className="btn btn-secondary" 
-                            style={{ padding: '4px 12px', fontSize: '13px' }}
+                            className="btn btn-secondary settings-rules-btn" 
                             onClick={() => setShowRulesModal(true)}
                         >
                             + Select Rules
@@ -354,7 +351,7 @@ export function AiRemediationTab() {
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
+                <div className="settings-premium-group">
                     <label className="premium-checkbox-label">
                         <input
                             type="checkbox"
@@ -362,9 +359,9 @@ export function AiRemediationTab() {
                             checked={proposeFixes}
                             onChange={(e) => setProposeFixes(e.target.checked)}
                         />
-                        <strong style={{ fontSize: '13px' }}>Propose Fixes Automatically</strong>
+                        <strong className="premium-checkbox-text">Propose Fixes Automatically</strong>
                     </label>
-                    <span className="settings-help-text" style={{ marginLeft: '24px', lineHeight: '1.4' }}>
+                    <span className="settings-help-text premium-help-text">
                         If enabled, the Go runner will use `git worktree` to clone the target repository, apply the AI patch, and attempt to open a Pull Request.
                     </span>
                 </div>
@@ -383,35 +380,21 @@ export function AiRemediationTab() {
             </form>
 
             {expandedPrompt && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', flexDirection: 'column', padding: '32px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: 'var(--bg-elevated)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <h3 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '18px', fontWeight: 600 }}>
+                <div className="settings-modal-backdrop">
+                    <div className="settings-modal-header">
+                        <h3 className="settings-modal-title">
                             {expandedPrompt === 'pass1_prompt' ? 'Triage Prompt Template' : 'Remediation Prompt Template'}
                         </h3>
                         <button 
                             type="button" 
                             onClick={() => setExpandedPrompt(null)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', fontSize: '24px', lineHeight: 1 }}
+                            className="settings-modal-close"
                         >
                             ✕
                         </button>
                     </div>
                     <textarea
-                        style={{ 
-                            flex: 1, 
-                            width: '100%', 
-                            resize: 'none', 
-                            padding: '24px', 
-                            fontSize: '15px', 
-                            fontFamily: 'monospace', 
-                            borderRadius: '8px', 
-                            background: 'var(--bg-input)', 
-                            color: 'var(--text-primary)', 
-                            border: '1px solid var(--border-color)',
-                            outline: 'none',
-                            lineHeight: '1.5',
-                            boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
-                        }}
+                        className="settings-modal-textarea"
                         value={aiPrompts[expandedPrompt]}
                         onChange={(e) => updatePromptField(expandedPrompt, e.target.value)}
                         data-1p-ignore
@@ -421,32 +404,32 @@ export function AiRemediationTab() {
             )}
 
             {showRulesModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '8px', width: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-                        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--text-primary)' }}>Select Auto-Fix Rules</h3>
+                <div className="settings-rules-backdrop">
+                    <div className="settings-rules-modal">
+                        <div className="settings-rules-header">
+                            <h3 className="settings-rules-title">Select Auto-Fix Rules</h3>
                             <button 
                                 type="button" 
                                 onClick={() => setShowRulesModal(false)}
-                                style={{ background: 'transparent', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', fontSize: '20px' }}
+                                className="settings-rules-close"
                             >
                                 ✕
                             </button>
                         </div>
-                        <div style={{ padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div className="settings-rules-body">
                             {AVAILABLE_RULES.map(rule => (
-                                <label key={rule} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '14px' }}>
+                                <label key={rule} className="settings-rule-label">
                                     <input 
                                         type="checkbox" 
                                         checked={currentRules.includes(rule)}
                                         onChange={() => toggleRule(rule)}
-                                        style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px' }}
+                                        className="settings-rule-checkbox"
                                     />
                                     {rule}
                                 </label>
                             ))}
                         </div>
-                        <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', textAlign: 'right' }}>
+                        <div className="settings-rules-footer">
                             <button type="button" className="btn btn-primary" onClick={() => setShowRulesModal(false)}>
                                 Done
                             </button>
