@@ -161,7 +161,7 @@ export function AiRemediationTab() {
             return pass === 1 ? 'claude -m haiku -p {{prompt_file}}' : 'claude -m sonnet -p {{prompt_file}}';
         }
         if (selectedTool === 'agy') {
-            return pass === 1 ? 'agy -m gemini-2.5-flash "{{prompt_file}}"' : 'agy -m gemini-2.5-pro "{{prompt_file}}"';
+            return pass === 1 ? 'agy -m gemini-3.5-flash "{{prompt_file}}"' : 'agy -m gemini-3.1-pro "{{prompt_file}}"';
         }
         return 'your-cli-command "{{prompt_file}}"';
     };
@@ -177,8 +177,8 @@ export function AiRemediationTab() {
         } else if (tool === 'agy') {
             setAiPrompts(prev => ({
                 ...prev,
-                pass1_cmd: 'agy -m gemini-2.5-flash "{{prompt_file}}"',
-                pass2_cmd: 'agy -m gemini-2.5-pro "{{prompt_file}}"'
+                pass1_cmd: 'agy -m gemini-3.5-flash "{{prompt_file}}"',
+                pass2_cmd: 'agy -m gemini-3.1-pro "{{prompt_file}}"'
             }));
         } else if (tool === 'custom') {
             setAiPrompts(prev => ({
