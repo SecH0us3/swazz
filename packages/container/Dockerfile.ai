@@ -1,0 +1,32 @@
+# === DOCKERFILE FOR AI REMEDIATION RUNNER ===
+# Inherits from the CI image, so you must build Dockerfile.ci first:
+# docker build -t swazz-runner:ci -f packages/container/Dockerfile.ci .
+
+FROM swazz-runner:ci
+
+# Switch to root to install system packages
+USER root
+
+# Install runtimes for AI CLI tools and Git CLIs for Pull Requests
+RUN apk update && apk add --no-cache \
+    github-cli \
+    glab \
+    nodejs \
+    npm \
+    python3 \
+    py3-pip \
+    pipx
+
+# Switch back to the non-root user inherited from swazz-runner:ci
+USER swazz:swazz
+
+# Install Antigravity CLI (agy)
+RUN pipx install antigravity-cli
+
+# Install Claude CLI (community Node.js package as example)
+RUN npm config set prefix '~/.npm-global'
+ENV PATH="/home/swazz/.npm-global/bin:/home/swazz/.local/bin:${PATH}"
+RUN npm install -g @anthropic-ai/claude-cli || npm install -g claude-cli
+
+ENTRYPOINT ["/swazz-engine"]
+CMD ["serve"]

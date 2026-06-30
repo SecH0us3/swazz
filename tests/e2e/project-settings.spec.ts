@@ -108,33 +108,31 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await backBtn.click();
     await expect(moreSettingsBtn).toBeVisible();
 
-    // 8. Open Payload Settings Modal
-    const payloadSettingsBtn = page.locator('button[title="Payload Settings"]');
-    await expect(payloadSettingsBtn).toBeVisible();
-    await payloadSettingsBtn.click();
+    // 8. Open Project Settings again and test Dictionaries tab
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
 
-    // Verify Modal Header
-    const modalTitle = page.locator('.modal-header h2:has-text("Payload Settings")');
-    await expect(modalTitle).toBeVisible();
+    const dictionariesTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing Dictionaries")');
+    await expect(dictionariesTabBtn).toBeVisible();
+    await dictionariesTabBtn.click();
 
-    // Switch to "Malicious" profile tab in modal
-    const maliciousTab = page.locator('.tabs-header button:has-text("Malicious")');
-    await expect(maliciousTab).toBeVisible();
-    await maliciousTab.click();
-
-    // Check the first payload item, toggle it
-    const firstCatalogItem = page.locator('.catalog-item').first();
-    await expect(firstCatalogItem).toBeVisible();
+    // Verify Custom Fuzzing Dictionaries card elements
+    await expect(page.locator('text=Custom Fuzzing Dictionaries')).toBeVisible();
     
-    // Toggle the category (verifying initial checked state and toggling off)
-    const checkboxInItem = firstCatalogItem.locator('input[type="checkbox"]');
-    await expect(checkboxInItem).toBeChecked();
-    await firstCatalogItem.click();
-    await expect(checkboxInItem).not.toBeChecked();
+    // Fill custom dictionaries textarea
+    const dictTextarea = page.locator('.dictionary-textarea-container textarea');
+    await expect(dictTextarea).toBeVisible();
+    await dictTextarea.click();
+    await dictTextarea.fill('{"test_user": ["admin", "guest"]}');
+    await dictTextarea.blur(); // Trigger blur to save
 
-    // Close Modal by pressing Escape
-    await page.keyboard.press('Escape');
-    await expect(modalTitle).not.toBeVisible();
+    // Verify raw config is updated with the custom dictionaries
+    const rawConfigTabBtnSecond = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
+    await expect(rawConfigTabBtnSecond).toBeVisible();
+    await rawConfigTabBtnSecond.click();
+
+    const rawTextareaSecond = page.locator('.card:has-text("Raw JSON Configuration") >> textarea.textarea');
+    await expect(rawTextareaSecond).toHaveValue(/"test_user"/);
   });
 
   test('should verify settings have actual effect on fuzzer and cover General, Chaining, and Wordlists tabs', async ({ page }) => {
@@ -225,12 +223,12 @@ test.describe('Project and Payload Settings E2E Tests', () => {
 
     const fuzzingTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing & Performance")');
     const timeoutInput = page.locator('label:has-text("Individual Request Timeout (ms)") + input');
+    const iterationsInput = page.locator('label:has-text("Fuzzing Intensity") + input');
     const rawConfigTabBtnSecond = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
     const saveBtn = page.locator('button:has-text("Save Configuration")');
     const successMsg = page.locator('text=/Configuration updated successfully/');
     const backBtn = page.locator('button:has-text("Back to Dashboard")');
     const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
-    const intensityInput = profilesSection.locator('input[type="number"]').first();
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
     const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
 
@@ -266,6 +264,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await expect(timeoutInput).toBeVisible();
       await timeoutInput.fill('1'); // 1ms timeout!
 
+      await expect(iterationsInput).toBeVisible();
+      await iterationsInput.fill('1'); // Set iterations to 1
+
       // Switch to Raw JSON Config tab to save the configuration
       await expect(rawConfigTabBtnSecond).toBeVisible();
       await rawConfigTabBtnSecond.click();
@@ -280,8 +281,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await backBtn.click();
       await expect(moreSettingsBtn).toBeVisible();
 
-      // Set intensity to 1 and disable heavy profiles to speed up E2E test
-      await intensityInput.fill('1');
+      // Disable heavy profiles to speed up E2E test (intensity is already 1)
 
       await expect(boundaryToggle).toHaveClass(/active/);
       await boundaryToggle.click();
@@ -327,14 +327,14 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       }
       await fuzzingTabBtn.click();
       await timeoutInput.fill('2000');
+      await iterationsInput.fill('5');
       await rawConfigTabBtnSecond.click();
       await saveBtn.click();
       await expect(successMsg).toBeVisible();
 
-      // Restore boundary/malicious profiles and intensity back to default (Boundary, Malicious active, intensity 5)
+      // Restore boundary/malicious profiles back to default (Boundary, Malicious active)
       await backBtn.click();
       await expect(moreSettingsBtn).toBeVisible();
-      await intensityInput.fill('5');
       
       const boundaryClass = await boundaryToggle.getAttribute('class');
       if (boundaryClass && !boundaryClass.includes('active')) {
@@ -417,4 +417,90 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     const targetInput = page.locator('label:has-text("Target Base URL") + input');
     await expect(targetInput).toHaveValue('https://jsonc-test-url.com');
   });
+
+  test('should configure AI Remediation settings and select rules', async ({ page }) => {
+    // 1. Navigate to frontend
+    await page.goto('/');
+
+    // 2. Register unique user
+    await page.getByRole('button', { name: 'Create' }).click();
+    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+    await page.locator('#username').fill(uniqueUsername);
+    await page.locator('#password').fill('Password123!');
+    await page.locator('#password').press('Enter');
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+
+    // 3. Open Project Settings
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
+
+    // 4. Switch to AI Remediation tab
+    const aiTabBtn = page.locator('button.tab-bar-btn:has-text("AI Remediation")');
+    await expect(aiTabBtn).toBeVisible();
+    await aiTabBtn.click();
+
+    // 5. Verify the tool dropdown is present and select "agy"
+    const toolSelect = page.locator('.settings-tool-select');
+    await expect(toolSelect).toBeVisible();
+    await toolSelect.selectOption('agy');
+
+    // 6. Verify CLI command placeholders/inputs updated
+    const pass1CmdInput = page.locator('input.settings-input-full').first();
+    const pass2CmdInput = page.locator('input.settings-input-full').nth(1);
+    await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
+    await expect(pass2CmdInput).toHaveValue('agy -m gemini-3.1-pro "{{prompt_file}}"');
+
+    // 7. Select rules modal
+    const selectRulesBtn = page.locator('button.settings-rules-btn');
+    await expect(selectRulesBtn).toBeVisible();
+    await selectRulesBtn.click();
+
+    const rulesModal = page.locator('.settings-rules-modal');
+    await expect(rulesModal).toBeVisible();
+
+    // Toggle swazz/sensitive-data-leak rule (e.g. which is in AVAILABLE_RULES)
+    const ruleCheckbox = page.locator('.settings-rule-label:has-text("swazz/sensitive-data-leak") input[type="checkbox"]');
+    await expect(ruleCheckbox).toBeVisible();
+    await ruleCheckbox.check();
+
+    // Close modal
+    const doneBtn = page.locator('.settings-rules-footer button:has-text("Done")');
+    await doneBtn.click();
+    await expect(rulesModal).not.toBeVisible();
+
+    // 8. Verify the auto-fix rules textarea now includes "swazz/sensitive-data-leak"
+    const autoFixRulesTextarea = page.locator('label:has-text("Rules to Auto-Fix") + textarea');
+    await expect(autoFixRulesTextarea).toContainText('swazz/sensitive-data-leak');
+
+    // 9. Check "Propose Fixes Automatically"
+    const proposeFixesCheckbox = page.locator('label:has-text("Propose Fixes Automatically") >> input[type="checkbox"]');
+    await expect(proposeFixesCheckbox).toBeVisible();
+    await proposeFixesCheckbox.check();
+    await expect(proposeFixesCheckbox).toBeChecked();
+
+    // 10. Fill URL mappings with valid JSON
+    const urlMappingsTextarea = page.locator('label:has-text("URL to Repository Mappings") + textarea');
+    await urlMappingsTextarea.fill('{"/api/*": "git@github.com:SecH0us3/swazz.git"}');
+
+    // 11. Save AI Settings
+    const saveBtn = page.locator('button[type="submit"]:has-text("Save AI Settings")');
+    await saveBtn.click();
+
+    // Verify success msg
+    const successMsg = page.locator('text=/Saved successfully/');
+    await expect(successMsg).toBeVisible();
+
+    // 12. Switch tabs and back to verify persistence
+    const generalTabBtn = page.locator('button.tab-bar-btn:has-text("General")');
+    await generalTabBtn.click();
+    await aiTabBtn.click();
+
+    // Assert states are preserved
+    await expect(toolSelect).toHaveValue('agy');
+    await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
+    await expect(proposeFixesCheckbox).toBeChecked();
+    await expect(urlMappingsTextarea).toHaveValue('{"/api/*": "git@github.com:SecH0us3/swazz.git"}');
+  });
 });
+

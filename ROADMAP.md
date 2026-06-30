@@ -195,3 +195,55 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
+- [ ] **Task 80: AI Remediation Stack & Rule Autocompletion UI**
+  - **Design Goal:** Enhance the AI Remediation Config experience by dynamically appending context to the AI prompt based on user-selected tech stacks and vulnerability rules.
+  - **Implementation Details:**
+    - Provide a checkbox list of common tech stacks (e.g., React, Node, Go, Python, Postgres).
+    - When the user selects a stack or selects specific "Rules to Auto-Fix", automatically append relevant instructions or knowledge to the selected `CLI Execution Command` prompt templates.
+
+
+- [ ] **Task 112: Webhook Notifications & Report Upload Integration**
+  - **Design Goal:** Support webhook notifications to allow uploading fuzzer findings/reports (including validated AI findings/remediation recommendations) to user-specified URLs.
+  - **Implementation Details:**
+    - Add a `webhooks` configuration section to Project Settings (allowing users to define target URLs, authentication headers, and toggle event types).
+    - Save webhook configurations in D1.
+    - When fuzzer events or findings are logged (including after LLM triage and patch validation), serialize the finding reports and queue a webhook delivery.
+    - The edge backend stores the original reports in the D1 database, but the webhook delivery must dispatch the reports out to the client's destination URL asynchronously (e.g. using Cloudflare Workers outbound fetch, decoupled via findings queues).
+
+
+- [ ] **Task 113: D1 Vertical Sharding Architecture**
+  - **Design Goal:** Lay the groundwork for scaling beyond the Cloudflare D1 10 GB per-database limit by enabling manual vertical sharding across multiple D1 databases. The system should operate with a single D1 database today, but the architecture must not prevent future shard expansion.
+  - **Current State:** Single D1 database. No sharding needed yet — this task is purely a forward-compatibility design investment.
+  - **Open Design Questions:**
+    - **How to route to the correct shard?**
+      - Option A — **UUIDv8 shard-tagged IDs**: Encode the shard number into the first nibble/byte of newly generated IDs (e.g. `shard_id | random_bits`). The edge coordinator extracts the shard number from the entity ID and selects the matching D1 binding at query time. Zero extra lookups. Risk: collisions and non-standard UUID parsing.
+      - Option B — **Separate shard routing table**: A small, dedicated "meta" D1 (or KV namespace) maps `project_id → shard_id`. The coordinator does one KV lookup per request to find the shard, then queries the right D1. Standard IDs everywhere. Slight overhead per request.
+      - Option C — **Range/tenant-based sharding**: Shard by tenant (project owner). All data for a given user lives on one shard. Simplifies cross-entity JOINs within a project. Harder to rebalance if a single tenant grows very large.
+    - **Which tables to shard?** Likely candidates: `findings`, `scan_events`, `scans`. Hot-path lookup tables (`users`, `projects`, `sessions`) might stay on shard 0 (the primary).
+    - **Migration path**: How to move existing rows to a new shard without downtime? Dual-write phase? Background job?
+  - **Proposed Short-Term Action (non-breaking, implement now):**
+    - Introduce a `getDB(env, shardId?: number): D1Database` helper that resolves the right D1 binding — today it always returns `env.DB`, but tomorrow it can select `env.DB_SHARD_1`, etc. All query sites go through this helper.
+    - Keep using standard UUIDv4 for IDs for now. If UUIDv8 shard-embedding is chosen later, it can be introduced as an opt-in generator without breaking existing data.
+    - Document the chosen routing strategy decision in `docs/sharding.md` before data grows large enough to matter.
+
+
+- [ ] **Task 114: Slow Query Monitoring**
+  - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
+  - **Implementation Details:**
+    - Wrap all D1 `prepare().bind().run() / .first() / .all()` calls in a thin timing helper (e.g. `timedQuery(stmt, label, env)`) that records wall-clock duration.
+    - Emit a structured log line (via `console.warn` or a dedicated logger) whenever a query exceeds a configurable threshold (default: 200 ms).
+    - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
+    - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
+
+- [ ] **Task 115: Structured Logging Framework**
+  - **Design Goal:** Provide a unified, searchable, JSON‑structured logging system across all workers (edge, container, web) to simplify debugging, observability, and alerting.
+  - **Implementation Details:**
+    - Introduce a tiny logging helper (e.g. `logInfo`, `logWarn`, `logError`) that emits JSON with fields: `timestamp`, `level`, `module`, `msg`, `requestId`, `traceId` (if available), and any additional `payload`.
+    - Use Cloudflare Workers `console.log` / `console.warn` – these automatically forward JSON to Cloudflare Logpush if enabled.
+    - Replace ad‑hoc `console.log("something")` calls throughout the codebase with the new helpers (search & replace).
+    - Add a `logpush` configuration in `wrangler.toml` to ship logs to a destination (e.g., Elasticsearch, Loki, or Cloudflare Logs UI).
+    - Provide a small UI component in the web app (admin panel) that fetches recent logs via the new `/api/admin/logs` endpoint (admin‑only) – the endpoint reads from KV where a short‑term rolling buffer (e.g., last 10 k entries) is stored.
+  - **Short‑Term Action:**
+    - Create `packages/common/logging/logger.ts` with the helper functions.
+    - Export and replace inline `console.*` calls in existing modules (edge, container, web) via a focused commit.
+    - Document usage guidelines in `docs/logging.md`.

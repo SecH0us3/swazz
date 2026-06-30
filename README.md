@@ -47,6 +47,8 @@ We publish two Docker images to the GitHub Container Registry:
 - **API Server & Web Dashboard**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)
 - **Headless CLI Fuzzer**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 
+For detailed information about specialized CI and AI Auto-Fix images, please see the [Docker Deployment Guide](docs/docker_images.md).
+
 For security reasons and to guarantee reproducibility, we **never use the `latest` tag**. Always use a specific commit SHA (replace `<COMMIT_SHA>` with the actual hash from our [Releases](https://github.com/SecH0us3/swazz/releases)).
 
 #### Running the API Server (Web Dashboard)

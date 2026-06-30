@@ -243,4 +243,86 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   });
   
+  // ---------------------------------------------------------------------------
+  // Findings endpoints
+  // ---------------------------------------------------------------------------
+
+  app.get('/api/findings/:id', async (c) => {
+    const findingId = c.req.param('id');
+    // JOIN with scans to retrieve project_id (findings table has no project_id column)
+    const row = await c.env.DB.prepare(
+      'SELECT f.*, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
+    )
+      .bind(findingId)
+      .first<{ project_id: string }>();
+
+    if (!row) {
+      return c.json({ error: 'Finding not found' }, 404);
+    }
+
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const hasAccess = await checkPermission(c.env, userId, row.project_id, 'get:/api/projects/:id/scans');
+      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    return c.json({ finding: row });
+  });
+
+  app.patch('/api/findings/:id', async (c) => {
+    const findingId = c.req.param('id');
+    const body = await c.req.json();
+
+    // JOIN with scans to retrieve project_id (findings table has no project_id column)
+    const finding = await c.env.DB.prepare(
+      'SELECT f.id, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
+    )
+      .bind(findingId)
+      .first<{ id: string; project_id: string }>();
+
+    if (!finding) {
+      return c.json({ error: 'Finding not found' }, 404);
+    }
+
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'post:/api/projects/:id/scans');
+      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+    }
+  
+    const allowedFields = [
+      'ai_status',
+      'ai_relevance',
+      'ai_explanation',
+      'ai_remediation',
+      'ai_proposed_patch',
+      'pr_link'
+    ] as const;
+
+    const setClauses: string[] = [];
+    const values: (string | null)[] = [];
+  
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        setClauses.push(`${field} = ?`);
+        values.push(body[field]);
+      }
+    }
+  
+    if (setClauses.length === 0) {
+      return c.json({ error: 'No valid fields to update' }, 400);
+    }
+  
+    values.push(findingId);
+    await c.env.DB.prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
+      .bind(...values)
+      .run();
+  
+    const updated = await c.env.DB.prepare('SELECT * FROM findings WHERE id = ?')
+      .bind(findingId)
+      .first();
+  
+    return c.json({ finding: updated });
+  });
+  
 }

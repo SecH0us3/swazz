@@ -33,7 +33,7 @@ test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
     await expect(modal).not.toBeVisible();
   });
 
-  test('Modal Dismissals - Backdrop Click, Close Button, and Escape on Payload Settings', async ({ page }) => {
+  test('Modal Dismissals - Backdrop Click and Close Button on Keyboard Shortcuts', async ({ page }) => {
     const modal = page.locator('.modal-container');
 
     // --- Part 1: Backdrop click on Shortcuts Modal ---
@@ -58,22 +58,6 @@ test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
     await closeBtn.click();
 
     // 6. Verify that it closes
-    await expect(modal).not.toBeVisible();
-
-    // --- Part 3: Escape key on Payload Settings Modal ---
-    // 7. Open the Payload Settings modal by clicking the gear icon in ConfigSidebar
-    const payloadSettingsBtn = page.locator('button[title="Payload Settings"]');
-    await expect(payloadSettingsBtn).toBeVisible();
-    await payloadSettingsBtn.click();
-
-    // 8. Verify the Payload Settings modal opens
-    await expect(modal).toBeVisible();
-    await expect(modal.locator('h2')).toHaveText('Payload Settings');
-
-    // 9. Press Escape key
-    await page.keyboard.press('Escape');
-
-    // 10. Verify that it closes
     await expect(modal).not.toBeVisible();
   });
 });

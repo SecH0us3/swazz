@@ -4922,6 +4922,27 @@ kbd {
   border-bottom-color: transparent;
 }
 
+/* Back-to-Dashboard button */
+.btn-back-dashboard {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Icon inside tab-bar buttons */
+.tab-bar-icon {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+/* Runners count badge accent override */
+.tab-bar-count--accent {
+  margin-left: auto;
+  background-color: var(--accent);
+  color: white;
+}
+
+
 .rbac-tab-container {
   display: flex;
   flex-direction: column;
@@ -5419,3 +5440,313 @@ kbd {
 
 
 
+
+/* ─── Settings Shared Styles ─────────────────────────────────────────── */
+.settings-card {
+  background-color: var(--bg-elevated);
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.settings-header {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 12px;
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.settings-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.settings-input-full {
+  width: 100%;
+}
+.settings-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  font-family: monospace;
+}
+.settings-help-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+/* ─── AI Insights ─────────────────────────────────────────── */
+
+.ai-insights-section {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--space-3);
+}
+
+.ai-insights-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.ai-insights-title {
+  font-weight: 600;
+  color: var(--accent-light);
+  font-size: var(--font-size-md);
+}
+
+.ai-insights-block {
+  margin-bottom: var(--space-3);
+}
+
+.ai-insights-label {
+  display: block;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.ai-insights-text {
+  white-space: pre-wrap;
+  color: var(--text-primary);
+}
+
+.ai-insights-code {
+  white-space: pre-wrap;
+}
+
+.ai-insights-actions {
+  margin-top: var(--space-3);
+}
+
+/* AI Remediation Tab Styles */
+.settings-field-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-tool-select {
+    width: 250px;
+    padding: 6px 12px;
+}
+
+.settings-pass-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+    padding: var(--space-4);
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-md);
+}
+
+.settings-pass-title {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-pass-desc {
+    margin: 0;
+    font-size: var(--font-size-xs);
+    color: var(--text-disabled);
+}
+
+.settings-prompt-wrapper {
+    position: relative;
+}
+
+.settings-prompt-expand {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-disabled);
+    cursor: pointer;
+    opacity: 0.7;
+    font-size: 20px;
+    padding: 4px;
+}
+
+.settings-field-margin {
+    margin-top: var(--space-4);
+}
+
+.settings-textarea-min {
+    min-height: 100px;
+}
+
+.settings-help-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.settings-rules-btn {
+    padding: 4px 12px;
+    font-size: 13px;
+}
+
+.settings-premium-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 16px;
+}
+
+.premium-checkbox-text {
+    font-size: 13px;
+}
+
+.premium-help-text {
+    margin-left: 24px;
+    line-height: 1.4;
+}
+
+/* Modals */
+.settings-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    padding: 32px;
+}
+
+.settings-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    background: var(--bg-elevated);
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.settings-modal-title {
+    color: var(--text-primary);
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.settings-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-disabled);
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+}
+
+.settings-modal-textarea {
+    flex: 1;
+    width: 100%;
+    resize: none;
+    padding: 24px;
+    font-size: 15px;
+    font-family: monospace;
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    outline: none;
+    line-height: 1.5;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.settings-rules-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-rules-modal {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 400px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.settings-rules-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.settings-rules-title {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.settings-rules-close {
+    background: transparent;
+    border: none;
+    color: var(--text-disabled);
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.settings-rules-body {
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-rule-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.settings-rule-checkbox {
+    accent-color: var(--color-primary);
+    width: 16px;
+    height: 16px;
+}
+
+.settings-rules-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border-color);
+    text-align: right;
+}

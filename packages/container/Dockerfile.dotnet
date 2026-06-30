@@ -1,0 +1,15 @@
+# === DOCKERFILE FOR .NET PROJECTS ===
+# Inherits from the CI image, so you must build Dockerfile.ci first:
+# docker build -t swazz-runner:ci -f packages/container/Dockerfile.ci .
+
+FROM swazz-runner:ci
+
+USER root
+
+# Install .NET SDK for executing tests/builds during local AI remediation
+RUN apk update && apk add --no-cache dotnet8-sdk
+
+USER swazz:swazz
+
+ENTRYPOINT ["/swazz-engine"]
+CMD ["serve"]

@@ -41,6 +41,13 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await expect(targetInput).toBeVisible();
     await expect(targetInput).toHaveValue(/127\.0\.0\.1:8788/);
 
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    await expect(boundaryToggle).toBeVisible();
+    await expect(boundaryToggle).toHaveClass(/active/);
+    await boundaryToggle.click();
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     // 4. Trigger fuzzing by clicking the Start/Run button
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();

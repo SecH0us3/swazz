@@ -43,6 +43,12 @@ export interface AnalysisFinding {
     message: string;
     evidence?: string;
     owaspCategory?: string[];
+    ai_status?: 'pending' | 'completed' | 'failed';
+    ai_relevance?: boolean;
+    ai_explanation?: string;
+    ai_remediation?: string;
+    ai_proposed_patch?: string;
+    pr_link?: string;
 }
 
 export interface ChainingRule {
@@ -231,4 +237,9 @@ export interface Project {
     id: string;
     name: string;
     description: string;
+    url_mappings?: string;
+    ai_prompts?: string;
+    propose_fixes?: number;
+    custom_cli_command?: string;
+    auto_fix_rules?: string;
 }
