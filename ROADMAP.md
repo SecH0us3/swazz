@@ -201,3 +201,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Provide a checkbox list of common tech stacks (e.g., React, Node, Go, Python, Postgres).
     - When the user selects a stack or selects specific "Rules to Auto-Fix", automatically append relevant instructions or knowledge to the selected `CLI Execution Command` prompt templates.
 
+
+- [ ] **Task 112: Webhook Notifications & Report Upload Integration**
+  - **Design Goal:** Support webhook notifications to allow uploading fuzzer findings/reports (including validated AI findings/remediation recommendations) to user-specified URLs.
+  - **Implementation Details:**
+    - Add a `webhooks` configuration section to Project Settings (allowing users to define target URLs, authentication headers, and toggle event types).
+    - Save webhook configurations in D1.
+    - When fuzzer events or findings are logged (including after LLM triage and patch validation), serialize the finding reports and queue a webhook delivery.
+    - The edge backend stores the original reports in the D1 database, but the webhook delivery must dispatch the reports out to the client's destination URL asynchronously (e.g. using Cloudflare Workers outbound fetch, decoupled via findings queues).
+
+
