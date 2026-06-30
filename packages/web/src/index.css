@@ -5353,5 +5353,29 @@ kbd {
   transform-origin: 0% 50%;
 }
 
+.alert-banner.alert-info {
+  border-left: 4px solid var(--accent);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.dictionary-help-list {
+  margin: var(--space-2) 0 0 var(--space-4);
+  padding: 0;
+}
+
+.dictionary-help-item {
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.dictionary-textarea-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+
 
 

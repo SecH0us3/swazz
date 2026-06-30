@@ -63,12 +63,13 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await expect(page.locator('text=User B (Secondary)')).toBeVisible();
     await expect(page.locator('text=Headers (User B)')).toBeVisible();
 
-    // 6. Verify "Wordlist Files" tab has Custom Fuzzing Dictionaries JSON
-    const wordlistsTabBtn = page.locator('button.tab-bar-btn:has-text("Wordlist Files")');
-    await expect(wordlistsTabBtn).toBeVisible();
-    await wordlistsTabBtn.click();
+    // 6. Verify "Fuzzing Dictionaries" tab has Custom Fuzzing Dictionaries JSON and help text
+    const dictionariesTabBtn = page.locator('button.tab-bar-btn:has-text("Fuzzing Dictionaries")');
+    await expect(dictionariesTabBtn).toBeVisible();
+    await dictionariesTabBtn.click();
 
     await expect(page.locator('text=Custom Fuzzing Dictionaries')).toBeVisible();
+    await expect(page.locator('text=How Dictionaries Work')).toBeVisible();
     await expect(page.locator('textarea[placeholder*="email"]')).toBeVisible();
   });
 });
