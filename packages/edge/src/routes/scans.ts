@@ -251,18 +251,38 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const findingId = c.req.param('id');
     const finding = await c.env.DB.prepare('SELECT * FROM findings WHERE id = ?')
       .bind(findingId)
-      .first();
+      .first<{ id: string; project_id: string }>();
   
     if (!finding) {
       return c.json({ error: 'Finding not found' }, 404);
     }
   
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'get:/api/projects/:id/scans');
+      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+    }
+
     return c.json({ finding });
   });
 
   app.patch('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
     const body = await c.req.json();
+  
+    const finding = await c.env.DB.prepare('SELECT id, project_id FROM findings WHERE id = ?')
+      .bind(findingId)
+      .first<{ id: string; project_id: string }>();
+
+    if (!finding) {
+      return c.json({ error: 'Finding not found' }, 404);
+    }
+
+    const userId = await getUserIdFromRequest(c);
+    if (userId) {
+      const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'post:/api/projects/:id/scans');
+      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+    }
   
     const allowedFields = [
       'ai_status',

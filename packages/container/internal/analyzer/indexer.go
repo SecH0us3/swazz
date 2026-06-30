@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 )
+
+var errFound = errors.New("handler found")
 
 // RepoIndexer scans a repository to extract context for handlers.
 type RepoIndexer struct {
@@ -69,31 +72,34 @@ func (idx *RepoIndexer) FindHandlerContext(httpMethod, routePath string) (filePa
 					foundPath = path
 					foundLineNum = i
 					foundLines = lines
-					return fmt.Errorf("FOUND")
+					return errFound
 				}
 			}
 		}
 		return nil
 	})
 
-	if walkErr != nil && walkErr.Error() == "FOUND" {
-		startLine := foundLineNum - 50
-		if startLine < 0 {
-			startLine = 0
-		}
-		endLine := foundLineNum + 50
-		if endLine > len(foundLines)-1 {
-			endLine = len(foundLines) - 1
-		}
+	if walkErr != nil {
+		if errors.Is(walkErr, errFound) {
+			startLine := foundLineNum - 50
+			if startLine < 0 {
+				startLine = 0
+			}
+			endLine := foundLineNum + 50
+			if endLine > len(foundLines)-1 {
+				endLine = len(foundLines) - 1
+			}
 
-		contextLines := foundLines[startLine : endLine+1]
-		
-		relPath, err := filepath.Rel(idx.RootDir, foundPath)
-		if err != nil {
-			relPath = foundPath
+			contextLines := foundLines[startLine : endLine+1]
+			
+			relPath, err := filepath.Rel(idx.RootDir, foundPath)
+			if err != nil {
+				relPath = foundPath
+			}
+			
+			return relPath, strings.Join(contextLines, "\n"), nil
 		}
-		
-		return relPath, strings.Join(contextLines, "\n"), nil
+		return "", "", fmt.Errorf("failed to walk directory: %w", walkErr)
 	}
 
 	return "", "", fmt.Errorf("handler for %s %s not found", httpMethod, routePath)

@@ -80,6 +80,32 @@ export function AiRemediationTab() {
         e.preventDefault();
         if (!activeProject) return;
 
+        if (urlMappings.trim()) {
+            try {
+                const parsed = JSON.parse(urlMappings);
+                if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                    setSaveError('URL to Repository Mappings must be a JSON object');
+                    return;
+                }
+            } catch {
+                setSaveError('URL to Repository Mappings must be valid JSON');
+                return;
+            }
+        }
+
+        if (autoFixRules.trim()) {
+            try {
+                const parsed = JSON.parse(autoFixRules);
+                if (!Array.isArray(parsed)) {
+                    setSaveError('Rules to Auto-Fix must be a JSON array');
+                    return;
+                }
+            } catch {
+                setSaveError('Rules to Auto-Fix must be valid JSON');
+                return;
+            }
+        }
+
         setIsSaving(true);
         setSaveSuccess(false);
         setSaveError('');

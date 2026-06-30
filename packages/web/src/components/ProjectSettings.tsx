@@ -195,11 +195,6 @@ export function ProjectSettings() {
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'ai_remediation' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('ai_remediation')}
-                        style={{
-                            width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 'var(--radius-md)',
-                            background: activeSubTab === 'ai_remediation' ? 'var(--accent-subtle)' : 'transparent',
-                            color: activeSubTab === 'ai_remediation' ? 'var(--accent-light)' : 'var(--text-secondary)'
-                        }}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
                             <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>

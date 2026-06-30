@@ -45,6 +45,7 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 	defer os.Remove(patchFilePath)
 
 	if _, err := patchFile.WriteString(patchContent); err != nil {
+		_ = patchFile.Close()
 		return "", fmt.Errorf("failed to write patch file: %v", err)
 	}
 	_ = patchFile.Close()
@@ -100,7 +101,7 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 	prCmd.Stdout = &stdout
 
 	if err := prCmd.Run(); err != nil {
-		return "Branch pushed: " + branchName, nil
+		return "", fmt.Errorf("failed to create pull request: %w", err)
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
