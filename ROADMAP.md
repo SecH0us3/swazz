@@ -673,3 +673,9 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Produce detailed architecture flow diagrams (using Mermaid in Markdown) detailing component interaction, JWT/key authentication sequences, data flow (D1 database & R2 bucket integrations), and WebSocket/SSE streaming.
     - Write security guidelines for deployment, covering self-hosted runner network isolation and TLS configurations.
 
+- [ ] **Task 80: AI Remediation Stack & Rule Autocompletion UI**
+  - **Design Goal:** Enhance the AI Remediation Config experience by dynamically appending context to the AI prompt based on user-selected tech stacks and vulnerability rules.
+  - **Implementation Details:**
+    - Provide a checkbox list of common tech stacks (e.g., React, Node, Go, Python, Postgres).
+    - When the user selects a stack or selects specific "Rules to Auto-Fix", automatically append relevant instructions or knowledge to the selected `CLI Execution Command` prompt templates.
+
