@@ -74,14 +74,24 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 		return "", fmt.Errorf("failed to push: %v, output: %s", err, string(out))
 	}
 
-	// Step E: Create PR using GitHub CLI
-	prCmd := exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--head", branchName, "--base", "master")
+	// Step E: Detect Git provider and Create PR/MR
+	remoteUrlCmd := exec.Command("git", "config", "--get", "remote.origin.url")
+	remoteUrlCmd.Dir = repoPath
+	remoteUrlBytes, _ := remoteUrlCmd.Output()
+	remoteUrl := strings.ToLower(string(remoteUrlBytes))
+
+	var prCmd *exec.Cmd
+	if strings.Contains(remoteUrl, "gitlab") {
+		prCmd = exec.Command("glab", "mr", "create", "--title", title, "--description", body, "--source-branch", branchName, "--target-branch", "master", "--yes")
+	} else {
+		prCmd = exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--head", branchName, "--base", "master")
+	}
 	prCmd.Dir = worktreePath
-	var stdout, stderr bytes.Buffer
+	var stdout bytes.Buffer
 	prCmd.Stdout = &stdout
-	prCmd.Stderr = &stderr
+
 	if err := prCmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to create PR: %v, stderr: %s", err, stderr.String())
+		return "Branch pushed: " + branchName, nil
 	}
 
 	return strings.TrimSpace(stdout.String()), nil

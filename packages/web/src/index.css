@@ -3639,3 +3639,48 @@ kbd {
   align-items: center;
   margin-top: 12px;
 }
+
+/* ─── AI Insights ─────────────────────────────────────────── */
+
+.ai-insights-section {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--space-3);
+}
+
+.ai-insights-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.ai-insights-title {
+  font-weight: 600;
+  color: var(--accent-light);
+  font-size: var(--font-size-md);
+}
+
+.ai-insights-block {
+  margin-bottom: var(--space-3);
+}
+
+.ai-insights-label {
+  display: block;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.ai-insights-text {
+  white-space: pre-wrap;
+  color: var(--text-primary);
+}
+
+.ai-insights-code {
+  white-space: pre-wrap;
+}
+
+.ai-insights-actions {
+  margin-top: var(--space-3);
+}

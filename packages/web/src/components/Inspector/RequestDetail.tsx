@@ -432,6 +432,45 @@ export function RequestDetail({
                                         {finding.evidence}
                                     </div>
                                 )}
+                                {finding.ai_status === 'completed' && (
+                                    <div className="ai-insights-section">
+                                        <div className="ai-insights-header">
+                                            <span className="ai-insights-title">✨ AI Insights</span>
+                                            <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
+                                                {finding.ai_relevance ? 'True Positive' : 'False Positive'}
+                                            </span>
+                                        </div>
+                                        {finding.ai_explanation && (
+                                            <div className="ai-insights-block">
+                                                <strong className="ai-insights-label">Explanation</strong>
+                                                <div className="ai-insights-text">{finding.ai_explanation}</div>
+                                            </div>
+                                        )}
+                                        {finding.ai_remediation && (
+                                            <div className="ai-insights-block">
+                                                <strong className="ai-insights-label">Remediation</strong>
+                                                <div className="ai-insights-text">{finding.ai_remediation}</div>
+                                            </div>
+                                        )}
+                                        {finding.ai_proposed_patch && (
+                                            <div className="ai-insights-block">
+                                                <strong className="ai-insights-label">Proposed Patch</strong>
+                                                <div className="detail-json-wrapper">
+                                                    <pre className="detail-json ai-insights-code">
+                                                        <code>{finding.ai_proposed_patch}</code>
+                                                    </pre>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {finding.pr_link && (
+                                            <div className="ai-insights-actions">
+                                                <a href={finding.pr_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
+                                                    View Pull Request ↗
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
