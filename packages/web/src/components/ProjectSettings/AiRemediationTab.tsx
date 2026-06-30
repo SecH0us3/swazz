@@ -8,6 +8,7 @@ export function AiRemediationTab() {
     const [urlMappings, setUrlMappings] = useState(activeProject?.url_mappings || '');
     const [aiPrompts, setAiPrompts] = useState(activeProject?.ai_prompts || '');
     const [customCliCommand, setCustomCliCommand] = useState(activeProject?.custom_cli_command || '');
+    const [autoFixRules, setAutoFixRules] = useState(activeProject?.auto_fix_rules || '');
     const [proposeFixes, setProposeFixes] = useState(activeProject?.propose_fixes === 1);
 
     const [isSaving, setIsSaving] = useState(false);
@@ -19,6 +20,7 @@ export function AiRemediationTab() {
             setUrlMappings(activeProject.url_mappings || '');
             setAiPrompts(activeProject.ai_prompts || '');
             setCustomCliCommand(activeProject.custom_cli_command || '');
+            setAutoFixRules(activeProject.auto_fix_rules || '');
             setProposeFixes(activeProject.propose_fixes === 1);
         }
     }, [activeProject]);
@@ -43,6 +45,7 @@ export function AiRemediationTab() {
                     url_mappings: urlMappings,
                     ai_prompts: aiPrompts,
                     custom_cli_command: customCliCommand,
+                    auto_fix_rules: autoFixRules,
                     propose_fixes: proposeFixes ? 1 : 0
                 })
             });
@@ -61,6 +64,7 @@ export function AiRemediationTab() {
                 url_mappings: urlMappings,
                 ai_prompts: aiPrompts,
                 custom_cli_command: customCliCommand,
+                auto_fix_rules: autoFixRules,
                 propose_fixes: proposeFixes ? 1 : 0
             };
             const updatedProjectsList = projects.map(p => p.id === activeProject.id ? updatedProject : p);
@@ -128,6 +132,20 @@ export function AiRemediationTab() {
                     />
                     <span className="settings-help-text">
                         {"Command template executed by the Go runner (e.g. `agy -p {{prompt_file}}`). Do not use shell variables."}
+                    </span>
+                </div>
+
+                <div>
+                    <label className="settings-label">Rules to Auto-Fix</label>
+                    <textarea 
+                        className="input settings-textarea" 
+                        value={autoFixRules} 
+                        onChange={(e) => setAutoFixRules(e.target.value)}
+                        placeholder={'[\n  "swazz/bola-idor",\n  "swazz/network-error",\n  "swazz/null-pointer-exception",\n  "swazz/timeout"\n]'}
+                        data-1p-ignore
+                    />
+                    <span className="settings-help-text">
+                        JSON array of rule IDs that should be automatically fixed.
                     </span>
                 </div>
 

@@ -7,6 +7,7 @@ export interface Project {
   ai_prompts?: string;
   propose_fixes?: number;
   custom_cli_command?: string;
+  auto_fix_rules?: string;
 }
 
 export interface Finding {

@@ -115,7 +115,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       if (!member || member.role !== 'owner') return c.json({ error: 'Forbidden' }, 403);
     }
   
-    const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command'];
+    const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command', 'auto_fix_rules'];
     const setClauses: string[] = [];
     const values: any[] = [];
     
