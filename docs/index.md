@@ -24,6 +24,8 @@ Explore the documentation to get started and master Swazz:
 - [Installation Guide](./installation.html) - Learn how to build and install Swazz.
 - [Usage & Configuration](./usage.html) - Discover CLI and Web UI usage.
 - [CI/CD Integration](./ci_cd.html) - Integrate Swazz into GitHub Actions, GitLab CI, and more with SARIF reporting.
+- [AI Auto-Fix & Remediation](./ai_remediation.html) - Configure the autonomous AI to triage vulnerabilities and open Pull Requests.
+- [Docker Deployment Guide](./docker_images.html) - Learn about the different Docker images available (Standalone, CI, AI).
 - [Architecture & Internals](./architecture.html) - Deep dive into the hybrid architecture and source code structure.
 - [Contributing Guidelines](./contributing.html) - Learn how to set up the dev environment, write tests, and contribute.
 
