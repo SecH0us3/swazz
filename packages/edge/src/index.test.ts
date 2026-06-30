@@ -2137,6 +2137,39 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
           body: JSON.stringify({ username: "someuser", roles: ["viewer"] })
         }), testEnv);
         expect(res.status).toBe(403);
+
+        // Register/Login Editor (userD)
+        const nameD = "u_editor_" + Date.now().toString().slice(-4);
+        const resRegD = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: nameD, password: "Password123!" })
+        }), testEnv);
+        const regData = (await resRegD.json()) as any;
+        const editorUserId = regData.id;
+
+        const resD = await appFetchWrapper(new Request("http://localhost/api/auth/login" as any, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: nameD, password: "Password123!" })
+        }), testEnv);
+        const editorData = (await resD.json()) as any;
+        const tokenEditor = editorData.token;
+
+        // Assign 'editor' role to userD in the database
+        await testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)")
+          .bind(projectId, editorUserId, "editor").run();
+
+        // Editor succeeds (200 OK)
+        const resEditor = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations` as any, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenEditor}`
+          },
+          body: JSON.stringify({ username: "someotheruser", roles: ["viewer"] })
+        }), testEnv);
+        expect(resEditor.status).toBe(200);
       });
     });
 
