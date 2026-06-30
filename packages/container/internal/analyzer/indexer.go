@@ -56,6 +56,7 @@ func (idx *RepoIndexer) FindHandlerContext(httpMethod, routePath string) (filePa
 			return nil
 		}
 
+		// #nosec G304 G122 -- Path is constructed safely from filepath.WalkDir starting from a trusted repository root
 		content, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return nil

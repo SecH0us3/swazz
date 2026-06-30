@@ -31,10 +31,10 @@ func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt 
 	fullPrompt := fmt.Sprintf("%s\n<untrusted-finding-context>\n%s\n</untrusted-finding-context>\n<code-context>\n%s\n</code-context>\n", prompt, findingMessage, contextCode)
 
 	if _, err := tmpFile.WriteString(fullPrompt); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return "", fmt.Errorf("failed to write to temp file: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	fields := strings.Fields(c.CommandTemplate)
 	if len(fields) == 0 {
@@ -47,6 +47,7 @@ func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt 
 		args = append(args, strings.ReplaceAll(arg, "{{prompt_file}}", tmpFile.Name()))
 	}
 
+	// #nosec G204 -- The command array is intentionally constructed from user configuration in a controlled runner environment
 	cmd := exec.Command(cmdName, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
