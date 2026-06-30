@@ -309,8 +309,8 @@ export function AiRemediationTab() {
             </form>
 
             {expandedPrompt && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(10, 10, 15, 0.95)', display: 'flex', flexDirection: 'column', padding: '32px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', flexDirection: 'column', padding: '32px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: 'var(--bg-elevated)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                         <h3 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '18px', fontWeight: 600 }}>
                             {expandedPrompt === 'pass1_prompt' ? 'Triage Prompt Template' : 'Remediation Prompt Template'}
                         </h3>
@@ -331,11 +331,12 @@ export function AiRemediationTab() {
                             fontSize: '15px', 
                             fontFamily: 'monospace', 
                             borderRadius: '8px', 
-                            background: '#1e1e1e', 
-                            color: '#e0e0e0', 
-                            border: '1px solid #333',
+                            background: 'var(--bg-input)', 
+                            color: 'var(--text-primary)', 
+                            border: '1px solid var(--border-color)',
                             outline: 'none',
-                            lineHeight: '1.5'
+                            lineHeight: '1.5',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
                         }}
                         value={aiPrompts[expandedPrompt]}
                         onChange={(e) => updatePromptField(expandedPrompt, e.target.value)}
@@ -346,9 +347,9 @@ export function AiRemediationTab() {
             )}
 
             {showRulesModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(10, 10, 15, 0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', width: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ padding: '16px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '8px', width: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+                        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--text-primary)' }}>Select Auto-Fix Rules</h3>
                             <button 
                                 type="button" 
@@ -371,7 +372,7 @@ export function AiRemediationTab() {
                                 </label>
                             ))}
                         </div>
-                        <div style={{ padding: '16px', borderTop: '1px solid #333', textAlign: 'right' }}>
+                        <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', textAlign: 'right' }}>
                             <button type="button" className="btn btn-primary" onClick={() => setShowRulesModal(false)}>
                                 Done
                             </button>
