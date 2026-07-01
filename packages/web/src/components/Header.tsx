@@ -171,7 +171,7 @@ export function Header({
                 </button>
 
                 <div 
-                    className="header-nav-logo header-cursor-pointer"
+                    className="header-logo header-cursor-pointer"
                     onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
                 >
                     <div className="header-logo-icon">⚡</div>

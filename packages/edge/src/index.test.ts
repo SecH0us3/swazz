@@ -2272,5 +2272,160 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         expect(((await res.json()) as any).error).toContain("Either email or username must be specified");
       });
     });
+
+    describe("User Billing Plans & Admin Endpoint Management", () => {
+      it("supports user billing plans and admin plan management", async () => {
+        // Test registration includes default plan 'Free'
+        const regUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+        const regRes = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: regUsername,
+            password: "SecurePassword123!",
+            email: `${regUsername}@example.com`
+          })
+        }), testEnv);
+        expect(regRes.status).toBe(200);
+        const regBody = await regRes.json() as any;
+        expect(regBody.token).toBeDefined();
+
+        // Get user profile and verify plan is 'Free'
+        const profileRes = await appFetchWrapper(new Request("http://localhost/api/auth/me", {
+          headers: { "Authorization": `Bearer ${regBody.token}` }
+        }), testEnv);
+        expect(profileRes.status).toBe(200);
+        const profileBody = await profileRes.json() as any;
+        expect(profileBody.plan).toBe("Free");
+
+        // Attempt plan upgrade with invalid secret
+        const upgradeResFail = await appFetchWrapper(new Request("http://localhost/api/admin/users/plan", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Secret": "wrong-secret"
+          },
+          body: JSON.stringify({ username: regUsername, plan: "Supporter Plan" })
+        }), testEnv);
+        expect(upgradeResFail.status).toBe(401);
+
+        // Attempt plan upgrade with valid secret
+        const upgradeResSuccess = await appFetchWrapper(new Request("http://localhost/api/admin/users/plan", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Secret": "admin-secret"
+          },
+          body: JSON.stringify({ username: regUsername, plan: "Supporter Plan" })
+        }), testEnv);
+        expect(upgradeResSuccess.status).toBe(200);
+        const upgradeBody = await upgradeResSuccess.json() as any;
+        expect(upgradeBody.status).toBe("ok");
+        expect(upgradeBody.plan).toBe("Supporter Plan");
+
+        // Verify updated plan in user profile
+        const updatedProfileRes = await appFetchWrapper(new Request("http://localhost/api/auth/me", {
+          headers: { "Authorization": `Bearer ${regBody.token}` }
+        }), testEnv);
+        expect(updatedProfileRes.status).toBe(200);
+        const updatedProfileBody = await updatedProfileRes.json() as any;
+        expect(updatedProfileBody.plan).toBe("Supporter Plan");
+      });
+    });
+
+    describe("Findings Authorization (BOLA/IDOR Prevention)", () => {
+      let projectId: string;
+      let scanId: string;
+      let findingId: string;
+      let tokenOwner: string;
+      let tokenGuest: string;
+
+      beforeAll(async () => {
+        projectId = crypto.randomUUID();
+        scanId = crypto.randomUUID();
+        findingId = crypto.randomUUID();
+
+        // 1. Create project owner
+        const ownerUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+        const regOwnerRes = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: ownerUsername,
+            password: "SecurePassword123!",
+            email: `${ownerUsername}@example.com`
+          })
+        }), testEnv);
+        expect(regOwnerRes.status).toBe(200);
+        tokenOwner = ((await regOwnerRes.json()) as any).token;
+
+        // 2. Create another user (guest who shouldn't have access to owner's project)
+        const guestUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+        const regGuestRes = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: guestUsername,
+            password: "SecurePassword123!",
+            email: `${guestUsername}@example.com`
+          })
+        }), testEnv);
+        expect(regGuestRes.status).toBe(200);
+        tokenGuest = ((await regGuestRes.json()) as any).token;
+
+        // 3. Directly inject scan and finding linked to the owner's project in D1
+        const ownerRow = await testEnv.DB.prepare("SELECT id FROM users WHERE username = ?").bind(ownerUsername).first<{ id: string }>();
+        const userIdOwner = ownerRow!.id;
+        await testEnv.DB.batch([
+          testEnv.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Owner Project', 'Private Project')").bind(projectId),
+          testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userIdOwner),
+          testEnv.DB.prepare("INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, 'http://example.com', 'default', 'completed')").bind(scanId, projectId),
+          testEnv.DB.prepare("INSERT INTO findings (id, scan_id, rule_id, level, message, evidence) VALUES (?, ?, 'swazz/bola-idor', 'High', 'Vulnerability', 'evidence')").bind(findingId, scanId)
+        ]);
+      });
+
+      it("allows project members to view a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          headers: { "Authorization": `Bearer ${tokenOwner}` }
+        }), testEnv);
+        expect(res.status).toBe(200);
+        const body = await res.json() as any;
+        expect(body.finding.id).toBe(findingId);
+      });
+
+      it("rejects unauthorized users from viewing a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          headers: { "Authorization": `Bearer ${tokenGuest}` }
+        }), testEnv);
+        expect(res.status).toBe(403);
+      });
+
+      it("allows authorized project members to update a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ ai_status: "triaged", ai_relevance: "True Positive" })
+        }), testEnv);
+        expect(res.status).toBe(200);
+        const body = await res.json() as any;
+        expect(body.finding.ai_status).toBe("triaged");
+        expect(body.finding.ai_relevance).toBe("True Positive");
+      });
+
+      it("rejects unauthorized users from updating a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenGuest}`
+          },
+          body: JSON.stringify({ ai_status: "triaged" })
+        }), testEnv);
+        expect(res.status).toBe(403);
+      });
+    });
   });
 });

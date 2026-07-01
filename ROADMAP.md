@@ -43,7 +43,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
 
-- [ ] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
+- [x] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
   - **Design Goal:** Secure runner agent connections by supporting token rotation. If a runner's credentials are revoked or become invalid, the runner agent process must fail/exit immediately to prevent unauthorized loops.
   - **Implementation Details:**
     - Update the runner agent CLI command (`run-agent` in Go) to detect authentication failure responses (such as `401 Unauthorized`).
@@ -84,7 +84,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
 
-- [ ] **Task 94: Support Billing Plans & Admin Plan Management**
+- [x] **Task 94: Support Billing Plans & Admin Plan Management**
   - **Design Goal:** Support billing plans (Free by default) and allow manual plan upgrades/downgrades to "Supporter Plan" by administrators.
   - **Implementation Details:**
     - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
@@ -170,7 +170,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
 
-- [ ] **Task 111: Fix Logo Alignment in Authenticated Header**
+- [x] **Task 111: Fix Logo Alignment in Authenticated Header**
   - **Design Goal:** Adjust header layout alignments to fix the logo image displacement that occurs when a user is logged in.
   - **Implementation Details:**
     - Fix the CSS styling rules in the header component for logo placement under authenticated user states.
