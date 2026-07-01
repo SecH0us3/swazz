@@ -82,7 +82,7 @@ beforeAll(async () => {
   }
 });
 
-const testEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
+const testEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', ADMIN_SECRET: 'admin-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
 
 describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {

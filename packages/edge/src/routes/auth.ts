@@ -1070,7 +1070,11 @@ app.delete('/api/auth/passkeys/:id', async (c) => {
 });
 
 app.post('/api/admin/users/plan', async (c) => {
-  const adminSecret = c.env.ADMIN_SECRET || 'admin-secret';
+  const adminSecret = c.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    return c.json({ error: 'Unauthorized: Admin secret is not configured' }, 401);
+  }
+
   const authHeader = c.req.header('X-Admin-Secret') || c.req.header('Authorization');
   const providedSecret = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
 
