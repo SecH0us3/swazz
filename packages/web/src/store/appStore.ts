@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 
 export interface UISlice {
-    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'settings' | 'project_settings' | 'history';
+    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'settings' | 'project_settings' | 'history' | 'compare';
     isSidebarOpen: boolean;
     isConfigOpen: boolean;
     isSidebarHiddenDesktop: boolean;
@@ -29,6 +29,8 @@ export interface FuzzingSlice {
     loadedRunId: string | null;
     heatmapFilter: HeatmapFilter | null;
     selectedResult: FuzzResult | null;
+    compareRunIdA: string | null;
+    compareRunIdB: string | null;
 }
 
 const createFuzzingSlice: StateCreator<AppState, [], [], FuzzingSlice> = () => ({
@@ -37,6 +39,8 @@ const createFuzzingSlice: StateCreator<AppState, [], [], FuzzingSlice> = () => (
     loadedRunId: null,
     heatmapFilter: null,
     selectedResult: null,
+    compareRunIdA: null,
+    compareRunIdB: null,
 });
 
 export interface StatsSlice {
