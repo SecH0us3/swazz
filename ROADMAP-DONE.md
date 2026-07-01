@@ -53,6 +53,9 @@ This file contains completed tasks.
     - When a user requests deletion (or when the account is purged), do not delete the record from `username_registry`.
     - Modify the registration endpoint to check if the hash of the requested username exists in `username_registry` and reject it if found.
 
+- [x] **Task 67: Restart Runner Agent Command in Web UI**
+  - **Design Goal:** Allow remote management of runners by providing a button in the Web UI dashboard to restart connected runner agent processes.
+
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
@@ -76,6 +79,17 @@ This file contains completed tasks.
     - Use CSS media queries or responsive flex layouts to align the target input centered inside `header-top-row` on desktop.
     - On mobile/small screens, keep the input positioned in its own row below (as it is currently) to prevent cramming.
 
+- [x] **Task 104: UI/UX Right Column Cleanup**
+  - **Design Goal:** Review and declutter the right-hand column/sidebar of the UI.
+  - **Implementation Details:**
+    - Identify controls in the right column that are redundant or rarely used.
+    - Move these rarely used controls exclusively to the Project Settings page to streamline the main workspace view.
+
+- [x] **Task 111: Fix Logo Alignment in Authenticated Header**
+  - **Design Goal:** Adjust header layout alignments to fix the logo image displacement that occurs when a user is logged in.
+  - **Implementation Details:**
+    - Fix the CSS styling rules in the header component for logo placement under authenticated user states.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
@@ -96,6 +110,12 @@ This file contains completed tasks.
     - Replace version tags (e.g. `actions/checkout@v4`, `actions/setup-go@v5`) in `.github/workflows/` with exact 40-character commit hashes.
     - Document human-readable version equivalents as line comments above each pinned step (e.g. `# v4.1.2`).
     - Configure Dependabot to support and automatically update commit-pinned action dependencies.
+
+- [x] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
+  - **Design Goal:** Secure runner agent connections by supporting token rotation. If a runner's credentials are revoked or become invalid, the runner agent process must fail/exit immediately to prevent unauthorized loops.
+  - **Implementation Details:**
+    - Update the runner agent CLI command (`run-agent` in Go) to detect authentication failure responses (such as `401 Unauthorized`).
+    - Instead of retrying connection loops indefinitely, print a critical error message and terminate the process with a non-zero exit code.
 
 ## ⚡️ Performance & Architecture
 
@@ -224,6 +244,14 @@ This file contains completed tasks.
     - Parse headers like `Content-Security-Policy` and `Content-Security-Policy-Report-Only` in the response analyzer.
     - Flag unsafe directives such as `unsafe-inline`, `unsafe-eval`, or wildcard sources (`*`) that weaken protection against XSS and data injection.
 
+- [x] **Task 76: AI-Based Findings Analysis with Local Repository Context**
+  - **Design Goal:** Automatically analyze and explain discovered vulnerabilities by correlating finding routes and parameters with the client's local repository code using AI (Claude or Antigravity).
+  - **Implementation Details:**
+    - Extend the CLI with an analysis mode (e.g., `--analyze-repo <path>`) that clones/reads the target repository.
+    - Build a fast pre-indexing system in the CLI to scan the files beforehand for quick symbol and path lookup.
+    - Allow users to configure instructions (prompts) specifying what vulnerabilities to prioritize and where to look.
+    - Match endpoint routes from findings to file paths, retrieve relevant code context, and invoke the LLM to output remediation steps.
+
 ## 🔐 Authorization & Access Control Testing
 
 - [x] **Task 28:** Implement BOLA/IDOR (Broken Object-Level Authorization) testing with multi-identity support.
@@ -316,6 +344,24 @@ This file contains completed tasks.
     - Ensure the endpoint executes a clean cascading database deletion in D1 (deleting `users`, associated `projects`, `scans`, `findings`, and `runners`).
     - Revoke and drop any active WebSocket runner connections matching the deleted user's ID immediately in the Durable Object.
     - Clear all client-side cache and credentials (auth tokens, cookies, and local IndexedDB databases) before redirecting the browser to the registration screen.
+
+- [x] **Task 87: Project Invitations and Collaboration (via Email/Username)**
+  - **Design Goal:** Enable multi-user collaboration inside projects by allowing project owners to invite other users to join their projects with structured Role-Based Access Control (RBAC).
+  - **Implementation Details:**
+    - Define a formal permission set mapping combinations of HTTP Verbs and Endpoint paths (e.g., `READ: /api/projects/:id/runs`, `WRITE: /api/projects/:id/settings`).
+    - Define roles (e.g., Owner, Editor, Viewer) as collections of these verb+endpoint permission items.
+    - Create a project member invitation schema and endpoints (`POST /api/projects/:id/invitations`).
+    - Support inviting users directly by email (sending an invitation code or registration link) or by username, assigning them a target role.
+    - Implement an invitation state machine (Pending, Accepted, Expired, Revoked) in the database.
+    - Validate permissions on the edge coordinator using the RBAC mapping during API requests.
+    - Update frontend Settings screen to display a "Members" tab listing active members, pending invitations, and options to invite new users or manage member roles.
+
+- [x] **Task 94: Support Billing Plans & Admin Plan Management**
+  - **Design Goal:** Support billing plans (Free by default) and allow manual plan upgrades/downgrades to "Supporter Plan" by administrators.
+  - **Implementation Details:**
+    - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
+    - Set the default plan to 'Free' during new user registration in the Edge Coordinator.
+    - Implement a mechanism (database script or coordinator admin endpoint) for manually updating user plans to 'Supporter Plan'.
 
 ## 📦 Compatibility & Quality
 
