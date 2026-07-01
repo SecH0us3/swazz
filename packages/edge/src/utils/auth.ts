@@ -65,7 +65,12 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
     return null;
   }
   try {
-    const decoded = await verify(token, secret, "HS256");
+    const cachedPayload = c.get('jwtPayload' as any);
+    let decoded = cachedPayload;
+    if (!decoded) {
+      decoded = await verify(token, secret, "HS256");
+      c.set('jwtPayload' as any, decoded);
+    }
     if (!decoded || !decoded.sub) {
       return null;
     }
@@ -267,7 +272,12 @@ export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<numb
   if (!secret) return null;
   
   try {
-    const decoded = await verify(token, secret, "HS256");
+    const cachedPayload = c.get('jwtPayload' as any);
+    let decoded = cachedPayload;
+    if (!decoded) {
+      decoded = await verify(token, secret, "HS256");
+      c.set('jwtPayload' as any, decoded);
+    }
     if (decoded && typeof decoded === 'object' && 'iat' in decoded) {
       return Number(decoded.iat);
     }

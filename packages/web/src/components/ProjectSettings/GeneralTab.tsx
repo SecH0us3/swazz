@@ -204,7 +204,7 @@ export function GeneralTab() {
                 <div>
                     <label className="form-label">Member Session Expiration</label>
                     <select 
-                        className="input" 
+                        className="input select-input" 
                         value={sessionTimeout} 
                         onChange={(e) => setSessionTimeout(Number(e.target.value))}
                     >
