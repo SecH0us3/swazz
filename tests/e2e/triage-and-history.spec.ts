@@ -104,7 +104,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await configPromiseReload;
 
     // 8. Navigate to Scan History in the sidebar
-    const historyBtn = page.locator('button:has-text("Scan History")');
+    const historyBtn = page.locator('button:has-text("History")');
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();
 

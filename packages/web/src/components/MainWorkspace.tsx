@@ -8,6 +8,7 @@ import { UserSettings } from './UserSettings.js';
 import { ProjectSettings } from './ProjectSettings.js';
 import { HistoryPage } from './HistoryPage.js';
 import { LandingShowcase } from './LandingShowcase.js';
+import { ComparePage } from './ComparePage.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -48,7 +49,9 @@ export function MainWorkspace({
         historyStats,
         activeTab,
         heatmapFilter,
-        isRunning
+        isRunning,
+        compareRunIdA,
+        compareRunIdB
     } = useAppStore(useShallow(state => ({
         activeRunId: state.liveRunId,
         activeStats: state.stats,
@@ -57,7 +60,9 @@ export function MainWorkspace({
         historyStats: state.historyStats,
         activeTab: state.activeTab,
         heatmapFilter: state.heatmapFilter,
-        isRunning: state.isRunning
+        isRunning: state.isRunning,
+        compareRunIdA: state.compareRunIdA,
+        compareRunIdB: state.compareRunIdB
     })));
 
     const [isExportHovered, setIsExportHovered] = useState(false);
@@ -138,41 +143,6 @@ export function MainWorkspace({
                 <UserSettings />
             ) : activeTab === 'project_settings' ? (
                 <ProjectSettings />
-            ) : activeTab === 'history' ? (
-                <HistoryPage 
-                    runs={runs}
-                    onLoadRun={(runId, importedRun) => {
-                        handleLoadRun(runId, importedRun);
-                        useAppStore.setState({ activeTab: 'heatmap' });
-                    }}
-                    onDeleteRun={handleDeleteRun}
-                    onImportRun={onImportRun}
-                    onExport={handleExport}
-                    onExportHTML={handleExportHTML}
-                    onExportMD={handleExportMD}
-                />
-            ) : !hasActivity ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="empty-state">
-                        <div className="empty-state-icon">⚡</div>
-                        <div className="empty-state-title">Ready to fuzz</div>
-                        <div className="empty-state-text">
-                            Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
-                        </div>
-                        <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                            <button
-                                className="btn btn-primary"
-                                style={{ padding: '8px 16px', fontSize: '14px' }}
-                                onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
-                            >
-                                Try Petstore Demo
-                            </button>
-                            <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
-                                Automatically loads endpoints and runs a quick fuzz test
-                            </div>
-                        </div>
-                    </div>
-                </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">
@@ -225,6 +195,31 @@ export function MainWorkspace({
                                 {findingsCount > 0 && (
                                     <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
                                 )}
+                            </button>
+                        )}
+                        <button
+                            className={`tab-bar-btn ${activeTab === 'history' ? 'active' : ''}`}
+                            onClick={() => useAppStore.setState({ activeTab: 'history' })}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            History
+                            {runs.length > 0 && (
+                                <span className="tab-bar-count">{runs.length}</span>
+                            )}
+                        </button>
+                        {compareRunIdA && compareRunIdB && (
+                            <button
+                                className={`tab-bar-btn ${activeTab === 'compare' ? 'active' : ''}`}
+                                onClick={() => useAppStore.setState({ activeTab: 'compare' })}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <line x1="12" y1="3" x2="12" y2="21" />
+                                </svg>
+                                Compare Scans
                             </button>
                         )}
                         <div 
@@ -286,50 +281,96 @@ export function MainWorkspace({
                         </div>
                     </div>
 
-                    {activeTab === 'heatmap' && (
-                        <Dashboard
-                            stats={currentStats}
-                            endpointKeys={endpointKeys}
-                            heatmapFilter={heatmapFilter}
-                            onHeatmapFilter={(filter) => {
-                                useAppStore.setState({ heatmapFilter: filter });
-                                if (filter) useAppStore.setState({ activeTab: 'logs' });
+                    {activeTab === 'history' ? (
+                        <HistoryPage 
+                            runs={runs}
+                            onLoadRun={(runId, importedRun) => {
+                                handleLoadRun(runId, importedRun);
+                                useAppStore.setState({ activeTab: 'heatmap' });
                             }}
-                            isRunning={isRunning}
+                            onDeleteRun={handleDeleteRun}
+                            onImportRun={onImportRun}
+                            onExport={handleExport}
+                            onExportHTML={handleExportHTML}
+                            onExportMD={handleExportMD}
                         />
-                    )}
-                    {activeTab === 'logs' && (
-                        <Inspector
-                            runId={inspectorRunId}
-                            queryResults={queryResults}
-                            liveCount={liveCount}
-                            heatmapFilter={heatmapFilter}
-                            onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
-                            onSelectResult={handleSelectResult}
-                            onExport={() => handleExport(inspectorRunId, config.base_url)}
-                            config={config}
-                        />
-                    )}
-                    {isAnalysisEnabled && activeTab === 'findings' && (
-                        <Inspector
-                            runId={inspectorRunId}
-                            queryResults={queryResults}
-                            liveCount={liveCount}
-                            heatmapFilter={heatmapFilter}
-                            onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
-                            onSelectResult={handleSelectResult}
-                            onExport={() => handleExport(inspectorRunId, config.base_url)}
-                            findingsOnly={true}
-                            config={config}
-                        />
-                    )}
-                    {isAnalysisEnabled && activeTab === 'owasp' && (
-                        <OWASPTop10
-                            runId={inspectorRunId}
-                            queryResults={queryResults}
-                            liveCount={liveCount}
-                            onSelectResult={handleSelectResult}
-                        />
+                    ) : !hasActivity ? (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="empty-state">
+                                <div className="empty-state-icon">⚡</div>
+                                <div className="empty-state-title">Ready to fuzz</div>
+                                <div className="empty-state-text">
+                                    Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
+                                </div>
+                                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <button
+                                        className="btn btn-primary"
+                                        style={{ padding: '8px 16px', fontSize: '14px' }}
+                                        onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
+                                    >
+                                        Try Petstore Demo
+                                    </button>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
+                                        Automatically loads endpoints and runs a quick fuzz test
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {activeTab === 'heatmap' && (
+                                <Dashboard
+                                    stats={currentStats}
+                                    endpointKeys={endpointKeys}
+                                    heatmapFilter={heatmapFilter}
+                                    onHeatmapFilter={(filter) => {
+                                        useAppStore.setState({ heatmapFilter: filter });
+                                        if (filter) useAppStore.setState({ activeTab: 'logs' });
+                                    }}
+                                    isRunning={isRunning}
+                                />
+                            )}
+                            {activeTab === 'logs' && (
+                                <Inspector
+                                    runId={inspectorRunId}
+                                    queryResults={queryResults}
+                                    liveCount={liveCount}
+                                    heatmapFilter={heatmapFilter}
+                                    onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
+                                    onSelectResult={handleSelectResult}
+                                    onExport={() => handleExport(inspectorRunId, config.base_url)}
+                                    config={config}
+                                />
+                            )}
+                            {isAnalysisEnabled && activeTab === 'findings' && (
+                                <Inspector
+                                    runId={inspectorRunId}
+                                    queryResults={queryResults}
+                                    liveCount={liveCount}
+                                    heatmapFilter={heatmapFilter}
+                                    onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
+                                    onSelectResult={handleSelectResult}
+                                    onExport={() => handleExport(inspectorRunId, config.base_url)}
+                                    findingsOnly={true}
+                                    config={config}
+                                />
+                            )}
+                            {isAnalysisEnabled && activeTab === 'owasp' && (
+                                <OWASPTop10
+                                    runId={inspectorRunId}
+                                    queryResults={queryResults}
+                                    liveCount={liveCount}
+                                    onSelectResult={handleSelectResult}
+                                />
+                            )}
+                            {activeTab === 'compare' && (
+                                <ComparePage
+                                    runs={runs}
+                                    queryResults={queryResults}
+                                    onSelectResult={handleSelectResult}
+                                />
+                            )}
+                        </>
                     )}
                 </div>
             )}

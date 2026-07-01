@@ -485,6 +485,11 @@ export default function App() {
                     useAppStore.setState({ activeTab: 'history' });
                     return;
                 }
+                if (e.key === '6' && state.compareRunIdA && state.compareRunIdB) {
+                    e.preventDefault();
+                    useAppStore.setState({ activeTab: 'compare' });
+                    return;
+                }
             }
 
             // Run: Mod + Enter
