@@ -106,6 +106,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
       const payload = {
         sub: id,
+        iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
       };
       
@@ -257,6 +258,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
       const payload = {
         sub: id,
+        iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
       };
       
@@ -592,6 +594,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     const payload = {
       sub: user.id,
+      iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
     };
     
@@ -1038,6 +1041,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
         const payload = {
           sub: pk.user_id,
+          iat: Math.floor(Date.now() / 1000),
           exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
         };
         const secret = c.env.JWT_SECRET;

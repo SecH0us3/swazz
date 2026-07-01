@@ -9,6 +9,7 @@ import { ProjectSettings } from './ProjectSettings.js';
 import { HistoryPage } from './HistoryPage.js';
 import { LandingShowcase } from './LandingShowcase.js';
 import { ComparePage } from './ComparePage.js';
+import { AboutPage } from './AboutPage.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -143,6 +144,8 @@ export function MainWorkspace({
                 <UserSettings />
             ) : activeTab === 'project_settings' ? (
                 <ProjectSettings />
+            ) : activeTab === 'about' ? (
+                <AboutPage />
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">

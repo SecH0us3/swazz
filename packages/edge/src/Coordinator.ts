@@ -445,6 +445,12 @@ export class RunnerCoordinator {
         server.serializeAttachment({ authenticated: true, connectionId });
         this.runners.add(server);
 
+        // Check version
+        const coordinatorVersion = this.env.VERSION || '1.0.0';
+        if (isVersionOutdated(version, coordinatorVersion)) {
+          console.warn(`[Runner Connection] Outdated runner agent connected: '${name}' (Shared) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+        }
+
         // Check for queued scans to dispatch
         await this.checkAndDispatchQueuedScans(server);
       }
@@ -523,6 +529,16 @@ export class RunnerCoordinator {
             ws.serializeAttachment({ ...attachment, authenticated: true });
             ws.send(JSON.stringify({ type: 'auth_ok' }));
             
+            // Check version
+            const versionTag = tags.find(t => t.startsWith('version:'));
+            const version = versionTag ? versionTag.substring(8) : 'v0.0.0';
+            const nameTag = tags.find(t => t.startsWith('name:'));
+            const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
+            const coordinatorVersion = this.env.VERSION || '1.0.0';
+            if (isVersionOutdated(version, coordinatorVersion)) {
+              console.warn(`[Runner Connection] Outdated runner agent connected: '${name}' is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+            }
+
             // Check for queued scans to dispatch
             await this.checkAndDispatchQueuedScans(ws);
           } else {
@@ -799,4 +815,26 @@ export class RunnerCoordinator {
   async webSocketError(ws: WebSocket, error: any) {
     await this.webSocketClose(ws, 1011, "Error", false);
   }
+}
+
+function isVersionOutdated(runnerVer: string, coordVer: string): boolean {
+  if (runnerVer === 'dev' || coordVer === 'dev') return false;
+  
+  // Normalize versions by removing leading 'v' or 'v.'
+  const cleanRunner = runnerVer.replace(/^v\.?/, '');
+  const cleanCoord = coordVer.replace(/^v\.?/, '');
+  
+  const runnerParts = cleanRunner.split('.').map(Number);
+  const coordParts = cleanCoord.split('.').map(Number);
+  
+  for (let i = 0; i < Math.max(runnerParts.length, coordParts.length); i++) {
+    const r = runnerParts[i] || 0;
+    const c = coordParts[i] || 0;
+    if (isNaN(r) || isNaN(c)) {
+      return cleanRunner < cleanCoord;
+    }
+    if (r < c) return true;
+    if (r > c) return false;
+  }
+  return false;
 }

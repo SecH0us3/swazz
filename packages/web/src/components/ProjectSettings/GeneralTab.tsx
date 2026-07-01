@@ -14,6 +14,7 @@ export function GeneralTab() {
     const [projectName, setProjectName] = useState(activeProject?.name || '');
     const [projectDesc, setProjectDesc] = useState(activeProject?.description || '');
     const [targetUrl, setTargetUrl] = useState(config.base_url || '');
+    const [sessionTimeout, setSessionTimeout] = useState<number>(activeProject?.member_session_timeout || 0);
 
     const [isSavingGeneral, setIsSavingGeneral] = useState(false);
     const [saveGeneralSuccess, setSaveGeneralSuccess] = useState(false);
@@ -24,6 +25,7 @@ export function GeneralTab() {
         if (activeProject) {
             setProjectName(activeProject.name);
             setProjectDesc(activeProject.description);
+            setSessionTimeout(activeProject.member_session_timeout || 0);
         }
     }, [activeProject]);
 
@@ -49,7 +51,11 @@ export function GeneralTab() {
             const res = await fetch(`/api/projects/${activeProject.id}`, {
                 method: 'PATCH',
                 headers,
-                body: JSON.stringify({ name: projectName, description: projectDesc })
+                body: JSON.stringify({ 
+                    name: projectName, 
+                    description: projectDesc,
+                    member_session_timeout: sessionTimeout
+                })
             });
 
             if (!res.ok) {
@@ -65,7 +71,12 @@ export function GeneralTab() {
             updateConfig({ base_url: targetUrl.trim() });
 
             // Update local store state
-            const updatedProject = { ...activeProject, name: projectName, description: projectDesc };
+            const updatedProject = { 
+                ...activeProject, 
+                name: projectName, 
+                description: projectDesc,
+                member_session_timeout: sessionTimeout
+            };
             const updatedProjectsList = projects.map(p => p.id === activeProject.id ? updatedProject : p);
             
             useAppStore.setState({
@@ -187,6 +198,25 @@ export function GeneralTab() {
                     </select>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
                         Controls how long scan histories and findings logs are stored in the local index or cloud backup.
+                    </span>
+                </div>
+
+                <div>
+                    <label className="form-label">Member Session Expiration</label>
+                    <select 
+                        className="input" 
+                        value={sessionTimeout} 
+                        onChange={(e) => setSessionTimeout(Number(e.target.value))}
+                    >
+                        <option value={0}>No Custom Limit (7 Days)</option>
+                        <option value={3600}>1 Hour</option>
+                        <option value={14400}>4 Hours</option>
+                        <option value={43200}>12 Hours</option>
+                        <option value={86400}>24 Hours</option>
+                        <option value={604800}>7 Days</option>
+                    </select>
+                    <span className="form-help-text">
+                        Forces members participating in this project to re-authenticate after the specified period.
                     </span>
                 </div>
 

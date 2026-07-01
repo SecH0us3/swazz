@@ -8,6 +8,7 @@ export interface Project {
   propose_fixes?: number;
   custom_cli_command?: string;
   auto_fix_rules?: string;
+  member_session_timeout?: number;
 }
 
 export interface Finding {
