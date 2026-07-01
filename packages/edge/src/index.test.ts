@@ -252,6 +252,61 @@ describe("D1 Database Migrations & API", () => {
     expect(typeof body.token).toBe("string");
   });
 
+  it("supports user billing plans and admin plan management", async () => {
+    // 1. Login to get token for 'newuser'
+    const loginReq = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "newuser", password: "Password123!" })
+    });
+    const loginRes = await appFetchWrapper(loginReq as any, testEnv);
+    expect(loginRes.status).toBe(200);
+    const loginBody = await loginRes.json() as any;
+    const token = loginBody.token;
+
+    // 2. Fetch profile and verify initial plan is 'Free'
+    const meReq = new Request("http://localhost/api/auth/me", {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const meRes = await appFetchWrapper(meReq as any, testEnv);
+    expect(meRes.status).toBe(200);
+    const meBody = await meRes.json() as any;
+    expect(meBody.plan).toBe("Free");
+
+    // 3. Try to update plan with incorrect admin secret
+    const adminReqWrong = new Request("http://localhost/api/admin/users/plan", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "X-Admin-Secret": "wrong-secret"
+      },
+      body: JSON.stringify({ username: "newuser", plan: "Supporter Plan" })
+    });
+    const adminResWrong = await appFetchWrapper(adminReqWrong as any, testEnv);
+    expect(adminResWrong.status).toBe(401);
+
+    // 4. Update plan to 'Supporter Plan' with correct admin secret
+    const adminReq = new Request("http://localhost/api/admin/users/plan", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "X-Admin-Secret": "admin-secret" // default in routes
+      },
+      body: JSON.stringify({ username: "newuser", plan: "Supporter Plan" })
+    });
+    const adminRes = await appFetchWrapper(adminReq as any, testEnv);
+    expect(adminRes.status).toBe(200);
+    const adminBody = await adminRes.json() as any;
+    expect(adminBody.status).toBe("ok");
+    expect(adminBody.plan).toBe("Supporter Plan");
+
+    // 5. Fetch profile again and verify updated plan is 'Supporter Plan'
+    const meResUpdated = await appFetchWrapper(meReq as any, testEnv);
+    expect(meResUpdated.status).toBe(200);
+    const meBodyUpdated = await meResUpdated.json() as any;
+    expect(meBodyUpdated.plan).toBe("Supporter Plan");
+  });
+
   it("can login as guest, fetch profile with guest flag, and triggers cleanup", async () => {
     // Helper to solve PoW in tests
     const solvePoWTest = async (challenge: string, difficulty: number): Promise<number> => {
@@ -2270,6 +2325,107 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         }), testEnv);
         expect(res.status).toBe(400);
         expect(((await res.json()) as any).error).toContain("Either email or username must be specified");
+      });
+    });
+
+    describe("Findings API Authorization", () => {
+      let tokenOwner: string;
+      let tokenGuest: string;
+      let projectId: string;
+      let scanId = "";
+      let findingId = "";
+
+      beforeEach(async () => {
+        const uniqueSuffix = Math.floor(Math.random() * 1000000);
+        const ownerUsername = `fo_${uniqueSuffix}`;
+        const guestUsername = `fg_${uniqueSuffix}`;
+        scanId = `s_${uniqueSuffix}`;
+        findingId = `f_${uniqueSuffix}`;
+
+        // 1. Register owner user
+        const ownerRes = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: ownerUsername, password: "Password123!" })
+        }), testEnv);
+        expect(ownerRes.status).toBe(200);
+        const ownerBody = await ownerRes.json() as any;
+        tokenOwner = ownerBody.token;
+
+        // Register guest user
+        const guestRes = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: guestUsername, password: "Password123!" })
+        }), testEnv);
+        expect(guestRes.status).toBe(200);
+        const guestBody = await guestRes.json() as any;
+        tokenGuest = guestBody.token;
+
+        // 2. Create project
+        const projRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ name: "Findings Project", description: "Project for testing findings auth" })
+        }), testEnv);
+        expect(projRes.status).toBe(200);
+        const projBody = await projRes.json() as any;
+        projectId = projBody.id;
+
+        // 3. Create scan and finding
+        await testEnv.DB.prepare(
+          "INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+        ).bind(scanId, projectId, "http://target.com", "default", "completed").run();
+
+        await testEnv.DB.prepare(
+          "INSERT INTO findings (id, scan_id, rule_id, level, message, evidence) VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(findingId, scanId, "swazz/xss", "error", "Reflected XSS", "alert(1)").run();
+      });
+
+      it("allows authorized project members to view a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          headers: { "Authorization": `Bearer ${tokenOwner}` }
+        }), testEnv);
+        expect(res.status).toBe(200);
+        const body = await res.json() as any;
+        expect(body.finding.id).toBe(findingId);
+      });
+
+      it("rejects unauthorized users from viewing a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          headers: { "Authorization": `Bearer ${tokenGuest}` }
+        }), testEnv);
+        expect(res.status).toBe(403);
+      });
+
+      it("allows authorized project members to update a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenOwner}`
+          },
+          body: JSON.stringify({ ai_status: "triaged", ai_relevance: "True Positive" })
+        }), testEnv);
+        expect(res.status).toBe(200);
+        const body = await res.json() as any;
+        expect(body.finding.ai_status).toBe("triaged");
+        expect(body.finding.ai_relevance).toBe("True Positive");
+      });
+
+      it("rejects unauthorized users from updating a finding", async () => {
+        const res = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${tokenGuest}`
+          },
+          body: JSON.stringify({ ai_status: "triaged" })
+        }), testEnv);
+        expect(res.status).toBe(403);
       });
     });
   });
