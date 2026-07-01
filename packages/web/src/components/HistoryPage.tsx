@@ -334,9 +334,17 @@ export function HistoryPage({
                             id="compare-scans-submit-btn"
                             className="btn btn-primary btn-sm"
                             onClick={() => {
+                                const runA = runs.find(r => r.id === selectedIds[0]);
+                                const runB = runs.find(r => r.id === selectedIds[1]);
+                                const timeA = runA?.startedAt || 0;
+                                const timeB = runB?.startedAt || 0;
+                                const sortedIds = timeA <= timeB
+                                    ? [selectedIds[0], selectedIds[1]]
+                                    : [selectedIds[1], selectedIds[0]];
+
                                 useAppStore.setState({
-                                    compareRunIdA: selectedIds[0],
-                                    compareRunIdB: selectedIds[1],
+                                    compareRunIdA: sortedIds[0],
+                                    compareRunIdB: sortedIds[1],
                                     activeTab: 'compare'
                                 });
                             }}
