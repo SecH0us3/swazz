@@ -181,11 +181,11 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
         if (!comparison) return list;
         for (const r of rowsB) {
             if (r.analyzerFindings) {
-                for (const f of r.analyzerFindings) {
+                r.analyzerFindings.forEach((f, idx) => {
                     const key = `${f.ruleId}|${r.method.toUpperCase()}|${r.endpoint}`;
                     if (!keysA.has(key)) {
                         list.push({
-                            id: `new-${key}-${r.id}`,
+                            id: `new-${key}-${r.id}-${idx}`,
                             result: r,
                             ruleId: f.ruleId,
                             level: f.level,
@@ -194,7 +194,7 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
                             type: 'new'
                         });
                     }
-                }
+                });
             }
         }
         return list;
@@ -205,11 +205,11 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
         if (!comparison) return list;
         for (const r of rowsA) {
             if (r.analyzerFindings) {
-                for (const f of r.analyzerFindings) {
+                r.analyzerFindings.forEach((f, idx) => {
                     const key = `${f.ruleId}|${r.method.toUpperCase()}|${r.endpoint}`;
                     if (!keysB.has(key)) {
                         list.push({
-                            id: `fixed-${key}-${r.id}`,
+                            id: `fixed-${key}-${r.id}-${idx}`,
                             result: r,
                             ruleId: f.ruleId,
                             level: f.level,
@@ -218,7 +218,7 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
                             type: 'fixed'
                         });
                     }
-                }
+                });
             }
         }
         return list;
@@ -229,11 +229,11 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
         if (!comparison) return list;
         for (const r of rowsB) {
             if (r.analyzerFindings) {
-                for (const f of r.analyzerFindings) {
+                r.analyzerFindings.forEach((f, idx) => {
                     const key = `${f.ruleId}|${r.method.toUpperCase()}|${r.endpoint}`;
                     if (keysA.has(key) && keysB.has(key)) {
                         list.push({
-                            id: `common-${key}-${r.id}`,
+                            id: `common-${key}-${r.id}-${idx}`,
                             result: r,
                             ruleId: f.ruleId,
                             level: f.level,
@@ -242,7 +242,7 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
                             type: 'common'
                         });
                     }
-                }
+                });
             }
         }
         return list;
