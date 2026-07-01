@@ -28,8 +28,16 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
 
     const handleDeleteRun = async (runId: string) => {
         await deleteRun(runId);
-        if (useAppStore.getState().loadedRunId === runId) {
+        const state = useAppStore.getState();
+        if (state.loadedRunId === runId) {
             useAppStore.setState({ loadedRunId: null, historyStats: null });
+        }
+        if (state.compareRunIdA === runId || state.compareRunIdB === runId) {
+            useAppStore.setState({
+                compareRunIdA: null,
+                compareRunIdB: null,
+                activeTab: state.activeTab === 'compare' ? 'heatmap' : state.activeTab
+            });
         }
         showToast('Run deleted', 'success');
     };

@@ -16,7 +16,7 @@ interface FindingListItem {
     ruleId: string;
     level: 'error' | 'warning' | 'note';
     message: string;
-    payload: string;
+    payload?: string;
     type: 'new' | 'fixed' | 'common';
 }
 
@@ -260,9 +260,9 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
     }, [activeTab, newFindingsList, fixedFindingsList, commonFindingsList, allFindingsList]);
 
     const filteredList = useMemo(() => {
+        const query = search.toLowerCase().trim();
         return activeList.filter(item => {
             const matchesSeverity = severityFilter === 'all' || item.level === severityFilter;
-            const query = search.toLowerCase().trim();
             const matchesSearch = !query ||
                 item.ruleId.toLowerCase().includes(query) ||
                 item.result.endpoint.toLowerCase().includes(query) ||

@@ -7,6 +7,10 @@ export interface ComparisonResult {
 }
 
 export function compareScans(runA: ResultSummary[], runB: ResultSummary[]): ComparisonResult {
+    if (!Array.isArray(runA) || !Array.isArray(runB)) {
+        throw new TypeError('compareScans expects two arrays of ResultSummary');
+    }
+
     const getFindingKey = (r: ResultSummary, ruleId: string) => {
         return `${ruleId}|${r.method.toUpperCase()}|${r.endpoint}`;
     };
@@ -34,17 +38,30 @@ export function compareScans(runA: ResultSummary[], runB: ResultSummary[]): Comp
     const fixedFindings: ResultSummary[] = [];
     const commonFindings: ResultSummary[] = [];
 
+    const seenNew = new Set<string>();
+    const seenCommon = new Set<string>();
+    const seenFixed = new Set<string>();
+
     findingsB.forEach((res, key) => {
         if (!findingsA.has(key)) {
-            newFindings.push(res);
+            if (!seenNew.has(res.id)) {
+                seenNew.add(res.id);
+                newFindings.push(res);
+            }
         } else {
-            commonFindings.push(res);
+            if (!seenCommon.has(res.id)) {
+                seenCommon.add(res.id);
+                commonFindings.push(res);
+            }
         }
     });
 
     findingsA.forEach((res, key) => {
         if (!findingsB.has(key)) {
-            fixedFindings.push(res);
+            if (!seenFixed.has(res.id)) {
+                seenFixed.add(res.id);
+                fixedFindings.push(res);
+            }
         }
     });
 

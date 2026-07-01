@@ -88,24 +88,6 @@ export function Sidebar({
                     <ProjectSelector />
                 </div>
             )}
-            {/* History Link Button */}
-            <div style={{
-                padding: '4px 12px 12px 12px',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                marginBottom: '8px'
-            }}>
-                <button
-                    className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ width: '100%', justifyContent: 'flex-start', gap: '8px', padding: '8px 12px', fontSize: '13px' }}
-                    onClick={() => useAppStore.setState({ activeTab: 'history' })}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    Scan History ({runs.length})
-                </button>
-            </div>
 
 
             {/* Swagger/OpenAPI/GraphQL Loader */}

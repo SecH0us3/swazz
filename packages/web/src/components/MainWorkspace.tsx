@@ -143,20 +143,7 @@ export function MainWorkspace({
                 <UserSettings />
             ) : activeTab === 'project_settings' ? (
                 <ProjectSettings />
-            ) : activeTab === 'history' ? (
-                <HistoryPage 
-                    runs={runs}
-                    onLoadRun={(runId, importedRun) => {
-                        handleLoadRun(runId, importedRun);
-                        useAppStore.setState({ activeTab: 'heatmap' });
-                    }}
-                    onDeleteRun={handleDeleteRun}
-                    onImportRun={onImportRun}
-                    onExport={handleExport}
-                    onExportHTML={handleExportHTML}
-                    onExportMD={handleExportMD}
-                />
-            ) : !hasActivity ? (
+            ) : (activeTab !== 'history' && !hasActivity) ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="empty-state">
                         <div className="empty-state-icon">⚡</div>
@@ -232,6 +219,19 @@ export function MainWorkspace({
                                 )}
                             </button>
                         )}
+                        <button
+                            className={`tab-bar-btn ${activeTab === 'history' ? 'active' : ''}`}
+                            onClick={() => useAppStore.setState({ activeTab: 'history' })}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            Scan History
+                            {runs.length > 0 && (
+                                <span className="tab-bar-count">{runs.length}</span>
+                            )}
+                        </button>
                         {compareRunIdA && compareRunIdB && (
                             <button
                                 className={`tab-bar-btn ${activeTab === 'compare' ? 'active' : ''}`}
@@ -353,6 +353,20 @@ export function MainWorkspace({
                             runs={runs}
                             queryResults={queryResults}
                             onSelectResult={handleSelectResult}
+                        />
+                    )}
+                    {activeTab === 'history' && (
+                        <HistoryPage 
+                            runs={runs}
+                            onLoadRun={(runId, importedRun) => {
+                                handleLoadRun(runId, importedRun);
+                                useAppStore.setState({ activeTab: 'heatmap' });
+                            }}
+                            onDeleteRun={handleDeleteRun}
+                            onImportRun={onImportRun}
+                            onExport={handleExport}
+                            onExportHTML={handleExportHTML}
+                            onExportMD={handleExportMD}
                         />
                     )}
                 </div>
