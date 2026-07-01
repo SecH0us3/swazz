@@ -32,6 +32,7 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 - **🛡️ Compliance Mapping**: Automatically map all discovered vulnerabilities to the **OWASP Top 10 (2025)** standard in reports and the Web Dashboard.
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
 - **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
+- **🔄 Multi-Scan Comparison**: Side-by-side analysis of scan runs to compare coverage metrics, HTTP status code distributions, and findings diffs (New, Fixed, and Common vulnerabilities).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
 - **🌐 Web Dashboard**: Real-time Heatmap, Request Inspector, and OWASP Compliance dashboard for deep-dive analysis.
 
