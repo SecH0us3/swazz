@@ -34,9 +34,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
-- [ ] **Task 68: Agent Update Notifications**
-  - **Design Goal:** Automatically check and notify administrators in the dashboard logs when connected Go runner agents are running outdated versions.
-
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
 
@@ -91,23 +88,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Set up demo CORS, API specs access, and pre-seeded database content (users, products, logs).
     - Update the onboarding flow and landing page copy to provide the live demo URL.
     - Add a "Scan Demo Target" button in the Web UI to launch a pre-configured scan against the live demo with a single click.
-
-- [ ] **Task 102: Custom Session Expiration per Project**
-  - **Design Goal:** Allow users to choose a custom session expiration time for members participating in a project.
-  - **Implementation Details:**
-    - Add a project setting for member session expiration length.
-    - Enforce this expiration on the edge backend when validating user sessions scoped to the project.
-
-- [ ] **Task 103: Footer and Navigation Reorganization**
-  - **Design Goal:** Clean up the navigation structure by moving external links and help menus.
-  - **Implementation Details:**
-    - Move the GitHub link and the hotkeys help menu to the footer.
-    - Create an "About the project" page and add a link to it in the footer.
-
-- [ ] **Task 106: Streamline Scan Progress Header Panel**
-  - **Design Goal:** Reduce the height of the top header panel that displays the scan progress, as it currently consumes too much vertical space.
-  - **Implementation Details:**
-    - Streamline layout and typography of the active scan header, merging metadata into compact badges.
 
 - [ ] **Task 107: Scans History Tab Layout Reorganization**
   - **Design Goal:** Redesign the scans history list to use a tabbed interface for clearer navigation and visual organization.

@@ -95,6 +95,17 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Design a comparison utility to side-by-side analyze changes, new findings, and fixed issues between scan runs.
 
+- [x] **Task 103: Footer and Navigation Reorganization**
+  - **Design Goal:** Clean up the navigation structure by moving external links and help menus.
+  - **Implementation Details:**
+    - Move the GitHub link and the hotkeys help menu to the footer.
+    - Create an "About the project" page and add a link to it in the footer.
+
+- [x] **Task 106: Streamline Scan Progress Header Panel**
+  - **Design Goal:** Reduce the height of the top header panel that displays the scan progress, as it currently consumes too much vertical space.
+  - **Implementation Details:**
+    - Streamline layout and typography of the active scan header, merging metadata into compact badges.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
@@ -121,6 +132,12 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Update the runner agent CLI command (`run-agent` in Go) to detect authentication failure responses (such as `401 Unauthorized`).
     - Instead of retrying connection loops indefinitely, print a critical error message and terminate the process with a non-zero exit code.
+
+- [x] **Task 102: Custom Session Expiration per Project**
+  - **Design Goal:** Allow users to choose a custom session expiration time for members participating in a project.
+  - **Implementation Details:**
+    - Add a project setting for member session expiration length.
+    - Enforce this expiration on the edge backend when validating user sessions scoped to the project.
 
 ## ⚡️ Performance & Architecture
 
@@ -790,3 +807,6 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
     - Research using KV for keeping track of active runner heartbeat state to avoid Durable Object lookups.
+
+- [x] **Task 68: Agent Update Notifications**
+  - **Design Goal:** Automatically check and notify administrators in the dashboard logs when connected Go runner agents are running outdated versions.
