@@ -43,7 +43,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
 
-- [ ] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
+- [x] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
   - **Design Goal:** Secure runner agent connections by supporting token rotation. If a runner's credentials are revoked or become invalid, the runner agent process must fail/exit immediately to prevent unauthorized loops.
   - **Implementation Details:**
     - Update the runner agent CLI command (`run-agent` in Go) to detect authentication failure responses (such as `401 Unauthorized`).
@@ -63,6 +63,19 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add an Analytics tab/page in the Web UI dashboard.
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
+
+- [/] **Task 84: Implement Passkey Authentication Support (WebAuthn)**
+  - **Design Goal:** Provide a modern, passwordless authentication alternative using biometric sensors (FaceID, TouchID, Windows Hello) or physical security keys via the WebAuthn API.
+  - **Implementation Details:**
+    - Implement WebAuthn registration and authentication flows in the edge coordinator backend.
+    - Store credential public keys and signature counters in the users D1 database.
+    - Update the frontend LoginScreen to support passkey registration in user settings and passkey login as an alternative to both passwords and 2FA OTP codes.
+
+- [/] **Task 86: Cloudflare KV and Cache API Optimization Research**
+  - **Design Goal:** Identify parts of the coordinator and runner architectures that would benefit from global, low-latency Cloudflare KV or regional Cache API storage (e.g., global API rate limiting, scan fuzzer payload catalog caching, global session blacklists, or feature flags).
+  - **Implementation Details:**
+    - Document KV read/write cost trade-offs vs in-memory Workers isolate caching.
+    - Research using KV for keeping track of active runner heartbeat state to avoid Durable Object lookups.
 
 - [x] **Task 87: Project Invitations and Collaboration (via Email/Username)**
   - **Design Goal:** Enable multi-user collaboration inside projects by allowing project owners to invite other users to join their projects with structured Role-Based Access Control (RBAC).
@@ -84,7 +97,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
 
-- [ ] **Task 94: Support Billing Plans & Admin Plan Management**
+- [x] **Task 94: Support Billing Plans & Admin Plan Management**
   - **Design Goal:** Support billing plans (Free by default) and allow manual plan upgrades/downgrades to "Supporter Plan" by administrators.
   - **Implementation Details:**
     - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
@@ -170,7 +183,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
 
-- [ ] **Task 111: Fix Logo Alignment in Authenticated Header**
+- [x] **Task 111: Fix Logo Alignment in Authenticated Header**
   - **Design Goal:** Adjust header layout alignments to fix the logo image displacement that occurs when a user is logged in.
   - **Implementation Details:**
     - Fix the CSS styling rules in the header component for logo placement under authenticated user states.

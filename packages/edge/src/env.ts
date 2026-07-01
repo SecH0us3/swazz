@@ -14,5 +14,6 @@ export interface Env {
   VERSION?: string;
   SCAN_QUEUE: Queue<any>;
   FINDINGS_QUEUE: Queue<any>;
+  ADMIN_SECRET?: string;
 }
 
