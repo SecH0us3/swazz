@@ -90,6 +90,11 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Fix the CSS styling rules in the header component for logo placement under authenticated user states.
 
+- [x] **Task 108: Multi-Scan Comparison Mode**
+  - **Design Goal:** Implement a comparison view allowing users to select and compare finding statistics, coverage metrics, and diffs between two separate scans.
+  - **Implementation Details:**
+    - Design a comparison utility to side-by-side analyze changes, new findings, and fixed issues between scan runs.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
