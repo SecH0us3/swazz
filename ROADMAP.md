@@ -114,11 +114,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
 
-- [/] **Task 108: Multi-Scan Comparison Mode**
-  - **Design Goal:** Implement a comparison view allowing users to select and compare finding statistics, coverage metrics, and diffs between two separate scans.
-  - **Implementation Details:**
-    - Design a comparison utility to side-by-side analyze changes, new findings, and fixed issues between scan runs.
-
 - [ ] **Task 109: Project Settings API Specifications Sub-Tab**
   - **Design Goal:** Duplicate API specs configurations and import tools directly into the project settings menu for improved target configuration.
   - **Implementation Details:**
