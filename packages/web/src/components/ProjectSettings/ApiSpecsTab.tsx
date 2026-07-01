@@ -46,14 +46,36 @@ export function ApiSpecsTab() {
                 return true;
             });
 
+            const updatedMetadata = {
+                ...(config._swagger_metadata || {}),
+                [trimmed]: {
+                    endpointCount,
+                    status: 'success' as const,
+                    lastRefreshed: new Date().toISOString()
+                }
+            };
+
             updateConfig({
                 _swagger_urls: newUrls,
                 base_url: basePath || config.base_url,
-                endpoints: uniqueEndpoints
+                endpoints: uniqueEndpoints,
+                _swagger_metadata: updatedMetadata
             });
             setUrlInput('');
             showToast(`✓ Loaded ${endpointCount} endpoints from ${trimmed}`, 'success');
         } catch (err: any) {
+            const updatedMetadata = {
+                ...(config._swagger_metadata || {}),
+                [trimmed]: {
+                    endpointCount: 0,
+                    status: 'error' as const,
+                    lastRefreshed: new Date().toISOString()
+                }
+            };
+            updateConfig({
+                _swagger_urls: newUrls,
+                _swagger_metadata: updatedMetadata
+            });
             showToast(`✗ Failed to load: ${err.message || String(err)}`, 'error');
         } finally {
             setIsLoading(false);
@@ -62,7 +84,12 @@ export function ApiSpecsTab() {
 
     const removeUrl = (url: string) => {
         const newUrls = swaggerUrls.filter((u) => u !== url);
-        updateConfig({ _swagger_urls: newUrls });
+        const updatedMetadata = { ...(config._swagger_metadata || {}) };
+        delete updatedMetadata[url];
+        updateConfig({ 
+            _swagger_urls: newUrls,
+            _swagger_metadata: updatedMetadata
+        });
         showToast('Spec URL removed from project settings', 'success');
     };
 
@@ -88,13 +115,88 @@ export function ApiSpecsTab() {
                 return true;
             });
 
+            const updatedMetadata = {
+                ...(config._swagger_metadata || {}),
+                [url]: {
+                    endpointCount,
+                    status: 'success' as const,
+                    lastRefreshed: new Date().toISOString()
+                }
+            };
+
             updateConfig({
                 base_url: basePath || config.base_url,
-                endpoints: uniqueEndpoints
+                endpoints: uniqueEndpoints,
+                _swagger_metadata: updatedMetadata
             });
             showToast(`✓ Refreshed ${endpointCount} endpoints from ${url}`, 'success');
         } catch (err: any) {
+            const updatedMetadata = {
+                ...(config._swagger_metadata || {}),
+                [url]: {
+                    endpointCount: 0,
+                    status: 'error' as const,
+                    lastRefreshed: new Date().toISOString()
+                }
+            };
+            updateConfig({
+                _swagger_metadata: updatedMetadata
+            });
             showToast(`✗ Refresh failed: ${err.message || String(err)}`, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const refreshAllUrls = async () => {
+        setIsLoading(true);
+        try {
+            showToast(`Refreshing all ${swaggerUrls.length} spec URLs...`, 'info');
+            let totalEndpoints = 0;
+            const updatedMetadata = { ...(config._swagger_metadata || {}) };
+            const allNewEndpoints: any[] = [];
+
+            for (const url of swaggerUrls) {
+                try {
+                    const { endpoints, endpointCount } = await loadSwaggerUrl(
+                        url,
+                        config.global_headers,
+                        config.cookies,
+                        true
+                    );
+                    allNewEndpoints.push(...endpoints);
+                    totalEndpoints += endpointCount;
+                    updatedMetadata[url] = {
+                        endpointCount,
+                        status: 'success' as const,
+                        lastRefreshed: new Date().toISOString()
+                    };
+                } catch (err: any) {
+                    updatedMetadata[url] = {
+                        endpointCount: 0,
+                        status: 'error' as const,
+                        lastRefreshed: new Date().toISOString()
+                    };
+                    showToast(`✗ Failed to refresh ${url}: ${err.message || String(err)}`, 'error');
+                }
+            }
+
+            const combinedEndpoints = [...(config.endpoints || []), ...allNewEndpoints];
+            const seen = new Set();
+            const uniqueEndpoints = combinedEndpoints.filter(ep => {
+                const key = `${ep.method.toUpperCase()} ${ep.path}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+
+            updateConfig({
+                endpoints: uniqueEndpoints,
+                _swagger_metadata: updatedMetadata
+            });
+            showToast(`✓ Refreshed all specs. Total loaded: ${totalEndpoints} endpoints`, 'success');
+        } catch (err: any) {
+            showToast(`✗ Refresh all failed: ${err.message || String(err)}`, 'error');
         } finally {
             setIsLoading(false);
         }
@@ -183,34 +285,62 @@ export function ApiSpecsTab() {
 
             {/* Specs URLs Section */}
             <div className="specs-urls-section">
-                <h3 className="specs-section-title">Spec URLs</h3>
+                <div className="specs-header-row">
+                    <h3 className="specs-section-title">Spec URLs</h3>
+                    {swaggerUrls.length > 2 && (
+                        <button 
+                            className="btn btn-secondary btn-sm" 
+                            onClick={refreshAllUrls}
+                            disabled={isLoading}
+                        >
+                            Refresh All
+                        </button>
+                    )}
+                </div>
+
                 <div className="specs-url-list">
                     {swaggerUrls.length === 0 ? (
                         <div className="specs-empty-state">No Spec URLs added yet.</div>
                     ) : (
-                        swaggerUrls.map((url) => (
-                            <div key={url} className="specs-url-item">
-                                <span className="specs-url-text" title={url}>{url}</span>
-                                <div className="specs-url-actions">
-                                    <button 
-                                        className="btn btn-ghost btn-sm" 
-                                        onClick={() => refreshUrl(url)}
-                                        disabled={isLoading}
-                                        title="Refresh"
-                                    >
-                                        Refresh
-                                    </button>
-                                    <button 
-                                        className="btn btn-danger btn-sm" 
-                                        onClick={() => removeUrl(url)}
-                                        disabled={isLoading}
-                                        title="Remove"
-                                    >
-                                        Remove
-                                    </button>
+                        swaggerUrls.map((url) => {
+                            const meta = (config._swagger_metadata || {})[url];
+                            const status = meta?.status || 'success';
+                            const count = meta?.endpointCount !== undefined ? meta.endpointCount : 0;
+
+                            return (
+                                <div key={url} className="specs-url-item">
+                                    <div className="specs-url-info">
+                                        <span className="specs-url-text" title={url}>{url}</span>
+                                        <div className="specs-url-meta-group">
+                                            <span className={`specs-status-badge status-${status}`}>
+                                                {status === 'success' ? '✓ Active' : '✗ Failed'}
+                                            </span>
+                                            {count > 0 && (
+                                                <span className="specs-stats">{count} methods</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="specs-url-actions">
+                                        <button 
+                                            className="btn btn-ghost btn-sm" 
+                                            onClick={() => refreshUrl(url)}
+                                            disabled={isLoading}
+                                            title="Refresh"
+                                        >
+                                            Refresh
+                                        </button>
+                                        <button 
+                                            className="btn btn-danger btn-sm" 
+                                            onClick={() => removeUrl(url)}
+                                            disabled={isLoading}
+                                            title="Remove"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 

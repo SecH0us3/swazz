@@ -70,15 +70,50 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     // 5. Verify Swagger URL adding works
     const specUrlInput = page.locator('input[placeholder="https://petstore.swagger.io/v2/swagger.json"]');
     await expect(specUrlInput).toBeVisible();
-    await specUrlInput.fill('http://127.0.0.1:8788/swagger.json');
     
+    // Add first URL
+    await specUrlInput.fill('http://127.0.0.1:8788/swagger.json');
     const addUrlBtn = page.locator('button:has-text("Add URL")');
     await expect(addUrlBtn).toBeVisible();
     await addUrlBtn.click();
 
     // Verify it appeared in the list
-    const urlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json")');
-    await expect(urlItem).toBeVisible({ timeout: 10000 });
+    const firstUrlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json")').first();
+    await expect(firstUrlItem).toBeVisible({ timeout: 10000 });
+
+    // Verify status badge and method count
+    const statusBadge = page.locator('.specs-status-badge.status-success').first();
+    await expect(statusBadge).toBeVisible({ timeout: 10000 });
+    await expect(statusBadge).toHaveText('✓ Active');
+
+    const methodStats = page.locator('.specs-stats').first();
+    await expect(methodStats).toBeVisible();
+    await expect(methodStats).toHaveText(/\d+ methods/);
+
+    // Verify "Refresh All" button does NOT appear for 1 URL
+    const refreshAllBtn = page.locator('button:has-text("Refresh All")');
+    await expect(refreshAllBtn).not.toBeVisible();
+
+    // Add second URL
+    await specUrlInput.fill('http://127.0.0.1:8788/swagger.json?dup=1');
+    await addUrlBtn.click();
+
+    // Wait for the second URL to appear in the list
+    const secondUrlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json?dup=1")');
+    await expect(secondUrlItem).toBeVisible({ timeout: 10000 });
+    await expect(refreshAllBtn).not.toBeVisible();
+
+    // Add third URL to trigger "Refresh All" button visibility (> 2 URLs)
+    await specUrlInput.fill('http://127.0.0.1:8788/swagger.json?dup=2');
+    await addUrlBtn.click();
+
+    // Wait for the third URL to appear in the list
+    const thirdUrlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json?dup=2")');
+    await expect(thirdUrlItem).toBeVisible({ timeout: 10000 });
+
+    // Verify "Refresh All" button is now visible
+    await expect(refreshAllBtn).toBeVisible();
+    await refreshAllBtn.click();
 
     // 6. Test file upload functionality
     const filePayload = {

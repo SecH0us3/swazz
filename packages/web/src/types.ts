@@ -150,6 +150,7 @@ export interface SwazzConfig {
     endpoints: EndpointConfig[];
     disabled_endpoints?: string[];
     _swagger_urls?: string[];
+    _swagger_metadata?: Record<string, { endpointCount: number; status: 'success' | 'error'; lastRefreshed?: string }>;
     wordlist_files?: Record<string, string>;
     auth_sequence?: AuthStep[];
     auth_identities?: Record<string, AuthIdentity>;
