@@ -8,6 +8,7 @@ import { UserSettings } from './UserSettings.js';
 import { ProjectSettings } from './ProjectSettings.js';
 import { HistoryPage } from './HistoryPage.js';
 import { LandingShowcase } from './LandingShowcase.js';
+import { ComparePage } from './ComparePage.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -48,7 +49,9 @@ export function MainWorkspace({
         historyStats,
         activeTab,
         heatmapFilter,
-        isRunning
+        isRunning,
+        compareRunIdA,
+        compareRunIdB
     } = useAppStore(useShallow(state => ({
         activeRunId: state.liveRunId,
         activeStats: state.stats,
@@ -57,7 +60,9 @@ export function MainWorkspace({
         historyStats: state.historyStats,
         activeTab: state.activeTab,
         heatmapFilter: state.heatmapFilter,
-        isRunning: state.isRunning
+        isRunning: state.isRunning,
+        compareRunIdA: state.compareRunIdA,
+        compareRunIdB: state.compareRunIdB
     })));
 
     const [isExportHovered, setIsExportHovered] = useState(false);
@@ -227,6 +232,18 @@ export function MainWorkspace({
                                 )}
                             </button>
                         )}
+                        {compareRunIdA && compareRunIdB && (
+                            <button
+                                className={`tab-bar-btn ${activeTab === 'compare' ? 'active' : ''}`}
+                                onClick={() => useAppStore.setState({ activeTab: 'compare' })}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <line x1="12" y1="3" x2="12" y2="21" />
+                                </svg>
+                                Compare Scans
+                            </button>
+                        )}
                         <div 
                             style={{ position: 'relative', display: 'inline-block' }}
                             onMouseEnter={() => setIsExportHovered(true)}
@@ -328,6 +345,13 @@ export function MainWorkspace({
                             runId={inspectorRunId}
                             queryResults={queryResults}
                             liveCount={liveCount}
+                            onSelectResult={handleSelectResult}
+                        />
+                    )}
+                    {activeTab === 'compare' && (
+                        <ComparePage
+                            runs={runs}
+                            queryResults={queryResults}
                             onSelectResult={handleSelectResult}
                         />
                     )}
