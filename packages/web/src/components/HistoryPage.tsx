@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import type { ScanRun } from '../hooks/useDb.js';
 import { useToast } from '../hooks/useToast.js';
@@ -35,6 +35,7 @@ export function HistoryPage({
     const fileInputRef = useRef<HTMLInputElement>(null);
     const loadedRunId = useAppStore(state => state.loadedRunId);
     const { showToast } = useToast();
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -153,6 +154,7 @@ export function HistoryPage({
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-default)' }}>
+                                <th className="history-checkbox-header"></th>
                                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ opacity: 0.8 }}>
@@ -186,6 +188,22 @@ export function HistoryPage({
                                         }}
                                         className="history-row"
                                     >
+                                        <td className="history-checkbox-cell">
+                                            <div className="history-checkbox-wrapper">
+                                                <input
+                                                    type="checkbox"
+                                                    className="premium-checkbox"
+                                                    checked={selectedIds.includes(r.id)}
+                                                    onChange={() => {
+                                                        setSelectedIds(prev =>
+                                                            prev.includes(r.id)
+                                                                ? prev.filter(id => id !== r.id)
+                                                                : [...prev, r.id]
+                                                        );
+                                                    }}
+                                                />
+                                            </div>
+                                        </td>
                                         <td style={{ padding: '16px', fontWeight: 500 }}>
                                             <span>{formatDate(r.startedAt)}</span>
                                         </td>
@@ -276,7 +294,12 @@ export function HistoryPage({
                                                 <button
                                                     className="btn btn-ghost btn-sm"
                                                     style={{ fontSize: '12px', padding: '4px 6px', color: 'var(--color-error)', display: 'inline-flex', alignItems: 'center' }}
-                                                    onClick={() => { if (confirm('Delete this scan history?')) onDeleteRun(r.id); }}
+                                                    onClick={() => {
+                                                        if (confirm('Delete this scan history?')) {
+                                                            onDeleteRun(r.id);
+                                                            setSelectedIds(prev => prev.filter(id => id !== r.id));
+                                                        }
+                                                    }}
                                                     title="Delete Scan Run"
                                                 >
                                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -290,6 +313,33 @@ export function HistoryPage({
                             })}
                         </tbody>
                     </table>
+                </div>
+            )}
+            {selectedIds.length === 2 && (
+                <div className="compare-bar">
+                    <span className="compare-bar-text">
+                        {selectedIds.length} scans selected for comparison
+                    </span>
+                    <div className="compare-bar-actions">
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setSelectedIds([])}
+                        >
+                            Clear
+                        </button>
+                        <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => {
+                                useAppStore.setState({
+                                    compareRunIdA: selectedIds[0],
+                                    compareRunIdB: selectedIds[1],
+                                    activeTab: 'compare'
+                                });
+                            }}
+                        >
+                            Compare Scans
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
