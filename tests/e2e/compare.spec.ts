@@ -56,7 +56,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     await expect(startBtn).toBeVisible({ timeout: 60000 });
 
     // 4. Navigate to Scan History
-    const historyBtn = page.locator('button:has-text("Scan History")');
+    const historyBtn = page.locator('button:has-text("History")');
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();
 

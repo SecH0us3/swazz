@@ -143,28 +143,6 @@ export function MainWorkspace({
                 <UserSettings />
             ) : activeTab === 'project_settings' ? (
                 <ProjectSettings />
-            ) : (activeTab !== 'history' && !hasActivity) ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="empty-state">
-                        <div className="empty-state-icon">⚡</div>
-                        <div className="empty-state-title">Ready to fuzz</div>
-                        <div className="empty-state-text">
-                            Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
-                        </div>
-                        <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                            <button
-                                className="btn btn-primary"
-                                style={{ padding: '8px 16px', fontSize: '14px' }}
-                                onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
-                            >
-                                Try Petstore Demo
-                            </button>
-                            <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
-                                Automatically loads endpoints and runs a quick fuzz test
-                            </div>
-                        </div>
-                    </div>
-                </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">
@@ -227,7 +205,7 @@ export function MainWorkspace({
                                 <circle cx="12" cy="12" r="10" />
                                 <polyline points="12 6 12 12 16 14" />
                             </svg>
-                            Scan History
+                            History
                             {runs.length > 0 && (
                                 <span className="tab-bar-count">{runs.length}</span>
                             )}
@@ -303,59 +281,7 @@ export function MainWorkspace({
                         </div>
                     </div>
 
-                    {activeTab === 'heatmap' && (
-                        <Dashboard
-                            stats={currentStats}
-                            endpointKeys={endpointKeys}
-                            heatmapFilter={heatmapFilter}
-                            onHeatmapFilter={(filter) => {
-                                useAppStore.setState({ heatmapFilter: filter });
-                                if (filter) useAppStore.setState({ activeTab: 'logs' });
-                            }}
-                            isRunning={isRunning}
-                        />
-                    )}
-                    {activeTab === 'logs' && (
-                        <Inspector
-                            runId={inspectorRunId}
-                            queryResults={queryResults}
-                            liveCount={liveCount}
-                            heatmapFilter={heatmapFilter}
-                            onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
-                            onSelectResult={handleSelectResult}
-                            onExport={() => handleExport(inspectorRunId, config.base_url)}
-                            config={config}
-                        />
-                    )}
-                    {isAnalysisEnabled && activeTab === 'findings' && (
-                        <Inspector
-                            runId={inspectorRunId}
-                            queryResults={queryResults}
-                            liveCount={liveCount}
-                            heatmapFilter={heatmapFilter}
-                            onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
-                            onSelectResult={handleSelectResult}
-                            onExport={() => handleExport(inspectorRunId, config.base_url)}
-                            findingsOnly={true}
-                            config={config}
-                        />
-                    )}
-                    {isAnalysisEnabled && activeTab === 'owasp' && (
-                        <OWASPTop10
-                            runId={inspectorRunId}
-                            queryResults={queryResults}
-                            liveCount={liveCount}
-                            onSelectResult={handleSelectResult}
-                        />
-                    )}
-                    {activeTab === 'compare' && (
-                        <ComparePage
-                            runs={runs}
-                            queryResults={queryResults}
-                            onSelectResult={handleSelectResult}
-                        />
-                    )}
-                    {activeTab === 'history' && (
+                    {activeTab === 'history' ? (
                         <HistoryPage 
                             runs={runs}
                             onLoadRun={(runId, importedRun) => {
@@ -368,6 +294,83 @@ export function MainWorkspace({
                             onExportHTML={handleExportHTML}
                             onExportMD={handleExportMD}
                         />
+                    ) : !hasActivity ? (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="empty-state">
+                                <div className="empty-state-icon">⚡</div>
+                                <div className="empty-state-title">Ready to fuzz</div>
+                                <div className="empty-state-text">
+                                    Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
+                                </div>
+                                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <button
+                                        className="btn btn-primary"
+                                        style={{ padding: '8px 16px', fontSize: '14px' }}
+                                        onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
+                                    >
+                                        Try Petstore Demo
+                                    </button>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
+                                        Automatically loads endpoints and runs a quick fuzz test
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {activeTab === 'heatmap' && (
+                                <Dashboard
+                                    stats={currentStats}
+                                    endpointKeys={endpointKeys}
+                                    heatmapFilter={heatmapFilter}
+                                    onHeatmapFilter={(filter) => {
+                                        useAppStore.setState({ heatmapFilter: filter });
+                                        if (filter) useAppStore.setState({ activeTab: 'logs' });
+                                    }}
+                                    isRunning={isRunning}
+                                />
+                            )}
+                            {activeTab === 'logs' && (
+                                <Inspector
+                                    runId={inspectorRunId}
+                                    queryResults={queryResults}
+                                    liveCount={liveCount}
+                                    heatmapFilter={heatmapFilter}
+                                    onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
+                                    onSelectResult={handleSelectResult}
+                                    onExport={() => handleExport(inspectorRunId, config.base_url)}
+                                    config={config}
+                                />
+                            )}
+                            {isAnalysisEnabled && activeTab === 'findings' && (
+                                <Inspector
+                                    runId={inspectorRunId}
+                                    queryResults={queryResults}
+                                    liveCount={liveCount}
+                                    heatmapFilter={heatmapFilter}
+                                    onClearHeatmapFilter={() => useAppStore.setState({ heatmapFilter: null })}
+                                    onSelectResult={handleSelectResult}
+                                    onExport={() => handleExport(inspectorRunId, config.base_url)}
+                                    findingsOnly={true}
+                                    config={config}
+                                />
+                            )}
+                            {isAnalysisEnabled && activeTab === 'owasp' && (
+                                <OWASPTop10
+                                    runId={inspectorRunId}
+                                    queryResults={queryResults}
+                                    liveCount={liveCount}
+                                    onSelectResult={handleSelectResult}
+                                />
+                            )}
+                            {activeTab === 'compare' && (
+                                <ComparePage
+                                    runs={runs}
+                                    queryResults={queryResults}
+                                    onSelectResult={handleSelectResult}
+                                />
+                            )}
+                        </>
                     )}
                 </div>
             )}

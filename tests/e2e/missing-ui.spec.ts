@@ -197,7 +197,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
   test('Scan History extra checks - CLI JSON Import, deleting scan runs, and report exports', async ({ page }) => {
     // Navigate to Scan History
-    const historyBtn = page.locator('button:has-text("Scan History")');
+    const historyBtn = page.locator('button:has-text("History")');
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();
 
