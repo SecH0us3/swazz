@@ -11,7 +11,16 @@ window.fetch = async (input, init) => {
     if (isApiRequest) {
         const newInit = { ...init };
         newInit.credentials = 'include';
-        return originalFetch(input, newInit);
+        const res = await originalFetch(input, newInit);
+        if (res.status === 401) {
+            const isAuthRoute = url.includes('/api/auth/login') || url.includes('/api/auth/register') || url.includes('/api/auth/guest');
+            if (!isAuthRoute) {
+                localStorage.removeItem('swazz_token');
+                sessionStorage.removeItem('swazz_guest');
+                window.location.reload();
+            }
+        }
+        return res;
     }
     return originalFetch(input, init);
 };
