@@ -93,7 +93,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = c.req.param('id');
     const body = await c.req.json();
   
-    const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command', 'auto_fix_rules'];
+    const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command', 'auto_fix_rules', 'member_session_timeout'];
     const setClauses: string[] = [];
     const values: any[] = [];
     

@@ -5,6 +5,8 @@ import { Env } from "./env";
 import app from "./index";
 import { cleanupScheduledDeletions } from "./utils/cleanup";
 import { splitSql } from "./splitSql";
+import { ulid } from "ulidx";
+import { sign } from "hono/jwt";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -2426,6 +2428,65 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         }), testEnv);
         expect(res.status).toBe(403);
       });
+    });
+  });
+
+  describe("Project Custom Session Expiration", () => {
+    let projectId: string;
+    let userId: string;
+    let expiredToken: string;
+    let validToken: string;
+
+    beforeAll(async () => {
+      projectId = ulid();
+      userId = ulid();
+      
+      // Insert user, project with 1 second session timeout, and membership
+      await testEnv.DB.batch([
+        testEnv.DB.prepare("INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)").bind(userId, "timeoutuser", "hash"),
+        testEnv.DB.prepare("INSERT INTO projects (id, name, description, member_session_timeout) VALUES (?, ?, ?, ?)")
+          .bind(projectId, "Timeout Project", "Desc", 1), // 1 second timeout
+        testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userId),
+        testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userId)
+      ]);
+
+      // Sign expired token (iat: current time - 5 seconds, exp: far future)
+      const expiredPayload = {
+        sub: userId,
+        iat: Math.floor(Date.now() / 1000) - 5,
+        exp: Math.floor(Date.now() / 1000) + 3600
+      };
+      expiredToken = await sign(expiredPayload, 'test-secret');
+
+      // Sign valid token (iat: current time, exp: far future)
+      const validPayload = {
+        sub: userId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600
+      };
+      validToken = await sign(validPayload, 'test-secret');
+    });
+
+    it("allows request to project-scoped endpoints with a valid active session", async () => {
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/config`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${validToken}`
+        }
+      }), testEnv);
+      expect(res.status).not.toBe(401);
+    });
+
+    it("rejects request to project-scoped endpoints if session age exceeds member_session_timeout", async () => {
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/config`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${expiredToken}`
+        }
+      }), testEnv);
+      expect(res.status).toBe(401);
+      const body = await res.json() as any;
+      expect(body.error).toContain("Session expired");
     });
   });
 });

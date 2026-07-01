@@ -117,16 +117,16 @@ export function StatsBar({ stats, isRunning }: Props) {
                         <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
                     </div>
                     <div className="progress-meta">
-                        <span className="progress-pct">{pct}%</span>
-                        <span className="progress-label">
+                        <span className="badge badge-pct">{pct}%</span>
+                        <span className="badge badge-endpoints">
                             {completedEndpoints}/{totalEndpoints} endpoints
-                            {currentEndpoint ? (
-                                <> · <span className="progress-current">
-                                    {currentProfile && <span className="progress-profile">{currentProfile}</span>}
-                                    {currentEndpoint}
-                                </span></>
-                            ) : null}
                         </span>
+                        {currentProfile && (
+                            <span className="badge badge-profile">{currentProfile}</span>
+                        )}
+                        {currentEndpoint && (
+                            <span className="progress-current">{currentEndpoint}</span>
+                        )}
                     </div>
                 </div>
             )}

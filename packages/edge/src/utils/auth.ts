@@ -65,7 +65,12 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
     return null;
   }
   try {
-    const decoded = await verify(token, secret, "HS256");
+    const cachedPayload = c.get('jwtPayload' as any);
+    let decoded = cachedPayload;
+    if (!decoded) {
+      decoded = await verify(token, secret, "HS256");
+      c.set('jwtPayload' as any, decoded);
+    }
     if (!decoded || !decoded.sub) {
       return null;
     }
@@ -249,6 +254,37 @@ export async function resetLoginAttempts(db: D1Database, username: string): Prom
     .run();
 }
 
+export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<number | null> {
+  let token = null;
+  const authHeader = c.req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else {
+    token = c.req.query('token');
+  }
+  if (!token) return null;
+  
+  if (token.startsWith('swazz_live_')) {
+    return null;
+  }
+  
+  const secret = c.env.JWT_SECRET;
+  if (!secret) return null;
+  
+  try {
+    const cachedPayload = c.get('jwtPayload' as any);
+    let decoded = cachedPayload;
+    if (!decoded) {
+      decoded = await verify(token, secret, "HS256");
+      c.set('jwtPayload' as any, decoded);
+    }
+    if (decoded && typeof decoded === 'object' && 'iat' in decoded) {
+      return Number(decoded.iat);
+    }
+  } catch {}
+  return null;
+}
+
 export async function checkProjectMembership(c: Context<{ Bindings: Env }>, projectId: string, userId: string, requiredRole?: string): Promise<{ authorized: boolean; error?: any }> {
   const member = await c.env.DB.prepare(
     'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
@@ -258,6 +294,24 @@ export async function checkProjectMembership(c: Context<{ Bindings: Env }>, proj
 
   if (!member) return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
   if (requiredRole && member.role !== requiredRole) return { authorized: false, error: c.json({ error: 'Forbidden: Owner role required' }, 403) };
+
+  try {
+    const project = await c.env.DB.prepare(
+      'SELECT member_session_timeout FROM projects WHERE id = ?'
+    ).bind(projectId).first<{ member_session_timeout: number | null }>();
+
+    if (project && project.member_session_timeout && project.member_session_timeout > 0) {
+      const iat = await getSessionIat(c);
+      if (iat) {
+        const elapsed = Math.floor(Date.now() / 1000) - iat;
+        if (elapsed > project.member_session_timeout) {
+          return { authorized: false, error: c.json({ error: 'Session expired: Project requires re-authentication' }, 401) };
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to validate project session timeout in checkProjectMembership:", err);
+  }
   
   return { authorized: true };
 }
