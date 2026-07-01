@@ -45,7 +45,9 @@ function formatDuration(start: number, end: number): string {
 function getCoverage(run: ScanRun | undefined): number {
     if (!run || !run.stats || !run.stats.progress) return 0;
     const { completedEndpoints, totalEndpoints } = run.stats.progress;
-    if (!totalEndpoints) return 0;
+    if (typeof completedEndpoints !== 'number') throw new TypeError('completedEndpoints must be a number');
+    if (typeof totalEndpoints !== 'number') throw new TypeError('totalEndpoints must be a number');
+    if (totalEndpoints <= 0) return 0;
     return (completedEndpoints / totalEndpoints) * 100;
 }
 
@@ -54,6 +56,7 @@ function getStatusCounts(run: ScanRun | undefined) {
     if (!run || !run.stats || !run.stats.statusCounts) return counts;
     for (const [codeStr, count] of Object.entries(run.stats.statusCounts)) {
         const code = parseInt(codeStr, 10);
+        if (typeof count !== 'number') throw new TypeError('count must be a number');
         if (code >= 200 && code < 300) counts['2xx'] += count;
         else if (code >= 400 && code < 500) counts['4xx'] += count;
         else if (code >= 500 && code < 600) counts['5xx'] += count;

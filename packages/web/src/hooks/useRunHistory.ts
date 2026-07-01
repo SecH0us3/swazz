@@ -36,7 +36,7 @@ export function useRunHistory({ runs, queryResults, getRunResults, deleteRun, sh
             useAppStore.setState({
                 compareRunIdA: null,
                 compareRunIdB: null,
-                activeTab: state.activeTab === 'compare' ? 'heatmap' : state.activeTab
+                activeTab: state.activeTab === 'compare' ? 'history' : state.activeTab
             });
         }
         showToast('Run deleted', 'success');
