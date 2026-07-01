@@ -96,7 +96,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       await c.env.DB.batch([
         c.env.DB.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
           .bind(usernameHash),
-        c.env.DB.prepare('INSERT INTO users (id, username, password_hash, api_key, email) VALUES (?, ?, ?, ?, ?)')
+        c.env.DB.prepare("INSERT INTO users (id, username, password_hash, api_key, email, plan) VALUES (?, ?, ?, ?, ?, 'Free')")
           .bind(id, username, hash, apiKey, email),
         c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
@@ -247,7 +247,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     try {
       await c.env.DB.batch([
         c.env.DB.prepare(
-          "INSERT INTO users (id, username, password_hash, api_key, is_guest, expires_at) VALUES (?, ?, ?, ?, 1, datetime('now', '+1 day'))"
+          "INSERT INTO users (id, username, password_hash, api_key, is_guest, expires_at, plan) VALUES (?, ?, ?, ?, 1, datetime('now', '+1 day'), 'Free')"
         ).bind(id, username, hash, apiKey),
         c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
@@ -289,9 +289,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled FROM users WHERE id = ?')
+      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan FROM users WHERE id = ?')
         .bind(decoded.sub)
-        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null; two_factor_enabled: number }>();
+        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null; two_factor_enabled: number; plan: string | null }>();
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -310,7 +310,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         public_key: user.public_key,
         is_guest: user.is_guest === 1,
         delete_requested_at: user.delete_requested_at,
-        two_factor_enabled: user.two_factor_enabled === 1
+        two_factor_enabled: user.two_factor_enabled === 1,
+        plan: user.plan || 'Free'
       });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);
@@ -1066,5 +1067,39 @@ app.delete('/api/auth/passkeys/:id', async (c) => {
   const { success } = await c.env.DB.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').bind(id, userId).run();
   if (!success) return c.json({ error: 'Failed to delete' }, 500);
   return c.json({ status: 'ok' });
+});
+
+app.post('/api/admin/users/plan', async (c) => {
+  const adminSecret = c.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    return c.json({ error: 'Unauthorized: Admin secret is not configured' }, 401);
+  }
+
+  const authHeader = c.req.header('X-Admin-Secret') || c.req.header('Authorization');
+  const providedSecret = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+
+  if (providedSecret !== adminSecret) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const body = await c.req.json();
+  const { username, plan } = body;
+  if (!username || !plan) {
+    return c.json({ error: 'Missing username or plan' }, 400);
+  }
+
+  if (plan !== 'Free' && plan !== 'Supporter Plan') {
+    return c.json({ error: 'Invalid plan. Allowed plans: Free, Supporter Plan' }, 400);
+  }
+
+  const result = await c.env.DB.prepare('UPDATE users SET plan = ? WHERE username = ?')
+    .bind(plan, username)
+    .run();
+
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'User not found' }, 404);
+  }
+
+  return c.json({ status: 'ok', username, plan });
 });
 }

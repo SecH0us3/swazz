@@ -168,8 +168,12 @@ func startAgent(args []string) {
 		HTTPHeader:   headers,
 	}
 
-	c, _, err := websocket.Dial(ctx, urlWithParams, opts)
+	c, resp, err := websocket.Dial(ctx, urlWithParams, opts)
 	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			logError("Critical Authentication Error: Unauthorized/Forbidden (Status Code: %d). Revoked or invalid credentials. Terminating agent process.", resp.StatusCode)
+			os.Exit(1)
+		}
 		log.Fatalf("Failed to connect to coordinator: %v", err)
 	}
 	defer c.Close(websocket.StatusInternalError, "internal error")
@@ -215,7 +219,8 @@ func startAgent(args []string) {
 		if authResult.Type == "auth_ok" {
 			logInfo("✓ Authentication successful!")
 		} else {
-			log.Fatalf("✗ Authentication failed: %s", authResult.Error)
+			logError("Critical Authentication Error: Handshake authentication failed: %s", authResult.Error)
+			os.Exit(1)
 		}
 	}
 

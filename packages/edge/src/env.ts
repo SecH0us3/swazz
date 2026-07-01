@@ -12,6 +12,7 @@ export interface Env {
   LIMIT_ANONYMOUS?: string; // 'true' | 'false'
   ALLOWED_ORIGINS?: string; // Comma-separated list of origins
   VERSION?: string;
+  ADMIN_SECRET?: string;
   SCAN_QUEUE: Queue<any>;
   FINDINGS_QUEUE: Queue<any>;
 }

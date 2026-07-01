@@ -260,8 +260,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Finding not found' }, 404);
     }
 
-    const userId = await getUserIdFromRequest(c);
-    if (userId) {
+    if (c.env.AUTH_ENABLED === 'true') {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
       const hasAccess = await checkPermission(c.env, userId, row.project_id, 'get:/api/projects/:id/scans');
       if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
     }
@@ -284,8 +287,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Finding not found' }, 404);
     }
 
-    const userId = await getUserIdFromRequest(c);
-    if (userId) {
+    if (c.env.AUTH_ENABLED === 'true') {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
       const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
     }

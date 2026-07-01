@@ -34,28 +34,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
-- [x] **Task 67: Restart Runner Agent Command in Web UI**
-  - **Design Goal:** Allow remote management of runners by providing a button in the Web UI dashboard to restart connected runner agent processes.
-
 - [ ] **Task 68: Agent Update Notifications**
   - **Design Goal:** Automatically check and notify administrators in the dashboard logs when connected Go runner agents are running outdated versions.
 
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
-
-- [ ] **Task 75: Runner Token Rotation and Automatic Safety Shutdown**
-  - **Design Goal:** Secure runner agent connections by supporting token rotation. If a runner's credentials are revoked or become invalid, the runner agent process must fail/exit immediately to prevent unauthorized loops.
-  - **Implementation Details:**
-    - Update the runner agent CLI command (`run-agent` in Go) to detect authentication failure responses (such as `401 Unauthorized`).
-    - Instead of retrying connection loops indefinitely, print a critical error message and terminate the process with a non-zero exit code.
-
-- [ ] **Task 76: AI-Based Findings Analysis with Local Repository Context**
-  - **Design Goal:** Automatically analyze and explain discovered vulnerabilities by correlating finding routes and parameters with the client's local repository code using AI (Claude or Antigravity).
-  - **Implementation Details:**
-    - Extend the CLI with an analysis mode (e.g., `--analyze-repo <path>`) that clones/reads the target repository.
-    - Build a fast pre-indexing system in the CLI to scan the files beforehand for quick symbol and path lookup.
-    - Allow users to configure instructions (prompts) specifying what vulnerabilities to prioritize and where to look.
-    - Match endpoint routes from findings to file paths, retrieve relevant code context, and invoke the LLM to output remediation steps.
 
 - [ ] **Task 77: Dynamic Analytics Dashboard**
   - **Design Goal:** Provide visual insights into fuzzing history, vulnerability trends, and runner performance over time in a dynamic dashboard.
@@ -63,17 +46,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add an Analytics tab/page in the Web UI dashboard.
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
-
-- [x] **Task 87: Project Invitations and Collaboration (via Email/Username)**
-  - **Design Goal:** Enable multi-user collaboration inside projects by allowing project owners to invite other users to join their projects with structured Role-Based Access Control (RBAC).
-  - **Implementation Details:**
-    - Define a formal permission set mapping combinations of HTTP Verbs and Endpoint paths (e.g., `READ: /api/projects/:id/runs`, `WRITE: /api/projects/:id/settings`).
-    - Define roles (e.g., Owner, Editor, Viewer) as collections of these verb+endpoint permission items.
-    - Create a project member invitation schema and endpoints (`POST /api/projects/:id/invitations`).
-    - Support inviting users directly by email (sending an invitation code or registration link) or by username, assigning them a target role.
-    - Implement an invitation state machine (Pending, Accepted, Expired, Revoked) in the database.
-    - Validate permissions on the edge coordinator using the RBAC mapping during API requests.
-    - Update frontend Settings screen to display a "Members" tab listing active members, pending invitations, and options to invite new users or manage member roles.
 
 
 - [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
@@ -83,13 +55,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a tokenized forgot password flow: send recovery links/tokens via email, verifying them at `/api/auth/password/reset`.
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
-
-- [ ] **Task 94: Support Billing Plans & Admin Plan Management**
-  - **Design Goal:** Support billing plans (Free by default) and allow manual plan upgrades/downgrades to "Supporter Plan" by administrators.
-  - **Implementation Details:**
-    - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
-    - Set the default plan to 'Free' during new user registration in the Edge Coordinator.
-    - Implement a mechanism (database script or coordinator admin endpoint) for manually updating user plans to 'Supporter Plan'.
 
 - [ ] **Task 95: Implement GitHub OAuth Authentication**
   - **Design Goal:** Allow users to log in or register using their GitHub accounts.
@@ -139,12 +104,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Move the GitHub link and the hotkeys help menu to the footer.
     - Create an "About the project" page and add a link to it in the footer.
 
-- [x] **Task 104: UI/UX Right Column Cleanup**
-  - **Design Goal:** Review and declutter the right-hand column/sidebar of the UI.
-  - **Implementation Details:**
-    - Identify controls in the right column that are redundant or rarely used.
-    - Move these rarely used controls exclusively to the Project Settings page to streamline the main workspace view.
-
 - [ ] **Task 106: Streamline Scan Progress Header Panel**
   - **Design Goal:** Reduce the height of the top header panel that displays the scan progress, as it currently consumes too much vertical space.
   - **Implementation Details:**
@@ -169,16 +128,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Design Goal:** Enforce strict RBAC constraints on guest/viewer roles, disabling member and role modification permissions in both the UI elements and the Edge coordinator API.
   - **Implementation Details:**
     - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
-
-- [ ] **Task 111: Fix Logo Alignment in Authenticated Header**
-  - **Design Goal:** Adjust header layout alignments to fix the logo image displacement that occurs when a user is logged in.
-  - **Implementation Details:**
-    - Fix the CSS styling rules in the header component for logo placement under authenticated user states.
-
-
-
-
-
 
 
 

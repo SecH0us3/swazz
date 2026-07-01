@@ -41,6 +41,7 @@ app.use('/api/*', async (c, next) => {
     path === '/api/version' ||
     path === '/api/payload-catalog' ||
     path.startsWith('/api/auth/') ||
+    path.startsWith('/api/admin/') ||
     path === '/api/runners/connect' ||
     (path.startsWith('/api/scans/') && path.endsWith('/upload'))
   ) {
