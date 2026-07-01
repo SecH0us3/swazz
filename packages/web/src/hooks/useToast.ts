@@ -27,3 +27,8 @@ export function useToast() {
 
     return { toasts, showToast, dismissToast };
 }
+
+export function resetToasts() {
+    globalToasts = [];
+    listeners.clear();
+}
