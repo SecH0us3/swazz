@@ -44,8 +44,16 @@ export function useFuzzSession({
                 );
                 allEndpoints = allEndpoints.concat(endpoints);
                 if (!detectedBaseUrl && basePath) {
+                    let cleanUrl = basePath.trim();
+                    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                        if (cleanUrl.startsWith('localhost') || cleanUrl.startsWith('127.0.0.1') || cleanUrl.startsWith('0.0.0.0')) {
+                            cleanUrl = `http://${cleanUrl}`;
+                        } else if (cleanUrl.includes('.') || cleanUrl.includes(':')) {
+                            cleanUrl = `https://${cleanUrl}`;
+                        }
+                    }
                     try {
-                        const u = new URL(basePath);
+                        const u = new URL(cleanUrl);
                         detectedBaseUrl = u.origin;
                     } catch {
                         detectedBaseUrl = basePath;
@@ -91,6 +99,13 @@ export function useFuzzSession({
         if (finalBaseUrl) {
             let cleanUrl = finalBaseUrl.trim();
             if (cleanUrl) {
+                if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                    if (cleanUrl.startsWith('localhost') || cleanUrl.startsWith('127.0.0.1') || cleanUrl.startsWith('0.0.0.0')) {
+                        cleanUrl = `http://${cleanUrl}`;
+                    } else {
+                        cleanUrl = `https://${cleanUrl}`;
+                    }
+                }
                 try {
                     const u = new URL(cleanUrl);
                     cleanUrl = u.origin;
