@@ -274,7 +274,6 @@ export function ComparePage({ runs, queryResults, onSelectResult }: ComparePageP
 
     const handleViewInInspector = (result: ResultSummary) => {
         onSelectResult(result);
-        useAppStore.setState({ activeTab: 'logs' });
     };
 
     if (!compareRunIdA || !compareRunIdB) {
