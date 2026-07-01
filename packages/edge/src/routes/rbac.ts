@@ -6,6 +6,19 @@ import { ulid } from 'ulidx';
 import { getUserIdFromRequest } from '../utils/auth';
 import { invalidateUserRBAC, invalidateProjectRBAC } from '../utils/rbac';
 
+async function verifyNotGuest(c: any): Promise<Response | null> {
+  const userId = await getUserIdFromRequest(c);
+  if (userId) {
+    const user = await c.env.DB.prepare('SELECT is_guest FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ is_guest: number | null }>();
+    if (user && user.is_guest === 1) {
+      return c.json({ error: 'Forbidden: Guest accounts cannot modify members or roles.' }, 403);
+    }
+  }
+  return null;
+}
+
 export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   
   app.get('/api/projects/:id/permissions', requirePermission('get:/api/projects/:id'), async (c) => {
@@ -48,6 +61,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), async (c) => {
+    const guestCheck = await verifyNotGuest(c);
+    if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
     const body = await c.req.json();
     const roleId = 'c_' + ulid();
@@ -163,6 +178,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), async (c) => {
+    const guestCheck = await verifyNotGuest(c);
+    if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
     const memberId = (c.req.param('user_id') as string);
     const body = await c.req.json(); // { roles: [] }
@@ -240,6 +257,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), async (c) => {
+    const guestCheck = await verifyNotGuest(c);
+    if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
     const memberId = (c.req.param('user_id') as string);
 
@@ -290,6 +309,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), async (c) => {
+    const guestCheck = await verifyNotGuest(c);
+    if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
     const roleId = c.req.param('role_id') as string;
     const body = await c.req.json(); // { name, permissions: [], included_roles: [] }
@@ -354,6 +375,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
   app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), async (c) => {
+    const guestCheck = await verifyNotGuest(c);
+    if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
     const roleId = c.req.param('role_id') as string;
 
@@ -395,6 +418,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
 
 
   app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), async (c) => {
+    const guestCheck = await verifyNotGuest(c);
+    if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
     const body = await c.req.json(); // { username, email, roles: [] }
     

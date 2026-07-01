@@ -1,17 +1,34 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { ToastData } from '../components/Toast/Toast.js';
 
+let globalToasts: ToastData[] = [];
+const listeners = new Set<(toasts: ToastData[]) => void>();
+
 export function useToast() {
-    const [toasts, setToasts] = useState<ToastData[]>([]);
+    const [toasts, setToasts] = useState<ToastData[]>(globalToasts);
+
+    useEffect(() => {
+        listeners.add(setToasts);
+        return () => {
+            listeners.delete(setToasts);
+        };
+    }, []);
 
     const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
         const id = Date.now();
-        setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
+        globalToasts = [...globalToasts.slice(-4), { id, message, type }];
+        listeners.forEach((listener) => listener(globalToasts));
     }, []);
 
     const dismissToast = useCallback((id: number) => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
+        globalToasts = globalToasts.filter((t) => t.id !== id);
+        listeners.forEach((listener) => listener(globalToasts));
     }, []);
 
     return { toasts, showToast, dismissToast };
+}
+
+export function resetToasts() {
+    globalToasts = [];
+    listeners.clear();
 }

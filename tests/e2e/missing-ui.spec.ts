@@ -361,7 +361,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await requestUrlInput.fill(tamperedUrl);
 
     // Click the Replay button
-    const replayBtn = page.locator('button:has-text("Replay")');
+    const replayBtn = page.locator('#btn-replay');
     await expect(replayBtn).toBeVisible();
     await replayBtn.click();
 

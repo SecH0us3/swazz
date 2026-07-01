@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useToast } from './useToast.js';
+import { useToast, resetToasts } from './useToast.js';
 
 describe('useToast', () => {
     beforeEach(() => {
+        resetToasts();
         vi.useFakeTimers();
     });
 

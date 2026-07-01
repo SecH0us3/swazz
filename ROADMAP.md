@@ -94,16 +94,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
 
-- [ ] **Task 109: Project Settings API Specifications Sub-Tab**
-  - **Design Goal:** Duplicate API specs configurations and import tools directly into the project settings menu for improved target configuration.
-  - **Implementation Details:**
-    - Add a sub-tab under Project Settings to view, edit, and upload API specs (Swagger/HAR/Postman).
-
-- [ ] **Task 110: RBAC Guest Role Restrictive Policy**
-  - **Design Goal:** Enforce strict RBAC constraints on guest/viewer roles, disabling member and role modification permissions in both the UI elements and the Edge coordinator API.
-  - **Implementation Details:**
-    - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
-
 
 
 - [ ] **Task 80: AI Remediation Stack & Rule Autocompletion UI**

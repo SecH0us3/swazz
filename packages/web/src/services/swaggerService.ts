@@ -38,3 +38,36 @@ export async function loadSwaggerUrl(
         cachedAt: data.cachedAt,
     };
 }
+
+export async function parseRawSpec(
+    rawSpec: string,
+): Promise<{ basePath: string; endpointCount: number; endpoints: any[] }> {
+    const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+    if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    const csrfToken = useAppStore.getState().csrfToken;
+    if (csrfToken) {
+        requestHeaders['X-CSRF-Token'] = csrfToken;
+    }
+
+    const res = await fetch(`${PROXY_URL}/api/parse`, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify({ rawSpec }),
+    });
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `Failed to parse spec: ${res.status}`);
+    }
+
+    const data = await res.json();
+    return {
+        basePath: data.basePath,
+        endpointCount: data.endpoints.length,
+        endpoints: data.endpoints,
+    };
+}
+

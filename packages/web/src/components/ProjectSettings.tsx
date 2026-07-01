@@ -10,6 +10,7 @@ import { RawConfigTab } from './ProjectSettings/RawConfigTab.js';
 import { AiRemediationTab } from './ProjectSettings/AiRemediationTab.js';
 import { MembersRolesTab } from './ProjectSettings/MembersRolesTab.js';
 import { DictionariesTab } from './ProjectSettings/DictionariesTab.js';
+import { ApiSpecsTab } from './ProjectSettings/ApiSpecsTab.js';
 
 interface Runner {
     connectionId: string | null;
@@ -22,7 +23,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'raw_config'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'raw_config'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -117,6 +118,15 @@ export function ProjectSettings() {
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                         Members & Roles
+                    </button>
+                    <button
+                        className={`tab-bar-btn ${activeSubTab === 'api_specs' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('api_specs')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                        </svg>
+                        API Specifications
                     </button>
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'performance' ? 'active' : ''}`}
@@ -218,6 +228,7 @@ export function ProjectSettings() {
                 <div className="project-settings-content">
                     {activeSubTab === 'general' && <GeneralTab />}
                     {activeSubTab === 'members' && <MembersRolesTab />}
+                    {activeSubTab === 'api_specs' && <ApiSpecsTab />}
                     {activeSubTab === 'performance' && <PerformanceTab />}
                     {activeSubTab === 'anomalies' && <AnomaliesTab />}
                     {activeSubTab === 'wordlists' && <WordlistsTab />}

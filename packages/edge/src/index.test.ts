@@ -2489,4 +2489,67 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(body.error).toContain("Session expired");
     });
   });
+
+  describe("RBAC Guest user write restrictions", () => {
+    let guestToken: string;
+    let projectId: string;
+
+    beforeEach(async () => {
+      projectId = "p_" + ulid();
+      const guestUserId = "user-guest-" + ulid();
+      const guestUsername = "guest_" + ulid().toLowerCase();
+      // Insert guest user
+      await testEnv.DB.batch([
+        testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, is_guest) VALUES (?, ?, 'hash', 1)").bind(guestUserId, guestUsername),
+        testEnv.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Guest Proj', '')").bind(projectId),
+        testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, guestUserId)
+      ]);
+
+      const payload = {
+        sub: guestUserId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600
+      };
+      guestToken = await sign(payload, 'test-secret');
+    });
+
+    it("rejects guest user attempting to create custom roles", async () => {
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/roles`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${guestToken}`
+        },
+        body: JSON.stringify({ name: "Custom Auditor", permissions: ["get:/api/projects/:id"] })
+      }), testEnv);
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
+    });
+
+    it("rejects guest user attempting to invite members", async () => {
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/invitations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${guestToken}`
+        },
+        body: JSON.stringify({ email: "test@example.com", roles: ["viewer"] })
+      }), testEnv);
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
+    });
+
+    it("rejects guest user attempting to modify member roles", async () => {
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/members/some-user`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${guestToken}`
+        },
+        body: JSON.stringify({ roles: ["editor"] })
+      }), testEnv);
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
+    });
+  });
 });
