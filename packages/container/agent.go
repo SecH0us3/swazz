@@ -441,7 +441,8 @@ func startAgent(args []string) {
 
 		case "parse_request":
 			var reqPayload struct {
-				URL string `json:"url"`
+				URL     string `json:"url"`
+				RawSpec string `json:"rawSpec"`
 			}
 			if err := json.Unmarshal(wsMsg.Payload, &reqPayload); err != nil {
 				logError("Failed to unmarshal parse_request payload: %v", err)
@@ -449,31 +450,38 @@ func startAgent(args []string) {
 			}
 			reqID := wsMsg.ReqID
 
-			logInfo("[Parser] Received parse request for URL: %s", reqPayload.URL)
+			logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v", reqPayload.URL, reqPayload.RawSpec != "")
 			go func() {
-				// Parse swagger
 				var result interface{}
-				
-				client := safenet.NewSafeHTTPClient(15 * time.Second)
-				resp, err := client.Get(reqPayload.URL)
+				var data []byte
+				var err error
+
+				if reqPayload.RawSpec != "" {
+					data = []byte(reqPayload.RawSpec)
+				} else if reqPayload.URL != "" {
+					client := safenet.NewSafeHTTPClient(15 * time.Second)
+					resp, errFetch := client.Get(reqPayload.URL)
+					if errFetch != nil {
+						logError("[Parser] Failed to fetch spec: %v", errFetch)
+						err = errFetch
+					} else {
+						defer resp.Body.Close()
+						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
+						data, err = io.ReadAll(limitReader)
+						if err == nil && len(data) > 10*1024*1024 {
+							err = fmt.Errorf("specification file exceeds the 10MB limit")
+						}
+					}
+				} else {
+					err = fmt.Errorf("missing url or rawSpec")
+				}
+
 				if err != nil {
-					logError("[Parser] Failed to fetch spec: %v", err)
 					result = map[string]string{"error": err.Error()}
 				} else {
-					defer resp.Body.Close()
-					// Limit spec reading to 10MB + 1 byte to detect truncation
-					limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
-					data, err := io.ReadAll(limitReader)
-					if err != nil {
-						logError("[Parser] Failed to read spec body: %v", err)
-						result = map[string]string{"error": err.Error()}
-					} else if len(data) > 10*1024*1024 {
-						logError("[Parser] Spec exceeds 10MB limit")
-						result = map[string]string{"error": "specification file exceeds the 10MB limit"}
-					} else {
-						var parseResult *swagger.ParseResult
-						var parseErr error
-						parseResult, parseErr = swagger.ParseRawSpec(data)
+					var parseResult *swagger.ParseResult
+					var parseErr error
+					parseResult, parseErr = swagger.ParseRawSpec(data)
 						if parseErr != nil {
 							originalErr := parseErr
 							if swagger.IsHAR(data) {
@@ -519,7 +527,6 @@ func startAgent(args []string) {
 							}
 						}
 					}
-				}
 
 				msgPayload := map[string]interface{}{
 					"type":    "parse_result",

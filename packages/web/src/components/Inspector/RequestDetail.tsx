@@ -409,7 +409,7 @@ export function RequestDetail({
                             }
                             return null;
                         })()}
-                        <button className="btn btn-primary" onClick={handleReplay} disabled={isReplaying}>
+                        <button id="btn-replay" className="btn btn-primary" onClick={handleReplay} disabled={isReplaying}>
                             {isReplaying ? '↺ Sending...' : '↺ Replay'}
                         </button>
                         <button className="btn btn-icon" onClick={onClose} aria-label="Close" title="Close (Esc)">✕</button>

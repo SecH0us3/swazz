@@ -138,6 +138,10 @@ export function useRunner(proxyUrl: string) {
             if (csrfToken) {
                 requestHeaders['X-CSRF-Token'] = csrfToken;
             }
+            const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+            if (token) {
+                requestHeaders['Authorization'] = `Bearer ${token}`;
+            }
             const res = await fetch(`${proxyUrl}/api/proxy`, {
                 method: 'POST',
                 headers: requestHeaders,

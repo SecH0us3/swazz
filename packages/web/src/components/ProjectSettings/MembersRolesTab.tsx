@@ -240,10 +240,16 @@ export function MembersRolesTab() {
                 </div>
             </div>
 
+            {userProfile?.isGuest && (
+                <div className="rbac-warning-banner">
+                    <strong>Notice:</strong> Guest accounts are permitted to view existing access rights, but cannot invite members, edit roles, or modify permissions.
+                </div>
+            )}
+
             {view === 'members' && (
                 <>
                     <div className="rbac-action-bar">
-                        <button className="btn btn-primary" onClick={() => setIsInviteModalOpen(true)}>Invite User</button>
+                        <button className="btn btn-primary" onClick={() => setIsInviteModalOpen(true)} disabled={userProfile?.isGuest}>Invite User</button>
                     </div>
                     <table className="rbac-table">
                         <thead>
@@ -270,8 +276,8 @@ export function MembersRolesTab() {
                                         <div className="rbac-actions-group">
                                             {m.username !== userProfile?.username && (
                                                 <>
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEditMemberModal(m)}>Edit Roles</button>
-                                                    <button className="btn btn-danger btn-sm" onClick={() => handleRemoveMember(m.id)}>Remove</button>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEditMemberModal(m)} disabled={userProfile?.isGuest}>Edit Roles</button>
+                                                    <button className="btn btn-danger btn-sm" onClick={() => handleRemoveMember(m.id)} disabled={userProfile?.isGuest}>Remove</button>
                                                 </>
                                             )}
                                         </div>
@@ -291,7 +297,7 @@ export function MembersRolesTab() {
             {view === 'roles' && (
                 <>
                     <div className="rbac-action-bar">
-                        <button className="btn btn-primary" onClick={() => setIsRoleModalOpen(true)}>Create Custom Role</button>
+                        <button className="btn btn-primary" onClick={() => setIsRoleModalOpen(true)} disabled={userProfile?.isGuest}>Create Custom Role</button>
                     </div>
                     <div className="rbac-roles-grid">
                         {roles.map(r => (
@@ -302,8 +308,8 @@ export function MembersRolesTab() {
                                         <span className="rbac-role-default-badge">Default</span>
                                     ) : (
                                         <div className="rbac-role-actions">
-                                            <button className="btn btn-ghost btn-sm rbac-role-btn" onClick={() => handleOpenEditRoleModal(r)}>Edit</button>
-                                            <button className="btn btn-danger btn-sm rbac-role-btn" onClick={() => handleDeleteCustomRole(r.id)}>Delete</button>
+                                            <button className="btn btn-ghost btn-sm rbac-role-btn" onClick={() => handleOpenEditRoleModal(r)} disabled={userProfile?.isGuest}>Edit</button>
+                                            <button className="btn btn-danger btn-sm rbac-role-btn" onClick={() => handleDeleteCustomRole(r.id)} disabled={userProfile?.isGuest}>Delete</button>
                                         </div>
                                     )}
                                 </div>

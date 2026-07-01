@@ -182,18 +182,18 @@ export class RunnerCoordinator {
 
     
     if (url.pathname === '/parse') {
-      let body: { url: string; forceRebuild?: boolean; userPublicKey?: string } | null = null;
+      let body: { url?: string; rawSpec?: string; forceRebuild?: boolean; userPublicKey?: string } | null = null;
       try {
         const bodyText = await request.text();
         body = JSON.parse(bodyText);
       } catch (err) {
         return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
-      if (!body || !body.url) {
-        return new Response(JSON.stringify({ error: "Missing required parameter: url" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (!body || (!body.url && !body.rawSpec)) {
+        return new Response(JSON.stringify({ error: "Missing required parameter: url or rawSpec" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       
-      if (!body.forceRebuild) {
+      if (body.url && !body.forceRebuild) {
         try {
           const cached = await this.env.DB.prepare('SELECT base_path, endpoints_r2_key, fetched_at FROM swagger_cache WHERE url = ?')
             .bind(body.url)
@@ -219,7 +219,7 @@ export class RunnerCoordinator {
       const activeRunners = Array.from(this.runners);
       if (activeRunners.length === 0) return new Response(JSON.stringify({ error: "No active runners connected to Coordinator" }), { status: 503 });
       const reqId = ulid();
-      this.pendingParseUrls.set(reqId, body.url);
+      this.pendingParseUrls.set(reqId, body.url || 'rawSpec');
       
       // Prioritize picking the runner matching the user's public key
       let runnerWs = null;
@@ -235,7 +235,14 @@ export class RunnerCoordinator {
       }
 
       try {
-        runnerWs?.send(JSON.stringify({ type: 'parse_request', reqId, payload: { url: body.url } }));
+        runnerWs?.send(JSON.stringify({
+          type: 'parse_request',
+          reqId,
+          payload: {
+            url: body.url || '',
+            rawSpec: body.rawSpec || ''
+          }
+        }));
       } catch (err) {
         this.pendingParseUrls.delete(reqId);
         return new Response(JSON.stringify({ error: "Failed to send parse request to runner" }), { status: 500 });
@@ -566,7 +573,7 @@ export class RunnerCoordinator {
             this.pendingParses.delete(msg.reqId);
             
             // Background write to DB/R2
-            if (msg.payload && !msg.payload.error && urlStr) {
+            if (msg.payload && !msg.payload.error && urlStr && urlStr !== 'rawSpec') {
               const db = this.env.DB;
               const storage = this.env.STORAGE;
               
