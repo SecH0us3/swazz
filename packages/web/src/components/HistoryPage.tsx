@@ -191,9 +191,11 @@ export function HistoryPage({
                                         <td className="history-checkbox-cell">
                                             <div className="history-checkbox-wrapper">
                                                 <input
+                                                    id={`select-run-${r.id}`}
                                                     type="checkbox"
                                                     className="premium-checkbox"
                                                     checked={selectedIds.includes(r.id)}
+                                                    disabled={selectedIds.length >= 2 && !selectedIds.includes(r.id)}
                                                     onChange={() => {
                                                         setSelectedIds(prev =>
                                                             prev.includes(r.id)
@@ -322,12 +324,14 @@ export function HistoryPage({
                     </span>
                     <div className="compare-bar-actions">
                         <button
+                            id="compare-scans-clear-btn"
                             className="btn btn-ghost btn-sm"
                             onClick={() => setSelectedIds([])}
                         >
                             Clear
                         </button>
                         <button
+                            id="compare-scans-submit-btn"
                             className="btn btn-primary btn-sm"
                             onClick={() => {
                                 useAppStore.setState({
