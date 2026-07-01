@@ -106,6 +106,11 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Streamline layout and typography of the active scan header, merging metadata into compact badges.
 
+- [x] **Task 109: Project Settings API Specifications Sub-Tab**
+  - **Design Goal:** Duplicate API specs configurations and import tools directly into the project settings menu for improved target configuration.
+  - **Implementation Details:**
+    - Add a sub-tab under Project Settings to view, edit, and upload API specs (Swagger/HAR/Postman).
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
@@ -384,6 +389,11 @@ This file contains completed tasks.
     - Add a `plan` column (type TEXT, default 'Free') to the `users` table in the database schema.
     - Set the default plan to 'Free' during new user registration in the Edge Coordinator.
     - Implement a mechanism (database script or coordinator admin endpoint) for manually updating user plans to 'Supporter Plan'.
+
+- [x] **Task 110: RBAC Guest Role Restrictive Policy**
+  - **Design Goal:** Enforce strict RBAC constraints on guest/viewer roles, disabling member and role modification permissions in both the UI elements and the Edge coordinator API.
+  - **Implementation Details:**
+    - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
 
 ## 📦 Compatibility & Quality
 
