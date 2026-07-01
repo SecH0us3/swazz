@@ -103,9 +103,7 @@ export function ApiSpecsTab() {
                 config.cookies,
                 true
             );
-            const otherEndpoints = (config.endpoints || []).filter(ep => {
-                return true;
-            });
+            const otherEndpoints = config.endpoints || [];
             const combinedEndpoints = [...otherEndpoints, ...endpoints];
             const seen = new Set();
             const uniqueEndpoints = combinedEndpoints.filter(ep => {

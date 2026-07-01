@@ -115,6 +115,10 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     await expect(refreshAllBtn).toBeVisible();
     await refreshAllBtn.click();
 
+    // Wait for the Refresh All operation to complete
+    const successToast = page.locator('.toast:has-text("Refreshed all specs")');
+    await expect(successToast).toBeVisible({ timeout: 15000 });
+
     // 6. Test file upload functionality
     const filePayload = {
       swagger: "2.0",

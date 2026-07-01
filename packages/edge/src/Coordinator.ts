@@ -234,6 +234,11 @@ export class RunnerCoordinator {
         runnerWs = activeRunners.find(r => !this.isPrivateRunner(r)) || null;
       }
 
+      if (!runnerWs) {
+        this.pendingParseUrls.delete(reqId);
+        return new Response(JSON.stringify({ error: "No compatible runner connected to Coordinator" }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
+
       try {
         runnerWs?.send(JSON.stringify({
           type: 'parse_request',
