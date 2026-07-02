@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useTheme } from '../hooks/useTheme.js';
 import QRCode from 'qrcode';
@@ -36,9 +36,9 @@ export function UserSettings() {
     const [searchQuery, setSearchQuery] = useState('');
     const [levelFilter, setLevelFilter] = useState<'all' | 'info' | 'warn' | 'error' | 'debug'>('all');
     const [moduleFilter, setModuleFilter] = useState('');
-    const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
+    const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
-    const fetchLogs = async (secretToUse?: string) => {
+    const fetchLogs = useCallback(async (secretToUse?: string) => {
         const secret = secretToUse !== undefined ? secretToUse : adminSecret;
         if (!secret) {
             setLogs([]);
@@ -64,13 +64,13 @@ export function UserSettings() {
         } finally {
             setLogsLoading(false);
         }
-    };
+    }, [adminSecret]);
 
     useEffect(() => {
         if (activeSubTab === 'admin') {
             fetchLogs();
         }
-    }, [activeSubTab, adminSecret]);
+    }, [activeSubTab, fetchLogs]);
 
     const handleSaveSecret = (e: React.FormEvent) => {
         e.preventDefault();
@@ -875,8 +875,9 @@ export function UserSettings() {
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {filtered.map((log, index) => {
-                                                            const isExpanded = expandedLogIndex === index;
+                                                        {filtered.map((log, idx) => {
+                                                            const logId = `${log.timestamp}-${idx}`;
+                                                            const isExpanded = expandedLogId === logId;
                                                             const hasPayload = log.payload && Object.keys(log.payload).length > 0;
                                                             const hasError = !!log.error;
                                                             const canInspect = hasPayload || hasError;
@@ -887,7 +888,7 @@ export function UserSettings() {
                                                             else if (log.level === 'error') levelClass = 'log-row-error';
 
                                                             return (
-                                                                <React.Fragment key={index}>
+                                                                <React.Fragment key={logId}>
                                                                     <tr className="logs-tr">
                                                                         <td className="logs-td">
                                                                             {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}
@@ -904,7 +905,7 @@ export function UserSettings() {
                                                                                 <button
                                                                                     type="button"
                                                                                     className="btn btn-secondary logs-inspect-btn"
-                                                                                    onClick={() => setExpandedLogIndex(isExpanded ? null : index)}
+                                                                                    onClick={() => setExpandedLogId(isExpanded ? null : logId)}
                                                                                 >
                                                                                     {isExpanded ? 'Hide' : 'Inspect'}
                                                                                 </button>
