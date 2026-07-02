@@ -8,12 +8,31 @@ description: Automates checking, reviewing, and addressing GitHub PR comments an
 When the user asks you to check PR comments, perform the following steps autonomously:
 
 ## 1. Fetch Comments
-Use the GitHub CLI (`gh`) to fetch the latest comments and feedback from reviewers.
-Since this project uses the `rtk` wrapper for token efficiency, use the following command:
-`rtk gh pr view <PR_NUMBER> --comments`
-
-If you need to view detailed reviews or comments in JSON format, you can use:
-`rtk gh pr view <PR_NUMBER> --json reviews,comments`
+Use a single GraphQL query via the GitHub CLI (`gh api graphql`) to fetch all PR-level comments, reviews, and inline review comments in a single network roundtrip:
+```bash
+rtk gh api graphql -F number=<PR_NUMBER> -f query='
+  query($number: Int!) {
+    repository(owner: "SecH0us3", name: "swazz") {
+      pullRequest(number: $number) {
+        comments(last: 100) { nodes { body } }
+        reviews(last: 100) {
+          nodes {
+            body
+            state
+            comments(last: 100) {
+              nodes {
+                path
+                line
+                body
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+'
+```
 
 ## 2. Analyze Feedback
 Carefully analyze the feedback. Identify actionable items:
