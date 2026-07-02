@@ -36,9 +36,6 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                     
                     {/* Hero Section */}
                     <div className="welcome-hero">
-                        <div className="welcome-hero-icon">
-                            ⚡
-                        </div>
                         <h2 className="welcome-hero-title">
                             Welcome to Swazz API Fuzzer
                         </h2>

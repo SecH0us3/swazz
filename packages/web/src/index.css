@@ -1955,19 +1955,6 @@ body.resizing .sidebar-resizer {
   gap: 16px;
 }
 
-.welcome-hero-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--accent-subtle);
-  border: 1px solid var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  box-shadow: var(--shadow-glow);
-  margin-bottom: 8px;
-}
 
 .welcome-hero-title {
   font-size: 28px;
