@@ -1,9 +1,12 @@
 package logger
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
+	"time"
 )
 
 type LogLevel int
@@ -62,30 +65,69 @@ func shouldLog(level LogLevel, msg string) bool {
 	return true
 }
 
+type JSONLog struct {
+	Timestamp string                 `json:"timestamp"`
+	Level     string                 `json:"level"`
+	Module    string                 `json:"module"`
+	Msg       string                 `json:"msg"`
+	Payload   map[string]interface{} `json:"payload,omitempty"`
+}
+
+func logJSON(level, msg string) {
+	entry := JSONLog{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Level:     level,
+		Module:    "container",
+		Msg:       msg,
+	}
+	data, err := json.Marshal(entry)
+	if err == nil {
+		log.Println(string(data))
+	} else {
+		log.Printf("[%s] %s", strings.ToUpper(level), msg)
+	}
+}
+
 func Debug(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelDebug, msg) {
-		log.Printf("[DEBUG] %s", msg)
+		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+			logJSON("debug", msg)
+		} else {
+			log.Printf("[DEBUG] %s", msg)
+		}
 	}
 }
 
 func Info(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelInfo, msg) {
-		log.Printf("[INFO] %s", msg)
+		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+			logJSON("info", msg)
+		} else {
+			log.Printf("[INFO] %s", msg)
+		}
 	}
 }
 
 func Warn(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelWarn, msg) {
-		log.Printf("[WARN] %s", msg)
+		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+			logJSON("warn", msg)
+		} else {
+			log.Printf("[WARN] %s", msg)
+		}
 	}
 }
 
 func Error(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelError, msg) {
-		log.Printf("[ERROR] %s", msg)
+		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+			logJSON("error", msg)
+		} else {
+			log.Printf("[ERROR] %s", msg)
+		}
 	}
 }
