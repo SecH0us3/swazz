@@ -851,7 +851,8 @@ export function UserSettings() {
                                     {logsLoading && logs.length === 0 ? (
                                         <p className="logs-no-data">Loading logs...</p>
                                     ) : (() => {
-                                        const filtered = logs.filter(log => {
+                                        const filtered = (Array.isArray(logs) ? logs : []).filter(log => {
+                                            if (!log) return false;
                                             if (levelFilter !== 'all' && log.level !== levelFilter) return false;
                                             if (moduleFilter && !log.module?.toLowerCase().includes(moduleFilter.toLowerCase())) return false;
                                             if (searchQuery && !log.msg?.toLowerCase().includes(searchQuery.toLowerCase())) return false;

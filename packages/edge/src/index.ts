@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
-import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
+import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerRbacRoutes } from './routes/rbac';
@@ -90,7 +90,7 @@ app.get('/api/admin/logs', async (c) => {
   const authHeader = c.req.header('X-Admin-Secret') || c.req.header('Authorization');
   const providedSecret = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
 
-  if (providedSecret !== adminSecret) {
+  if (!providedSecret || !safeCompare(providedSecret, adminSecret)) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
