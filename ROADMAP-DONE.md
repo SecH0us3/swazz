@@ -111,6 +111,12 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Add a sub-tab under Project Settings to view, edit, and upload API specs (Swagger/HAR/Postman).
 
+- [x] **Task 80: AI Remediation Stack & Rule Autocompletion UI**
+  - **Design Goal:** Enhance the AI Remediation Config experience by dynamically appending context to the AI prompt based on user-selected tech stacks and vulnerability rules.
+  - **Implementation Details:**
+    - Provide a checkbox list of common tech stacks (React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot).
+    - When the user selects a stack or selects specific "Rules to Auto-Fix", automatically append relevant instructions or knowledge to the selected `CLI Execution Command` prompt templates.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
