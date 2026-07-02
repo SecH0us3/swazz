@@ -82,20 +82,24 @@ const RULE_SNIPPETS: Record<string, string> = {
 const getStackMarker = (stack: string) => `\n\n=== Tech Stack: ${stack} ===\n- ${stack} Tech Stack: ${TECH_STACK_SNIPPETS[stack] || ''}\n=== End of Tech Stack: ${stack} ===`;
 const getRuleMarker = (rule: string) => `\n\n=== Rule: ${rule} ===\n- Rule ${rule}: ${RULE_SNIPPETS[rule] || ''}\n=== End of Rule: ${rule} ===`;
 
-const addContextToPrompt = (prompt: string, block: string) => {
-    if (prompt.includes(block.trim())) return prompt;
-    return prompt.trim() + block;
+const addContextToPrompt = (prompt: string | undefined | null, block: string) => {
+    const safePrompt = prompt || '';
+    if (safePrompt.includes(block.trim())) return safePrompt;
+    return safePrompt.trim() + block;
 };
 
-const removeStackFromPrompt = (prompt: string, stack: string) => {
-    const regex = new RegExp(`\\n*=== Tech Stack: ${stack} ===[\\s\\S]*?=== End of Tech Stack: ${stack} ===`, 'g');
-    return prompt.replace(regex, '').trim();
+const removeStackFromPrompt = (prompt: string | undefined | null, stack: string) => {
+    const safePrompt = prompt || '';
+    const escapedStack = stack.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`\\n*=== Tech Stack: ${escapedStack} ===[\\s\\S]*?=== End of Tech Stack: ${escapedStack} ===`, 'g');
+    return safePrompt.replace(regex, '').trim();
 };
 
-const removeRuleFromPrompt = (prompt: string, rule: string) => {
+const removeRuleFromPrompt = (prompt: string | undefined | null, rule: string) => {
+    const safePrompt = prompt || '';
     const escapedRule = rule.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const regex = new RegExp(`\\n*=== Rule: ${escapedRule} ===[\\s\\S]*?=== End of Rule: ${escapedRule} ===`, 'g');
-    return prompt.replace(regex, '').trim();
+    return safePrompt.replace(regex, '').trim();
 };
 
 export function AiRemediationTab() {
@@ -125,13 +129,14 @@ export function AiRemediationTab() {
             if (activeProject.ai_prompts) {
                 try {
                     const parsed = JSON.parse(activeProject.ai_prompts);
-                    setAiPrompts({ ...DEFAULT_AI_PROMPTS, ...parsed });
-                    if (Array.isArray(parsed.tech_stacks)) {
-                        setSelectedStacks(parsed.tech_stacks);
+                    const safeParsed = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+                    setAiPrompts({ ...DEFAULT_AI_PROMPTS, ...safeParsed });
+                    if (Array.isArray(safeParsed.tech_stacks)) {
+                        setSelectedStacks(safeParsed.tech_stacks);
                     } else {
                         setSelectedStacks([]);
                     }
-                    const p1 = parsed.pass1_cmd || DEFAULT_AI_PROMPTS.pass1_cmd;
+                    const p1 = safeParsed.pass1_cmd || DEFAULT_AI_PROMPTS.pass1_cmd;
                     if (p1.startsWith('agy')) {
                         setSelectedTool('agy');
                     } else if (p1.startsWith('claude')) {
@@ -413,7 +418,7 @@ export function AiRemediationTab() {
                 <div className="settings-field-group-stacks">
                     <label className="settings-label">Target Tech Stacks</label>
                     <div className="tech-stacks-grid">
-                        {['React', 'Node', 'Go', 'Python', 'Postgres', '.NET', 'Flask', 'Django', 'Next.js', 'FastAPI', 'Spring Boot'].map(stack => (
+                        {Object.keys(TECH_STACK_SNIPPETS).map(stack => (
                             <label key={stack} className="tech-stack-label">
                                 <input
                                     type="checkbox"
@@ -546,7 +551,7 @@ export function AiRemediationTab() {
                     <div className="settings-modal-stacks">
                         <label className="settings-label">Target Tech Stacks</label>
                         <div className="tech-stacks-grid">
-                            {['React', 'Node', 'Go', 'Python', 'Postgres', '.NET', 'Flask', 'Django', 'Next.js', 'FastAPI', 'Spring Boot'].map(stack => (
+                            {Object.keys(TECH_STACK_SNIPPETS).map(stack => (
                                 <label key={stack} className="tech-stack-label">
                                     <input
                                         type="checkbox"

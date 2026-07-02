@@ -5770,7 +5770,7 @@ kbd {
     background: var(--bg-elevated);
     padding: 16px;
     border-radius: 8px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-subtle);
 }
 
 .settings-rules-backdrop {
