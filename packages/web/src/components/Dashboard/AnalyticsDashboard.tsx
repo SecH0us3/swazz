@@ -686,7 +686,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                     const maxVal = Math.max(...topCategories.map(c => c.count), 1);
                                     return topCategories.map((cat, i) => {
                                         const y = 25 + i * 38;
-                                        const barWidth = (cat.count / maxVal) * 230;
+                                        const barWidth = (cat.count / maxVal) * 200;
                                         const barClass = `svg-bar-fill svg-bar-fill-${cat.maxSeverity}`;
                                         return (
                                             <g key={cat.category}>
@@ -701,16 +701,16 @@ export function AnalyticsDashboard({ projectId }: Props) {
 
                                                 {/* Bar background */}
                                                 <rect 
-                                                    x="120" 
+                                                    x="150" 
                                                     y={y} 
-                                                    width="230" 
+                                                    width="200" 
                                                     height="16" 
                                                     className="svg-bar-bg" 
                                                 />
 
                                                 {/* Bar fill */}
                                                 <rect 
-                                                    x="120" 
+                                                    x="150" 
                                                     y={y} 
                                                     width={barWidth} 
                                                     height="16" 
@@ -719,7 +719,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
 
                                                 {/* Value */}
                                                 <text 
-                                                    x={120 + barWidth + 8} 
+                                                    x={150 + barWidth + 8} 
                                                     y={y + 12} 
                                                     className="bar-value-text"
                                                 >
