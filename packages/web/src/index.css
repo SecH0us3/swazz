@@ -6954,6 +6954,43 @@ kbd {
   transition: all var(--duration-base) var(--ease-out);
 }
 
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.period-selector {
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.period-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.period-btn:hover {
+  color: var(--text-default);
+}
+
+.period-btn.active {
+  background: var(--bg-elevated);
+  color: var(--accent-light);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
 .analytics-card:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-hover);
@@ -7062,8 +7099,19 @@ kbd {
   stroke-width: 3;
 }
 
+.svg-line-path-findings {
+  fill: none;
+  stroke: var(--color-error);
+  stroke-width: 3;
+}
+
 .svg-area-path {
   fill: url(#chart-gradient);
+  opacity: 0.15;
+}
+
+.svg-area-path-findings {
+  fill: url(#findings-gradient);
   opacity: 0.15;
 }
 
@@ -7085,6 +7133,13 @@ kbd {
   font-family: var(--font-ui);
 }
 
+.chart-axis-text-findings {
+  fill: var(--color-error);
+  font-size: 10px;
+  font-family: var(--font-ui);
+  opacity: 0.85;
+}
+
 .chart-tooltip-group {
   pointer-events: none;
   transition: transform 0.15s ease-out;
@@ -7101,6 +7156,13 @@ kbd {
   fill: var(--text-primary);
   font-size: 10px;
   font-family: var(--font-ui);
+}
+
+.chart-tooltip-text-findings {
+  fill: var(--color-error);
+  font-size: 10px;
+  font-family: var(--font-ui);
+  font-weight: 500;
 }
 
 .chart-tooltip-date {

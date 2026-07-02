@@ -7,21 +7,23 @@ test.describe('Analytics Dashboard E2E Tests', () => {
     page.on('pageerror', err => console.error('PAGE ERROR:', err.message));
 
     // Intercept analytics API
-    await page.route('**/api/projects/*/analytics', async (route) => {
+    await page.route('**/api/projects/*/analytics*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           scanStats: { total: 42, completed: 35, failed: 7, avgDuration: 120 },
           scanHistory: [
-            { date: '2026-07-01', count: 3, completed_count: 2, failed_count: 1 }
+            { date: '2026-07-01', count: 3, completed_count: 2, failed_count: 1 },
+            { date: '2026-07-02', count: 5, completed_count: 4, failed_count: 1 }
           ],
           findingsStats: [
             { severity: 'error', category: 'swazz/reflected-xss', count: 5 },
             { severity: 'warning', category: 'swazz/bola-idor', count: 3 }
           ],
           findingsHistory: [
-            { date: '2026-07-01', severity: 'error', count: 5 }
+            { date: '2026-07-01', severity: 'error', count: 5 },
+            { date: '2026-07-02', severity: 'warning', count: 3 }
           ],
           runnerMetrics: {
             totalConnected: 4,
@@ -61,21 +63,15 @@ test.describe('Analytics Dashboard E2E Tests', () => {
     // Wait for endpoints tree structure to render so sidebar has loaded the workspace fully
     await expect(page.locator('.tree-leaf-row').first()).toBeVisible({ timeout: 15000 });
 
-    // 4. Locate and click Analytics tab with retries to handle React binding delays
+    // 4. Locate and click Analytics tab
     const analyticsTab = page.locator('button.tab-bar-btn:has-text("Analytics")');
     await expect(analyticsTab).toBeVisible({ timeout: 15000 });
     
-    // Perform click and wait for active state
-    await page.waitForTimeout(1000); // Wait for React handlers to stabilize
-    await analyticsTab.click();
-
-    // Check if the tab button has active class, if not click again
-    const isActive = await analyticsTab.evaluate(el => el.classList.contains('active'));
-    if (!isActive) {
-      console.log('Tab did not become active, retrying click...');
-      await page.waitForTimeout(500);
+    // Perform click with toPass retry block to safely wait for React event binding
+    await expect(async () => {
       await analyticsTab.click();
-    }
+      await expect(analyticsTab).toHaveClass(/active/);
+    }).toPass({ timeout: 10000 });
 
     // 5. Verify stats and dashboard content are visible
     await expect(page.locator('text=Total Scans')).toBeVisible({ timeout: 10000 });
@@ -85,5 +81,12 @@ test.describe('Analytics Dashboard E2E Tests', () => {
     // Verify SVG charts exist
     const svgCharts = page.locator('svg.svg-chart');
     await expect(svgCharts.first()).toBeVisible();
+
+    // Verify findings line and right-axis text exist
+    const findingsLine = page.locator('path.svg-line-path-findings');
+    await expect(findingsLine).toBeVisible();
+
+    const rightAxisText = page.locator('text.chart-axis-text-findings');
+    await expect(rightAxisText.first()).toBeVisible();
   });
 });

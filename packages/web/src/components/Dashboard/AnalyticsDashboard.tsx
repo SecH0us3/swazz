@@ -101,6 +101,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
     const activeProject = useAppStore(state => state.activeProject);
     const targetProjectId = projectId || activeProject?.id;
 
+    const [period, setPeriod] = useState<'24h' | '30d' | '12w' | '12m'>('30d');
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -122,7 +123,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
                 if (token) {
                     headers['Authorization'] = `Bearer ${token}`;
                 }
-                const res = await fetch(`${PROXY_URL}/api/projects/${targetProjectId}/analytics`, { headers });
+                const res = await fetch(`${PROXY_URL}/api/projects/${targetProjectId}/analytics?period=${period}`, { headers });
                 if (!res.ok) {
                     throw new Error(`Failed to load analytics: ${res.statusText}`);
                 }
@@ -146,7 +147,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
         return () => {
             isMounted = false;
         };
-    }, [targetProjectId]);
+    }, [targetProjectId, period]);
 
     // Format duration helper
     const formatDuration = (seconds: number) => {
@@ -155,6 +156,14 @@ export function AnalyticsDashboard({ projectId }: Props) {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    };
+
+    // Normalize database severity levels to UI severity levels
+    const normalizeSeverity = (severity: string): 'error' | 'warning' | 'note' => {
+        const s = (severity || '').toLowerCase();
+        if (s === 'high' || s === 'critical' || s === 'error') return 'error';
+        if (s === 'medium' || s === 'warning') return 'warning';
+        return 'note';
     };
 
     // Derived statistics calculations
@@ -167,17 +176,15 @@ export function AnalyticsDashboard({ projectId }: Props) {
         const counts = { error: 0, warning: 0, note: 0 };
         if (!data?.findingsStats) return counts;
         data.findingsStats.forEach(item => {
-            const s = (item.severity || '').toLowerCase();
-            if (s === 'error') counts.error += item.count;
-            else if (s === 'warning') counts.warning += item.count;
-            else if (s === 'note') counts.note += item.count;
+            const s = normalizeSeverity(item.severity);
+            counts[s] += item.count;
         });
         return counts;
     }, [data]);
 
     const topCategories = useMemo(() => {
         if (!data?.findingsStats) return [];
-        const cats: Record<string, { count: number; maxSeverity: string }> = {};
+        const cats: Record<string, { count: number; maxSeverity: 'error' | 'warning' | 'note' }> = {};
         data.findingsStats.forEach(item => {
             const cat = item.category;
             const current = cats[cat] || { count: 0, maxSeverity: 'note' };
@@ -185,10 +192,11 @@ export function AnalyticsDashboard({ projectId }: Props) {
             
             // promote severity if higher
             const levelOrder = { error: 3, warning: 2, note: 1 };
-            const itemOrder = levelOrder[item.severity.toLowerCase() as keyof typeof levelOrder] || 0;
-            const currentOrder = levelOrder[current.maxSeverity as keyof typeof levelOrder] || 0;
+            const itemSeverity = normalizeSeverity(item.severity);
+            const itemOrder = levelOrder[itemSeverity] || 0;
+            const currentOrder = levelOrder[current.maxSeverity] || 0;
             if (itemOrder > currentOrder) {
-                current.maxSeverity = item.severity.toLowerCase();
+                current.maxSeverity = itemSeverity;
             }
             cats[cat] = current;
         });
@@ -206,21 +214,35 @@ export function AnalyticsDashboard({ projectId }: Props) {
     const lineChartProps = useMemo(() => {
         if (!data?.scanHistory || data.scanHistory.length === 0) return null;
         const history = data.scanHistory;
-        const width = 500;
+        const width = 550; // Increased width slightly to accommodate right axis labels without clipping
         const height = 200;
-        const paddingX = 40;
+        const paddingX = 45; // Adjusted padding to fit axis values on both sides
         const paddingY = 20;
 
+        const findingsByDate: Record<string, number> = {};
+        if (data.findingsHistory) {
+            for (const item of data.findingsHistory) {
+                // Group by date (ignoring severity) to show total findings count per date
+                findingsByDate[item.date] = (findingsByDate[item.date] || 0) + item.count;
+            }
+        }
+
         const maxCount = Math.max(...history.map(d => d.count), 5);
+        const maxFindings = Math.max(...history.map(d => findingsByDate[d.date] || 0), 5);
+
         const points = history.map((d, i) => {
             const x = history.length > 1 
                 ? paddingX + i * (width - 2 * paddingX) / (history.length - 1)
                 : width / 2;
             const y = height - paddingY - (d.count / maxCount) * (height - 2 * paddingY);
-            return { x, y, raw: d };
+            
+            const findingsCount = findingsByDate[d.date] || 0;
+            const yFindings = height - paddingY - (findingsCount / maxFindings) * (height - 2 * paddingY);
+
+            return { x, y, yFindings, raw: d, findingsCount };
         });
 
-        // Compute curved path using Cubic Beziers
+        // Compute curved path for scans count using Cubic Beziers
         let pathD = '';
         if (points.length > 0) {
             pathD = `M ${points[0].x} ${points[0].y}`;
@@ -239,7 +261,26 @@ export function AnalyticsDashboard({ projectId }: Props) {
             ? `${pathD} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`
             : '';
 
-        return { points, pathD, areaD, width, height, paddingX, paddingY, maxCount };
+        // Compute curved path for findings count using Cubic Beziers
+        let findingsPathD = '';
+        if (points.length > 0) {
+            findingsPathD = `M ${points[0].x} ${points[0].yFindings}`;
+            for (let i = 0; i < points.length - 1; i++) {
+                const p0 = points[i];
+                const p1 = points[i + 1];
+                const cp1x = p0.x + (p1.x - p0.x) / 3;
+                const cp1y = p0.yFindings;
+                const cp2x = p0.x + 2 * (p1.x - p0.x) / 3;
+                const cp2y = p1.yFindings;
+                findingsPathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p1.x} ${p1.yFindings}`;
+            }
+        }
+
+        const findingsAreaD = points.length > 0 
+            ? `${findingsPathD} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`
+            : '';
+
+        return { points, pathD, areaD, findingsPathD, findingsAreaD, width, height, paddingX, paddingY, maxCount, maxFindings };
     }, [data]);
 
     // SVG Donut chart segment calculations
@@ -408,7 +449,25 @@ export function AnalyticsDashboard({ projectId }: Props) {
             <div className="analytics-chart-row">
                 {/* Scan History Card */}
                 <div className="analytics-card">
-                    <h3 className="chart-card-title">Scans Frequency (Last 30 Days)</h3>
+                    <div className="chart-card-header">
+                        <h3 className="chart-card-title">
+                            {period === '24h' && 'Scans Frequency (Last 24 Hours)'}
+                            {period === '30d' && 'Scans Frequency (Last 30 Days)'}
+                            {period === '12w' && 'Scans Frequency (Last 12 Weeks)'}
+                            {period === '12m' && 'Scans Frequency (Last 12 Months)'}
+                        </h3>
+                        <div className="period-selector">
+                            {(['24h', '30d', '12w', '12m'] as const).map(p => (
+                                <button
+                                    key={p}
+                                    className={`period-btn ${period === p ? 'active' : ''}`}
+                                    onClick={() => setPeriod(p)}
+                                >
+                                    {p}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <div className="svg-chart-container">
                         {lineChartProps ? (
                             <svg className="svg-chart" viewBox={`0 0 ${lineChartProps.width} ${lineChartProps.height}`}>
@@ -417,11 +476,16 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                         <stop offset="0%" stopColor="var(--accent-light)" stopOpacity="0.4" />
                                         <stop offset="100%" stopColor="var(--accent-light)" stopOpacity="0.0" />
                                     </linearGradient>
+                                    <linearGradient id="findings-gradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="var(--color-error)" stopOpacity="0.4" />
+                                        <stop offset="100%" stopColor="var(--color-error)" stopOpacity="0.0" />
+                                    </linearGradient>
                                 </defs>
                                 {/* Grid lines */}
                                 {[0, 1, 2, 3, 4].map(i => {
                                     const y = lineChartProps.paddingY + i * (lineChartProps.height - 2 * lineChartProps.paddingY) / 4;
                                     const val = Math.round(lineChartProps.maxCount - (i * lineChartProps.maxCount / 4));
+                                    const valFindings = Math.round(lineChartProps.maxFindings - (i * lineChartProps.maxFindings / 4));
                                     return (
                                         <g key={i}>
                                             <line 
@@ -431,6 +495,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                                 y2={y} 
                                                 className="svg-grid-line" 
                                             />
+                                            {/* Left axis: Scans count */}
                                             <text 
                                                 x={lineChartProps.paddingX - 10} 
                                                 y={y + 4} 
@@ -438,6 +503,15 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                                 className="chart-axis-text"
                                             >
                                                 {val}
+                                            </text>
+                                            {/* Right axis: Findings count */}
+                                            <text 
+                                                x={lineChartProps.width - lineChartProps.paddingX + 10} 
+                                                y={y + 4} 
+                                                textAnchor="start" 
+                                                className="chart-axis-text-findings"
+                                            >
+                                                {valFindings}
                                             </text>
                                         </g>
                                     );
@@ -447,14 +521,31 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                 <path d={lineChartProps.areaD} className="svg-area-path" />
                                 <path d={lineChartProps.pathD} className="svg-line-path" />
 
-                                {/* Interactive Dots */}
+                                <path d={lineChartProps.findingsAreaD} className="svg-area-path-findings" />
+                                <path d={lineChartProps.findingsPathD} className="svg-line-path-findings" />
+
+                                {/* Interactive Dots for Scans */}
                                 {lineChartProps.points.map((pt, i) => (
                                     <circle
-                                        key={i}
+                                        key={`scan-${i}`}
                                         cx={pt.x}
                                         cy={pt.y}
                                         r={hoveredScanIndex === i ? 6 : 4}
                                         fill="var(--accent-light)"
+                                        className="chart-interactive-dot"
+                                        onMouseEnter={() => setHoveredScanIndex(i)}
+                                        onMouseLeave={() => setHoveredScanIndex(null)}
+                                    />
+                                ))}
+
+                                {/* Interactive Dots for Findings */}
+                                {lineChartProps.points.map((pt, i) => (
+                                    <circle
+                                        key={`find-${i}`}
+                                        cx={pt.x}
+                                        cy={pt.yFindings}
+                                        r={hoveredScanIndex === i ? 6 : 4}
+                                        fill="var(--color-error)"
                                         className="chart-interactive-dot"
                                         onMouseEnter={() => setHoveredScanIndex(i)}
                                         onMouseLeave={() => setHoveredScanIndex(null)}
@@ -483,7 +574,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                 {hoveredScanIndex !== null && lineChartProps.points[hoveredScanIndex] && (() => {
                                     const pt = lineChartProps.points[hoveredScanIndex];
                                     const tooltipW = 150;
-                                    const tooltipH = 50;
+                                    const tooltipH = 62; // Increased height to fit extra row
                                     
                                     // Keep tooltip inside limits
                                     let tooltipX = pt.x - tooltipW / 2;
@@ -498,14 +589,47 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                         tooltipY = pt.y + 10;
                                     }
 
+                                    const formatTooltipDate = (dateStr: string, periodStr: string) => {
+                                        if (!dateStr) return '';
+                                        if (periodStr === '24h') {
+                                            try {
+                                                const date = new Date(dateStr.replace(' ', 'T'));
+                                                return date.toLocaleTimeString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                                            } catch {
+                                                return dateStr;
+                                            }
+                                        }
+                                        if (periodStr === '12w') {
+                                            const parts = dateStr.split('-');
+                                            if (parts.length === 2) {
+                                                return `Week ${parts[1]}, ${parts[0]}`;
+                                            }
+                                            return dateStr;
+                                        }
+                                        if (periodStr === '12m') {
+                                            try {
+                                                const [year, month] = dateStr.split('-');
+                                                const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                                return date.toLocaleDateString([], { month: 'long', year: 'numeric' });
+                                            } catch {
+                                                return dateStr;
+                                            }
+                                        }
+                                        try {
+                                            const date = new Date(dateStr);
+                                            return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+                                        } catch {
+                                            return dateStr;
+                                        }
+                                    };
+
                                     return (
                                         <g transform={`translate(${tooltipX}, ${tooltipY})`} className="chart-tooltip-group">
                                             <rect width={tooltipW} height={tooltipH} className="chart-tooltip-bg" />
-                                            <text x="10" y="16" className="chart-tooltip-date">{pt.raw.date}</text>
-                                            <text x="10" y="28" className="chart-tooltip-text">Scans: {pt.raw.count}</text>
-                                            <text x="10" y="40" className="chart-tooltip-text">
-                                                Success: {pt.raw.completed_count} / Fail: {pt.raw.failed_count}
-                                            </text>
+                                            <text x="10" y="14" className="chart-tooltip-date">{formatTooltipDate(pt.raw.date, period)}</text>
+                                            <text x="10" y="26" className="chart-tooltip-text">Scans: {pt.raw.count} (Success: {pt.raw.completed_count} / Fail: {pt.raw.failed_count})</text>
+                                            <text x="10" y="38" className="chart-tooltip-text-findings">Findings: {pt.findingsCount}</text>
+                                            <text x="10" y="50" className="chart-tooltip-date">Click/Hover points for details</text>
                                         </g>
                                     );
                                 })()}
@@ -513,7 +637,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
                         ) : (
                             <div className="analytics-empty-state">
                                 <div className="analytics-empty-icon">📊</div>
-                                <p className="chart-axis-text">No scan history recorded in the last 30 days.</p>
+                                <p className="chart-axis-text">No scan history recorded in the selected period.</p>
                             </div>
                         )}
                     </div>
