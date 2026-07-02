@@ -132,9 +132,46 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/projects/:id/analytics', async (c) => {
     const projectId = c.req.param('id');
     const userId = await getUserIdFromRequest(c);
-    if (c.env.AUTH_ENABLED === 'true' && userId) {
+    if (c.env.AUTH_ENABLED === 'true') {
+      if (!userId) return c.json({ error: 'Unauthorized' }, 401);
       const hasAccess = await checkPermission(c.env, userId, projectId, 'get:/api/projects/:id/scans');
       if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const period = c.req.query('period') || '30d';
+
+    let rangeClause = "created_at >= datetime('now', '-30 days')";
+    let groupClause = "DATE(created_at)";
+    let selectClause = "DATE(created_at) as date";
+
+    let findingsRangeClause = "f.created_at >= datetime('now', '-30 days')";
+    let findingsSelectClause = "DATE(f.created_at) as date";
+    let findingsGroupClause = "DATE(f.created_at), f.level";
+
+    if (period === '24h') {
+      rangeClause = "created_at >= datetime('now', '-24 hours')";
+      groupClause = "strftime('%Y-%m-%d %H:00:00', created_at)";
+      selectClause = "strftime('%Y-%m-%d %H:00:00', created_at) as date";
+
+      findingsRangeClause = "f.created_at >= datetime('now', '-24 hours')";
+      findingsSelectClause = "strftime('%Y-%m-%d %H:00:00', f.created_at) as date";
+      findingsGroupClause = "strftime('%Y-%m-%d %H:00:00', f.created_at), f.level";
+    } else if (period === '12w') {
+      rangeClause = "created_at >= datetime('now', '-84 days')";
+      groupClause = "strftime('%Y-%W', created_at)";
+      selectClause = "strftime('%Y-%W', created_at) as date";
+
+      findingsRangeClause = "f.created_at >= datetime('now', '-84 days')";
+      findingsSelectClause = "strftime('%Y-%W', f.created_at) as date";
+      findingsGroupClause = "strftime('%Y-%W', f.created_at), f.level";
+    } else if (period === '12m') {
+      rangeClause = "created_at >= datetime('now', '-12 months')";
+      groupClause = "strftime('%Y-%m', created_at)";
+      selectClause = "strftime('%Y-%m', created_at) as date";
+
+      findingsRangeClause = "f.created_at >= datetime('now', '-12 months')";
+      findingsSelectClause = "strftime('%Y-%m', f.created_at) as date";
+      findingsGroupClause = "strftime('%Y-%m', f.created_at), f.level";
     }
 
     const db = getDB(c.env);
@@ -150,16 +187,16 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       WHERE project_id = ?
     `).bind(projectId).first<{ total_scans: number; completed_scans: number; failed_scans: number; avg_duration_seconds: number | null }>();
 
-    // 2. Scan history query (last 30 days)
+    // 2. Scan history query (based on period)
     const historyQuery = await db.prepare(`
       SELECT 
-        DATE(created_at) as date, 
+        ${selectClause}, 
         COUNT(*) as count,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
       FROM scans 
-      WHERE project_id = ? AND created_at >= datetime('now', '-30 days')
-      GROUP BY DATE(created_at)
+      WHERE project_id = ? AND ${rangeClause}
+      GROUP BY ${groupClause}
       ORDER BY date ASC
     `).bind(projectId).all<{ date: string; count: number; completed_count: number; failed_count: number }>();
 
@@ -175,16 +212,16 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       GROUP BY f.level, f.rule_id
     `).bind(projectId).all<{ severity: string; category: string; count: number }>();
 
-    // 4. Findings history over time (daily)
+    // 4. Findings history over time (based on period)
     const findingsHistoryQuery = await db.prepare(`
       SELECT 
-        DATE(f.created_at) as date,
+        ${findingsSelectClause},
         f.level as severity,
         COUNT(*) as count
       FROM findings f
       JOIN scans s ON f.scan_id = s.id
-      WHERE s.project_id = ? AND f.created_at >= datetime('now', '-30 days')
-      GROUP BY DATE(f.created_at), f.level
+      WHERE s.project_id = ? AND ${findingsRangeClause}
+      GROUP BY ${findingsGroupClause}
       ORDER BY date ASC
     `).bind(projectId).all<{ date: string; severity: string; count: number }>();
 

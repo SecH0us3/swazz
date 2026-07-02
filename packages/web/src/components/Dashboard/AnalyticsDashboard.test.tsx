@@ -30,5 +30,11 @@ describe('AnalyticsDashboard Component', () => {
     expect(screen.getByText('Total Scans')).toBeTruthy();
     expect(screen.getByText('10')).toBeTruthy();
     expect(screen.getByText('50.0%')).toBeTruthy();
+
+    // Assert period buttons exist
+    expect(screen.getByRole('button', { name: '24h' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '30d' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '12w' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '12m' })).toBeTruthy();
   });
 });

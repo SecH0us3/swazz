@@ -236,6 +236,10 @@ export function useRunner(proxyUrl: string) {
                         ws.close();
                         wsRef.current = null;
                         onComplete(finalStats);
+                    } else if (msg.type === 'error') {
+                        useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
+                        ws.close();
+                        wsRef.current = null;
                     }
                 } catch {
                     // ignore parse errors
