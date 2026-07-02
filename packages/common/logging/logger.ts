@@ -47,43 +47,70 @@ export function formatLog(
   };
 }
 
-async function pushToKV(env: any, entry: LogEntry) {
+async function pushToKV(ctxOrEnv: any, entry: LogEntry) {
+  let env: any = ctxOrEnv;
+  let waitCtx: any = null;
+
+  if (ctxOrEnv) {
+    if (typeof ctxOrEnv.env === 'object') {
+      env = ctxOrEnv.env;
+    }
+    if (typeof ctxOrEnv.waitUntil === 'function') {
+      waitCtx = ctxOrEnv;
+    } else if (ctxOrEnv.executionCtx && typeof ctxOrEnv.executionCtx.waitUntil === 'function') {
+      waitCtx = ctxOrEnv.executionCtx;
+    }
+  }
+
   if (!env?.SESSION_CACHE) return;
-  try {
-    const key = 'admin:logs';
-    const raw = await env.SESSION_CACHE.get(key);
-    let logs: LogEntry[] = [];
-    if (raw) {
-      try {
-        logs = JSON.parse(raw);
-      } catch {
-        logs = [];
+
+  const p = (async () => {
+    try {
+      const key = 'admin:logs';
+      const raw = await env.SESSION_CACHE.get(key);
+      let logs: LogEntry[] = [];
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            logs = parsed;
+          }
+        } catch {
+          logs = [];
+        }
       }
+      logs.unshift(entry);
+      if (logs.length > 200) {
+        logs = logs.slice(0, 200);
+      }
+      await env.SESSION_CACHE.put(key, JSON.stringify(logs));
+    } catch (e) {
+      console.error('Failed to buffer log to KV:', e);
     }
-    logs.unshift(entry);
-    if (logs.length > 1000) {
-      logs = logs.slice(0, 1000);
-    }
-    await env.SESSION_CACHE.put(key, JSON.stringify(logs));
-  } catch (e) {
-    console.error('Failed to buffer log to KV:', e);
+  })();
+
+  if (waitCtx) {
+    waitCtx.waitUntil(p);
+  } else {
+    // If no execution context is available (e.g. tests or scripts), we wait to guarantee write
+    await p;
   }
 }
 
-export function logInfo(env: any, module: string, msg: string, options?: any) {
+export function logInfo(ctxOrEnv: any, module: string, msg: string, options?: any) {
   const entry = formatLog('info', module, msg, options);
   console.log(JSON.stringify(entry));
-  if (env) pushToKV(env, entry);
+  if (ctxOrEnv) pushToKV(ctxOrEnv, entry);
 }
 
-export function logWarn(env: any, module: string, msg: string, options?: any) {
+export function logWarn(ctxOrEnv: any, module: string, msg: string, options?: any) {
   const entry = formatLog('warn', module, msg, options);
   console.warn(JSON.stringify(entry));
-  if (env) pushToKV(env, entry);
+  if (ctxOrEnv) pushToKV(ctxOrEnv, entry);
 }
 
-export function logError(env: any, module: string, msg: string, options?: any) {
+export function logError(ctxOrEnv: any, module: string, msg: string, options?: any) {
   const entry = formatLog('error', module, msg, options);
   console.error(JSON.stringify(entry));
-  if (env) pushToKV(env, entry);
+  if (ctxOrEnv) pushToKV(ctxOrEnv, entry);
 }
