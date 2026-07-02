@@ -7062,13 +7062,6 @@ kbd {
   stroke-width: 3;
 }
 
-.svg-line-path-failed {
-  fill: none;
-  stroke: var(--color-error);
-  stroke-width: 1.5;
-  stroke-dasharray: 4 4;
-}
-
 .svg-area-path {
   fill: url(#chart-gradient);
   opacity: 0.15;
@@ -7077,6 +7070,7 @@ kbd {
 .svg-grid-line {
   stroke: var(--border-default);
   stroke-width: 1;
+  stroke-dasharray: 4 4;
 }
 
 .svg-grid-line-dashed {

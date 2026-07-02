@@ -68,7 +68,29 @@ const PRETTY_CATEGORIES: Record<string, string> = {
     'swazz/sensitive-headers': 'Sensitive Headers',
     'swazz/sensitive-query-params': 'Sensitive Query Params',
     'swazz/bola': 'BOLA Vulnerability',
-    'swazz/similarity': 'Response Similarity'
+    'swazz/similarity': 'Response Similarity',
+    'swazz/reflected-xss': 'Reflected XSS',
+    'swazz/bola-idor': 'BOLA IDOR',
+    'swazz/sql-error-leak': 'SQL Error Leak',
+    'swazz/cmdi-leak': 'Command Injection Leak',
+    'swazz/ssti-leak': 'SSTI Leak',
+    'swazz/path-traversal-leak': 'Path Traversal Leak',
+    'swazz/cors-misconfig': 'CORS Misconfiguration',
+    'swazz/no-rate-limit': 'Missing Rate Limit',
+    'swazz/unauthorized-access': 'Unauthorized Access',
+    'swazz/csp-missing': 'Missing CSP Header',
+    'swazz/csp-unsafe-directive': 'Unsafe CSP Directive',
+    'swazz/custom-auth-leak': 'Custom Auth Leak',
+    'swazz/header-injection': 'HTTP Header Injection',
+    'swazz/null-pointer-exception': 'Null Pointer Exception',
+    'swazz/oob-interaction': 'Out-of-Band Interaction',
+    'swazz/rce-leak': 'Remote Code Execution Leak',
+    'swazz/response-size-anomaly': 'Response Size Anomaly',
+    'swazz/stack-trace-leak': 'Stack Trace Leak',
+    'swazz/time-based-cmdi': 'Time-based Command Injection',
+    'swazz/time-based-sqli': 'Time-based SQL Injection',
+    'swazz/xxe-leak': 'XXE Leak',
+    'swazz/tenant-isolation-bypass': 'Tenant Isolation Bypass'
 };
 
 const getPrettyCategory = (name: string) => {
@@ -460,7 +482,7 @@ export function AnalyticsDashboard({ projectId }: Props) {
                                 {/* Tooltip UI */}
                                 {hoveredScanIndex !== null && lineChartProps.points[hoveredScanIndex] && (() => {
                                     const pt = lineChartProps.points[hoveredScanIndex];
-                                    const tooltipW = 120;
+                                    const tooltipW = 150;
                                     const tooltipH = 50;
                                     
                                     // Keep tooltip inside limits
