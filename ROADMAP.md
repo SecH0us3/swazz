@@ -120,19 +120,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
     - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
-- [ ] **Task 115: Structured Logging Framework**
-  - **Design Goal:** Provide a unified, searchable, JSON‑structured logging system across all workers (edge, container, web) to simplify debugging, observability, and alerting.
-  - **Implementation Details:**
-    - Introduce a tiny logging helper (e.g. `logInfo`, `logWarn`, `logError`) that emits JSON with fields: `timestamp`, `level`, `module`, `msg`, `requestId`, `traceId` (if available), and any additional `payload`.
-    - Use Cloudflare Workers `console.log` / `console.warn` – these automatically forward JSON to Cloudflare Logpush if enabled.
-    - Replace ad‑hoc `console.log("something")` calls throughout the codebase with the new helpers (search & replace).
-    - Add a `logpush` configuration in `wrangler.toml` to ship logs to a destination (e.g., Elasticsearch, Loki, or Cloudflare Logs UI).
-    - Provide a small UI component in the web app (admin panel) that fetches recent logs via the new `/api/admin/logs` endpoint (admin‑only) – the endpoint reads from KV where a short‑term rolling buffer (e.g., last 10 k entries) is stored.
-  - **Short‑Term Action:**
-    - Create `packages/common/logging/logger.ts` with the helper functions.
-    - Export and replace inline `console.*` calls in existing modules (edge, container, web) via a focused commit.
-    - Document usage guidelines in `docs/logging.md`.
-
 - [ ] **Task 116: Deepen Tech Stack Security Guidelines & Rules Integration**
   - **Design Goal:** Curate and expand highly specific, framework-specific secure coding rules for each supported technology stack (React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot) to generate more precise AI remediation patches.
   - **Implementation Details:**
