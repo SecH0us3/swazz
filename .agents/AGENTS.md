@@ -20,3 +20,8 @@
 ## Roadmap Management
 - **Roadmap updates on task completion**: When a task from [ROADMAP.md](file:///Users/alex/src/swazz/ROADMAP.md) is completed/implemented, always move it to [ROADMAP-DONE.md](file:///Users/alex/src/swazz/ROADMAP-DONE.md) marked as completed (`[x]`).
 
+## Branch Verification & Metadata Scripts
+- **Running complete test suite**: Before finishing or reviewing any branch, always run `bash scripts/verify-all.sh` to compile/test edge worker, Go container backend, frontend build, and Playwright E2E tests in one step.
+- **Checking branch metadata**: To get current branch status, default branch, merge base, and changed files in JSON format, run `bash scripts/git-meta.sh`.
+
+
