@@ -58,7 +58,7 @@ app.use('/api/*', async (c, next) => {
 
     const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
     if (!isCancelRoute) {
-      const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env), userId);
+      const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env, userId), userId);
       if (deleteRequestedAt !== null) {
         return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
       }
@@ -378,7 +378,7 @@ export default {
           });
           const doRes = await stub.fetch(doReq as any);
           if (doRes.ok) {
-            await getDB(env).prepare('UPDATE scans SET status = ? WHERE id = ?')
+            await getDB(env, msg.body.runId).prepare('UPDATE scans SET status = ? WHERE id = ?')
               .bind('dispatched', msg.body.runId)
               .run();
             msg.ack();
@@ -399,7 +399,7 @@ export default {
         const id = crypto.randomUUID();
         const { scanId, type, payload } = msg.body;
         const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
-        return getDB(env).prepare(
+        return getDB(env, scanId).prepare(
           `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
         ).bind(id, scanId, type, payloadStr);
       });

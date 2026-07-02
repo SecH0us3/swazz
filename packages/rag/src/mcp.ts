@@ -266,7 +266,10 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
           sendError(id, -32603, `Failed to retrieve context outline: ${err.message}`);
         }
       } else if (name === 'swazz_list_files') {
-        const pattern = args.pattern;
+        const pattern = args?.pattern;
+        if (pattern !== undefined && typeof pattern !== 'string') {
+          throw new TypeError("pattern must be a string");
+        }
         console.error(`[Swazz MCP] Listing files with pattern: "${pattern || 'all'}"`);
         try {
           let rows: Array<{ filepath: string }>;
