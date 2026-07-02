@@ -342,9 +342,14 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     Help fund infrastructure
                                 </li>
                             </ul>
-                            <button type="button" onClick={onActionClick} className="btn-pricing-primary">
+                            <a
+                                href="https://github.com/sponsors/SecH0us3"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-pricing-primary"
+                            >
                                 Support Us
-                            </button>
+                            </a>
                         </div>
                     </div>
                 </section>
