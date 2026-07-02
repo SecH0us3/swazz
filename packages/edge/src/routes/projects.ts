@@ -182,7 +182,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
         COUNT(*) as total_scans,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_scans,
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_scans,
-        AVG(strftime('%s', completed_at) - strftime('%s', created_at)) as avg_duration_seconds
+        AVG(CASE WHEN status = 'completed' AND completed_at IS NOT NULL AND completed_at > created_at THEN (strftime('%s', completed_at) - strftime('%s', created_at)) ELSE NULL END) as avg_duration_seconds
       FROM scans 
       WHERE project_id = ?
     `).bind(projectId).first<{ total_scans: number; completed_scans: number; failed_scans: number; avg_duration_seconds: number | null }>();
@@ -200,24 +200,24 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       ORDER BY date ASC
     `).bind(projectId).all<{ date: string; count: number; completed_count: number; failed_count: number }>();
 
-    // 3. Findings by level and category
+    // 3. Findings by level and category (counting unique instances by message)
     const findingsQuery = await db.prepare(`
       SELECT 
         f.level as severity,
         f.rule_id as category,
-        COUNT(*) as count
+        COUNT(DISTINCT f.message) as count
       FROM findings f
       JOIN scans s ON f.scan_id = s.id
       WHERE s.project_id = ?
       GROUP BY f.level, f.rule_id
     `).bind(projectId).all<{ severity: string; category: string; count: number }>();
 
-    // 4. Findings history over time (based on period)
+    // 4. Findings history over time (based on period, counting unique instances by message)
     const findingsHistoryQuery = await db.prepare(`
       SELECT 
         ${findingsSelectClause},
         f.level as severity,
-        COUNT(*) as count
+        COUNT(DISTINCT f.message) as count
       FROM findings f
       JOIN scans s ON f.scan_id = s.id
       WHERE s.project_id = ? AND ${findingsRangeClause}
