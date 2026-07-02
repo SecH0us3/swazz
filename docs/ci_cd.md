@@ -322,6 +322,7 @@ This lets developers run richer local configs while CI uses a trimmed, fast prof
 
 Never commit real credentials. Instead, read auth tokens from environment variables and inject them via a CI secret:
 
+{% raw %}
 ```yaml
 # In your GitHub Actions workflow:
 - name: Patch auth token into CI config
@@ -343,6 +344,7 @@ Never commit real credentials. Instead, read auth tokens from environment variab
       --fail-on-severity error
   continue-on-error: true
 ```
+{% endraw %}
 
 ---
 
