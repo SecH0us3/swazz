@@ -22,4 +22,31 @@ describe('Logger Library', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(mockKV.put).toHaveBeenCalled();
   });
+
+  it('should serialize error objects and merge extra fields into payload', () => {
+    const err = new Error('database down');
+    const entry = formatLog('error', 'Database', 'Failed to connect', {
+      error: err,
+      host: 'localhost',
+      port: 5432,
+      payload: { someDefault: 'value' }
+    });
+
+    expect(entry.error).toBeDefined();
+    expect(entry.error.message).toBe('database down');
+    expect(entry.error.name).toBe('Error');
+    expect(entry.error.stack).toBeDefined();
+    
+    expect(entry.payload).toBeDefined();
+    expect(entry.payload?.someDefault).toBe('value');
+    expect(entry.payload?.host).toBe('localhost');
+    expect(entry.payload?.port).toBe(5432);
+  });
+
+  it('should accept non-Error objects or strings as error options', () => {
+    const entry = formatLog('error', 'Service', 'Generic crash', {
+      error: 'raw-string-error'
+    });
+    expect(entry.error).toBe('raw-string-error');
+  });
 });

@@ -5,6 +5,7 @@ export interface LogEntry {
   msg: string;
   requestId?: string;
   traceId?: string;
+  error?: any;
   payload?: Record<string, any>;
 }
 
@@ -12,16 +13,37 @@ export function formatLog(
   level: LogEntry['level'],
   module: string,
   msg: string,
-  options?: { requestId?: string; traceId?: string; payload?: Record<string, any> }
+  options?: { requestId?: string; traceId?: string; error?: any; payload?: Record<string, any>; [key: string]: any }
 ): LogEntry {
+  const { requestId, traceId, error, payload, ...extra } = options || {};
+
+  let formattedError: any = undefined;
+  if (error !== undefined && error !== null) {
+    if (error instanceof Error) {
+      formattedError = {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      };
+    } else {
+      formattedError = error;
+    }
+  }
+
+  let mergedPayload = payload;
+  if (Object.keys(extra).length > 0) {
+    mergedPayload = { ...payload, ...extra };
+  }
+
   return {
     timestamp: new Date().toISOString(),
     level,
     module,
     msg,
-    requestId: options?.requestId,
-    traceId: options?.traceId,
-    payload: options?.payload,
+    requestId,
+    traceId,
+    error: formattedError,
+    payload: mergedPayload,
   };
 }
 
