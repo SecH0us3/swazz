@@ -15,4 +15,19 @@ describe('getDB Helper', () => {
     const mockEnv = { DB: mockDB } as unknown as Env;
     expect(getDB(mockEnv, 'user-123')).toBe(mockDB);
   });
+
+  it.skip('routes to correct database shards based on routingKey (future sharding implementation)', () => {
+    const mockPrimaryDB = { name: 'primary' } as unknown as D1Database;
+    const mockShard1DB = { name: 'shard1' } as unknown as D1Database;
+    
+    // In a sharded environment, env would contain additional database bindings
+    const mockEnv = { 
+      DB: mockPrimaryDB,
+      DB_SHARD_1: mockShard1DB 
+    } as unknown as Env;
+    
+    // Once sharding routing logic is implemented in getDB:
+    // expect(getDB(mockEnv, 'project-routing-to-primary')).toBe(mockPrimaryDB);
+    // expect(getDB(mockEnv, 'project-routing-to-shard-1')).toBe(mockShard1DB);
+  });
 });
