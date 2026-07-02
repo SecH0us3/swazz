@@ -17,3 +17,6 @@
 ## Code Search & Exploration
 - **Prefer custom RAG tools**: For searching code or retrieving file structures/outlines, always prefer the custom MCP tools `swazz_search_code` and `swazz_get_file_context` over generic grep, find, or complete file views where possible.
 
+## Roadmap Management
+- **Roadmap updates on task completion**: When a task from [ROADMAP.md](file:///Users/alex/src/swazz/ROADMAP.md) is completed/implemented, always move it to [ROADMAP-DONE.md](file:///Users/alex/src/swazz/ROADMAP-DONE.md) marked as completed (`[x]`).
+

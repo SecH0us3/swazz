@@ -2552,4 +2552,68 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
     });
   });
+
+  describe("Admin Logs API", () => {
+    function createMockKV() {
+      const store = new Map<string, string>();
+      return {
+        get: async (key: string) => store.get(key) || null,
+        put: async (key: string, value: string) => { store.set(key, value); }
+      };
+    }
+
+    it("should reject unauthorized requests to /api/admin/logs", async () => {
+      const req = new Request("http://localhost/api/admin/logs");
+      const res = await appFetchWrapper(req, testEnv);
+      expect(res.status).toBe(401);
+    });
+
+    it("should return logs when valid admin secret is provided", async () => {
+      const mockKV = createMockKV();
+      const mockLogs = [{ timestamp: new Date().toISOString(), level: 'info', module: 'test', msg: 'hello' }];
+      await mockKV.put('admin:logs', JSON.stringify(mockLogs));
+
+      const customEnv = {
+        ...testEnv,
+        SESSION_CACHE: mockKV as any
+      };
+
+      const req = new Request("http://localhost/api/admin/logs", {
+        headers: { 'Authorization': `Bearer admin-secret` }
+      });
+      const res = await appFetchWrapper(req, customEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.length).toBe(1);
+      expect(data[0].msg).toBe('hello');
+    });
+
+    it("should return empty list if SESSION_CACHE is not bound", async () => {
+      const customEnv = {
+        ...testEnv,
+        SESSION_CACHE: undefined
+      };
+      const req = new Request("http://localhost/api/admin/logs", {
+        headers: { 'Authorization': `Bearer admin-secret` }
+      });
+      const res = await appFetchWrapper(req, customEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data).toEqual([]);
+    });
+
+    it("should reject with 401 if ADMIN_SECRET is not configured", async () => {
+      const customEnv = {
+        ...testEnv,
+        ADMIN_SECRET: undefined
+      };
+      const req = new Request("http://localhost/api/admin/logs", {
+        headers: { 'Authorization': `Bearer admin-secret` }
+      });
+      const res = await appFetchWrapper(req, customEnv);
+      expect(res.status).toBe(401);
+      const data = await res.json() as any;
+      expect(data.error).toBe("Unauthorized: Admin secret is not configured");
+    });
+  });
 });

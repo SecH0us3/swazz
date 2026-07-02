@@ -80,6 +80,32 @@ app.get('/api/info', (c) => {
 app.get('/api/version', (c) => {
   return c.json({ version: c.env.VERSION || '1.0.0' });
 });
+
+app.get('/api/admin/logs', async (c) => {
+  const adminSecret = c.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    return c.json({ error: 'Unauthorized: Admin secret is not configured' }, 401);
+  }
+  const authHeader = c.req.header('X-Admin-Secret') || c.req.header('Authorization');
+  const providedSecret = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+
+  if (providedSecret !== adminSecret) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  if (!c.env.SESSION_CACHE) {
+    return c.json([]);
+  }
+
+  const raw = await c.env.SESSION_CACHE.get('admin:logs');
+  if (!raw) return c.json([]);
+
+  try {
+    return c.json(JSON.parse(raw));
+  } catch {
+    return c.json([]);
+  }
+});
 // Add Security Headers middleware
 
 app.use('*', async (c, next) => {
