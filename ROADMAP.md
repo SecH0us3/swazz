@@ -94,15 +94,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
 
-
-
-- [ ] **Task 80: AI Remediation Stack & Rule Autocompletion UI**
-  - **Design Goal:** Enhance the AI Remediation Config experience by dynamically appending context to the AI prompt based on user-selected tech stacks and vulnerability rules.
-  - **Implementation Details:**
-    - Provide a checkbox list of common tech stacks (e.g., React, Node, Go, Python, Postgres).
-    - When the user selects a stack or selects specific "Rules to Auto-Fix", automatically append relevant instructions or knowledge to the selected `CLI Execution Command` prompt templates.
-
-
 - [ ] **Task 112: Webhook Notifications & Report Upload Integration**
   - **Design Goal:** Support webhook notifications to allow uploading fuzzer findings/reports (including validated AI findings/remediation recommendations) to user-specified URLs.
   - **Implementation Details:**
@@ -148,3 +139,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Create `packages/common/logging/logger.ts` with the helper functions.
     - Export and replace inline `console.*` calls in existing modules (edge, container, web) via a focused commit.
     - Document usage guidelines in `docs/logging.md`.
+
+- [ ] **Task 116: Deepen Tech Stack Security Guidelines & Rules Integration**
+  - **Design Goal:** Curate and expand highly specific, framework-specific secure coding rules for each supported technology stack (React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot) to generate more precise AI remediation patches.
+  - **Implementation Details:**
+    - Perform deep research or ingest OWASP Cheat Sheets for each specific framework/stack.
+    - Define comprehensive, high-quality checklists (e.g. CSRF protection in Flask via WTF, route security and data leaking in Next.js Server Actions, entity mapping validations in Spring Boot, query formatting in C#/.NET).
+    - Map each checklist to prompt templates or agent runtime configurations to further refine the AI's patch generation capabilities.
+
