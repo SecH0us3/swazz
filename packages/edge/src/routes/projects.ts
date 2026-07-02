@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
+import { getDB } from '../utils/db';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { requirePermission } from '../middleware/rbac';
 import { ulid } from 'ulidx';
@@ -10,7 +11,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/projects', async (c) => {
     const userId = await getUserIdFromRequest(c) || c.req.query('user_id');
     if (userId) {
-      let { results } = await c.env.DB.prepare(`
+      let { results } = await getDB(c.env).prepare(`
         SELECT p.* 
         FROM projects p 
         JOIN project_members m ON p.id = m.project_id 
@@ -21,16 +22,16 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       // Auto-create a default project if the user has none
       if (!results || results.length === 0) {
         const projectId = ulid();
-        await c.env.DB.batch([
-          c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+        await getDB(c.env).batch([
+          getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
             .bind(projectId),
-          c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
             .bind(projectId, userId),
-          c.env.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
+          getDB(c.env).prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
             .bind(projectId, userId)
         ]);
         
-        const newProject = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<Project>();
+        const newProject = await getDB(c.env).prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<Project>();
         results = newProject ? [newProject] : [];
       }
   
@@ -38,7 +39,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     }
     
     // Fallback: list all
-    const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+    const { results } = await getDB(c.env).prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
     return c.json({ projects: results });
   });
   
@@ -47,12 +48,12 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
     const id = ulid();
     
-    await c.env.DB.batch([
-      c.env.DB.prepare('INSERT INTO projects (id, name, description, url_mappings, ai_prompts, propose_fixes, custom_cli_command) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    await getDB(c.env).batch([
+      getDB(c.env).prepare('INSERT INTO projects (id, name, description, url_mappings, ai_prompts, propose_fixes, custom_cli_command) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .bind(id, body.name, body.description || '', body.url_mappings || null, body.ai_prompts || null, body.propose_fixes ? 1 : 0, body.custom_cli_command || null),
-      c.env.DB.prepare('INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)')
+      getDB(c.env).prepare('INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)')
         .bind(id, userId, 'owner'),
-      c.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)')
+      getDB(c.env).prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)')
         .bind(id, userId, 'owner')
     ]);
   
@@ -62,7 +63,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/projects/:id/config', requirePermission('get:/api/projects/:id/config'), async (c) => {
     const projectId = c.req.param('id');
   
-    const result = await c.env.DB.prepare(
+    const result = await getDB(c.env).prepare(
       "SELECT config_json FROM scan_configs WHERE project_id = ? AND name = 'default'"
     )
     .bind(projectId)
@@ -81,9 +82,9 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const configJson = JSON.stringify(body.config);
     const id = ulid();
   
-    await c.env.DB.batch([
-      c.env.DB.prepare("DELETE FROM scan_configs WHERE project_id = ? AND name = 'default'").bind(projectId),
-      c.env.DB.prepare("INSERT INTO scan_configs (id, project_id, name, config_json) VALUES (?, ?, 'default', ?)").bind(id, projectId, configJson)
+    await getDB(c.env).batch([
+      getDB(c.env).prepare("DELETE FROM scan_configs WHERE project_id = ? AND name = 'default'").bind(projectId),
+      getDB(c.env).prepare("INSERT INTO scan_configs (id, project_id, name, config_json) VALUES (?, ?, 'default', ?)").bind(id, projectId, configJson)
     ]);
   
     return c.json({ status: 'saved' });
@@ -106,7 +107,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
 
     if (setClauses.length > 0) {
       values.push(projectId);
-      await c.env.DB.prepare(`UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?`)
+      await getDB(c.env).prepare(`UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?`)
         .bind(...values)
         .run();
     }
@@ -117,11 +118,11 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
   app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), async (c) => {
     const projectId = c.req.param('id');
   
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectId),
-      c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ?').bind(projectId),
-      c.env.DB.prepare('DELETE FROM scan_configs WHERE project_id = ?').bind(projectId),
-      c.env.DB.prepare('DELETE FROM scans WHERE project_id = ?').bind(projectId),
+    await getDB(c.env).batch([
+      getDB(c.env).prepare('DELETE FROM projects WHERE id = ?').bind(projectId),
+      getDB(c.env).prepare('DELETE FROM project_members WHERE project_id = ?').bind(projectId),
+      getDB(c.env).prepare('DELETE FROM scan_configs WHERE project_id = ?').bind(projectId),
+      getDB(c.env).prepare('DELETE FROM scans WHERE project_id = ?').bind(projectId),
     ]);
   
     return c.json({ status: 'deleted' });

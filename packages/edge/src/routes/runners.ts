@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
+import { getDB } from '../utils/db';
 import { getUserIdFromRequest, getDeleteRequestedAt, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
@@ -24,7 +25,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
   
     let userId = "";
     if (publicKey) {
-      const user = await c.env.DB.prepare('SELECT id FROM users WHERE public_key = ?')
+      const user = await getDB(c.env).prepare('SELECT id FROM users WHERE public_key = ?')
         .bind(publicKey)
         .first<{ id: string }>();
       if (!user) {
@@ -32,7 +33,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       }
       userId = user.id;
     } else if (token) {
-      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+      const user = await getDB(c.env).prepare('SELECT id FROM users WHERE api_key = ?')
         .bind(token)
         .first<{ id: string }>();
       if (!user) {
@@ -43,7 +44,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       return new Response('Unauthorized: Missing token or X-Runner-Public-Key header', { status: 401 });
     }
 
-    const deleteRequestedAt = await getDeleteRequestedAt(c.env.DB, userId);
+    const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env), userId);
     if (deleteRequestedAt !== null) {
       return new Response('Forbidden: Account is scheduled for deletion', { status: 403 });
     }
@@ -70,7 +71,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
   
     let userPublicKey: string | null = null;
     try {
-      const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT public_key FROM users WHERE id = ?')
         .bind(userId)
         .first<{ public_key: string | null }>();
       if (user) {
@@ -150,7 +151,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       }
   
       try {
-        const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        const user = await getDB(c.env).prepare('SELECT public_key FROM users WHERE id = ?')
           .bind(userId)
           .first<{ public_key: string | null }>();
         if (user && user.public_key) {
@@ -170,7 +171,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     const status = 'queued';
 
     try {
-      await c.env.DB.prepare(
+      await getDB(c.env).prepare(
         `INSERT INTO scans (id, project_id, target_url, profile, status, user_id)
          VALUES (?, ?, ?, ?, ?, ?)`
       )
@@ -259,7 +260,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
     let userPublicKey = "";
     let dbFailed = false;
     try {
-      const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT public_key FROM users WHERE id = ?')
         .bind(userId)
         .first<{ public_key: string | null }>();
       if (user && user.public_key) {

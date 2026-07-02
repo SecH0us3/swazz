@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
+import { getDB } from '../utils/db';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
@@ -46,7 +47,7 @@ export function registerMiscRoutes(app: Hono<{ Bindings: Env }>) {
       if (isAnon) {
         const ip = getClientIp(c);
         
-        const usage = await c.env.DB.prepare('SELECT json_count FROM anonymous_usage WHERE ip = ?')
+        const usage = await getDB(c.env).prepare('SELECT json_count FROM anonymous_usage WHERE ip = ?')
           .bind(ip)
           .first<{ json_count: number }>();
   
@@ -60,7 +61,7 @@ export function registerMiscRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (userId) {
       try {
-        const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        const user = await getDB(c.env).prepare('SELECT public_key FROM users WHERE id = ?')
           .bind(userId)
           .first<{ public_key: string | null }>();
         if (user && user.public_key) {
@@ -86,7 +87,7 @@ export function registerMiscRoutes(app: Hono<{ Bindings: Env }>) {
       const isAnon = await isAnonymousUser(c);
       if (isAnon) {
         const ip = getClientIp(c);
-        await c.env.DB.prepare(
+        await getDB(c.env).prepare(
           `INSERT INTO anonymous_usage (ip, json_count) VALUES (?, 1)
            ON CONFLICT(ip) DO UPDATE SET json_count = json_count + 1`
         ).bind(ip).run();

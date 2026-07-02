@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
+import { getDB } from '../utils/db';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
@@ -77,7 +78,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     try {
       usernameHash = await hashUsername(username);
       // Check if username is locked
-      const existing = await c.env.DB.prepare('SELECT username_hash FROM username_registry WHERE username_hash = ?')
+      const existing = await getDB(c.env).prepare('SELECT username_hash FROM username_registry WHERE username_hash = ?')
         .bind(usernameHash)
         .first<{ username_hash: string }>();
       if (existing) {
@@ -93,14 +94,14 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
   
     try {
-      await c.env.DB.batch([
-        c.env.DB.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
+      await getDB(c.env).batch([
+        getDB(c.env).prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
           .bind(usernameHash),
-        c.env.DB.prepare("INSERT INTO users (id, username, password_hash, api_key, email, plan) VALUES (?, ?, ?, ?, ?, 'Free')")
+        getDB(c.env).prepare("INSERT INTO users (id, username, password_hash, api_key, email, plan) VALUES (?, ?, ?, ?, ?, 'Free')")
           .bind(id, username, hash, apiKey, email),
-        c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+        getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
-        c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+        getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
 
@@ -127,7 +128,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/auth/guest/step1', async (c) => {
     // IP-based Rate limit check (max 30 requests per minute)
     const clientIp = getClientIp(c);
-    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip-guest:${clientIp}`, 30, 60);
+    const ipRateLimit = await checkIpRateLimit(getDB(c.env), `ip-guest:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) {
       return c.json({ error: 'Too many requests. Please try again later.' }, 429);
     }
@@ -159,7 +160,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
 
     // Save challenge with placeholder guest username
-    await c.env.DB.prepare(
+    await getDB(c.env).prepare(
       'INSERT INTO login_challenges (token, username, challenge, difficulty, expires_at) VALUES (?, ?, ?, ?, ?)'
     )
     .bind(token, 'guest_temp', challenge, difficulty, expiryStr)
@@ -176,9 +177,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/auth/guest', async (c) => {
     // Proactively clean up expired guests asynchronously (non-blocking)
     try {
-      c.executionCtx.waitUntil(cleanupExpiredGuests(c.env.DB));
+      c.executionCtx.waitUntil(cleanupExpiredGuests(getDB(c.env)));
     } catch {
-      cleanupExpiredGuests(c.env.DB).catch(console.error);
+      cleanupExpiredGuests(getDB(c.env)).catch(console.error);
     }
 
     const body = await c.req.json();
@@ -204,7 +205,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     // Verify Proof of Work challenge exists and is valid
-    const challengeRow = await c.env.DB.prepare(
+    const challengeRow = await getDB(c.env).prepare(
       'SELECT challenge, difficulty, expires_at FROM login_challenges WHERE token = ? AND username = ?'
     )
     .bind(challengeToken, 'guest_temp')
@@ -215,7 +216,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     // Delete token immediately to prevent replay attacks
-    await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?')
+    await getDB(c.env).prepare('DELETE FROM login_challenges WHERE token = ?')
       .bind(challengeToken)
       .run();
 
@@ -246,13 +247,13 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
 
     try {
-      await c.env.DB.batch([
-        c.env.DB.prepare(
+      await getDB(c.env).batch([
+        getDB(c.env).prepare(
           "INSERT INTO users (id, username, password_hash, api_key, is_guest, expires_at, plan) VALUES (?, ?, ?, ?, 1, datetime('now', '+1 day'), 'Free')"
         ).bind(id, username, hash, apiKey),
-        c.env.DB.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+        getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
-        c.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+        getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
 
@@ -291,7 +292,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await c.env.DB.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan FROM users WHERE id = ?')
         .bind(decoded.sub)
         .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null; two_factor_enabled: number; plan: string | null }>();
       if (!user) {
@@ -301,7 +302,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       let currentApiKey = user.api_key;
       if (!currentApiKey) {
         currentApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
-        await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
+        await getDB(c.env).prepare('UPDATE users SET api_key = ? WHERE id = ?')
           .bind(currentApiKey, decoded.sub)
           .run();
       }
@@ -337,7 +338,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
   
       const val = (publicKey === '' || publicKey === null || publicKey === undefined) ? null : publicKey.toLowerCase();
-      await c.env.DB.prepare('UPDATE users SET public_key = ? WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET public_key = ? WHERE id = ?')
         .bind(val, userId)
         .run();
   
@@ -362,7 +363,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
 
       // Fetch old API key for KV cache invalidation
-      const oldUser = await c.env.DB.prepare('SELECT api_key FROM users WHERE id = ?')
+      const oldUser = await getDB(c.env).prepare('SELECT api_key FROM users WHERE id = ?')
         .bind(decoded.sub)
         .first<{ api_key: string | null }>();
 
@@ -371,7 +372,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
 
       const newApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
-      await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET api_key = ? WHERE id = ?')
         .bind(newApiKey, decoded.sub)
         .run();
 
@@ -397,13 +398,13 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const clientIp = getClientIp(c);
     
     // IP-based Rate limit check (max 30 requests per minute)
-    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    const ipRateLimit = await checkIpRateLimit(getDB(c.env), `ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) {
       return c.json({ error: 'Too many requests. Please try again later.' }, 429);
     }
     
     // Global system rate limit check (max 100 requests per minute)
-    const systemRateLimit = await checkIpRateLimit(c.env.DB, 'system', 100, 60);
+    const systemRateLimit = await checkIpRateLimit(getDB(c.env), 'system', 100, 60);
     if (systemRateLimit.limited) {
       return c.json({ error: 'System busy. Please try again later.' }, 429);
     }
@@ -440,7 +441,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const expiryStr = expiry.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
 
     // Save challenge
-    await c.env.DB.prepare(
+    await getDB(c.env).prepare(
       'INSERT INTO login_challenges (token, username, challenge, difficulty, expires_at) VALUES (?, ?, ?, ?, ?)'
     )
     .bind(token, username, challenge, difficulty, expiryStr)
@@ -467,7 +468,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     };
 
     // IP-based Rate limit check (max 30 requests per minute)
-    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    const ipRateLimit = await checkIpRateLimit(getDB(c.env), `ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) {
       return c.json({ error: 'Too many requests. Please try again later.' }, 429);
     }
@@ -499,7 +500,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
 
       // Retrieve challenge
-      const challengeRow = await c.env.DB.prepare(
+      const challengeRow = await getDB(c.env).prepare(
         'SELECT username, challenge, difficulty, expires_at FROM login_challenges WHERE token = ?'
       )
       .bind(body.token)
@@ -510,7 +511,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
 
       // Delete token immediately to prevent replay attacks
-      await c.env.DB.prepare('DELETE FROM login_challenges WHERE token = ?').bind(body.token).run();
+      await getDB(c.env).prepare('DELETE FROM login_challenges WHERE token = ?').bind(body.token).run();
 
       // Check expiry
       const expiresAt = new Date(challengeRow.expires_at + 'Z');
@@ -536,7 +537,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     // Check username rate limits
-    const rateLimit = await checkLoginRateLimit(c.env.DB, username);
+    const rateLimit = await checkLoginRateLimit(getDB(c.env), username);
     if (rateLimit.locked) {
       return c.json(
         { error: 'Account temporarily locked due to too many failed attempts', retry_after: rateLimit.retryAfter },
@@ -544,21 +545,21 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       );
     }
 
-    const user = await c.env.DB.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
+    const user = await getDB(c.env).prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
       .bind(username)
       .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
 
     if (!user) {
       // User doesn't exist: run dummy verify and inject timing-delay to prevent username enumeration
       await verifyDummyPassword(body.password);
-      await recordFailedLogin(c.env.DB, username);
+      await recordFailedLogin(getDB(c.env), username);
       await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
-      await recordFailedLogin(c.env.DB, username);
+      await recordFailedLogin(getDB(c.env), username);
       await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
@@ -577,20 +578,20 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       try {
         decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
       } catch {
-        await recordFailedLogin(c.env.DB, username);
+        await recordFailedLogin(getDB(c.env), username);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
       const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
-        await recordFailedLogin(c.env.DB, username);
+        await recordFailedLogin(getDB(c.env), username);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
     }
 
     // Successful login — reset rate-limit counter
-    await resetLoginAttempts(c.env.DB, username);
+    await resetLoginAttempts(getDB(c.env), username);
 
     const payload = {
       sub: user.id,
@@ -617,14 +618,14 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     try {
-      await c.env.DB.prepare('UPDATE users SET delete_requested_at = datetime(\'now\') WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET delete_requested_at = datetime(\'now\') WHERE id = ?')
         .bind(userId)
         .run();
 
       deletionCache.delete(userId);
 
       // Terminate active scans for this user
-      await c.env.DB.prepare(`
+      await getDB(c.env).prepare(`
         UPDATE scans
         SET status = 'failed', completed_at = datetime('now')
         WHERE (user_id = ? OR project_id IN (
@@ -663,7 +664,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     try {
-      await c.env.DB.prepare('UPDATE users SET delete_requested_at = NULL WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET delete_requested_at = NULL WHERE id = ?')
         .bind(userId)
         .run();
 
@@ -688,7 +689,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Missing password verification' }, 400);
       }
 
-      const user = await c.env.DB.prepare('SELECT username, password_hash, two_factor_enabled FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT username, password_hash, two_factor_enabled FROM users WHERE id = ?')
         .bind(userId)
         .first<{ username: string; password_hash: string; two_factor_enabled: number }>();
 
@@ -709,7 +710,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       const secret = generateTOTPSecret();
       const encryptedSecret = await encryptTOTPSecret(secret, body.password);
       
-      await c.env.DB.prepare('UPDATE users SET two_factor_secret = ? WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET two_factor_secret = ? WHERE id = ?')
         .bind(encryptedSecret, userId)
         .run();
 
@@ -742,7 +743,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Missing password verification' }, 400);
       }
 
-      const user = await c.env.DB.prepare('SELECT password_hash, two_factor_secret FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT password_hash, two_factor_secret FROM users WHERE id = ?')
         .bind(userId)
         .first<{ password_hash: string; two_factor_secret: string | null }>();
 
@@ -770,7 +771,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Invalid password or 2FA code' }, 401);
       }
 
-      await c.env.DB.prepare('UPDATE users SET two_factor_enabled = 1 WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET two_factor_enabled = 1 WHERE id = ?')
         .bind(userId)
         .run();
 
@@ -796,7 +797,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Missing password verification' }, 400);
       }
 
-      const user = await c.env.DB.prepare('SELECT password_hash, two_factor_secret, two_factor_enabled FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT password_hash, two_factor_secret, two_factor_enabled FROM users WHERE id = ?')
         .bind(userId)
         .first<{ password_hash: string; two_factor_secret: string | null; two_factor_enabled: number }>();
 
@@ -824,7 +825,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Invalid password or 2FA code' }, 401);
       }
 
-      await c.env.DB.prepare('UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE id = ?')
         .bind(userId)
         .run();
 
@@ -840,7 +841,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
-    const user = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first<{username: string}>();
+    const user = await getDB(c.env).prepare('SELECT username FROM users WHERE id = ?').bind(userId).first<{username: string}>();
     if (!user) {
       return c.json({ error: 'User not found' }, 404);
     }
@@ -850,7 +851,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const encoder = new TextEncoder();
     const userIDBytes = encoder.encode(userId);
 
-    const passkeys = await c.env.DB.prepare('SELECT credential_id FROM passkeys WHERE user_id = ?').bind(userId).all<{credential_id: string}>();
+    const passkeys = await getDB(c.env).prepare('SELECT credential_id FROM passkeys WHERE user_id = ?').bind(userId).all<{credential_id: string}>();
     const excludeCredentials = passkeys.results.map(pk => ({
       id: pk.credential_id,
       type: 'public-key' as const,
@@ -920,7 +921,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
         const webauthn_user_id = arrayBufferToBase64(new TextEncoder().encode(userId));
 
-        await c.env.DB.prepare(`
+        await getDB(c.env).prepare(`
           INSERT INTO passkeys (credential_id, user_id, public_key, webauthn_user_id, counter, device_type, backed_up, transports)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(credential_id, userId, public_key, webauthn_user_id, counter, device_type, backed_up, transports).run();
@@ -936,7 +937,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.post('/api/auth/passkeys/login/generate-options', async (c) => {
     const clientIp = getClientIp(c);
-    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    const ipRateLimit = await checkIpRateLimit(getDB(c.env), `ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) {
       return c.json({ error: 'Too many requests. Please try again later.' }, 429);
     }
@@ -947,13 +948,13 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     }
     const username = body.username.trim();
 
-    const user = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first<{id: string}>();
+    const user = await getDB(c.env).prepare('SELECT id FROM users WHERE username = ?').bind(username).first<{id: string}>();
     if (!user) {
       await new Promise(r => setTimeout(r, 200));
       return c.json({ error: 'User not found' }, 404);
     }
 
-    const passkeys = await c.env.DB.prepare('SELECT credential_id, transports FROM passkeys WHERE user_id = ?').bind(user.id).all<{credential_id: string, transports: string}>();
+    const passkeys = await getDB(c.env).prepare('SELECT credential_id, transports FROM passkeys WHERE user_id = ?').bind(user.id).all<{credential_id: string, transports: string}>();
     
     if (!passkeys.results || passkeys.results.length === 0) {
       await new Promise(r => setTimeout(r, 200));
@@ -985,7 +986,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.post('/api/auth/passkeys/login/verify', async (c) => {
     const clientIp = getClientIp(c);
-    const ipRateLimit = await checkIpRateLimit(c.env.DB, `ip:${clientIp}`, 30, 60);
+    const ipRateLimit = await checkIpRateLimit(getDB(c.env), `ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) {
       return c.json({ error: 'Too many requests. Please try again later.' }, 429);
     }
@@ -996,7 +997,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
        return c.json({ error: 'Invalid or missing credential ID' }, 400);
     }
 
-    const pk = await c.env.DB.prepare('SELECT user_id, public_key, counter, transports FROM passkeys WHERE credential_id = ?').bind(credential_id).first<{user_id: string, public_key: string, counter: number, transports: string}>();
+    const pk = await getDB(c.env).prepare('SELECT user_id, public_key, counter, transports FROM passkeys WHERE credential_id = ?').bind(credential_id).first<{user_id: string, public_key: string, counter: number, transports: string}>();
     
     if (!pk) {
       return c.json({ error: 'Credential not found' }, 404);
@@ -1032,11 +1033,11 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
       if (verification.verified && verification.authenticationInfo) {
         const { newCounter } = verification.authenticationInfo;
-        await c.env.DB.prepare('UPDATE passkeys SET counter = ? WHERE credential_id = ?').bind(newCounter, credential_id).run();
+        await getDB(c.env).prepare('UPDATE passkeys SET counter = ? WHERE credential_id = ?').bind(newCounter, credential_id).run();
 
-        const user = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(pk.user_id).first<{username: string}>();
+        const user = await getDB(c.env).prepare('SELECT username FROM users WHERE id = ?').bind(pk.user_id).first<{username: string}>();
         if (user) {
-            await resetLoginAttempts(c.env.DB, user.username);
+            await resetLoginAttempts(getDB(c.env), user.username);
         }
 
         const payload = {
@@ -1060,7 +1061,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/auth/passkeys', async (c) => {
   const userId = await getUserIdFromRequest(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
-  const { results } = await c.env.DB.prepare('SELECT credential_id as id, device_type, created_at FROM passkeys WHERE user_id = ?').bind(userId).all();
+  const { results } = await getDB(c.env).prepare('SELECT credential_id as id, device_type, created_at FROM passkeys WHERE user_id = ?').bind(userId).all();
   return c.json(results);
 });
 
@@ -1068,7 +1069,7 @@ app.delete('/api/auth/passkeys/:id', async (c) => {
   const userId = await getUserIdFromRequest(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
   const id = c.req.param('id');
-  const { success } = await c.env.DB.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').bind(id, userId).run();
+  const { success } = await getDB(c.env).prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').bind(id, userId).run();
   if (!success) return c.json({ error: 'Failed to delete' }, 500);
   return c.json({ status: 'ok' });
 });
@@ -1096,7 +1097,7 @@ app.post('/api/admin/users/plan', async (c) => {
     return c.json({ error: 'Invalid plan. Allowed plans: Free, Supporter Plan' }, 400);
   }
 
-  const result = await c.env.DB.prepare('UPDATE users SET plan = ? WHERE username = ?')
+  const result = await getDB(c.env).prepare('UPDATE users SET plan = ? WHERE username = ?')
     .bind(plan, username)
     .run();
 

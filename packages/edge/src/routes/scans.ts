@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
+import { getDB } from '../utils/db';
 import { getUserIdFromRequest } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
@@ -22,7 +23,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const id = ulid();
     const status = 'queued';
   
-    await c.env.DB.prepare(
+    await getDB(c.env).prepare(
       `INSERT INTO scans (id, project_id, target_url, profile, status)
        VALUES (?, ?, ?, ?, ?)`
     )
@@ -32,7 +33,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     let userPublicKey = "";
     if (userId) {
       try {
-        const user = await c.env.DB.prepare('SELECT public_key FROM users WHERE id = ?')
+        const user = await getDB(c.env).prepare('SELECT public_key FROM users WHERE id = ?')
           .bind(userId)
           .first<{ public_key: string | null }>();
         if (user && user.public_key) {
@@ -69,7 +70,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
     }
   
-    const { results } = await c.env.DB.prepare(
+    const { results } = await getDB(c.env).prepare(
       'SELECT * FROM scans WHERE project_id = ? ORDER BY created_at DESC'
     )
       .bind(projectId)
@@ -80,7 +81,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   
   app.get('/api/scans/:id', async (c) => {
     const scanId = c.req.param('id');
-    const scan = await c.env.DB.prepare('SELECT * FROM scans WHERE id = ?')
+    const scan = await getDB(c.env).prepare('SELECT * FROM scans WHERE id = ?')
       .bind(scanId)
       .first<{ id: string; project_id: string }>();
   
@@ -102,7 +103,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
   
     // Verify scan exists
-    const scan = await c.env.DB.prepare('SELECT id, project_id FROM scans WHERE id = ?')
+    const scan = await getDB(c.env).prepare('SELECT id, project_id FROM scans WHERE id = ?')
       .bind(scanId)
       .first<{ id: string; project_id: string }>();
     if (!scan) {
@@ -132,11 +133,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   
     values.push(scanId);
-    await c.env.DB.prepare(`UPDATE scans SET ${setClauses.join(', ')} WHERE id = ?`)
+    await getDB(c.env).prepare(`UPDATE scans SET ${setClauses.join(', ')} WHERE id = ?`)
       .bind(...values)
       .run();
   
-    const updated = await c.env.DB.prepare('SELECT * FROM scans WHERE id = ?')
+    const updated = await getDB(c.env).prepare('SELECT * FROM scans WHERE id = ?')
       .bind(scanId)
       .first();
   
@@ -155,7 +156,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const scanId = c.req.param('id');
   
     // Verify scan exists
-    const scan = await c.env.DB.prepare('SELECT id, project_id, status FROM scans WHERE id = ?')
+    const scan = await getDB(c.env).prepare('SELECT id, project_id, status FROM scans WHERE id = ?')
       .bind(scanId)
       .first<{ id: string; project_id: string; status: string }>();
     if (!scan) {
@@ -230,7 +231,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       });
   
       // Update scan record with report_url
-      await c.env.DB.prepare('UPDATE scans SET report_url = ?, is_encrypted = 1 WHERE id = ?')
+      await getDB(c.env).prepare('UPDATE scans SET report_url = ?, is_encrypted = 1 WHERE id = ?')
         .bind(decoded.r2_key, scanId)
         .run();
   
@@ -250,7 +251,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
     // JOIN with scans to retrieve project_id (findings table has no project_id column)
-    const row = await c.env.DB.prepare(
+    const row = await getDB(c.env).prepare(
       'SELECT f.*, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     )
       .bind(findingId)
@@ -277,7 +278,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
 
     // JOIN with scans to retrieve project_id (findings table has no project_id column)
-    const finding = await c.env.DB.prepare(
+    const finding = await getDB(c.env).prepare(
       'SELECT f.id, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     )
       .bind(findingId)
@@ -320,11 +321,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   
     values.push(findingId);
-    await c.env.DB.prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
+    await getDB(c.env).prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
       .bind(...values)
       .run();
   
-    const updated = await c.env.DB.prepare('SELECT * FROM findings WHERE id = ?')
+    const updated = await getDB(c.env).prepare('SELECT * FROM findings WHERE id = ?')
       .bind(findingId)
       .first();
   

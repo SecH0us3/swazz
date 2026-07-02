@@ -146,6 +146,19 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
               },
               required: ['filepath']
             }
+          },
+          {
+            name: 'swazz_list_files',
+            description: 'Lists all indexed files in the workspace, optionally filtered by a substring pattern.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                pattern: {
+                  type: 'string',
+                  description: 'Optional pattern to filter file paths (e.g. "edge/src" or ".ts")'
+                }
+              }
+            }
           }
         ]
       });
@@ -251,6 +264,47 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
         } catch (err: any) {
           console.error('[Swazz MCP] Get context outline failed:', err);
           sendError(id, -32603, `Failed to retrieve context outline: ${err.message}`);
+        }
+      } else if (name === 'swazz_list_files') {
+        const pattern = args?.pattern;
+        if (pattern !== undefined && typeof pattern !== 'string') {
+          throw new TypeError("pattern must be a string");
+        }
+        console.error(`[Swazz MCP] Listing files with pattern: "${pattern || 'all'}"`);
+        try {
+          let rows: Array<{ filepath: string }>;
+          if (pattern) {
+            const stmt = db.prepare('SELECT filepath FROM files WHERE filepath LIKE ? ORDER BY filepath ASC');
+            rows = stmt.all(`%${pattern}%`) as Array<{ filepath: string }>;
+          } else {
+            const stmt = db.prepare('SELECT filepath FROM files ORDER BY filepath ASC');
+            rows = stmt.all() as Array<{ filepath: string }>;
+          }
+
+          if (rows.length === 0) {
+            sendResponse(id, {
+              content: [
+                {
+                  type: 'text',
+                  text: 'No files found matching the pattern.'
+                }
+              ]
+            });
+            return;
+          }
+
+          const responseText = rows.map(r => r.filepath).join('\n');
+          sendResponse(id, {
+            content: [
+              {
+                type: 'text',
+                text: responseText
+              }
+            ]
+          });
+        } catch (err: any) {
+          console.error('[Swazz MCP] List files failed:', err);
+          sendError(id, -32603, `List files failed: ${err.message}`);
         }
       } else {
         sendError(id, -32601, `Method not found: ${name}`);

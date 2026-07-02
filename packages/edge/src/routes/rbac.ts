@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
+import { getDB } from '../utils/db';
 import { requirePermission } from '../middleware/rbac';
 import { PERMISSIONS, DEFAULT_ROLES, PermissionKey } from '../config/rbac';
 import { ulid } from 'ulidx';
@@ -9,7 +10,7 @@ import { invalidateUserRBAC, invalidateProjectRBAC } from '../utils/rbac';
 async function verifyNotGuest(c: any): Promise<Response | null> {
   const userId = await getUserIdFromRequest(c);
   if (userId) {
-    const user = await c.env.DB.prepare('SELECT is_guest FROM users WHERE id = ?')
+    const user = await getDB(c.env).prepare('SELECT is_guest FROM users WHERE id = ?')
       .bind(userId)
       .first<{ is_guest: number | null }>();
     if (user && user.is_guest === 1) {
@@ -27,7 +28,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.get('/api/projects/:id/roles', requirePermission('get:/api/projects/:id/roles'), async (c) => {
     const projectId = (c.req.param('id') as string);
-    const { results: customRoles } = await c.env.DB.prepare(
+    const { results: customRoles } = await getDB(c.env).prepare(
       'SELECT id, name, created_at FROM project_custom_roles WHERE project_id = ?'
     ).bind(projectId).all();
 
@@ -37,8 +38,8 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     if (customRoles && customRoles.length > 0) {
       const customRoleIds = customRoles.map((r: any) => r.id);
       const placeholders = customRoleIds.map(() => '?').join(',');
-      allCustomPermissions = (await c.env.DB.prepare(`SELECT role_id, permission_key FROM custom_role_permissions WHERE role_id IN (${placeholders})`).bind(...customRoleIds).all<{role_id: string, permission_key: string}>()).results || [];
-      allInheritance = (await c.env.DB.prepare(`SELECT parent_role_id, child_role_id FROM custom_role_inheritance WHERE parent_role_id IN (${placeholders})`).bind(...customRoleIds).all<{parent_role_id: string, child_role_id: string}>()).results || [];
+      allCustomPermissions = (await getDB(c.env).prepare(`SELECT role_id, permission_key FROM custom_role_permissions WHERE role_id IN (${placeholders})`).bind(...customRoleIds).all<{role_id: string, permission_key: string}>()).results || [];
+      allInheritance = (await getDB(c.env).prepare(`SELECT parent_role_id, child_role_id FROM custom_role_inheritance WHERE parent_role_id IN (${placeholders})`).bind(...customRoleIds).all<{parent_role_id: string, child_role_id: string}>()).results || [];
     }
 
     const custom = customRoles?.map((r: any) => ({
@@ -89,7 +90,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
       if (customCandidates.length > 0) {
         const placeholders = customCandidates.map(() => '?').join(',');
-        const { results: found } = await c.env.DB.prepare(
+        const { results: found } = await getDB(c.env).prepare(
           `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
         ).bind(projectId, ...customCandidates).all<{ id: string }>();
         const foundIds = new Set((found || []).map(r => r.id));
@@ -109,7 +110,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
 
-    const existingRole = await c.env.DB.prepare(
+    const existingRole = await getDB(c.env).prepare(
       'SELECT id FROM project_custom_roles WHERE project_id = ? AND name = ?'
     ).bind(projectId, roleName).first();
     if (existingRole) {
@@ -117,18 +118,18 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     const stmts = [
-      c.env.DB.prepare('INSERT INTO project_custom_roles (id, project_id, name) VALUES (?, ?, ?)').bind(roleId, projectId, roleName)
+      getDB(c.env).prepare('INSERT INTO project_custom_roles (id, project_id, name) VALUES (?, ?, ?)').bind(roleId, projectId, roleName)
     ];
 
     permissions.forEach((perm: string) => {
-      stmts.push(c.env.DB.prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, perm));
+      stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, perm));
     });
 
     includedRoles.forEach((childId: string) => {
-      stmts.push(c.env.DB.prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, childId));
+      stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, childId));
     });
 
-    await c.env.DB.batch(stmts);
+    await getDB(c.env).batch(stmts);
     
     // Invalidate project RBAC cache
     await invalidateProjectRBAC(c.env, projectId);
@@ -139,7 +140,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/projects/:id/members', requirePermission('get:/api/projects/:id/members'), async (c) => {
     const projectId = (c.req.param('id') as string);
     
-    const { results } = await c.env.DB.prepare(`
+    const { results } = await getDB(c.env).prepare(`
       SELECT u.id, u.username, u.email, m.role_id 
       FROM project_member_roles m 
       JOIN users u ON m.user_id = u.id 
@@ -155,7 +156,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       usersMap.get(r.id).roles.push(r.role_id);
     });
 
-    const { results: invites } = await c.env.DB.prepare(`
+    const { results: invites } = await getDB(c.env).prepare(`
       SELECT id, email, username, target_role_ids, expires_at 
       FROM project_invitations 
       WHERE project_id = ? AND status = 'Pending' AND strftime('%s', expires_at) > strftime('%s', 'now')
@@ -198,7 +199,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
     if (customRoles.length > 0) {
       const placeholders = customRoles.map(() => '?').join(',');
-      const { results } = await c.env.DB.prepare(
+      const { results } = await getDB(c.env).prepare(
         `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
       ).bind(projectId, ...customRoles).all<{id: string}>();
       const foundRoles = new Set((results || []).map(r => r.id));
@@ -209,14 +210,14 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     // Check if invitation
-    const isInvite = await c.env.DB.prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
+    const isInvite = await getDB(c.env).prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
     if (isInvite) {
-      await c.env.DB.prepare('UPDATE project_invitations SET target_role_ids = ? WHERE id = ?').bind(JSON.stringify(body.roles), memberId).run();
+      await getDB(c.env).prepare('UPDATE project_invitations SET target_role_ids = ? WHERE id = ?').bind(JSON.stringify(body.roles), memberId).run();
       return c.json({ status: 'updated' });
     }
 
     // Update active member roles atomically
-    const currentMemberRoles = await c.env.DB.prepare(
+    const currentMemberRoles = await getDB(c.env).prepare(
       'SELECT role_id FROM project_member_roles WHERE project_id = ? AND user_id = ?'
     )
       .bind(projectId, memberId)
@@ -225,7 +226,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const hasOwner = currentMemberRoles.results.some(r => r.role_id === 'owner');
 
     if (hasOwner && !body.roles.includes('owner')) {
-      const ownersCount = await c.env.DB.prepare(`
+      const ownersCount = await getDB(c.env).prepare(`
         SELECT COUNT(DISTINCT user_id) as count FROM (
           SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
           UNION
@@ -241,14 +242,14 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     const stmts = [
-      c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
+      getDB(c.env).prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
     ];
 
     body.roles.forEach((r: string) => {
-      stmts.push(c.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, memberId, r));
+      stmts.push(getDB(c.env).prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, memberId, r));
     });
 
-    await c.env.DB.batch(stmts);
+    await getDB(c.env).batch(stmts);
     
     // Invalidate user RBAC cache
     await(invalidateUserRBAC(c.env, projectId, memberId));
@@ -267,13 +268,13 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'You cannot remove yourself from the project' }, 400);
     }
 
-    const isInvite = await c.env.DB.prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
+    const isInvite = await getDB(c.env).prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
     if (isInvite) {
-      await c.env.DB.prepare("UPDATE project_invitations SET status = 'Revoked' WHERE id = ?").bind(memberId).run();
+      await getDB(c.env).prepare("UPDATE project_invitations SET status = 'Revoked' WHERE id = ?").bind(memberId).run();
       return c.json({ status: 'revoked' });
     }
 
-    const currentMemberRoles = await c.env.DB.prepare(
+    const currentMemberRoles = await getDB(c.env).prepare(
       'SELECT role_id FROM project_member_roles WHERE project_id = ? AND user_id = ?'
     )
       .bind(projectId, memberId)
@@ -282,7 +283,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const hasOwner = currentMemberRoles.results.some(r => r.role_id === 'owner');
 
     if (hasOwner) {
-      const ownersCount = await c.env.DB.prepare(`
+      const ownersCount = await getDB(c.env).prepare(`
         SELECT COUNT(DISTINCT user_id) as count FROM (
           SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
           UNION
@@ -297,9 +298,9 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
 
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
-      c.env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
+    await getDB(c.env).batch([
+      getDB(c.env).prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
+      getDB(c.env).prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
     ]);
 
     // Invalidate user RBAC cache
@@ -324,7 +325,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     }
     const roleName = body.name.trim();
 
-    const existing = await c.env.DB.prepare('SELECT 1 FROM project_custom_roles WHERE project_id = ? AND name = ? AND id != ?').bind(projectId, roleName, roleId).first();
+    const existing = await getDB(c.env).prepare('SELECT 1 FROM project_custom_roles WHERE project_id = ? AND name = ? AND id != ?').bind(projectId, roleName, roleId).first();
     if (existing) {
       return c.json({ error: 'A role with this name already exists' }, 400);
     }
@@ -343,7 +344,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
       if (customCandidates.length > 0) {
         const placeholders = customCandidates.map(() => '?').join(',');
-        const { results: found } = await c.env.DB.prepare(
+        const { results: found } = await getDB(c.env).prepare(
           `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
         ).bind(projectId, ...customCandidates).all<{ id: string }>();
         const foundIds = new Set((found || []).map(r => r.id));
@@ -358,15 +359,15 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     const stmts = [
-      c.env.DB.prepare('UPDATE project_custom_roles SET name = ? WHERE id = ?').bind(roleName, roleId),
-      c.env.DB.prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
-      c.env.DB.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ?').bind(roleId)
+      getDB(c.env).prepare('UPDATE project_custom_roles SET name = ? WHERE id = ?').bind(roleName, roleId),
+      getDB(c.env).prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
+      getDB(c.env).prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ?').bind(roleId)
     ];
 
-    permissions.forEach(p => stmts.push(c.env.DB.prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, p)));
-    includedRoles.forEach(child => stmts.push(c.env.DB.prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, child)));
+    permissions.forEach(p => stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, p)));
+    includedRoles.forEach(child => stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, child)));
 
-    await c.env.DB.batch(stmts);
+    await getDB(c.env).batch(stmts);
     
     // Invalidate project RBAC cache since role definition changed
     await invalidateProjectRBAC(c.env, projectId);
@@ -384,11 +385,11 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Default roles cannot be deleted' }, 400);
     }
 
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM project_custom_roles WHERE id = ?').bind(roleId),
-      c.env.DB.prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
-      c.env.DB.prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ? OR child_role_id = ?').bind(roleId, roleId),
-      c.env.DB.prepare('DELETE FROM project_member_roles WHERE role_id = ?').bind(roleId)
+    await getDB(c.env).batch([
+      getDB(c.env).prepare('DELETE FROM project_custom_roles WHERE id = ?').bind(roleId),
+      getDB(c.env).prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
+      getDB(c.env).prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ? OR child_role_id = ?').bind(roleId, roleId),
+      getDB(c.env).prepare('DELETE FROM project_member_roles WHERE role_id = ?').bind(roleId)
     ]);
 
     // Invalidate project RBAC cache since a role was deleted
@@ -401,10 +402,10 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
+    const user = await getDB(c.env).prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
     if (!user) return c.json({ error: 'User not found' }, 404);
 
-    const { results } = await c.env.DB.prepare(`
+    const { results } = await getDB(c.env).prepare(`
       SELECT i.id, i.token, i.project_id, p.name as project_name, i.expires_at 
       FROM project_invitations i
       JOIN projects p ON i.project_id = p.id
@@ -437,7 +438,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
     if (customRoles.length > 0) {
       const placeholders = customRoles.map(() => '?').join(',');
-      const { results } = await c.env.DB.prepare(
+      const { results } = await getDB(c.env).prepare(
         `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
       ).bind(projectId, ...customRoles).all<{id: string}>();
       const foundRoles = new Set((results || []).map(r => r.id));
@@ -451,7 +452,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const token = ulid() + ulid();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
 
-    await c.env.DB.prepare(`
+    await getDB(c.env).prepare(`
       INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
       VALUES (?, ?, ?, ?, ?, 'Pending', ?, ?)
     `).bind(id, projectId, body.email || null, body.username || null, JSON.stringify(body.roles), token, expiresAt).run();
@@ -465,11 +466,11 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
+    const user = await getDB(c.env).prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
     if (!user) return c.json({ error: 'User not found' }, 404);
 
     // Atomically claim the token if it's valid, not expired, and matches user (or is open)
-    const inv = await c.env.DB.prepare(`
+    const inv = await getDB(c.env).prepare(`
       UPDATE project_invitations 
       SET status = 'Accepted' 
       WHERE token = ?1 
@@ -482,7 +483,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
 
     if (!inv) {
       // Check why it failed to provide better error
-      const existing = await c.env.DB.prepare("SELECT username, email FROM project_invitations WHERE token = ? AND status = 'Pending'").bind(body.token).first<{username: string|null, email: string|null}>();
+      const existing = await getDB(c.env).prepare("SELECT username, email FROM project_invitations WHERE token = ? AND status = 'Pending'").bind(body.token).first<{username: string|null, email: string|null}>();
       if (existing) {
         if (existing.username && existing.username !== user.username) return c.json({ error: 'Invitation is for a different username' }, 403);
         if (existing.email && existing.email !== user.email) return c.json({ error: 'Invitation is for a different email' }, 403);
@@ -494,12 +495,12 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const stmts: any[] = [];
 
     roles.forEach((r: string) => {
-      stmts.push(c.env.DB.prepare('INSERT OR IGNORE INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(inv.project_id, userId, r));
+      stmts.push(getDB(c.env).prepare('INSERT OR IGNORE INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(inv.project_id, userId, r));
     });
     // Add to legacy project_members just in case for other endpoints
-    stmts.push(c.env.DB.prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')").bind(inv.project_id, userId));
+    stmts.push(getDB(c.env).prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')").bind(inv.project_id, userId));
 
-    await c.env.DB.batch(stmts);
+    await getDB(c.env).batch(stmts);
     await invalidateUserRBAC(c.env, inv.project_id, userId);
 
     return c.json({ status: 'accepted', project_id: inv.project_id });
@@ -510,10 +511,10 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const user = await c.env.DB.prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
+    const user = await getDB(c.env).prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
     if (!user) return c.json({ error: 'User not found' }, 404);
 
-    const res = await c.env.DB.prepare(`
+    const res = await getDB(c.env).prepare(`
       UPDATE project_invitations 
       SET status = 'Revoked' 
       WHERE token = ?1 
