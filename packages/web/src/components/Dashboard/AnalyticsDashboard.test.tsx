@@ -12,8 +12,8 @@ describe('AnalyticsDashboard Component', () => {
         json: () => Promise.resolve({
           scanStats: { total: 10, completed: 8, failed: 2, avgDuration: 15 },
           scanHistory: [{ date: '2026-07-01', count: 2, completed_count: 2, failed_count: 0 }],
-          findingsStats: [{ severity: 'High', category: 'swazz/reflected-xss', count: 1 }],
-          findingsHistory: [{ date: '2026-07-01', severity: 'High', count: 1 }],
+          findingsStats: [{ severity: 'error', category: 'swazz/reflected-xss', count: 1 }],
+          findingsHistory: [{ date: '2026-07-01', severity: 'error', count: 1 }],
           runnerMetrics: { totalConnected: 2, totalBusy: 1, utilization: 50, runners: [] }
         }),
       })
