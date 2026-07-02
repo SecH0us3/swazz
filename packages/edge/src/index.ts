@@ -2,7 +2,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';
-import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
+import { logInfo, logWarn, logError } from '../../common/logging/logger';
+import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerRbacRoutes } from './routes/rbac';
@@ -79,6 +80,32 @@ app.get('/api/info', (c) => {
 
 app.get('/api/version', (c) => {
   return c.json({ version: c.env.VERSION || '1.0.0' });
+});
+
+app.get('/api/admin/logs', async (c) => {
+  const adminSecret = c.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    return c.json({ error: 'Unauthorized: Admin secret is not configured' }, 401);
+  }
+  const authHeader = c.req.header('X-Admin-Secret') || c.req.header('Authorization');
+  const providedSecret = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+
+  if (!providedSecret || !safeCompare(providedSecret, adminSecret)) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  if (!c.env.SESSION_CACHE) {
+    return c.json([]);
+  }
+
+  const raw = await c.env.SESSION_CACHE.get('admin:logs');
+  if (!raw) return c.json([]);
+
+  try {
+    return c.json(JSON.parse(raw));
+  } catch {
+    return c.json([]);
+  }
 });
 // Add Security Headers middleware
 
@@ -330,9 +357,9 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: any, env: Env, ctx: any) {
-    ctx.waitUntil(cleanupExpiredGuests(env.DB));
+    ctx.waitUntil(cleanupExpiredGuests(env.DB, env));
     ctx.waitUntil(cleanupScheduledDeletions(env));
-    ctx.waitUntil(cleanupSecurityTables(env.DB));
+    ctx.waitUntil(cleanupSecurityTables(env.DB, env));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     if (batch.queue === 'swazz-scan-queue') {
@@ -358,11 +385,11 @@ export default {
             // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
             msg.ack();
           } else {
-            console.error(`SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
+            logError(env, "Queue", `SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
             msg.retry();
           }
         } catch (err) {
-          console.error(`SCAN_QUEUE dispatch failed for run ${msg.body.runId}:`, err);
+          logError(env, "Queue", `SCAN_QUEUE dispatch failed for run ${msg.body.runId}`, { error: err });
           msg.retry();
         }
       }
@@ -382,7 +409,7 @@ export default {
             msg.ack();
           }
         } catch (err) {
-          console.error("Failed to bulk insert findings:", err);
+          logError(env, "Queue", "Failed to bulk insert findings", { error: err });
           throw err;
         }
       }

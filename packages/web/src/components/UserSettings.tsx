@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useTheme } from '../hooks/useTheme.js';
 import QRCode from 'qrcode';
@@ -26,7 +26,65 @@ export function UserSettings() {
     const [setupSuccess, setSetupSuccess] = useState('');
     const [is2faLoading, setIs2faLoading] = useState(false);
 
-    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger'>('account');
+    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger' | 'admin'>('account');
+
+    const [adminSecret, setAdminSecret] = useState(() => localStorage.getItem('admin_secret') || '');
+    const [inputSecret, setInputSecret] = useState(() => localStorage.getItem('admin_secret') || '');
+    const [logs, setLogs] = useState<any[]>([]);
+    const [logsLoading, setLogsLoading] = useState(false);
+    const [logsError, setLogsError] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [levelFilter, setLevelFilter] = useState<'all' | 'info' | 'warn' | 'error' | 'debug'>('all');
+    const [moduleFilter, setModuleFilter] = useState('');
+    const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+    const fetchLogs = useCallback(async (secretToUse?: string) => {
+        const secret = secretToUse !== undefined ? secretToUse : adminSecret;
+        if (!secret) {
+            setLogs([]);
+            return;
+        }
+        setLogsLoading(true);
+        setLogsError('');
+        try {
+            const res = await fetch(`${PROXY_URL}/api/admin/logs`, {
+                headers: {
+                    'Authorization': `Bearer ${secret}`
+                }
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP error ${res.status}`);
+            }
+            const data = await res.json();
+            setLogs(data || []);
+        } catch (err: any) {
+            console.error('Failed to fetch admin logs', err);
+            setLogsError(err.message || 'Failed to fetch logs');
+        } finally {
+            setLogsLoading(false);
+        }
+    }, [adminSecret]);
+
+    useEffect(() => {
+        if (activeSubTab === 'admin') {
+            fetchLogs();
+        }
+    }, [activeSubTab, fetchLogs]);
+
+    const handleSaveSecret = (e: React.FormEvent) => {
+        e.preventDefault();
+        localStorage.setItem('admin_secret', inputSecret);
+        setAdminSecret(inputSecret);
+    };
+
+    const handleClearSecret = () => {
+        localStorage.removeItem('admin_secret');
+        setInputSecret('');
+        setAdminSecret('');
+        setLogs([]);
+        setLogsError('');
+    };
 
     useEffect(() => {
         if (userProfile) {
@@ -351,6 +409,19 @@ export function UserSettings() {
                             <line x1="12" y1="17" x2="12.01" y2="17"></line>
                         </svg>
                         Danger Zone
+                    </button>
+                    <button
+                        className={`settings-nav-btn ${activeSubTab === 'admin' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('admin')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="logs-nav-icon">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        Admin Logs
                     </button>
                 </div>
 
@@ -683,6 +754,191 @@ export function UserSettings() {
                                 <p className="settings-delete-error">
                                     Error: {deleteError}
                                 </p>
+                            )}
+                        </div>
+                    )}
+
+                    {activeSubTab === 'admin' && (
+                        <div className="settings-card">
+                            <div className="logs-header-container">
+                                <h2 className="settings-card-title">
+                                    Admin Edge Worker Logs
+                                </h2>
+                                {adminSecret && (
+                                    <button
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => fetchLogs()}
+                                        disabled={logsLoading}
+                                    >
+                                        {logsLoading ? 'Refreshing...' : 'Refresh'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {!adminSecret ? (
+                                <form onSubmit={handleSaveSecret} className="logs-secret-section">
+                                    <p className="settings-danger-text">
+                                        Enter your Admin Secret key to authenticate and view real-time system logs.
+                                    </p>
+                                    <div className="logs-secret-row">
+                                        <input
+                                            type="password"
+                                            className="input logs-secret-input"
+                                            placeholder="Enter Admin Secret"
+                                            value={inputSecret}
+                                            onChange={(e) => setInputSecret(e.target.value)}
+                                            required
+                                            data-1p-ignore
+                                        />
+                                        <button type="submit" className="btn btn-primary btn-sm">
+                                            Save & Authenticate
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className="logs-tab-container">
+                                    <div className="logs-secret-row">
+                                        <input
+                                            type="password"
+                                            className="input logs-secret-input"
+                                            value="••••••••••••••••"
+                                            disabled
+                                            data-1p-ignore
+                                        />
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={handleClearSecret}
+                                        >
+                                            Clear Secret
+                                        </button>
+                                    </div>
+
+                                    {logsError && (
+                                        <div className="two-factor-error-alert">
+                                            {logsError}
+                                        </div>
+                                    )}
+
+                                    <div className="logs-filter-row">
+                                        <input
+                                            type="text"
+                                            className="input logs-filter-input"
+                                            placeholder="Search messages..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                        />
+                                        <input
+                                            type="text"
+                                            className="input logs-filter-input"
+                                            placeholder="Filter by module..."
+                                            value={moduleFilter}
+                                            onChange={(e) => setModuleFilter(e.target.value)}
+                                        />
+                                        <select
+                                            className="input logs-filter-select"
+                                            value={levelFilter}
+                                            onChange={(e) => setLevelFilter(e.target.value as any)}
+                                        >
+                                            <option value="all">All Levels</option>
+                                            <option value="info">Info</option>
+                                            <option value="warn">Warn</option>
+                                            <option value="error">Error</option>
+                                            <option value="debug">Debug</option>
+                                        </select>
+                                    </div>
+
+                                    {logsLoading && logs.length === 0 ? (
+                                        <p className="logs-no-data">Loading logs...</p>
+                                    ) : (() => {
+                                        const filtered = (Array.isArray(logs) ? logs : []).filter(log => {
+                                            if (!log) return false;
+                                            if (levelFilter !== 'all' && log.level !== levelFilter) return false;
+                                            if (moduleFilter && !log.module?.toLowerCase().includes(moduleFilter.toLowerCase())) return false;
+                                            if (searchQuery && !log.msg?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+                                            return true;
+                                        });
+
+                                        if (filtered.length === 0) {
+                                            return <p className="logs-no-data">No logs found matching filters.</p>;
+                                        }
+
+                                        return (
+                                            <div className="logs-table-wrapper">
+                                                <table className="logs-table">
+                                                    <thead className="logs-table-header">
+                                                        <tr>
+                                                            <th className="logs-th">Timestamp</th>
+                                                            <th className="logs-th">Level</th>
+                                                            <th className="logs-th">Module</th>
+                                                            <th className="logs-th">Message</th>
+                                                            <th className="logs-th">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {filtered.map((log, idx) => {
+                                                            const logId = `${log.timestamp}-${idx}`;
+                                                            const isExpanded = expandedLogId === logId;
+                                                            const hasPayload = log.payload && Object.keys(log.payload).length > 0;
+                                                            const hasError = !!log.error;
+                                                            const canInspect = hasPayload || hasError;
+                                                            
+                                                            let levelClass = '';
+                                                            if (log.level === 'info') levelClass = 'log-row-info';
+                                                            else if (log.level === 'warn') levelClass = 'log-row-warn';
+                                                            else if (log.level === 'error') levelClass = 'log-row-error';
+
+                                                            return (
+                                                                <React.Fragment key={logId}>
+                                                                    <tr className="logs-tr">
+                                                                        <td className="logs-td">
+                                                                            {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}
+                                                                        </td>
+                                                                        <td className="logs-td">
+                                                                            <span className={`logs-level-badge ${levelClass}`}>
+                                                                                {log.level}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="logs-td">{log.module}</td>
+                                                                        <td className="logs-td-msg">{log.msg}</td>
+                                                                        <td className="logs-td">
+                                                                            {canInspect ? (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="btn btn-secondary logs-inspect-btn"
+                                                                                    onClick={() => setExpandedLogId(isExpanded ? null : logId)}
+                                                                                >
+                                                                                    {isExpanded ? 'Hide' : 'Inspect'}
+                                                                                </button>
+                                                                            ) : (
+                                                                                <span className="text-muted">-</span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                    {isExpanded && canInspect && (
+                                                                        <tr className="logs-tr">
+                                                                            <td colSpan={5} className="logs-payload-row-td">
+                                                                                <div className="logs-payload-container">
+                                                                                    <pre className="log-payload-preview">
+                                                                                        {JSON.stringify(
+                                                                                            hasError ? { error: log.error, payload: log.payload } : log.payload,
+                                                                                            null,
+                                                                                            2
+                                                                                        )}
+                                                                                    </pre>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
                             )}
                         </div>
                     )}
