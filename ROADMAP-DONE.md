@@ -167,6 +167,14 @@ This file contains completed tasks.
     - In `New()` (L27-48), after building `activeCategories`, call `getActiveMaliciousStrings()` once and store the result in `cachedMaliciousStrings`.
     - Replace all call sites of `getActiveMaliciousStrings()` (used in `generateMaliciousValue()` L268 and `MinIterationsNeeded()` L78) with reads from `g.cachedMaliciousStrings`.
 
+- [x] **Task 113: D1 Vertical Sharding Architecture**
+  - **Design Goal:** Lay the groundwork for scaling beyond the Cloudflare D1 10 GB per-database limit by enabling manual vertical sharding across multiple D1 databases. The system should operate with a single D1 database today, but the architecture must not prevent future shard expansion.
+  - **Implementation Details:**
+    - Introduced a centralized `getDB(env, routingKey?)` helper in `packages/edge/src/utils/db.ts` that resolves database bindings dynamically based on routing keys (e.g. user ID, scan ID, project ID).
+    - Refactored index entrypoints, Hono routes, and the coordinator Durable Object to query D1 exclusively via the `getDB` wrapper.
+    - Documented the architecture design decisions and routing options in `docs/sharding.md`.
+    - Added and enabled integration tests in `db.test.ts` to verify multi-shard routing.
+
 ## 🔍 Detection & Analysis
 
 > **Current Gap:** The [classifier](./packages/container/internal/classifier/classifier.go) is purely status-code-based — `ruleIDForResult()` (L189-197) only generates IDs `swazz/status-{code}`, `swazz/timeout`, `swazz/network-error`. The runner's `executeRequest()` (L424-603 in [runner.go](./packages/container/internal/runner/runner.go)) reads response bodies only for status ≥ 400 (limited to 51200 bytes), and for status < 400 **drains the body to `/dev/null`**. This means swazz sends XSS, SQLi, and CRLF payloads from [malicious.go](./packages/container/internal/generator/payloads/malicious.go) but has no mechanism to verify if they succeed. The tasks below transform swazz from a "status-code stress tester" into a true vulnerability scanner.
