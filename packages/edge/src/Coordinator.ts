@@ -1,5 +1,6 @@
 import { Env } from './env';
 import { ulid } from 'ulidx';
+import { logInfo, logWarn, logError } from '../../common/logging/logger';
 
 export class RunnerCoordinator {
   state: DurableObjectState;
@@ -212,7 +213,7 @@ export class RunnerCoordinator {
             }
           }
         } catch (dbErr) {
-          console.error("Failed to read swagger cache from DB/R2:", dbErr);
+          logError(this.env, "Coordinator", "Failed to read swagger cache from DB/R2", { error: dbErr });
         }
       }
 
@@ -460,7 +461,7 @@ export class RunnerCoordinator {
         // Check version
         const coordinatorVersion = this.env.VERSION || '1.0.0';
         if (isVersionOutdated(version, coordinatorVersion)) {
-          console.warn(`[Runner Connection] Outdated runner agent connected: '${name}' (Shared) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+          logWarn(this.env, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' (Shared) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
         }
 
         // Check for queued scans to dispatch
@@ -531,7 +532,7 @@ export class RunnerCoordinator {
               nonceBuffer
             );
           } catch (err) {
-            console.error("Runner Ed25519 verify failed:", err);
+            logError(this.env, "Coordinator", "Runner Ed25519 verify failed", { error: err });
           }
           
           if (isValid) {
@@ -548,7 +549,7 @@ export class RunnerCoordinator {
             const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
             const coordinatorVersion = this.env.VERSION || '1.0.0';
             if (isVersionOutdated(version, coordinatorVersion)) {
-              console.warn(`[Runner Connection] Outdated runner agent connected: '${name}' is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+              logWarn(this.env, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
             }
 
             // Check for queued scans to dispatch
@@ -559,7 +560,7 @@ export class RunnerCoordinator {
           }
         }
       } catch (err) {
-        console.error("Failed to process runner challenge response:", err);
+        logError(this.env, "Coordinator", "Failed to process runner challenge response", { error: err });
         ws.close(1008, "Invalid auth request format");
       }
       return;
@@ -620,7 +621,7 @@ export class RunnerCoordinator {
                     .bind(urlStr, basePath, endpointsHash, endpointsR2Key, rawSpecR2Key)
                     .run();
                 } catch (cacheErr) {
-                  console.error("Failed to write swagger cache in background:", cacheErr);
+                  logError(this.env, "Coordinator", "Failed to write swagger cache in background", { error: cacheErr });
                 }
               })();
             }
@@ -641,9 +642,9 @@ export class RunnerCoordinator {
               scanId: runId,
               type: msg.type,
               payload: msg.payload
-            }).catch(qErr => {
-              console.error("Failed to send to FINDINGS_QUEUE:", qErr);
-            })
+             }).catch(qErr => {
+              logError(this.env, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
+             })
           );
 
           const clientSet = this.clients.get(runId);
@@ -678,7 +679,7 @@ export class RunnerCoordinator {
           }
         }
       } catch (e) {
-        console.error("Failed to parse runner message", e);
+        logError(this.env, "Coordinator", "Failed to parse runner message", { error: e });
       }
     }
   }
@@ -739,7 +740,7 @@ export class RunnerCoordinator {
               config = JSON.parse(row.config_json);
             }
           } catch (err) {
-            console.error("Failed to fetch config from scan_configs:", err);
+            logError(this.env, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
           }
         }
         if (!config) {
@@ -796,7 +797,7 @@ export class RunnerCoordinator {
         }
       }
     } catch (err) {
-      console.error("Error in checkAndDispatchQueuedScans:", err);
+      logError(this.env, "Coordinator", "Error in checkAndDispatchQueuedScans", { error: err });
     }
   }
 

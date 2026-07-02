@@ -1,12 +1,13 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { logInfo, logWarn, logError } from '../../../common/logging/logger';
 
-export async function cleanupSecurityTables(db: D1Database): Promise<void> {
+export async function cleanupSecurityTables(db: D1Database, env?: any): Promise<void> {
   try {
     const challengesRes = await db.prepare(
       "DELETE FROM login_challenges WHERE expires_at < datetime('now')"
     ).run();
     if (challengesRes.meta?.changes > 0) {
-      console.log(`Cleaned up ${challengesRes.meta?.changes || 0} expired login challenges.`);
+      logInfo(env, "Cleanup", `Cleaned up ${challengesRes.meta?.changes || 0} expired login challenges.`);
     }
 
 
@@ -14,17 +15,17 @@ export async function cleanupSecurityTables(db: D1Database): Promise<void> {
       "DELETE FROM rate_limits WHERE reset_at < datetime('now')"
     ).run();
     if (rateLimitsRes.meta?.changes > 0) {
-      console.log(`Cleaned up ${rateLimitsRes.meta?.changes || 0} expired rate limits.`);
+      logInfo(env, "Cleanup", `Cleaned up ${rateLimitsRes.meta?.changes || 0} expired rate limits.`);
     }
   } catch (err) {
-    console.error("Failed to clean up security tables:", err);
+    logError(env, "Cleanup", "Failed to clean up security tables", { error: err });
   }
 }
 
-export async function cleanupExpiredGuests(db: D1Database): Promise<void> {
+export async function cleanupExpiredGuests(db: D1Database, env?: any): Promise<void> {
   try {
     // Run security tables cleanup at the same time
-    await cleanupSecurityTables(db);
+    await cleanupSecurityTables(db, env);
 
     // 1. Find all expired guest users
     const expiredGuests = await db.prepare(
@@ -35,7 +36,7 @@ export async function cleanupExpiredGuests(db: D1Database): Promise<void> {
       return;
     }
 
-    console.log(`Found ${expiredGuests.results.length} expired guest users to clean up.`);
+    logInfo(env, "Cleanup", `Found ${expiredGuests.results.length} expired guest users to clean up.`);
 
     for (const user of expiredGuests.results) {
       const userId = user.id;
@@ -68,9 +69,9 @@ export async function cleanupExpiredGuests(db: D1Database): Promise<void> {
         await db.batch(batchStatements);
       }
     }
-    console.log("Cleanup of expired guest users completed successfully.");
+    logInfo(env, "Cleanup", "Cleanup of expired guest users completed successfully.");
   } catch (err) {
-    console.error("Failed to clean up expired guest users:", err);
+    logError(env, "Cleanup", "Failed to clean up expired guest users", { error: err });
   }
 }
 
@@ -90,7 +91,7 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
     const userIds = expiredDeletions.results.map(u => u.id);
     const usernames = expiredDeletions.results.map(u => u.username);
 
-    console.log(`Found ${userIds.length} accounts to permanently delete (grace period expired).`);
+    logInfo(env, "Cleanup", `Found ${userIds.length} accounts to permanently delete (grace period expired).`);
 
     // 1. Fetch projects owned by these users (to cascade delete owned projects/scans)
     const userPlaceholders = userIds.map(() => '?').join(',');
@@ -120,7 +121,7 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
           try {
             await env.STORAGE.delete(scan.report_url);
           } catch (r2Err) {
-            console.error(`Failed to delete R2 report object ${scan.report_url}:`, r2Err);
+            logError(env, "Cleanup", `Failed to delete R2 report object ${scan.report_url}`, { error: r2Err });
           }
         }
       }
@@ -135,10 +136,10 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
           method: 'POST'
         }) as any);
         if (!doRes.ok) {
-          console.error(`Failed to revoke runner connections in DO for user ${userId}:`, await doRes.text());
+          logError(env, "Cleanup", `Failed to revoke runner connections in DO for user ${userId}`, { error: await doRes.text() });
         }
       } catch (doErr) {
-        console.error(`Failed to invoke DO /revoke-user for user ${userId}:`, doErr);
+        logError(env, "Cleanup", `Failed to invoke DO /revoke-user for user ${userId}`, { error: doErr });
       }
     }));
 
@@ -196,9 +197,9 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
       }
     }
 
-    console.log(`Permanently deleted ${userIds.length} users after grace period.`);
+    logInfo(env, "Cleanup", `Permanently deleted ${userIds.length} users after grace period.`);
   } catch (err) {
-    console.error("Failed to process scheduled account deletions:", err);
+    logError(env, "Cleanup", "Failed to process scheduled account deletions", { error: err });
   }
 }
 

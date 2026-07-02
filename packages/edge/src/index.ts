@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from './env';
+import { logInfo, logWarn, logError } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt } from './utils/auth';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
@@ -356,9 +357,9 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: any, env: Env, ctx: any) {
-    ctx.waitUntil(cleanupExpiredGuests(env.DB));
+    ctx.waitUntil(cleanupExpiredGuests(env.DB, env));
     ctx.waitUntil(cleanupScheduledDeletions(env));
-    ctx.waitUntil(cleanupSecurityTables(env.DB));
+    ctx.waitUntil(cleanupSecurityTables(env.DB, env));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     if (batch.queue === 'swazz-scan-queue') {
@@ -384,11 +385,11 @@ export default {
             // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
             msg.ack();
           } else {
-            console.error(`SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
+            logError(env, "Queue", `SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
             msg.retry();
           }
         } catch (err) {
-          console.error(`SCAN_QUEUE dispatch failed for run ${msg.body.runId}:`, err);
+          logError(env, "Queue", `SCAN_QUEUE dispatch failed for run ${msg.body.runId}`, { error: err });
           msg.retry();
         }
       }
@@ -408,7 +409,7 @@ export default {
             msg.ack();
           }
         } catch (err) {
-          console.error("Failed to bulk insert findings:", err);
+          logError(env, "Queue", "Failed to bulk insert findings", { error: err });
           throw err;
         }
       }
