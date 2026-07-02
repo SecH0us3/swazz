@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { Env } from './env';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
+import { getDB } from './utils/db';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
 import { registerRbacRoutes } from './routes/rbac';
@@ -57,7 +58,7 @@ app.use('/api/*', async (c, next) => {
 
     const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
     if (!isCancelRoute) {
-      const deleteRequestedAt = await getDeleteRequestedAt(c.env.DB, userId);
+      const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env), userId);
       if (deleteRequestedAt !== null) {
         return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
       }
@@ -357,9 +358,9 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: any, env: Env, ctx: any) {
-    ctx.waitUntil(cleanupExpiredGuests(env.DB, env));
+    ctx.waitUntil(cleanupExpiredGuests(getDB(env), env));
     ctx.waitUntil(cleanupScheduledDeletions(env));
-    ctx.waitUntil(cleanupSecurityTables(env.DB, env));
+    ctx.waitUntil(cleanupSecurityTables(getDB(env), env));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     if (batch.queue === 'swazz-scan-queue') {
@@ -377,7 +378,7 @@ export default {
           });
           const doRes = await stub.fetch(doReq as any);
           if (doRes.ok) {
-            await env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
+            await getDB(env).prepare('UPDATE scans SET status = ? WHERE id = ?')
               .bind('dispatched', msg.body.runId)
               .run();
             msg.ack();
@@ -398,13 +399,13 @@ export default {
         const id = crypto.randomUUID();
         const { scanId, type, payload } = msg.body;
         const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
-        return env.DB.prepare(
+        return getDB(env).prepare(
           `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
         ).bind(id, scanId, type, payloadStr);
       });
       if (statements.length > 0) {
         try {
-          await env.DB.batch(statements);
+          await getDB(env).batch(statements);
           for (const msg of batch.messages) {
             msg.ack();
           }

@@ -1,4 +1,5 @@
 import { Env } from './env';
+import { getDB } from './utils/db';
 import { ulid } from 'ulidx';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
 
@@ -196,7 +197,7 @@ export class RunnerCoordinator {
       
       if (body.url && !body.forceRebuild) {
         try {
-          const cached = await this.env.DB.prepare('SELECT base_path, endpoints_r2_key, fetched_at FROM swagger_cache WHERE url = ?')
+          const cached = await getDB(this.env).prepare('SELECT base_path, endpoints_r2_key, fetched_at FROM swagger_cache WHERE url = ?')
             .bind(body.url)
             .first() as { base_path: string; endpoints_r2_key: string; fetched_at: string } | null;
             
@@ -580,7 +581,7 @@ export class RunnerCoordinator {
             
             // Background write to DB/R2
             if (msg.payload && !msg.payload.error && urlStr && urlStr !== 'rawSpec') {
-              const db = this.env.DB;
+              const db = getDB(this.env);
               const storage = this.env.STORAGE;
               
               (async () => {
@@ -695,7 +696,7 @@ export class RunnerCoordinator {
         !t.startsWith('user_id:')
       ) || null;
 
-      const queuedScans = await this.env.DB.prepare(`
+      const queuedScans = await getDB(this.env).prepare(`
         SELECT scans.*, users.public_key AS userPublicKey
         FROM scans
         LEFT JOIN users ON scans.user_id = users.id
@@ -731,7 +732,7 @@ export class RunnerCoordinator {
         
         if (!config && scan.project_id) {
           try {
-            const row = await this.env.DB.prepare(
+            const row = await getDB(this.env).prepare(
               'SELECT config_json FROM scan_configs WHERE project_id = ? AND name = ?'
             )
               .bind(scan.project_id, scan.profile)
@@ -786,7 +787,7 @@ export class RunnerCoordinator {
           ws.send(dispatchMsg);
 
           // Update scan status to 'dispatched' in D1
-          await this.env.DB.prepare('UPDATE scans SET status = ? WHERE id = ?')
+          await getDB(this.env).prepare('UPDATE scans SET status = ? WHERE id = ?')
             .bind('dispatched', runId)
             .run();
 
