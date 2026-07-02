@@ -16,7 +16,7 @@ describe('getDB Helper', () => {
     expect(getDB(mockEnv, 'user-123')).toBe(mockDB);
   });
 
-  it.skip('routes to correct database shards based on routingKey (future sharding implementation)', () => {
+  it('routes to correct database shards based on routingKey (sharding routing implementation)', () => {
     const mockPrimaryDB = { name: 'primary' } as unknown as D1Database;
     const mockShard1DB = { name: 'shard1' } as unknown as D1Database;
     
@@ -26,8 +26,8 @@ describe('getDB Helper', () => {
       DB_SHARD_1: mockShard1DB 
     } as unknown as Env;
     
-    // Once sharding routing logic is implemented in getDB:
-    // expect(getDB(mockEnv, 'project-routing-to-primary')).toBe(mockPrimaryDB);
-    // expect(getDB(mockEnv, 'project-routing-to-shard-1')).toBe(mockShard1DB);
+    // Verifies that routing resolves to correct databases
+    expect(getDB(mockEnv, 'project-routing-to-primary')).toBe(mockPrimaryDB);
+    expect(getDB(mockEnv, 'project-routing-to-shard-1')).toBe(mockShard1DB);
   });
 });
