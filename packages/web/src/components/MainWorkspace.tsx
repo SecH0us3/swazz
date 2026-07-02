@@ -2,6 +2,7 @@ import { useMemo, useEffect, useState } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { Dashboard } from './Dashboard/Dashboard.js';
+import { AnalyticsDashboard } from './Dashboard/AnalyticsDashboard.js';
 import { Inspector } from './Inspector/Inspector.js';
 import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
 import { UserSettings } from './UserSettings.js';
@@ -52,7 +53,8 @@ export function MainWorkspace({
         heatmapFilter,
         isRunning,
         compareRunIdA,
-        compareRunIdB
+        compareRunIdB,
+        activeProject
     } = useAppStore(useShallow(state => ({
         activeRunId: state.liveRunId,
         activeStats: state.stats,
@@ -63,7 +65,8 @@ export function MainWorkspace({
         heatmapFilter: state.heatmapFilter,
         isRunning: state.isRunning,
         compareRunIdA: state.compareRunIdA,
-        compareRunIdB: state.compareRunIdB
+        compareRunIdB: state.compareRunIdB,
+        activeProject: state.activeProject
     })));
 
     const [isExportHovered, setIsExportHovered] = useState(false);
@@ -212,6 +215,17 @@ export function MainWorkspace({
                             {runs.length > 0 && (
                                 <span className="tab-bar-count">{runs.length}</span>
                             )}
+                        </button>
+                        <button
+                            className={`tab-bar-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+                            onClick={() => useAppStore.setState({ activeTab: 'analytics' })}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            Analytics
                         </button>
                         {compareRunIdA && compareRunIdB && (
                             <button
@@ -372,6 +386,9 @@ export function MainWorkspace({
                                     queryResults={queryResults}
                                     onSelectResult={handleSelectResult}
                                 />
+                            )}
+                            {activeTab === 'analytics' && (
+                                <AnalyticsDashboard projectId={config.projectId || activeProject?.id} />
                             )}
                         </>
                     )}

@@ -144,6 +144,7 @@ export function useFuzzSession({
         const finalConfig: SwazzConfig = {
             ...config,
             base_url: finalBaseUrl,
+            _swagger_urls: swaggerUrls,
             endpoints: activeEndpoints,
         };
         delete finalConfig.disabled_endpoints;

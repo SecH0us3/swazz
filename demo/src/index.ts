@@ -775,7 +775,7 @@ export default {
         // Let's declare a global counter object outside fetch if possible, or bind it to globalThis.
         const g = globalThis as any;
         g.rateLimitCounter = (g.rateLimitCounter || 0) + 1;
-        if (g.rateLimitCounter > 20) {
+        if (g.rateLimitCounter > 2000) {
           return new Response(JSON.stringify({ error: "Too Many Requests", retryAfter: 1 }), {
             status: 429,
             headers: {

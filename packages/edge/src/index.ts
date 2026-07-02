@@ -395,14 +395,38 @@ export default {
         }
       }
     } else if (batch.queue === 'swazz-findings-queue') {
-      const statements = batch.messages.map(msg => {
+      const statements: any[] = [];
+      for (const msg of batch.messages) {
         const id = crypto.randomUUID();
         const { scanId, type, payload } = msg.body;
         const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
-        return getDB(env, scanId).prepare(
-          `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
-        ).bind(id, scanId, type, payloadStr);
-      });
+        statements.push(
+          getDB(env, scanId).prepare(
+            `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
+          ).bind(id, scanId, type, payloadStr)
+        );
+
+        // Populate findings table for analytics & detail queries
+        if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
+          for (const finding of payload.data.analyzerFindings) {
+            const findingId = crypto.randomUUID();
+            statements.push(
+              getDB(env, scanId).prepare(
+                `INSERT INTO findings (id, scan_id, rule_id, level, message, evidence)
+                 VALUES (?, ?, ?, ?, ?, ?)`
+              ).bind(
+                findingId,
+                scanId,
+                finding.ruleId,
+                finding.level,
+                finding.message,
+                finding.evidence || null
+              )
+            );
+          }
+        }
+      }
+
       if (statements.length > 0) {
         try {
           await getDB(env).batch(statements);
@@ -410,7 +434,7 @@ export default {
             msg.ack();
           }
         } catch (err) {
-          logError(env, "Queue", "Failed to bulk insert findings", { error: err });
+          logError(env, "Queue", "Failed to bulk insert findings and events", { error: err });
           throw err;
         }
       }

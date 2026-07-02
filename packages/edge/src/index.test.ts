@@ -1052,6 +1052,39 @@ describe("Projects & Runners API", () => {
     expect(privateRunner.publicKey).toBe(pubKeyHex);
   });
 
+  describe("GET /api/projects/:id/analytics", () => {
+    it("returns correct project analytics data structure", async () => {
+      await testEnv.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now', '+30 seconds'))"
+      ).bind("scan-1", projectId, "http://target.com", "default", "completed").run();
+
+      await testEnv.DB.prepare(
+        "INSERT INTO findings (id, scan_id, rule_id, level, message) VALUES (?, ?, ?, ?, ?)"
+      ).bind("finding-1", "scan-1", "swazz/xss", "High", "Reflected XSS").run();
+
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/analytics`, {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.scanStats).toBeDefined();
+      expect(data.scanStats.total).toBe(1);
+      expect(data.scanStats.completed).toBe(1);
+      expect(data.scanHistory.length).toBeGreaterThan(0);
+      expect(data.findingsStats.length).toBe(1);
+      expect(data.findingsStats[0].severity).toBe("High");
+    });
+
+    it("returns analytics grouped correctly based on period query param", async () => {
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/analytics?period=24h`, {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.scanHistory).toBeDefined();
+    });
+  });
+
   it("DELETE /api/projects/:id removes the project", async () => {
     const req = new Request(`http://localhost/api/projects/${projectId}`, {
       method: "DELETE",
@@ -1731,6 +1764,57 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(results.length).toBe(2);
       expect(results[0].type).toBe("event");
       expect(results[1].type).toBe("error");
+    });
+
+    it("extracts findings from result events and populates findings table in D1", async () => {
+      const scanId = "findings-scan-id-result";
+      await env.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status) VALUES (?, ?, ?, ?, ?)"
+      ).bind(scanId, "proj-findings-1", "http://test.com", "default", "dispatched").run();
+
+      const mockMessages = [
+        {
+          body: {
+            scanId,
+            type: "event",
+            payload: {
+              type: "result",
+              data: {
+                id: "req-1",
+                endpoint: "/status",
+                method: "GET",
+                status: 200,
+                analyzerFindings: [
+                  {
+                    ruleId: "swazz/sensitive-data-leak",
+                    level: "warning",
+                    message: "Sensitive data leaked.",
+                    evidence: "192.168.1.15"
+                  }
+                ]
+              }
+            }
+          },
+          ack: vi.fn(),
+        }
+      ];
+
+      const batch = {
+        queue: "swazz-findings-queue",
+        messages: mockMessages,
+      } as any;
+
+      await app.queue(batch, testEnv as any, {} as any);
+
+      expect(mockMessages[0].ack).toHaveBeenCalled();
+
+      const scanEvents = await env.DB.prepare("SELECT * FROM scan_events WHERE scan_id = ?").bind(scanId).all<any>();
+      expect(scanEvents.results.length).toBe(1);
+
+      const findings = await env.DB.prepare("SELECT * FROM findings WHERE scan_id = ?").bind(scanId).all<any>();
+      expect(findings.results.length).toBe(1);
+      expect(findings.results[0].rule_id).toBe("swazz/sensitive-data-leak");
+      expect(findings.results[0].level).toBe("warning");
     });
 
     it("handles SCAN_QUEUE flow and updates D1 status to dispatched or keeps queued", async () => {
