@@ -1,40 +1,200 @@
-# Implementation Plan: Task 87 (Project Invitations & RBAC)
+# D1 Vertical Sharding Architecture Implementation Plan
 
-## 1. Schema & Database Migrations
-- **Permissions Config:** Define a static configuration in code containing all available permissions (e.g., `get:/api/projects/:id/users`) and their human-readable descriptions (e.g., "View project members").
-- **Database Tables:**
-  - `roles`: `id`, `project_id` (NULL for defaults like Owner/Editor/Viewer), `name`, `is_default`, `created_at`.
-  - `role_permissions`: `role_id`, `permission_key`.
-  - `role_inheritance`: `parent_role_id`, `child_role_id`.
-  - `project_members`: `project_id`, `user_id`.
-  - `project_member_roles`: `project_id`, `user_id`, `role_id` (allows a user to have multiple roles).
-  - `project_invitations`: `id`, `project_id`, `email`, `username`, `target_role_ids` (JSON or junction table), `status` (Pending, Accepted, Expired, Revoked), `token`, `expires_at`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-## 2. Edge Coordinator Backend (RBAC & API)
-- **RBAC Middleware:** 
-  - Intercept API requests to `/api/projects/:id/*`.
-  - Identify the current user and fetch their assigned roles for the project.
-  - Recursively expand roles to find all inherited roles (up to a maximum inheritance depth of 3).
-  - Resolve all permissions for the expanded role set.
-  - Assert that the current `METHOD:/route` exists in the resolved permissions set.
-- **API Endpoints:**
-  - `GET /api/projects/:id/members`: List users and their assigned roles.
-  - `POST /api/projects/:id/invitations`: Create a project invitation by email or username.
-  - `GET /api/projects/:id/roles`: List all default and project-specific custom roles.
-  - `POST /api/projects/:id/roles`: Create a custom role (assign permissions, include child roles).
-  - `PUT /api/projects/:id/roles/:role_id`: Edit a custom role (default roles reject edits).
-  - `POST /api/projects/invitations/accept`: Endpoint to accept an invitation token.
+**Goal:** Lay the groundwork for Cloudflare D1 vertical sharding by introducing a `getDB(env, shardId?)` utility helper and routing all query sites in the edge coordinator through it, and documenting the sharding design strategy.
 
-## 3. Web Frontend (React UI)
-- **Members Tab:** Add a "Members & Roles" section inside Project Settings.
-- **Users List:** Display a table/list of current project users and their assigned roles.
-- **Roles List & Management:**
-  - Display default roles (read-only UI).
-  - Interface to create/edit custom roles.
-  - Checkbox grid or list to select permissions (showing the human-readable description for each).
-  - Dropdown to select child roles for inheritance (validation to ensure we don't break the depth limit or create cycles).
-- **Invitations:** Modal to invite a user via username or email, selecting their roles.
+**Architecture:** A new utility `getDB` resolves the database binding from `env`. It currently returns `env.DB` for a single database setup but allows future dynamic routing to databases like `env.DB_SHARD_1` without breaking the codebase.
 
-## 4. Documentation Updates
-- **ROADMAP.md**: Update to reflect progress.
-- **README.md / docs**: Create/update documentation detailing the RBAC system, the permission definition config, the depth-limit rules for role inheritance, and API changes.
+**Tech Stack:** TypeScript, Cloudflare Workers, Hono, Vitest
+
+## Global Constraints
+
+- Never use string concatenation or `fmt.Sprintf` for formatting URL query parameters (Go rule).
+- Never use inline layout styles in React components (CSS rule).
+- Keep E2E test usernames between 3 and 20 characters.
+- Use `getDB` helper at all D1 query preparation and execution sites in the Cloudflare edge coordinator.
+
+---
+
+### Task 1: Define `getDB` Helper Utility
+
+**Files:**
+- Create: `packages/edge/src/utils/db.ts`
+- Create: `packages/edge/src/utils/db.test.ts`
+
+**Interfaces:**
+- Produces: `getDB(env: Env, shardId?: number): D1Database`
+
+- [ ] **Step 1: Write tests for `getDB`**
+
+Create `packages/edge/src/utils/db.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { getDB } from './db';
+import { Env } from '../env';
+import { D1Database } from '@cloudflare/workers-types';
+
+describe('getDB Helper', () => {
+  it('returns the default DB binding when no shardId is provided', () => {
+    const mockDB = {} as D1Database;
+    const mockEnv = { DB: mockDB } as unknown as Env;
+    expect(getDB(mockEnv)).toBe(mockDB);
+  });
+
+  it('returns the default DB binding even when shardId is provided (current behavior)', () => {
+    const mockDB = {} as D1Database;
+    const mockEnv = { DB: mockDB } as unknown as Env;
+    expect(getDB(mockEnv, 1)).toBe(mockDB);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `rtk npm run test --workspace=packages/edge`
+Expected: FAIL due to missing `getDB` module.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `packages/edge/src/utils/db.ts`:
+```typescript
+import type { D1Database } from '@cloudflare/workers-types';
+import type { Env } from '../env';
+
+/**
+ * Resolves the appropriate D1 database binding based on the environment and optional shard ID.
+ * Today it always returns env.DB, but in the future it can route to env.DB_SHARD_1, etc.
+ */
+export function getDB(env: Env, shardId?: number): D1Database {
+  return env.DB;
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `rtk npm run test --workspace=packages/edge`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+rtk git add packages/edge/src/utils/db.ts packages/edge/src/utils/db.test.ts
+rtk git commit -m "feat: define getDB helper for sharding"
+```
+
+
+### Task 2: Refactor Index & Coordinator to use `getDB`
+
+**Files:**
+- Modify: `packages/edge/src/index.ts`
+- Modify: `packages/edge/src/Coordinator.ts`
+
+- [ ] **Step 1: Import `getDB` in `packages/edge/src/index.ts` and `Coordinator.ts`**
+
+Import statement:
+```typescript
+import { getDB } from './utils/db';
+```
+
+- [ ] **Step 2: Replace direct `env.DB` access with `getDB(env)` in `packages/edge/src/index.ts`**
+
+Locate references to `c.env.DB` or `env.DB` and wrap them. For example:
+```typescript
+const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env), userId);
+```
+and:
+```typescript
+ctx.waitUntil(cleanupExpiredGuests(getDB(env), env));
+ctx.waitUntil(cleanupSecurityTables(getDB(env), env));
+```
+and queue event listeners:
+```typescript
+await getDB(env).prepare('UPDATE scans SET status = ? WHERE id = ?')
+```
+
+- [ ] **Step 3: Replace `this.env.DB` with `getDB(this.env)` in `packages/edge/src/Coordinator.ts`**
+
+Locate references to `this.env.DB` in `Coordinator.ts` and replace them. For example:
+```typescript
+const cached = await getDB(this.env).prepare('SELECT base_path, endpoints_r2_key, fetched_at FROM swagger_cache WHERE url = ?')
+```
+
+- [ ] **Step 4: Run edge tests to ensure no regressions**
+
+Run: `rtk npm run test --workspace=packages/edge`
+Expected: PASS (all 85 tests)
+
+- [ ] **Step 5: Commit changes**
+
+```bash
+rtk git add packages/edge/src/index.ts packages/edge/src/Coordinator.ts
+rtk git commit -m "refactor: use getDB in Coordinator and index"
+```
+
+
+### Task 3: Refactor API Routes to use `getDB`
+
+**Files:**
+- Modify: `packages/edge/src/routes/auth.ts`
+- Modify: `packages/edge/src/routes/misc.ts`
+- Modify: `packages/edge/src/routes/projects.ts`
+- Modify: `packages/edge/src/routes/rbac.ts`
+- Modify: `packages/edge/src/routes/runners.ts`
+- Modify: `packages/edge/src/routes/scans.ts`
+
+- [ ] **Step 1: Import `getDB` in all route files**
+
+```typescript
+import { getDB } from '../utils/db';
+```
+
+- [ ] **Step 2: Replace direct `c.env.DB` references with `getDB(c.env)`**
+
+Go through each of:
+- `packages/edge/src/routes/auth.ts`
+- `packages/edge/src/routes/misc.ts`
+- `packages/edge/src/routes/projects.ts`
+- `packages/edge/src/routes/rbac.ts`
+- `packages/edge/src/routes/runners.ts`
+- `packages/edge/src/routes/scans.ts`
+
+Replace `c.env.DB` with `getDB(c.env)` everywhere.
+
+- [ ] **Step 3: Run edge unit tests**
+
+Run: `rtk npm run test --workspace=packages/edge`
+Expected: PASS
+
+- [ ] **Step 4: Commit changes**
+
+```bash
+rtk git add packages/edge/src/routes/
+rtk git commit -m "refactor: use getDB in all API routes"
+```
+
+
+### Task 4: Documentation & Roadmap Updates
+
+**Files:**
+- Create: `docs/sharding.md`
+- Modify: `ROADMAP.md`
+
+- [ ] **Step 1: Create `docs/sharding.md`**
+
+Write a detailed documentation file covering the chosen routing strategy decision (e.g., vertical sharding routing via `getDB` wrapper, options explored such as UUIDv8 vs mapping table vs tenant-based sharding).
+
+- [ ] **Step 2: Mark Task 113 as in progress/completed in `ROADMAP.md`**
+
+Change `- [ ] **Task 113: D1 Vertical Sharding Architecture**` to `- [/] **Task 113: D1 Vertical Sharding Architecture**`.
+
+- [ ] **Step 3: Run the full verify script**
+
+Run: `bash scripts/verify-all.sh` to ensure compile, frontend build, and e2e playwright tests all pass.
+
+- [ ] **Step 4: Commit and generate walkthrough**
+
+```bash
+rtk git add docs/sharding.md ROADMAP.md
+rtk git commit -m "docs: document D1 sharding strategy and update roadmap"
+```
