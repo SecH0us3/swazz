@@ -370,26 +370,6 @@ export function AiRemediationTab() {
                     </select>
                 </div>
 
-                <div className="settings-field-group-stacks">
-                    <label className="settings-label">Target Tech Stacks</label>
-                    <div className="tech-stacks-grid">
-                        {['React', 'Node', 'Go', 'Python', 'Postgres', '.NET', 'Flask', 'Django', 'Next.js', 'FastAPI', 'Spring Boot'].map(stack => (
-                            <label key={stack} className="tech-stack-label">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedStacks.includes(stack)}
-                                    onChange={() => handleStackToggle(stack)}
-                                    className="tech-stack-checkbox"
-                                />
-                                {stack}
-                            </label>
-                        ))}
-                    </div>
-                    <span className="settings-help-text">
-                        Select the technology stacks of your target application to automatically tune AI prompt templates.
-                    </span>
-                </div>
-
                 <div className="settings-pass-container">
                     <h3 className="settings-pass-title">Pass 1: Triage Model (Fast / Cheap)</h3>
                     <p className="settings-pass-desc">
@@ -428,6 +408,26 @@ export function AiRemediationTab() {
                             </button>
                         </div>
                     </div>
+                </div>
+
+                <div className="settings-field-group-stacks">
+                    <label className="settings-label">Target Tech Stacks</label>
+                    <div className="tech-stacks-grid">
+                        {['React', 'Node', 'Go', 'Python', 'Postgres', '.NET', 'Flask', 'Django', 'Next.js', 'FastAPI', 'Spring Boot'].map(stack => (
+                            <label key={stack} className="tech-stack-label">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedStacks.includes(stack)}
+                                    onChange={() => handleStackToggle(stack)}
+                                    className="tech-stack-checkbox"
+                                />
+                                {stack}
+                            </label>
+                        ))}
+                    </div>
+                    <span className="settings-help-text">
+                        Select the technology stacks of your target application to automatically tune AI prompt templates.
+                    </span>
                 </div>
 
                 <div className="settings-pass-container">
@@ -543,6 +543,22 @@ export function AiRemediationTab() {
                         data-1p-ignore
                         autoFocus
                     />
+                    <div className="settings-modal-stacks">
+                        <label className="settings-label">Target Tech Stacks</label>
+                        <div className="tech-stacks-grid">
+                            {['React', 'Node', 'Go', 'Python', 'Postgres', '.NET', 'Flask', 'Django', 'Next.js', 'FastAPI', 'Spring Boot'].map(stack => (
+                                <label key={stack} className="tech-stack-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedStacks.includes(stack)}
+                                        onChange={() => handleStackToggle(stack)}
+                                        className="tech-stack-checkbox"
+                                    />
+                                    {stack}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
 
