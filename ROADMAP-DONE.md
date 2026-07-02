@@ -854,3 +854,11 @@ This file contains completed tasks.
     - Create `packages/common/logging/logger.ts` with the helper functions.
     - Export and replace inline `console.*` calls in existing modules (edge, container, web) via a focused commit.
     - Document usage guidelines in `docs/logging.md`.
+
+- [x] **Task 77: Dynamic Analytics Dashboard**
+  - **Design Goal:** Provide visual insights into fuzzing history, vulnerability trends, and runner performance over time in a dynamic dashboard.
+  - **Implementation Details:**
+    - Add an Analytics tab/page in the Web UI dashboard.
+    - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
+    - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
+

@@ -38,13 +38,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 69: Model Context Protocol (MCP) Support**
   - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
 
-- [ ] **Task 77: Dynamic Analytics Dashboard**
-  - **Design Goal:** Provide visual insights into fuzzing history, vulnerability trends, and runner performance over time in a dynamic dashboard.
-  - **Implementation Details:**
-    - Add an Analytics tab/page in the Web UI dashboard.
-    - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
-    - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
-
 - [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
   - **Design Goal:** Provide secure password management tools including dynamic password changes, email-based password recovery (forgot password flow), and 2FA backup codes.
   - **Implementation Details:**
