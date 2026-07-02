@@ -2134,7 +2134,7 @@ body.resizing .sidebar-resizer {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   padding: 0 4px;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 10px;
   color: var(--text-secondary);
 }
