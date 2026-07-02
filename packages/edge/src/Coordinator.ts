@@ -335,10 +335,16 @@ export class RunnerCoordinator {
         const version = versionTag ? versionTag.substring(8) : 'v0.0.0';
         
         let connectionId = null;
+        let activeJobs: string[] = [];
         try {
-          const attachment = ws.deserializeAttachment() as { connectionId?: string } | null;
-          if (attachment && attachment.connectionId) {
-            connectionId = attachment.connectionId;
+          const attachment = ws.deserializeAttachment() as { connectionId?: string; activeJobs?: string[] } | null;
+          if (attachment) {
+            if (attachment.connectionId) {
+              connectionId = attachment.connectionId;
+            }
+            if (attachment.activeJobs) {
+              activeJobs = attachment.activeJobs;
+            }
           }
         } catch {}
 
@@ -349,6 +355,7 @@ export class RunnerCoordinator {
           status: isPending ? 'authenticating' : 'connected',
           isShared: !pubKey,
           version,
+          activeJobs,
         });
       }
       return new Response(JSON.stringify({ runners: runnerList }), {

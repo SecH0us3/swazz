@@ -1052,6 +1052,30 @@ describe("Projects & Runners API", () => {
     expect(privateRunner.publicKey).toBe(pubKeyHex);
   });
 
+  describe("GET /api/projects/:id/analytics", () => {
+    it("returns correct project analytics data structure", async () => {
+      await testEnv.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now', '+30 seconds'))"
+      ).bind("scan-1", projectId, "http://target.com", "default", "completed").run();
+
+      await testEnv.DB.prepare(
+        "INSERT INTO findings (id, scan_id, rule_id, level, message) VALUES (?, ?, ?, ?, ?)"
+      ).bind("finding-1", "scan-1", "swazz/xss", "High", "Reflected XSS").run();
+
+      const res = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/analytics`, {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.scanStats).toBeDefined();
+      expect(data.scanStats.total).toBe(1);
+      expect(data.scanStats.completed).toBe(1);
+      expect(data.scanHistory.length).toBeGreaterThan(0);
+      expect(data.findingsStats.length).toBe(1);
+      expect(data.findingsStats[0].severity).toBe("High");
+    });
+  });
+
   it("DELETE /api/projects/:id removes the project", async () => {
     const req = new Request(`http://localhost/api/projects/${projectId}`, {
       method: "DELETE",
