@@ -80,7 +80,7 @@ jobs:
           body: |
             ## Docker Images
 
-            We publish two Docker images for each release. We never use the `latest` tag.
+            We publish two Docker images for each release, including the `latest` tag.
 
             ### Web Dashboard & API Server
             Pushed to [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz). To run:
@@ -167,6 +167,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ env.DOCKER_TAG }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
 
       - name: Extract metadata (CLI)
         id: meta-cli
@@ -178,6 +179,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ env.DOCKER_TAG }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build and export Server to Docker
         # v7.1.0

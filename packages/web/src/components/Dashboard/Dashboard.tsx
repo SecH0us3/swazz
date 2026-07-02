@@ -85,8 +85,8 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                     </div>
                                     <pre className="welcome-pre">
                                         <code>
-                                            docker pull ghcr.io/sech0us3/swazz:{version}{'\n'}
-                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:{version}
+                                            docker pull ghcr.io/sech0us3/swazz:latest{'\n'}
+                                            docker run -p 8080:8080 ghcr.io/sech0us3/swazz:latest
                                         </code>
                                     </pre>
                                 </div>
@@ -96,8 +96,8 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                                     </div>
                                     <pre className="welcome-pre">
                                         <code>
-                                            docker pull ghcr.io/sech0us3/swazz-cli:{version}{'\n'}
-                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:{version} --config /app/swazz.config.json .
+                                            docker pull ghcr.io/sech0us3/swazz-cli:latest{'\n'}
+                                            docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json .
                                         </code>
                                     </pre>
                                 </div>
@@ -157,7 +157,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                         </div>
 
                         <p className="welcome-footer-tip">
-                            Tip: The docker commands above automatically reference the running version ({version}). You can replace it with any other release tag (e.g., v1.0.0) or short commit SHA.
+                                Tip: The docker commands above reference the latest tag. You can replace it with the running version ({version}), a specific release tag (e.g., v1.0.0), or a short commit SHA.
                         </p>
                     </div>
 
