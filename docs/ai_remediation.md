@@ -45,6 +45,14 @@ In the **Project Settings -> AI Remediation Config** tab:
 5. **Propose Fixes Automatically**:
    Check this box to enable the automated Git Worktree patching and PR creation workflow.
 
+## Tech Stack & Rule Autocompletion
+
+To refine remediation suggestions, Swazz allows you to tune AI prompts using target application contexts:
+
+* **Target Tech Stacks**: Check the tech stacks used by your application (e.g. React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot). Checking a stack automatically appends standard security rules and guidelines (such as avoiding inline layout styles in React, using EF Core parameterized queries in .NET, or safe route handlers in Next.js) to the triage and remediation templates.
+* **Auto-Fix Rules Context**: Toggling rules in the "Select Auto-Fix Rules" modal automatically appends rule-specific security goals (like validating resource ownership for IDOR/BOLA or checking null-pointer references) into the prompts.
+* **Dynamic Cleaning**: Unchecking any stack or rule automatically parses the prompt templates using markers (e.g. `=== Tech Stack: Go ===`) and cleanly removes the respective instruction block, preserving any manual modifications you have written.
+
 ## How it works safely
 When a finding occurs:
 1. The AI engine wraps the untrusted payload inside `<untrusted-finding-context>` to mitigate Prompt Injections.
