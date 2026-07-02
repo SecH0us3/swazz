@@ -252,11 +252,10 @@ body::before {
 
 .app-layout {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr;
   grid-template-areas:
     "header  header"
-    "sidebar main"
-    "footer  footer";
+    "sidebar main";
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -2106,6 +2105,66 @@ body.resizing .sidebar-resizer {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.welcome-quick-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+  flex-wrap: wrap;
+}
+
+.welcome-quick-link-separator {
+  color: rgba(255, 255, 255, 0.15);
+  font-size: 10px;
+}
+
+.welcome-quick-link,
+.welcome-quick-link-btn {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color var(--duration-fast);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.welcome-quick-link:hover,
+.welcome-quick-link-btn:hover {
+  color: var(--text-primary);
+}
+
+.welcome-quick-hotkeys-kbd {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.welcome-quick-github-link {
+  color: var(--text-muted);
+  transition: color var(--duration-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.welcome-quick-github-link:hover {
+  color: var(--text-primary);
 }
 
 /* ─── Skeleton ───────────────────────────────────────────── */
@@ -6339,77 +6398,7 @@ kbd {
   to { transform: rotate(360deg); }
 }
 
-/* ─── Footer ────────────────────────────────────────────── */
-.app-footer {
-  grid-area: footer;
-  height: 32px;
-  background: rgba(13, 13, 15, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 var(--space-4);
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  box-sizing: border-box;
-  z-index: 50;
-}
-
-.app-footer-left,
-.app-footer-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.footer-link,
-.footer-link-btn {
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: 11px;
-  font-weight: 500;
-  transition: color var(--duration-fast);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.footer-link:hover,
-.footer-link-btn:hover {
-  color: var(--text-primary);
-}
-
-.footer-separator {
-  color: rgba(255, 255, 255, 0.15);
-  font-size: 10px;
-}
-
-.footer-hotkeys-kbd {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  padding: 0 4px;
-  font-family: var(--font-sans);
-  font-size: 9px;
-  color: var(--text-secondary);
-}
-
-.footer-github-link {
-  color: var(--text-muted);
-  transition: color var(--duration-fast);
-  display: flex;
-  align-items: center;
-}
-
-.footer-github-link:hover {
-  color: var(--text-primary);
-}
+/* ─── Footer (Removed) ──────────────────────────────────── */
 
 /* ─── Form Elements ─────────────────────────────────────── */
 .form-label {
