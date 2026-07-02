@@ -4,16 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
-	"os"
 	"strings"
 	"testing"
 )
 
 func TestLoggerTextMode(t *testing.T) {
-	// Clear env var if set
-	origFormat := os.Getenv("SWAZZ_LOG_FORMAT")
-	defer os.Setenv("SWAZZ_LOG_FORMAT", origFormat)
-	os.Unsetenv("SWAZZ_LOG_FORMAT")
+	origJSON := isJSONFormat
+	defer SetJSONFormat(origJSON)
+	SetJSONFormat(false)
 
 	// Set log level to debug to ensure all are printed
 	SetLevel(LevelDebug)
@@ -52,23 +50,19 @@ func TestLoggerTextMode(t *testing.T) {
 }
 
 func TestLoggerJSONMode(t *testing.T) {
-	// Set env var to json
-	origFormat := os.Getenv("SWAZZ_LOG_FORMAT")
-	defer os.Setenv("SWAZZ_LOG_FORMAT", origFormat)
-	os.Setenv("SWAZZ_LOG_FORMAT", "json")
+	origJSON := isJSONFormat
+	defer SetJSONFormat(origJSON)
+	SetJSONFormat(true)
 
 	// Set log level to debug
 	SetLevel(LevelDebug)
 
 	var buf bytes.Buffer
-	origFlags := log.Flags()
 	origOutput := log.Writer()
 	defer func() {
-		log.SetFlags(origFlags)
 		log.SetOutput(origOutput)
 	}()
 
-	log.SetFlags(0) // disable prefixes
 	log.SetOutput(&buf)
 
 	Info("info JSON message: %s", "test")

@@ -21,7 +21,24 @@ const (
 var (
 	currentLevel = LevelInfo
 	logFilter    = ""
+	isJSONFormat = false
 )
+
+func init() {
+	if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+		SetJSONFormat(true)
+	}
+}
+
+// SetJSONFormat sets whether the logger uses JSON format or not.
+func SetJSONFormat(jsonFormat bool) {
+	isJSONFormat = jsonFormat
+	if jsonFormat {
+		log.SetFlags(0)
+	} else {
+		log.SetFlags(log.Ldate | log.Ltime)
+	}
+}
 
 func SetLevel(level LogLevel) {
 	currentLevel = level
@@ -91,7 +108,7 @@ func logJSON(level, msg string) {
 func Debug(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelDebug, msg) {
-		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+		if isJSONFormat {
 			logJSON("debug", msg)
 		} else {
 			log.Printf("[DEBUG] %s", msg)
@@ -102,7 +119,7 @@ func Debug(format string, v ...interface{}) {
 func Info(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelInfo, msg) {
-		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+		if isJSONFormat {
 			logJSON("info", msg)
 		} else {
 			log.Printf("[INFO] %s", msg)
@@ -113,7 +130,7 @@ func Info(format string, v ...interface{}) {
 func Warn(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelWarn, msg) {
-		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+		if isJSONFormat {
 			logJSON("warn", msg)
 		} else {
 			log.Printf("[WARN] %s", msg)
@@ -124,7 +141,7 @@ func Warn(format string, v ...interface{}) {
 func Error(format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
 	if shouldLog(LevelError, msg) {
-		if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
+		if isJSONFormat {
 			logJSON("error", msg)
 		} else {
 			log.Printf("[ERROR] %s", msg)
