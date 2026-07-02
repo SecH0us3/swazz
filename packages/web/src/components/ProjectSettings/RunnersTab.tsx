@@ -180,7 +180,7 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
 
     const apiBase = getOrigin(PROXY_URL);
     const coordinatorHost = apiBase.replace(/^http/, 'ws');
-    const runnerImage = `ghcr.io/sech0us3/swazz-cli:${version}`;
+    const runnerImage = `ghcr.io/sech0us3/swazz-cli:latest`;
     const genKeysCmd = `docker run --rm -it -v $(pwd):/app ${runnerImage} generate-keys`;
     const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
     const sharedRunCommand = `docker run --rm -it ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
