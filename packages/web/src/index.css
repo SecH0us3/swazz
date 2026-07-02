@@ -1938,7 +1938,7 @@ body.resizing .sidebar-resizer {
 
 .empty-state-welcome {
   max-width: 800px;
-  margin: 40px auto;
+  margin: 0 auto 40px;
   padding: 24px;
   display: flex;
   flex-direction: column;
