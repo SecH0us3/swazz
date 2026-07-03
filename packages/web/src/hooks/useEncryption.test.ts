@@ -9,7 +9,8 @@ import {
     KEY_PRIVATE,
     KEY_PUBLIC,
     generateMnemonic,
-    deriveKeyFromMnemonic
+    deriveKeyFromMnemonic,
+    validateMnemonicChecksum
 } from './useEncryption.js';
 
 // ─── Helper tests ───────────────────────────────────────
@@ -40,9 +41,11 @@ describe('bufferToBase64 / base64ToBuffer', () => {
 });
 
 describe('Mnemonic helpers', () => {
-    it('should generate a 12-word mnemonic', () => {
-        const mnemonic = generateMnemonic();
+    it('should generate a 12-word mnemonic with valid checksum', async () => {
+        const mnemonic = await generateMnemonic();
         expect(mnemonic.split(' ').length).toBe(12);
+        const isValid = await validateMnemonicChecksum(mnemonic);
+        expect(isValid).toBe(true);
     });
 
     it('should derive X25519 key pair from mnemonic', async () => {
@@ -50,6 +53,12 @@ describe('Mnemonic helpers', () => {
         const pair = await deriveKeyFromMnemonic(mnemonic);
         expect(pair.publicKey).toBeDefined();
         expect(pair.privateKey).toBeDefined();
+    });
+
+    it('should fail checksum validation for invalid word order or typo', async () => {
+        const invalidMnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon';
+        const isValid = await validateMnemonicChecksum(invalidMnemonic);
+        expect(isValid).toBe(false);
     });
 });
 
@@ -300,6 +309,22 @@ describe('useEncryption', () => {
                     );
                 })
             ).rejects.toThrow('Mnemonic contains invalid words: xyz123');
+        });
+
+        it('should throw error for invalid mnemonic checksum', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
+
+            await waitFor(() => {
+                expect(result.current.isLoading).toBe(false);
+            });
+
+            await expect(
+                act(async () => {
+                    await result.current.importFromMnemonic(
+                        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon'
+                    );
+                })
+            ).rejects.toThrow('Invalid mnemonic checksum (verify word order/spelling).');
         });
 
         it('should import and export JWK', async () => {

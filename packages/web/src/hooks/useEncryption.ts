@@ -80,6 +80,23 @@ class KeyStorage {
             request.onerror = () => reject(request.error);
         });
     }
+
+    static async deleteKeys(projectId?: string): Promise<void> {
+        const db = await this.getDB();
+        const privKey = projectId ? `private_key_${projectId}` : 'private_key';
+        const pubKey = projectId ? `public_key_${projectId}` : 'public_key';
+        const mnemonicKey = projectId ? `mnemonic_${projectId}` : 'mnemonic';
+
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            store.delete(privKey);
+            store.delete(pubKey);
+            store.delete(mnemonicKey);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
 }
 
 // ─── Types ──────────────────────────────────────────────
@@ -192,15 +209,54 @@ async function deriveDecryptionKey(
     return aesKey;
 }
 
-/** Generate a random 12-word mnemonic phrase from our wordlist */
-function generateMnemonic(): string {
-    const indices = new Uint32Array(12);
-    crypto.getRandomValues(indices);
+/** Generate a random 12-word mnemonic phrase from our wordlist with standard BIP-39 checksum */
+async function generateMnemonic(): Promise<string> {
+    const entropy = new Uint8Array(16);
+    crypto.getRandomValues(entropy);
+
+    const hashBuffer = await crypto.subtle.digest('SHA-256', entropy);
+    const hashArray = new Uint8Array(hashBuffer);
+    const checksum = hashArray[0] >> 4;
+
+    let binary = '';
+    for (let i = 0; i < entropy.length; i++) {
+        binary += entropy[i].toString(2).padStart(8, '0');
+    }
+    binary += checksum.toString(2).padStart(4, '0');
+
     const words: string[] = [];
-    for (let i = 0; i < 12; i++) {
-        words.push(WORDLIST[indices[i] % 2048]);
+    for (let i = 0; i < binary.length; i += 11) {
+        const chunk = binary.slice(i, i + 11);
+        words.push(WORDLIST[parseInt(chunk, 2)]);
     }
     return words.join(' ');
+}
+
+/** Validate standard BIP-39 checksum for a 12-word mnemonic phrase */
+async function validateMnemonicChecksum(mnemonic: string): Promise<boolean> {
+    const words = mnemonic.trim().toLowerCase().split(/\s+/);
+    if (words.length !== 12) return false;
+
+    let binary = '';
+    for (const word of words) {
+        const index = WORDLIST.indexOf(word);
+        if (index === -1) return false;
+        binary += index.toString(2).padStart(11, '0');
+    }
+
+    const entropyBinary = binary.slice(0, 128);
+    const checksumBinary = binary.slice(128);
+
+    const entropyBytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) {
+        entropyBytes[i] = parseInt(entropyBinary.slice(i * 8, (i + 1) * 8), 2);
+    }
+
+    const hashBuffer = await crypto.subtle.digest('SHA-256', entropyBytes);
+    const hashArray = new Uint8Array(hashBuffer);
+    const calculatedChecksum = hashArray[0] >> 4;
+
+    return parseInt(checksumBinary, 2) === calculatedChecksum;
 }
 
 /** Derive X25519 key pair from a mnemonic seed phrase */
@@ -218,7 +274,7 @@ async function deriveKeyFromMnemonic(mnemonic: string): Promise<EncryptionKeyPai
         {
             name: 'PBKDF2',
             salt: encoder.encode('mnemonic'),
-            iterations: 100000,
+            iterations: 2048,
             hash: 'SHA-256',
         },
         baseKey,
@@ -298,7 +354,7 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
                         const isBypassed = typeof window !== 'undefined' && window.location.search.includes('no_bypass_e2e_gate');
 
                         if (isE2E && !isBypassed) {
-                            const mnemonicPhrase = generateMnemonic();
+                            const mnemonicPhrase = await generateMnemonic();
                             const keys = await deriveKeyFromMnemonic(mnemonicPhrase);
                             await KeyStorage.saveKey(KEY_PRIVATE, keys.privateKey, projectId);
                             await KeyStorage.saveKey(KEY_PUBLIC, keys.publicKey, projectId);
@@ -315,9 +371,7 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
                     }
                 }
             } catch (err) {
-                if (!projectId) {
-                    await KeyStorage.clear();
-                }
+                await KeyStorage.deleteKeys(projectId);
                 if (!cancelled) {
                     setError('Failed to restore encryption keys — please regenerate.');
                 }
@@ -340,7 +394,7 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
         }
 
         try {
-            const mnemonicPhrase = generateMnemonic();
+            const mnemonicPhrase = await generateMnemonic();
             const keyPair = await deriveKeyFromMnemonic(mnemonicPhrase);
 
             await KeyStorage.saveKey(KEY_PRIVATE, keyPair.privateKey, projectId);
@@ -372,6 +426,11 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
         const invalidWords = words.filter(word => !WORDLIST.includes(word.toLowerCase()));
         if (invalidWords.length > 0) {
             throw new Error('Mnemonic contains invalid words: ' + invalidWords.join(', '));
+        }
+
+        const isValidChecksum = await validateMnemonicChecksum(mnemonicPhrase);
+        if (!isValidChecksum) {
+            throw new Error('Invalid mnemonic checksum (verify word order/spelling).');
         }
 
         try {
@@ -538,4 +597,4 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
     };
 }
 
-export { bufferToBase64, base64ToBuffer, checkX25519Support, KeyStorage, KEY_PRIVATE, KEY_PUBLIC, generateMnemonic, deriveKeyFromMnemonic };
+export { bufferToBase64, base64ToBuffer, checkX25519Support, KeyStorage, KEY_PRIVATE, KEY_PUBLIC, generateMnemonic, deriveKeyFromMnemonic, validateMnemonicChecksum };

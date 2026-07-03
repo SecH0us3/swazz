@@ -205,6 +205,11 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
                             value={mnemonicInput}
                             onChange={(e) => setMnemonicInput(e.target.value)}
                             required
+                            data-1p-ignore
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
                         />
                     </div>
 
