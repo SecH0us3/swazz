@@ -3,6 +3,11 @@ import { getCookie, setCookie } from 'hono/cookie';
 
 export const csrfMiddleware = (): MiddlewareHandler => {
   return async (c, next) => {
+    const path = c.req.path;
+    if (path === '/api/auth/oauth/exchange') {
+      return await next();
+    }
+
     const method = c.req.method;
     const isSafeMethod = ['GET', 'HEAD', 'OPTIONS'].includes(method);
 
@@ -19,11 +24,6 @@ export const csrfMiddleware = (): MiddlewareHandler => {
         secure: isSecure,
         sameSite: 'Lax',
       });
-    }
-
-    const path = c.req.path;
-    if (path === '/api/auth/oauth/exchange') {
-      return await next();
     }
 
     if (isSafeMethod) {
