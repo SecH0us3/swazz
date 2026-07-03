@@ -1,5 +1,4 @@
 ---
-layout: default
 title: Cloudflare KV & Cache Research
 ---
 

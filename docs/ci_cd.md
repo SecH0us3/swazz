@@ -1,5 +1,4 @@
 ---
-layout: default
 title: CI/CD Integration
 ---
 
