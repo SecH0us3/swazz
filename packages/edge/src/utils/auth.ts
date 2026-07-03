@@ -1,6 +1,7 @@
 import { verify } from 'hono/jwt';
 import { Env } from '../env';
 import { Context } from 'hono';
+import { ulid } from 'ulidx';
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
@@ -478,6 +479,50 @@ export function safeCompare(a: string, b: string): boolean {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return result === 0;
+}
+
+export async function recordLoginHistory(
+  db: any,
+  userId: string,
+  status: 'success' | 'failed_password' | 'failed_2fa' | 'locked',
+  authMethod: 'password' | 'github',
+  twoFactorActive: boolean,
+  c: Context<{ Bindings: Env }>
+): Promise<void> {
+  const id = ulid();
+  const ipAddress = getClientIp(c);
+  const userAgent = c.req.header('User-Agent') || null;
+  const cfRay = c.req.header('CF-Ray') || null;
+  
+  // Geolocation and CF properties
+  const cf = (c.req.raw as any).cf;
+  const country = cf?.country || c.req.header('CF-IPCountry') || null;
+  const city = cf?.city || null;
+  const region = cf?.region || null;
+  const timezone = cf?.timezone || null;
+
+  try {
+    await db.prepare(`
+      INSERT INTO user_login_history (
+        id, user_id, status, ip_address, country, city, region, timezone, cf_ray, user_agent, auth_method, two_factor_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      userId,
+      status,
+      ipAddress,
+      country,
+      city,
+      region,
+      timezone,
+      cfRay,
+      userAgent,
+      authMethod,
+      twoFactorActive ? 1 : 0
+    ).run();
+  } catch (err) {
+    console.error("Failed to record login history:", err);
+  }
 }
 
 

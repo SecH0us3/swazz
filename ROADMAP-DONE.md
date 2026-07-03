@@ -179,6 +179,16 @@ This file contains completed tasks.
     - Add a project setting for member session expiration length.
     - Enforce this expiration on the edge backend when validating user sessions scoped to the project.
 
+- [x] **Task 119: Account Login History Auditing**
+  - **Design Goal:** Track and audit user login sessions (success, failed, 2FA failures) to provide security transparency. Allow project administrators/owners to view login history for any member in their project for compliance and audit logs.
+  - **Implementation Details:**
+    - Created database table `user_login_history` to log: IP, Country, City, Region, Timezone, Device Type, Cloudflare Ray ID, User-Agent, status (success/failed), and timestamp.
+    - Leverage Cloudflare-provided geolocation and network details (using `CF-Connecting-IP`, `CF-IPCountry`, `CF-Ray`, `CF-Device-Type` headers or `c.req.raw.cf` properties).
+    - Log attempts in `POST /api/auth/login` (successful login, incorrect password, rate-limited, TOTP validation failures) and `POST /api/auth/register`.
+    - Implemented a backend route `GET /api/projects/:id/members/:user_id/login-history` protected by a new RBAC permission `get:/api/projects/:id/members/:user_id/login-history` (assigned to Owner/Editor roles).
+    - Validate that the target `:user_id` is a member of project `:id` to prevent cross-project scanning.
+    - Created a React UI tab/panel under Project Members or User Settings to display login logs in a clear, paginated table format with browser icons and geo-resolved information.
+
 ## ⚡️ Performance & Architecture
 
 - [x] **Task 16:** Replace the blocking select-timeout SSE Broadcast implementation with a non-blocking lock-free concurrent collection or ring-buffer pattern (similar to LMAX Disruptor or a lock-free MPSC ring-buffer queue).

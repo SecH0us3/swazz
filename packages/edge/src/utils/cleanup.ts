@@ -17,6 +17,13 @@ export async function cleanupSecurityTables(db: D1Database, env?: any): Promise<
     if (rateLimitsRes.meta?.changes > 0) {
       logInfo(env, "Cleanup", `Cleaned up ${rateLimitsRes.meta?.changes || 0} expired rate limits.`);
     }
+
+    const historyRes = await db.prepare(
+      "DELETE FROM user_login_history WHERE created_at < datetime('now', '-90 days')"
+    ).run();
+    if (historyRes.meta?.changes > 0) {
+      logInfo(env, "Cleanup", `Cleaned up ${historyRes.meta?.changes || 0} user login history logs older than 90 days.`);
+    }
   } catch (err) {
     logError(env, "Cleanup", "Failed to clean up security tables", { error: err });
   }

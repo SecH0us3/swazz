@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getDB } from '../utils/db';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword } from '../utils/auth';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword, recordLoginHistory } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -104,8 +104,12 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          .bind(projectId, id),
+        getDB(c.env).prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
+
+      await recordLoginHistory(getDB(c.env), id, 'success', 'password', false, c);
 
       const payload = {
         sub: id,
@@ -256,6 +260,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          .bind(projectId, id),
+        getDB(c.env).prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
 
@@ -563,6 +569,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
       await recordFailedLogin(getDB(c.env), username);
+      const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
+      const status = postRateLimit.locked ? 'locked' : 'failed_password';
+      await recordLoginHistory(getDB(c.env), user.id, status, 'password', user.two_factor_enabled === 1, c);
       await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
@@ -582,12 +591,18 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
       } catch {
         await recordFailedLogin(getDB(c.env), username);
+        const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
+        const status = postRateLimit.locked ? 'locked' : 'failed_password';
+        await recordLoginHistory(getDB(c.env), user.id, status, 'password', user.two_factor_enabled === 1, c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
       const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
         await recordFailedLogin(getDB(c.env), username);
+        const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
+        const status = postRateLimit.locked ? 'locked' : 'failed_2fa';
+        await recordLoginHistory(getDB(c.env), user.id, status, 'password', user.two_factor_enabled === 1, c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
@@ -595,6 +610,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Successful login — reset rate-limit counter
     await resetLoginAttempts(getDB(c.env), username);
+    await recordLoginHistory(getDB(c.env), user.id, 'success', 'password', user.two_factor_enabled === 1, c);
 
     const payload = {
       sub: user.id,
@@ -1273,9 +1289,9 @@ app.post('/api/admin/users/plan', async (c) => {
         return c.redirect(`${frontendUrl}/?status=github_linked`);
       } else {
         // Log in or Register
-        let user = await db.prepare('SELECT id FROM users WHERE github_id = ?')
+        let user = await db.prepare('SELECT id, two_factor_enabled FROM users WHERE github_id = ?')
           .bind(githubId)
-          .first<{ id: string }>();
+          .first<{ id: string; two_factor_enabled: number }>();
           
         let userId: string;
         
@@ -1341,6 +1357,9 @@ app.post('/api/admin/users/plan', async (c) => {
               .bind(projectId, userId)
           ]);
         }
+
+        const twoFactorActive = user ? user.two_factor_enabled === 1 : false;
+        await recordLoginHistory(db, userId, 'success', 'github', twoFactorActive, c);
         
         // Generate JWT token
         const payload = {

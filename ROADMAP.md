@@ -56,6 +56,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
 
+
 ## 🔴 High Complexity
 
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**
