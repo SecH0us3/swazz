@@ -11,6 +11,7 @@ import { AiRemediationTab } from './ProjectSettings/AiRemediationTab.js';
 import { MembersRolesTab } from './ProjectSettings/MembersRolesTab.js';
 import { DictionariesTab } from './ProjectSettings/DictionariesTab.js';
 import { ApiSpecsTab } from './ProjectSettings/ApiSpecsTab.js';
+import { KeysTab } from './ProjectSettings/KeysTab.js';
 
 interface Runner {
     connectionId: string | null;
@@ -23,7 +24,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'raw_config'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -213,6 +214,16 @@ export function ProjectSettings() {
                         AI Remediation
                     </button>
                     <button
+                        className={`tab-bar-btn ${activeSubTab === 'keys' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('keys')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        Encryption Keys
+                    </button>
+                    <button
                         className={`tab-bar-btn ${activeSubTab === 'raw_config' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('raw_config')}
                     >
@@ -243,6 +254,7 @@ export function ProjectSettings() {
                         />
                     )}
                     {activeSubTab === 'ai_remediation' && <AiRemediationTab />}
+                    {activeSubTab === 'keys' && <KeysTab />}
                     {activeSubTab === 'raw_config' && <RawConfigTab />}
                 </div>
             </div>
