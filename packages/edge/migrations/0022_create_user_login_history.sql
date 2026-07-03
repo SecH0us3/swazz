@@ -14,4 +14,4 @@ CREATE TABLE user_login_history (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_login_history_user ON user_login_history(user_id);
+CREATE INDEX idx_login_history_user_created ON user_login_history(user_id, created_at DESC);

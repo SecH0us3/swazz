@@ -140,19 +140,22 @@ export function MembersRolesTab() {
         try {
             const data = await fetchMemberLoginHistory(activeProject.id, activeHistoryMember.id, 1, 1000);
             const headers = ['Time', 'Status', 'IP Address', 'Country', 'City', 'Region', 'Timezone', 'Ray ID', 'User Agent'];
-            const rows = data.history.map(entry => [
-                new Date(entry.created_at.replace(' ', 'T') + 'Z').toLocaleString(),
-                entry.status,
-                entry.ip_address,
-                entry.country || '',
-                entry.city || '',
-                entry.region || '',
-                entry.timezone || '',
-                entry.cf_ray || '',
-                `"${(entry.user_agent || '').replace(/"/g, '""')}"`
-            ]);
+            const rows = data.history.map(entry => {
+                const timeStr = new Date(entry.created_at.replace(' ', 'T') + 'Z').toISOString();
+                return [
+                    timeStr,
+                    entry.status,
+                    entry.ip_address,
+                    entry.country || '',
+                    entry.city || '',
+                    entry.region || '',
+                    entry.timezone || '',
+                    entry.cf_ray || '',
+                    entry.user_agent || ''
+                ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+            });
 
-            const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
