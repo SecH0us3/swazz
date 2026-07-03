@@ -286,6 +286,22 @@ describe('useEncryption', () => {
             ).rejects.toThrow('Mnemonic phrase must be exactly 12 words.');
         });
 
+        it('should throw error for invalid words in mnemonic', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
+
+            await waitFor(() => {
+                expect(result.current.isLoading).toBe(false);
+            });
+
+            await expect(
+                act(async () => {
+                    await result.current.importFromMnemonic(
+                        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon xyz123'
+                    );
+                })
+            ).rejects.toThrow('Mnemonic contains invalid words: xyz123');
+        });
+
         it('should import and export JWK', async () => {
             const { result } = renderHook(() => useEncryption('proj_123'));
 

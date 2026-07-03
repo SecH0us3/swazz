@@ -33,6 +33,7 @@ npm-debug.log*
 # Cache
 .turbo/
 *.tsbuildinfo
+.vitepress/cache/
 
 # CLI run artifacts
 test-run.config.json

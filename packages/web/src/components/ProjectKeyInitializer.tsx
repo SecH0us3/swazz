@@ -51,7 +51,8 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+        const target = e.target;
+        const file = target.files?.[0];
         if (!file) return;
 
         setIsProcessing(true);
@@ -68,11 +69,13 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
                 setError(err.message || 'Invalid backup file format.');
             } finally {
                 setIsProcessing(false);
+                target.value = '';
             }
         };
         reader.onerror = () => {
             setError('Failed to read file.');
             setIsProcessing(false);
+            target.value = '';
         };
         reader.readAsText(file);
     };
@@ -156,7 +159,7 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
                     </div>
 
                     <div className="e2ee-guideline e2ee-text-center e2ee-margin-top-sm">
-                        Read the <a href="./docs/encryption_backup.md" target="_blank" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
+                        Read the <a href="/docs/encryption_backup" target="_blank" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
                     </div>
                 </div>
             )}
@@ -169,12 +172,12 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
                     </p>
 
                     <div className="mnemonic-grid">
-                        {displayMnemonic.split(' ').map((word, idx) => (
+                        {mnemonic ? mnemonic.split(' ').map((word, idx) => (
                             <div key={idx} className="mnemonic-word-badge">
                                 <span className="mnemonic-word-index">{idx + 1}</span>
                                 <span>{word}</span>
                             </div>
-                        ))}
+                        )) : null}
                     </div>
 
                     <div className="e2ee-footer e2ee-margin-top-lg">

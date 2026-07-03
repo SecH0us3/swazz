@@ -369,6 +369,11 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
             throw new Error('Mnemonic phrase must be exactly 12 words.');
         }
 
+        const invalidWords = words.filter(word => !WORDLIST.includes(word.toLowerCase()));
+        if (invalidWords.length > 0) {
+            throw new Error('Mnemonic contains invalid words: ' + invalidWords.join(', '));
+        }
+
         try {
             const keyPair = await deriveKeyFromMnemonic(mnemonicPhrase);
 

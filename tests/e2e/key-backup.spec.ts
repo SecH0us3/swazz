@@ -31,7 +31,7 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     // 4. Verify there is a guide link
     const guideLink = page.locator('.e2ee-link', { hasText: 'Key Backup & Recovery guide' });
     await expect(guideLink).toBeVisible();
-    await expect(guideLink).toHaveAttribute('href', './docs/encryption_backup.md');
+    await expect(guideLink).toHaveAttribute('href', '/docs/encryption_backup');
 
     // 5. Generate a new keypair
     const generateBtn = page.getByRole('button', { name: 'Generate Keys' });

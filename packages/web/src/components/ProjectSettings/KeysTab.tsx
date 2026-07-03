@@ -118,7 +118,7 @@ export function KeysTab() {
                 </div>
 
                 <div className="e2ee-sub-section e2ee-text-center">
-                    Read the <a href="./docs/encryption_backup.md" target="_blank" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
+                    Read the <a href="/docs/encryption_backup" target="_blank" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
                 </div>
             </div>
         </div>
