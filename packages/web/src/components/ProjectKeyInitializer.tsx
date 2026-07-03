@@ -98,8 +98,6 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
         }
     };
 
-    const displayMnemonic = mnemonic || '';
-
     return (
         <div className="e2ee-container">
             <div className="e2ee-header">

@@ -349,6 +349,20 @@ describe('useEncryption', () => {
             expect(exportedJwk).toEqual(mockPrivateJwk);
         });
 
+        it('should throw error for invalid JWK missing d component', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
+
+            await waitFor(() => {
+                expect(result.current.isLoading).toBe(false);
+            });
+
+            await expect(
+                act(async () => {
+                    await result.current.importFromJwk({ kty: 'OKP', crv: 'X25519', x: 'abc' });
+                })
+            ).rejects.toThrow('Invalid backup file: private key component (d) is missing or invalid.');
+        });
+
         describe('uploadPublicKey', () => {
             beforeEach(() => {
                 vi.spyOn(globalThis, 'fetch').mockResolvedValue(

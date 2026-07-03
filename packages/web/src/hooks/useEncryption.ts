@@ -326,6 +326,10 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
     useEffect(() => {
         let cancelled = false;
         setIsLoading(true);
+        setError(null);
+        setHasKeyPair(false);
+        setMnemonic(null);
+        keyPairRef.current = null;
 
         (async () => {
             const supported = await checkX25519Support();
@@ -414,8 +418,9 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
     const importFromMnemonic = useCallback(async (mnemonicPhrase: string) => {
         setError(null);
         if (!isSupported) {
-            setError('X25519 is not supported in this browser.');
-            return;
+            const msg = 'X25519 is not supported in this browser.';
+            setError(msg);
+            throw new Error(msg);
         }
 
         const words = mnemonicPhrase.trim().split(/\s+/);
@@ -453,8 +458,15 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
     const importFromJwk = useCallback(async (jwk: JsonWebKey) => {
         setError(null);
         if (!isSupported) {
-            setError('X25519 is not supported in this browser.');
-            return;
+            const msg = 'X25519 is not supported in this browser.';
+            setError(msg);
+            throw new Error(msg);
+        }
+
+        if (!jwk || typeof jwk.d !== 'string') {
+            const msg = 'Invalid backup file: private key component (d) is missing or invalid.';
+            setError(msg);
+            throw new TypeError(msg);
         }
 
         try {
