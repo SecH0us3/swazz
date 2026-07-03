@@ -26,7 +26,7 @@ A React 19 Single Page Application built with Vite.
 - **Service Layer**: All external API calls to the Go backend are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
 
 ### 3. `packages/edge` (Optional)
-Reserved for Cloudflare Workers integration and edge-deployments. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.html).
+Reserved for Cloudflare Workers integration and edge-deployments. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.md).
 
 ## Smart Fuzzing Workflow
 
@@ -46,7 +46,7 @@ To protect the fuzzing runner from excessive memory usage (OOM) on very large, d
 
 ## Security & Threat Model 🛡️
 
-For a comprehensive analysis of Swazz's security controls, network isolation mechanisms (including SSRF protection and DNS pinning), agent cryptographic challenge-response authentication, and user access policies, please refer to the [Security Review & Threat Model](./security_review.html).
+For a comprehensive analysis of Swazz's security controls, network isolation mechanisms (including SSRF protection and DNS pinning), agent cryptographic challenge-response authentication, and user access policies, please refer to the [Security Review & Threat Model](./security_review.md).
 
 ## CSRF Protection Strategy
 
@@ -57,6 +57,6 @@ Swazz implements a double-submit cookie validation pattern to protect all state-
   - Safe methods (`GET`, `HEAD`, `OPTIONS`) bypass CSRF validation.
   - Requests authenticated via custom headers, such as `Authorization: Bearer <token>` (the primary auth flow for runners and CLI clients) or `X-Upload-Token` (used by runners for report uploads), bypass CSRF validation since cross-site requests cannot set custom headers.
 
-[← Back to Usage](./usage.html)
+[← Back to Usage](./usage.md)
 
 

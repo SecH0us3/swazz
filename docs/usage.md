@@ -370,4 +370,4 @@ This action will immediately and irreversibly purge:
 
 ---
 
-[← Back to Installation](./installation.html) | [Next: Architecture →](./architecture.html)
+[← Back to Installation](./installation.md) | [Next: Architecture →](./architecture.md)
