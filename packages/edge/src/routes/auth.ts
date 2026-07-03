@@ -104,6 +104,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          .bind(projectId, id),
+        getDB(c.env).prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
 
@@ -258,6 +260,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+          .bind(projectId, id),
+        getDB(c.env).prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
 
