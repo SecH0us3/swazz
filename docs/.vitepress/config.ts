@@ -70,7 +70,7 @@ export default withMermaid(defineConfig({
       { icon: 'github', link: 'https://github.com/SecH0us3/swazz' }
     ],
     footer: {
-      message: 'Released under the MIT License.',
+      message: 'Released under the AGPLv3 License.',
       copyright: 'Copyright © 2026 SecH0us3'
     }
   }

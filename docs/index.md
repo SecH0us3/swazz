@@ -31,6 +31,3 @@ features:
     details: Comprehensive SSRF protection, agent cryptographic authentication, and sandboxing.
 ---
 
-<div class="docs-video-container">
-  <video src="./assets/swazz_demo.webm" width="800" class="docs-video-element" controls autoplay muted loop></video>
-</div>
