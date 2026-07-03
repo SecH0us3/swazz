@@ -52,7 +52,8 @@ export default withMermaid(defineConfig({
           { text: 'Runner Security Audit 🔍', link: '/runner_security_audit' },
           { text: 'KV Caching Research 💾', link: '/cloudflare_kv_cache_research' },
           { text: 'Logging & Analytics 📈', link: '/logging' },
-          { text: 'Environment Variables ⚙️', link: '/env_variables' }
+          { text: 'Environment Variables ⚙️', link: '/env_variables' },
+          { text: 'Key Backup & Recovery 🔑', link: '/encryption_backup' }
         ]
       },
       {
