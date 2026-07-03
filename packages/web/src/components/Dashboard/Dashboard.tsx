@@ -11,9 +11,10 @@ interface Props {
     heatmapFilter: HeatmapFilter | null;
     onHeatmapFilter: (f: HeatmapFilter | null) => void;
     isRunning: boolean;
+    onTryDemo?: () => void;
 }
 
-export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning }: Props) {
+export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning, onTryDemo }: Props) {
     const [version, setVersion] = useState<string>('<TAG>');
 
     useEffect(() => {
@@ -46,13 +47,11 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
                         <div className="welcome-hero-actions">
                             <button 
                                 className="btn btn-primary welcome-hero-btn" 
-                                onClick={() => {
-                                    document.querySelector<HTMLInputElement>('.sidebar input.input')?.focus();
-                                }}>
-                                🚀 Try Petstore Demo
+                                onClick={onTryDemo}>
+                                🚀 Try Vulnerable Demo
                             </button>
                             <span className="welcome-hero-btn-target">
-                                Target: https://petstore.swagger.io/v2/swagger.json
+                                Target: https://bbad.secmy.app/swagger.json
                             </span>
                         </div>
                     </div>

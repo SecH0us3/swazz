@@ -218,6 +218,11 @@ export default {
             version: "1.0.0",
             description: "A deliberately vulnerable API for testing Swazz fuzzing engine."
           },
+          servers: [
+            {
+              url: url.origin
+            }
+          ],
           paths: {
             "/users": {
               get: {
