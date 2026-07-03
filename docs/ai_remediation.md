@@ -35,8 +35,8 @@ In the **Project Settings -> AI Remediation Config** tab:
    You can provide custom JSON or text for your prompts to instruct the AI how to behave during triage (Pass 1) and remediation (Pass 2).
 
 3. **Custom CLI Command**:
-   If you rely on external AI tools, provide the execution template. The runner replaces `{{prompt_file}}` with the path to the secure temporary prompt file.
-   Example: `agy -p {{prompt_file}}`
+   If you rely on external AI tools, provide the execution template. The runner replaces <code v-pre>{{prompt_file}}</code> with the path to the secure temporary prompt file.
+   Example: <code v-pre>agy -p {{prompt_file}}</code>
 
 4. **Rules to Auto-Fix**:
    Specify a JSON array of vulnerability IDs that you trust the AI to automatically patch.

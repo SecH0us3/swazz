@@ -24,9 +24,9 @@ jobs:
       
       - name: Run Swazz Fuzzer
         # Pin to verified commit hash
-        uses: docker://ghcr.io/sech0us3/swazz-cli:7d8123ae45b14
+        uses: docker://ghcr.io/sech0us3/swazz-cli:7d8123ae45b1480f2d12f170f3f3c7e73d8123ae
         with:
-          args: start --config swazz.config.json --output sarif --out-file results.sarif
+          args: start --config swazz.config.json --sarif results.sarif
         env:
           SWAZZ_AGENT_TOKEN: ${{ secrets.SWAZZ_AGENT_TOKEN }}
 
@@ -90,8 +90,9 @@ For zero-setup scans, record your browser sessions using DevTools and upload the
 Run your Go fuzzer agent with restrictive system sandbox configurations to defend against arbitrary system commands.
 
 ```bash
-# Run Swazz using a non-root system user and bind-mount only local files
-systemd-run --user \
+# Run Swazz using a non-root system user
+sudo systemd-run \
+  -p User=swazz \
   -p PrivateTmp=yes \
   -p ProtectSystem=strict \
   -p ProtectHome=yes \
@@ -108,7 +109,6 @@ Upload your scans directly to your DefectDojo dashboard via API.
 ```bash
 curl -X POST "https://defectdojo.company.local/api/v2/import-scan/" \
   -H "Authorization: Token d3f3c7d0139b4..." \
-  -H "Content-Type: multipart/form-data" \
   -F "active=true" \
   -F "verified=true" \
   -F "scan_type=SARIF" \
