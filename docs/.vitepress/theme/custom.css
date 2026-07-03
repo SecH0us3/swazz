@@ -4,3 +4,14 @@
   --vp-c-brand-3: #a78bfa;
   --vp-c-brand-soft: rgba(124, 58, 237, 0.16);
 }
+
+.docs-video-container {
+  display: flex;
+  justify-content: center;
+  margin: 3rem 0;
+}
+
+.docs-video-element {
+  border-radius: 8px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}

@@ -6,7 +6,7 @@ hero:
   text: Smart API Fuzzer ⚡️
   tagline: Find crashes, logic flaws, and security vulnerabilities before your users do.
   image:
-    src: /assets/og-image.png
+    src: ./assets/og-image.png
     alt: Swazz Logo
   actions:
     - theme: brand
@@ -34,6 +34,6 @@ features:
     details: Comprehensive SSRF protection, agent cryptographic authentication, and sandboxing.
 ---
 
-<div style="display: flex; justify-content: center; margin: 3rem 0;">
-  <video src="./assets/swazz_demo.webm" width="800" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);" controls autoplay muted loop></video>
+<div class="docs-video-container">
+  <video src="./assets/swazz_demo.webm" width="800" class="docs-video-element" controls autoplay muted loop></video>
 </div>

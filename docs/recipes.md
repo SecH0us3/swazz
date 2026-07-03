@@ -24,14 +24,14 @@ jobs:
       
       - name: Run Swazz Fuzzer
         # Pin to verified commit hash
-        uses: docker://ghcr.io/sech0us3/swazz-cli@7d8123ae45b14
+        uses: docker://ghcr.io/sech0us3/swazz-cli:7d8123ae45b14
         with:
           args: start --config swazz.config.json --output sarif --out-file results.sarif
         env:
           SWAZZ_AGENT_TOKEN: ${{ secrets.SWAZZ_AGENT_TOKEN }}
 
       - name: Upload SARIF Report
-        uses: github/codeql-action/upload-sarif@515828d97454 # v3
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v3
         with:
           sarif_file: results.sarif
 ```
