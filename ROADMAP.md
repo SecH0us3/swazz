@@ -62,17 +62,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Define comprehensive, high-quality checklists (e.g. CSRF protection in Flask via WTF, route security and data leaking in Next.js Server Actions, entity mapping validations in Spring Boot, query formatting in C#/.NET).
     - Map each checklist to prompt templates or agent runtime configurations to further refine the AI's patch generation capabilities.
 
-- [ ] **Task 119: Account Login History Auditing**
-  - **Design Goal:** Track and audit user login sessions (success, failed, 2FA failures) to provide security transparency. Allow project administrators/owners to view login history for any member in their project for compliance and audit logs.
-  - **Implementation Details:**
-    - Create a database table `user_login_history` to log: IP, Country, City, Region, Timezone, Device Type, Cloudflare Ray ID, User-Agent, status (success/failed), and timestamp.
-    - Leverage Cloudflare-provided geolocation and network details (using `CF-Connecting-IP`, `CF-IPCountry`, `CF-Ray`, `CF-Device-Type` headers or `c.req.raw.cf` properties).
-    - Log attempts in `POST /api/auth/login` (successful login, incorrect password, rate-limited, TOTP validation failures) and `POST /api/auth/register`.
-    - Implement a backend route `GET /api/projects/:id/members/:user_id/login-history` protected by a new RBAC permission `get:/api/projects/:id/members/:user_id/login-history` (default to Owner role).
-    - Validate that the target `:user_id` is a member of project `:id` to prevent cross-project scanning.
-    - Create a React UI tab/panel under Project Members or User Settings to display login logs in a clear, paginated table format with browser icons and geo-resolved information.
-
-
 ## 🔴 High Complexity
 
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**
