@@ -139,6 +139,13 @@ This file contains completed tasks.
     - Provide a checkbox list of common tech stacks (React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot).
     - When the user selects a stack or selects specific "Rules to Auto-Fix", automatically append relevant instructions or knowledge to the selected `CLI Execution Command` prompt templates.
 
+- [x] **Task 116: Deepen Tech Stack Security Guidelines & Rules Integration**
+  - **Design Goal:** Curate and expand highly specific, framework-specific secure coding rules for each supported technology stack (React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot) to generate more precise AI remediation patches.
+  - **Implementation Details:**
+    - Perform deep research or ingest OWASP Cheat Sheets for each specific framework/stack.
+    - Define comprehensive, high-quality checklists (e.g. CSRF protection in Flask via WTF, route security and data leaking in Next.js Server Actions, entity mapping validations in Spring Boot, query formatting in C#/.NET).
+    - Map each checklist to prompt templates or agent runtime configurations to further refine the AI's patch generation capabilities.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
