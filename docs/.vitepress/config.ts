@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: "Swazz Docs",
   description: "Smart API Fuzzer — find crashes before your users do",
   base: '/swazz/',
@@ -50,7 +51,8 @@ export default defineConfig({
           { text: 'Security Review 🛡', link: '/security_review' },
           { text: 'Runner Security Audit 🔍', link: '/runner_security_audit' },
           { text: 'KV Caching Research 💾', link: '/cloudflare_kv_cache_research' },
-          { text: 'Logging & Analytics 📈', link: '/logging' }
+          { text: 'Logging & Analytics 📈', link: '/logging' },
+          { text: 'Environment Variables ⚙️', link: '/env_variables' }
         ]
       },
       {
@@ -71,4 +73,4 @@ export default defineConfig({
       copyright: 'Copyright © 2026 SecH0us3'
     }
   }
-})
+}))
