@@ -102,7 +102,7 @@ Each step in `auth_sequence` can define the following fields:
 
 ### Template Substitution & Variables
 
-Variables extracted via `extract_variables` or computed via `set_variables` are stored in the global variable space. You can reference them in subsequent steps or any request by wrapping the variable name in double curly braces: `{% raw %}{{variable_name}}{% endraw %}`.
+Variables extracted via `extract_variables` or computed via `set_variables` are stored in the global variable space. You can reference them in subsequent steps or any request by wrapping the variable name in double curly braces: `{{variable_name}}`.
 
 ```json
   "auth_sequence": [
@@ -135,7 +135,7 @@ You can use a rich set of built-in functions inside `set_variables` to generate 
 | **Generation** | | |
 | `uuid()` | Generates a new random UUID v4 string (non-deterministic). | `uuid()` |
 | **String Manipulation** | | |
-| `concat(a, b, ...)` | Concatenates any number of string arguments. | `concat("Bearer ", {% raw %}{{token}}{% endraw %})` |
+| `concat(a, b, ...)` | Concatenates any number of string arguments. | `concat("Bearer ", {{token}})` |
 | `upper(v)` | Converts the string to uppercase. | `upper("secret")` &rarr; `"SECRET"` |
 | `lower(v)` | Converts the string to lowercase. | `lower("SECRET")` &rarr; `"secret"` |
 | `trim(v)` | Trims leading and trailing whitespace. | `trim("  data  ")` &rarr; `"data"` |
@@ -147,7 +147,7 @@ You can use a rich set of built-in functions inside `set_variables` to generate 
 | `base64(v)` | Encodes the input string to standard Base64. | `base64("hello world")` &rarr; `"aGVsbG8gd29ybGQ="` |
 | `hex(v)` | Encodes the input string to its hexadecimal representation. | `hex("AB")` &rarr; `"4142"` |
 | **JSON** | | |
-| `jsonPath(jsonStr, path)` | Parses `jsonStr` and extracts a value using dot-notation (e.g. `data.token`). | `jsonPath({% raw %}{{response_body}}{% endraw %}, "data.token")` |
+| `jsonPath(jsonStr, path)` | Parses `jsonStr` and extracts a value using dot-notation (e.g. `data.token`). | `jsonPath({{response_body}}, "data.token")` |
 | **Legacy & Proof-of-Work** | | |
 | `solvePoW(challenge, difficulty)` | Solves a Proof-of-Work challenge by finding an integer nonce such that the SHA256 hash of the concatenated `challenge + nonce` (hex encoded) starts with `difficulty` number of zero nibbles. | `solvePoW("challenge_token", 4)` |
 
@@ -180,7 +180,7 @@ Swazz supports importing Postman Collection JSON files (v2.0.0 and v2.1.0) direc
    - In Web UI, upload/fetch the collection using the input URL field.
 2. **Endpoint Mapping & Path Variables**:
    - Swazz recursively traverses folders inside your Postman Collection and extracts all requests.
-   - Path variables like `:userId` or `{% raw %}{{userId}}{% endraw %}` are automatically converted to `{userId}` format.
+   - Path variables like `:userId` or `{{userId}}` are automatically converted to `{userId}` format.
    - If the request includes query parameters or a body (JSON payloads, URL-encoded forms, or multipart form-data), Swazz infers their schemas and fuzzes their inputs.
 
 ## HAR (HTTP Archive) Fuzzing 📂
