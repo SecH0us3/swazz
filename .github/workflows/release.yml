@@ -29,6 +29,7 @@ jobs:
             frontend:
               - 'packages/web/**'
               - 'packages/edge/**'
+              - 'demo/**'
               - 'package.json'
               - 'package-lock.json'
             backend:
@@ -285,3 +286,4 @@ jobs:
         run: |
           npm run deploy:api
           npm run deploy:web
+          npm run deploy:demo

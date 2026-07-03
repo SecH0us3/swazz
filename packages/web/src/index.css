@@ -7389,3 +7389,27 @@ kbd {
     transform: rotate(360deg);
   }
 }
+
+/* Settings OAuth Status Styles */
+.settings-oauth-link-status {
+  display: flex;
+  align-items: center;
+}
+
+.oauth-connected-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background-color: rgba(34, 211, 160, 0.08);
+  border: 1px solid rgba(34, 211, 160, 0.2);
+  border-radius: var(--radius-md);
+  color: #22d3a0;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.oauth-connected-badge svg {
+  margin-right: var(--space-2);
+  flex-shrink: 0;
+}
+

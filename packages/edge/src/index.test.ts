@@ -84,7 +84,15 @@ beforeAll(async () => {
   }
 });
 
-const testEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', ADMIN_SECRET: 'admin-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env;
+const testEnv = { 
+  ...env, 
+  JWT_SECRET: 'test-secret', 
+  ADMIN_SECRET: 'admin-secret', 
+  TURNSTILE_SITE_KEY: undefined, 
+  TURNSTILE_SECRET: undefined,
+  GITHUB_CLIENT_ID: undefined,
+  GITHUB_CLIENT_SECRET: undefined
+} as unknown as Env;
 
 describe("Swazz Worker (Hono)", () => {
   it("responds with health check at /", async () => {
@@ -102,7 +110,7 @@ describe("Swazz Worker (Hono)", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, version: "1.0.0", turnstile_site_key: null });
+    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, github_auth_enabled: false, version: "1.0.0", turnstile_site_key: null });
   });
 });
 
@@ -2700,4 +2708,69 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(data.error).toBe("Unauthorized: Admin secret is not configured");
     });
   });
+
+  describe("GitHub OAuth routes", () => {
+    const oauthEnv = {
+      ...testEnv,
+      GITHUB_CLIENT_ID: "test-client-id",
+      GITHUB_CLIENT_SECRET: "test-client-secret",
+      GITHUB_REDIRECT_URI: "http://localhost:8787/api/auth/callback/github",
+    };
+
+    it("GET /api/auth/login/github redirects to GitHub authorize endpoint", async () => {
+      const req = new Request("http://localhost/api/auth/login/github");
+      const res = await appFetchWrapper(req, oauthEnv);
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location");
+      expect(location).toContain("https://github.com/login/oauth/authorize");
+      expect(location).toContain("client_id=test-client-id");
+      expect(location).toContain("redirect_uri=" + encodeURIComponent("http://localhost:8787/api/auth/callback/github"));
+      expect(location).toContain("state=");
+    });
+
+    it("GET /api/auth/callback/github returns error if state/code is missing", async () => {
+      const req = new Request("http://localhost/api/auth/callback/github?code=123");
+      const res = await appFetchWrapper(req, oauthEnv);
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location");
+      expect(location).toContain("?error=" + encodeURIComponent("Missing code or state"));
+    });
+
+    it("GET /api/auth/callback/github returns error if state is invalid", async () => {
+      const req = new Request("http://localhost/api/auth/callback/github?code=123&state=invalidstate");
+      const res = await appFetchWrapper(req, oauthEnv);
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location");
+      expect(location).toContain("?error=" + encodeURIComponent("Invalid or expired state"));
+    });
+
+    it("GET /api/info returns github_auth_enabled: true when configured", async () => {
+      const req = new Request("http://localhost/api/info");
+      const res = await appFetchWrapper(req, oauthEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.github_auth_enabled).toBe(true);
+    });
+
+    it("GET /api/info returns github_auth_enabled: false when not configured", async () => {
+      const req = new Request("http://localhost/api/info");
+      const res = await appFetchWrapper(req, testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.github_auth_enabled).toBe(false);
+    });
+
+    it("POST /api/auth/oauth/exchange returns 400 for invalid/expired code", async () => {
+      const req = new Request("http://localhost/api/auth/oauth/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "invalid-code" }),
+      });
+      const res = await appFetchWrapper(req, oauthEnv);
+      expect(res.status).toBe(400);
+      const data = await res.json() as any;
+      expect(data.error).toBe("Invalid or expired exchange code");
+    });
+  });
 });
+

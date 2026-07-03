@@ -8,6 +8,8 @@ import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
 import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
 
+const tempOauthCodes = new Map<string, string>();
+
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -292,9 +294,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!decoded || !decoded.sub) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const user = await getDB(c.env).prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan FROM users WHERE id = ?')
+      const user = await getDB(c.env).prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id FROM users WHERE id = ?')
         .bind(decoded.sub)
-        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null; two_factor_enabled: number; plan: string | null }>();
+        .first<{ username: string; api_key: string | null; public_key: string | null; is_guest: number; delete_requested_at: string | null; two_factor_enabled: number; plan: string | null; github_id: string | null }>();
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -314,7 +316,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         is_guest: user.is_guest === 1,
         delete_requested_at: user.delete_requested_at,
         two_factor_enabled: user.two_factor_enabled === 1,
-        plan: user.plan || 'Free'
+        plan: user.plan || 'Free',
+        github_id: user.github_id || null
       });
     } catch {
       return c.json({ error: 'Unauthorized' }, 401);
@@ -1107,4 +1110,290 @@ app.post('/api/admin/users/plan', async (c) => {
 
   return c.json({ status: 'ok', username, plan });
 });
+
+  app.get('/api/auth/login/github', async (c) => {
+    const clientId = c.env.GITHUB_CLIENT_ID;
+    if (!clientId) {
+      return c.json({ error: 'GitHub OAuth not configured' }, 500);
+    }
+    
+    // Check if linking existing account
+    let userId: string | null = null;
+    try {
+      userId = await getUserIdFromRequest(c);
+    } catch {
+      // Ignore, user is not logged in
+    }
+    
+    const secret = c.env.JWT_SECRET;
+    const statePayload = {
+      action: userId ? 'link' : 'login',
+      userId: userId || null,
+      exp: Math.floor(Date.now() / 1000) + 60 * 10, // 10 minutes
+    };
+    const state = await sign(statePayload, secret);
+    
+    const requestUrl = new URL(c.req.url);
+    const redirectUri = c.env.GITHUB_REDIRECT_URI || `${requestUrl.origin}/api/auth/callback/github`;
+    
+    const githubAuthUrl = new URL('https://github.com/login/oauth/authorize');
+    githubAuthUrl.searchParams.set('client_id', clientId);
+    githubAuthUrl.searchParams.set('redirect_uri', redirectUri);
+    githubAuthUrl.searchParams.set('scope', 'user:email');
+    githubAuthUrl.searchParams.set('state', state);
+    
+    return c.redirect(githubAuthUrl.toString());
+  });
+
+  app.get('/api/auth/callback/github', async (c) => {
+    const code = c.req.query('code');
+    const state = c.req.query('state');
+    
+    const requestUrl = new URL(c.req.url);
+    console.log('[DEBUG-OAUTH] c.req.url:', c.req.url);
+    console.log('[DEBUG-OAUTH] requestUrl.hostname:', requestUrl.hostname);
+    console.log('[DEBUG-OAUTH] requestUrl.port:', requestUrl.port);
+    console.log('[DEBUG-OAUTH] requestUrl.origin:', requestUrl.origin);
+    console.log('[DEBUG-OAUTH] ALLOWED_ORIGINS:', c.env.ALLOWED_ORIGINS);
+    
+    let frontendUrl = c.env.ALLOWED_ORIGINS && c.env.ALLOWED_ORIGINS !== '*' ? c.env.ALLOWED_ORIGINS.split(',')[0].trim() : '';
+    if (!frontendUrl) {
+      if (c.env.JWT_SECRET === 'test-secret' || requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1' || requestUrl.hostname === '[::1]' || requestUrl.hostname === '::1' || requestUrl.port === '8787') {
+        frontendUrl = 'http://localhost:5173';
+      } else {
+        frontendUrl = requestUrl.origin;
+      }
+    }
+    console.log('[DEBUG-OAUTH] final frontendUrl:', frontendUrl);
+    frontendUrl = frontendUrl.replace(/\/$/, '');
+    
+    if (!code || !state) {
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Missing code or state')}`);
+    }
+    
+    const secret = c.env.JWT_SECRET;
+    let decodedState: any;
+    try {
+      decodedState = await verify(state, secret, "HS256");
+    } catch (err) {
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}`);
+    }
+    
+    if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Invalid state payload')}`);
+    }
+    
+    const clientId = c.env.GITHUB_CLIENT_ID;
+    const clientSecret = c.env.GITHUB_CLIENT_SECRET;
+    
+    if (!clientId || !clientSecret) {
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('GitHub OAuth not configured on server')}`);
+    }
+    
+    try {
+      // 1. Exchange code for access token
+      const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'Swazz-Edge-Coordinator',
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+        }),
+      });
+      
+      const tokenData = (await tokenRes.json()) as { access_token?: string; error?: string };
+      if (tokenData.error || !tokenData.access_token) {
+        return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Failed to exchange code: ' + (tokenData.error || 'unknown'))}`);
+      }
+      
+      const accessToken = tokenData.access_token;
+      
+      // 2. Fetch user profile
+      const userRes = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `token ${accessToken}`,
+          'User-Agent': 'Swazz-Edge-Coordinator',
+          'Accept': 'application/json',
+        },
+      });
+      
+      const userData = (await userRes.json()) as { id?: number; login?: string; email?: string | null };
+      if (!userData.id || !userData.login) {
+        return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Failed to fetch GitHub profile')}`);
+      }
+      
+      const githubId = String(userData.id);
+      const githubLogin = userData.login;
+      
+      // 3. Fetch primary email
+      let email = userData.email || null;
+      if (!email) {
+        const emailsRes = await fetch('https://api.github.com/user/emails', {
+          headers: {
+            'Authorization': `token ${accessToken}`,
+            'User-Agent': 'Swazz-Edge-Coordinator',
+            'Accept': 'application/json',
+          },
+        });
+        const emailsData = (await emailsRes.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
+        if (Array.isArray(emailsData)) {
+          const primaryEmail = emailsData.find(e => e.primary && e.verified) || emailsData.find(e => e.primary) || emailsData[0];
+          if (primaryEmail) {
+            email = primaryEmail.email;
+          }
+        }
+      }
+      
+      const db = getDB(c.env);
+      
+      if (decodedState.action === 'link') {
+        const userId = decodedState.userId;
+        if (!userId) {
+          return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Invalid user session for linking')}`);
+        }
+        
+        // Check if already linked
+        const existingLink = await db.prepare('SELECT id FROM users WHERE github_id = ?')
+          .bind(githubId)
+          .first<{ id: string }>();
+          
+        if (existingLink && existingLink.id !== userId) {
+          return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('GitHub account is already linked to another user')}`);
+        }
+        
+        await db.prepare('UPDATE users SET github_id = ? WHERE id = ?')
+          .bind(githubId, userId)
+          .run();
+          
+        return c.redirect(`${frontendUrl}/?status=github_linked`);
+      } else {
+        // Log in or Register
+        let user = await db.prepare('SELECT id FROM users WHERE github_id = ?')
+          .bind(githubId)
+          .first<{ id: string }>();
+          
+        let userId: string;
+        
+        if (user) {
+          userId = user.id;
+        } else {
+          // Check if email already exists to prevent duplicate accounts or database constraint errors
+          if (email) {
+            const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?')
+              .bind(email)
+              .first<{ id: string }>();
+            if (existingUser) {
+              return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('An account with this email already exists. Please log in with your password and link your GitHub account in settings.')}`);
+            }
+          }
+
+          // Unique username generator (limited to 3 to 20 characters matching ^[a-zA-Z0-9_\-]{3,20}$)
+          let baseUsername = githubLogin.replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 15);
+          if (baseUsername.length < 3) {
+            baseUsername = 'gh_' + baseUsername;
+          }
+          
+          let username = baseUsername;
+          let usernameHash = '';
+          let isUnique = false;
+          let attempts = 0;
+          
+          while (!isUnique && attempts < 10) {
+            const finalUsername = attempts === 0 ? username : `${username.substring(0, 16)}_${Math.floor(Math.random() * 100)}`;
+            const currentHash = await hashUsername(finalUsername);
+            
+            const existingReg = await db.prepare('SELECT username_hash FROM username_registry WHERE username_hash = ?')
+              .bind(currentHash)
+              .first<{ username_hash: string }>();
+              
+            if (!existingReg) {
+              username = finalUsername;
+              usernameHash = currentHash;
+              isUnique = true;
+            } else {
+              attempts++;
+            }
+          }
+          
+          if (!isUnique) {
+            return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Failed to generate a unique username')}`);
+          }
+          
+          userId = ulid();
+          const projectId = ulid();
+          const randomPass = crypto.randomUUID() + crypto.randomUUID();
+          const passwordHash = await hashPassword(randomPass);
+          const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+          
+          await db.batch([
+            db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
+              .bind(usernameHash),
+            db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, github_id, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')")
+              .bind(userId, username, passwordHash, apiKey, email, githubId),
+            db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
+              .bind(projectId),
+            db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+              .bind(projectId, userId)
+          ]);
+        }
+        
+        // Generate JWT token
+        const payload = {
+          sub: userId,
+          iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+        };
+        const jwtToken = await sign(payload, secret);
+        
+        const exchangeCode = crypto.randomUUID();
+        const exchangeKey = `oauth_code:${exchangeCode}`;
+        const cache = c.env.SESSION_CACHE;
+        if (cache) {
+          await cache.put(exchangeKey, jwtToken, { expirationTtl: 60 });
+        } else {
+          tempOauthCodes.set(exchangeKey, jwtToken);
+          setTimeout(() => tempOauthCodes.delete(exchangeKey), 60 * 1000);
+        }
+        
+        return c.redirect(`${frontendUrl}/?exchange_code=${exchangeCode}`);
+      }
+    } catch (err: any) {
+      console.error('GitHub OAuth callback error:', err);
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
+    }
+  });
+
+  app.post('/api/auth/oauth/exchange', async (c) => {
+    const body = await c.req.json();
+    const code = body.code;
+    if (typeof code !== 'string') {
+      return c.json({ error: 'Missing code' }, 400);
+    }
+    
+    const key = `oauth_code:${code}`;
+    let token: string | null = null;
+    const cache = c.env.SESSION_CACHE;
+    if (cache) {
+      token = await cache.get(key);
+      if (token) {
+        await cache.delete(key);
+      }
+    } else {
+      token = tempOauthCodes.get(key) || null;
+      if (token) {
+        tempOauthCodes.delete(key);
+      }
+    }
+    
+    if (!token) {
+      return c.json({ error: 'Invalid or expired exchange code' }, 400);
+    }
+    
+    return c.json({ status: 'ok', token });
+  });
 }
