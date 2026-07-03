@@ -5304,6 +5304,13 @@ kbd {
   margin-top: 24px;
 }
 
+.rbac-modal-footer-between {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+}
+
 .rbac-empty-state {
   text-align: center;
   padding: 24px;

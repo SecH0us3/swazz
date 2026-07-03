@@ -135,6 +135,37 @@ export function MembersRolesTab() {
         }
     };
 
+    const handleExportCSV = async () => {
+        if (!activeHistoryMember || !activeProject) return;
+        try {
+            const data = await fetchMemberLoginHistory(activeProject.id, activeHistoryMember.id, 1, 1000);
+            const headers = ['Time', 'Status', 'IP Address', 'Country', 'City', 'Region', 'Timezone', 'Ray ID', 'User Agent'];
+            const rows = data.history.map(entry => [
+                new Date(entry.created_at.replace(' ', 'T') + 'Z').toLocaleString(),
+                entry.status,
+                entry.ip_address,
+                entry.country || '',
+                entry.city || '',
+                entry.region || '',
+                entry.timezone || '',
+                entry.cf_ray || '',
+                `"${(entry.user_agent || '').replace(/"/g, '""')}"`
+            ]);
+
+            const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `login_history_${activeHistoryMember.username || activeHistoryMember.id}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err: any) {
+            showToast(err.message || 'Failed to export CSV', 'error');
+        }
+    };
+
     const handleInvite = async () => {
         const trimmed = inviteInput.trim();
         if (!trimmed) {
@@ -609,7 +640,8 @@ export function MembersRolesTab() {
                             </div>
                         </div>
 
-                        <div className="rbac-modal-footer">
+                        <div className="rbac-modal-footer-between">
+                            <button className="btn btn-secondary" onClick={handleExportCSV} disabled={historyData.length === 0}>Export CSV</button>
                             <button className="btn btn-secondary" onClick={() => setActiveHistoryMember(null)}>Close</button>
                         </div>
                     </div>
