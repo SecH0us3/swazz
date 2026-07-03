@@ -8,6 +8,8 @@ import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
 import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
 
+const tempOauthCodes = new Map<string, string>();
+
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -1116,7 +1118,12 @@ app.post('/api/admin/users/plan', async (c) => {
     }
     
     // Check if linking existing account
-    const userId = await getUserIdFromRequest(c);
+    let userId: string | null = null;
+    try {
+      userId = await getUserIdFromRequest(c);
+    } catch {
+      // Ignore, user is not logged in
+    }
     
     const secret = c.env.JWT_SECRET;
     const statePayload = {
@@ -1186,6 +1193,7 @@ app.post('/api/admin/users/plan', async (c) => {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': 'Swazz-Edge-Coordinator',
         },
         body: JSON.stringify({
           client_id: clientId,
@@ -1270,6 +1278,16 @@ app.post('/api/admin/users/plan', async (c) => {
         if (user) {
           userId = user.id;
         } else {
+          // Check if email already exists to prevent duplicate accounts or database constraint errors
+          if (email) {
+            const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?')
+              .bind(email)
+              .first<{ id: string }>();
+            if (existingUser) {
+              return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('An account with this email already exists. Please log in with your password and link your GitHub account in settings.')}`);
+            }
+          }
+
           // Unique username generator (limited to 3 to 20 characters matching ^[a-zA-Z0-9_\-]{3,20}$)
           let baseUsername = githubLogin.replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 15);
           if (baseUsername.length < 3) {
@@ -1277,19 +1295,21 @@ app.post('/api/admin/users/plan', async (c) => {
           }
           
           let username = baseUsername;
+          let usernameHash = '';
           let isUnique = false;
           let attempts = 0;
           
           while (!isUnique && attempts < 10) {
             const finalUsername = attempts === 0 ? username : `${username.substring(0, 16)}_${Math.floor(Math.random() * 100)}`;
-            const usernameHash = await hashUsername(finalUsername);
+            const currentHash = await hashUsername(finalUsername);
             
             const existingReg = await db.prepare('SELECT username_hash FROM username_registry WHERE username_hash = ?')
-              .bind(usernameHash)
+              .bind(currentHash)
               .first<{ username_hash: string }>();
               
             if (!existingReg) {
               username = finalUsername;
+              usernameHash = currentHash;
               isUnique = true;
             } else {
               attempts++;
@@ -1305,7 +1325,6 @@ app.post('/api/admin/users/plan', async (c) => {
           const randomPass = crypto.randomUUID() + crypto.randomUUID();
           const passwordHash = await hashPassword(randomPass);
           const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
-          const usernameHash = await hashUsername(username);
           
           await db.batch([
             db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
@@ -1327,11 +1346,50 @@ app.post('/api/admin/users/plan', async (c) => {
         };
         const jwtToken = await sign(payload, secret);
         
-        return c.redirect(`${frontendUrl}/?auth_token=${jwtToken}`);
+        const exchangeCode = crypto.randomUUID();
+        const exchangeKey = `oauth_code:${exchangeCode}`;
+        const cache = c.env.SESSION_CACHE;
+        if (cache) {
+          await cache.put(exchangeKey, jwtToken, { expirationTtl: 60 });
+        } else {
+          tempOauthCodes.set(exchangeKey, jwtToken);
+          setTimeout(() => tempOauthCodes.delete(exchangeKey), 60 * 1000);
+        }
+        
+        return c.redirect(`${frontendUrl}/?exchange_code=${exchangeCode}`);
       }
     } catch (err: any) {
       console.error('GitHub OAuth callback error:', err);
-      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Authentication failed: ' + (err.message || 'unknown error'))}`);
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
     }
+  });
+
+  app.post('/api/auth/oauth/exchange', async (c) => {
+    const body = await c.req.json();
+    const code = body.code;
+    if (typeof code !== 'string') {
+      return c.json({ error: 'Missing code' }, 400);
+    }
+    
+    const key = `oauth_code:${code}`;
+    let token: string | null = null;
+    const cache = c.env.SESSION_CACHE;
+    if (cache) {
+      token = await cache.get(key);
+      if (token) {
+        await cache.delete(key);
+      }
+    } else {
+      token = tempOauthCodes.get(key) || null;
+      if (token) {
+        tempOauthCodes.delete(key);
+      }
+    }
+    
+    if (!token) {
+      return c.json({ error: 'Invalid or expired exchange code' }, 400);
+    }
+    
+    return c.json({ status: 'ok', token });
   });
 }

@@ -36,7 +36,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     });
 
     const handleGithubLogin = () => {
-        window.location.href = `${PROXY_URL}/api/auth/login/github`;
+        window.location.href = '/api/auth/login/github';
     };
 
     // Initialize Turnstile script dynamically

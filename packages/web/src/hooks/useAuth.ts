@@ -12,6 +12,35 @@ export function useAuth() {
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
+        const exchangeCode = urlParams.get('exchange_code');
+        if (exchangeCode) {
+            fetch(`${PROXY_URL}/api/auth/oauth/exchange`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ code: exchangeCode })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to exchange code');
+                return res.json();
+            })
+            .then(data => {
+                const authToken = data.token;
+                localStorage.setItem('swazz_token', authToken);
+                setToken(authToken);
+                setIsGuest(false);
+                sessionStorage.removeItem('swazz_guest');
+            })
+            .catch(err => {
+                console.error(err);
+            });
+            
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.delete('exchange_code');
+            window.history.replaceState({}, '', newUrl);
+        }
+
         const authToken = urlParams.get('auth_token');
         if (authToken) {
             localStorage.setItem('swazz_token', authToken);

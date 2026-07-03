@@ -14,6 +14,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Support admin invites or bypass codes to register extra users manually during the beta phase.
     - Design status banners in the web client dashboard alerting users about the current beta limits.
 
+- [ ] **Task 119: Rebuild Documentation Site with Search**
+  - **Design Goal:** Fully rebuild the documentation site using a modern framework (e.g. VitePress or Docusaurus) to provide a more convenient and structured layout, featuring full offline-capable search and interactive code blocks.
+  - **Implementation Details:**
+    - Initialize VitePress or Docusaurus in the documentation workspace.
+    - Port existing markdown guides to the new site layout.
+    - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
+
 - [ ] **Task 98: RSS Feed Integration**
   - **Design Goal:** Provide a standard RSS feed for product updates, security disclosures, or public scan releases.
   - **Implementation Details:**

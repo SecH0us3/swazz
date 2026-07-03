@@ -2759,6 +2759,18 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const data = await res.json() as any;
       expect(data.github_auth_enabled).toBe(false);
     });
+
+    it("POST /api/auth/oauth/exchange returns 400 for invalid/expired code", async () => {
+      const req = new Request("http://localhost/api/auth/oauth/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "invalid-code" }),
+      });
+      const res = await appFetchWrapper(req, oauthEnv);
+      expect(res.status).toBe(400);
+      const data = await res.json() as any;
+      expect(data.error).toBe("Invalid or expired exchange code");
+    });
   });
 });
 

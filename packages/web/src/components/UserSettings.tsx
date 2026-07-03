@@ -465,7 +465,7 @@ export function UserSettings() {
                                                 type="button" 
                                                 className="btn btn-secondary btn-sm"
                                                 onClick={() => {
-                                                    window.location.href = `${PROXY_URL}/api/auth/login/github`;
+                                                    window.location.href = '/api/auth/login/github';
                                                 }}
                                             >
                                                 <svg className="github-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
