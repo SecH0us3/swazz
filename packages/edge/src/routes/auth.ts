@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getDB } from '../utils/db';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword } from '../utils/auth';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword, recordLoginHistory } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -106,6 +106,8 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
           .bind(projectId, id)
       ]);
+
+      await recordLoginHistory(getDB(c.env), id, 'success', c);
 
       const payload = {
         sub: id,
@@ -539,18 +541,21 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       username = challengeRow.username;
     }
 
+    const user = await getDB(c.env).prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
+      .bind(username)
+      .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
+
     // Check username rate limits
     const rateLimit = await checkLoginRateLimit(getDB(c.env), username);
     if (rateLimit.locked) {
+      if (user) {
+        await recordLoginHistory(getDB(c.env), user.id, 'locked', c);
+      }
       return c.json(
         { error: 'Account temporarily locked due to too many failed attempts', retry_after: rateLimit.retryAfter },
         429
       );
     }
-
-    const user = await getDB(c.env).prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
-      .bind(username)
-      .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
 
     if (!user) {
       // User doesn't exist: run dummy verify and inject timing-delay to prevent username enumeration
@@ -563,6 +568,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
       await recordFailedLogin(getDB(c.env), username);
+      await recordLoginHistory(getDB(c.env), user.id, 'failed_password', c);
       await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
@@ -582,12 +588,14 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
       } catch {
         await recordFailedLogin(getDB(c.env), username);
+        await recordLoginHistory(getDB(c.env), user.id, 'failed_password', c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
       const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
         await recordFailedLogin(getDB(c.env), username);
+        await recordLoginHistory(getDB(c.env), user.id, 'failed_2fa', c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
@@ -595,6 +603,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Successful login — reset rate-limit counter
     await resetLoginAttempts(getDB(c.env), username);
+    await recordLoginHistory(getDB(c.env), user.id, 'success', c);
 
     const payload = {
       sub: user.id,

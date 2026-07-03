@@ -245,3 +245,16 @@ export interface Project {
     auto_fix_rules?: string;
     member_session_timeout?: number;
 }
+
+export interface LoginHistoryEntry {
+    id: string;
+    status: 'success' | 'failed_password' | 'failed_2fa' | 'locked';
+    ip_address: string;
+    country: string | null;
+    city: string | null;
+    region: string | null;
+    timezone: string | null;
+    cf_ray: string | null;
+    user_agent: string | null;
+    created_at: string;
+}

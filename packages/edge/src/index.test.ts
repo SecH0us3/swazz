@@ -2265,6 +2265,44 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         }), testEnv);
         expect(resEditor.status).toBe(200);
       });
+
+      it("restricts GET /members/:user_id/login-history to authorized roles", async () => {
+        // 1. Register and login a member user
+        const memberName = "u_hist_" + Date.now().toString().slice(-4);
+        const resReg = await appFetchWrapper(new Request("http://localhost/api/auth/register" as any, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: memberName, password: "Password123!" })
+        }), testEnv);
+        const regData = (await resReg.json()) as any;
+        const memberUserId = regData.id;
+
+        // 2. Add as a member of the project
+        await testEnv.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')")
+          .bind(projectId, memberUserId).run();
+
+        // 3. Owner fetches login history for memberUserId - succeeds (200 OK)
+        const resOwner = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/members/${memberUserId}/login-history` as any, {
+          headers: { "Authorization": `Bearer ${tokenOwner}` }
+        }), testEnv);
+        expect(resOwner.status).toBe(200);
+        const bodyOwner = await resOwner.json() as any;
+        expect(bodyOwner.history).toBeDefined();
+        expect(bodyOwner.history.length).toBeGreaterThan(0);
+        expect(bodyOwner.history[0].status).toBe("success"); // from register
+
+        // 4. Outsider fetches login history - fails (403 Forbidden)
+        const resOutsider = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/members/${memberUserId}/login-history` as any, {
+          headers: { "Authorization": `Bearer ${tokenOutsider}` }
+        }), testEnv);
+        expect(resOutsider.status).toBe(403);
+
+        // 5. Fetching history of non-member user fails (404 Not Found)
+        const resNonMember = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/members/nonexistent/login-history` as any, {
+          headers: { "Authorization": `Bearer ${tokenOwner}` }
+        }), testEnv);
+        expect(resNonMember.status).toBe(404);
+      });
     });
 
     describe("Invitation System Security & Flow", () => {
