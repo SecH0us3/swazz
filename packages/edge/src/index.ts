@@ -71,9 +71,11 @@ app.use('/api/*', async (c, next) => {
 app.get('/api/info', (c) => {
   const authEnabled = c.env.AUTH_ENABLED === 'true';
   const limitAnonymous = c.env.LIMIT_ANONYMOUS === 'true';
+  const githubAuthEnabled = !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET);
   return c.json({ 
     auth_enabled: authEnabled, 
     limit_anonymous: limitAnonymous, 
+    github_auth_enabled: githubAuthEnabled,
     version: c.env.VERSION || '1.0.0',
     turnstile_site_key: c.env.TURNSTILE_SITE_KEY || null
   });

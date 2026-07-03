@@ -27,10 +27,29 @@ import { fetchProjects } from './services/projectService.js';
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export default function App() {
-    const { authEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
+    const { authEnabled, githubAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
     const userProfile = useAppStore(state => state.userProfile);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const status = urlParams.get('status');
+
+        if (error) {
+            showToast(`Authentication Error: ${error}`, 'error');
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.delete('error');
+            window.history.replaceState({}, '', newUrl);
+        }
+        if (status === 'github_linked') {
+            showToast('GitHub account linked successfully!', 'success');
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.delete('status');
+            window.history.replaceState({}, '', newUrl);
+        }
+    }, [showToast]);
 
     useEffect(() => {
         if (token) {
@@ -53,7 +72,8 @@ export default function App() {
                         publicKey: data.public_key,
                         isGuest: data.is_guest,
                         deleteRequestedAt: data.delete_requested_at,
-                        twoFactorEnabled: data.two_factor_enabled
+                        twoFactorEnabled: data.two_factor_enabled,
+                        githubId: data.github_id
                     } 
                 });
             })

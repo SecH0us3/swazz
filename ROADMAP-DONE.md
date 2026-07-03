@@ -56,6 +56,14 @@ This file contains completed tasks.
 - [x] **Task 67: Restart Runner Agent Command in Web UI**
   - **Design Goal:** Allow remote management of runners by providing a button in the Web UI dashboard to restart connected runner agent processes.
 
+- [x] **Task 95: Implement GitHub OAuth Authentication**
+  - **Design Goal:** Allow users to log in or register using their GitHub accounts.
+  - **Implementation Details:**
+    - Set up OAuth 2.0 configuration for GitHub on the edge coordinator.
+    - Implement callback handling routes (`GET /api/auth/callback/github`) to exchange code for access tokens and fetch user profiles.
+    - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
+    - Add a "Sign in with GitHub" button to the frontend authentication modals.
+
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.

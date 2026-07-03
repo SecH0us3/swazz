@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/web",
     "packages/edge",
-    "packages/rag"
+    "packages/rag",
+    "demo"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=packages/edge",
@@ -15,6 +16,7 @@
     "build": "npm run build --workspace=packages/web",
     "deploy:api": "npm run deploy --workspace=packages/edge",
     "deploy:web": "npm run deploy --workspace=packages/web",
+    "deploy:demo": "npm run deploy --workspace=demo",
     "deploy:all": "npm run deploy:web",
     "test:e2e": "playwright test"
   },

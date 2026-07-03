@@ -45,13 +45,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a tokenized forgot password flow: send recovery links/tokens via email, verifying them at `/api/auth/password/reset`.
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
-- [ ] **Task 95: Implement GitHub OAuth Authentication**
-  - **Design Goal:** Allow users to log in or register using their GitHub accounts.
-  - **Implementation Details:**
-    - Set up OAuth 2.0 configuration for GitHub on the edge coordinator.
-    - Implement callback handling routes (`GET /api/auth/callback/github`) to exchange code for access tokens and fetch user profiles.
-    - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
-    - Add a "Sign in with GitHub" button to the frontend authentication modals.
+
 - [ ] **Task 114: Slow Query Monitoring**
   - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
   - **Implementation Details:**
