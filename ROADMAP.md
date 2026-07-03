@@ -14,12 +14,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Support admin invites or bypass codes to register extra users manually during the beta phase.
     - Design status banners in the web client dashboard alerting users about the current beta limits.
 
-- [ ] **Task 119: Rebuild Documentation Site with Search**
-  - **Design Goal:** Fully rebuild the documentation site using a modern framework (e.g. VitePress or Docusaurus) to provide a more convenient and structured layout, featuring full offline-capable search and interactive code blocks.
-  - **Implementation Details:**
-    - Initialize VitePress or Docusaurus in the documentation workspace.
-    - Port existing markdown guides to the new site layout.
-    - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
 
 - [ ] **Task 98: RSS Feed Integration**
   - **Design Goal:** Provide a standard RSS feed for product updates, security disclosures, or public scan releases.
@@ -113,4 +107,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `cron_schedule` field to `scan_configs` or create a new `scan_schedules` table in D1.
     - Implement a Cloudflare Workers Cron Trigger or coordinator scheduler loop to fetch pending schedules, verify the user's plan is "Supporter Plan", and trigger active fuzzer runs.
     - Add a "Schedule Scan" configuration panel in the project settings web UI supporting standard cron/interval selections.
+
+- [ ] **Task 120: Project-Level E2EE Key Backup & Recovery (Backup File + Seed Phrase)**
+  - **Design Goal:** Support exporting and importing the Project X25519 private key in Project Settings via a downloaded backup file (`.swazzkey`) or a 12-word mnemonic seed phrase, enabling seamless device migration and collaboration without losing access to historical encrypted reports. Includes a link in the UI to the [Key Backup & Recovery guide](./docs/encryption_backup.md).
+  - **Implementation Details:**
+    - Build UI buttons in Project Settings to download the private key as a `.swazzkey` file (JSON JWK format) or reveal a 12-word mnemonic seed phrase.
+    - Implement import/recovery fields in the project initialization UI flow to allow users to enter a seed phrase or upload a `.swazzkey` file to restore the private key to local IndexedDB (`KeyStorage`).
+    - Derive the X25519 private key from the mnemonic seed phrase using PBKDF2/scrypt client-side derivation.
+
 

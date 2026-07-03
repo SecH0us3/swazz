@@ -7,7 +7,8 @@
     "packages/web",
     "packages/edge",
     "packages/rag",
-    "demo"
+    "demo",
+    "docs"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=packages/edge",

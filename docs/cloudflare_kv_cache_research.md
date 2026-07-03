@@ -1,5 +1,4 @@
 ---
-layout: default
 title: Cloudflare KV & Cache Research
 ---
 
@@ -19,7 +18,7 @@ Currently, the Swazz Edge Coordinator (`packages/edge`) utilizes:
 ### Challenges:
 * **Centralization**: Durable Objects reside in a single coordinator isolate region (typically closest to the first client connection), introducing latency overhead for global users.
 * **D1 Transaction Load**: Read operations (e.g., verifying user session tokens or API keys on every API call) execute database queries, which increases D1 read-unit consumption and limits global throughput.
-* **DO Active-Class Pricing**: Durable Objects incur billing costs per active-class hour ($12.50 per million active GB-seconds). Keeping DOs active solely to track runner status or rate limits is cost-inefficient.
+* **DO Active-Class Cost**: Durable Objects incur billing costs based on active execution duration (GB-seconds). Keeping DOs active solely to track idle runner status or rate limits is cost-inefficient compared to transient caching.
 
 ---
 
@@ -29,9 +28,9 @@ Currently, the Swazz Edge Coordinator (`packages/edge`) utilizes:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Workers Memory (Isolate Cache)** | Ephemeral / Non-replicated | < 1 ms (Local) | < 1 ms (Local) | Free | Minutes (Isolate lifecycle) | High-frequency rate limit sliding windows, local memoization. |
 | **Cache API** | Ephemeral / Region-bound | 10–30 ms (Regional CDN) | < 10 ms (via cache.put) | Free | Hours/Days (Evicts on cold start) | Parsed spec files, static payload dictionaries, public R2 assets. |
-| **Cloudflare KV** | Eventual Consistency (up to 60s) | 10–15 ms (Edge Cache) | 1–2 seconds | $0.50/M reads<br/>$5.00/M writes | Persistent | API key authorization lists, global session blacklists, feature flags. |
-| **Durable Objects (DO)** | Strong Consistency (Single-leader) | 50–200 ms (Centralized) | 50–200 ms | $12.50/M GB-s | Persistent | Stateful WebSocket routing, active scan run orchestration. |
-| **D1 Database** | Strong Consistency (Primary-replica) | 50–300 ms | 100–500 ms | $0.001/10K reads<br/>$0.01/10K writes | Persistent | Core transactional metadata (users, settings, historical runs). |
+| **Cloudflare KV** | Eventual Consistency (up to 60s) | 10–15 ms (Edge Cache) | 1–2 seconds | Billed per million read/write operations (Low read, moderate write cost) | Persistent | API key authorization lists, global session blacklists, feature flags. |
+| **Durable Objects (DO)** | Strong Consistency (Single-leader) | 50–200 ms (Centralized) | 50–200 ms | Billed per active GB-second | Persistent | Stateful WebSocket routing, active scan run orchestration. |
+| **D1 Database** | Strong Consistency (Primary-replica) | 50–300 ms | 100–500 ms | Billed per read/write query units | Persistent | Core transactional metadata (users, settings, historical runs). |
 
 ---
 
@@ -76,7 +75,7 @@ Currently, the Swazz Edge Coordinator (`packages/edge`) utilizes:
 
     $$\frac{10 \text{ runners} \times 12 \text{ heartbeats/min} \times 60 \text{ min} \times 24 \text{ hours} \times 30 \text{ days}}{1,000,000} \approx 5.18 \text{ million KV writes/month}$$
 
-    At $\$5.00$ per million KV writes, this costs **$\$25.90\text{/month}$** just for idle heartbeats.
+    This translates to millions of write operations per month, incurring recurring KV write costs just to track idle state.
   * **Consistency**: KV's eventual consistency (up to 60s replication delay) means the dashboard will display stale runner statuses (e.g., indicating a runner is connected when it has crashed, or vice versa).
 * **Conclusion**: Storing heartbeats in KV is **inefficient** and **costly**. Stateful WebSocket connections are naturally handled in the memory of the Durable Object coordinator, which remains the most real-time and cost-effective approach for runner tracking.
 

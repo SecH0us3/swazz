@@ -1,5 +1,4 @@
 ---
-layout: default
 title: Installation
 ---
 
@@ -95,4 +94,4 @@ cd packages/container
 go run main.go serve
 ```
 
-[← Back to Home](./index.html) | [Next: Usage & Configuration →](./usage.html)
+[← Back to Home](./index.md) | [Next: Usage & Configuration →](./usage.md)

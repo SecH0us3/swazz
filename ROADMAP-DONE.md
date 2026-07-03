@@ -19,6 +19,13 @@ This file contains completed tasks.
 
 - [x] **Task 3:** Add high-quality screenshots or GIFs of the Web Dashboard (Heatmap, Inspector) to the `README.md`. *(Depends on: Task 12)*
 
+- [x] **Task 119: Rebuild Documentation Site with Search**
+  - **Design Goal:** Fully rebuild the documentation site using a modern framework (e.g. VitePress or Docusaurus) to provide a more convenient and structured layout, featuring full offline-capable search and interactive code blocks.
+  - **Implementation Details:**
+    - Initialize VitePress or Docusaurus in the documentation workspace.
+    - Port existing markdown guides to the new site layout.
+    - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
+
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
 - [x] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).

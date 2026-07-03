@@ -1,5 +1,4 @@
 ---
-layout: default
 title: Contributing
 ---
 
@@ -106,4 +105,4 @@ npm run test --workspace=packages/web
 
 ---
 
-[← Back to Home](./index.html)
+[← Back to Home](./index.md)
