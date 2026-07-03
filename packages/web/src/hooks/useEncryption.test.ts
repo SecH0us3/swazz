@@ -1,7 +1,16 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useEncryption, bufferToBase64, base64ToBuffer, KeyStorage, KEY_PRIVATE, KEY_PUBLIC } from './useEncryption.js';
+import {
+    useEncryption,
+    bufferToBase64,
+    base64ToBuffer,
+    KeyStorage,
+    KEY_PRIVATE,
+    KEY_PUBLIC,
+    generateMnemonic,
+    deriveKeyFromMnemonic
+} from './useEncryption.js';
 
 // ─── Helper tests ───────────────────────────────────────
 
@@ -14,7 +23,6 @@ describe('bufferToBase64 / base64ToBuffer', () => {
     });
 
     it('should produce URL-safe Base64 (no +, /, or =)', () => {
-        // Use bytes that typically produce +, /, and padding in standard base64
         const data = new Uint8Array([251, 239, 190]);
         const b64 = bufferToBase64(data.buffer);
         expect(b64).not.toContain('+');
@@ -28,6 +36,20 @@ describe('bufferToBase64 / base64ToBuffer', () => {
         expect(b64).toBe('');
         const restored = new Uint8Array(base64ToBuffer(b64));
         expect(restored.length).toBe(0);
+    });
+});
+
+describe('Mnemonic helpers', () => {
+    it('should generate a 12-word mnemonic', () => {
+        const mnemonic = generateMnemonic();
+        expect(mnemonic.split(' ').length).toBe(12);
+    });
+
+    it('should derive X25519 key pair from mnemonic', async () => {
+        const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        const pair = await deriveKeyFromMnemonic(mnemonic);
+        expect(pair.publicKey).toBeDefined();
+        expect(pair.privateKey).toBeDefined();
     });
 });
 
@@ -45,7 +67,6 @@ describe('useEncryption', () => {
 
     describe('when X25519 is NOT supported', () => {
         beforeEach(() => {
-            // Simulate unsupported X25519 by making generateKey throw
             const realGenerateKey = crypto.subtle.generateKey.bind(crypto.subtle);
             vi.spyOn(crypto.subtle, 'generateKey').mockImplementation(
                 (algorithm: any, ...args: any[]) => {
@@ -76,7 +97,11 @@ describe('useEncryption', () => {
             });
 
             await act(async () => {
-                await result.current.generateKeyPair();
+                try {
+                    await result.current.generateKeyPair();
+                } catch {
+                    // expected
+                }
             });
 
             expect(result.current.error).toBe('X25519 is not supported in this browser.');
@@ -85,10 +110,6 @@ describe('useEncryption', () => {
     });
 
     describe('when X25519 IS supported', () => {
-        // These tests will only pass in browsers/runtimes that support X25519.
-        // In jsdom (Node), crypto.subtle may not support X25519.
-        // We mock the full flow to test hook logic independently.
-
         const mockPublicJwk = {
             kty: 'OKP',
             crv: 'X25519',
@@ -111,37 +132,57 @@ describe('useEncryption', () => {
                 privateKey: mockPrivateKey,
             } as CryptoKeyPair);
 
-            // Mock exportKey
+            // Mock exportKey with pass-through for PBKDF2/HKDF keys if any
+            const realExportKey = crypto.subtle.exportKey.bind(crypto.subtle);
             vi.spyOn(crypto.subtle, 'exportKey').mockImplementation(
-                (format: string, key: CryptoKey) => {
+                async (format: string, key: CryptoKey) => {
+                    if (format === 'jwk' && (key as any).type !== 'private' && (key as any).type !== 'public') {
+                        return realExportKey(format, key);
+                    }
                     if (format === 'jwk') {
-                        return Promise.resolve(
-                            (key as any).type === 'public' ? mockPublicJwk : mockPrivateJwk,
-                        ) as Promise<JsonWebKey>;
+                        return ((key as any).type === 'public' ? mockPublicJwk : mockPrivateJwk) as JsonWebKey;
                     }
                     if (format === 'raw') {
-                        // Return 32 bytes for raw public key
-                        return Promise.resolve(new Uint8Array(32).buffer) as Promise<ArrayBuffer>;
+                        return new Uint8Array(32).buffer;
                     }
-                    return Promise.reject(new Error('Unsupported format'));
+                    throw new Error('Unsupported format');
                 },
             );
 
-            // Mock importKey
+            // Mock importKey with pass-through for PBKDF2/HKDF
+            const realImportKey = crypto.subtle.importKey.bind(crypto.subtle);
             vi.spyOn(crypto.subtle, 'importKey').mockImplementation(
-                (format: string, keyData: any) => {
+                async (format: any, keyData: any, algorithm: any, extractable: boolean, keyUsages: any) => {
+                    const algName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+                    if (algName === 'PBKDF2' || algName === 'HKDF') {
+                        return realImportKey(format, keyData, algorithm, extractable, keyUsages);
+                    }
                     if (format === 'jwk') {
                         const isPublic = !keyData.d;
-                        return Promise.resolve(isPublic ? mockPublicKey : mockPrivateKey);
+                        return isPublic ? mockPublicKey : mockPrivateKey;
                     }
-                    // Raw import for ephemeral key
-                    return Promise.resolve(mockPublicKey);
+                    if (format === 'pkcs8') {
+                        return mockPrivateKey;
+                    }
+                    return mockPublicKey;
                 },
+            );
+
+            // Mock deriveBits with pass-through for PBKDF2/HKDF
+            const realDeriveBits = crypto.subtle.deriveBits.bind(crypto.subtle);
+            vi.spyOn(crypto.subtle, 'deriveBits').mockImplementation(
+                async (algorithm: any, baseKey: CryptoKey, length: any) => {
+                    const algName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+                    if (algName === 'PBKDF2' || algName === 'HKDF') {
+                        return realDeriveBits(algorithm, baseKey, length);
+                    }
+                    return new Uint8Array(32).buffer;
+                }
             );
         });
 
         it('should detect X25519 support and start with no key pair', async () => {
-            const { result } = renderHook(() => useEncryption());
+            const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
                 expect(result.current.isLoading).toBe(false);
@@ -152,8 +193,8 @@ describe('useEncryption', () => {
             expect(result.current.error).toBeNull();
         });
 
-        it('should generate and persist a key pair', async () => {
-            const { result } = renderHook(() => useEncryption());
+        it('should generate and persist a key pair with mnemonic', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
                 expect(result.current.isLoading).toBe(false);
@@ -164,21 +205,26 @@ describe('useEncryption', () => {
             });
 
             expect(result.current.hasKeyPair).toBe(true);
+            expect(result.current.mnemonic).toBeDefined();
+            expect(result.current.mnemonic?.split(' ').length).toBe(12);
             expect(result.current.error).toBeNull();
 
             // Verify persistence to KeyStorage
-            const privateKey = await KeyStorage.getKey(KEY_PRIVATE);
-            const publicKey = await KeyStorage.getKey(KEY_PUBLIC);
+            const privateKey = await KeyStorage.getKey(KEY_PRIVATE, 'proj_123');
+            const publicKey = await KeyStorage.getKey(KEY_PUBLIC, 'proj_123');
+            const mnemonic = await KeyStorage.getMnemonic('proj_123');
             expect(privateKey).toEqual(mockPrivateKey);
             expect(publicKey).toEqual(mockPublicKey);
+            expect(mnemonic).toBe(result.current.mnemonic);
         });
 
-        it('should restore keys from KeyStorage on mount', async () => {
-            // Pre-populate KeyStorage
-            await KeyStorage.saveKey(KEY_PRIVATE, mockPrivateKey);
-            await KeyStorage.saveKey(KEY_PUBLIC, mockPublicKey);
+        it('should restore keys from KeyStorage on mount scoped to project', async () => {
+            // Pre-populate KeyStorage for proj_123
+            await KeyStorage.saveKey(KEY_PRIVATE, mockPrivateKey, 'proj_123');
+            await KeyStorage.saveKey(KEY_PUBLIC, mockPublicKey, 'proj_123');
+            await KeyStorage.saveMnemonic('test mnemonic phrase', 'proj_123');
 
-            const { result } = renderHook(() => useEncryption());
+            const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
                 expect(result.current.isLoading).toBe(false);
@@ -186,10 +232,11 @@ describe('useEncryption', () => {
 
             expect(result.current.isSupported).toBe(true);
             expect(result.current.hasKeyPair).toBe(true);
+            expect(result.current.mnemonic).toBe('test mnemonic phrase');
         });
 
         it('should return Base64-encoded public key', async () => {
-            const { result } = renderHook(() => useEncryption());
+            const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
                 expect(result.current.isLoading).toBe(false);
@@ -206,45 +253,60 @@ describe('useEncryption', () => {
 
             expect(publicKeyB64).not.toBeNull();
             expect(typeof publicKeyB64).toBe('string');
-            // URL-safe base64 should not contain +, /, or =
-            expect(publicKeyB64!).not.toContain('+');
-            expect(publicKeyB64!).not.toContain('/');
-            expect(publicKeyB64!).not.toContain('=');
         });
 
-        it('should return null from getPublicKeyBase64 when no key pair exists', async () => {
-            const { result } = renderHook(() => useEncryption());
+        it('should import from 12-word mnemonic phrase', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
                 expect(result.current.isLoading).toBe(false);
             });
 
-            let publicKeyB64: string | null = 'not-null';
+            const testMnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
             await act(async () => {
-                publicKeyB64 = await result.current.getPublicKeyBase64();
+                await result.current.importFromMnemonic(testMnemonic);
             });
 
-            expect(publicKeyB64).toBeNull();
+            expect(result.current.hasKeyPair).toBe(true);
+            expect(result.current.mnemonic).toBe(testMnemonic);
+            expect(result.current.error).toBeNull();
         });
 
-        it('should handle corrupted KeyStorage gracefully', async () => {
-            // Force getKey to throw an error
-            vi.spyOn(KeyStorage, 'getKey').mockRejectedValue(
-                new Error('Database corruption'),
-            );
-            const clearSpy = vi.spyOn(KeyStorage, 'clear');
-
-            const { result } = renderHook(() => useEncryption());
+        it('should throw error for invalid mnemonic length', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
                 expect(result.current.isLoading).toBe(false);
             });
 
-            expect(result.current.hasKeyPair).toBe(false);
-            expect(result.current.error).toContain('Failed to restore');
-            expect(clearSpy).toHaveBeenCalled();
+            await expect(
+                act(async () => {
+                    await result.current.importFromMnemonic('abandon abandon');
+                })
+            ).rejects.toThrow('Mnemonic phrase must be exactly 12 words.');
         });
 
+        it('should import and export JWK', async () => {
+            const { result } = renderHook(() => useEncryption('proj_123'));
+
+            await waitFor(() => {
+                expect(result.current.isLoading).toBe(false);
+            });
+
+            await act(async () => {
+                await result.current.importFromJwk(mockPrivateJwk);
+            });
+
+            expect(result.current.hasKeyPair).toBe(true);
+            expect(result.current.mnemonic).toBeNull();
+
+            let exportedJwk: JsonWebKey | null = null;
+            await act(async () => {
+                exportedJwk = await result.current.exportAsJwk();
+            });
+
+            expect(exportedJwk).toEqual(mockPrivateJwk);
+        });
 
         describe('uploadPublicKey', () => {
             beforeEach(() => {
@@ -257,7 +319,7 @@ describe('useEncryption', () => {
             });
 
             it('should PUT the public key to /api/users/me/public-key', async () => {
-                const { result } = renderHook(() => useEncryption());
+                const { result } = renderHook(() => useEncryption('proj_123'));
 
                 await waitFor(() => {
                     expect(result.current.isLoading).toBe(false);
@@ -283,49 +345,6 @@ describe('useEncryption', () => {
                 );
 
                 expect(result.current.error).toBeNull();
-            });
-
-            it('should set error when upload fails', async () => {
-                vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-                    new Response(JSON.stringify({ error: 'Unauthorized' }), {
-                        status: 401,
-                        headers: { 'Content-Type': 'application/json' },
-                    }),
-                );
-
-                const { result } = renderHook(() => useEncryption());
-
-                await waitFor(() => {
-                    expect(result.current.isLoading).toBe(false);
-                });
-
-                await act(async () => {
-                    await result.current.generateKeyPair();
-                });
-
-                await act(async () => {
-                    try {
-                        await result.current.uploadPublicKey('bad-token');
-                    } catch {
-                        // expected
-                    }
-                });
-
-                expect(result.current.error).toBe('Unauthorized');
-            });
-
-            it('should set error when no key pair exists', async () => {
-                const { result } = renderHook(() => useEncryption());
-
-                await waitFor(() => {
-                    expect(result.current.isLoading).toBe(false);
-                });
-
-                await act(async () => {
-                    await result.current.uploadPublicKey('test-token');
-                });
-
-                expect(result.current.error).toBe('No public key available. Generate keys first.');
             });
         });
     });

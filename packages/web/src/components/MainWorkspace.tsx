@@ -8,6 +8,8 @@ import { OWASPTop10 } from './OWASPTop10/OWASPTop10.js';
 import { UserSettings } from './UserSettings.js';
 import { ProjectSettings } from './ProjectSettings.js';
 import { HistoryPage } from './HistoryPage.js';
+import { useEncryption } from '../hooks/useEncryption.js';
+import { ProjectKeyInitializer } from './ProjectKeyInitializer.js';
 import { LandingShowcase } from './LandingShowcase.js';
 import { ComparePage } from './ComparePage.js';
 import { AboutPage } from './AboutPage.js';
@@ -68,6 +70,17 @@ export function MainWorkspace({
         compareRunIdB: state.compareRunIdB,
         activeProject: state.activeProject
     })));
+
+    const encryption = useEncryption(activeProject?.id);
+    const { hasKeyPair, isLoading: isEncryptionLoading } = encryption;
+
+    const [needsKeySetup, setNeedsKeySetup] = useState(false);
+
+    useEffect(() => {
+        if (!isEncryptionLoading) {
+            setNeedsKeySetup(!hasKeyPair);
+        }
+    }, [activeProject?.id, isEncryptionLoading, activeTab]);
 
     const [isExportHovered, setIsExportHovered] = useState(false);
 
@@ -149,6 +162,12 @@ export function MainWorkspace({
                 <ProjectSettings />
             ) : activeTab === 'about' ? (
                 <AboutPage />
+            ) : activeProject && !isEncryptionLoading && needsKeySetup ? (
+                <ProjectKeyInitializer
+                    projectName={activeProject.name}
+                    onSuccess={() => setNeedsKeySetup(false)}
+                    encryption={encryption}
+                />
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
                     <div className="tab-bar">

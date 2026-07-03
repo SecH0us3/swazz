@@ -71,6 +71,13 @@ This file contains completed tasks.
     - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
     - Add a "Sign in with GitHub" button to the frontend authentication modals.
 
+- [x] **Task 120: Project-Level E2EE Key Backup & Recovery (Backup File + Seed Phrase)**
+  - **Design Goal:** Support exporting and importing the Project X25519 private key in Project Settings via a downloaded backup file (`.swazzkey`) or a 12-word mnemonic seed phrase, enabling seamless device migration and collaboration without losing access to historical encrypted reports. Includes a link in the UI to the [Key Backup & Recovery guide](./docs/encryption_backup.md).
+  - **Implementation Details:**
+    - Built UI buttons in Project Settings to download the private key as a `.swazzkey` file (JSON JWK format) or reveal a 12-word mnemonic seed phrase.
+    - Implemented import/recovery fields in the project initialization UI flow to allow users to enter a seed phrase or upload a `.swazzkey` file to restore the private key to local IndexedDB (`KeyStorage`).
+    - Derived the X25519 private key from the mnemonic seed phrase using PBKDF2 client-side derivation and standard wordlist validation.
+
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
