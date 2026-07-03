@@ -286,8 +286,8 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'User is not a member of this project' }, 404);
     }
 
-    const page = Math.max(1, parseInt(c.req.query('page') || '1'));
-    const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '20')));
+    const page = Math.max(1, parseInt(c.req.query('page') || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '20', 10) || 20));
     const offset = (page - 1) * limit;
 
     const { results } = await getDB(c.env).prepare(`

@@ -558,7 +558,7 @@ export function MembersRolesTab() {
                             <tbody>
                                 {historyData.map(entry => (
                                     <tr key={entry.id}>
-                                        <td>{new Date(entry.created_at + 'Z').toLocaleString()}</td>
+                                        <td>{new Date(entry.created_at.replace(' ', 'T') + 'Z').toLocaleString()}</td>
                                         <td>
                                             <span className={
                                                 entry.status === 'success' ? 'rbac-badge-status-success' :

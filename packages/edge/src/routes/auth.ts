@@ -541,21 +541,18 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       username = challengeRow.username;
     }
 
-    const user = await getDB(c.env).prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
-      .bind(username)
-      .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
-
     // Check username rate limits
     const rateLimit = await checkLoginRateLimit(getDB(c.env), username);
     if (rateLimit.locked) {
-      if (user) {
-        await recordLoginHistory(getDB(c.env), user.id, 'locked', c);
-      }
       return c.json(
         { error: 'Account temporarily locked due to too many failed attempts', retry_after: rateLimit.retryAfter },
         429
       );
     }
+
+    const user = await getDB(c.env).prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
+      .bind(username)
+      .first<{ id: string; password_hash: string; two_factor_enabled: number; two_factor_secret: string | null }>();
 
     if (!user) {
       // User doesn't exist: run dummy verify and inject timing-delay to prevent username enumeration
@@ -568,7 +565,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
       await recordFailedLogin(getDB(c.env), username);
-      await recordLoginHistory(getDB(c.env), user.id, 'failed_password', c);
+      const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
+      const status = postRateLimit.locked ? 'locked' : 'failed_password';
+      await recordLoginHistory(getDB(c.env), user.id, status, c);
       await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
@@ -588,14 +587,18 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         decryptedSecret = await decryptTOTPSecret(user.two_factor_secret, body.password);
       } catch {
         await recordFailedLogin(getDB(c.env), username);
-        await recordLoginHistory(getDB(c.env), user.id, 'failed_password', c);
+        const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
+        const status = postRateLimit.locked ? 'locked' : 'failed_password';
+        await recordLoginHistory(getDB(c.env), user.id, status, c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
       const isValid2fa = await verifyTOTP(decryptedSecret, body.two_factor_code);
       if (!isValid2fa) {
         await recordFailedLogin(getDB(c.env), username);
-        await recordLoginHistory(getDB(c.env), user.id, 'failed_2fa', c);
+        const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
+        const status = postRateLimit.locked ? 'locked' : 'failed_2fa';
+        await recordLoginHistory(getDB(c.env), user.id, status, c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
