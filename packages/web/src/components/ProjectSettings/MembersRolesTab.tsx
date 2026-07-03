@@ -143,7 +143,7 @@ export function MembersRolesTab() {
             const data = await fetchMemberLoginHistory(activeProject.id, activeHistoryMember.id, 1, 1000);
             const headers = ['Time', 'Status', 'IP Address', 'Method', '2FA Active', 'Country', 'City', 'Region', 'Timezone', 'Ray ID', 'User Agent'];
             const rows = data.history.map(entry => {
-                const timeStr = new Date(entry.created_at.replace(' ', 'T') + 'Z').toISOString();
+                const timeStr = entry.created_at ? new Date(entry.created_at.replace(' ', 'T') + 'Z').toISOString() : '';
                 return [
                     timeStr,
                     entry.status,
@@ -610,7 +610,7 @@ export function MembersRolesTab() {
                             <tbody>
                                 {historyData.map(entry => (
                                     <tr key={entry.id}>
-                                        <td>{new Date(entry.created_at.replace(' ', 'T') + 'Z').toLocaleString()}</td>
+                                        <td>{entry.created_at ? new Date(entry.created_at.replace(' ', 'T') + 'Z').toLocaleString() : 'N/A'}</td>
                                         <td>
                                             <span className={
                                                 entry.status === 'success' ? 'rbac-badge-status-success' :
