@@ -104,7 +104,6 @@ Each step in `auth_sequence` can define the following fields:
 
 Variables extracted via `extract_variables` or computed via `set_variables` are stored in the global variable space. You can reference them in subsequent steps or any request by wrapping the variable name in double curly braces: `{% raw %}{{variable_name}}{% endraw %}`.
 
-{% raw %}
 ```json
   "auth_sequence": [
     {
@@ -126,7 +125,6 @@ Variables extracted via `extract_variables` or computed via `set_variables` are 
     }
   ]
 ```
-{% endraw %}
 
 ### Built-in Template Functions
 
