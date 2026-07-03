@@ -21,6 +21,11 @@ export const csrfMiddleware = (): MiddlewareHandler => {
       });
     }
 
+    const path = c.req.path;
+    if (path === '/api/auth/oauth/exchange') {
+      return await next();
+    }
+
     if (isSafeMethod) {
       // Set the X-CSRF-Token response header with the current token value
       c.header('X-CSRF-Token', csrfToken);
