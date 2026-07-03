@@ -50,7 +50,7 @@ test.describe('Login History E2E Tests', () => {
     await expect(successBadge).toBeVisible();
 
     // 6. Close the modal
-    const closeBtn = page.locator('.rbac-modal-footer button:has-text("Close")');
+    const closeBtn = page.locator('.rbac-modal-footer-between button:has-text("Close")');
     await expect(closeBtn).toBeVisible();
     await closeBtn.click();
 
