@@ -55,13 +55,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
     - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
-- [ ] **Task 116: Deepen Tech Stack Security Guidelines & Rules Integration**
-  - **Design Goal:** Curate and expand highly specific, framework-specific secure coding rules for each supported technology stack (React, Node, Go, Python, Postgres, .NET, Flask, Django, Next.js, FastAPI, Spring Boot) to generate more precise AI remediation patches.
-  - **Implementation Details:**
-    - Perform deep research or ingest OWASP Cheat Sheets for each specific framework/stack.
-    - Define comprehensive, high-quality checklists (e.g. CSRF protection in Flask via WTF, route security and data leaking in Next.js Server Actions, entity mapping validations in Spring Boot, query formatting in C#/.NET).
-    - Map each checklist to prompt templates or agent runtime configurations to further refine the AI's patch generation capabilities.
-
 
 ## 🔴 High Complexity
 
