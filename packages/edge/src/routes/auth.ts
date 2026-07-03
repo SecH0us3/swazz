@@ -1179,6 +1179,10 @@ app.post('/api/admin/users/plan', async (c) => {
       return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}`);
     }
     
+    if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Invalid state payload')}`);
+    }
+    
     const clientId = c.env.GITHUB_CLIENT_ID;
     const clientSecret = c.env.GITHUB_CLIENT_SECRET;
     
