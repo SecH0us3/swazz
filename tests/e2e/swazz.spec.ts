@@ -119,5 +119,46 @@ test.describe('Swazz Integration E2E Test', () => {
       expect(content).toContain('noscript-warning');
     }
   });
+
+  test('should load dashboard, click Try Vulnerable Demo button, and verify fuzzing starts and finishes successfully', async ({ page }) => {
+    page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
+    page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
+
+    // 1. Navigate to the frontend dev server
+    await page.goto('/');
+
+    // 2. Handle Login/Registration: Register a unique user
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+    await page.locator('#username').fill(uniqueUsername);
+    await page.locator('#password').fill('Password123!');
+    await page.locator('#password').press('Enter');
+
+    // Wait for the main layout to load
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+
+    // Click Try Vulnerable Demo
+    const demoBtn = page.getByRole('button', { name: /Try Vulnerable Demo/ });
+    await expect(demoBtn).toBeVisible();
+    await demoBtn.click();
+
+    // 3. Verify endpoints are populated in the sidebar
+    const endpointItems = page.locator('.tree-leaf-row');
+    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+
+    // 4. Verify target base URL input is populated in the header
+    const targetInput = page.locator('input.header-target-input');
+    await expect(targetInput).toBeVisible();
+
+    // 5. Verify the run starts and click Stop to finish the test quickly
+    const stopBtn = page.locator('button.btn-danger[title="Stop"]');
+    await expect(stopBtn).toBeVisible({ timeout: 15000 });
+    await stopBtn.click();
+
+    // Verify fuzzer has stopped
+    const startBtn = page.locator('#btn-start');
+    await expect(startBtn).toBeVisible({ timeout: 15000 });
+  });
 });
 

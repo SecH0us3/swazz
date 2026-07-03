@@ -2,5 +2,9 @@ name = "swazz-demo-api"
 main = "src/index.ts"
 compatibility_date = "2024-05-12"
 
+routes = [
+  { pattern = "bbad.secmy.app/*", zone_name = "secmy.app" }
+]
+
 [observability]
 enabled = true

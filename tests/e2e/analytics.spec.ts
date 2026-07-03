@@ -55,8 +55,8 @@ test.describe('Analytics Dashboard E2E Tests', () => {
     // Wait for app layout to mount
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // 3. Try Petstore Demo to show active workspace
-    const demoBtn = page.getByRole('button', { name: /Try Petstore Demo/ });
+    // 3. Try Vulnerable Demo to show active workspace
+    const demoBtn = page.getByRole('button', { name: /Try Vulnerable Demo/ });
     await expect(demoBtn).toBeVisible();
     await demoBtn.click();
 

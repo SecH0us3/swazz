@@ -346,7 +346,7 @@ export function ApiSpecsTab() {
                     <input
                         className="input specs-add-url-input"
                         value={urlInput}
-                        placeholder="https://petstore.swagger.io/v2/swagger.json"
+                        placeholder="https://bbad.secmy.app/swagger.json"
                         onChange={(e) => setUrlInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && !isLoading && urlInput.trim() && addUrl()}
                     />

@@ -191,6 +191,13 @@ export class RunnerCoordinator {
       } catch (err) {
         return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
+      
+      if (body && body.url && body.url.includes("bbad.secmy.app")) {
+        const isLocal = this.env.JWT_SECRET === 'test-secret';
+        if (isLocal) {
+          body.url = body.url.replace("https://bbad.secmy.app", "http://127.0.0.1:8788");
+        }
+      }
       if (!body || (!body.url && !body.rawSpec)) {
         return new Response(JSON.stringify({ error: "Missing required parameter: url or rawSpec" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
@@ -205,8 +212,15 @@ export class RunnerCoordinator {
             const r2Object = await this.env.STORAGE.get(cached.endpoints_r2_key);
             if (r2Object) {
               const endpointsText = await r2Object.text();
+              let basePath = cached.base_path || '';
+              if (basePath.includes("bbad.secmy.app")) {
+                const isLocal = this.env.JWT_SECRET === 'test-secret';
+                if (isLocal) {
+                  basePath = basePath.replace(/(https?:\/\/)?bbad\.secmy\.app/, "http://127.0.0.1:8788");
+                }
+              }
               return new Response(JSON.stringify({
-                basePath: cached.base_path,
+                basePath: basePath,
                 endpoints: JSON.parse(endpointsText),
                 cachedAt: cached.fetched_at,
                 fromCache: true
@@ -637,6 +651,12 @@ export class RunnerCoordinator {
             const clientPayload = { ...msg.payload };
             if (clientPayload.rawSpec !== undefined) {
               delete clientPayload.rawSpec;
+            }
+            if (clientPayload.basePath && clientPayload.basePath.includes("bbad.secmy.app")) {
+              const isLocal = this.env.JWT_SECRET === 'test-secret';
+              if (isLocal) {
+                clientPayload.basePath = clientPayload.basePath.replace(/(https?:\/\/)?bbad\.secmy\.app/, "http://127.0.0.1:8788");
+              }
             }
             
             resolve(new Response(JSON.stringify(clientPayload), { status: 200, headers: { 'Content-Type': 'application/json' } }));

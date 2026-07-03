@@ -862,3 +862,11 @@ This file contains completed tasks.
     - Query historical tables (e.g., `scans`, `findings`, and runner metrics) from the D1 database to render dynamic charts (e.g., using Chart.js or Recharts).
     - Render stats showing scan frequencies, vulnerability categories over time, and runner utilization metrics.
 
+- [x] **Task 101: Deploy & Publish Live Vulnerable Demo API**
+  - **Design Goal:** Deploy a publicly accessible instance of the Vulnerable Demo API, enabling new users to immediately run their first fuzzing scan against a live, interactive target.
+  - **Implementation Details:**
+    - Deploy the Vulnerable Demo API to a cloud platform (Cloudflare Workers) as an independent worker with custom domain `bbad.secmy.app`.
+    - Set up dynamic server origin injection in the swagger spec returned by the Worker.
+    - Update the onboarding welcome landing page and configurations to target `https://bbad.secmy.app/swagger.json`.
+    - Support clicking the "Try Vulnerable Demo" button to automatically load and run the scan.
+

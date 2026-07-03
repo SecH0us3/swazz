@@ -52,15 +52,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement callback handling routes (`GET /api/auth/callback/github`) to exchange code for access tokens and fetch user profiles.
     - Handle user registration and session creation for OAuth-authenticated users, and support linking existing accounts.
     - Add a "Sign in with GitHub" button to the frontend authentication modals.
-
-- [ ] **Task 101: Deploy & Publish Live Vulnerable Demo API**
-  - **Design Goal:** Deploy a publicly accessible instance of the Vulnerable Demo API, enabling new users to immediately run their first fuzzing scan against a live, interactive target.
-  - **Implementation Details:**
-    - Deploy the Go-based Vulnerable Demo API to a cloud platform (e.g. fly.io, AWS, or Cloudflare Workers) as a public host.
-    - Set up demo CORS, API specs access, and pre-seeded database content (users, products, logs).
-    - Update the onboarding flow and landing page copy to provide the live demo URL.
-    - Add a "Scan Demo Target" button in the Web UI to launch a pre-configured scan against the live demo with a single click.
-
 - [ ] **Task 114: Slow Query Monitoring**
   - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
   - **Implementation Details:**
@@ -114,3 +105,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Save these logs in a new D1 table `runner_logs` (schema: `id, scan_id, timestamp, level, message`) or reuse the `scan_events` table with a custom payload structure.
     - Implement a backend route `GET /api/scans/:id/runner-logs` (scoped to project viewer permissions) fetching logs for the specified scan.
     - Build a "Runner Logs" tab in the Active Scan and Scans History UI pages to view, search, and copy logs.
+
+- [ ] **Task 118: User-Configured Scheduled Auto-Scans**
+  - **Design Goal:** Allow users to schedule automatic vulnerability scans on their projects at custom intervals, restricted by billing plan limits (e.g. only available on the "Supporter Plan").
+  - **Implementation Details:**
+    - Add a `cron_schedule` field to `scan_configs` or create a new `scan_schedules` table in D1.
+    - Implement a Cloudflare Workers Cron Trigger or coordinator scheduler loop to fetch pending schedules, verify the user's plan is "Supporter Plan", and trigger active fuzzer runs.
+    - Add a "Schedule Scan" configuration panel in the project settings web UI supporting standard cron/interval selections.
+

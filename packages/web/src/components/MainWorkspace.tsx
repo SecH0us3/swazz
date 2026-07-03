@@ -323,9 +323,9 @@ export function MainWorkspace({
                                     <button
                                         className="btn btn-primary"
                                         style={{ padding: '8px 16px', fontSize: '14px' }}
-                                        onClick={() => handleStart(['https://petstore.swagger.io/v2/swagger.json'])}
+                                        onClick={() => handleStart(['https://bbad.secmy.app/swagger.json'])}
                                     >
-                                        Try Petstore Demo
+                                        Try Vulnerable Demo
                                     </button>
                                     <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
                                         Automatically loads endpoints and runs a quick fuzz test
@@ -345,6 +345,7 @@ export function MainWorkspace({
                                         if (filter) useAppStore.setState({ activeTab: 'logs' });
                                     }}
                                     isRunning={isRunning}
+                                    onTryDemo={() => handleStart(['https://bbad.secmy.app/swagger.json'])}
                                 />
                             )}
                             {activeTab === 'logs' && (

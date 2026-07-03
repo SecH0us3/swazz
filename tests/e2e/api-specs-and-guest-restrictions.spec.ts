@@ -68,7 +68,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     await expect(baseUrlInput).toHaveValue('http://127.0.0.1:9090');
 
     // 5. Verify Swagger URL adding works
-    const specUrlInput = page.locator('input[placeholder="https://petstore.swagger.io/v2/swagger.json"]');
+    const specUrlInput = page.locator('input[placeholder="https://bbad.secmy.app/swagger.json"]');
     await expect(specUrlInput).toBeVisible();
     
     // Add first URL
