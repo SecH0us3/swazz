@@ -18,6 +18,8 @@ interface Member {
     email: string;
     roles: string[];
     is_pending?: boolean;
+    two_factor_enabled?: boolean;
+    auth_method?: 'password' | 'github';
 }
 
 export function MembersRolesTab() {
@@ -139,13 +141,15 @@ export function MembersRolesTab() {
         if (!activeHistoryMember || !activeProject) return;
         try {
             const data = await fetchMemberLoginHistory(activeProject.id, activeHistoryMember.id, 1, 1000);
-            const headers = ['Time', 'Status', 'IP Address', 'Country', 'City', 'Region', 'Timezone', 'Ray ID', 'User Agent'];
+            const headers = ['Time', 'Status', 'IP Address', 'Method', '2FA Active', 'Country', 'City', 'Region', 'Timezone', 'Ray ID', 'User Agent'];
             const rows = data.history.map(entry => {
                 const timeStr = new Date(entry.created_at.replace(' ', 'T') + 'Z').toISOString();
                 return [
                     timeStr,
                     entry.status,
                     entry.ip_address,
+                    entry.auth_method || 'password',
+                    entry.two_factor_active === 1 ? 'Yes' : 'No',
                     entry.country || '',
                     entry.city || '',
                     entry.region || '',
@@ -319,6 +323,8 @@ export function MembersRolesTab() {
                         <thead>
                             <tr>
                                 <th>User</th>
+                                <th>Auth Method</th>
+                                <th>2FA</th>
                                 <th>Roles</th>
                                 <th className="rbac-text-right">Actions</th>
                             </tr>
@@ -329,6 +335,16 @@ export function MembersRolesTab() {
                                     <td>
                                         {m.username || m.email}
                                         {m.is_pending && <span className="rbac-pending-badge">Invited</span>}
+                                    </td>
+                                    <td>
+                                        <span className={`rbac-badge-method rbac-badge-method-${m.auth_method || 'password'}`}>
+                                            {m.auth_method === 'github' ? 'GitHub' : 'Password'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span className={`rbac-badge-2fa rbac-badge-2fa-${m.two_factor_enabled ? 'enabled' : 'disabled'}`}>
+                                            {m.two_factor_enabled ? 'Enabled' : 'Disabled'}
+                                        </span>
                                     </td>
                                     <td>
                                         {m.roles.map(rid => {
@@ -353,7 +369,7 @@ export function MembersRolesTab() {
                             ))}
                             {members.length === 0 && (
                                 <tr>
-                                    <td colSpan={3} className="rbac-empty-state">No members found.</td>
+                                    <td colSpan={5} className="rbac-empty-state">No members found.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -583,6 +599,8 @@ export function MembersRolesTab() {
                                 <tr>
                                     <th>Time</th>
                                     <th>Status</th>
+                                    <th>Method</th>
+                                    <th>2FA Active</th>
                                     <th>IP Address</th>
                                     <th>Location</th>
                                     <th>User Agent</th>
@@ -602,6 +620,16 @@ export function MembersRolesTab() {
                                                 {entry.status}
                                             </span>
                                         </td>
+                                        <td>
+                                            <span className={`rbac-badge-method rbac-badge-method-${entry.auth_method || 'password'}`}>
+                                                {entry.auth_method === 'github' ? 'GitHub' : 'Password'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span className={`rbac-badge-2fa rbac-badge-2fa-${entry.two_factor_active === 1 ? 'enabled' : 'disabled'}`}>
+                                                {entry.two_factor_active === 1 ? 'Yes' : 'No'}
+                                            </span>
+                                        </td>
                                         <td>{entry.ip_address}</td>
                                         <td>
                                             {[entry.city, entry.region, entry.country].filter(Boolean).join(', ') || 'Unknown'}
@@ -616,7 +644,7 @@ export function MembersRolesTab() {
                                 ))}
                                 {historyData.length === 0 && !historyLoading && (
                                     <tr>
-                                        <td colSpan={6} className="rbac-empty-state">No login history records found.</td>
+                                        <td colSpan={8} className="rbac-empty-state">No login history records found.</td>
                                     </tr>
                                 )}
                             </tbody>

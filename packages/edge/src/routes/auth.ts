@@ -109,7 +109,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
           .bind(projectId, id)
       ]);
 
-      await recordLoginHistory(getDB(c.env), id, 'success', c);
+      await recordLoginHistory(getDB(c.env), id, 'success', 'password', false, c);
 
       const payload = {
         sub: id,
@@ -571,7 +571,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       await recordFailedLogin(getDB(c.env), username);
       const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
       const status = postRateLimit.locked ? 'locked' : 'failed_password';
-      await recordLoginHistory(getDB(c.env), user.id, status, c);
+      await recordLoginHistory(getDB(c.env), user.id, status, 'password', user.two_factor_enabled === 1, c);
       await enforceUniformDelay(startTime);
       return c.json({ error: 'Invalid credentials' }, 401);
     }
@@ -593,7 +593,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         await recordFailedLogin(getDB(c.env), username);
         const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
         const status = postRateLimit.locked ? 'locked' : 'failed_password';
-        await recordLoginHistory(getDB(c.env), user.id, status, c);
+        await recordLoginHistory(getDB(c.env), user.id, status, 'password', user.two_factor_enabled === 1, c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
@@ -602,7 +602,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         await recordFailedLogin(getDB(c.env), username);
         const postRateLimit = await checkLoginRateLimit(getDB(c.env), username);
         const status = postRateLimit.locked ? 'locked' : 'failed_2fa';
-        await recordLoginHistory(getDB(c.env), user.id, status, c);
+        await recordLoginHistory(getDB(c.env), user.id, status, 'password', user.two_factor_enabled === 1, c);
         await enforceUniformDelay(startTime);
         return c.json({ error: 'Invalid credentials' }, 401);
       }
@@ -610,7 +610,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Successful login — reset rate-limit counter
     await resetLoginAttempts(getDB(c.env), username);
-    await recordLoginHistory(getDB(c.env), user.id, 'success', c);
+    await recordLoginHistory(getDB(c.env), user.id, 'success', 'password', user.two_factor_enabled === 1, c);
 
     const payload = {
       sub: user.id,
@@ -1289,9 +1289,9 @@ app.post('/api/admin/users/plan', async (c) => {
         return c.redirect(`${frontendUrl}/?status=github_linked`);
       } else {
         // Log in or Register
-        let user = await db.prepare('SELECT id FROM users WHERE github_id = ?')
+        let user = await db.prepare('SELECT id, two_factor_enabled FROM users WHERE github_id = ?')
           .bind(githubId)
-          .first<{ id: string }>();
+          .first<{ id: string; two_factor_enabled: number }>();
           
         let userId: string;
         
@@ -1357,6 +1357,9 @@ app.post('/api/admin/users/plan', async (c) => {
               .bind(projectId, userId)
           ]);
         }
+
+        const twoFactorActive = user ? user.two_factor_enabled === 1 : false;
+        await recordLoginHistory(db, userId, 'success', 'github', twoFactorActive, c);
         
         // Generate JWT token
         const payload = {

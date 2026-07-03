@@ -256,5 +256,7 @@ export interface LoginHistoryEntry {
     timezone: string | null;
     cf_ray: string | null;
     user_agent: string | null;
+    auth_method: 'password' | 'github';
+    two_factor_active: number;
     created_at: string;
 }

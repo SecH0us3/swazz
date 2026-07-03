@@ -141,17 +141,24 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = (c.req.param('id') as string);
     
     const { results } = await getDB(c.env).prepare(`
-      SELECT u.id, u.username, u.email, m.role_id 
+      SELECT u.id, u.username, u.email, u.two_factor_enabled, u.github_id, m.role_id 
       FROM project_member_roles m 
       JOIN users u ON m.user_id = u.id 
       WHERE m.project_id = ?
-    `).bind(projectId).all<{ id: string; username: string; email: string; role_id: string }>();
+    `).bind(projectId).all<{ id: string; username: string; email: string; two_factor_enabled: number; github_id: string | null; role_id: string }>();
 
     // Group by user
     const usersMap = new Map();
     (results || []).forEach(r => {
       if (!usersMap.has(r.id)) {
-        usersMap.set(r.id, { id: r.id, username: r.username, email: r.email, roles: [] });
+        usersMap.set(r.id, { 
+          id: r.id, 
+          username: r.username, 
+          email: r.email, 
+          two_factor_enabled: r.two_factor_enabled === 1,
+          auth_method: r.github_id ? 'github' : 'password',
+          roles: [] 
+        });
       }
       usersMap.get(r.id).roles.push(r.role_id);
     });

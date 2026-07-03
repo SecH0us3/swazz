@@ -291,7 +291,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const offset = (page - 1) * limit;
 
     const { results } = await getDB(c.env).prepare(`
-      SELECT id, status, ip_address, country, city, region, timezone, cf_ray, user_agent, created_at
+      SELECT id, status, ip_address, country, city, region, timezone, cf_ray, user_agent, auth_method, two_factor_active, created_at
       FROM user_login_history
       WHERE user_id = ?
       ORDER BY created_at DESC

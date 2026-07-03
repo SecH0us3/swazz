@@ -485,6 +485,8 @@ export async function recordLoginHistory(
   db: any,
   userId: string,
   status: 'success' | 'failed_password' | 'failed_2fa' | 'locked',
+  authMethod: 'password' | 'github',
+  twoFactorActive: boolean,
   c: Context<{ Bindings: Env }>
 ): Promise<void> {
   const id = ulid();
@@ -502,8 +504,8 @@ export async function recordLoginHistory(
   try {
     await db.prepare(`
       INSERT INTO user_login_history (
-        id, user_id, status, ip_address, country, city, region, timezone, cf_ray, user_agent
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, status, ip_address, country, city, region, timezone, cf_ray, user_agent, auth_method, two_factor_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id,
       userId,
@@ -514,7 +516,9 @@ export async function recordLoginHistory(
       region,
       timezone,
       cfRay,
-      userAgent
+      userAgent,
+      authMethod,
+      twoFactorActive ? 1 : 0
     ).run();
   } catch (err) {
     console.error("Failed to record login history:", err);
