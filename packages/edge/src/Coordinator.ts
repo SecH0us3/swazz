@@ -192,10 +192,15 @@ export class RunnerCoordinator {
         return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       
-      if (body && body.url && body.url.includes("bbad.secmy.app")) {
-        const isLocal = this.env.JWT_SECRET === 'test-secret';
-        if (isLocal) {
-          body.url = body.url.replace("https://bbad.secmy.app", "http://127.0.0.1:8788");
+      if (body && body.url !== undefined) {
+        if (typeof body.url !== 'string') {
+          throw new TypeError('body.url must be a string');
+        }
+        if (body.url.includes("bbad.secmy.app")) {
+          const isLocal = this.env.JWT_SECRET === 'test-secret';
+          if (isLocal) {
+            body.url = body.url.replace(/(https?:\/\/)?bbad\.secmy\.app/, "http://127.0.0.1:8788");
+          }
         }
       }
       if (!body || (!body.url && !body.rawSpec)) {
@@ -652,10 +657,15 @@ export class RunnerCoordinator {
             if (clientPayload.rawSpec !== undefined) {
               delete clientPayload.rawSpec;
             }
-            if (clientPayload.basePath && clientPayload.basePath.includes("bbad.secmy.app")) {
-              const isLocal = this.env.JWT_SECRET === 'test-secret';
-              if (isLocal) {
-                clientPayload.basePath = clientPayload.basePath.replace(/(https?:\/\/)?bbad\.secmy\.app/, "http://127.0.0.1:8788");
+            if (clientPayload.basePath !== undefined) {
+              if (typeof clientPayload.basePath !== 'string') {
+                throw new TypeError('clientPayload.basePath must be a string');
+              }
+              if (clientPayload.basePath.includes("bbad.secmy.app")) {
+                const isLocal = this.env.JWT_SECRET === 'test-secret';
+                if (isLocal) {
+                  clientPayload.basePath = clientPayload.basePath.replace(/(https?:\/\/)?bbad\.secmy\.app/, "http://127.0.0.1:8788");
+                }
               }
             }
             
