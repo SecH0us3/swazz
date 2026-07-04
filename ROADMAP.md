@@ -36,9 +36,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🟡 Medium Complexity
 
-- [ ] **Task 69: Model Context Protocol (MCP) Support**
-  - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
-
 - [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
   - **Design Goal:** Provide secure password management tools including dynamic password changes, email-based password recovery (forgot password flow), and 2FA backup codes.
   - **Implementation Details:**

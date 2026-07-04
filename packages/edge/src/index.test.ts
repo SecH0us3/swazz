@@ -7,6 +7,7 @@ import { cleanupScheduledDeletions } from "./utils/cleanup";
 import { splitSql } from "./splitSql";
 import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
+import { hashApiKey } from "./utils/auth";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -496,17 +497,11 @@ describe("D1 Database Migrations & API", () => {
     const projForbiddenBody = await projResForbidden.json() as any;
     expect(projForbiddenBody.error).toContain("Forbidden");
 
-    // Verify that runner connection for the deleted user returns 403 Forbidden
-    const userRow = await env.DB.prepare('SELECT api_key FROM users WHERE id = ?').bind(userId).first<{ api_key: string | null }>();
-    let apiKey = userRow?.api_key;
-    if (!apiKey) {
-      apiKey = 'swazz_live_test_api_key_123';
-      await env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?').bind(apiKey, userId).run();
-    }
+    const plainApiKey = regBody.api_key;
     const runnerReqDeleted = new Request(`http://localhost/api/runners/connect`, {
       headers: {
         "Upgrade": "websocket",
-        "Authorization": `Bearer ${apiKey}`
+        "Authorization": `Bearer ${plainApiKey}`
       }
     });
     const runnerResDeleted = await appFetchWrapper(runnerReqDeleted as any, testEnv);
@@ -1343,14 +1338,7 @@ describe("KV Session Cache", () => {
     const regBody = await regRes.json() as any;
     userToken.set(regBody.token);
     testUserId = regBody.id;
-
-    // Get the user's API key via JWT-authed /api/auth/me
-    const meReq = new Request("http://localhost/api/auth/me", {
-      headers: { "Authorization": `Bearer ${regBody.token}` },
-    });
-    const meRes = await appFetchWrapper(meReq as any, { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
-    const meBody = await meRes.json() as any;
-    testApiKey = meBody.api_key;
+    testApiKey = regBody.api_key;
   });
 
   it("authenticates via API key and populates KV cache on first request", async () => {
@@ -1365,7 +1353,8 @@ describe("KV Session Cache", () => {
     expect(res.status).toBe(200);
 
     // Verify KV was populated with the userId
-    const cached = await mockKV.get(`apikey:${testApiKey}`);
+    const hashedKey = await hashApiKey(testApiKey);
+    const cached = await mockKV.get(`apikey:${hashedKey}`);
     expect(cached).not.toBeNull();
     const parsed = JSON.parse(cached!);
     expect(parsed.userId).toBe(testUserId);
@@ -1376,7 +1365,8 @@ describe("KV Session Cache", () => {
     const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Pre-populate the KV cache
-    await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
+    const hashedKey = await hashApiKey(testApiKey);
+    await mockKV.put(`apikey:${hashedKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
 
     // Spy on DB.prepare to verify D1 is NOT called for the api_key lookup
     const originalPrepare = env.DB.prepare.bind(env.DB);
@@ -1413,7 +1403,8 @@ describe("KV Session Cache", () => {
     expect(res.status).toBe(401);
 
     // Verify negative cache entry was written
-    const cached = await mockKV.get(`apikey:${fakeKey}`);
+    const hashedFakeKey = await hashApiKey(fakeKey);
+    const cached = await mockKV.get(`apikey:${hashedFakeKey}`);
     expect(cached).not.toBeNull();
     const parsed = JSON.parse(cached!);
     expect(parsed.userId).toBeNull();
@@ -1432,9 +1423,10 @@ describe("KV Session Cache", () => {
     const mockKV = createMockKV();
     const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
+    const hashedOldKey = await hashApiKey(testApiKey);
     // Pre-populate KV with the current API key
-    await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
-    expect(await mockKV.get(`apikey:${testApiKey}`)).not.toBeNull();
+    await mockKV.put(`apikey:${hashedOldKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
+    expect(await mockKV.get(`apikey:${hashedOldKey}`)).not.toBeNull();
 
     // Regenerate the API key
     const regenReq = new Request("http://localhost/api/auth/regenerate-key", {
@@ -1446,10 +1438,11 @@ describe("KV Session Cache", () => {
     const regenBody = await regenRes.json() as { api_key: string };
 
     // Old key should be invalidated from KV
-    expect(await mockKV.get(`apikey:${testApiKey}`)).toBeNull();
+    expect(await mockKV.get(`apikey:${hashedOldKey}`)).toBeNull();
 
     // New key should be proactively cached
-    const newCached = await mockKV.get(`apikey:${regenBody.api_key}`);
+    const hashedNewKey = await hashApiKey(regenBody.api_key);
+    const newCached = await mockKV.get(`apikey:${hashedNewKey}`);
     expect(newCached).not.toBeNull();
     const parsed = JSON.parse(newCached!);
     expect(parsed.userId).toBe(testUserId);
@@ -1471,18 +1464,12 @@ describe("KV Session Cache", () => {
     const regBody = await regRes.json() as any;
     const delUserId = regBody.id;
     const delToken = regBody.token;
-
-    // Get the user's API key
-    const meReq = new Request("http://localhost/api/auth/me", {
-      headers: { "Authorization": `Bearer ${delToken}` },
-    });
-    const meRes = await appFetchWrapper(meReq as any, cleanupEnv);
-    const meBody = await meRes.json() as any;
-    const delApiKey = meBody.api_key;
+    const delApiKey = regBody.api_key; // Use plain-text API key directly from registration
 
     // Pre-populate KV with this API key
-    await mockKV.put(`apikey:${delApiKey}`, JSON.stringify({ userId: delUserId }), { expirationTtl: 300 });
-    expect(await mockKV.get(`apikey:${delApiKey}`)).not.toBeNull();
+    const hashedDelKey = await hashApiKey(delApiKey);
+    await mockKV.put(`apikey:${hashedDelKey}`, JSON.stringify({ userId: delUserId }), { expirationTtl: 300 });
+    expect(await mockKV.get(`apikey:${hashedDelKey}`)).not.toBeNull();
 
     // Schedule deletion
     const delReq = new Request("http://localhost/api/users/me", {
@@ -1498,7 +1485,7 @@ describe("KV Session Cache", () => {
     await cleanupScheduledDeletions(cleanupEnv);
 
     // Verify the API key was invalidated from KV
-    expect(await mockKV.get(`apikey:${delApiKey}`)).toBeNull();
+    expect(await mockKV.get(`apikey:${hashedDelKey}`)).toBeNull();
 
     // Verify the user was actually deleted from D1
     const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(delUserId).first();
@@ -2918,6 +2905,93 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         "SELECT cron_schedule FROM scan_configs WHERE project_id = ? AND name = 'default'"
       ).bind(projectId).first<{ cron_schedule: string }>();
       expect(result?.cron_schedule).toBe("0 12 * * *");
+    });
+  });
+
+  describe("MCP and API Key Hashing Security", () => {
+    let apiKey: string;
+    let userId: string;
+    let userToken: string;
+
+    it("hashes API keys on registration and returns plain text", async () => {
+      const username = `u_${Math.floor(Math.random() * 1000000)}`;
+      const res = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password: "TestPassword123!",
+          email: `${username}@example.com`
+        })
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.status).toBe("ok");
+      expect(data.api_key).toBeDefined();
+      expect(data.api_key).toContain("swazz_live_");
+      
+      apiKey = data.api_key;
+      userId = data.id;
+      userToken = data.token;
+
+      // Verify D1 has the hashed version
+      const dbUser = await testEnv.DB.prepare("SELECT api_key FROM users WHERE id = ?")
+        .bind(userId)
+        .first<{ api_key: string }>();
+      expect(dbUser?.api_key).not.toBe(apiKey);
+      expect(dbUser?.api_key).not.toContain("swazz_live_");
+    });
+
+    it("masks existing API keys in /api/auth/me", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/auth/me", {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.api_key).toContain("swazz_live_");
+      expect(data.api_key).toContain("•");
+    });
+
+    it("authenticates requests with plain text API key", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.projects).toBeDefined();
+    });
+
+    it("exposes tools list at /api/mcp/tools", async () => {
+      // Unauthorized
+      const unauth = await appFetchWrapper(new Request("http://localhost/api/mcp/tools"), testEnv);
+      expect(unauth.status).toBe(401);
+
+      // Authorized
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/tools", {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.tools).toBeDefined();
+      expect(data.tools.some((t: any) => t.name === "swazz_list_projects")).toBe(true);
+    });
+
+    it("executes tools internally via /api/mcp/call", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          name: "swazz_list_projects",
+          arguments: {}
+        })
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.result).toBeDefined();
+      expect(data.result.projects).toBeDefined();
     });
   });
 });

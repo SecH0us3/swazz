@@ -10,6 +10,44 @@ export function UserSettings() {
     const { theme, toggleTheme } = useTheme();
     const [copiedApiKey, setCopiedApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
+    const [newApiKeyToShow, setNewApiKeyToShow] = useState<string | null>(null);
+    const [isRegeneratingKey, setIsRegeneratingKey] = useState(false);
+
+    const handleRegenerateApiKey = async () => {
+        if (!confirm('Are you sure you want to regenerate your API key? This will invalidate your old API key.')) {
+            return;
+        }
+        setIsRegeneratingKey(true);
+        try {
+            const token = localStorage.getItem('swazz_token');
+            const res = await fetch(`${PROXY_URL}/api/auth/regenerate-key`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP error ${res.status}`);
+            }
+            const data = await res.json();
+            setNewApiKeyToShow(data.api_key);
+            const profile = useAppStore.getState().userProfile;
+            if (profile) {
+                useAppStore.setState({
+                    userProfile: {
+                        ...profile,
+                        apiKey: data.api_key
+                    }
+                });
+            }
+        } catch (err: any) {
+            console.error('Failed to regenerate API key', err);
+            alert(err.message || 'Failed to regenerate API key');
+        } finally {
+            setIsRegeneratingKey(false);
+        }
+    };
 
     const [deleteState, setDeleteState] = useState<'idle' | 'warning' | 'deleting'>('idle');
     const [deleteError, setDeleteError] = useState('');
@@ -491,27 +529,63 @@ export function UserSettings() {
                             {apiKey && (
                                 <div className="settings-form-group">
                                     <label className="settings-form-label">API Key</label>
-                                    <div className="settings-input-row">
-                                        <input 
-                                            type={showApiKey ? 'text' : 'password'} 
-                                            className="input settings-input-monospace" 
-                                            value={apiKey} 
-                                            readOnly 
-                                            data-1p-ignore
-                                        />
-                                        <button 
-                                            className="btn btn-secondary btn-sm"
-                                            onClick={() => setShowApiKey(!showApiKey)}
-                                        >
-                                            {showApiKey ? 'Hide' : 'Show'}
-                                        </button>
-                                        <button 
-                                            className="btn btn-secondary btn-sm settings-btn-min-w"
-                                            onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
-                                        >
-                                            {copiedApiKey ? '✓ Copied' : 'Copy'}
-                                        </button>
-                                    </div>
+                                    {newApiKeyToShow ? (
+                                        <div className="api-key-new-alert">
+                                            <p className="api-key-new-warning">
+                                                <strong>Please copy your new API key now.</strong> You won't be able to see it again!
+                                            </p>
+                                            <div className="settings-input-row">
+                                                <input 
+                                                    type="text" 
+                                                    className="input settings-input-monospace api-key-highlight" 
+                                                    value={newApiKeyToShow} 
+                                                    readOnly 
+                                                    data-1p-ignore
+                                                />
+                                                <button 
+                                                    className="btn btn-secondary btn-sm settings-btn-min-w"
+                                                    onClick={() => copyToClipboard(newApiKeyToShow, setCopiedApiKey)}
+                                                >
+                                                    {copiedApiKey ? '✓ Copied' : 'Copy'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="settings-input-row">
+                                            <input 
+                                                type={showApiKey ? 'text' : 'password'} 
+                                                className="input settings-input-monospace" 
+                                                value={apiKey} 
+                                                readOnly 
+                                                data-1p-ignore
+                                            />
+                                            <button 
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={() => setShowApiKey(!showApiKey)}
+                                            >
+                                                {showApiKey ? 'Hide' : 'Show'}
+                                            </button>
+                                            <button 
+                                                className="btn btn-secondary btn-sm settings-btn-min-w"
+                                                onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
+                                            >
+                                                {copiedApiKey ? '✓ Copied' : 'Copy'}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {!userProfile?.isGuest && (
+                                        <div className="settings-action-row">
+                                            <button 
+                                                className="btn btn-danger btn-sm"
+                                                onClick={handleRegenerateApiKey}
+                                                disabled={isRegeneratingKey}
+                                                type="button"
+                                                id="btn-rotate-api-key"
+                                            >
+                                                {isRegeneratingKey ? 'Regenerating...' : 'Regenerate API Key'}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

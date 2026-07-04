@@ -11,6 +11,7 @@ import { registerRbacRoutes } from './routes/rbac';
 import { registerScansRoutes } from './routes/scans';
 import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
+import { registerMcpRoutes } from './routes/mcp';
 import { cleanupExpiredGuests, cleanupScheduledDeletions, cleanupSecurityTables } from './utils/cleanup';
 import { csrfMiddleware } from './utils/csrf';
 import { handleScheduledScans } from './utils/scheduler';
@@ -355,6 +356,7 @@ registerRbacRoutes(app);
 registerScansRoutes(app);
 registerRunnersRoutes(app);
 registerMiscRoutes(app);
+registerMcpRoutes(app);
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

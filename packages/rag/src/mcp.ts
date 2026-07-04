@@ -85,6 +85,31 @@ function sendError(id: any, code: number, message: string) {
   process.stdout.write(JSON.stringify(response) + '\n');
 }
 
+async function fetchFromCoordinator(path: string, method: string, body?: any) {
+  const apiUrl = process.env.SWAZZ_API_URL || '';
+  const apiKey = process.env.SWAZZ_API_KEY || '';
+  if (!apiUrl || !apiKey) {
+    throw new Error('SWAZZ_API_URL and SWAZZ_API_KEY must be configured in environment');
+  }
+
+  const url = `${apiUrl.replace(/\/$/, '')}${path}`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Coordinator API error (${response.status}): ${errText || response.statusText}`);
+  }
+
+  return await response.json();
+}
+
 async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder: any) {
   const { method, params, id } = request;
 
@@ -109,58 +134,77 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
     }
 
     case 'tools/list': {
-      sendResponse(id, {
-        tools: [
-          {
-            name: 'swazz_search_code',
-            description: 'Semantic search across the entire project codebase. Returns relevant code snippets with file paths and line ranges.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'The search query or description of the code functionality (e.g. "error handling in Go client" or "scan history React view")'
-                },
-                limit: {
-                  type: 'integer',
-                  description: 'Maximum number of results to return (default: 5)'
-                },
-                threshold: {
-                  type: 'number',
-                  description: 'Minimum similarity score threshold, between 0.0 and 1.0 (default: 0.7)'
-                }
+      const localTools = [
+        {
+          name: 'swazz_search_code',
+          description: 'Semantic search across the entire project codebase. Returns relevant code snippets with file paths and line ranges.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'The search query or description of the code functionality (e.g. "error handling in Go client" or "scan history React view")'
               },
-              required: ['query']
-            }
-          },
-          {
-            name: 'swazz_get_file_context',
-            description: 'Retrieves a semantically structured summary of functions, declarations, and blocks in a specific file. Useful for understanding a file outline without downloading its full contents.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                filepath: {
-                  type: 'string',
-                  description: 'Relative path of the target file in the workspace (e.g. "packages/container/main.go")'
-                }
+              limit: {
+                type: 'integer',
+                description: 'Maximum number of results to return (default: 5)'
               },
-              required: ['filepath']
-            }
-          },
-          {
-            name: 'swazz_list_files',
-            description: 'Lists all indexed files in the workspace, optionally filtered by a substring pattern.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                pattern: {
-                  type: 'string',
-                  description: 'Optional pattern to filter file paths (e.g. "edge/src" or ".ts")'
-                }
+              threshold: {
+                type: 'number',
+                description: 'Minimum similarity score threshold, between 0.0 and 1.0 (default: 0.7)'
+              }
+            },
+            required: ['query']
+          }
+        },
+        {
+          name: 'swazz_get_file_context',
+          description: 'Retrieves a semantically structured summary of functions, declarations, and blocks in a specific file. Useful for understanding a file outline without downloading its full contents.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              filepath: {
+                type: 'string',
+                description: 'Relative path of the target file in the workspace (e.g. "packages/container/main.go")'
+              }
+            },
+            required: ['filepath']
+          }
+        },
+        {
+          name: 'swazz_list_files',
+          description: 'Lists all indexed files in the workspace, optionally filtered by a substring pattern.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              pattern: {
+                type: 'string',
+                description: 'Optional pattern to filter file paths (e.g. "edge/src" or ".ts")'
               }
             }
           }
-        ]
+        }
+      ];
+
+      const apiUrl = process.env.SWAZZ_API_URL;
+      const apiKey = process.env.SWAZZ_API_KEY;
+      if (apiUrl && apiKey) {
+        try {
+          console.error(`[Swazz MCP] Querying Coordinator tools from ${apiUrl}...`);
+          const data = await fetchFromCoordinator('/api/mcp/tools', 'GET') as { tools: any[] };
+          if (data && Array.isArray(data.tools)) {
+            sendResponse(id, {
+              tools: [...localTools, ...data.tools]
+            });
+            break;
+          }
+        } catch (err: any) {
+          console.error('[Swazz MCP] Failed to retrieve tools from coordinator:', err.message);
+        }
+      }
+
+      sendResponse(id, {
+        tools: localTools
       });
       break;
     }
@@ -170,6 +214,43 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
       if (!name) {
         sendError(id, -32602, 'Missing tool name');
         return;
+      }
+
+      const localToolNames = ['swazz_search_code', 'swazz_get_file_context', 'swazz_list_files'];
+      if (!localToolNames.includes(name)) {
+        // Forward call to coordinator!
+        const apiUrl = process.env.SWAZZ_API_URL;
+        const apiKey = process.env.SWAZZ_API_KEY;
+        if (!apiUrl || !apiKey) {
+          sendError(id, -32601, `Method not found: ${name} (and Coordinator credentials not configured)`);
+          return;
+        }
+
+        console.error(`[Swazz MCP] Forwarding tool call "${name}" to coordinator at ${apiUrl}...`);
+        try {
+          const res = await fetchFromCoordinator('/api/mcp/call', 'POST', {
+            name,
+            arguments: args
+          }) as { result?: any; error?: string };
+
+          if (res.error) {
+            sendError(id, -32603, res.error);
+            return;
+          }
+
+          sendResponse(id, {
+            content: [
+              {
+                type: 'text',
+                text: typeof res.result === 'string' ? res.result : JSON.stringify(res.result, null, 2)
+              }
+            ]
+          });
+        } catch (err: any) {
+          console.error('[Swazz MCP] Forwarded tool call failed:', err.message);
+          sendError(id, -32603, err.message);
+        }
+        break;
       }
 
       if (name === 'swazz_search_code') {

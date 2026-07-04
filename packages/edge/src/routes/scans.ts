@@ -248,6 +248,31 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   // Findings endpoints
   // ---------------------------------------------------------------------------
 
+  app.get('/api/scans/:id/findings', async (c) => {
+    const scanId = c.req.param('id');
+    const scan = await getDB(c.env).prepare('SELECT id, project_id FROM scans WHERE id = ?')
+      .bind(scanId)
+      .first<{ id: string; project_id: string }>();
+    if (!scan) {
+      return c.json({ error: 'Scan not found' }, 404);
+    }
+
+    if (c.env.AUTH_ENABLED === 'true') {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+      const hasAccess = await checkPermission(c.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const { results } = await getDB(c.env).prepare('SELECT * FROM findings WHERE scan_id = ?')
+      .bind(scanId)
+      .all();
+
+    return c.json({ findings: results || [] });
+  });
+
   app.get('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
     // JOIN with scans to retrieve project_id (findings table has no project_id column)

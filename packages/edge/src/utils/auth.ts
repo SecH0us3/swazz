@@ -6,6 +6,13 @@ import { ulid } from 'ulidx';
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
 
+export async function hashApiKey(key: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(key);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promise<string | null> {
   let token = null;
   const authHeader = c.req.header('Authorization');
@@ -20,7 +27,8 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
 
   if (token.startsWith('swazz_live_')) {
     const kv = c.env.SESSION_CACHE;
-    const cacheKey = `apikey:${token}`;
+    const hashedToken = await hashApiKey(token);
+    const cacheKey = `apikey:${hashedToken}`;
 
     // 1. Try KV cache first (if available)
     if (kv) {
@@ -40,7 +48,7 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
     // 2. Cache miss — query D1
     try {
       const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-        .bind(token)
+        .bind(hashedToken)
         .first<{ id: string }>();
       const userId = user ? user.id : null;
 
