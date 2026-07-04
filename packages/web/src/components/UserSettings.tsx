@@ -548,6 +548,14 @@ export function UserSettings() {
                                                 >
                                                     {copiedApiKey ? '✓ Copied' : 'Copy'}
                                                 </button>
+                                                <button 
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={() => setNewApiKeyToShow(null)}
+                                                    type="button"
+                                                    id="btn-dismiss-api-key"
+                                                >
+                                                    Dismiss
+                                                </button>
                                             </div>
                                         </div>
                                     ) : (

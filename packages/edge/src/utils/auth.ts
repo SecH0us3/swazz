@@ -47,9 +47,28 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
 
     // 2. Cache miss — query D1
     try {
-      const user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+      let user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
         .bind(hashedToken)
         .first<{ id: string }>();
+
+      if (!user) {
+        // Fallback for legacy plain-text keys
+        user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
+          .bind(token)
+          .first<{ id: string }>();
+
+        if (user) {
+          // Auto-upgrade plain-text key to hashed key in DB
+          try {
+            await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
+              .bind(hashedToken, user.id)
+              .run();
+          } catch {
+            // Auto-upgrade update failed — non-critical
+          }
+        }
+      }
+
       const userId = user ? user.id : null;
 
       // 3. Write to KV (positive or negative cache)
