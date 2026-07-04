@@ -94,12 +94,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a backend route `GET /api/scans/:id/runner-logs` (scoped to project viewer permissions) fetching logs for the specified scan.
     - Build a "Runner Logs" tab in the Active Scan and Scans History UI pages to view, search, and copy logs.
 
-- [ ] **Task 118: User-Configured Scheduled Auto-Scans**
-  - **Design Goal:** Allow users to schedule automatic vulnerability scans on their projects at custom intervals, restricted by billing plan limits (e.g. only available on the "Supporter Plan").
-  - **Implementation Details:**
-    - Add a `cron_schedule` field to `scan_configs` or create a new `scan_schedules` table in D1.
-    - Implement a Cloudflare Workers Cron Trigger or coordinator scheduler loop to fetch pending schedules, verify the user's plan is "Supporter Plan", and trigger active fuzzer runs.
-    - Add a "Schedule Scan" configuration panel in the project settings web UI supporting standard cron/interval selections.
 
 
 

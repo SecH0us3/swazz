@@ -220,6 +220,19 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	defer r.finaliseRun()
 
+	if r.config.Settings.MaxScanDurationMin > 0 {
+		timerCtx, cancelTimer := context.WithCancel(runCtx)
+		defer cancelTimer()
+		go func() {
+			select {
+			case <-time.After(time.Duration(r.config.Settings.MaxScanDurationMin) * time.Minute):
+				logger.Debug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
+				r.Stop()
+			case <-timerCtx.Done():
+			}
+		}()
+	}
+
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
 

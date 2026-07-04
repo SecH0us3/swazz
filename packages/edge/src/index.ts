@@ -13,6 +13,7 @@ import { registerRunnersRoutes } from './routes/runners';
 import { registerMiscRoutes } from './routes/misc';
 import { cleanupExpiredGuests, cleanupScheduledDeletions, cleanupSecurityTables } from './utils/cleanup';
 import { csrfMiddleware } from './utils/csrf';
+import { handleScheduledScans } from './utils/scheduler';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -363,6 +364,7 @@ export default {
     ctx.waitUntil(cleanupExpiredGuests(getDB(env), env));
     ctx.waitUntil(cleanupScheduledDeletions(env));
     ctx.waitUntil(cleanupSecurityTables(getDB(env), env));
+    ctx.waitUntil(handleScheduledScans(env));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     if (batch.queue === 'swazz-scan-queue') {
@@ -407,6 +409,20 @@ export default {
             `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
           ).bind(id, scanId, type, payloadStr)
         );
+
+        if (payload && payload.type === 'complete') {
+          statements.push(
+            getDB(env, scanId).prepare(
+              `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ?`
+            ).bind('completed', JSON.stringify(payload.data || {}), scanId)
+          );
+        } else if (type === 'error' || (payload && payload.type === 'error')) {
+          statements.push(
+            getDB(env, scanId).prepare(
+              `UPDATE scans SET status = ?, completed_at = datetime('now') WHERE id = ?`
+            ).bind('failed', scanId)
+          );
+        }
 
         // Populate findings table for analytics & detail queries
         if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {

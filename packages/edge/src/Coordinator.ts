@@ -685,6 +685,24 @@ export class RunnerCoordinator {
              })
           );
 
+          if (runId) {
+            if (msg.type === 'error' || (msg.payload && msg.payload.type === 'error')) {
+              this.state.waitUntil(
+                getDB(this.env, runId).prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ?")
+                  .bind(runId)
+                  .run()
+                  .catch(dbErr => logError(this.env, "Coordinator", "Failed to update scan status to failed in D1", { error: dbErr }))
+              );
+            } else if (msg.type === 'event' && msg.payload && msg.payload.type === 'complete') {
+              this.state.waitUntil(
+                getDB(this.env, runId).prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?")
+                  .bind(JSON.stringify(msg.payload.data || {}), runId)
+                  .run()
+                  .catch(dbErr => logError(this.env, "Coordinator", "Failed to update scan status to completed in D1", { error: dbErr }))
+              );
+            }
+          }
+
           const clientSet = this.clients.get(runId);
           if (clientSet) {
             const outMsg = JSON.stringify(msg.payload);

@@ -65,15 +65,19 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = c.req.param('id');
   
     const result = await getDB(c.env).prepare(
-      "SELECT config_json FROM scan_configs WHERE project_id = ? AND name = 'default'"
+      "SELECT config_json, cron_schedule, last_run_at FROM scan_configs WHERE project_id = ? AND name = 'default'"
     )
     .bind(projectId)
-    .first<{ config_json: string }>();
+    .first<{ config_json: string; cron_schedule: string | null; last_run_at: string | null }>();
   
     if (!result) {
-      return c.json({ config: null });
+      return c.json({ config: null, cron_schedule: null, last_run_at: null });
     }
-    return c.json({ config: JSON.parse(result.config_json) });
+    return c.json({
+      config: JSON.parse(result.config_json),
+      cron_schedule: result.cron_schedule,
+      last_run_at: result.last_run_at
+    });
   });
   
   app.post('/api/projects/:id/config', requirePermission('post:/api/projects/:id/config'), async (c) => {
@@ -83,12 +87,71 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const configJson = JSON.stringify(body.config);
     const id = ulid();
   
+    // Fetch current cron_schedule and last_run_at to preserve them
+    const existing = await getDB(c.env).prepare(
+      "SELECT cron_schedule, last_run_at FROM scan_configs WHERE project_id = ? AND name = 'default'"
+    ).bind(projectId).first<{ cron_schedule: string | null; last_run_at: string | null }>();
+    const cronSchedule = (existing && existing.cron_schedule) || null;
+    const lastRunAt = (existing && existing.last_run_at) || null;
+
     await getDB(c.env).batch([
       getDB(c.env).prepare("DELETE FROM scan_configs WHERE project_id = ? AND name = 'default'").bind(projectId),
-      getDB(c.env).prepare("INSERT INTO scan_configs (id, project_id, name, config_json) VALUES (?, ?, 'default', ?)").bind(id, projectId, configJson)
+      getDB(c.env).prepare("INSERT INTO scan_configs (id, project_id, name, config_json, cron_schedule, last_run_at) VALUES (?, ?, 'default', ?, ?, ?)").bind(id, projectId, configJson, cronSchedule, lastRunAt)
     ]);
   
     return c.json({ status: 'saved' });
+  });
+
+  app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), async (c) => {
+    const projectId = c.req.param('id');
+    const body = await c.req.json();
+    const { cron_schedule } = body;
+    
+    if (cron_schedule) {
+      // 1. Enforce frequency limit: at most once a day
+      const parts = cron_schedule.trim().split(/\s+/);
+      if (parts.length !== 5) {
+        return c.json({ error: 'Invalid cron format. Must have exactly 5 fields.' }, 400);
+      }
+      const minute = parts[0];
+      const hour = parts[1];
+      const isSingleMinute = /^\d+$/.test(minute) && parseInt(minute, 10) >= 0 && parseInt(minute, 10) <= 59;
+      const isSingleHour = /^\d+$/.test(hour) && parseInt(hour, 10) >= 0 && parseInt(hour, 10) <= 23;
+      if (!isSingleMinute || !isSingleHour) {
+        return c.json({ error: 'Scan schedule cannot be more frequent than once a day (minute and hour fields must be specific single integer constants).' }, 400);
+      }
+
+      // 2. Enforce plan restriction: Supporter Plan only
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+      const user = await getDB(c.env).prepare('SELECT plan FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ plan: string | null }>();
+      if (!user || user.plan !== 'Supporter Plan') {
+        return c.json({ error: 'Scheduled auto-scans are only available on the Supporter Plan.' }, 403);
+      }
+    }
+
+    // Check if the config exists
+    const existingConfig = await getDB(c.env).prepare(
+      "SELECT id FROM scan_configs WHERE project_id = ? AND name = 'default'"
+    ).bind(projectId).first<{ id: string }>();
+
+    if (!existingConfig) {
+      const id = ulid();
+      await getDB(c.env).prepare(
+        "INSERT INTO scan_configs (id, project_id, name, config_json, cron_schedule) VALUES (?, ?, 'default', ?, ?)"
+      ).bind(id, projectId, "{}", cron_schedule || null).run();
+    } else {
+      // Update the config row
+      await getDB(c.env).prepare(
+        "UPDATE scan_configs SET cron_schedule = ? WHERE project_id = ? AND name = 'default'"
+      ).bind(cron_schedule || null, projectId).run();
+    }
+
+    return c.json({ status: 'saved', cron_schedule });
   });
   
   app.patch('/api/projects/:id', requirePermission('patch:/api/projects/:id'), async (c) => {

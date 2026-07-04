@@ -73,7 +73,8 @@ export default function App() {
                         isGuest: data.is_guest,
                         deleteRequestedAt: data.delete_requested_at,
                         twoFactorEnabled: data.two_factor_enabled,
-                        githubId: data.github_id
+                        githubId: data.github_id,
+                        plan: data.plan
                     } 
                 });
             })
@@ -171,7 +172,8 @@ export default function App() {
         isConfigOpen,
         isSidebarHiddenDesktop,
         isConfigHiddenDesktop,
-        isHotkeysHelpOpen
+        isHotkeysHelpOpen,
+        activeProject
     } = useAppStore(useShallow(state => ({
         activeTab: state.activeTab,
         selectedResult: state.selectedResult,
@@ -180,6 +182,7 @@ export default function App() {
         isSidebarHiddenDesktop: state.isSidebarHiddenDesktop,
         isConfigHiddenDesktop: state.isConfigHiddenDesktop,
         isHotkeysHelpOpen: state.isHotkeysHelpOpen,
+        activeProject: state.activeProject
     })));
 
     const {
@@ -197,7 +200,7 @@ export default function App() {
     } | null>(null);
     const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
-    const { start, stop, pause, resume, sendRequest } = useRunner(PROXY_URL);
+    const { start, stop, pause, resume, sendRequest, connectToExisting } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
 
@@ -215,14 +218,56 @@ export default function App() {
         },
     });
 
-    const { loadEndpoints, handleStart } = useFuzzSession({
+    const { loadEndpoints, handleStart, handleConnectToExisting } = useFuzzSession({
         config: config as any,
         updateConfig,
         start,
+        connectToExisting,
         saveRun,
         getDb,
         showToast,
     });
+
+    // Auto-reconnect to active scans on project load/change
+    useEffect(() => {
+        if (!activeProject) return;
+
+        const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+        if (!token) return;
+
+        let active = true;
+
+        const checkActiveScan = async () => {
+            try {
+                const res = await fetch(`${PROXY_URL}/api/scans?project_id=${activeProject.id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok && active) {
+                    const data = await res.json();
+                    const scans = data.scans || [];
+                    const activeScan = scans.find(
+                        (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running'
+                    );
+                    const state = useAppStore.getState();
+                    if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId) {
+                        const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
+                        await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url);
+                    }
+                }
+            } catch (err) {
+                console.warn('[swazz] Failed to check active scan on load:', err);
+            }
+        };
+
+        checkActiveScan();
+        // Check periodically (every 5 seconds) to catch newly triggered backend/scheduled scans too
+        const timer = setInterval(checkActiveScan, 5000);
+
+        return () => {
+            active = false;
+            clearInterval(timer);
+        };
+    }, [activeProject, handleConnectToExisting]);
 
     const handleImportConfig = useCallback((jsonString: string) => {
         let parsed: any;

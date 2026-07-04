@@ -64,10 +64,12 @@ wait_for_port() {
   exit 1
 }
 
-# Pre-cleanup: kill any zombie processes on the test ports
+# Pre-cleanup: kill any zombie processes on the test ports and clear wrangler states
 echo "→ Stopping any existing services on ports 8788, 8787, 5173..."
 lsof -ti :8788,8787,5173 | xargs kill -9 2>/dev/null || true
 pkill -f "swazz-engine" || true
+rm -rf packages/edge/.wrangler
+rm -rf demo/.wrangler
 sleep 1
 
 # 1. Start Vulnerable Demo API (Port 8788)
@@ -86,6 +88,8 @@ if check_port 8787; then
 else
   echo "→ Applying local database migrations..."
   npx wrangler d1 migrations apply swazz_db --local --cwd packages/edge || true
+  echo "→ Seeding CI runner user..."
+  npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', 'swazz_live_citoken1234567890', 'Supporter Plan');" --cwd packages/edge || true
   echo "→ Starting Edge Coordinator..."
   NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --log-level error > edge.log 2>&1 &
   PIDS+=($!)

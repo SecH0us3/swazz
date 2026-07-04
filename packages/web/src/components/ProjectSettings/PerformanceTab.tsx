@@ -77,6 +77,20 @@ export function PerformanceTab() {
                 </div>
 
                 <div>
+                    <label className="form-group-label">Maximum Scan Duration (minutes)</label>
+                    <input 
+                        type="number" 
+                        className="input input-width-md" 
+                        min="0"
+                        value={config.settings.max_scan_duration_min || 0} 
+                        onChange={(e) => updateSettings({ max_scan_duration_min: Math.max(0, parseInt(e.target.value) || 0) })}
+                    />
+                    <span className="form-group-hint">
+                        Automatically abort the fuzzing scan if it runs longer than this duration (set to 0 for unlimited).
+                    </span>
+                </div>
+
+                <div>
                     <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Fuzzing Intensity (Iterations per profile)</label>
                     <input 
                         type="number" 
