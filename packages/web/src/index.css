@@ -7723,33 +7723,6 @@ kbd {
     padding-bottom: 12px;
 }
 
-.schedule-upgrade-banner {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(124, 58, 237, 0.05));
-    border: 1px solid rgba(124, 58, 237, 0.2);
-    border-radius: var(--radius-md);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.schedule-upgrade-title {
-    font-weight: 600;
-    color: var(--accent-light);
-    font-size: 14px;
-}
-
-.schedule-upgrade-text {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-}
-
-.schedule-upgrade-footer {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
 
 .schedule-form-group {
     display: flex;
