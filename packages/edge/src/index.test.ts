@@ -2864,7 +2864,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       projectId = ((await projRes.json()) as any).id;
     });
 
-    it("rejects scheduled scans configuration for Free user", async () => {
+    it("allows scheduled scans configuration for Free user", async () => {
       const freeProjRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
         method: "POST",
         headers: {
@@ -2883,9 +2883,9 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         },
         body: JSON.stringify({ cron_schedule: "0 0 * * *" })
       }), testEnv);
-      expect(scheduleRes.status).toBe(403);
+      expect(scheduleRes.status).toBe(200);
       const body = await scheduleRes.json() as any;
-      expect(body.error).toContain("only available on the Supporter Plan");
+      expect(body.status).toBe("saved");
     });
 
     it("rejects schedules running more than once daily", async () => {

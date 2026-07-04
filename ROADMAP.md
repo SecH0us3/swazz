@@ -63,6 +63,15 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Save the private key as a GitHub Action Secret `COSIGN_PRIVATE_KEY` (along with its password secret).
     - Update the build & publish CI workflow to install Cosign and sign the built Docker images after pushing them to the registry.
 
+- [ ] **Task 123: User Action Audit Trail Logging**
+  - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
+  - **Implementation Details:**
+    - Create a database table `audit_logs` (schema: `id, project_id, user_id, action, details, ip_address, timestamp`).
+    - Implement a backend middleware or helper in Hono that intercepts non-GET requests (POST, PUT, PATCH, DELETE) to project-scoped endpoints.
+    - Automatically log details of key actions (e.g. member additions/removals, role modifications, settings updates, scan executions) into the `audit_logs` table.
+    - Expose an API endpoint `GET /api/projects/:id/audit-logs` (accessible only to owners/admins).
+    - Design an "Audit Trail" tab in Project Settings to view, search, and export the logs.
+
 
 
 ## 🔴 High Complexity
