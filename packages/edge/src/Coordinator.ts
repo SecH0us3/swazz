@@ -12,6 +12,7 @@ export class RunnerCoordinator {
   pendingChallenges?: Map<WebSocket, string>; // runner WS -> challenge nonce
   pendingParses: Map<string, (r: Response) => void>;
   pendingParseUrls: Map<string, string>; // reqId -> url
+  sseStreams: Map<string, ReadableStreamDefaultController>;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -21,6 +22,7 @@ export class RunnerCoordinator {
     this.jobs = new Map();
     this.pendingParses = new Map();
     this.pendingParseUrls = new Map();
+    this.sseStreams = new Map();
 
     // Reconstruct in-memory maps from active WebSockets after waking up/initializing
     for (const ws of this.state.getWebSockets()) {
@@ -65,6 +67,47 @@ export class RunnerCoordinator {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/sse') {
+      const connectionId = url.searchParams.get('connectionId');
+      if (!connectionId) {
+        return new Response('Missing connectionId', { status: 400 });
+      }
+
+      const stream = new ReadableStream({
+        start: (controller) => {
+          this.sseStreams.set(connectionId, controller);
+          const initEvent = `event: endpoint\ndata: /api/mcp/message?connectionId=${connectionId}\n\n`;
+          controller.enqueue(new TextEncoder().encode(initEvent));
+        },
+        cancel: () => {
+          this.sseStreams.delete(connectionId);
+        }
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        }
+      });
+    }
+
+    if (url.pathname === '/sse-send') {
+      const connectionId = url.searchParams.get('connectionId');
+      if (!connectionId) {
+        return new Response('Missing connectionId', { status: 400 });
+      }
+
+      const controller = this.sseStreams.get(connectionId);
+      if (!controller) {
+        return new Response('Connection not found', { status: 404 });
+      }
+
+      const body = await request.text();
+      controller.enqueue(new TextEncoder().encode(`event: message\ndata: ${body}\n\n`));
+      return new Response('Sent', { status: 200 });
+    }
 
     if (url.pathname === '/revoke-user') {
       const userId = url.searchParams.get('userId');

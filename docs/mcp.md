@@ -74,6 +74,26 @@ Add the following to your `claude_desktop_config.json` (located at `~/Library/Ap
 }
 ```
 
+### 2. Deployed Product (HTTP/SSE Transport)
+
+If you are connecting your AI assistant (e.g. Claude Desktop, Cursor) directly to a deployed Swazz instance in the cloud, you can use the built-in HTTP/SSE transport of the coordinator without running any local process.
+
+Add the server to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "swazz-cloud": {
+      "type": "sse",
+      "url": "https://api.swazz.dev/api/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer swazz_live_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
 ---
 
 ## Security & Authorization

@@ -3067,6 +3067,59 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       }), testEnv);
       expect(res.status).toBe(200);
     });
+
+    it("supports standard HTTP/SSE Model Context Protocol (MCP) server transport", async () => {
+      // 1. Unauthenticated SSE request returns 401
+      const resUnauth = await appFetchWrapper(new Request("http://localhost/api/mcp/sse"), testEnv);
+      expect(resUnauth.status).toBe(401);
+
+      // 2. Authenticated SSE request returns 200 event-stream
+      const resSse = await appFetchWrapper(new Request("http://localhost/api/mcp/sse", {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      }), testEnv);
+      expect(resSse.status).toBe(200);
+      expect(resSse.headers.get("Content-Type")).toBe("text/event-stream");
+      expect(resSse.body).toBeDefined();
+
+      // Read the first chunk (ready event)
+      const reader = resSse.body!.getReader();
+      const { value, done } = await reader.read();
+      expect(done).toBe(false);
+
+      const chunkStr = new TextDecoder().decode(value);
+      expect(chunkStr).toContain("event: endpoint");
+      expect(chunkStr).toContain("/api/mcp/message?connectionId=");
+
+      // Extract the connectionId
+      const connIdMatch = chunkStr.match(/connectionId=([a-zA-Z0-9-]+)/);
+      expect(connIdMatch).toBeDefined();
+      const connectionId = connIdMatch![1];
+
+      // 3. POST JSON-RPC message to the message endpoint
+      const postRes = await appFetchWrapper(new Request(`http://localhost/api/mcp/message?connectionId=${connectionId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 42,
+          method: "tools/list"
+        })
+      }), testEnv);
+      expect(postRes.status).toBe(202);
+
+      // 4. Read the streamed response from the SSE reader
+      const { value: resValue, done: resDone } = await reader.read();
+      expect(resDone).toBe(false);
+
+      const resChunkStr = new TextDecoder().decode(resValue);
+      expect(resChunkStr).toContain("event: message");
+      expect(resChunkStr).toContain("data: {");
+      expect(resChunkStr).toContain('"id":42');
+      expect(resChunkStr).toContain("swazz_list_projects");
+    });
   });
 });
 
