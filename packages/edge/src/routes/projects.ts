@@ -108,6 +108,9 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const { cron_schedule } = body;
     
     if (cron_schedule) {
+      if (typeof cron_schedule !== 'string') {
+        return c.json({ error: 'cron_schedule must be a string' }, 400);
+      }
       // 1. Enforce frequency limit: at most once a day
       const parts = cron_schedule.trim().split(/\s+/);
       if (parts.length !== 5) {

@@ -55,6 +55,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
     - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
+- [ ] **Task 121: Container Image Signing & Verification via Cosign**
+  - **Design Goal:** Secure built runner agent container images against supply chain tampering by signing release images with Cosign.
+  - **Implementation Details:**
+    - Generate a key pair for image signing (`cosign generate-key-pair`).
+    - Store the public verification key (`cosign.pub`) in the repository under a `keys/` directory and document image verification steps.
+    - Save the private key as a GitHub Action Secret `COSIGN_PRIVATE_KEY` (along with its password secret).
+    - Update the build & publish CI workflow to install Cosign and sign the built Docker images after pushing them to the registry.
+
 
 ## 🔴 High Complexity
 
@@ -93,6 +101,15 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Save these logs in a new D1 table `runner_logs` (schema: `id, scan_id, timestamp, level, message`) or reuse the `scan_events` table with a custom payload structure.
     - Implement a backend route `GET /api/scans/:id/runner-logs` (scoped to project viewer permissions) fetching logs for the specified scan.
     - Build a "Runner Logs" tab in the Active Scan and Scans History UI pages to view, search, and copy logs.
+
+- [ ] **Task 122: Enterprise SAML Authentication & Organizations**
+  - **Design Goal:** Support SAML SSO for enterprise customers by introducing an Organizations layer to group projects and configure IdP authentication details.
+  - **Implementation Details:**
+    - Create database tables for `organizations`, `organization_members` (RBAC), and `organization_saml_configs`.
+    - Group projects under organizations via `organization_id` field in `projects` table.
+    - Implement a domain-based login redirect checking user email domains to route employees to their mapped SAML IdP.
+    - Implement a lightweight SAML Assertion Consumer Service (ACS) endpoint verifying XML signatures against IdP certificates using the Workers Web Crypto API.
+    - Build UI settings tabs in the dashboard for managing organization details, team memberships, and SAML configurations.
 
 
 

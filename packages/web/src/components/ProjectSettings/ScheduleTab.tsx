@@ -17,7 +17,10 @@ export function ScheduleTab() {
     const isSupporter = userProfile?.plan === 'Supporter Plan';
 
     useEffect(() => {
-        if (!activeProject || !token) return;
+        if (!activeProject || !token) {
+            setIsLoading(false);
+            return;
+        }
 
         let active = true;
         const fetchSchedule = async () => {

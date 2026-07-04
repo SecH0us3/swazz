@@ -41,6 +41,8 @@ import (
 
 var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
 
+var scanDurationUnit = time.Minute
+
 const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
@@ -225,7 +227,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		defer cancelTimer()
 		go func() {
 			select {
-			case <-time.After(time.Duration(r.config.Settings.MaxScanDurationMin) * time.Minute):
+			case <-time.After(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit):
 				logger.Debug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
 				r.Stop()
 			case <-timerCtx.Done():
