@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useToast } from '../../hooks/useToast.js';
+import { fetchMemberLoginHistory } from '../../services/projectService.js';
+import type { LoginHistoryEntry } from '../../types.js';
 
 interface Role {
     id: string;
@@ -16,6 +18,8 @@ interface Member {
     email: string;
     roles: string[];
     is_pending?: boolean;
+    two_factor_enabled?: boolean;
+    auth_method?: 'password' | 'github';
 }
 
 export function MembersRolesTab() {
@@ -40,9 +44,16 @@ export function MembersRolesTab() {
     const [selectedInheritedRoles, setSelectedInheritedRoles] = useState<string[]>([]);
     const [permissionSearch, setPermissionSearch] = useState('');
 
-    // Edit Member State
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [selectedMemberRoles, setSelectedMemberRoles] = useState<string[]>([]);
+
+    // Login History State
+    const [activeHistoryMember, setActiveHistoryMember] = useState<Member | null>(null);
+    const [historyData, setHistoryData] = useState<LoginHistoryEntry[]>([]);
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyTotal, setHistoryTotal] = useState(0);
+    const [historyPages, setHistoryPages] = useState(1);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     useEffect(() => {
         if (!activeProject) return;
@@ -68,13 +79,17 @@ export function MembersRolesTab() {
                     setEditingMember(null);
                     e.stopPropagation();
                     e.preventDefault();
+                } else if (activeHistoryMember) {
+                    setActiveHistoryMember(null);
+                    e.stopPropagation();
+                    e.preventDefault();
                 }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown, true);
         return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [isInviteModalOpen, isRoleModalOpen, editingMember]);
+    }, [isInviteModalOpen, isRoleModalOpen, editingMember, activeHistoryMember]);
 
     const getHeaders = () => {
         const token = localStorage.getItem('swazz_token');
@@ -102,6 +117,59 @@ export function MembersRolesTab() {
         if (res.ok) {
             const data = await res.json();
             setMembers(data.members);
+        }
+    };
+
+    const loadLoginHistory = async (member: Member, page = 1) => {
+        if (!activeProject) return;
+        setHistoryLoading(true);
+        try {
+            const data = await fetchMemberLoginHistory(activeProject.id, member.id, page, 10);
+            setHistoryData(data.history);
+            setHistoryPage(data.pagination.page);
+            setHistoryTotal(data.pagination.total);
+            setHistoryPages(data.pagination.pages);
+            setActiveHistoryMember(member);
+        } catch (err: any) {
+            showToast(err.message || 'Failed to load login history', 'error');
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const handleExportCSV = async () => {
+        if (!activeHistoryMember || !activeProject) return;
+        try {
+            const data = await fetchMemberLoginHistory(activeProject.id, activeHistoryMember.id, 1, 1000);
+            const headers = ['Time', 'Status', 'IP Address', 'Method', '2FA Active', 'Country', 'City', 'Region', 'Timezone', 'Ray ID', 'User Agent'];
+            const rows = data.history.map(entry => {
+                const timeStr = entry.created_at ? new Date(entry.created_at.replace(' ', 'T') + 'Z').toISOString() : '';
+                return [
+                    timeStr,
+                    entry.status,
+                    entry.ip_address,
+                    entry.auth_method || 'password',
+                    entry.two_factor_active === 1 ? 'Yes' : 'No',
+                    entry.country || '',
+                    entry.city || '',
+                    entry.region || '',
+                    entry.timezone || '',
+                    entry.cf_ray || '',
+                    entry.user_agent || ''
+                ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+            });
+
+            const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `login_history_${activeHistoryMember.username || activeHistoryMember.id}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err: any) {
+            showToast(err.message || 'Failed to export CSV', 'error');
         }
     };
 
@@ -255,6 +323,8 @@ export function MembersRolesTab() {
                         <thead>
                             <tr>
                                 <th>User</th>
+                                <th>Auth Method</th>
+                                <th>2FA</th>
                                 <th>Roles</th>
                                 <th className="rbac-text-right">Actions</th>
                             </tr>
@@ -267,6 +337,16 @@ export function MembersRolesTab() {
                                         {m.is_pending && <span className="rbac-pending-badge">Invited</span>}
                                     </td>
                                     <td>
+                                        <span className={`rbac-badge-method rbac-badge-method-${m.auth_method || 'password'}`}>
+                                            {m.auth_method === 'github' ? 'GitHub' : 'Password'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span className={`rbac-badge-2fa rbac-badge-2fa-${m.two_factor_enabled ? 'enabled' : 'disabled'}`}>
+                                            {m.two_factor_enabled ? 'Enabled' : 'Disabled'}
+                                        </span>
+                                    </td>
+                                    <td>
                                         {m.roles.map(rid => {
                                             const role = roles.find(r => r.id === rid);
                                             return <span key={rid} className="rbac-role-badge">{role?.name || rid}</span>;
@@ -274,6 +354,9 @@ export function MembersRolesTab() {
                                     </td>
                                     <td>
                                         <div className="rbac-actions-group">
+                                            {!m.is_pending && (
+                                                <button className="btn btn-ghost btn-sm" onClick={() => loadLoginHistory(m, 1)}>History</button>
+                                            )}
                                             {m.username !== userProfile?.username && (
                                                 <>
                                                     <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEditMemberModal(m)} disabled={userProfile?.isGuest}>Edit Roles</button>
@@ -286,7 +369,7 @@ export function MembersRolesTab() {
                             ))}
                             {members.length === 0 && (
                                 <tr>
-                                    <td colSpan={3} className="rbac-empty-state">No members found.</td>
+                                    <td colSpan={5} className="rbac-empty-state">No members found.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -500,6 +583,97 @@ export function MembersRolesTab() {
                         <div className="rbac-modal-footer">
                             <button className="btn btn-secondary" onClick={() => setEditingMember(null)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleSaveMemberRoles} disabled={selectedMemberRoles.length === 0}>Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Login History Modal */}
+            {activeHistoryMember && (
+                <div className="modal-container">
+                    <div className="rbac-modal-content rbac-modal-large">
+                        <h3 className="rbac-tab-title rbac-modal-title">Login History: {activeHistoryMember.username || activeHistoryMember.email}</h3>
+                        
+                        <table className="rbac-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                    <th>Method</th>
+                                    <th>2FA Active</th>
+                                    <th>IP Address</th>
+                                    <th>Location</th>
+                                    <th>User Agent</th>
+                                    <th>Ray ID</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {historyData.map(entry => (
+                                    <tr key={entry.id}>
+                                        <td>{entry.created_at ? new Date(entry.created_at.replace(' ', 'T') + 'Z').toLocaleString() : 'N/A'}</td>
+                                        <td>
+                                            <span className={
+                                                entry.status === 'success' ? 'rbac-badge-status-success' :
+                                                entry.status === 'locked' ? 'rbac-badge-status-locked' :
+                                                'rbac-badge-status-failed'
+                                            }>
+                                                {entry.status}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span className={`rbac-badge-method rbac-badge-method-${entry.auth_method || 'password'}`}>
+                                                {entry.auth_method === 'github' ? 'GitHub' : 'Password'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span className={`rbac-badge-2fa rbac-badge-2fa-${entry.two_factor_active === 1 ? 'enabled' : 'disabled'}`}>
+                                                {entry.two_factor_active === 1 ? 'Yes' : 'No'}
+                                            </span>
+                                        </td>
+                                        <td>{entry.ip_address}</td>
+                                        <td>
+                                            {[entry.city, entry.region, entry.country].filter(Boolean).join(', ') || 'Unknown'}
+                                        </td>
+                                        <td className="rbac-history-ua" title={entry.user_agent || ''}>
+                                            {entry.user_agent || 'Unknown'}
+                                        </td>
+                                        <td>
+                                            <code>{entry.cf_ray || 'N/A'}</code>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {historyData.length === 0 && !historyLoading && (
+                                    <tr>
+                                        <td colSpan={8} className="rbac-empty-state">No login history records found.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+
+                        <div className="rbac-pagination">
+                            <span>Total: {historyTotal} records</span>
+                            <div className="rbac-pagination-controls">
+                                <button 
+                                    className="btn btn-secondary btn-sm" 
+                                    disabled={historyPage <= 1 || historyLoading} 
+                                    onClick={() => loadLoginHistory(activeHistoryMember, historyPage - 1)}
+                                >
+                                    Previous
+                                </button>
+                                <span>Page {historyPage} of {historyPages}</span>
+                                <button 
+                                    className="btn btn-secondary btn-sm" 
+                                    disabled={historyPage >= historyPages || historyLoading} 
+                                    onClick={() => loadLoginHistory(activeHistoryMember, historyPage + 1)}
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="rbac-modal-footer-between">
+                            <button className="btn btn-secondary" onClick={handleExportCSV} disabled={historyData.length === 0}>Export CSV</button>
+                            <button className="btn btn-secondary" onClick={() => setActiveHistoryMember(null)}>Close</button>
                         </div>
                     </div>
                 </div>

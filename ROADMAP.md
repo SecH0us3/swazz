@@ -64,6 +64,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Update the build & publish CI workflow to install Cosign and sign the built Docker images after pushing them to the registry.
 
 
+
 ## 🔴 High Complexity
 
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**

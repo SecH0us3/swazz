@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   'post:/api/projects/:id/scans': 'Start new scans',
   'get:/api/projects/:id/scans': 'View scan history',
   'post:/api/projects/:id/schedule': 'Configure scan schedule',
+  'get:/api/projects/:id/members/:user_id/login-history': 'View member login history',
 };
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -41,7 +42,8 @@ export const DEFAULT_ROLES: Record<string, { name: string; permissions: Permissi
       'put:/api/projects/:id/roles/:role_id',
       'delete:/api/projects/:id/roles/:role_id',
       'post:/api/projects/:id/scans',
-      'get:/api/projects/:id/scans'
+      'get:/api/projects/:id/scans',
+      'get:/api/projects/:id/members/:user_id/login-history'
     ]
   },
   'viewer': {

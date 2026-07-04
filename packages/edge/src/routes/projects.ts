@@ -325,5 +325,51 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       }
     });
   });
+
+  app.get('/api/projects/:id/members/:user_id/login-history', requirePermission('get:/api/projects/:id/members/:user_id/login-history'), async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('user_id');
+
+    // Verify that the user is actually a member of the project
+    const member = await getDB(c.env).prepare(
+      'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
+    )
+    .bind(projectId, userId)
+    .first<{ role: string }>();
+
+    if (!member) {
+      return c.json({ error: 'User is not a member of this project' }, 404);
+    }
+
+    const page = Math.max(1, parseInt(c.req.query('page') || '1', 10) || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(c.req.query('limit') || '20', 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const { results } = await getDB(c.env).prepare(`
+      SELECT id, status, ip_address, country, city, region, timezone, cf_ray, user_agent, auth_method, two_factor_active, created_at
+      FROM user_login_history
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `)
+    .bind(userId, limit, offset)
+    .all();
+
+    const countRow = await getDB(c.env).prepare(`
+      SELECT COUNT(*) as total FROM user_login_history WHERE user_id = ?
+    `)
+    .bind(userId)
+    .first<{ total: number }>();
+
+    return c.json({
+      history: results || [],
+      pagination: {
+        page,
+        limit,
+        total: countRow?.total || 0,
+        pages: Math.ceil((countRow?.total || 0) / limit)
+      }
+    });
+  });
   
 }
