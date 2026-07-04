@@ -3068,6 +3068,42 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(res.status).toBe(200);
     });
 
+    it("returns 400 when MCP tool call arguments are missing required route parameters", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          name: "swazz_get_scan_status",
+          arguments: {} // Missing 'id' which is required for path parameter :id
+        })
+      }), testEnv);
+      expect(res.status).toBe(400);
+      const data = await res.json() as any;
+      expect(data.error).toContain("Missing required path parameters");
+    });
+
+    it("invalidates old legacy plain-text API key from KV session cache on rotation", async () => {
+      const hashedApiKey = await hashApiKey(apiKey);
+      // Place the hashed legacy key in KV cache
+      await testEnv.SESSION_CACHE.put(`apikey:${hashedApiKey}`, JSON.stringify({ userId: "dummy" }));
+
+      // Rotate API key using POST /api/auth/regenerate-key
+      const res = await appFetchWrapper(new Request("http://localhost/api/auth/regenerate-key", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const resData = await res.json() as any;
+      apiKey = resData.api_key;
+
+      // Verify that the old legacy key's cache entry has been deleted
+      const cached = await testEnv.SESSION_CACHE.get(`apikey:${hashedApiKey}`);
+      expect(cached).toBeNull();
+    });
+
     it("supports standard HTTP/SSE Model Context Protocol (MCP) server transport", async () => {
       // 1. Unauthenticated SSE request returns 401
       const resUnauth = await appFetchWrapper(new Request("http://localhost/api/mcp/sse"), testEnv);

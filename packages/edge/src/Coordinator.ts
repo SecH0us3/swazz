@@ -104,8 +104,13 @@ export class RunnerCoordinator {
         return new Response('Connection not found', { status: 404 });
       }
 
-      const body = await request.text();
-      controller.enqueue(new TextEncoder().encode(`event: message\ndata: ${body}\n\n`));
+      try {
+        const body = await request.text();
+        controller.enqueue(new TextEncoder().encode(`event: message\ndata: ${body}\n\n`));
+      } catch (err) {
+        this.sseStreams.delete(connectionId);
+        return new Response('Connection closed', { status: 410 });
+      }
       return new Response('Sent', { status: 200 });
     }
 

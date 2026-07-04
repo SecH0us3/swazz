@@ -184,6 +184,9 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
         path = path.replace(`:${k}`, encodeURIComponent(String(v)));
       }
     }
+    if (path.includes(':')) {
+      return c.json({ error: `Missing required path parameters in arguments` }, 400);
+    }
 
     let urlStr = `http://localhost${path}`;
     if (tool.method === 'GET' && args && typeof args === 'object' && !Array.isArray(args)) {

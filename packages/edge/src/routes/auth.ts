@@ -397,7 +397,10 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (kv) {
         try {
           if (oldUser?.api_key) {
-            await kv.delete(`apikey:${oldUser.api_key}`);
+            const cacheKey = oldUser.api_key.startsWith('swazz_live_')
+              ? await hashApiKey(oldUser.api_key)
+              : oldUser.api_key;
+            await kv.delete(`apikey:${cacheKey}`);
           }
           await kv.put(`apikey:${hashedNewApiKey}`, JSON.stringify({ userId: String(decoded.sub) }), { expirationTtl: 300 });
         } catch {
