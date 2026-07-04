@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { logInfo, logWarn, logError } from '../../../common/logging/logger';
+import { hashApiKey } from './auth';
 
 export async function cleanupSecurityTables(db: D1Database, env?: any): Promise<void> {
   try {
@@ -197,7 +198,10 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
         const chunkSize = 10;
         for (let i = 0; i < apiKeysToInvalidate.length; i += chunkSize) {
           const chunk = apiKeysToInvalidate.slice(i, i + chunkSize);
-          await Promise.all(chunk.map(key => kv.delete(`apikey:${key}`)));
+          await Promise.all(chunk.map(async key => {
+            const cacheKey = key.startsWith('swazz_live_') ? await hashApiKey(key) : key;
+            await kv.delete(`apikey:${cacheKey}`);
+          }));
         }
       } catch {
         // KV cleanup failed — non-critical

@@ -1491,6 +1491,34 @@ describe("KV Session Cache", () => {
     const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(delUserId).first();
     expect(userPost).toBeNull();
   });
+
+  it("cleanupScheduledDeletions invalidates legacy plain-text API keys from KV session cache", async () => {
+    const mockKV = createMockKV();
+    const cleanupEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+
+    const delUserId = `u_del_leg_${Math.floor(Math.random() * 1000000)}`;
+    const legacyKey = `swazz_live_del_leg_${Math.floor(Math.random() * 1000000)}`;
+    const hashedKey = await hashApiKey(legacyKey);
+
+    // Seed user with plain-text API key directly in D1
+    await env.DB.prepare(
+      "INSERT INTO users (id, username, password_hash, api_key, plan, delete_requested_at) VALUES (?, ?, ?, ?, ?, datetime('now', '-8 days'))"
+    ).bind(delUserId, `user_${delUserId}`, "hash", legacyKey, "Free Plan").run();
+
+    // Populate KV with the hashed session cache entry
+    await mockKV.put(`apikey:${hashedKey}`, JSON.stringify({ userId: delUserId }));
+    expect(await mockKV.get(`apikey:${hashedKey}`)).not.toBeNull();
+
+    // Run the cleanup
+    await cleanupScheduledDeletions(cleanupEnv);
+
+    // Verify the legacy key's hashed KV cache entry was invalidated
+    expect(await mockKV.get(`apikey:${hashedKey}`)).toBeNull();
+
+    // Verify the user was actually deleted from D1
+    const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(delUserId).first();
+    expect(userPost).toBeNull();
+  });
 });
 
 describe("splitSql helper", () => {
@@ -3155,6 +3183,96 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(resChunkStr).toContain("data: {");
       expect(resChunkStr).toContain('"id":42');
       expect(resChunkStr).toContain("swazz_list_projects");
+    });
+
+    it("enforces scan ownership BOLA on retrieving/triaging specific standalone scan findings", async () => {
+      // Create two users
+      const uIdA = `u_leg_fn_a_${Math.floor(Math.random() * 1000000)}`;
+      const uIdB = `u_leg_fn_b_${Math.floor(Math.random() * 1000000)}`;
+      const keyA = `swazz_live_fna_${Math.floor(Math.random() * 1000000)}`;
+      const keyB = `swazz_live_fnb_${Math.floor(Math.random() * 1000000)}`;
+      const hashedKeyA = await hashApiKey(keyA);
+      const hashedKeyB = await hashApiKey(keyB);
+
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdA, `user_a_${uIdA}`, "hash", hashedKeyA).run();
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdB, `user_b_${uIdB}`, "hash", hashedKeyB).run();
+
+      // Create standalone scan owned by User A
+      const scanId = `scan_fn_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+      ).bind(scanId, "", "http://target.com", "default", "completed", uIdA).run();
+
+      // Insert a finding for this scan
+      const findingId = `finding_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare(
+        "INSERT INTO findings (id, scan_id, rule_id, level, message) VALUES (?, ?, ?, ?, ?)"
+      ).bind(findingId, scanId, "SQL Injection", "High", "Test Description").run();
+
+      // Query GET finding details as User B (Forbidden 403)
+      const getB = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        headers: { "Authorization": `Bearer ${keyB}` }
+      }), testEnv);
+      expect(getB.status).toBe(403);
+
+      // Query PATCH finding triage as User B (Forbidden 403)
+      const patchB = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${keyB}`
+        },
+        body: JSON.stringify({ ai_status: "reviewed" })
+      }), testEnv);
+      expect(patchB.status).toBe(403);
+
+      // Query GET finding details as User A (Allowed 200)
+      const getA = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        headers: { "Authorization": `Bearer ${keyA}` }
+      }), testEnv);
+      expect(getA.status).toBe(200);
+
+      // Query PATCH finding triage as User A (Allowed 200)
+      const patchA = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${keyA}`
+        },
+        body: JSON.stringify({ ai_status: "reviewed" })
+      }), testEnv);
+      expect(patchA.status).toBe(200);
+    });
+
+    it("auto-upgrades legacy plain-text API key on fuzzer runner websocket connect", async () => {
+      const username = `u_run_leg_${Math.floor(Math.random() * 1000000)}`;
+      const legacyKey = `swazz_live_run_leg_${Math.floor(Math.random() * 1000000)}`;
+      const uId = `u_${Math.floor(Math.random() * 1000000)}`;
+
+      // Seed user with plain-text API key directly in D1
+      await testEnv.DB.prepare(
+        "INSERT INTO users (id, username, password_hash, api_key, plan) VALUES (?, ?, ?, ?, ?)"
+      ).bind(uId, username, "hash", legacyKey, "Free Plan").run();
+
+      // Connect runner using plain-text key
+      const res = await appFetchWrapper(new Request("http://localhost/api/runners/connect", {
+        headers: {
+          "Upgrade": "websocket",
+          "Authorization": `Bearer ${legacyKey}`
+        }
+      }), testEnv);
+      expect(res.status).not.toBe(401);
+
+      // Verify D1 has the hashed version
+      const dbUser = await testEnv.DB.prepare("SELECT api_key FROM users WHERE id = ?")
+        .bind(uId)
+        .first<{ api_key: string }>();
+      expect(dbUser?.api_key).not.toBe(legacyKey);
+      
+      const expectedHash = await hashApiKey(legacyKey);
+      expect(dbUser?.api_key).toBe(expectedHash);
     });
   });
 });
