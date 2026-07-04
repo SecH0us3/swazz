@@ -52,58 +52,14 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     const settingsHeader = page.locator('h1:has-text("Project Settings")');
     await expect(settingsHeader).toBeVisible();
 
-    // 3. Navigate to Scan Scheduler tab (should see blocked banner initially)
+    // 3. Navigate to Scan Scheduler tab
     const schedulerTabBtn = page.locator('button.tab-bar-btn:has-text("Scan Scheduler")');
     await expect(schedulerTabBtn).toBeVisible();
-    await schedulerTabBtn.click();
-
-    // Should see premium feature notice
-    await expect(page.locator('text=Supporter Plan Required')).toBeVisible();
-
-    // 4. Upgrade user plan using the Admin API
-    const upgradeRes = await page.evaluate(async () => {
-      const token = localStorage.getItem('swazz_token');
-      // Retrieve profile first to get userId/username
-      const meRes = await fetch('/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const me = await meRes.json();
-      
-      const res = await fetch('/api/admin/users/plan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'test-admin-secret'
-        },
-        body: JSON.stringify({
-          username: me.username,
-          plan: 'Supporter Plan'
-        })
-      });
-      return res.status;
-    });
-    expect(upgradeRes).toBe(200);
-
-    // Refresh page to load upgraded plan
-    const reloadConfigPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    const reloadMePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/me') && resp.status() === 200);
-    await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await reloadConfigPromise;
-    await reloadMePromise;
-
-    // Go back to Project Settings -> Scan Scheduler
-    const moreSettingsBtn2 = page.locator('button:has-text("More Project Settings")');
-    await expect(moreSettingsBtn2).toBeVisible();
-    await moreSettingsBtn2.click();
-    
-    const schedulerTabBtn2 = page.locator('button.tab-bar-btn:has-text("Scan Scheduler")');
-    await expect(schedulerTabBtn2).toBeVisible();
     const configFetchPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.request().method() === 'GET' && resp.status() === 200);
-    await schedulerTabBtn2.click();
+    await schedulerTabBtn.click();
     await configFetchPromise;
 
-    // Premium banner should now be gone, and frequency select should be visible
+    // Frequency select should be visible
     await expect(page.locator('label:has-text("Schedule Frequency")')).toBeVisible();
 
     // 5. Select custom cron and input invalid frequency (e.g. hourly `0 * * * *`)

@@ -124,17 +124,6 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'Scan schedule cannot be more frequent than once a day (minute and hour fields must be specific single integer constants).' }, 400);
       }
 
-      // 2. Enforce plan restriction: Supporter Plan only
-      const userId = await getUserIdFromRequest(c);
-      if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
-      const user = await getDB(c.env).prepare('SELECT plan FROM users WHERE id = ?')
-        .bind(userId)
-        .first<{ plan: string | null }>();
-      if (!user || user.plan !== 'Supporter Plan') {
-        return c.json({ error: 'Scheduled auto-scans are only available on the Supporter Plan.' }, 403);
-      }
     }
 
     // Check if the config exists

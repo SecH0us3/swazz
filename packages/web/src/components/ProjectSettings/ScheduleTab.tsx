@@ -14,7 +14,6 @@ export function ScheduleTab() {
     const [isLoading, setIsLoading] = useState(true);
 
     const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
-    const isSupporter = userProfile?.plan === 'Supporter Plan';
 
     useEffect(() => {
         if (!activeProject || !token) {
@@ -111,22 +110,6 @@ export function ScheduleTab() {
         }
     };
 
-    if (!isSupporter) {
-        return (
-            <div className="schedule-tab-container">
-                <h3 className="schedule-header">Auto-Scan Scheduler</h3>
-                <div className="schedule-upgrade-banner">
-                    <span className="schedule-upgrade-title">Premium Feature: Scheduled Auto-Scans</span>
-                    <p className="schedule-upgrade-text">
-                        Automate your vulnerability detection. Set up daily, weekly, or custom cron intervals to automatically scan your endpoints for OWASP top 10 vulnerabilities, BOLA, and rate-limiting flaws.
-                    </p>
-                    <div className="schedule-upgrade-footer">
-                        <span className="badge badge--accent">Supporter Plan Required</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     if (isLoading) {
         return (
