@@ -2993,6 +2993,80 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(data.result).toBeDefined();
       expect(data.result.projects).toBeDefined();
     });
+
+    it("auto-upgrades legacy plain-text API keys to hashed versions on first match", async () => {
+      const username = `u_legacy_${Math.floor(Math.random() * 1000000)}`;
+      const legacyKey = `swazz_live_legacy_${Math.floor(Math.random() * 1000000)}`;
+      const uId = `u_${Math.floor(Math.random() * 1000000)}`;
+
+      // Seed a user with a plain text API key
+      await testEnv.DB.prepare(
+        "INSERT INTO users (id, username, password_hash, api_key, plan) VALUES (?, ?, ?, ?, ?)"
+      ).bind(uId, username, "hash", legacyKey, "Free Plan").run();
+
+      // Query projects using the plain-text key
+      const res = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        headers: { "Authorization": `Bearer ${legacyKey}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+
+      // Verify that the database now stores the hashed version of the legacy key
+      const dbUser = await testEnv.DB.prepare("SELECT api_key FROM users WHERE id = ?")
+        .bind(uId)
+        .first<{ api_key: string }>();
+      expect(dbUser?.api_key).not.toBe(legacyKey);
+      
+      const expectedHash = await hashApiKey(legacyKey);
+      expect(dbUser?.api_key).toBe(expectedHash);
+    });
+
+    it("enforces scan ownership BOLA authorization on standalone scans (null project_id)", async () => {
+      // Create two users
+      const uIdA = `u_bola_a_${Math.floor(Math.random() * 1000000)}`;
+      const uIdB = `u_bola_b_${Math.floor(Math.random() * 1000000)}`;
+      const keyA = `swazz_live_key_a_${Math.floor(Math.random() * 1000000)}`;
+      const keyB = `swazz_live_key_b_${Math.floor(Math.random() * 1000000)}`;
+      const hashedKeyA = await hashApiKey(keyA);
+      const hashedKeyB = await hashApiKey(keyB);
+
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdA, `user_a_${uIdA}`, "hash", hashedKeyA).run();
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdB, `user_b_${uIdB}`, "hash", hashedKeyB).run();
+
+      // Create a standalone scan owned by User A
+      const scanId = `scan_bola_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+      ).bind(scanId, "", "http://target.com", "default", "completed", uIdA).run();
+
+      // Query findings as User B (should be Forbidden 403)
+      const resB = await appFetchWrapper(new Request(`http://localhost/api/scans/${scanId}/findings`, {
+        headers: { "Authorization": `Bearer ${keyB}` }
+      }), testEnv);
+      expect(resB.status).toBe(403);
+
+      // Query findings as User A (should be Allowed 200)
+      const resA = await appFetchWrapper(new Request(`http://localhost/api/scans/${scanId}/findings`, {
+        headers: { "Authorization": `Bearer ${keyA}` }
+      }), testEnv);
+      expect(resA.status).toBe(200);
+    });
+
+    it("handles array arguments safely in MCP call gateway", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          name: "swazz_list_projects",
+          arguments: [] // Array argument
+        })
+      }), testEnv);
+      expect(res.status).toBe(200);
+    });
   });
 });
 

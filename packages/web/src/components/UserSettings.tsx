@@ -37,7 +37,7 @@ export function UserSettings() {
                 useAppStore.setState({
                     userProfile: {
                         ...profile,
-                        apiKey: data.api_key
+                        apiKey: 'swazz_live_' + '•'.repeat(24)
                     }
                 });
             }

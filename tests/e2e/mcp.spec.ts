@@ -32,10 +32,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // 4. Verify initial API Key input is present and masked
     const apiKeyInput = page.locator('.settings-input-monospace');
     await expect(apiKeyInput).toBeVisible();
-    
-    const initialValue = await apiKeyInput.inputValue();
-    expect(initialValue).toContain('swazz_live_');
-    expect(initialValue).toContain('•');
+    await expect(apiKeyInput).toHaveValue(/swazz_live_.*•/);
 
     // 5. Setup confirm dialog handler to accept key regeneration
     page.on('dialog', async dialog => {
@@ -54,10 +51,16 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     const newApiKeyInput = newAlert.locator('.settings-input-monospace');
     await expect(newApiKeyInput).toBeVisible();
+    await expect(newApiKeyInput).toHaveValue(/swazz_live_/);
+    await expect(newApiKeyInput).not.toHaveValue(/•/);
 
-    const newValue = await newApiKeyInput.inputValue();
-    expect(newValue).toContain('swazz_live_');
-    expect(newValue).not.toContain('•');
+    // Click Dismiss button
+    const dismissBtn = page.locator('#btn-dismiss-api-key');
+    await expect(dismissBtn).toBeVisible();
+    await dismissBtn.click();
+
+    // Verify the alert is gone
+    await expect(newAlert).toBeHidden();
 
     // 8. Reload page to verify that the key returns to being masked
     await page.reload();
@@ -71,8 +74,6 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // Verify it is masked again
     const apiInputReloaded = page.locator('.settings-input-monospace');
     await expect(apiInputReloaded).toBeVisible();
-    const reloadedValue = await apiInputReloaded.inputValue();
-    expect(reloadedValue).toContain('swazz_live_');
-    expect(reloadedValue).toContain('•');
+    await expect(apiInputReloaded).toHaveValue(/swazz_live_.*•/);
   });
 });

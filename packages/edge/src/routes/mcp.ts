@@ -26,7 +26,7 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Build the request path with route parameters
     let path = tool.path;
-    if (args && typeof args === 'object') {
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
       for (const [k, v] of Object.entries(args)) {
         path = path.replace(`:${k}`, encodeURIComponent(String(v)));
       }
@@ -34,7 +34,7 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Construct URL with query parameters if GET
     let urlStr = `http://localhost${path}`;
-    if (tool.method === 'GET' && args) {
+    if (tool.method === 'GET' && args && typeof args === 'object' && !Array.isArray(args)) {
       const url = new URL(urlStr);
       for (const [k, v] of Object.entries(args)) {
         if (!tool.path.includes(`:${k}`)) {
@@ -45,9 +45,15 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     }
 
     const headers = new Headers();
+    let token = null;
     const authHeader = c.req.header('Authorization');
-    if (authHeader) {
-      headers.set('Authorization', authHeader);
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else {
+      token = c.req.query('token');
+    }
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
     headers.set('Content-Type', 'application/json');
 

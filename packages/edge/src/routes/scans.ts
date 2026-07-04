@@ -250,9 +250,9 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.get('/api/scans/:id/findings', async (c) => {
     const scanId = c.req.param('id');
-    const scan = await getDB(c.env).prepare('SELECT id, project_id FROM scans WHERE id = ?')
+    const scan = await getDB(c.env).prepare('SELECT id, project_id, user_id FROM scans WHERE id = ?')
       .bind(scanId)
-      .first<{ id: string; project_id: string }>();
+      .first<{ id: string; project_id: string | null; user_id: string | null }>();
     if (!scan) {
       return c.json({ error: 'Scan not found' }, 404);
     }
@@ -262,8 +262,14 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       if (!userId) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const hasAccess = await checkPermission(c.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
-      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      if (!scan.project_id) {
+        if (scan.user_id !== userId) {
+          return c.json({ error: 'Forbidden' }, 403);
+        }
+      } else {
+        const hasAccess = await checkPermission(c.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+        if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      }
     }
 
     const { results } = await getDB(c.env).prepare('SELECT * FROM findings WHERE scan_id = ?')
