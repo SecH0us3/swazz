@@ -53,7 +53,7 @@ ALLOWED_ORIGINS = "*"
 TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
 
 [triggers]
-crons = [ "0 * * * *" ]
+crons = [ "* * * * *" ]
 
 [[queues.producers]]
 binding = "SCAN_QUEUE"

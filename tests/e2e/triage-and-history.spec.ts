@@ -117,8 +117,13 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await loadRunBtn.click();
 
     // Navigate to Grouped Errors and expand all
-    await findingsTab.click();
-    await expandAllBtn.click();
+    const findingsTabReloaded = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
+    await expect(findingsTabReloaded).toBeVisible();
+    await findingsTabReloaded.click();
+
+    const expandAllBtnReloaded = page.locator('button:has-text("Expand All")');
+    await expect(expandAllBtnReloaded).toBeVisible();
+    await expandAllBtnReloaded.click();
 
     // 10. Verify triage state is restored (opacity is 0.6 and FP badge is present)
     const restoredFinding = page.locator('.finding-item').first();

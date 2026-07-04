@@ -55,6 +55,23 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
     - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
+- [ ] **Task 121: Container Image Signing & Verification via Cosign**
+  - **Design Goal:** Secure built runner agent container images against supply chain tampering by signing release images with Cosign.
+  - **Implementation Details:**
+    - Generate a key pair for image signing (`cosign generate-key-pair`).
+    - Store the public verification key (`cosign.pub`) in the repository under a `keys/` directory and document image verification steps.
+    - Save the private key as a GitHub Action Secret `COSIGN_PRIVATE_KEY` (along with its password secret).
+    - Update the build & publish CI workflow to install Cosign and sign the built Docker images after pushing them to the registry.
+
+- [ ] **Task 123: User Action Audit Trail Logging**
+  - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
+  - **Implementation Details:**
+    - Create a database table `audit_logs` (schema: `id, project_id, user_id, action, details, ip_address, timestamp`).
+    - Implement a backend middleware or helper in Hono that intercepts non-GET requests (POST, PUT, PATCH, DELETE) to project-scoped endpoints.
+    - Automatically log details of key actions (e.g. member additions/removals, role modifications, settings updates, scan executions) into the `audit_logs` table.
+    - Expose an API endpoint `GET /api/projects/:id/audit-logs` (accessible only to owners/admins).
+    - Design an "Audit Trail" tab in Project Settings to view, search, and export the logs.
+
 
 
 ## 🔴 High Complexity
@@ -95,12 +112,15 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a backend route `GET /api/scans/:id/runner-logs` (scoped to project viewer permissions) fetching logs for the specified scan.
     - Build a "Runner Logs" tab in the Active Scan and Scans History UI pages to view, search, and copy logs.
 
-- [ ] **Task 118: User-Configured Scheduled Auto-Scans**
-  - **Design Goal:** Allow users to schedule automatic vulnerability scans on their projects at custom intervals, restricted by billing plan limits (e.g. only available on the "Supporter Plan").
+- [ ] **Task 122: Enterprise SAML Authentication & Organizations**
+  - **Design Goal:** Support SAML SSO for enterprise customers by introducing an Organizations layer to group projects and configure IdP authentication details.
   - **Implementation Details:**
-    - Add a `cron_schedule` field to `scan_configs` or create a new `scan_schedules` table in D1.
-    - Implement a Cloudflare Workers Cron Trigger or coordinator scheduler loop to fetch pending schedules, verify the user's plan is "Supporter Plan", and trigger active fuzzer runs.
-    - Add a "Schedule Scan" configuration panel in the project settings web UI supporting standard cron/interval selections.
+    - Create database tables for `organizations`, `organization_members` (RBAC), and `organization_saml_configs`.
+    - Group projects under organizations via `organization_id` field in `projects` table.
+    - Implement a domain-based login redirect checking user email domains to route employees to their mapped SAML IdP.
+    - Implement a lightweight SAML Assertion Consumer Service (ACS) endpoint verifying XML signatures against IdP certificates using the Workers Web Crypto API.
+    - Build UI settings tabs in the dashboard for managing organization details, team memberships, and SAML configurations.
+
 
 
 

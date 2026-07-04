@@ -311,9 +311,70 @@ export function useRunner(proxyUrl: string) {
         useAppStore.setState({ isPaused: false });
     }, [proxyUrl]);
 
+    const connectToExisting = useCallback(
+        async (
+            runId: string,
+            onResult: (rawResult: any) => void,
+            onComplete: (stats: RunStats) => void,
+        ) => {
+            if (useAppStore.getState().isRunning) return;
+
+            useAppStore.setState({ isRunning: true, isPaused: false, isQueued: false });
+            runIdRef.current = runId;
+
+            let lastProgressTime = 0;
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const wsUrl = proxyUrl ? proxyUrl.replace(/^http/, 'ws') : `${protocol}//${host}`;
+            const wsToken = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
+            const ws = new WebSocket(`${wsUrl}/api/runs/${runId}/events${wsToken ? `?token=${encodeURIComponent(wsToken)}` : ''}`);
+            wsRef.current = ws;
+
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    
+                    if (msg.type === 'queued') {
+                        useAppStore.setState({ isQueued: true });
+                    } else if (msg.type === 'result') {
+                        useAppStore.setState({ isQueued: false });
+                        onResult(msg.data);
+                    } else if (msg.type === 'progress') {
+                        useAppStore.setState({ isQueued: false });
+                        const now = Date.now();
+                        if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
+                            lastProgressTime = now;
+                            useAppStore.setState({ stats: msg.data });
+                        }
+                    } else if (msg.type === 'complete') {
+                        const finalStats = msg.data;
+                        useAppStore.setState({ stats: finalStats, isRunning: false, isPaused: false, isQueued: false });
+                        ws.close();
+                        wsRef.current = null;
+                        onComplete(finalStats);
+                    } else if (msg.type === 'error') {
+                        useAppStore.setState({ isRunning: false, isPaused: false, isQueued: false });
+                        ws.close();
+                        wsRef.current = null;
+                    }
+                } catch {
+                    // ignore
+                }
+            };
+
+            ws.onerror = () => {
+                ws.close();
+                wsRef.current = null;
+                useAppStore.setState({ isRunning: false, isQueued: false });
+            };
+        },
+        [proxyUrl]
+    );
+
     useEffect(() => {
         return () => { wsRef.current?.close(); };
     }, []);
 
-    return { start, stop, pause, resume, sendRequest };
+    return { start, stop, pause, resume, sendRequest, connectToExisting };
 }

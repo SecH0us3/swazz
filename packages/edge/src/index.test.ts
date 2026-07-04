@@ -2810,5 +2810,115 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(data.error).toBe("Invalid or expired exchange code");
     });
   });
+
+  describe("Auto-Scan Scheduler", () => {
+    let tokenFree: string;
+    let tokenSupporter: string;
+    let projectId: string;
+    let supporterUserId: string;
+
+    beforeAll(async () => {
+      // Register/Login Free User
+      const freeUsername = "u_free_" + Date.now().toString().slice(-4);
+      await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: freeUsername, password: "Password123!" })
+      }), testEnv);
+      const loginFreeRes = await appFetchWrapper(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: freeUsername, password: "Password123!" })
+      }), testEnv);
+      tokenFree = ((await loginFreeRes.json()) as any).token;
+
+      // Register/Login Supporter User
+      const suppUsername = "u_supp_" + Date.now().toString().slice(-4);
+      const regSuppRes = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: suppUsername, password: "Password123!" })
+      }), testEnv);
+      const regSuppData = (await regSuppRes.json()) as any;
+      supporterUserId = regSuppData.id;
+
+      // Set Supporter Plan directly in DB
+      await testEnv.DB.prepare("UPDATE users SET plan = 'Supporter Plan' WHERE id = ?").bind(supporterUserId).run();
+
+      const loginSuppRes = await appFetchWrapper(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: suppUsername, password: "Password123!" })
+      }), testEnv);
+      tokenSupporter = ((await loginSuppRes.json()) as any).token;
+
+      // Create a project under Supporter User
+      const projRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenSupporter}`
+        },
+        body: JSON.stringify({ name: "Scheduled Project" })
+      }), testEnv);
+      projectId = ((await projRes.json()) as any).id;
+    });
+
+    it("allows scheduled scans configuration for Free user", async () => {
+      const freeProjRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenFree}`
+        },
+        body: JSON.stringify({ name: "Free Project" })
+      }), testEnv);
+      const freeProjId = ((await freeProjRes.json()) as any).id;
+
+      const scheduleRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${freeProjId}/schedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenFree}`
+        },
+        body: JSON.stringify({ cron_schedule: "0 0 * * *" })
+      }), testEnv);
+      expect(scheduleRes.status).toBe(200);
+      const body = await scheduleRes.json() as any;
+      expect(body.status).toBe("saved");
+    });
+
+    it("rejects schedules running more than once daily", async () => {
+      const scheduleRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/schedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenSupporter}`
+        },
+        body: JSON.stringify({ cron_schedule: "*/5 * * * *" })
+      }), testEnv);
+      expect(scheduleRes.status).toBe(400);
+      const body = await scheduleRes.json() as any;
+      expect(body.error).toContain("cannot be more frequent than once a day");
+    });
+
+    it("accepts valid daily or weekly schedules for Supporter user", async () => {
+      const scheduleRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/schedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenSupporter}`
+        },
+        body: JSON.stringify({ cron_schedule: "0 12 * * *" })
+      }), testEnv);
+      expect(scheduleRes.status).toBe(200);
+
+      // Verify stored in DB
+      const result = await testEnv.DB.prepare(
+        "SELECT cron_schedule FROM scan_configs WHERE project_id = ? AND name = 'default'"
+      ).bind(projectId).first<{ cron_schedule: string }>();
+      expect(result?.cron_schedule).toBe("0 12 * * *");
+    });
+  });
 });
 

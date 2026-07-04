@@ -702,3 +702,67 @@ func TestRunner_TimeBaseline(t *testing.T) {
 		t.Errorf("Expected 200 median for lowercase method, got %d", median)
 	}
 }
+
+func TestRunner_MaxScanDurationTimeout(t *testing.T) {
+	// Temporarily override duration unit to millisecond for rapid testing
+	scanDurationUnit = time.Millisecond
+	defer func() { scanDurationUnit = time.Minute }()
+
+	// Spin up a slow test server that sleeps during request handling
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/slow",
+				Method: "GET",
+			},
+		},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 100,
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+			MaxScanDurationMin:   5, // 5 milliseconds (using scanDurationUnit = time.Millisecond)
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+
+	// Capture when it completes
+	resultsCh := r.Subscribe()
+	done := make(chan bool)
+	go func() {
+		for evt := range resultsCh {
+			if evt.Type == EventComplete {
+				break
+			}
+		}
+		done <- true
+	}()
+
+	err := r.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timeout waiting for runner to stop on scan duration limit")
+	}
+
+	// Verify that the runner actually stopped due to limit and didn't complete all iterations
+	stats := r.GetStats()
+	if stats.TotalRequests >= 100 {
+		t.Errorf("Expected runner to stop early under timeout, but executed all %d iterations", stats.TotalRequests)
+	}
+}

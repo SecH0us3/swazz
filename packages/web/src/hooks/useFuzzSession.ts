@@ -11,6 +11,7 @@ interface UseFuzzSessionProps {
     config: SwazzConfig;
     updateConfig: (updates: Partial<SwazzConfig>) => void;
     start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
+    connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
     saveRun: (runRecord: ScanRun, rows?: any[]) => void;
     getDb: () => IDBDatabase | null;
     showToast: (message: string, type: 'info' | 'success' | 'error') => void;
@@ -20,6 +21,7 @@ export function useFuzzSession({
     config,
     updateConfig,
     start,
+    connectToExisting,
     saveRun,
     getDb,
     showToast,
@@ -224,5 +226,68 @@ export function useFuzzSession({
         }
     };
 
-    return { loadEndpoints, handleStart };
+    const handleConnectToExisting = useCallback(
+        async (runId: string, startedAt: number, baseUrl: string) => {
+            const activeProject = useAppStore.getState().activeProject;
+            const runRec: ScanRun = {
+                id: runId,
+                startedAt: startedAt,
+                completedAt: 0,
+                baseUrl: baseUrl,
+                stats: null as any,
+                projectId: activeProject ? activeProject.id : undefined,
+            };
+
+            await saveRun(runRec);
+
+            useAppStore.setState({
+                liveRunId: runId,
+                liveCount: 0,
+                heatmapFilter: null,
+                selectedResult: null,
+                loadedRunId: null,
+                activeTab: 'heatmap',
+                stats: null,
+            });
+
+            let liveCount = 0;
+            let lastCountUpdate = 0;
+
+            const onResult = (raw: any) => {
+                const db = getDb();
+                if (!db) return;
+
+                const summary = toSummary(raw);
+                dbStreamResult(db, runId, summary).catch((err) => {
+                    console.warn('[swazz] IDB write error:', err);
+                });
+
+                liveCount++;
+                const now = Date.now();
+                if (now - lastCountUpdate > 500) {
+                    lastCountUpdate = now;
+                    useAppStore.setState({ liveCount });
+                }
+            };
+
+            const onComplete = (finalStats: RunStats) => {
+                const completedRun: ScanRun = { ...runRec, completedAt: Date.now(), stats: finalStats };
+                saveRun(completedRun);
+                useAppStore.setState({
+                    liveCount,
+                });
+                showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
+            };
+
+            try {
+                await connectToExisting(runId, onResult, onComplete);
+            } catch (err: any) {
+                showToast(`Failed to connect to active scan: ${err.message}`, 'error');
+                useAppStore.setState({ liveRunId: null });
+            }
+        },
+        [getDb, saveRun, connectToExisting, showToast]
+    );
+
+    return { loadEndpoints, handleStart, handleConnectToExisting };
 }

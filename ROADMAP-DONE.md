@@ -448,6 +448,13 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Implement backend validation to reject members/role write operations for guest tokens, and disable the corresponding actions in the UI.
 
+- [x] **Task 118: User-Configured Scheduled Auto-Scans**
+  - **Design Goal:** Allow users to schedule automatic vulnerability scans on their projects at custom intervals, restricted by billing plan limits (e.g. only available on the "Supporter Plan").
+  - **Implementation Details:**
+    - Add a `cron_schedule` field to `scan_configs` or create a new `scan_schedules` table in D1.
+    - Implement a Cloudflare Workers Cron Trigger or coordinator scheduler loop to fetch pending schedules, verify the user's plan is "Supporter Plan", and trigger active fuzzer runs.
+    - Add a "Schedule Scan" configuration panel in the project settings web UI supporting standard cron/interval selections.
+
 ## 📦 Compatibility & Quality
 
 - [x] **Task 30:** Add YAML OpenAPI spec support.

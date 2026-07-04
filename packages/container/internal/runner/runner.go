@@ -41,6 +41,8 @@ import (
 
 var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
 
+var scanDurationUnit = time.Minute
+
 const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
@@ -219,6 +221,21 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	defer r.finaliseRun()
+
+	if r.config.Settings.MaxScanDurationMin > 0 {
+		timerCtx, cancelTimer := context.WithCancel(runCtx)
+		defer cancelTimer()
+		go func() {
+			timer := time.NewTimer(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				logger.Debug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
+				r.Stop()
+			case <-timerCtx.Done():
+			}
+		}()
+	}
 
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)

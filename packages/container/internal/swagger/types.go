@@ -121,6 +121,7 @@ type Settings struct {
 	HarDomainFilter               string                      `json:"har_domain_filter,omitempty"`
 	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
 	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
+	MaxScanDurationMin            int                         `json:"max_scan_duration_min,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -143,6 +144,7 @@ func DefaultSettings() Settings {
 		AuthCookies:                   []string{"session", "token", "jwt", "sid", "JSESSIONID", "PHPSESSID"},
 		MaxNodesBudget:                50000,
 		MaxDepthLimit:                 64,
+		MaxScanDurationMin:            0,
 	}
 }
 

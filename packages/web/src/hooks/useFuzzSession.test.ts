@@ -10,6 +10,7 @@ import type { SwazzConfig } from '../types.js';
 describe('useFuzzSession hook', () => {
     const mockUpdateConfig = vi.fn();
     const mockStart = vi.fn();
+    const mockConnectToExisting = vi.fn();
     const mockSaveRun = vi.fn();
     const mockGetDb = vi.fn();
     const mockShowToast = vi.fn();
@@ -63,6 +64,7 @@ describe('useFuzzSession hook', () => {
             config: initialConfig,
             updateConfig: mockUpdateConfig,
             start: mockStart,
+            connectToExisting: mockConnectToExisting,
             saveRun: mockSaveRun,
             getDb: mockGetDb,
             showToast: mockShowToast,
@@ -89,6 +91,7 @@ describe('useFuzzSession hook', () => {
             config: configWithDisabled,
             updateConfig: mockUpdateConfig,
             start: mockStart,
+            connectToExisting: mockConnectToExisting,
             saveRun: mockSaveRun,
             getDb: mockGetDb,
             showToast: mockShowToast,
@@ -118,6 +121,7 @@ describe('useFuzzSession hook', () => {
             config: configAllDisabled,
             updateConfig: mockUpdateConfig,
             start: mockStart,
+            connectToExisting: mockConnectToExisting,
             saveRun: mockSaveRun,
             getDb: mockGetDb,
             showToast: mockShowToast,

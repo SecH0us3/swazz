@@ -83,6 +83,7 @@ export interface SwazzSettings {
     har_domain_filter?: string;
     data_retention?: string;
     disable_shared_runners?: boolean;
+    max_scan_duration_min?: number;
 }
 
 export interface AuthStep {
@@ -130,6 +131,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     debug: false,
     data_retention: 'forever',
     disable_shared_runners: false,
+    max_scan_duration_min: 0,
 };
 
 // ─── Full Config ────────────────────────────────────────
