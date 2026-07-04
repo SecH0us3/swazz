@@ -60,19 +60,19 @@ export async function handleScheduledScans(env: Env): Promise<void> {
     "SELECT id, project_id, name, config_json, cron_schedule, last_run_at FROM scan_configs WHERE cron_schedule IS NOT NULL"
   ).all<{ id: string; project_id: string; name: string; config_json: string; cron_schedule: string; last_run_at: string | null }>();
   
-  for (const config of configs) {
+  // 1. Filter configs locally first to minimize D1 subrequests and CPU time inside loop
+  const matchingConfigs = configs.filter(config => {
+    if (config.last_run_at) {
+      const lastRun = new Date(config.last_run_at);
+      if (now.getTime() - lastRun.getTime() < 50000) {
+        return false; // Already ran in this minute, skip to prevent double run
+      }
+    }
+    return cronMatches(config.cron_schedule, now);
+  });
+  
+  for (const config of matchingConfigs) {
     try {
-      if (config.last_run_at) {
-        const lastRun = new Date(config.last_run_at);
-        if (now.getTime() - lastRun.getTime() < 50000) {
-          continue; // Already ran in this minute, skip to prevent double run
-        }
-      }
-      
-      if (!cronMatches(config.cron_schedule, now)) {
-        continue;
-      }
-      
       // Query project owners
       const { results: owners } = await db.prepare(`
         SELECT u.id, u.public_key, u.plan
@@ -81,14 +81,14 @@ export async function handleScheduledScans(env: Env): Promise<void> {
         WHERE pm.project_id = ? AND pm.role = 'owner'
       `).bind(config.project_id).all<{ id: string; public_key: string | null; plan: string | null }>();
       
-      const supporterOwner = owners.find(o => o.plan === 'Supporter Plan');
-      if (!supporterOwner) {
-        console.warn(`[Scheduler] Skipping scheduled scan for project ${config.project_id}: no owner on Supporter Plan.`);
+      const activeOwner = owners.find(o => o.plan === 'Supporter Plan') || owners[0];
+      if (!activeOwner) {
+        console.warn(`[Scheduler] Skipping scheduled scan for project ${config.project_id}: no owner found.`);
         continue;
       }
       
       const runId = crypto.randomUUID();
-      const parsedConfig = JSON.parse(config.config_json);
+      const parsedConfig = JSON.parse(config.config_json || "{}") || {};
       const targetUrl = parsedConfig.base_url || "";
       const profile = (parsedConfig.settings?.profiles && parsedConfig.settings.profiles[0]) || "default";
       const status = 'queued';
@@ -98,7 +98,7 @@ export async function handleScheduledScans(env: Env): Promise<void> {
         db.prepare(
           `INSERT INTO scans (id, project_id, target_url, profile, status, user_id)
            VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(runId, config.project_id, targetUrl, profile, status, supporterOwner.id),
+        ).bind(runId, config.project_id, targetUrl, profile, status, activeOwner.id),
         db.prepare(
           "UPDATE scan_configs SET last_run_at = ? WHERE id = ?"
         ).bind(now.toISOString(), config.id)
@@ -108,11 +108,11 @@ export async function handleScheduledScans(env: Env): Promise<void> {
       await env.SCAN_QUEUE.send({
         runId,
         config: parsedConfig,
-        userPublicKey: supporterOwner.public_key || "",
+        userPublicKey: activeOwner.public_key || "",
         targetUrl,
         profile,
         projectId: config.project_id,
-        userId: supporterOwner.id
+        userId: activeOwner.id
       });
       
       console.log(`[Scheduler] Triggered scheduled scan ${runId} for project ${config.project_id}`);

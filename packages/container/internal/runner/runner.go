@@ -226,8 +226,10 @@ func (r *Runner) Start(ctx context.Context) error {
 		timerCtx, cancelTimer := context.WithCancel(runCtx)
 		defer cancelTimer()
 		go func() {
+			timer := time.NewTimer(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit)
+			defer timer.Stop()
 			select {
-			case <-time.After(time.Duration(r.config.Settings.MaxScanDurationMin) * scanDurationUnit):
+			case <-timer.C:
 				logger.Debug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
 				r.Stop()
 			case <-timerCtx.Done():

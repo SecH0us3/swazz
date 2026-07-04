@@ -200,6 +200,7 @@ export default function App() {
     } | null>(null);
     const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
+    const attemptedReconnections = useRef<Set<string>>(new Set());
     const { start, stop, pause, resume, sendRequest, connectToExisting } = useRunner(PROXY_URL);
 
     const { db, runs, getDb, saveRun, importCliReport, queryResults, getRunResults, deleteRun, updateTriage, getAllTriaged } = useDb();
@@ -249,7 +250,8 @@ export default function App() {
                         (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running'
                     );
                     const state = useAppStore.getState();
-                    if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId) {
+                    if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
+                        attemptedReconnections.current.add(activeScan.id);
                         const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
                         await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url);
                     }
