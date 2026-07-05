@@ -364,11 +364,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   
     values.push(findingId);
-    await getDB(c.env).prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
+    await getDB(c.env, findingId).prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
       .bind(...values)
       .run();
   
-    const updated = await getDB(c.env).prepare('SELECT * FROM findings WHERE id = ?')
+    const updated = await getDB(c.env, findingId).prepare('SELECT * FROM findings WHERE id = ?')
       .bind(findingId)
       .first();
   
