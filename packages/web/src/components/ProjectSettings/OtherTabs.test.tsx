@@ -141,17 +141,19 @@ describe('Other ProjectSettings components', () => {
         });
     });
 
-    it('renders Section and KVEditor from Shared components', () => {
-        const handleToggle = vi.fn();
-        const handleChange = vi.fn();
-
+    it('renders Section component', () => {
         render(
             <Section title="My Section">
                 <div>Content</div>
             </Section>
         );
         expect(screen.getByText("My Section")).toBeTruthy();
-        
+    });
+
+    it('renders KVEditor component', () => {
+        const handleToggle = vi.fn();
+        const handleChange = vi.fn();
+
         render(
             <KVEditor
                 entries={{ "Content-Type": "application/json" }}

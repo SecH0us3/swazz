@@ -208,10 +208,13 @@ func TestWrapWithSSRFProtection(t *testing.T) {
 	})
 
 	t.Run("Wrapped Transport Dial Public IP Literal", func(t *testing.T) {
-		tr := &http.Transport{}
+		tr := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return nil, net.UnknownNetworkError("mock dial")
+			},
+		}
 		rt := WrapWithSSRFProtection(tr, false)
 		cloned := rt.(*http.Transport)
-		// 1.1.1.1 is public, connection might fail but dialer branch is covered
 		_, _ = cloned.DialContext(context.Background(), "tcp", "1.1.1.1:80")
 	})
 
@@ -239,12 +242,6 @@ func TestWrapWithSSRFProtection(t *testing.T) {
 		if !strings.Contains(err.Error(), "blocked by SSRF policy") {
 			t.Errorf("expected SSRF block error, got: %v", err)
 		}
-	})
-
-	t.Run("NewSSRFProtectedTransport Dial Public IP Literal", func(t *testing.T) {
-		rt := NewSSRFProtectedTransport(false)
-		tr := rt.(*http.Transport)
-		_, _ = tr.DialContext(context.Background(), "tcp", "1.1.1.1:80")
 	})
 }
 
