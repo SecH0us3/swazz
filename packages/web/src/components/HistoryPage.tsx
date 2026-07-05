@@ -39,15 +39,22 @@ export function HistoryPage({
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentTab, setCurrentTab] = useState<'all' | 'active' | 'completed' | 'failed'>('all');
 
-    const activeRuns = runs.filter(r => r.completedAt === 0 || r.id === liveRunId);
-    const completedRuns = runs.filter(r => r.completedAt > 0);
+    const activeRuns = runs.filter(r => r.completedAt === 0 && r.id === liveRunId);
+    const completedRuns = runs.filter(r => {
+        const errors5xx = r.stats?.statusCounts
+            ? Object.entries(r.stats.statusCounts)
+                .filter(([s]) => s.startsWith('5'))
+                .reduce((acc: number, [, c]) => acc + (c as number), 0)
+            : 0;
+        return r.completedAt > 0 && errors5xx === 0;
+    });
     const failedRuns = runs.filter(r => {
         const errors5xx = r.stats?.statusCounts
             ? Object.entries(r.stats.statusCounts)
                 .filter(([s]) => s.startsWith('5'))
                 .reduce((acc: number, [, c]) => acc + (c as number), 0)
             : 0;
-        return errors5xx > 0 || (r.completedAt === 0 && r.id !== liveRunId);
+        return (r.completedAt > 0 && errors5xx > 0) || (r.completedAt === 0 && r.id !== liveRunId);
     });
 
     const displayRuns = currentTab === 'all' ? runs
