@@ -577,18 +577,22 @@ export function UserSettings() {
                                                 readOnly 
                                                 data-1p-ignore
                                             />
-                                            <button 
-                                                className="btn btn-secondary btn-sm"
-                                                onClick={() => setShowApiKey(!showApiKey)}
-                                            >
-                                                {showApiKey ? 'Hide' : 'Show'}
-                                            </button>
-                                            <button 
-                                                className="btn btn-secondary btn-sm settings-btn-min-w"
-                                                onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
-                                            >
-                                                {copiedApiKey ? '✓ Copied' : 'Copy'}
-                                            </button>
+                                            {!apiKey.includes('•') && (
+                                                <>
+                                                    <button 
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => setShowApiKey(!showApiKey)}
+                                                    >
+                                                        {showApiKey ? 'Hide' : 'Show'}
+                                                    </button>
+                                                    <button 
+                                                        className="btn btn-secondary btn-sm settings-btn-min-w"
+                                                        onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
+                                                    >
+                                                        {copiedApiKey ? '✓ Copied' : 'Copy'}
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                     {!userProfile?.isGuest && (
