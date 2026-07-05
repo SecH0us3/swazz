@@ -136,7 +136,12 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const requestUrl = new URL(c.req.url);
     const host = c.req.header('Host') || c.req.header('host') || requestUrl.host;
     const protocol = requestUrl.protocol;
-    const origin = `${protocol}//${host}`;
+    let origin = `${protocol}//${host}`;
+
+    const isLocal = c.env.JWT_SECRET === 'test-secret';
+    if (isLocal) {
+      origin = 'http://localhost:8787';
+    }
 
     const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&origin=${encodeURIComponent(origin)}`));
     return doRes;
