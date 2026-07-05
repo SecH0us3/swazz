@@ -79,8 +79,15 @@ Add the server to your `claude_desktop_config.json` (located at `~/Library/Appli
 }
 ```
 
-##### Command Line (macOS/Linux):
-To configure Claude Desktop programmatically from your terminal, run:
+##### Command Line (using `claude` CLI):
+The easiest way to register the server using the `claude` CLI:
+```bash
+claude mcp add --transport sse swazz-cloud https://api.swazz.dev/api/mcp/sse \
+  --header "Authorization: Bearer swazz_live_your_api_key_here"
+```
+
+##### Alternative Node.js Command Line:
+If you do not have the `claude` CLI installed and want to edit `claude_desktop_config.json` directly from your terminal:
 ```bash
 node -e '
 const fs = require("fs");
