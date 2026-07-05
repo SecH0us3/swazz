@@ -116,6 +116,10 @@ app.get('/api/admin/logs', async (c) => {
 
 app.use('*', async (c, next) => {
   await next();
+  const contentType = c.res.headers.get('Content-Type') || '';
+  if (contentType.includes('text/event-stream')) {
+    return;
+  }
   c.header('Content-Signal', 'ai-train=no, search=yes');
   c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' ws: wss: http: https: https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';");
   c.header('X-Frame-Options', 'DENY');

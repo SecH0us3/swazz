@@ -127,6 +127,11 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<{ Bindings: Env 
 export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/mcp/sse', async (c) => {
     const userId = await getUserIdFromRequest(c);
+    console.log("MCP SSE ROUTE:", {
+      url: c.req.url,
+      headers: Object.fromEntries(c.req.headers.entries()),
+      userId
+    });
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     const connectionId = crypto.randomUUID();
@@ -149,6 +154,11 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
 
   app.post('/api/mcp/message', async (c) => {
     const userId = await getUserIdFromRequest(c);
+    console.log("MCP MESSAGE ROUTE:", {
+      url: c.req.url,
+      headers: Object.fromEntries(c.req.headers.entries()),
+      userId
+    });
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     const connectionId = c.req.query('connectionId');
