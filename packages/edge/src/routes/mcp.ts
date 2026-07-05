@@ -147,6 +147,18 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     return doRes;
   });
 
+  app.post('/api/mcp/sse', async (c) => {
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+    const body = await c.req.json();
+    const responsePayload = await handleMcpJsonRpc(body, c, app);
+    if (responsePayload) {
+      return c.json(responsePayload);
+    }
+    return c.text('Accepted', 202);
+  });
+
   app.post('/api/mcp/message', async (c) => {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
