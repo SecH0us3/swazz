@@ -4,6 +4,13 @@ import { mcpTools } from '../utils/mcp';
 import { getUserIdFromRequest } from '../utils/auth';
 
 async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<{ Bindings: Env }>): Promise<any> {
+  if (!reqBody || typeof reqBody !== 'object') {
+    return {
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'Invalid Request' }
+    };
+  }
   const { jsonrpc, id, method, params } = reqBody;
 
   if (jsonrpc !== '2.0') {
@@ -151,7 +158,13 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const body = await c.req.json();
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+
     const responsePayload = await handleMcpJsonRpc(body, c, app);
     if (responsePayload) {
       return c.json(responsePayload);
@@ -166,7 +179,12 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const connectionId = c.req.query('connectionId');
     if (!connectionId) return c.json({ error: 'Missing connectionId' }, 400);
 
-    const body = await c.req.json();
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
 
     const responsePayload = await handleMcpJsonRpc(body, c, app);
     if (responsePayload) {
@@ -192,7 +210,12 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const body = await c.req.json();
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
     const { name, arguments: args } = body;
 
     const tool = mcpTools.find(t => t.name === name);
@@ -214,7 +237,7 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     if (tool.method === 'GET' && args && typeof args === 'object' && !Array.isArray(args)) {
       const url = new URL(urlStr);
       for (const [k, v] of Object.entries(args)) {
-        if (!tool.path.includes(`:${k}`)) {
+        if (v !== undefined && v !== null && !tool.path.includes(`:${k}`)) {
           url.searchParams.set(k, String(v));
         }
       }

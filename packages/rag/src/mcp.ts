@@ -242,7 +242,7 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
             content: [
               {
                 type: 'text',
-                text: typeof res.result === 'string' ? res.result : JSON.stringify(res.result, null, 2)
+                text: res.result !== undefined && res.result !== null ? (typeof res.result === 'string' ? res.result : JSON.stringify(res.result, null, 2)) : ''
               }
             ]
           });

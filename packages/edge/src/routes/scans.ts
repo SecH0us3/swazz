@@ -272,7 +272,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
 
-    const { results } = await getDB(c.env).prepare('SELECT * FROM findings WHERE scan_id = ?')
+    const { results } = await getDB(c.env, scanId).prepare('SELECT * FROM findings WHERE scan_id = ?')
       .bind(scanId)
       .all();
 
@@ -282,7 +282,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
     // JOIN with scans to retrieve project_id (findings table has no project_id column)
-    const row = await getDB(c.env).prepare(
+    const row = await getDB(c.env, findingId).prepare(
       'SELECT f.*, s.project_id, s.user_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     )
       .bind(findingId)
@@ -315,7 +315,7 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
 
     // JOIN with scans to retrieve project_id (findings table has no project_id column)
-    const finding = await getDB(c.env).prepare(
+    const finding = await getDB(c.env, findingId).prepare(
       'SELECT f.id, s.project_id, s.user_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     )
       .bind(findingId)

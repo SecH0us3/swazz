@@ -385,6 +385,7 @@ export function UserSettings() {
 
     const username = userProfile?.username || 'Guest';
     const apiKey = userProfile?.apiKey || '';
+    const displayKeyForSetup = !apiKey || apiKey.includes('•') ? '<YOUR_API_KEY>' : apiKey;
 
     const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
         navigator.clipboard.writeText(text);
@@ -1110,7 +1111,7 @@ export function UserSettings() {
                                 </p>
                                 <pre className="log-payload-preview mcp-code-preview">
                                     {`claude mcp add --transport sse swazz-cloud ${apiBaseUrl}/api/mcp/sse \\
-  --header "Authorization: Bearer ${apiKey || '<YOUR_API_KEY>'}"`}
+  --header "Authorization: Bearer ${displayKeyForSetup}"`}
                                 </pre>
 
                                 <p className="settings-card-desc mcp-step-desc">
@@ -1123,7 +1124,7 @@ export function UserSettings() {
                                                 type: "sse",
                                                 url: `${apiBaseUrl}/api/mcp/sse`,
                                                 headers: {
-                                                    Authorization: `Bearer ${apiKey || '<YOUR_API_KEY>'}`
+                                                    Authorization: `Bearer ${displayKeyForSetup}`
                                                 }
                                             }
                                         }
@@ -1144,7 +1145,7 @@ export function UserSettings() {
                                             "swazz-cloud": {
                                                 serverUrl: `${apiBaseUrl}/api/mcp/sse`,
                                                 headers: {
-                                                    Authorization: `Bearer ${apiKey || '<YOUR_API_KEY>'}`
+                                                    Authorization: `Bearer ${displayKeyForSetup}`
                                                 }
                                             }
                                         }
@@ -1163,7 +1164,7 @@ let config = { mcpServers: {} };
 try { config = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch {}
 config.mcpServers["swazz-cloud"] = {
   serverUrl: "${apiBaseUrl}/api/mcp/sse",
-  headers: { Authorization: "Bearer ${apiKey || '<YOUR_API_KEY>'}" }
+  headers: { Authorization: "Bearer ${displayKeyForSetup}" }
 };
 fs.mkdirSync(path.dirname(filePath), { recursive: true });
 fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
