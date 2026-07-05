@@ -134,7 +134,9 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const stub = c.env.COORDINATOR_DO.get(doId);
 
     const requestUrl = new URL(c.req.url);
-    const origin = requestUrl.origin;
+    const host = c.req.header('Host') || c.req.header('host') || requestUrl.host;
+    const protocol = requestUrl.protocol;
+    const origin = `${protocol}//${host}`;
 
     const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&origin=${encodeURIComponent(origin)}`));
     return doRes;
