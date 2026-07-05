@@ -7851,3 +7851,91 @@ kbd {
     margin-bottom: 16px;
 }
 
+/* ─── History Tabs & Badges ──────────────────────────────── */
+
+.history-tabs-container {
+    display: flex;
+    gap: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-1);
+    align-items: center;
+}
+
+.history-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 8px 16px;
+    font-family: var(--font-ui);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--duration-base) var(--ease-in-out);
+    user-select: none;
+}
+
+.history-tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card-hover);
+}
+
+.history-tab-btn.active {
+    color: var(--accent-light);
+    background: var(--accent-subtle);
+    border-color: rgba(124,58,237,0.2);
+}
+
+.history-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: var(--radius-full);
+    background: var(--border-default);
+    color: var(--text-secondary);
+    transition: all var(--duration-base) var(--ease-in-out);
+}
+
+.history-tab-btn.active .history-tab-badge {
+    background: rgba(124,58,237,0.18);
+    color: var(--accent-light);
+}
+
+.history-tab-badge.active {
+    background: var(--color-info-bg);
+    color: var(--color-info);
+}
+
+.history-tab-badge.completed {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.history-tab-badge.failed {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+}
+
+.history-empty-tab-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px;
+    min-height: 240px;
+    background: var(--bg-card);
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}
+

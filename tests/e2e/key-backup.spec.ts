@@ -83,6 +83,7 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     await expect(settingsWordBadges).toHaveCount(12);
 
     // 9. Test importing keys into a second project via mnemonic seed phrase
+    await page.locator('.header-logo').click();
     await projectSelectorBtn.click();
     const createProjectBtn = page.locator('button.dropdown-item', { hasText: 'Create New Project' });
     await expect(createProjectBtn).toBeVisible();

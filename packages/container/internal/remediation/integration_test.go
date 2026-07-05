@@ -23,6 +23,7 @@ func TestAI_Remediation_Integration(t *testing.T) {
 	runGit(t, repoDir, "init")
 	runGit(t, repoDir, "config", "user.email", "test@example.com")
 	runGit(t, repoDir, "config", "user.name", "Test User")
+	runGit(t, repoDir, "config", "commit.gpgsign", "false")
 	runGit(t, repoDir, "branch", "-M", "master")
 
 	// 2. Create a vulnerable controller file in the repo

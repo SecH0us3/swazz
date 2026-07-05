@@ -146,6 +146,18 @@ This file contains completed tasks.
     - Define comprehensive, high-quality checklists (e.g. CSRF protection in Flask via WTF, route security and data leaking in Next.js Server Actions, entity mapping validations in Spring Boot, query formatting in C#/.NET).
     - Map each checklist to prompt templates or agent runtime configurations to further refine the AI's patch generation capabilities.
 
+- [x] **Task 107: Scans History Tab Layout Reorganization**
+  - **Design Goal:** Redesign the scans history list to use a tabbed interface for clearer navigation and visual organization.
+  - **Implementation Details:**
+    - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
+
+- [x] **Task 108: Auto-Hide Side Panels in Settings Views**
+  - **Design Goal:** Automatically hide/collapse the left and right navigation/configuration panels when navigating to project or user settings to optimize screen real estate for settings forms.
+  - **Implementation Details:**
+    - Detect routing/view transition to Project Settings or User Settings tabs.
+    - Automatically trigger states to collapse both the left sidebar and the right configuration panel.
+    - Ensure the panels are restored or can be reopened when navigating away from the settings views.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
