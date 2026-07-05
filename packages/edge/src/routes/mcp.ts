@@ -73,7 +73,13 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<{ Bindings: Env 
 
     try {
       const internalRes = await app.fetch(internalReq, c.env);
-      const resJson: any = await internalRes.json();
+      let resJson: any;
+      const contentType = internalRes.headers.get('Content-Type') || '';
+      if (contentType.includes('application/json')) {
+        resJson = await internalRes.json();
+      } else {
+        resJson = { error: await internalRes.text() };
+      }
       if (internalRes.ok) {
         return {
           jsonrpc: '2.0',
@@ -226,7 +232,9 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     let path = tool.path;
     if (args && typeof args === 'object' && !Array.isArray(args)) {
       for (const [k, v] of Object.entries(args)) {
-        path = path.replace(`:${k}`, encodeURIComponent(String(v)));
+        if (v !== undefined && v !== null) {
+          path = path.replace(`:${k}`, encodeURIComponent(String(v)));
+        }
       }
     }
     if (path.includes(':')) {
@@ -236,8 +244,9 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     let urlStr = `http://localhost${path}`;
     if (tool.method === 'GET' && args && typeof args === 'object' && !Array.isArray(args)) {
       const url = new URL(urlStr);
+      const pathParams = tool.path.split('/').filter(s => s.startsWith(':')).map(s => s.slice(1));
       for (const [k, v] of Object.entries(args)) {
-        if (v !== undefined && v !== null && !tool.path.includes(`:${k}`)) {
+        if (v !== undefined && v !== null && !pathParams.includes(k)) {
           url.searchParams.set(k, String(v));
         }
       }
