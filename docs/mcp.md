@@ -50,35 +50,20 @@ These tools are dynamically exposed by the Cloud Coordinator and verify user-spe
 
 To connect your AI assistant, configure the Swazz MCP server in your editor's or agent's configuration file.
 
-### Environment Variables
+### Environment Variables (For Local RAG Server)
 - `SWAZZ_API_URL`: The base URL of your Swazz Cloud Coordinator deployment (e.g., `https://api.swazz.dev` or `http://localhost:8787`).
 - `SWAZZ_API_KEY`: Your personal Swazz API Key. You can generate or rotate this key on the **Profile Settings** page in the Swazz Web UI.
 - `EMBEDDING_MODEL` *(Optional)*: Set to `local` (default) or a specific cloud model provider.
 
-### Example: Claude Desktop Configuration
+---
 
-Add the following to your `claude_desktop_config.json` (located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+### 1. Deployed Product (HTTP/SSE Transport)
 
-```json
-{
-  "mcpServers": {
-    "swazz-rag": {
-      "command": "node",
-      "args": ["/path/to/swazz/packages/rag/dist/mcp.js", "/path/to/swazz/.swazz.db"],
-      "env": {
-        "SWAZZ_API_URL": "https://api.swazz.dev",
-        "SWAZZ_API_KEY": "swazz_live_your_api_key_here"
-      }
-    }
-  }
-}
-```
+If you are connecting your AI assistant directly to a deployed Swazz instance in the cloud, you can use the built-in HTTP/SSE transport of the coordinator without running any local process.
 
-### 2. Deployed Product (HTTP/SSE Transport)
+#### A. Claude Desktop
 
-If you are connecting your AI assistant (e.g. Claude Desktop, Cursor) directly to a deployed Swazz instance in the cloud, you can use the built-in HTTP/SSE transport of the coordinator without running any local process.
-
-Add the server to your `claude_desktop_config.json`:
+Add the server to your `claude_desktop_config.json` (located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
 
 ```json
 {
@@ -88,6 +73,94 @@ Add the server to your `claude_desktop_config.json`:
       "url": "https://api.swazz.dev/api/mcp/sse",
       "headers": {
         "Authorization": "Bearer swazz_live_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+##### Command Line (macOS/Linux):
+To configure Claude Desktop programmatically from your terminal, run:
+```bash
+node -e '
+const fs = require("fs");
+const path = require("path");
+const filePath = path.join(process.env.HOME, "Library/Application Support/Claude/claude_desktop_config.json");
+let config = { mcpServers: {} };
+try { config = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch {}
+config.mcpServers["swazz-cloud"] = {
+  type: "sse",
+  url: "https://api.swazz.dev/api/mcp/sse",
+  headers: { Authorization: "Bearer swazz_live_your_api_key_here" }
+};
+fs.mkdirSync(path.dirname(filePath), { recursive: true });
+fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
+console.log("Successfully added Swazz Cloud MCP to Claude Desktop!");
+'
+```
+
+---
+
+#### B. Google Antigravity (AGY)
+
+You can configure the Swazz MCP server in the Google Antigravity CLI either visually or via JSON configuration files.
+
+##### Method 1: Using the Interactive CLI Manager
+1. Start the CLI by running `agy`.
+2. Type `/mcp` and press **Enter** to open the interactive manager overlay.
+3. Select **Add MCP** -> enter the name and configuration properties.
+
+##### Method 2: Manual / Programmatic JSON Configuration
+Configure the server in your global configuration file `~/.gemini/antigravity-cli/mcp_config.json` (or project-level `.agents/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "swazz-cloud": {
+      "serverUrl": "https://api.swazz.dev/api/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer swazz_live_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+##### Command Line (macOS/Linux):
+To configure Google Antigravity programmatically from your terminal, run:
+```bash
+node -e '
+const fs = require("fs");
+const path = require("path");
+const filePath = path.join(process.env.HOME, ".gemini/antigravity-cli/mcp_config.json");
+let config = { mcpServers: {} };
+try { config = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch {}
+config.mcpServers["swazz-cloud"] = {
+  serverUrl: "https://api.swazz.dev/api/mcp/sse",
+  headers: { Authorization: "Bearer swazz_live_your_api_key_here" }
+};
+fs.mkdirSync(path.dirname(filePath), { recursive: true });
+fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
+console.log("Successfully added Swazz Cloud MCP to Google Antigravity!");
+'
+```
+
+---
+
+### 2. Local Repository RAG (Local Transport)
+
+If you are running the Swazz RAG server locally for context-aware code search, configure it using local transport:
+
+#### Example: Claude Desktop Configuration
+```json
+{
+  "mcpServers": {
+    "swazz-rag": {
+      "command": "node",
+      "args": ["/path/to/swazz/packages/rag/dist/mcp.js", "/path/to/swazz/.swazz.db"],
+      "env": {
+        "SWAZZ_API_URL": "https://api.swazz.dev",
+        "SWAZZ_API_KEY": "swazz_live_your_api_key_here"
       }
     }
   }
