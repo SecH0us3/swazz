@@ -29,5 +29,13 @@
   },
   "dependencies": {
     "fake-indexeddb": "^6.2.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true,
+    "onnxruntime-node@1.24.3": true,
+    "protobufjs@7.6.5": true,
+    "sharp@0.34.5": true,
+    "workerd": true
   }
 }
