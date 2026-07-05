@@ -138,6 +138,9 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
       buffer: Buffer.from(JSON.stringify(filePayload))
     });
 
+    // Click Back to Dashboard to restore the sidebar
+    await page.locator('button:has-text("Back to Dashboard")').click();
+
     // Verify the new endpoint has been parsed and loaded in the sidebar
     const uploadedEndpointItem = page.locator('.tree-leaf-row:has-text("/test-fuzz-e2e-upload")');
     await expect(uploadedEndpointItem).toBeVisible({ timeout: 15000 });

@@ -82,6 +82,9 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     const settingsWordBadges = page.locator('.mnemonic-word-badge');
     await expect(settingsWordBadges).toHaveCount(12);
 
+    // Click Back to Dashboard to restore the sidebar
+    await page.locator('button:has-text("Back to Dashboard")').click();
+
     // 9. Test importing keys into a second project via mnemonic seed phrase
     await projectSelectorBtn.click();
     const createProjectBtn = page.locator('button.dropdown-item', { hasText: 'Create New Project' });
