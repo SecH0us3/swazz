@@ -248,14 +248,45 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   // Findings endpoints
   // ---------------------------------------------------------------------------
 
+  app.get('/api/scans/:id/findings', async (c) => {
+    const scanId = c.req.param('id');
+    const scan = await getDB(c.env).prepare('SELECT id, project_id, user_id FROM scans WHERE id = ?')
+      .bind(scanId)
+      .first<{ id: string; project_id: string | null; user_id: string | null }>();
+    if (!scan) {
+      return c.json({ error: 'Scan not found' }, 404);
+    }
+
+    if (c.env.AUTH_ENABLED === 'true') {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+      if (!scan.project_id) {
+        if (scan.user_id !== userId) {
+          return c.json({ error: 'Forbidden' }, 403);
+        }
+      } else {
+        const hasAccess = await checkPermission(c.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+        if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      }
+    }
+
+    const { results } = await getDB(c.env, scanId).prepare('SELECT * FROM findings WHERE scan_id = ?')
+      .bind(scanId)
+      .all();
+
+    return c.json({ findings: results || [] });
+  });
+
   app.get('/api/findings/:id', async (c) => {
     const findingId = c.req.param('id');
     // JOIN with scans to retrieve project_id (findings table has no project_id column)
-    const row = await getDB(c.env).prepare(
-      'SELECT f.*, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
+    const row = await getDB(c.env, findingId).prepare(
+      'SELECT f.*, s.project_id, s.user_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     )
       .bind(findingId)
-      .first<{ project_id: string }>();
+      .first<{ project_id: string | null; user_id: string | null }>();
 
     if (!row) {
       return c.json({ error: 'Finding not found' }, 404);
@@ -266,8 +297,14 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       if (!userId) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const hasAccess = await checkPermission(c.env, userId, row.project_id, 'get:/api/projects/:id/scans');
-      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      if (!row.project_id) {
+        if (row.user_id !== userId) {
+          return c.json({ error: 'Forbidden' }, 403);
+        }
+      } else {
+        const hasAccess = await checkPermission(c.env, userId, row.project_id, 'get:/api/projects/:id/scans');
+        if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      }
     }
 
     return c.json({ finding: row });
@@ -278,11 +315,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
 
     // JOIN with scans to retrieve project_id (findings table has no project_id column)
-    const finding = await getDB(c.env).prepare(
-      'SELECT f.id, s.project_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
+    const finding = await getDB(c.env, findingId).prepare(
+      'SELECT f.id, s.project_id, s.user_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     )
       .bind(findingId)
-      .first<{ id: string; project_id: string }>();
+      .first<{ id: string; project_id: string | null; user_id: string | null }>();
 
     if (!finding) {
       return c.json({ error: 'Finding not found' }, 404);
@@ -293,8 +330,14 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       if (!userId) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'post:/api/projects/:id/scans');
-      if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      if (!finding.project_id) {
+        if (finding.user_id !== userId) {
+          return c.json({ error: 'Forbidden' }, 403);
+        }
+      } else {
+        const hasAccess = await checkPermission(c.env, userId, finding.project_id, 'post:/api/projects/:id/scans');
+        if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      }
     }
   
     const allowedFields = [
@@ -321,11 +364,11 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     }
   
     values.push(findingId);
-    await getDB(c.env).prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
+    await getDB(c.env, findingId).prepare(`UPDATE findings SET ${setClauses.join(', ')} WHERE id = ?`)
       .bind(...values)
       .run();
   
-    const updated = await getDB(c.env).prepare('SELECT * FROM findings WHERE id = ?')
+    const updated = await getDB(c.env, findingId).prepare('SELECT * FROM findings WHERE id = ?')
       .bind(findingId)
       .first();
   

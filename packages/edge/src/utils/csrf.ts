@@ -4,7 +4,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 export const csrfMiddleware = (): MiddlewareHandler => {
   return async (c, next) => {
     const path = c.req.path;
-    if (path === '/api/auth/oauth/exchange') {
+    if (path === '/api/auth/oauth/exchange' || path.startsWith('/api/mcp/')) {
       return await next();
     }
 

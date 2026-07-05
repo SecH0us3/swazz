@@ -916,3 +916,13 @@ This file contains completed tasks.
     - Update the onboarding welcome landing page and configurations to target `https://bbad.secmy.app/swagger.json`.
     - Support clicking the "Try Vulnerable Demo" button to automatically load and run the scan.
 
+- [x] **Task 69: Model Context Protocol (MCP) Support**
+  - **Design Goal:** Expose Swazz commands and findings through an MCP server interface, allowing AI coding assistants to trigger and query scans natively.
+  - **Implementation Details:**
+    - Secure API Key Storage using SHA-256 one-way hashing on backend (plain text returned once on creation/rotation, masked on subsequent loads).
+    - Dynamic MCP annotations registry mapping tools to Hono REST endpoints.
+    - Internal App fetch route dispatching ensuring full authorization and RBAC verification.
+    - Local RAG server merging cloud tools and dynamic forwarding of remote requests.
+    - Frontend UserSettings key rotation & masking UI and automated E2E & unit tests.
+
+

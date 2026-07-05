@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getDB } from '../utils/db';
-import { getUserIdFromRequest, getDeleteRequestedAt, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
+import { getUserIdFromRequest, getDeleteRequestedAt, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, hashApiKey } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
 import { checkPermission } from '../utils/rbac';
@@ -33,9 +33,24 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       }
       userId = user.id;
     } else if (token) {
-      const user = await getDB(c.env).prepare('SELECT id FROM users WHERE api_key = ?')
-        .bind(token)
+      const hashedToken = await hashApiKey(token);
+      let user = await getDB(c.env).prepare('SELECT id FROM users WHERE api_key = ?')
+        .bind(hashedToken)
         .first<{ id: string }>();
+      if (!user && token.startsWith('swazz_live_')) {
+        user = await getDB(c.env).prepare('SELECT id FROM users WHERE api_key = ?')
+          .bind(token)
+          .first<{ id: string }>();
+        if (user) {
+          try {
+            await getDB(c.env).prepare('UPDATE users SET api_key = ? WHERE id = ?')
+              .bind(hashedToken, user.id)
+              .run();
+          } catch {
+            // ignore
+          }
+        }
+      }
       if (!user) {
         return new Response('Unauthorized: Invalid runner token', { status: 401 });
       }

@@ -183,7 +183,8 @@ export function RunnersTab({ runners, isLoadingRunners, runnerError }: RunnersTa
     const runnerImage = `ghcr.io/sech0us3/swazz-cli:latest`;
     const genKeysCmd = `docker run --rm -it -v $(pwd):/app ${runnerImage} generate-keys`;
     const runCommand = `docker run --rm -it -v $(pwd)/swazz_runner.key:/swazz_runner.key ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --key /swazz_runner.key`;
-    const sharedRunCommand = `docker run --rm -it ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${apiKey || '<YOUR_API_KEY>'}`;
+    const displayKeyForSetup = !apiKey || apiKey.includes('•') ? '<YOUR_API_KEY>' : apiKey;
+    const sharedRunCommand = `docker run --rm -it ${runnerImage} run-agent --coordinator ${coordinatorHost}/api/runners/connect --token ${displayKeyForSetup}`;
 
     return (
         <div className="runners-layout">

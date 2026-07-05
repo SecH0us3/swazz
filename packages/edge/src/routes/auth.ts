@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getDB } from '../utils/db';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword, recordLoginHistory } from '../utils/auth';
+import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp, checkLoginRateLimit, deletionCache, hashUsername, checkIpRateLimit, verifyDummyPassword, recordLoginHistory, hashApiKey } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -94,13 +94,14 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = ulid();
     const hash = await hashPassword(body.password);
     const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+    const hashedApiKey = await hashApiKey(apiKey);
   
     try {
       await getDB(c.env).batch([
         getDB(c.env).prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
           .bind(usernameHash),
         getDB(c.env).prepare("INSERT INTO users (id, username, password_hash, api_key, email, plan) VALUES (?, ?, ?, ?, ?, 'Free')")
-          .bind(id, username, hash, apiKey, email),
+          .bind(id, username, hash, hashedApiKey, email),
         getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
@@ -121,7 +122,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (!secret) return c.json({ error: 'Internal server error: auth not configured' }, 500);
       const jwtToken = await sign(payload, secret);
 
-      return c.json({ status: 'ok', id, token: jwtToken });
+      return c.json({ status: 'ok', id, token: jwtToken, api_key: apiKey });
     } catch (err: any) {
       const errMsg = String(err?.message || err || '');
       if (errMsg.includes('UNIQUE constraint failed')) {
@@ -251,12 +252,13 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
     const projectId = ulid();
     const hash = await hashPassword(password);
     const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+    const hashedApiKey = await hashApiKey(apiKey);
 
     try {
       await getDB(c.env).batch([
         getDB(c.env).prepare(
           "INSERT INTO users (id, username, password_hash, api_key, is_guest, expires_at, plan) VALUES (?, ?, ?, ?, 1, datetime('now', '+1 day'), 'Free')"
-        ).bind(id, username, hash, apiKey),
+        ).bind(id, username, hash, hashedApiKey),
         getDB(c.env).prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
           .bind(projectId),
         getDB(c.env).prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
@@ -307,17 +309,21 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         return c.json({ error: 'User not found' }, 404);
       }
       
-      let currentApiKey = user.api_key;
-      if (!currentApiKey) {
-        currentApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+      let displayApiKey = "";
+      if (!user.api_key) {
+        const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+        const hashedApiKey = await hashApiKey(apiKey);
         await getDB(c.env).prepare('UPDATE users SET api_key = ? WHERE id = ?')
-          .bind(currentApiKey, decoded.sub)
+          .bind(hashedApiKey, decoded.sub)
           .run();
+        displayApiKey = apiKey; // Show generated key once
+      } else {
+        displayApiKey = 'swazz_live_' + '•'.repeat(24); // Mask existing key
       }
       
       return c.json({ 
         username: user.username, 
-        api_key: currentApiKey, 
+        api_key: displayApiKey, 
         public_key: user.public_key,
         is_guest: user.is_guest === 1,
         delete_requested_at: user.delete_requested_at,
@@ -381,8 +387,9 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
 
       const newApiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+      const hashedNewApiKey = await hashApiKey(newApiKey);
       await getDB(c.env).prepare('UPDATE users SET api_key = ? WHERE id = ?')
-        .bind(newApiKey, decoded.sub)
+        .bind(hashedNewApiKey, decoded.sub)
         .run();
 
       // Invalidate old key and proactively cache new key in KV
@@ -390,9 +397,12 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       if (kv) {
         try {
           if (oldUser?.api_key) {
-            await kv.delete(`apikey:${oldUser.api_key}`);
+            const cacheKey = oldUser.api_key.startsWith('swazz_live_')
+              ? await hashApiKey(oldUser.api_key)
+              : oldUser.api_key;
+            await kv.delete(`apikey:${cacheKey}`);
           }
-          await kv.put(`apikey:${newApiKey}`, JSON.stringify({ userId: String(decoded.sub) }), { expirationTtl: 300 });
+          await kv.put(`apikey:${hashedNewApiKey}`, JSON.stringify({ userId: String(decoded.sub) }), { expirationTtl: 300 });
         } catch {
           // KV operations failed — non-critical
         }
@@ -1345,12 +1355,13 @@ app.post('/api/admin/users/plan', async (c) => {
           const randomPass = crypto.randomUUID() + crypto.randomUUID();
           const passwordHash = await hashPassword(randomPass);
           const apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+          const hashedApiKey = await hashApiKey(apiKey);
           
           await db.batch([
             db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)')
               .bind(usernameHash),
             db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, github_id, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')")
-              .bind(userId, username, passwordHash, apiKey, email, githubId),
+              .bind(userId, username, passwordHash, hashedApiKey, email, githubId),
             db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
               .bind(projectId),
             db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")

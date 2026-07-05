@@ -45,4 +45,16 @@ describe('UserSettings Component', () => {
 
         expect(screen.getByText('Delete My Account & Data')).toBeTruthy();
     });
+
+    it('can switch to MCP Integration subtab and show setups', () => {
+        render(<UserSettings />);
+
+        // Switch to MCP Integration subtab
+        const mcpTabBtn = screen.getByRole('button', { name: /MCP Integration/i });
+        fireEvent.click(mcpTabBtn);
+
+        expect(screen.getByText('Model Context Protocol (MCP) Integration')).toBeTruthy();
+        expect(screen.getByText(/Claude Desktop Setup/i)).toBeTruthy();
+        expect(screen.getAllByText(/Google Antigravity/i).length).toBeGreaterThan(0);
+    });
 });

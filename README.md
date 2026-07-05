@@ -34,7 +34,8 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 - **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
 - **🔄 Multi-Scan Comparison**: Side-by-side analysis of scan runs to compare coverage metrics, HTTP status code distributions, and findings diffs (New, Fixed, and Common vulnerabilities).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
-- **🌐 Web Dashboard**: Real-time Heatmap, Request Inspector, and OWASP Compliance dashboard for deep-dive analysis.
+- 🌐 **Web Dashboard**: Real-time Heatmap, Request Inspector, and OWASP Compliance dashboard for deep-dive analysis.
+- 🤖 **MCP Server**: Expose Swazz commands, local codebase search, and scan findings natively through Model Context Protocol.
 
 ---
 
@@ -239,6 +240,7 @@ Key pages to explore:
 *   [Installation Guide](docs/installation.md)
 *   [Deployment Guidelines](docs/deployment.md)
 *   [Usage & Configuration](docs/usage.md)
+*   [Model Context Protocol (MCP) Guide](docs/mcp.md)
 *   [CI/CD Integration Guide](docs/ci_cd.md)
 *   [Architecture & Internals](docs/architecture.md)
 *   [Security Review & Threat Model](docs/security_review.md)

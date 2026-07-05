@@ -7,6 +7,7 @@ import { cleanupScheduledDeletions } from "./utils/cleanup";
 import { splitSql } from "./splitSql";
 import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
+import { hashApiKey } from "./utils/auth";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -496,17 +497,11 @@ describe("D1 Database Migrations & API", () => {
     const projForbiddenBody = await projResForbidden.json() as any;
     expect(projForbiddenBody.error).toContain("Forbidden");
 
-    // Verify that runner connection for the deleted user returns 403 Forbidden
-    const userRow = await env.DB.prepare('SELECT api_key FROM users WHERE id = ?').bind(userId).first<{ api_key: string | null }>();
-    let apiKey = userRow?.api_key;
-    if (!apiKey) {
-      apiKey = 'swazz_live_test_api_key_123';
-      await env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?').bind(apiKey, userId).run();
-    }
+    const plainApiKey = regBody.api_key;
     const runnerReqDeleted = new Request(`http://localhost/api/runners/connect`, {
       headers: {
         "Upgrade": "websocket",
-        "Authorization": `Bearer ${apiKey}`
+        "Authorization": `Bearer ${plainApiKey}`
       }
     });
     const runnerResDeleted = await appFetchWrapper(runnerReqDeleted as any, testEnv);
@@ -1343,14 +1338,7 @@ describe("KV Session Cache", () => {
     const regBody = await regRes.json() as any;
     userToken.set(regBody.token);
     testUserId = regBody.id;
-
-    // Get the user's API key via JWT-authed /api/auth/me
-    const meReq = new Request("http://localhost/api/auth/me", {
-      headers: { "Authorization": `Bearer ${regBody.token}` },
-    });
-    const meRes = await appFetchWrapper(meReq as any, { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined } as unknown as Env);
-    const meBody = await meRes.json() as any;
-    testApiKey = meBody.api_key;
+    testApiKey = regBody.api_key;
   });
 
   it("authenticates via API key and populates KV cache on first request", async () => {
@@ -1365,7 +1353,8 @@ describe("KV Session Cache", () => {
     expect(res.status).toBe(200);
 
     // Verify KV was populated with the userId
-    const cached = await mockKV.get(`apikey:${testApiKey}`);
+    const hashedKey = await hashApiKey(testApiKey);
+    const cached = await mockKV.get(`apikey:${hashedKey}`);
     expect(cached).not.toBeNull();
     const parsed = JSON.parse(cached!);
     expect(parsed.userId).toBe(testUserId);
@@ -1376,7 +1365,8 @@ describe("KV Session Cache", () => {
     const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
     // Pre-populate the KV cache
-    await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
+    const hashedKey = await hashApiKey(testApiKey);
+    await mockKV.put(`apikey:${hashedKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
 
     // Spy on DB.prepare to verify D1 is NOT called for the api_key lookup
     const originalPrepare = env.DB.prepare.bind(env.DB);
@@ -1413,7 +1403,8 @@ describe("KV Session Cache", () => {
     expect(res.status).toBe(401);
 
     // Verify negative cache entry was written
-    const cached = await mockKV.get(`apikey:${fakeKey}`);
+    const hashedFakeKey = await hashApiKey(fakeKey);
+    const cached = await mockKV.get(`apikey:${hashedFakeKey}`);
     expect(cached).not.toBeNull();
     const parsed = JSON.parse(cached!);
     expect(parsed.userId).toBeNull();
@@ -1432,9 +1423,10 @@ describe("KV Session Cache", () => {
     const mockKV = createMockKV();
     const kvEnv = { ...env, /* as unknown as Env */ JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
 
+    const hashedOldKey = await hashApiKey(testApiKey);
     // Pre-populate KV with the current API key
-    await mockKV.put(`apikey:${testApiKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
-    expect(await mockKV.get(`apikey:${testApiKey}`)).not.toBeNull();
+    await mockKV.put(`apikey:${hashedOldKey}`, JSON.stringify({ userId: testUserId }), { expirationTtl: 300 });
+    expect(await mockKV.get(`apikey:${hashedOldKey}`)).not.toBeNull();
 
     // Regenerate the API key
     const regenReq = new Request("http://localhost/api/auth/regenerate-key", {
@@ -1446,10 +1438,11 @@ describe("KV Session Cache", () => {
     const regenBody = await regenRes.json() as { api_key: string };
 
     // Old key should be invalidated from KV
-    expect(await mockKV.get(`apikey:${testApiKey}`)).toBeNull();
+    expect(await mockKV.get(`apikey:${hashedOldKey}`)).toBeNull();
 
     // New key should be proactively cached
-    const newCached = await mockKV.get(`apikey:${regenBody.api_key}`);
+    const hashedNewKey = await hashApiKey(regenBody.api_key);
+    const newCached = await mockKV.get(`apikey:${hashedNewKey}`);
     expect(newCached).not.toBeNull();
     const parsed = JSON.parse(newCached!);
     expect(parsed.userId).toBe(testUserId);
@@ -1471,18 +1464,12 @@ describe("KV Session Cache", () => {
     const regBody = await regRes.json() as any;
     const delUserId = regBody.id;
     const delToken = regBody.token;
-
-    // Get the user's API key
-    const meReq = new Request("http://localhost/api/auth/me", {
-      headers: { "Authorization": `Bearer ${delToken}` },
-    });
-    const meRes = await appFetchWrapper(meReq as any, cleanupEnv);
-    const meBody = await meRes.json() as any;
-    const delApiKey = meBody.api_key;
+    const delApiKey = regBody.api_key; // Use plain-text API key directly from registration
 
     // Pre-populate KV with this API key
-    await mockKV.put(`apikey:${delApiKey}`, JSON.stringify({ userId: delUserId }), { expirationTtl: 300 });
-    expect(await mockKV.get(`apikey:${delApiKey}`)).not.toBeNull();
+    const hashedDelKey = await hashApiKey(delApiKey);
+    await mockKV.put(`apikey:${hashedDelKey}`, JSON.stringify({ userId: delUserId }), { expirationTtl: 300 });
+    expect(await mockKV.get(`apikey:${hashedDelKey}`)).not.toBeNull();
 
     // Schedule deletion
     const delReq = new Request("http://localhost/api/users/me", {
@@ -1498,7 +1485,35 @@ describe("KV Session Cache", () => {
     await cleanupScheduledDeletions(cleanupEnv);
 
     // Verify the API key was invalidated from KV
-    expect(await mockKV.get(`apikey:${delApiKey}`)).toBeNull();
+    expect(await mockKV.get(`apikey:${hashedDelKey}`)).toBeNull();
+
+    // Verify the user was actually deleted from D1
+    const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(delUserId).first();
+    expect(userPost).toBeNull();
+  });
+
+  it("cleanupScheduledDeletions invalidates legacy plain-text API keys from KV session cache", async () => {
+    const mockKV = createMockKV();
+    const cleanupEnv = { ...env, JWT_SECRET: 'test-secret', TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: undefined, SESSION_CACHE: mockKV };
+
+    const delUserId = `u_del_leg_${Math.floor(Math.random() * 1000000)}`;
+    const legacyKey = `swazz_live_del_leg_${Math.floor(Math.random() * 1000000)}`;
+    const hashedKey = await hashApiKey(legacyKey);
+
+    // Seed user with plain-text API key directly in D1
+    await env.DB.prepare(
+      "INSERT INTO users (id, username, password_hash, api_key, plan, delete_requested_at) VALUES (?, ?, ?, ?, ?, datetime('now', '-8 days'))"
+    ).bind(delUserId, `user_${delUserId}`, "hash", legacyKey, "Free Plan").run();
+
+    // Populate KV with the hashed session cache entry
+    await mockKV.put(`apikey:${hashedKey}`, JSON.stringify({ userId: delUserId }));
+    expect(await mockKV.get(`apikey:${hashedKey}`)).not.toBeNull();
+
+    // Run the cleanup
+    await cleanupScheduledDeletions(cleanupEnv);
+
+    // Verify the legacy key's hashed KV cache entry was invalidated
+    expect(await mockKV.get(`apikey:${hashedKey}`)).toBeNull();
 
     // Verify the user was actually deleted from D1
     const userPost = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(delUserId).first();
@@ -2918,6 +2933,346 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         "SELECT cron_schedule FROM scan_configs WHERE project_id = ? AND name = 'default'"
       ).bind(projectId).first<{ cron_schedule: string }>();
       expect(result?.cron_schedule).toBe("0 12 * * *");
+    });
+  });
+
+  describe("MCP and API Key Hashing Security", () => {
+    let apiKey: string;
+    let userId: string;
+    let userToken: string;
+
+    it("hashes API keys on registration and returns plain text", async () => {
+      const username = `u_${Math.floor(Math.random() * 1000000)}`;
+      const res = await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password: "TestPassword123!",
+          email: `${username}@example.com`
+        })
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.status).toBe("ok");
+      expect(data.api_key).toBeDefined();
+      expect(data.api_key).toContain("swazz_live_");
+      
+      apiKey = data.api_key;
+      userId = data.id;
+      userToken = data.token;
+
+      // Verify D1 has the hashed version
+      const dbUser = await testEnv.DB.prepare("SELECT api_key FROM users WHERE id = ?")
+        .bind(userId)
+        .first<{ api_key: string }>();
+      expect(dbUser?.api_key).not.toBe(apiKey);
+      expect(dbUser?.api_key).not.toContain("swazz_live_");
+    });
+
+    it("masks existing API keys in /api/auth/me", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/auth/me", {
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.api_key).toContain("swazz_live_");
+      expect(data.api_key).toContain("•");
+    });
+
+    it("authenticates requests with plain text API key", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.projects).toBeDefined();
+    });
+
+    it("exposes tools list at /api/mcp/tools", async () => {
+      // Unauthorized
+      const unauth = await appFetchWrapper(new Request("http://localhost/api/mcp/tools"), testEnv);
+      expect(unauth.status).toBe(401);
+
+      // Authorized
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/tools", {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.tools).toBeDefined();
+      expect(data.tools.some((t: any) => t.name === "swazz_list_projects")).toBe(true);
+    });
+
+    it("executes tools internally via /api/mcp/call", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          name: "swazz_list_projects",
+          arguments: {}
+        })
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.result).toBeDefined();
+      expect(data.result.projects).toBeDefined();
+    });
+
+    it("auto-upgrades legacy plain-text API keys to hashed versions on first match", async () => {
+      const username = `u_legacy_${Math.floor(Math.random() * 1000000)}`;
+      const legacyKey = `swazz_live_legacy_${Math.floor(Math.random() * 1000000)}`;
+      const uId = `u_${Math.floor(Math.random() * 1000000)}`;
+
+      // Seed a user with a plain text API key
+      await testEnv.DB.prepare(
+        "INSERT INTO users (id, username, password_hash, api_key, plan) VALUES (?, ?, ?, ?, ?)"
+      ).bind(uId, username, "hash", legacyKey, "Free Plan").run();
+
+      // Query projects using the plain-text key
+      const res = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        headers: { "Authorization": `Bearer ${legacyKey}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+
+      // Verify that the database now stores the hashed version of the legacy key
+      const dbUser = await testEnv.DB.prepare("SELECT api_key FROM users WHERE id = ?")
+        .bind(uId)
+        .first<{ api_key: string }>();
+      expect(dbUser?.api_key).not.toBe(legacyKey);
+      
+      const expectedHash = await hashApiKey(legacyKey);
+      expect(dbUser?.api_key).toBe(expectedHash);
+    });
+
+    it("enforces scan ownership BOLA authorization on standalone scans (null project_id)", async () => {
+      // Create two users
+      const uIdA = `u_bola_a_${Math.floor(Math.random() * 1000000)}`;
+      const uIdB = `u_bola_b_${Math.floor(Math.random() * 1000000)}`;
+      const keyA = `swazz_live_key_a_${Math.floor(Math.random() * 1000000)}`;
+      const keyB = `swazz_live_key_b_${Math.floor(Math.random() * 1000000)}`;
+      const hashedKeyA = await hashApiKey(keyA);
+      const hashedKeyB = await hashApiKey(keyB);
+
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdA, `user_a_${uIdA}`, "hash", hashedKeyA).run();
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdB, `user_b_${uIdB}`, "hash", hashedKeyB).run();
+
+      // Create a standalone scan owned by User A
+      const scanId = `scan_bola_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+      ).bind(scanId, "", "http://target.com", "default", "completed", uIdA).run();
+
+      // Query findings as User B (should be Forbidden 403)
+      const resB = await appFetchWrapper(new Request(`http://localhost/api/scans/${scanId}/findings`, {
+        headers: { "Authorization": `Bearer ${keyB}` }
+      }), testEnv);
+      expect(resB.status).toBe(403);
+
+      // Query findings as User A (should be Allowed 200)
+      const resA = await appFetchWrapper(new Request(`http://localhost/api/scans/${scanId}/findings`, {
+        headers: { "Authorization": `Bearer ${keyA}` }
+      }), testEnv);
+      expect(resA.status).toBe(200);
+    });
+
+    it("handles array arguments safely in MCP call gateway", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          name: "swazz_list_projects",
+          arguments: [] // Array argument
+        })
+      }), testEnv);
+      expect(res.status).toBe(200);
+    });
+
+    it("returns 400 when MCP tool call arguments are missing required route parameters", async () => {
+      const res = await appFetchWrapper(new Request("http://localhost/api/mcp/call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          name: "swazz_get_scan_status",
+          arguments: {} // Missing 'id' which is required for path parameter :id
+        })
+      }), testEnv);
+      expect(res.status).toBe(400);
+      const data = await res.json() as any;
+      expect(data.error).toContain("Missing required path parameters");
+    });
+
+    it("invalidates old legacy plain-text API key from KV session cache on rotation", async () => {
+      const hashedApiKey = await hashApiKey(apiKey);
+      // Place the hashed legacy key in KV cache
+      await testEnv.SESSION_CACHE.put(`apikey:${hashedApiKey}`, JSON.stringify({ userId: "dummy" }));
+
+      // Rotate API key using POST /api/auth/regenerate-key
+      const res = await appFetchWrapper(new Request("http://localhost/api/auth/regenerate-key", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}` }
+      }), testEnv);
+      expect(res.status).toBe(200);
+      const resData = await res.json() as any;
+      apiKey = resData.api_key;
+
+      // Verify that the old legacy key's cache entry has been deleted
+      const cached = await testEnv.SESSION_CACHE.get(`apikey:${hashedApiKey}`);
+      expect(cached).toBeNull();
+    });
+
+    it("supports standard HTTP/SSE Model Context Protocol (MCP) server transport", async () => {
+      // 1. Unauthenticated SSE request returns 401
+      const resUnauth = await appFetchWrapper(new Request("http://localhost/api/mcp/sse"), testEnv);
+      expect(resUnauth.status).toBe(401);
+
+      // 2. Authenticated SSE request returns 200 event-stream
+      const resSse = await appFetchWrapper(new Request("http://localhost/api/mcp/sse", {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      }), testEnv);
+      expect(resSse.status).toBe(200);
+      expect(resSse.headers.get("Content-Type")).toBe("text/event-stream");
+      expect(resSse.body).toBeDefined();
+
+      // Read the first chunk (ready event)
+      const reader = resSse.body!.getReader();
+      const { value, done } = await reader.read();
+      expect(done).toBe(false);
+
+      const chunkStr = new TextDecoder().decode(value);
+      expect(chunkStr).toContain("event: endpoint");
+      expect(chunkStr).toContain("/api/mcp/message?connectionId=");
+
+      // Extract the connectionId
+      const connIdMatch = chunkStr.match(/connectionId=([a-zA-Z0-9-]+)/);
+      expect(connIdMatch).toBeDefined();
+      const connectionId = connIdMatch![1];
+
+      // 3. POST JSON-RPC message to the message endpoint
+      const postRes = await appFetchWrapper(new Request(`http://localhost/api/mcp/message?connectionId=${connectionId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 42,
+          method: "tools/list"
+        })
+      }), testEnv);
+      expect(postRes.status).toBe(202);
+
+      // 4. Read the streamed response from the SSE reader
+      const { value: resValue, done: resDone } = await reader.read();
+      expect(resDone).toBe(false);
+
+      const resChunkStr = new TextDecoder().decode(resValue);
+      expect(resChunkStr).toContain("event: message");
+      expect(resChunkStr).toContain("data: {");
+      expect(resChunkStr).toContain('"id":42');
+      expect(resChunkStr).toContain("swazz_list_projects");
+    });
+
+    it("enforces scan ownership BOLA on retrieving/triaging specific standalone scan findings", async () => {
+      // Create two users
+      const uIdA = `u_leg_fn_a_${Math.floor(Math.random() * 1000000)}`;
+      const uIdB = `u_leg_fn_b_${Math.floor(Math.random() * 1000000)}`;
+      const keyA = `swazz_live_fna_${Math.floor(Math.random() * 1000000)}`;
+      const keyB = `swazz_live_fnb_${Math.floor(Math.random() * 1000000)}`;
+      const hashedKeyA = await hashApiKey(keyA);
+      const hashedKeyB = await hashApiKey(keyB);
+
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdA, `user_a_${uIdA}`, "hash", hashedKeyA).run();
+      await testEnv.DB.prepare("INSERT INTO users (id, username, password_hash, api_key) VALUES (?, ?, ?, ?)")
+        .bind(uIdB, `user_b_${uIdB}`, "hash", hashedKeyB).run();
+
+      // Create standalone scan owned by User A
+      const scanId = `scan_fn_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare(
+        "INSERT INTO scans (id, project_id, target_url, profile, status, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+      ).bind(scanId, "", "http://target.com", "default", "completed", uIdA).run();
+
+      // Insert a finding for this scan
+      const findingId = `finding_${Math.floor(Math.random() * 1000000)}`;
+      await testEnv.DB.prepare(
+        "INSERT INTO findings (id, scan_id, rule_id, level, message) VALUES (?, ?, ?, ?, ?)"
+      ).bind(findingId, scanId, "SQL Injection", "High", "Test Description").run();
+
+      // Query GET finding details as User B (Forbidden 403)
+      const getB = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        headers: { "Authorization": `Bearer ${keyB}` }
+      }), testEnv);
+      expect(getB.status).toBe(403);
+
+      // Query PATCH finding triage as User B (Forbidden 403)
+      const patchB = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${keyB}`
+        },
+        body: JSON.stringify({ ai_status: "reviewed" })
+      }), testEnv);
+      expect(patchB.status).toBe(403);
+
+      // Query GET finding details as User A (Allowed 200)
+      const getA = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        headers: { "Authorization": `Bearer ${keyA}` }
+      }), testEnv);
+      expect(getA.status).toBe(200);
+
+      // Query PATCH finding triage as User A (Allowed 200)
+      const patchA = await appFetchWrapper(new Request(`http://localhost/api/findings/${findingId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${keyA}`
+        },
+        body: JSON.stringify({ ai_status: "reviewed" })
+      }), testEnv);
+      expect(patchA.status).toBe(200);
+    });
+
+    it("auto-upgrades legacy plain-text API key on fuzzer runner websocket connect", async () => {
+      const username = `u_run_leg_${Math.floor(Math.random() * 1000000)}`;
+      const legacyKey = `swazz_live_run_leg_${Math.floor(Math.random() * 1000000)}`;
+      const uId = `u_${Math.floor(Math.random() * 1000000)}`;
+
+      // Seed user with plain-text API key directly in D1
+      await testEnv.DB.prepare(
+        "INSERT INTO users (id, username, password_hash, api_key, plan) VALUES (?, ?, ?, ?, ?)"
+      ).bind(uId, username, "hash", legacyKey, "Free Plan").run();
+
+      // Connect runner using plain-text key
+      const res = await appFetchWrapper(new Request("http://localhost/api/runners/connect", {
+        headers: {
+          "Upgrade": "websocket",
+          "Authorization": `Bearer ${legacyKey}`
+        }
+      }), testEnv);
+      expect(res.status).not.toBe(401);
+
+      // Verify D1 has the hashed version
+      const dbUser = await testEnv.DB.prepare("SELECT api_key FROM users WHERE id = ?")
+        .bind(uId)
+        .first<{ api_key: string }>();
+      expect(dbUser?.api_key).not.toBe(legacyKey);
+      
+      const expectedHash = await hashApiKey(legacyKey);
+      expect(dbUser?.api_key).toBe(expectedHash);
     });
   });
 });
