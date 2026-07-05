@@ -23,13 +23,14 @@ run_cmd go vet ./...
 if ! command -v gosec &> /dev/null; then
     echo "-> gosec not found, installing..."
     run_cmd go install github.com/securego/gosec/v2/cmd/gosec@latest
+    export PATH="$PATH:$(go env GOPATH)/bin:~/go/bin"
 fi
 
 echo "-> Running gosec..."
 # Run gosec but exclude test files. We don't fail immediately to still run tests,
 # but we capture the exit code.
 set +e
-run_cmd ~/go/bin/gosec -exclude-dir=tests -quiet ./...
+run_cmd gosec -exclude-dir=tests -quiet ./...
 GOSEC_EXIT=$?
 set -e
 

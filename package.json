@@ -36,6 +36,8 @@
     "onnxruntime-node@1.24.3": true,
     "protobufjs@7.6.5": true,
     "sharp@0.34.5": true,
-    "workerd@1.20260704.1": true
+    "fsevents@2.3.2": true,
+    "fsevents@2.3.3": true,
+    "workerd@1.20260701.1 || 1.20260704.1": true
   }
 }
