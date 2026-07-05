@@ -15,7 +15,7 @@ interface RunnerLog {
   timestamp: string;
 }
 
-export function RunnerLogsViewer({ runId }: { runId: string | null }) {
+export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; isRunning?: boolean }) {
   const [logs, setLogs] = useState<RunnerLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,9 +47,15 @@ export function RunnerLogsViewer({ runId }: { runId: string | null }) {
         if (active && data.logs) {
           const parsedLogs = data.logs.map((log: LogEntry) => {
             try {
-              return JSON.parse(log.payload) as RunnerLog;
+              const parsed = typeof log.payload === 'string' ? JSON.parse(log.payload) : log.payload;
+              const logData = parsed.data || parsed;
+              return {
+                level: logData.level || 'INFO',
+                message: logData.message || '',
+                timestamp: logData.timestamp || log.created_at,
+              };
             } catch {
-              return { level: 'INFO', message: log.payload, timestamp: log.created_at };
+              return { level: 'INFO', message: String(log.payload), timestamp: log.created_at };
             }
           });
           setLogs(parsedLogs);
@@ -63,12 +69,17 @@ export function RunnerLogsViewer({ runId }: { runId: string | null }) {
 
     fetchLogs();
     
-    // Poll for new logs if we want real-time updates (optional, simplified for now)
-    const interval = setInterval(fetchLogs, 3000);
+    // Poll for new logs if the scan is currently running
+    let interval: any;
+    if (isRunning) {
+      interval = setInterval(fetchLogs, 3000);
+    }
 
     return () => {
       active = false;
-      clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+      }
     };
   }, [runId, token]);
 

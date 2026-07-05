@@ -142,6 +142,11 @@ func startAgent(args []string) {
 
 	logInfo("Starting agent '%s', connecting to %s (log level: %s)", name, coordinatorURL, logLevelStr) // #nosec G706
 
+	var (
+		activeRunners   = make(map[string]*runner.Runner)
+		activeRunnersMu sync.Mutex
+	)
+
 	ctx := context.Background()
 
 	headers := make(http.Header)
@@ -185,6 +190,12 @@ func startAgent(args []string) {
 	go func() {
 		<-sigCh
 		logInfo("Received termination signal, shutting down agent gracefully...")
+		activeRunnersMu.Lock()
+		for _, r := range activeRunners {
+			r.Stop()
+		}
+		activeRunnersMu.Unlock()
+		time.Sleep(500 * time.Millisecond)
 		_ = c.Close(websocket.StatusNormalClosure, "agent shutting down")
 		os.Exit(0)
 	}()
@@ -288,10 +299,7 @@ func startAgent(args []string) {
 		}
 	}
 
-	var (
-		activeRunners   = make(map[string]*runner.Runner)
-		activeRunnersMu sync.Mutex
-	)
+
 
 	// Agent loop
 	for {

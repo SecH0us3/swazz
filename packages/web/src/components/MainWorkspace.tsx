@@ -421,7 +421,7 @@ export function MainWorkspace({
                                 <AnalyticsDashboard projectId={config.projectId || activeProject?.id} />
                             )}
                             {activeTab === 'runner_logs' && (
-                                <RunnerLogsViewer runId={inspectorRunId} />
+                                <RunnerLogsViewer runId={inspectorRunId} isRunning={isRunning && !loadedRunId} />
                             )}
                         </>
                     )}
