@@ -229,6 +229,46 @@ export default function App() {
         showToast,
     });
 
+    // Auto-hide and restore side panels when navigating to settings
+    const prevSidebarStates = useRef<{
+        isSidebarHiddenDesktop: boolean;
+        isConfigHiddenDesktop: boolean;
+        isSidebarOpen: boolean;
+        isConfigOpen: boolean;
+    } | null>(null);
+
+    useEffect(() => {
+        const isSettingsTab = activeTab === 'settings' || activeTab === 'project_settings';
+
+        if (isSettingsTab) {
+            if (!prevSidebarStates.current) {
+                prevSidebarStates.current = {
+                    isSidebarHiddenDesktop: useAppStore.getState().isSidebarHiddenDesktop,
+                    isConfigHiddenDesktop: useAppStore.getState().isConfigHiddenDesktop,
+                    isSidebarOpen: useAppStore.getState().isSidebarOpen,
+                    isConfigOpen: useAppStore.getState().isConfigOpen
+                };
+            }
+
+            useAppStore.setState({
+                isSidebarHiddenDesktop: true,
+                isConfigHiddenDesktop: true,
+                isSidebarOpen: false,
+                isConfigOpen: false
+            });
+        } else {
+            if (prevSidebarStates.current) {
+                useAppStore.setState({
+                    isSidebarHiddenDesktop: prevSidebarStates.current.isSidebarHiddenDesktop,
+                    isConfigHiddenDesktop: prevSidebarStates.current.isConfigHiddenDesktop,
+                    isSidebarOpen: prevSidebarStates.current.isSidebarOpen,
+                    isConfigOpen: prevSidebarStates.current.isConfigOpen
+                });
+                prevSidebarStates.current = null;
+            }
+        }
+    }, [activeTab]);
+
     // Auto-reconnect to active scans on project load/change
     useEffect(() => {
         if (!activeProject) return;

@@ -19,6 +19,7 @@ func TestGitPatcher_LocalGitOperations(t *testing.T) {
 	runGit(t, tempDir, "init")
 	runGit(t, tempDir, "config", "user.email", "test@example.com")
 	runGit(t, tempDir, "config", "user.name", "Test User")
+	runGit(t, tempDir, "config", "commit.gpgsign", "false")
 	runGit(t, tempDir, "branch", "-M", "master")
 
 	// Create a file and commit to establish 'master' branch

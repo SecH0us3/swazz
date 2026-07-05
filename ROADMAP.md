@@ -27,19 +27,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Set up a clean, modern blog index and article layout in the frontend web application.
     - Support markdown article rendering and sharing actions to drive organic technical traffic.
 
-- [ ] **Task 107: Scans History Tab Layout Reorganization**
-  - **Design Goal:** Redesign the scans history list to use a tabbed interface for clearer navigation and visual organization.
-  - **Implementation Details:**
-    - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
-
-- [ ] **Task 108: Auto-Hide Side Panels in Settings Views**
-  - **Design Goal:** Automatically hide/collapse the left and right navigation/configuration panels when navigating to project or user settings to optimize screen real estate for settings forms.
-  - **Implementation Details:**
-    - Detect routing/view transition to Project Settings or User Settings tabs.
-    - Automatically trigger states to collapse both the left sidebar and the right configuration panel.
-    - Ensure the panels are restored or can be reopened when navigating away from the settings views.
-
-
 ## 🟡 Medium Complexity
 
 - [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
