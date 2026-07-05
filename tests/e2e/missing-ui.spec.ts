@@ -102,24 +102,34 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(settingsHeader).toBeVisible();
 
     // 1. API Key show/hide toggle
+    // API key is masked on initial load, so no Show/Copy buttons are present.
     const apiKeyInput = page.locator('input[type="password"][readonly]');
     await expect(apiKeyInput).toBeVisible();
 
-    // Click Show/Hide button (first sibling button of the readonly input)
-    const toggleApiKeyBtn = page.locator('input[readonly] ~ button').first();
-    await expect(toggleApiKeyBtn).toBeVisible();
-    await expect(toggleApiKeyBtn).toHaveText('Show');
-    await toggleApiKeyBtn.click();
+    const showBtn = page.locator('input[readonly] ~ button');
+    await expect(showBtn).toHaveCount(0);
 
-    // Now input type shifts to text
-    const visibleApiKeyInput = page.locator('input[type="text"][readonly]');
-    await expect(visibleApiKeyInput).toBeVisible();
-    await expect(toggleApiKeyBtn).toHaveText('Hide');
+    // Click Regenerate API Key to show plain-text key (accepting confirmation dialog)
+    page.once('dialog', async dialog => {
+      await dialog.accept();
+    });
 
-    // Click Hide
-    await toggleApiKeyBtn.click();
-    await expect(apiKeyInput).toBeVisible();
-    await expect(toggleApiKeyBtn).toHaveText('Show');
+    const rotateBtn = page.locator('#btn-rotate-api-key');
+    await expect(rotateBtn).toBeVisible();
+    await rotateBtn.click();
+
+    // Now copy and dismiss buttons should be visible
+    const copyBtn = page.locator('button:has-text("Copy")');
+    await expect(copyBtn).toBeVisible();
+
+    const dismissBtn = page.locator('#btn-dismiss-api-key');
+    await expect(dismissBtn).toBeVisible();
+
+    // Click Dismiss to mask the key again
+    await dismissBtn.click();
+
+    // Key is masked again, so no buttons are present
+    await expect(showBtn).toHaveCount(0);
 
     // Navigate to Project Settings -> Active Runners where public key setup now lives
     const profileBackBtn = page.locator('button:has-text("Back to Dashboard")');
