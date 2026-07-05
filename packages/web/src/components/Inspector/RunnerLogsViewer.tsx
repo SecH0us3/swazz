@@ -40,6 +40,13 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
           headers['Authorization'] = `Bearer ${token}`;
         }
         const res = await fetch(`/api/scans/${runId}/runner-logs`, { headers });
+        if (res.status === 404) {
+          if (active) {
+            setLogs([]);
+            // Don't show an error for 404, just leave it empty
+          }
+          return;
+        }
         if (!res.ok) {
           throw new Error('Failed to fetch runner logs');
         }
