@@ -478,6 +478,38 @@ export default function App() {
 
     const displayUrl = config.base_url || (config._swagger_urls?.[0] ?? '');
 
+    const prevSidebarHiddenRef = useRef<boolean | null>(null);
+    const prevConfigHiddenRef = useRef<boolean | null>(null);
+    const prevTabRef = useRef<string>('heatmap');
+
+    useEffect(() => {
+        const isSettings = activeTab === 'settings' || activeTab === 'project_settings';
+        const wasSettings = prevTabRef.current === 'settings' || prevTabRef.current === 'project_settings';
+
+        if (isSettings && !wasSettings) {
+            // Save current visibility state before hiding
+            prevSidebarHiddenRef.current = useAppStore.getState().isSidebarHiddenDesktop;
+            prevConfigHiddenRef.current = useAppStore.getState().isConfigHiddenDesktop;
+
+            // Automatically hide panels
+            useAppStore.setState({
+                isSidebarHiddenDesktop: true,
+                isConfigHiddenDesktop: true
+            });
+        } else if (!isSettings && wasSettings) {
+            // Restore visibility states when leaving settings
+            useAppStore.setState({
+                isSidebarHiddenDesktop: prevSidebarHiddenRef.current ?? false,
+                isConfigHiddenDesktop: prevConfigHiddenRef.current ?? false
+            });
+            // Reset refs
+            prevSidebarHiddenRef.current = null;
+            prevConfigHiddenRef.current = null;
+        }
+
+        prevTabRef.current = activeTab;
+    }, [activeTab]);
+
     const { sidebarWidth, configSidebarWidth, startResizingLeft, startResizingRight } = useResizableLayout(300, 320);
 
     useEffect(() => {

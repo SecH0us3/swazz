@@ -348,6 +348,10 @@ The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. Th
 - **Localized Cell Hover**: Heatmap cells manage their own hover states locally. Moving the cursor over the grid does not trigger expensive dashboard or full-grid re-renders.
 - **Memoized Rows**: Endpoint rows use `React.memo` with custom value comparison. A row only updates when its specific endpoint stats change.
 - **Findings Pagination**: Both the **Grouped Errors** and **OWASP Top 10** lists cap expanded category views to 50 items by default. A "Show More" button allows loading additional results incrementally, avoiding DOM bloat and lagging.
+
+### Settings View Workspace Optimization
+
+To optimize screen real estate for complex configuration forms, navigating to **User Settings** or **Project Settings** will automatically collapse/hide both the left sidebar and the right configuration panel. When navigating back to the main workspace (such as the Fuzzing Dashboard or Logs views), the panels are automatically restored to their previous visibility states.
 ## 🔒 Privacy & Account Deletion (Right to be Forgotten)
 
 Swazz values user privacy and complies with GDPR requirements. If you wish to delete your account and all associated data, you can do so immediately from the dashboard settings page:

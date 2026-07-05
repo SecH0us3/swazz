@@ -32,7 +32,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Reorganize history layouts into categorized tabs (e.g. Active, Completed, All, Failed).
 
-- [ ] **Task 108: Auto-Hide Side Panels in Settings Views**
+- [/] **Task 108: Auto-Hide Side Panels in Settings Views**
   - **Design Goal:** Automatically hide/collapse the left and right navigation/configuration panels when navigating to project or user settings to optimize screen real estate for settings forms.
   - **Implementation Details:**
     - Detect routing/view transition to Project Settings or User Settings tabs.
