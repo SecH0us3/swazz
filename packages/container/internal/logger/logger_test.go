@@ -91,3 +91,61 @@ func TestLoggerJSONMode(t *testing.T) {
 		t.Errorf("expected non-empty timestamp")
 	}
 }
+
+func TestLoggerExtraHelpers(t *testing.T) {
+	origLevel := GetLevel()
+	defer SetLevel(origLevel)
+
+	SetLevel(LevelWarn)
+	if GetLevel() != LevelWarn {
+		t.Errorf("expected LevelWarn, got %v", GetLevel())
+	}
+
+	SetLevelByName("debug")
+	if GetLevel() != LevelDebug {
+		t.Errorf("expected LevelDebug, got %v", GetLevel())
+	}
+	if !IsDebugEnabled() {
+		t.Error("expected IsDebugEnabled to be true")
+	}
+
+	SetLevelByName("info")
+	if GetLevel() != LevelInfo {
+		t.Errorf("expected LevelInfo, got %v", GetLevel())
+	}
+
+	SetLevelByName("warning")
+	if GetLevel() != LevelWarn {
+		t.Errorf("expected LevelWarn, got %v", GetLevel())
+	}
+
+	SetLevelByName("quiet")
+	if GetLevel() != LevelError {
+		t.Errorf("expected LevelError, got %v", GetLevel())
+	}
+
+	SetLevelByName("unknown-level")
+	if GetLevel() != LevelInfo {
+		t.Errorf("expected default LevelInfo, got %v", GetLevel())
+	}
+
+	origFilter := logFilter
+	defer SetFilter(origFilter)
+	SetFilter("specific-msg")
+	if logFilter != "specific-msg" {
+		t.Errorf("expected filter 'specific-msg', got %s", logFilter)
+	}
+
+	if shouldLog(LevelInfo, "random message") {
+		t.Error("expected shouldLog to be false when message doesn't match filter")
+	}
+	if !shouldLog(LevelInfo, "contains specific-msg") {
+		t.Error("expected shouldLog to be true when message matches filter")
+	}
+
+	SetFilter("")
+	if !shouldLog(LevelInfo, "random message") {
+		t.Error("expected shouldLog to be true when filter is empty")
+	}
+}
+
