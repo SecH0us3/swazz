@@ -118,7 +118,7 @@ You can configure the Swazz MCP server in the Google Antigravity CLI either visu
 3. Select **Add MCP** -> enter the name and configuration properties.
 
 ##### Method 2: Manual / Programmatic JSON Configuration
-Configure the server in your global configuration file `~/.gemini/antigravity-cli/mcp_config.json` (or project-level `.agents/mcp_config.json`):
+Configure the server in your global configuration file `~/.gemini/config/mcp_config.json` (or project-level `.agents/mcp_config.json`):
 
 ```json
 {
@@ -139,7 +139,7 @@ To configure Google Antigravity programmatically from your terminal, run:
 node -e '
 const fs = require("fs");
 const path = require("path");
-const filePath = path.join(process.env.HOME, ".gemini/antigravity-cli/mcp_config.json");
+const filePath = path.join(process.env.HOME, ".gemini/config/mcp_config.json");
 let config = { mcpServers: {} };
 try { config = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch {}
 config.mcpServers["swazz-cloud"] = {
