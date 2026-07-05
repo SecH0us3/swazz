@@ -230,7 +230,7 @@ func (r *Runner) Start(ctx context.Context) error {
 			defer timer.Stop()
 			select {
 			case <-timer.C:
-				logger.Debug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
+				r.logDebug("Scan exceeded maximum duration of %d minutes. Stopping...", r.config.Settings.MaxScanDurationMin)
 				r.Stop()
 			case <-timerCtx.Done():
 			}
@@ -240,7 +240,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
 
-	logger.Debug("Start run: len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t",
+	r.logDebug("Start run: len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t",
 		len(r.config.Endpoints), profiles, r.sizeBaselines == nil)
 
 	r.limiter.SetTarget(r.config.Settings.Concurrency)
@@ -357,7 +357,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				ep.ContentType,
 			)
 
-			logger.Debug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
+			r.logDebug("Baseline run: method=%s path=%s status=%d size=%d err=%v",
 				ep.Method, ep.Path, result.Status, result.ResponseSize, result.Error)
 
 			if result.Status >= 200 && result.Status < 300 {
@@ -730,3 +730,53 @@ func (r *Runner) finaliseRun() {
 func (r *Runner) stopped() bool { return r.lifecycle.shouldStop.Load() }
 
 func (r *Runner) paused() bool { return r.lifecycle.isPaused.Load() }
+
+func (r *Runner) logDebug(format string, v ...interface{}) {
+	if logger.IsDebugEnabled() || r.config.Settings.Debug {
+		logger.Debug(format, v...)
+	}
+}
+
+func truncateLog(msg string) string {
+	const maxSize = 32768
+	if len(msg) > maxSize {
+		return msg[:maxSize] + "... [TRUNCATED]"
+	}
+	return msg
+}
+
+func (r *Runner) logInfo(format string, v ...interface{}) {
+	logger.Info(format, v...)
+	r.Broadcast(Event{
+		Type: "runner_log",
+		Data: map[string]interface{}{
+			"level":     "info",
+			"message":   truncateLog(fmt.Sprintf(format, v...)),
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+func (r *Runner) logWarn(format string, v ...interface{}) {
+	logger.Warn(format, v...)
+	r.Broadcast(Event{
+		Type: "runner_log",
+		Data: map[string]interface{}{
+			"level":     "warn",
+			"message":   truncateLog(fmt.Sprintf(format, v...)),
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+func (r *Runner) logError(format string, v ...interface{}) {
+	logger.Error(format, v...)
+	r.Broadcast(Event{
+		Type: "runner_log",
+		Data: map[string]interface{}{
+			"level":     "error",
+			"message":   truncateLog(fmt.Sprintf(format, v...)),
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}

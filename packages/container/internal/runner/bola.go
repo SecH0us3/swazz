@@ -36,7 +36,6 @@ import (
 
 	"swazz-engine/internal/bola"
 	"swazz-engine/internal/generator"
-	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -215,7 +214,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 			if val := extractJSONPathExtended(respBody, jsonPath); val != nil {
 				r.config.Variables[varName] = val
 				varsUpdated = true
-				logger.Debug("[BOLA] Extracted variable %s = %v from response of %s %s",
+				r.logDebug("[BOLA] Extracted variable %s = %v from response of %s %s",
 					varName, val, method, originalPath)
 			}
 		}
@@ -249,7 +248,7 @@ func (r *Runner) harvestFromResponse(originalPath, method string, respStatus int
 	}
 	r.resultsMu.Unlock()
 
-	logger.Debug("[BOLA] Harvested IDs for prefix %s: %v", prefix, newIDs)
+	r.logDebug("[BOLA] Harvested IDs for prefix %s: %v", prefix, newIDs)
 }
 
 // mergeUniqueStrings returns the union of two string slices without duplicates.
@@ -428,14 +427,14 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	case concurrency <= 0:
 		concurrency = 5
 	case concurrency > 1000:
-		logger.Warn("BOLA: Concurrency limit exceeded (max 1000)")
+		r.logWarn("BOLA: Concurrency limit exceeded (max 1000)")
 		return nil
 	}
 	r.limiter.SetTarget(concurrency)
 
 	r.progress.currentProfile.Store("BOLA")
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
-	logger.Info("Running Access Control & BOLA/IDOR testing phase...")
+	r.logInfo("Running Access Control & BOLA/IDOR testing phase...")
 
 	identityHeaders, identityCookies := r.authenticateIdentities(ctx)
 
@@ -446,7 +445,7 @@ func (r *Runner) bolaPhase(ctx context.Context, results []*swagger.FuzzResult) [
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 	bolaResults := r.replayCandidates(ctx, candidates, identityHeaders, identityCookies)
-	logger.Info("Access Control phase complete. Found %d findings.", len(bolaResults))
+	r.logInfo("Access Control phase complete. Found %d findings.", len(bolaResults))
 	return bolaResults
 }
 
@@ -458,7 +457,7 @@ func (r *Runner) authenticateIdentities(ctx context.Context) (map[string]map[str
 	for name, identity := range r.config.AuthIdentities {
 		h, c, err := r.ExecuteAuthSequence(ctx, identity.AuthSequence, identity.Headers, identity.Cookies)
 		if err != nil {
-			logger.Error("BOLA: Failed to authenticate identity %s: %v", name, err)
+			r.logError("BOLA: Failed to authenticate identity %s: %v", name, err)
 			continue
 		}
 		headers[name] = h
@@ -835,7 +834,7 @@ func (r *Runner) replayCandidate(
 		}
 	}
 	if !hasAuth {
-		logger.Debug("[BOLA] Skipping %s %s — no auth credentials in baseline request",
+		r.logDebug("[BOLA] Skipping %s %s — no auth credentials in baseline request",
 			cand.Method, cand.Endpoint)
 		return
 	}

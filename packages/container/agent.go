@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
@@ -176,6 +178,17 @@ func startAgent(args []string) {
 		}
 		log.Fatalf("Failed to connect to coordinator: %v", err)
 	}
+
+	// Add graceful shutdown handler to prevent abrupt WebSocket closures
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		logInfo("Received termination signal, shutting down agent gracefully...")
+		_ = c.Close(websocket.StatusNormalClosure, "agent shutting down")
+		os.Exit(0)
+	}()
+
 	defer c.Close(websocket.StatusInternalError, "internal error")
 
 	if useSignatureAuth {
