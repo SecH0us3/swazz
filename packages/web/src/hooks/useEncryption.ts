@@ -161,7 +161,7 @@ function base64ToBuffer(base64: string): ArrayBuffer {
 async function checkX25519Support(): Promise<boolean> {
     try {
         const testKeyPair = await crypto.subtle.generateKey(
-            'X25519' as any,
+            { name: 'X25519' },
             false,
             ['deriveBits'],
         );
@@ -537,7 +537,7 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
             const ephemeralPublicKey = await crypto.subtle.importKey(
                 'raw',
                 ephemeralPublicKeyRaw,
-                'X25519' as any,
+                { name: 'X25519' },
                 false,
                 [],
             );

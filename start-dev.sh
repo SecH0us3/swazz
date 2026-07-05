@@ -61,6 +61,7 @@ wait_for_port 8788 "Vulnerable Demo API"
 # 2. Start Edge Coordinator (Port 8787)
 echo "→ Applying local database migrations..."
 npx wrangler d1 migrations apply swazz_db --local --cwd packages/edge || true
+npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', 'swazz_live_citoken1234567890', 'Supporter Plan');" --cwd packages/edge || true
 echo "→ Starting Edge Coordinator (wrangler dev on port 8787)..."
 NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --port 8787 --log-level error > edge.log 2>&1 &
 PIDS+=($!)

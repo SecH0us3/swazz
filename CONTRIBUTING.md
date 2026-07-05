@@ -12,6 +12,7 @@ Ensure you have the following installed on your local machine:
 - **Go** (version 1.21 or later)
 - **Node.js** (version 18 or later)
 - **npm** (Node Package Manager)
+- **Modern Web Browser** (Chrome 128+, Safari 17+, or Firefox with support for Web Crypto API's X25519 curve. If you get errors during local cryptographic key initialization, ensure your browser is updated to the latest version).
 
 ---
 
@@ -93,6 +94,10 @@ You can also run the backend test script:
 # If using the developer toolkit
 ./.agents/plugins/swazz-toolkit/skills/swazz-workflows/scripts/test-backend.sh
 ```
+
+> [!NOTE]
+> **About the `rtk` Wrapper:** The test and verification scripts contain commands prefixed with `rtk` (Repo Toolkit, used in specific sandbox environments). These scripts are configured to automatically check if `rtk` is available on the system. If you run them locally on your host machine without `rtk`, they will seamlessly fallback to running standard commands (`go test`, `go vet`, etc.).
+
 
 ### Frontend React Tests
 Run the Vitest suite in the frontend workspace:
