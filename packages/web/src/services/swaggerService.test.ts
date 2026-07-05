@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadSwaggerUrl } from './swaggerService.js';
+import { loadSwaggerUrl, parseRawSpec } from './swaggerService.js';
 
 describe('swaggerService', () => {
     let originalFetch: typeof globalThis.fetch;
@@ -127,4 +127,44 @@ describe('swaggerService', () => {
             endpoints: []
         });
     });
+
+    describe('parseRawSpec', () => {
+        it('successfully parses raw spec', async () => {
+            const mockResponseData = {
+                basePath: '/v2',
+                endpoints: [
+                    { path: '/items', method: 'GET' }
+                ]
+            };
+            const mockResponse = new Response(JSON.stringify(mockResponseData), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
+
+            const result = await parseRawSpec('openapi: 3.0.0');
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/parse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rawSpec: 'openapi: 3.0.0' })
+            });
+            expect(result).toEqual({
+                basePath: '/v2',
+                endpointCount: 1,
+                endpoints: mockResponseData.endpoints
+            });
+        });
+
+        it('throws error when parse fails', async () => {
+            const mockErrorData = { error: 'Failed to parse spec' };
+            const mockResponse = new Response(JSON.stringify(mockErrorData), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
+
+            await expect(parseRawSpec('invalid spec')).rejects.toThrow('Failed to parse spec');
+        });
+    });
 });
+

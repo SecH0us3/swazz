@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -112,3 +113,140 @@ func TestSSRFProtectedClient_IPLiteralBlock(t *testing.T) {
 		t.Errorf("expected SSRF block error, got: %v", err)
 	}
 }
+
+func TestConfigureTransport_Nil(t *testing.T) {
+	// Should not panic
+	ConfigureTransport(nil)
+}
+
+type mockRoundTripper struct {
+	called bool
+}
+
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	m.called = true
+	return nil, nil
+}
+
+func TestWrapWithSSRFProtection(t *testing.T) {
+	t.Run("Allow Private True", func(t *testing.T) {
+		mockRt := &mockRoundTripper{}
+		rt := WrapWithSSRFProtection(mockRt, true)
+		if rt != mockRt {
+			t.Error("expected original RoundTripper when allowPrivate is true")
+		}
+	})
+
+	t.Run("Nil RoundTripper", func(t *testing.T) {
+		rt := WrapWithSSRFProtection(nil, false)
+		if rt == nil {
+			t.Fatal("expected non-nil RoundTripper wrapper when passing nil")
+		}
+	})
+
+	t.Run("Standard Transport Cloned", func(t *testing.T) {
+		tr := &http.Transport{}
+		rt := WrapWithSSRFProtection(tr, false)
+		if rt == tr {
+			t.Error("expected a cloned transport, not the original instance")
+		}
+		cloned, ok := rt.(*http.Transport)
+		if !ok {
+			t.Fatalf("expected cloned to be *http.Transport, got %T", rt)
+		}
+		if cloned.DialContext == nil {
+			t.Error("expected DialContext to be overridden")
+		}
+	})
+
+	t.Run("Non Standard RoundTripper wrapped", func(t *testing.T) {
+		mockRt := &mockRoundTripper{}
+		rt := WrapWithSSRFProtection(mockRt, false)
+		if rt == mockRt {
+			t.Error("expected mockRoundTripper to be wrapped, not returned directly")
+		}
+	})
+
+	t.Run("Wrapped Transport Dial Private IP", func(t *testing.T) {
+		tr := &http.Transport{}
+		rt := WrapWithSSRFProtection(tr, false)
+		cloned := rt.(*http.Transport)
+		_, err := cloned.DialContext(context.Background(), "tcp", "127.0.0.1:80")
+		if err == nil {
+			t.Fatal("expected DialContext to fail for loopback IP")
+		}
+		if !strings.Contains(err.Error(), "blocked by SSRF policy") {
+			t.Errorf("expected SSRF block error, got: %v", err)
+		}
+	})
+
+	t.Run("Wrapped Transport Dial Invalid Host", func(t *testing.T) {
+		tr := &http.Transport{}
+		rt := WrapWithSSRFProtection(tr, false)
+		cloned := rt.(*http.Transport)
+		_, err := cloned.DialContext(context.Background(), "tcp", "non-existent-host-xyz.invalid:80")
+		if err == nil {
+			t.Fatal("expected dial to invalid host to fail")
+		}
+	})
+
+	t.Run("Wrapped Transport with Original Dial Context", func(t *testing.T) {
+		calledOrig := false
+		tr := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				calledOrig = true
+				return nil, net.UnknownNetworkError("test")
+			},
+		}
+		rt := WrapWithSSRFProtection(tr, false)
+		cloned := rt.(*http.Transport)
+		// Dialing a public IP to trigger the original dialer
+		_, _ = cloned.DialContext(context.Background(), "tcp", "1.1.1.1:80")
+		if !calledOrig {
+			t.Error("expected the original dialer to be called for public IP dial")
+		}
+	})
+
+	t.Run("Wrapped Transport Dial Public IP Literal", func(t *testing.T) {
+		tr := &http.Transport{}
+		rt := WrapWithSSRFProtection(tr, false)
+		cloned := rt.(*http.Transport)
+		// 1.1.1.1 is public, connection might fail but dialer branch is covered
+		_, _ = cloned.DialContext(context.Background(), "tcp", "1.1.1.1:80")
+	})
+
+	t.Run("Wrapped Transport Dial Private Hostname", func(t *testing.T) {
+		tr := &http.Transport{}
+		rt := WrapWithSSRFProtection(tr, false)
+		cloned := rt.(*http.Transport)
+		// localhost resolves to loopback (private)
+		_, err := cloned.DialContext(context.Background(), "tcp", "localhost:80")
+		if err == nil {
+			t.Fatal("expected dial to private hostname to fail")
+		}
+		if !strings.Contains(err.Error(), "blocked by SSRF policy") {
+			t.Errorf("expected SSRF block error, got: %v", err)
+		}
+	})
+
+	t.Run("NewSSRFProtectedTransport Dial Hostname", func(t *testing.T) {
+		rt := NewSSRFProtectedTransport(false)
+		tr := rt.(*http.Transport)
+		_, err := tr.DialContext(context.Background(), "tcp", "localhost:80")
+		if err == nil {
+			t.Fatal("expected dial to private hostname to fail")
+		}
+		if !strings.Contains(err.Error(), "blocked by SSRF policy") {
+			t.Errorf("expected SSRF block error, got: %v", err)
+		}
+	})
+
+	t.Run("NewSSRFProtectedTransport Dial Public IP Literal", func(t *testing.T) {
+		rt := NewSSRFProtectedTransport(false)
+		tr := rt.(*http.Transport)
+		_, _ = tr.DialContext(context.Background(), "tcp", "1.1.1.1:80")
+	})
+}
+
+
+
