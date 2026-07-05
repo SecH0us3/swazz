@@ -7,6 +7,7 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
+    const apiBaseUrl = PROXY_URL || window.location.origin;
     const { theme, toggleTheme } = useTheme();
     const [copiedApiKey, setCopiedApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
@@ -64,7 +65,7 @@ export function UserSettings() {
     const [setupSuccess, setSetupSuccess] = useState('');
     const [is2faLoading, setIs2faLoading] = useState(false);
 
-    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger' | 'admin'>('account');
+    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger' | 'admin' | 'mcp'>('account');
 
     const [adminSecret, setAdminSecret] = useState(() => localStorage.getItem('admin_secret') || '');
     const [inputSecret, setInputSecret] = useState(() => localStorage.getItem('admin_secret') || '');
@@ -460,6 +461,15 @@ export function UserSettings() {
                             <polyline points="10 9 9 9 8 9"></polyline>
                         </svg>
                         Admin Logs
+                    </button>
+                    <button
+                        className={`settings-nav-btn ${activeSubTab === 'mcp' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('mcp')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="logs-nav-icon">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                        </svg>
+                        MCP Integration
                     </button>
                 </div>
 
@@ -1051,6 +1061,112 @@ export function UserSettings() {
                                     })()}
                                 </div>
                             )}
+                        </div>
+                    )}
+                    {activeSubTab === 'mcp' && (
+                        <div className="settings-card">
+                            <h2 className="settings-card-title">
+                                Model Context Protocol (MCP) Integration
+                            </h2>
+                            <p className="settings-card-desc mcp-desc-spacing">
+                                Connect your local AI assistant (like Claude Desktop, Cursor, or Google Antigravity CLI) directly to your Swazz instance.
+                            </p>
+
+                            <div className="settings-form-group">
+                                <label className="settings-form-label">Your API Key (Password / Token)</label>
+                                <div className="settings-input-row mcp-key-row">
+                                    <input 
+                                        type="text" 
+                                        className="input settings-input-monospace" 
+                                        value={apiKey || 'swazz_live_••••••••••••••••••••••••'} 
+                                        readOnly 
+                                        data-1p-ignore
+                                    />
+                                    <button 
+                                        className="btn btn-secondary btn-sm settings-btn-min-w"
+                                        onClick={() => copyToClipboard(apiKey, setCopiedApiKey)}
+                                        disabled={!apiKey || apiKey.includes('•')}
+                                    >
+                                        {copiedApiKey ? '✓ Copied' : 'Copy'}
+                                    </button>
+                                </div>
+                                {!userProfile?.isGuest && (!apiKey || apiKey.includes('•')) && (
+                                    <p className="api-key-new-warning mcp-warning-text">
+                                        * Note: API keys are masked for security. If you do not have your plain-text key saved, please go to the <strong>Account Details</strong> tab and click <strong>Regenerate API Key</strong>.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="mcp-section-wrapper">
+                                <h3 className="settings-card-subtitle mcp-subtitle">
+                                    1. Claude Desktop Setup
+                                </h3>
+                                <p className="settings-card-desc mcp-step-desc">
+                                    The easiest way to register the Swazz MCP server using the <code>claude</code> CLI:
+                                </p>
+                                <pre className="log-payload-preview mcp-code-preview">
+                                    {`claude mcp add --transport sse swazz-cloud ${apiBaseUrl}/api/mcp/sse \\
+  --header "Authorization: Bearer ${apiKey || '<YOUR_API_KEY>'}"`}
+                                </pre>
+
+                                <p className="settings-card-desc mcp-step-desc">
+                                    Or manually add this to your <code>claude_desktop_config.json</code>:
+                                </p>
+                                <pre className="log-payload-preview mcp-code-preview">
+                                    {JSON.stringify({
+                                        mcpServers: {
+                                            "swazz-cloud": {
+                                                type: "sse",
+                                                url: `${apiBaseUrl}/api/mcp/sse`,
+                                                headers: {
+                                                    Authorization: `Bearer ${apiKey || '<YOUR_API_KEY>'}`
+                                                }
+                                            }
+                                        }
+                                    }, null, 2)}
+                                </pre>
+                            </div>
+
+                            <div className="mcp-section-wrapper">
+                                <h3 className="settings-card-subtitle mcp-subtitle">
+                                    2. Google Antigravity (AGY) Setup
+                                </h3>
+                                <p className="settings-card-desc mcp-step-desc">
+                                    Add the Swazz MCP server to your global configuration file <code>~/.gemini/config/mcp_config.json</code> (or project-level <code>.agents/mcp_config.json</code>):
+                                </p>
+                                <pre className="log-payload-preview mcp-code-preview">
+                                    {JSON.stringify({
+                                        mcpServers: {
+                                            "swazz-cloud": {
+                                                serverUrl: `${apiBaseUrl}/api/mcp/sse`,
+                                                headers: {
+                                                    Authorization: `Bearer ${apiKey || '<YOUR_API_KEY>'}`
+                                                }
+                                            }
+                                        }
+                                    }, null, 2)}
+                                </pre>
+
+                                <p className="settings-card-desc mcp-step-desc">
+                                    Or configure programmatically from your terminal in one command:
+                                </p>
+                                <pre className="log-payload-preview mcp-code-preview">
+                                    {`node -e '
+const fs = require("fs");
+const path = require("path");
+const filePath = path.join(process.env.HOME, ".gemini/config/mcp_config.json");
+let config = { mcpServers: {} };
+try { config = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch {}
+config.mcpServers["swazz-cloud"] = {
+  serverUrl: "${apiBaseUrl}/api/mcp/sse",
+  headers: { Authorization: "Bearer ${apiKey || '<YOUR_API_KEY>'}" }
+};
+fs.mkdirSync(path.dirname(filePath), { recursive: true });
+fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
+console.log("Successfully added Swazz Cloud MCP to Google Antigravity!");
+'`}
+                                </pre>
+                            </div>
                         </div>
                     )}
                 </div>

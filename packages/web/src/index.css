@@ -7811,3 +7811,43 @@ kbd {
     width: 120px;
 }
 
+/* MCP Integration Tab Layout Styles */
+.mcp-desc-spacing {
+    margin-bottom: 20px;
+}
+
+.mcp-key-row {
+    margin-bottom: 15px;
+}
+
+.mcp-warning-text {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.mcp-section-wrapper {
+    margin-top: 24px;
+    border-top: 1px solid var(--border-default);
+    padding-top: 20px;
+}
+
+.mcp-subtitle {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.mcp-step-desc {
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.mcp-code-preview {
+    padding: 12px;
+    background: var(--bg-app);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+}
+
