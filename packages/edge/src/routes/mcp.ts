@@ -133,7 +133,10 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const doId = c.env.COORDINATOR_DO.idFromName('global-coordinator');
     const stub = c.env.COORDINATOR_DO.get(doId);
 
-    const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}`));
+    const requestUrl = new URL(c.req.url);
+    const origin = requestUrl.origin;
+
+    const doRes = await stub.fetch(new Request(`http://localhost/sse?connectionId=${connectionId}&origin=${encodeURIComponent(origin)}`));
     return doRes;
   });
 

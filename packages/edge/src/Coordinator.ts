@@ -73,10 +73,12 @@ export class RunnerCoordinator {
         return new Response('Missing connectionId', { status: 400 });
       }
 
+      const origin = decodeURIComponent(url.searchParams.get('origin') || '');
       const stream = new ReadableStream({
         start: (controller) => {
           this.sseStreams.set(connectionId, controller);
-          const initEvent = `event: endpoint\ndata: /api/mcp/message?connectionId=${connectionId}\n\n`;
+          const endpointUrl = `${origin}/api/mcp/message?connectionId=${connectionId}`;
+          const initEvent = `event: endpoint\ndata: ${endpointUrl}\n\n`;
           controller.enqueue(new TextEncoder().encode(initEvent));
         },
         cancel: () => {
