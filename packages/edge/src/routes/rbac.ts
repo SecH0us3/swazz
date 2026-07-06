@@ -146,14 +146,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
       FROM project_member_roles m 
       JOIN users u ON m.user_id = u.id 
       WHERE m.project_id = ?
-      UNION
-      SELECT u.id, u.username, u.email, u.two_factor_enabled, u.github_id, pm.role as role_id
-      FROM project_members pm
-      JOIN users u ON pm.user_id = u.id
-      WHERE pm.project_id = ? AND NOT EXISTS (
-        SELECT 1 FROM project_member_roles WHERE project_id = pm.project_id AND user_id = pm.user_id
-      )
-    `).bind(projectId, projectId).all<{ id: string; username: string; email: string; two_factor_enabled: number; github_id: string | null; role_id: string }>();
+    `).bind(projectId).all<{ id: string; username: string; email: string; two_factor_enabled: number; github_id: string | null; role_id: string }>();
 
     // Group by user
     const usersMap = new Map();
