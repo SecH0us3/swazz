@@ -345,6 +345,43 @@ describe("D1 Database Migrations & API", () => {
     expect(dbUserAfter).toBeNull();
   });
 
+  it("cleans up audit logs older than 45 days", async () => {
+    const { cleanupSecurityTables } = await import("./utils/cleanup");
+    
+    const pid = "test_pid";
+    
+    // Create a dummy project first to satisfy the FOREIGN KEY constraint
+    await env.DB.prepare(
+      "INSERT INTO projects (id, name, description) VALUES (?, ?, ?)"
+    ).bind(pid, "Test Project", "For audit trail testing").run();
+    
+    await env.DB.prepare(
+      `INSERT INTO audit_logs (id, project_id, user_id, actor_username, actor_role, action, action_label, source, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-46 days'))`
+    ).bind("old_log", pid, null, "actor", "owner", "act", "lbl", "web").run();
+
+    await env.DB.prepare(
+      `INSERT INTO audit_logs (id, project_id, user_id, actor_username, actor_role, action, action_label, source, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-10 days'))`
+    ).bind("new_log", pid, null, "actor", "owner", "act", "lbl", "web").run();
+
+    // Trigger cleanup
+    await cleanupSecurityTables(env.DB);
+
+    // Verify
+    const oldLog = await env.DB.prepare("SELECT 1 FROM audit_logs WHERE id = 'old_log'").first();
+    const newLog = await env.DB.prepare("SELECT 1 FROM audit_logs WHERE id = 'new_log'").first();
+
+    expect(oldLog).toBeNull();
+    expect(newLog).not.toBeNull();
+
+    // Clean up test data
+    await env.DB.prepare("DELETE FROM audit_logs WHERE project_id = ?").bind(pid).run();
+    await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(pid).run();
+  });
+
+
+
   it("blocks login after 5 failed attempts (rate limiting)", async () => {
     // Attempt 5 bad logins
     for (let i = 0; i < 5; i++) {
