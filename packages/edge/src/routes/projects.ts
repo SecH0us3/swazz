@@ -3,6 +3,7 @@ import { Env } from '../env';
 import { getDB } from '../utils/db';
 import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { requirePermission } from '../middleware/rbac';
+import { auditLog } from '../middleware/auditLog';
 import { checkPermission } from '../utils/rbac';
 import { ulid } from 'ulidx';
 import { sign } from 'hono/jwt';
@@ -80,7 +81,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     });
   });
   
-  app.post('/api/projects/:id/config', requirePermission('post:/api/projects/:id/config'), async (c) => {
+  app.post('/api/projects/:id/config', requirePermission('post:/api/projects/:id/config'), auditLog('post:/api/projects/:id/config', 'Saved scan configuration'), async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json();
   
@@ -102,7 +103,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'saved' });
   });
 
-  app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), async (c) => {
+  app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), auditLog('post:/api/projects/:id/schedule', 'Updated scan schedule'), async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json();
     const { cron_schedule } = body;
@@ -146,7 +147,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'saved', cron_schedule });
   });
   
-  app.patch('/api/projects/:id', requirePermission('patch:/api/projects/:id'), async (c) => {
+  app.patch('/api/projects/:id', requirePermission('patch:/api/projects/:id'), auditLog('patch:/api/projects/:id', 'Updated project settings'), async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json();
   
@@ -171,7 +172,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'updated' });
   });
   
-  app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), async (c) => {
+  app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), auditLog('delete:/api/projects/:id', 'Deleted project'), async (c) => {
     const projectId = c.req.param('id');
   
     await getDB(c.env).batch([
@@ -371,5 +372,64 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       }
     });
   });
-  
+  app.get('/api/projects/:id/audit-logs', requirePermission('get:/api/projects/:id/audit-logs'), async (c) => {
+    const projectId = c.req.param('id');
+
+    const page   = Math.max(1, parseInt(c.req.query('page')   || '1',  10) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '20', 10) || 20));
+    const offset = (page - 1) * limit;
+    const search = (c.req.query('search') || '').trim();
+    const source = (c.req.query('source') || '').trim();
+    const action = (c.req.query('action') || '').trim();
+
+    const conditions: string[] = ['project_id = ?'];
+    const params: any[] = [projectId];
+
+    if (search) {
+      conditions.push('(actor_username LIKE ? OR action_label LIKE ? OR ip_address LIKE ?)');
+      const like = `%${search}%`;
+      params.push(like, like, like);
+    }
+    if (source) {
+      conditions.push('source = ?');
+      params.push(source);
+    }
+    if (action) {
+      conditions.push('action LIKE ?');
+      params.push(`${action}%`);
+    }
+
+    const where = conditions.join(' AND ');
+    const db = getDB(c.env);
+
+    const [rows, countRow] = await Promise.all([
+      db
+        .prepare(
+          `SELECT id, user_id, actor_username, actor_role, action, action_label, source, ip_address, timestamp
+           FROM audit_logs
+           WHERE ${where}
+           ORDER BY timestamp DESC
+           LIMIT ? OFFSET ?`
+        )
+        .bind(...params, limit, offset)
+        .all(),
+      db
+        .prepare(`SELECT COUNT(*) as total FROM audit_logs WHERE ${where}`)
+        .bind(...params)
+        .first<{ total: number }>(),
+    ]);
+
+    const total = countRow?.total || 0;
+
+    return c.json({
+      logs: rows.results || [],
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  });
+
 }

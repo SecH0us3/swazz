@@ -38,7 +38,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 
 
-- [ ] **Task 123: User Action Audit Trail Logging**
+- [/] **Task 123: User Action Audit Trail Logging**
   - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
   - **Implementation Details:**
     - Create a database table `audit_logs` (schema: `id, project_id, user_id, action, details, ip_address, timestamp`).

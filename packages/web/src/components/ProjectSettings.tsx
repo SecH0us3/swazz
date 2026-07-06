@@ -13,6 +13,7 @@ import { DictionariesTab } from './ProjectSettings/DictionariesTab.js';
 import { ApiSpecsTab } from './ProjectSettings/ApiSpecsTab.js';
 import { KeysTab } from './ProjectSettings/KeysTab.js';
 import { ScheduleTab } from './ProjectSettings/ScheduleTab.js';
+import { AuditTrailTab } from './ProjectSettings/AuditTrailTab.js';
 
 interface Runner {
     connectionId: string | null;
@@ -25,7 +26,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -246,6 +247,17 @@ export function ProjectSettings() {
                         </svg>
                         Scan Scheduler
                     </button>
+                    <button
+                        id="tab-audit-trail"
+                        className={`tab-bar-btn ${activeSubTab === 'audit_trail' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('audit_trail')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <path d="M9 12h6M9 16h6M9 8h6M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+                            <path d="M12 2v4" strokeLinecap="round" />
+                        </svg>
+                        Audit Trail
+                    </button>
                 </div>
 
                 {/* Main Content Area */}
@@ -270,6 +282,7 @@ export function ProjectSettings() {
                     {activeSubTab === 'keys' && <KeysTab />}
                     {activeSubTab === 'raw_config' && <RawConfigTab />}
                     {activeSubTab === 'schedule' && <ScheduleTab />}
+                    {activeSubTab === 'audit_trail' && <AuditTrailTab />}
                 </div>
             </div>
         </div>
