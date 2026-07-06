@@ -45,13 +45,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
     - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
-- [ ] **Task 121: Container Image Signing & Verification via Cosign**
-  - **Design Goal:** Secure built runner agent container images against supply chain tampering by signing release images with Cosign.
-  - **Implementation Details:**
-    - Generate a key pair for image signing (`cosign generate-key-pair`).
-    - Store the public verification key (`cosign.pub`) in the repository under a `keys/` directory and document image verification steps.
-    - Save the private key as a GitHub Action Secret `COSIGN_PRIVATE_KEY` (along with its password secret).
-    - Update the build & publish CI workflow to install Cosign and sign the built Docker images after pushing them to the registry.
 
 - [ ] **Task 123: User Action Audit Trail Logging**
   - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
