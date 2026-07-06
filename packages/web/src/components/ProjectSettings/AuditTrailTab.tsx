@@ -11,6 +11,7 @@ interface AuditLog {
     action: string;
     action_label: string | null;
     source: 'web' | 'api_key' | 'mcp';
+    details?: string | null;
     ip_address: string | null;
     timestamp: string;
 }
@@ -47,13 +48,14 @@ function formatTimestamp(ts: string): string {
 }
 
 function exportToCsv(logs: AuditLog[], projectId: string) {
-    const headers = ['Timestamp (UTC)', 'Actor', 'Role', 'Action', 'Source', 'IP Address'];
+    const headers = ['Timestamp (UTC)', 'Actor', 'Role', 'Action', 'Source', 'Details', 'IP Address'];
     const rows = logs.map(l => [
         l.timestamp,
         l.actor_username ?? '[deleted]',
         l.actor_role ?? '—',
         l.action_label ?? l.action,
         SOURCE_LABELS[l.source] ?? l.source,
+        l.details ?? '—',
         l.ip_address ?? '—',
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
@@ -68,6 +70,61 @@ function exportToCsv(logs: AuditLog[], projectId: string) {
     URL.revokeObjectURL(url);
 }
 
+function RenderDetailsDiff({ details }: { details: string }) {
+    try {
+        const parsed = JSON.parse(details);
+        if (parsed && typeof parsed === 'object') {
+            // Check if before/after diff structure
+            if ('before' in parsed && 'after' in parsed) {
+                const before = parsed.before || {};
+                const after = parsed.after || {};
+                const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]));
+                
+                if (keys.length === 0) return <span className="audit-details-text">No fields were modified.</span>;
+
+                return (
+                    <div className="audit-details-diff">
+                        <table className="audit-diff-table">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>Old Value</th>
+                                    <th>New Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {keys.map(key => (
+                                    <tr key={key}>
+                                        <td className="audit-diff-field">{key}</td>
+                                        <td className="audit-diff-val audit-diff-val--old">{String(before[key] ?? '—')}</td>
+                                        <td className="audit-diff-val audit-diff-val--new">{String(after[key] ?? '—')}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            }
+            
+            // Render general key-value pairs (e.g. scan target, profile)
+            const keys = Object.keys(parsed);
+            return (
+                <div className="audit-details-params">
+                    {keys.map(key => (
+                        <div key={key} className="audit-details-param-row">
+                            <span className="audit-details-param-key">{key}:</span>
+                            <span className="audit-details-param-val">{String(parsed[key])}</span>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+    } catch {
+        // Fallback to plain text
+    }
+    return <span className="audit-details-text">{details}</span>;
+}
+
 export function AuditTrailTab() {
     const projectId = useAppStore(s => s.activeProject?.id ?? null);
 
@@ -80,6 +137,7 @@ export function AuditTrailTab() {
     const [search, setSearch] = useState('');
     const [source, setSource] = useState('');
     const [page, setPage] = useState(1);
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const fetchLogs = useCallback(async (searchVal: string, sourceVal: string, pageVal: number, signal?: AbortSignal) => {
@@ -157,6 +215,10 @@ export function AuditTrailTab() {
         } catch (err: any) {
             setError(err.message || 'Export failed');
         }
+    };
+
+    const toggleRow = (id: string) => {
+        setExpandedRow(prev => (prev === id ? null : id));
     };
 
     if (forbidden) {
@@ -243,6 +305,7 @@ export function AuditTrailTab() {
                         <table className="audit-trail-table" aria-label="Audit trail events">
                             <thead>
                                 <tr>
+                                    <th style={{ width: '40px' }} />
                                     <th>Timestamp</th>
                                     <th>Actor</th>
                                     <th>Role</th>
@@ -252,32 +315,65 @@ export function AuditTrailTab() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {logs.map(log => (
-                                    <tr key={log.id}>
-                                        <td className="audit-trail-timestamp">{formatTimestamp(log.timestamp)}</td>
-                                        <td>
-                                            {log.actor_username ? (
-                                                <span className="audit-trail-actor">{log.actor_username}</span>
-                                            ) : (
-                                                <span className="audit-trail-actor-deleted">[deleted user]</span>
+                                {logs.map(log => {
+                                    const isExpanded = expandedRow === log.id;
+                                    const hasDetails = !!log.details;
+                                    
+                                    return (
+                                        <React.Fragment key={log.id}>
+                                            <tr 
+                                                className={`audit-row-main ${hasDetails ? 'audit-row-interactive' : ''}`}
+                                                onClick={() => hasDetails && toggleRow(log.id)}
+                                            >
+                                                <td className="audit-row-chevron-cell">
+                                                    {hasDetails && (
+                                                        <svg 
+                                                            className={`audit-chevron-icon ${isExpanded ? 'rotated' : ''}`} 
+                                                            width="12" 
+                                                            height="12" 
+                                                            viewBox="0 0 24 24" 
+                                                            fill="none" 
+                                                            stroke="currentColor" 
+                                                            strokeWidth="3"
+                                                        >
+                                                            <polyline points="9 18 15 12 9 6" />
+                                                        </svg>
+                                                    )}
+                                                </td>
+                                                <td className="audit-trail-timestamp">{formatTimestamp(log.timestamp)}</td>
+                                                <td>
+                                                    {log.actor_username ? (
+                                                        <span className="audit-trail-actor">{log.actor_username}</span>
+                                                    ) : (
+                                                        <span className="audit-trail-actor-deleted">[deleted user]</span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    {log.actor_role ? (
+                                                        <span className="audit-trail-role-badge">{log.actor_role}</span>
+                                                    ) : '—'}
+                                                </td>
+                                                <td className="audit-trail-action-label" title={log.action}>
+                                                    {log.action_label ?? log.action}
+                                                </td>
+                                                <td>
+                                                    <span className={`audit-trail-source-badge audit-trail-source-badge--${log.source}`}>
+                                                        {SOURCE_ICONS[log.source] ?? '?'} {SOURCE_LABELS[log.source] ?? log.source}
+                                                    </span>
+                                                </td>
+                                                <td className="audit-trail-ip">{log.ip_address ?? '—'}</td>
+                                            </tr>
+                                            {isExpanded && log.details && (
+                                                <tr className="audit-row-details">
+                                                    <td />
+                                                    <td colSpan={6} className="audit-details-cell">
+                                                        <RenderDetailsDiff details={log.details} />
+                                                    </td>
+                                                </tr>
                                             )}
-                                        </td>
-                                        <td>
-                                            {log.actor_role ? (
-                                                <span className="audit-trail-role-badge">{log.actor_role}</span>
-                                            ) : '—'}
-                                        </td>
-                                        <td className="audit-trail-action-label" title={log.action}>
-                                            {log.action_label ?? log.action}
-                                        </td>
-                                        <td>
-                                            <span className={`audit-trail-source-badge audit-trail-source-badge--${log.source}`}>
-                                                {SOURCE_ICONS[log.source] ?? '?'} {SOURCE_LABELS[log.source] ?? log.source}
-                                            </span>
-                                        </td>
-                                        <td className="audit-trail-ip">{log.ip_address ?? '—'}</td>
-                                    </tr>
-                                ))}
+                                        </React.Fragment>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

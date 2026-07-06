@@ -129,8 +129,10 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
 
     // Check if the config exists
     const existingConfig = await getDB(c.env).prepare(
-      "SELECT id FROM scan_configs WHERE project_id = ? AND name = 'default'"
-    ).bind(projectId).first<{ id: string }>();
+      "SELECT id, cron_schedule FROM scan_configs WHERE project_id = ? AND name = 'default'"
+    ).bind(projectId).first<{ id: string; cron_schedule: string | null }>();
+
+    const oldSchedule = existingConfig ? existingConfig.cron_schedule : null;
 
     if (!existingConfig) {
       const id = ulid();
@@ -144,6 +146,11 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
       ).bind(cron_schedule || null, projectId).run();
     }
 
+    c.set('auditDetails', {
+      before: { cron_schedule: oldSchedule },
+      after: { cron_schedule: cron_schedule || null }
+    });
+ 
     return c.json({ status: 'saved', cron_schedule });
   });
   
@@ -152,13 +159,29 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     const body = await c.req.json();
   
     const allowedFields = ['name', 'description', 'url_mappings', 'ai_prompts', 'propose_fixes', 'custom_cli_command', 'auto_fix_rules', 'member_session_timeout'];
+    
+    // Fetch old values to compute diff
+    const fieldsCSV = allowedFields.join(', ');
+    const oldProj = await getDB(c.env).prepare(`SELECT ${fieldsCSV} FROM projects WHERE id = ?`)
+      .bind(projectId)
+      .first<Record<string, any>>();
+
     const setClauses: string[] = [];
     const values: any[] = [];
+    const beforeDiff: Record<string, any> = {};
+    const afterDiff: Record<string, any> = {};
     
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
         setClauses.push(`${field} = ?`);
-        values.push(field === 'propose_fixes' ? (body[field] ? 1 : 0) : body[field]);
+        const val = field === 'propose_fixes' ? (body[field] ? 1 : 0) : body[field];
+        values.push(val);
+
+        const oldVal = oldProj ? oldProj[field] : null;
+        if (oldVal !== val) {
+          beforeDiff[field] = oldVal;
+          afterDiff[field] = val;
+        }
       }
     }
 
@@ -168,6 +191,11 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
         .bind(...values)
         .run();
     }
+
+    c.set('auditDetails', {
+      before: beforeDiff,
+      after: afterDiff
+    });
   
     return c.json({ status: 'updated' });
   });

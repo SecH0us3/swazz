@@ -50,6 +50,12 @@ export function auditLog(action: PermissionKey | string, label: string) {
     // executionCtx may be unavailable in test environments — skip silently.
     if (!c.executionCtx?.waitUntil) return;
 
+    // Retrieve details set by the route handler
+    const auditDetailsVal = c.get('auditDetails');
+    const details = auditDetailsVal 
+      ? (typeof auditDetailsVal === 'string' ? auditDetailsVal : JSON.stringify(auditDetailsVal)) 
+      : null;
+
     c.executionCtx.waitUntil(
       (async () => {
         try {
@@ -70,8 +76,8 @@ export function auditLog(action: PermissionKey | string, label: string) {
           await db
             .prepare(
               `INSERT INTO audit_logs
-                 (id, project_id, user_id, actor_username, actor_role, action, action_label, source, ip_address)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                 (id, project_id, user_id, actor_username, actor_role, action, action_label, source, details, ip_address)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
             .bind(
               ulid(),
@@ -82,6 +88,7 @@ export function auditLog(action: PermissionKey | string, label: string) {
               action,
               label,
               source,
+              details,
               ip ?? null
             )
             .run();

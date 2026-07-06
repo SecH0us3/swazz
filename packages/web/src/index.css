@@ -8226,3 +8226,110 @@ kbd {
     cursor: not-allowed;
 }
 
+/* ============================================================
+   Audit Details & Diff Styling
+   ============================================================ */
+
+.audit-row-interactive {
+    cursor: pointer;
+}
+
+.audit-row-chevron-cell {
+    text-align: center;
+    width: 40px;
+    padding: 0;
+}
+
+.audit-chevron-icon {
+    transition: transform 0.2s ease;
+    color: var(--text-muted);
+}
+
+.audit-chevron-icon.rotated {
+    transform: rotate(90deg);
+    color: var(--accent-primary);
+}
+
+.audit-row-details {
+    background: color-mix(in srgb, var(--accent-primary) 3%, var(--bg-hover));
+}
+
+.audit-details-cell {
+    padding: var(--spacing-4) var(--spacing-6) !important;
+    border-top: 1px solid var(--border-subtle, var(--border-default));
+}
+
+.audit-details-text {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.audit-details-params {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.audit-details-param-row {
+    display: flex;
+    gap: var(--spacing-2);
+    font-size: 13px;
+}
+
+.audit-details-param-key {
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.audit-details-param-val {
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+}
+
+.audit-details-diff {
+    width: 100%;
+}
+
+.audit-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.audit-diff-table th {
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-bottom: 1px solid var(--border-default);
+    text-align: left;
+}
+
+.audit-diff-table td {
+    padding: var(--spacing-2) var(--spacing-4);
+    vertical-align: middle;
+}
+
+.audit-diff-field {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-family: var(--font-mono, monospace);
+}
+
+.audit-diff-val {
+    font-family: var(--font-mono, monospace);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    display: inline-block;
+}
+
+.audit-diff-val--old {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.audit-diff-val--new {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+
