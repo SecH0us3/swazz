@@ -75,21 +75,28 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
       }
     };
 
-    fetchLogs();
     
-    // Poll for new logs if the scan is currently running
-    let interval: any;
+    let timer: any;
+    const poll = async () => {
+      await fetchLogs();
+      if (active && isRunning) {
+        timer = setTimeout(poll, 3000);
+      }
+    };
+
     if (isRunning) {
-      interval = setInterval(fetchLogs, 3000);
+      poll();
+    } else {
+      fetchLogs();
     }
 
     return () => {
       active = false;
-      if (interval) {
-        clearInterval(interval);
+      if (timer) {
+        clearTimeout(timer);
       }
     };
-  }, [runId, token]);
+  }, [runId, token, isRunning]);
 
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {

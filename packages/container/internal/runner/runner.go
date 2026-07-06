@@ -740,9 +740,12 @@ func (r *Runner) logDebug(format string, v ...interface{}) {
 func truncateLog(msg string) string {
 	const maxSize = 32768
 	if len(msg) > maxSize {
-		runes := []rune(msg)
-		if len(runes) > maxSize {
-			return string(runes[:maxSize]) + "... [TRUNCATED]"
+		count := 0
+		for i := range msg {
+			if count == maxSize {
+				return msg[:i] + "... [TRUNCATED]"
+			}
+			count++
 		}
 	}
 	return msg

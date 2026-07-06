@@ -272,18 +272,13 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
 
-    const { results } = await getDB(c.env, scanId).prepare("SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' ORDER BY created_at ASC")
+    const { results } = await getDB(c.env, scanId).prepare(
+      "SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' AND json_extract(payload, '$.type') = 'runner_log' ORDER BY created_at ASC"
+    )
       .bind(scanId)
       .all();
 
-    const logs = (results || []).filter((r: any) => {
-      try {
-        const parsed = typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload;
-        return parsed.type === 'runner_log';
-      } catch {
-        return false;
-      }
-    });
+    const logs = results || [];
 
     console.log('Runner logs for', scanId, 'results:', logs.length);
     return c.json({ logs });
