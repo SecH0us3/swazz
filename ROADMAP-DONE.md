@@ -26,6 +26,15 @@ This file contains completed tasks.
     - Port existing markdown guides to the new site layout.
     - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
 
+- [x] **Task 123: User Action Audit Trail Logging**
+  - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
+  - **Implementation Details:**
+    - Create a database table `audit_logs` (schema: `id, project_id, user_id, action, details, ip_address, timestamp`).
+    - Implement a backend middleware or helper in Hono that intercepts non-GET requests (POST, PUT, PATCH, DELETE) to project-scoped endpoints.
+    - Automatically log details of key actions (e.g. member additions/removals, role modifications, settings updates, scan executions) into the `audit_logs` table.
+    - Expose an API endpoint `GET /api/projects/:id/audit-logs` (accessible only to owners/admins).
+    - Design an "Audit Trail" tab in Project Settings to view, search, and export the logs.
+
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
 - [x] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
