@@ -6,7 +6,7 @@ import { auditLog } from '../middleware/auditLog';
 import { IProjectServices, ProjectServices } from '../services/projects';
 
 export function registerProjectsRoutes(
-  app: Hono<{ Bindings: Env }>,
+  app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
   projectServicesFactory: (env: Env) => IProjectServices = (env) => new ProjectServices(env)
 ) {
   app.get('/api/projects', async (c) => {
@@ -23,7 +23,15 @@ export function registerProjectsRoutes(
   
   app.post('/api/projects', async (c) => {
     const services = projectServicesFactory(c.env);
-    const userId = await getUserIdFromRequest(c) || 'anonymous';
+    let userId = await getUserIdFromRequest(c);
+    
+    // Only fallback to anonymous if auth is globally disabled
+    if (!userId) {
+      if (c.env.AUTH_ENABLED === 'true') {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+      userId = 'anonymous';
+    }
     const body = await c.req.json();
     
     const { id } = await services.createProject(userId, body);
@@ -74,7 +82,7 @@ export function registerProjectsRoutes(
 
     const { oldSchedule } = await services.updateProjectSchedule(projectId, cron_schedule || null);
 
-    c.set('auditDetails' as any, {
+    c.set('auditDetails', {
       before: { cron_schedule: oldSchedule },
       after: { cron_schedule: cron_schedule || null }
     });
@@ -90,7 +98,7 @@ export function registerProjectsRoutes(
     const { beforeDiff, afterDiff, updated } = await services.updateProjectSettings(projectId, body);
 
     if (updated) {
-      c.set('auditDetails' as any, {
+      c.set('auditDetails', {
         before: beforeDiff,
         after: afterDiff
       });
