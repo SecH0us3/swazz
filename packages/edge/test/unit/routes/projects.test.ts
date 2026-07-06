@@ -1,22 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { registerProjectsRoutes } from './projects';
-import { IProjectServices } from '../services/projects';
+import { registerProjectsRoutes } from '../../../src/routes/projects';
+import { IProjectServices } from '../../../src/services/projects';
 
 // Mock middleware and auth utils so we can test routes in isolation
-vi.mock('../utils/auth', () => ({
+vi.mock('../../../src/utils/auth', () => ({
   getUserIdFromRequest: vi.fn().mockResolvedValue('user_123'),
   getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 
-vi.mock('../middleware/rbac', () => ({
+vi.mock('../../../src/middleware/rbac', () => ({
   requirePermission: () => async (c: any, next: any) => {
     // just pass through for testing
     await next();
   },
 }));
 
-vi.mock('../middleware/auditLog', () => ({
+vi.mock('../../../src/middleware/auditLog', () => ({
   auditLog: () => async (c: any, next: any) => {
     await next();
   },
@@ -63,7 +63,7 @@ describe('Projects Routes', () => {
 
     it('should return 401 if unauthenticated and auth is enabled', async () => {
       // Mock getUserIdFromRequest to return null
-      const auth = await import('../utils/auth');
+      const auth = await import('../../../src/utils/auth');
       (auth.getUserIdFromRequest as any).mockResolvedValueOnce(null);
 
       const res = await app.request('/api/projects');
