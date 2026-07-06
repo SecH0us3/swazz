@@ -22,6 +22,7 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
   const { token } = useAuth();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [minLevel, setMinLevel] = useState<'INFO' | 'WARN' | 'ERROR'>('WARN');
 
   useEffect(() => {
     if (!runId) {
@@ -105,11 +106,20 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
   const getLogColor = (level: string) => {
     switch (level?.toUpperCase()) {
       case 'ERROR': return 'var(--danger)';
-      case 'WARN': return 'var(--warning)';
+      case 'WARN': 
+      case 'WARNING': return 'var(--warning)';
       case 'DEBUG': return 'var(--text-muted)';
       default: return 'var(--text-normal)';
     }
   };
+
+  const levelScore: Record<string, number> = { 'DEBUG': -1, 'INFO': 0, 'WARN': 1, 'WARNING': 1, 'ERROR': 2 };
+  const minLevelScore = levelScore[minLevel] || 0;
+  
+  const filteredLogs = logs.filter(log => {
+    const score = levelScore[log.level.toUpperCase()] || 0;
+    return score >= minLevelScore;
+  });
 
   if (!runId) {
     return <div style={{ padding: 'var(--space-4)', color: 'var(--text-muted)' }}>No scan selected.</div>;
@@ -124,10 +134,26 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
           </svg>
           Runner Logs
         </h3>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {minLevel === 'WARN' && (
+            <span style={{ color: 'var(--warning)', fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+              ⚠️ Showing warnings+ only
+            </span>
+          )}
+          <select 
+            className="input input-sm" 
+            value={minLevel} 
+            onChange={(e) => setMinLevel(e.target.value as 'INFO' | 'WARN' | 'ERROR')}
+            style={{ padding: '2px 8px', fontSize: 'var(--font-size-xs)', height: '24px', backgroundColor: 'var(--bg-default)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)' }}
+          >
+            <option value="INFO">All logs (Info)</option>
+            <option value="WARN">Warnings & Errors</option>
+            <option value="ERROR">Errors only</option>
+          </select>
           <button 
             className={`btn btn-sm ${autoScroll ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setAutoScroll(!autoScroll)}
+            style={{ height: '24px', padding: '0 8px', fontSize: 'var(--font-size-xs)' }}
           >
             {autoScroll ? 'Auto-scroll On' : 'Auto-scroll Off'}
           </button>
@@ -141,17 +167,18 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
         {loading && logs.length === 0 && <div style={{ color: 'var(--text-muted)' }}>Loading logs...</div>}
         {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
         
-        {logs.map((log, i) => (
+        {filteredLogs.map((log, i) => (
           <div key={i} style={{ marginBottom: '4px', display: 'flex', gap: '12px', wordBreak: 'break-all' }}>
             <span style={{ color: '#4c566a', flexShrink: 0, minWidth: '85px' }}>
               {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
             <span style={{ color: getLogColor(log.level), flexShrink: 0, minWidth: '45px' }}>
-              [{log.level}]
+              [{log.level.toUpperCase() === 'WARNING' ? 'WARN' : log.level.toUpperCase()}]
             </span>
             <span style={{ color: getLogColor(log.level) }}>{log.message}</span>
           </div>
         ))}
+        {filteredLogs.length === 0 && logs.length > 0 && <div style={{ color: 'var(--text-muted)' }}>Logs exist, but are hidden by the current filter.</div>}
         {logs.length === 0 && !loading && !error && <div style={{ color: 'var(--text-muted)' }}>No logs found for this scan.</div>}
         <div ref={logsEndRef} />
       </div>

@@ -157,6 +157,7 @@ export function useRunner(proxyUrl: string) {
             config: any,
             onResult: (rawResult: any) => void,
             onComplete: (stats: RunStats) => void,
+            clientRunId?: string
         ) => {
             if (useAppStore.getState().isRunning) return;
 
@@ -190,7 +191,7 @@ export function useRunner(proxyUrl: string) {
                 const res = await fetch(`${proxyUrl}/api/runs`, {
                     method: 'POST',
                     headers: requestHeaders,
-                    body: JSON.stringify({ config: agentConfig, projectId: projectId ?? '' }),
+                    body: JSON.stringify({ config: agentConfig, projectId: projectId ?? '', runId: clientRunId }),
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));

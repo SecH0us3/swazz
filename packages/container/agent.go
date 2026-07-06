@@ -425,7 +425,7 @@ func startAgent(args []string) {
 							logInfo("[Fuzz Complete] Run %s: %s", runID, msg)
 						}
 						sendWSEvent(runID, "runner_log", map[string]interface{}{
-							"level":     "info",
+							"level":     "warning",
 							"message":   msg,
 							"timestamp": time.Now().Format(time.RFC3339),
 						})
@@ -444,7 +444,7 @@ func startAgent(args []string) {
 			go func(runID string) {
 				logInfo("Starting fuzz runner for runID: %s", runID)
 				sendWSEvent(runID, "runner_log", map[string]interface{}{
-					"level":     "info",
+					"level":     "warning",
 					"message":   fmt.Sprintf("Starting fuzz runner for runID: %s", runID),
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
