@@ -44,6 +44,10 @@ describe('Projects Routes', () => {
     const mockFactory = () => mockServices as IProjectServices;
 
     app = new Hono();
+    app.use('*', async (c, next) => {
+      c.env = { AUTH_ENABLED: 'true' };
+      await next();
+    });
     registerProjectsRoutes(app, mockFactory);
   });
 
@@ -57,15 +61,15 @@ describe('Projects Routes', () => {
       expect(mockServices.getProjects).toHaveBeenCalledWith('user_123');
     });
 
-    it('should pass user_id query param if provided', async () => {
-      // Mock getUserIdFromRequest to return null to simulate query param usage
+    it('should return 401 if unauthenticated and auth is enabled', async () => {
+      // Mock getUserIdFromRequest to return null
       const auth = await import('../utils/auth');
       (auth.getUserIdFromRequest as any).mockResolvedValueOnce(null);
-      (mockServices.getProjects as any).mockResolvedValue([]);
 
-      const res = await app.request('/api/projects?user_id=user_456');
-      expect(res.status).toBe(200);
-      expect(mockServices.getProjects).toHaveBeenCalledWith('user_456');
+      const res = await app.request('/api/projects');
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'Unauthorized' });
+      expect(mockServices.getProjects).not.toHaveBeenCalled();
     });
   });
 

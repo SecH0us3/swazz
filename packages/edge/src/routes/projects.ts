@@ -11,7 +11,12 @@ export function registerProjectsRoutes(
 ) {
   app.get('/api/projects', async (c) => {
     const services = projectServicesFactory(c.env);
-    const userId = await getUserIdFromRequest(c) || c.req.query('user_id') || null;
+    const userId = await getUserIdFromRequest(c);
+    
+    if (!userId && c.env.AUTH_ENABLED === 'true') {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
     const projects = await services.getProjects(userId);
     return c.json({ projects });
   });

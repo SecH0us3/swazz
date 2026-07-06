@@ -24,6 +24,9 @@ export class ProjectServices extends BaseService implements IProjectServices {
   }
 
   async getProjects(userId: string | null): Promise<Project[]> {
+    if (userId !== null && typeof userId !== 'string') {
+      throw new TypeError('userId must be a string or null');
+    }
     if (userId) {
       let { results } = await this.db.prepare(`
         SELECT p.* 
@@ -58,6 +61,15 @@ export class ProjectServices extends BaseService implements IProjectServices {
   }
 
   async createProject(userId: string, body: any): Promise<{ id: string }> {
+    if (typeof userId !== 'string') {
+      throw new TypeError('userId must be a string');
+    }
+    if (!body || typeof body !== 'object') {
+      throw new TypeError('body must be an object');
+    }
+    if (typeof body.name !== 'string') {
+      throw new TypeError('body.name must be a string');
+    }
     const id = ulid();
     
     await this.db.batch([
@@ -73,6 +85,9 @@ export class ProjectServices extends BaseService implements IProjectServices {
   }
 
   async getProjectConfig(projectId: string): Promise<{ config: any; cron_schedule: string | null; last_run_at: string | null }> {
+    if (typeof projectId !== 'string') {
+      throw new TypeError('projectId must be a string');
+    }
     const result = await this.db.prepare(
       "SELECT config_json, cron_schedule, last_run_at FROM scan_configs WHERE project_id = ? AND name = 'default'"
     )
@@ -82,8 +97,16 @@ export class ProjectServices extends BaseService implements IProjectServices {
     if (!result) {
       return { config: null, cron_schedule: null, last_run_at: null };
     }
+
+    let config = null;
+    try {
+      config = JSON.parse(result.config_json);
+    } catch (err) {
+      console.error('Failed to parse config_json for project ' + projectId + ':', err);
+    }
+
     return {
-      config: JSON.parse(result.config_json),
+      config,
       cron_schedule: result.cron_schedule,
       last_run_at: result.last_run_at
     };
@@ -107,6 +130,12 @@ export class ProjectServices extends BaseService implements IProjectServices {
   }
 
   async updateProjectSchedule(projectId: string, cronSchedule: string | null): Promise<{ oldSchedule: string | null }> {
+    if (typeof projectId !== 'string') {
+      throw new TypeError('projectId must be a string');
+    }
+    if (cronSchedule !== null && typeof cronSchedule !== 'string') {
+      throw new TypeError('cronSchedule must be a string or null');
+    }
     const existingConfig = await this.db.prepare(
       "SELECT id, cron_schedule FROM scan_configs WHERE project_id = ? AND name = 'default'"
     ).bind(projectId).first<{ id: string; cron_schedule: string | null }>();
@@ -166,6 +195,9 @@ export class ProjectServices extends BaseService implements IProjectServices {
   }
 
   async deleteProject(projectId: string): Promise<void> {
+    if (typeof projectId !== 'string') {
+      throw new TypeError('projectId must be a string');
+    }
     await this.db.batch([
       this.db.prepare('DELETE FROM projects WHERE id = ?').bind(projectId),
       this.db.prepare('DELETE FROM project_members WHERE project_id = ?').bind(projectId),
