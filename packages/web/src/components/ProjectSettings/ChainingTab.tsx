@@ -24,7 +24,7 @@ export function ChainingTab() {
             <div className="alert-banner alert-info">
                 <div className="alert-banner-header">Tip</div>
                 <div className="alert-banner-message">
-                    Ask the AI assistant to help configure CI/CD — it will be easier.
+                    Ask the AI assistant to help you write the request chaining rules — it will be much easier.
                 </div>
             </div>
             <ChainingRulesEditor 
