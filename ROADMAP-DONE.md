@@ -23,6 +23,15 @@ This file contains completed tasks.
   - **Design Goal:** Fully rebuild the documentation site using a modern framework (e.g. VitePress or Docusaurus) to provide a more convenient and structured layout, featuring full offline-capable search and interactive code blocks.
   - **Implementation Details:**
     - Initialize VitePress or Docusaurus in the documentation workspace.
+
+- [x] **Task 123: User Action Audit Trail Logging**
+  - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
+  - **Implementation Details:**
+    - Create a database table `audit_logs` (schema: `id, project_id, user_id, action, details, ip_address, timestamp`).
+    - Implement a backend middleware or helper in Hono that intercepts non-GET requests (POST, PUT, PATCH, DELETE) to project-scoped endpoints.
+    - Automatically log details of key actions (e.g. member additions/removals, role modifications, settings updates, scan executions) into the `audit_logs` table.
+    - Expose an API endpoint `GET /api/projects/:id/audit-logs` (accessible only to owners/admins).
+    - Design an "Audit Trail" tab in Project Settings to view, search, and export the logs.
     - Port existing markdown guides to the new site layout.
     - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
 
