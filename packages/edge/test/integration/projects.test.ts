@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env as rawEnv } from 'cloudflare:test';
 import { Env } from '../../src/env';
-import { ProjectServices } from '../../src/services/projects';
+import { ProjectRepository } from '../../src/repositories/projects';
 import { splitSql } from '../../src/splitSql';
 import { ulid } from 'ulidx';
 
@@ -35,11 +35,11 @@ beforeAll(async () => {
   }
 });
 
-describe('ProjectServices Integration', () => {
-  let services: ProjectServices;
+describe('ProjectRepository Integration', () => {
+  let services: ProjectRepository;
 
   beforeAll(() => {
-    services = new ProjectServices(env);
+    services = new ProjectRepository(env);
   });
 
   it('creates a project successfully and links to user', async () => {
