@@ -248,6 +248,42 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   // Findings endpoints
   // ---------------------------------------------------------------------------
 
+  app.get('/api/scans/:id/runner-logs', async (c) => {
+    const scanId = c.req.param('id');
+    const scan = await getDB(c.env).prepare('SELECT id, project_id, user_id FROM scans WHERE id = ?')
+      .bind(scanId)
+      .first<{ id: string; project_id: string | null; user_id: string | null }>();
+    if (!scan) {
+      return c.json({ error: 'Scan not found' }, 404);
+    }
+
+    if (c.env.AUTH_ENABLED === 'true') {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+      if (!scan.project_id) {
+        if (scan.user_id !== userId) {
+          return c.json({ error: 'Forbidden' }, 403);
+        }
+      } else {
+        const hasAccess = await checkPermission(c.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+        if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      }
+    }
+
+    const { results } = await getDB(c.env, scanId).prepare(
+      "SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' AND json_extract(payload, '$.type') = 'runner_log' ORDER BY created_at ASC"
+    )
+      .bind(scanId)
+      .all();
+
+    const logs = results || [];
+
+    console.log('Runner logs for', scanId, 'results:', logs.length);
+    return c.json({ logs });
+  });
+
   app.get('/api/scans/:id/findings', async (c) => {
     const scanId = c.req.param('id');
     const scan = await getDB(c.env).prepare('SELECT id, project_id, user_id FROM scans WHERE id = ?')

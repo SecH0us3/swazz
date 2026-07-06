@@ -197,7 +197,7 @@ func (r *Runner) executeRequest(
 		}
 
 		if (logger.IsDebugEnabled() || r.config.Settings.Debug) && dumpErr == nil {
-			logger.Debug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
+			r.logDebug("\n--- Fuzz Request ---\n%s\n--------------------", string(reqDump))
 		}
 
 		// Look for OOB payloads to register the actual request details
@@ -235,7 +235,7 @@ func (r *Runner) executeRequest(
 
 		if err == nil && (logger.IsDebugEnabled() || r.config.Settings.Debug) {
 			dump, _ := httputil.DumpResponse(resp, false)
-			logger.Debug("\n--- Fuzz Response ---\n%s\n---------------------", string(dump))
+			r.logDebug("\n--- Fuzz Response ---\n%s\n---------------------", string(dump))
 		}
 
 		if err != nil {
@@ -304,7 +304,7 @@ func (r *Runner) executeRequest(
 		if r.isSessionExpired(resp, rawBodyBytes, mergedHeaders, cookies, profile) && attempt < 1 {
 			newHeaders, newCookies, refreshed, reauthErr := r.MaybeReauthenticate(ctx, mergedHeaders, cookies)
 			if reauthErr != nil {
-				logger.Error("Automatic re-authentication failed: %v", reauthErr)
+				r.logError("Automatic re-authentication failed: %v", reauthErr)
 			} else if refreshed {
 				// Update cookies/headers for retry
 				cookies = newCookies
@@ -341,7 +341,7 @@ func (r *Runner) executeRequest(
 			responseSize = int64(len(rawBodyBytes)) + discarded
 		}
 		if logger.IsDebugEnabled() && originalPath == "/users" {
-			logger.Debug("Users response: status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t",
+			r.logDebug("Users response: status=%d ContentLength=%d len(rawBodyBytes)=%d discarded=%d AnalyzeResponseBody=%t",
 				resp.StatusCode, resp.ContentLength, len(rawBodyBytes), discarded, r.config.Settings.AnalyzeResponseBody)
 		}
 
@@ -392,10 +392,10 @@ func (r *Runner) executeRequest(
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {
-				logger.Debug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
+				r.logDebug("Analyzer: Found findings for %s %s: %v", method, originalPath, result.AnalyzerFindings)
 			}
 			if logger.IsDebugEnabled() && profile == swagger.ProfileMalicious && originalPath == "/users" {
-				logger.Debug("Users anomaly check: method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v",
+				r.logDebug("Users anomaly check: method=%s baseline=%d observed=%d mult=%.1f findings=%d payload=%v",
 					method, baselineSize, responseSize, multiplier, len(result.AnalyzerFindings), result.Payload)
 			}
 		}

@@ -10,7 +10,7 @@ import { matchesPattern } from '../utils/glob.js';
 interface UseFuzzSessionProps {
     config: SwazzConfig;
     updateConfig: (updates: Partial<SwazzConfig>) => void;
-    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
+    start: (config: SwazzConfig, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void, clientRunId?: string) => void;
     connectToExisting: (runId: string, onResult: (raw: any) => void, onComplete: (stats: RunStats) => void) => void;
     saveRun: (runRecord: ScanRun, rows?: any[]) => void;
     getDb: () => IDBDatabase | null;
@@ -211,7 +211,7 @@ export function useFuzzSession({
         };
 
         try {
-            await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete);
+            await start({ ...finalConfig, projectId: activeProject?.id }, onResult, onComplete, runId);
             showToast(
                 `Fuzzing ${activeEndpoints.length} endpoint${activeEndpoints.length > 1 ? 's' : ''}...`,
                 'info',
