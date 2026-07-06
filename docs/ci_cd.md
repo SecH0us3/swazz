@@ -352,13 +352,13 @@ To protect runner agent and server container images against supply chain tamperi
 
 ### Verification
 
-The public verification key is located in the repository under [keys/cosign.pub](./../keys/cosign.pub). To verify a published image:
+The public verification key is located in the repository under [keys/cosign.pub](https://github.com/SecH0us3/swazz/blob/master/keys/cosign.pub). To verify a published image:
 
 ```bash
 cosign verify --key keys/cosign.pub ghcr.io/sech0us3/swazz:<TAG_OR_DIGEST>
 ```
 
-For more details on installing Cosign and verifying signatures, see the [Image Verification Documentation](./../keys/README.md).
+For more details on installing Cosign and verifying signatures, see the [Image Verification Documentation](https://github.com/SecH0us3/swazz/blob/master/keys/README.md).
 
 ---
 
