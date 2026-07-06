@@ -172,7 +172,7 @@ export function registerProjectsRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'updated' });
   });
   
-  app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), auditLog('delete:/api/projects/:id', 'Deleted project'), async (c) => {
+  app.delete('/api/projects/:id', requirePermission('delete:/api/projects/:id'), async (c) => {
     const projectId = c.req.param('id');
   
     await getDB(c.env).batch([

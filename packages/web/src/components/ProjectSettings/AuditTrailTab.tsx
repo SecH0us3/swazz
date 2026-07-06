@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 
-const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
+
 
 interface AuditLog {
     id: string;
@@ -36,7 +36,8 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function formatTimestamp(ts: string): string {
     try {
-        return new Date(ts).toLocaleString(undefined, {
+        const normalized = ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z';
+        return new Date(normalized).toLocaleString(undefined, {
             year: 'numeric', month: 'short', day: '2-digit',
             hour: '2-digit', minute: '2-digit', second: '2-digit',
         });
@@ -81,7 +82,7 @@ export function AuditTrailTab() {
     const [page, setPage] = useState(1);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const fetchLogs = useCallback(async (searchVal: string, sourceVal: string, pageVal: number) => {
+    const fetchLogs = useCallback(async (searchVal: string, sourceVal: string, pageVal: number, signal?: AbortSignal) => {
         if (!projectId) return;
         setIsLoading(true);
         setError('');
@@ -96,7 +97,7 @@ export function AuditTrailTab() {
         if (sourceVal) params.set('source', sourceVal);
 
         try {
-            const res = await fetch(`${PROXY_URL}/api/projects/${projectId}/audit-logs?${params}`, { headers });
+            const res = await fetch(`/api/projects/${projectId}/audit-logs?${params}`, { headers, signal });
             if (res.status === 403) {
                 setForbidden(true);
                 return;
@@ -106,6 +107,7 @@ export function AuditTrailTab() {
             setLogs(data.logs || []);
             setPagination(data.pagination || { page: 1, limit: 20, total: 0, pages: 0 });
         } catch (err: any) {
+            if (err.name === 'AbortError') return;
             setError(err.message || 'Failed to load audit logs');
         } finally {
             setIsLoading(false);
@@ -114,7 +116,11 @@ export function AuditTrailTab() {
 
     // Initial load and when page/source changes
     useEffect(() => {
-        fetchLogs(search, source, page);
+        const controller = new AbortController();
+        fetchLogs(search, source, page, controller.signal);
+        return () => {
+            controller.abort();
+        };
     }, [source, page, projectId]);
 
     // Debounce search input
@@ -144,7 +150,7 @@ export function AuditTrailTab() {
         if (source) params.set('source', source);
 
         try {
-            const res = await fetch(`${PROXY_URL}/api/projects/${projectId}/audit-logs?${params}`, { headers });
+            const res = await fetch(`/api/projects/${projectId}/audit-logs?${params}`, { headers });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             exportToCsv(data.logs || [], projectId);

@@ -57,36 +57,38 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
     });
 
     // Fire-and-forget audit log entry for scan launch
-    c.executionCtx.waitUntil(
-      (async () => {
-        try {
-          const db = getDB(c.env);
-          const projectId = body.project_id;
-          const [userRow, memberRow] = await Promise.all([
-            userId
-              ? db.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first()
-              : Promise.resolve(null),
-            userId
-              ? db.prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, userId).first()
-              : Promise.resolve(null),
-          ]);
-          const authHeader = c.req.header('Authorization') ?? '';
-          const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-          const source = token.startsWith('swazz_live_') ? 'api_key' : 'web';
-          await db.prepare(
-            `INSERT INTO audit_logs (id, project_id, user_id, actor_username, actor_role, action, action_label, source, ip_address)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(
-            newUlid(), projectId, userId ?? null,
-            userRow?.username ?? null, memberRow?.role ?? null,
-            'post:/api/projects/:id/scans', 'Started scan',
-            source, getClientIp(c) ?? null
-          ).run();
-        } catch (err) {
-          console.error('[auditLog] Failed to write scan audit log:', err);
-        }
-      })()
-    );
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const db = getDB(c.env);
+            const projectId = body.project_id;
+            const [userRow, memberRow] = await Promise.all([
+              userId
+                ? db.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first()
+                : Promise.resolve(null),
+              userId
+                ? db.prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, userId).first()
+                : Promise.resolve(null),
+            ]);
+            const authHeader = c.req.header('Authorization') ?? '';
+            const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+            const source = token.startsWith('swazz_live_') ? 'api_key' : 'web';
+            await db.prepare(
+              `INSERT INTO audit_logs (id, project_id, user_id, actor_username, actor_role, action, action_label, source, ip_address)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).bind(
+              newUlid(), projectId, userId ?? null,
+              userRow?.username ?? null, memberRow?.role ?? null,
+              'post:/api/projects/:id/scans', 'Started scan',
+              source, getClientIp(c) ?? null
+            ).run();
+          } catch (err) {
+            console.error('[auditLog] Failed to write scan audit log:', err);
+          }
+        })()
+      );
+    }
   
     return c.json({ id, status: 'queued' }, 201);
   });
