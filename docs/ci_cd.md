@@ -10,6 +10,7 @@ This guide covers:
 - [GitHub Actions — Full SARIF Workflow](#github-actions-sarif-reporting)
 - [GitLab CI — Security Dashboard](#gitlab-ci)
 - [Configuration Tips for CI Environments](#configuration-tips-for-ci)
+- [Container Image Signing & Verification](#container-image-signing--verification)
 - [Understanding SARIF Findings](#understanding-sarif-findings)
 - [Interpreting Results & Build Gates](#interpreting-results--build-gates)
 
@@ -342,6 +343,22 @@ Never commit real credentials. Instead, read auth tokens from environment variab
       --fail-on-severity error
   continue-on-error: true
 ```
+
+---
+
+## Container Image Signing & Verification 🔒
+
+To protect runner agent and server container images against supply chain tampering, Swazz release images are signed using **Cosign**.
+
+### Verification
+
+The public verification key is located in the repository under [keys/cosign.pub](./../keys/cosign.pub). To verify a published image:
+
+```bash
+cosign verify --key keys/cosign.pub ghcr.io/sech0us3/swazz:<TAG_OR_DIGEST>
+```
+
+For more details on installing Cosign and verifying signatures, see the [Image Verification Documentation](./../keys/README.md).
 
 ---
 
