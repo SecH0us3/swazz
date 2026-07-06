@@ -60,7 +60,7 @@ app.use('/api/*', async (c, next) => {
 
     const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
     if (!isCancelRoute) {
-      const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env, userId), userId);
+      const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env, userId, c), userId);
       if (deleteRequestedAt !== null) {
         return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
       }
@@ -393,9 +393,9 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: any, env: Env, ctx: any) {
-    ctx.waitUntil(cleanupExpiredGuests(getDB(env), env));
+    ctx.waitUntil(cleanupExpiredGuests(getDB(env, undefined, ctx), env));
     ctx.waitUntil(cleanupScheduledDeletions(env));
-    ctx.waitUntil(cleanupSecurityTables(getDB(env), env));
+    ctx.waitUntil(cleanupSecurityTables(getDB(env, undefined, ctx), env));
     ctx.waitUntil(handleScheduledScans(env));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
@@ -414,7 +414,7 @@ export default {
           });
           const doRes = await stub.fetch(doReq as any);
           if (doRes.ok) {
-            await getDB(env, msg.body.runId).prepare('UPDATE scans SET status = ? WHERE id = ?')
+            await getDB(env, msg.body.runId, ctx).prepare('UPDATE scans SET status = ? WHERE id = ?')
               .bind('dispatched', msg.body.runId)
               .run();
             msg.ack();
@@ -437,20 +437,20 @@ export default {
         const { scanId, type, payload } = msg.body;
         const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
         statements.push(
-          getDB(env, scanId).prepare(
+          getDB(env, scanId, ctx).prepare(
             `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
           ).bind(id, scanId, type, payloadStr)
         );
 
         if (payload && payload.type === 'complete') {
           statements.push(
-            getDB(env, scanId).prepare(
+            getDB(env, scanId, ctx).prepare(
               `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ?`
             ).bind('completed', JSON.stringify(payload.data || {}), scanId)
           );
         } else if (type === 'error' || (payload && payload.type === 'error')) {
           statements.push(
-            getDB(env, scanId).prepare(
+            getDB(env, scanId, ctx).prepare(
               `UPDATE scans SET status = ?, completed_at = datetime('now') WHERE id = ?`
             ).bind('failed', scanId)
           );
@@ -461,7 +461,7 @@ export default {
           for (const finding of payload.data.analyzerFindings) {
             const findingId = crypto.randomUUID();
             statements.push(
-              getDB(env, scanId).prepare(
+              getDB(env, scanId, ctx).prepare(
                 `INSERT INTO findings (id, scan_id, rule_id, level, message, evidence)
                  VALUES (?, ?, ?, ?, ?, ?)`
               ).bind(
@@ -479,7 +479,7 @@ export default {
 
       if (statements.length > 0) {
         try {
-          await getDB(env).batch(statements);
+          await getDB(env, undefined, ctx).batch(statements);
           for (const msg of batch.messages) {
             msg.ack();
           }

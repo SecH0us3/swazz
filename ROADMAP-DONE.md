@@ -234,6 +234,15 @@ This file contains completed tasks.
     - Documented the architecture design decisions and routing options in `docs/sharding.md`.
     - Added and enabled integration tests in `db.test.ts` to verify multi-shard routing.
 
+- [x] **Task 114: Slow Query Monitoring**
+  - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
+  - **Implementation Details:**
+    - Wrapped all D1 `prepare().bind().run() / .first() / .all()` calls in a timing wrapper that records wall-clock duration.
+    - Emits a structured log line (via `console.warn`) whenever a query exceeds a configurable threshold (default: 200 ms).
+    - Exposes an aggregated slow-query counter as a Cloudflare Analytics Engine data point.
+    - Added a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
+
+
 ## 🔍 Detection & Analysis
 
 > **Current Gap:** The [classifier](./packages/container/internal/classifier/classifier.go) is purely status-code-based — `ruleIDForResult()` (L189-197) only generates IDs `swazz/status-{code}`, `swazz/timeout`, `swazz/network-error`. The runner's `executeRequest()` (L424-603 in [runner.go](./packages/container/internal/runner/runner.go)) reads response bodies only for status ≥ 400 (limited to 51200 bytes), and for status < 400 **drains the body to `/dev/null`**. This means swazz sends XSS, SQLi, and CRLF payloads from [malicious.go](./packages/container/internal/generator/payloads/malicious.go) but has no mechanism to verify if they succeed. The tasks below transform swazz from a "status-code stress tester" into a true vulnerability scanner.

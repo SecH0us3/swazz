@@ -37,14 +37,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
 
-- [/] **Task 114: Slow Query Monitoring**
-  - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
-  - **Implementation Details:**
-    - Wrap all D1 `prepare().bind().run() / .first() / .all()` calls in a thin timing helper (e.g. `timedQuery(stmt, label, env)`) that records wall-clock duration.
-    - Emit a structured log line (via `console.warn` or a dedicated logger) whenever a query exceeds a configurable threshold (default: 200 ms).
-    - Expose an aggregated slow-query counter as a Cloudflare Analytics Engine data point or a Workers `logpush` field so that trends are visible in the Cloudflare dashboard.
-    - Add a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
-
 
 - [ ] **Task 123: User Action Audit Trail Logging**
   - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
