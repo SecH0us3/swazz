@@ -2,10 +2,11 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { getDB } from '../utils/db';
-import { getUserIdFromRequest } from '../utils/auth';
+import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { checkPermission } from '../utils/rbac';
+import { ulid as newUlid } from 'ulidx';
 
 export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/scans', async (c) => {
@@ -54,6 +55,44 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
       projectId: body.project_id,
       userId
     });
+
+    // Fire-and-forget audit log entry for scan launch
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const db = getDB(c.env);
+            const projectId = body.project_id;
+            const [userRow, memberRow] = await Promise.all([
+              userId
+                ? db.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first()
+                : Promise.resolve(null),
+              userId
+                ? db.prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, userId).first()
+                : Promise.resolve(null),
+            ]);
+            const details = JSON.stringify({
+              target_url: body.target_url,
+              profile: body.profile
+            });
+            const authHeader = c.req.header('Authorization') ?? '';
+            const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+            const source = token.startsWith('swazz_live_') ? 'api_key' : 'web';
+            await db.prepare(
+              `INSERT INTO audit_logs (id, project_id, user_id, actor_username, actor_role, action, action_label, source, details, ip_address)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).bind(
+              newUlid(), projectId, userId ?? null,
+              userRow?.username ?? null, memberRow?.role ?? null,
+              'post:/api/projects/:id/scans', 'Started scan',
+              source, details, getClientIp(c) ?? null
+            ).run();
+          } catch (err) {
+            console.error('[auditLog] Failed to write scan audit log:', err);
+          }
+        })()
+      );
+    }
   
     return c.json({ id, status: 'queued' }, 201);
   });
@@ -247,6 +286,42 @@ export function registerScansRoutes(app: Hono<{ Bindings: Env }>) {
   // ---------------------------------------------------------------------------
   // Findings endpoints
   // ---------------------------------------------------------------------------
+
+  app.get('/api/scans/:id/runner-logs', async (c) => {
+    const scanId = c.req.param('id');
+    const scan = await getDB(c.env).prepare('SELECT id, project_id, user_id FROM scans WHERE id = ?')
+      .bind(scanId)
+      .first<{ id: string; project_id: string | null; user_id: string | null }>();
+    if (!scan) {
+      return c.json({ error: 'Scan not found' }, 404);
+    }
+
+    if (c.env.AUTH_ENABLED === 'true') {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+      if (!scan.project_id) {
+        if (scan.user_id !== userId) {
+          return c.json({ error: 'Forbidden' }, 403);
+        }
+      } else {
+        const hasAccess = await checkPermission(c.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+        if (!hasAccess) return c.json({ error: 'Forbidden' }, 403);
+      }
+    }
+
+    const { results } = await getDB(c.env, scanId).prepare(
+      "SELECT * FROM scan_events WHERE scan_id = ? AND type = 'event' AND json_extract(payload, '$.type') = 'runner_log' ORDER BY created_at ASC"
+    )
+      .bind(scanId)
+      .all();
+
+    const logs = results || [];
+
+    console.log('Runner logs for', scanId, 'results:', logs.length);
+    return c.json({ logs });
+  });
 
   app.get('/api/scans/:id/findings', async (c) => {
     const scanId = c.req.param('id');

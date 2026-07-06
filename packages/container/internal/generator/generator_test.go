@@ -291,3 +291,29 @@ func BenchmarkGenerateStringMalicious(b *testing.B) {
 		_ = g.Generate("test", schema)
 	}
 }
+
+func TestGenerate_BooleanAndDateAndHeaderIterations(t *testing.T) {
+	schemaBool := &swagger.SchemaProperty{Type: "boolean"}
+	
+	gBound := New(nil, swagger.ProfileBoundary, swagger.Settings{})
+	_ = gBound.Generate("bool", schemaBool)
+
+	gMal := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	_ = gMal.Generate("bool", schemaBool)
+
+	gRand := New(nil, swagger.ProfileRandom, swagger.Settings{})
+	_ = gRand.Generate("bool", schemaBool)
+
+	schemaDate := &swagger.SchemaProperty{Type: "string", Format: "date"}
+	_ = gBound.Generate("date", schemaDate)
+	_ = gMal.Generate("date", schemaDate)
+	_ = gRand.Generate("date", schemaDate)
+
+	schemaDateTime := &swagger.SchemaProperty{Type: "string", Format: "date-time"}
+	_ = gBound.Generate("datetime", schemaDateTime)
+	_ = gMal.Generate("datetime", schemaDateTime)
+	_ = gRand.Generate("datetime", schemaDateTime)
+
+	_ = gBound.SecurityHeaderIterations()
+}
+

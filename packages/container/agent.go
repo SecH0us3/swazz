@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
@@ -140,6 +142,11 @@ func startAgent(args []string) {
 
 	logInfo("Starting agent '%s', connecting to %s (log level: %s)", name, coordinatorURL, logLevelStr) // #nosec G706
 
+	var (
+		activeRunners   = make(map[string]*runner.Runner)
+		activeRunnersMu sync.Mutex
+	)
+
 	ctx := context.Background()
 
 	headers := make(http.Header)
@@ -176,6 +183,23 @@ func startAgent(args []string) {
 		}
 		log.Fatalf("Failed to connect to coordinator: %v", err)
 	}
+
+	// Add graceful shutdown handler to prevent abrupt WebSocket closures
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		logInfo("Received termination signal, shutting down agent gracefully...")
+		activeRunnersMu.Lock()
+		for _, r := range activeRunners {
+			r.Stop()
+		}
+		activeRunnersMu.Unlock()
+		time.Sleep(500 * time.Millisecond)
+		_ = c.Close(websocket.StatusNormalClosure, "agent shutting down")
+		os.Exit(0)
+	}()
+
 	defer c.Close(websocket.StatusInternalError, "internal error")
 
 	if useSignatureAuth {
@@ -275,10 +299,7 @@ func startAgent(args []string) {
 		}
 	}
 
-	var (
-		activeRunners   = make(map[string]*runner.Runner)
-		activeRunnersMu sync.Mutex
-	)
+
 
 	// Agent loop
 	for {
@@ -377,23 +398,44 @@ func startAgent(args []string) {
 							logError("Received result event but ev.Data is not a recognized FuzzResult type: %T", ev.Data)
 						}
 					} else if ev.Type == "progress" {
+						var msg string
 						if stats, ok := ev.Data.(swagger.RunStats); ok {
-							logInfo("[Fuzz Progress] Run %s: %d/%d requests (%s, concurrency: %d) | %d endpoints complete",
-								runID, stats.TotalRequests, stats.TotalPlanned, stats.Progress.CurrentProfile, stats.Concurrency, stats.Progress.CompletedEndpoints)
+							msg = fmt.Sprintf("[Fuzz Progress] %d/%d requests (%s, concurrency: %d) | %d endpoints complete",
+								stats.TotalRequests, stats.TotalPlanned, stats.Progress.CurrentProfile, stats.Concurrency, stats.Progress.CompletedEndpoints)
+							logInfo("Run %s: %s", runID, msg)
 						} else {
 							statsJSON, _ := json.Marshal(ev.Data)
-							logInfo("[Fuzz Progress] Run %s: %s", runID, string(statsJSON))
+							msg = string(statsJSON)
+							logInfo("[Fuzz Progress] Run %s: %s", runID, msg)
 						}
+						sendWSEvent(runID, "runner_log", map[string]interface{}{
+							"level":     "info",
+							"message":   msg,
+							"timestamp": time.Now().Format(time.RFC3339),
+						})
 					} else if ev.Type == "complete" {
+						var msg string
 						if stats, ok := ev.Data.(swagger.RunStats); ok {
-							logInfo("[Fuzz Complete] Run %s: finished with %d requests, duration: %v",
-								runID, stats.TotalRequests, time.Duration(stats.TotalDurationMs)*time.Millisecond)
+							msg = fmt.Sprintf("[Fuzz Complete] finished with %d requests, duration: %v",
+								stats.TotalRequests, time.Duration(stats.TotalDurationMs)*time.Millisecond)
+							logInfo("Run %s: %s", runID, msg)
 						} else {
 							statsJSON, _ := json.Marshal(ev.Data)
-							logInfo("[Fuzz Complete] Run %s: %s", runID, string(statsJSON))
+							msg = string(statsJSON)
+							logInfo("[Fuzz Complete] Run %s: %s", runID, msg)
 						}
+						sendWSEvent(runID, "runner_log", map[string]interface{}{
+							"level":     "warning",
+							"message":   msg,
+							"timestamp": time.Now().Format(time.RFC3339),
+						})
 					} else if ev.Type == "error" {
 						logError("[Fuzz Error] Run %s: %v", runID, ev.Data)
+						sendWSEvent(runID, "runner_log", map[string]interface{}{
+							"level":     "error",
+							"message":   fmt.Sprintf("%v", ev.Data),
+							"timestamp": time.Now().Format(time.RFC3339),
+						})
 					}
 					sendWSEvent(runID, ev.Type, ev.Data)
 				}
@@ -401,6 +443,11 @@ func startAgent(args []string) {
 
 			go func(runID string) {
 				logInfo("Starting fuzz runner for runID: %s", runID)
+				sendWSEvent(runID, "runner_log", map[string]interface{}{
+					"level":     "warning",
+					"message":   fmt.Sprintf("Starting fuzz runner for runID: %s", runID),
+					"timestamp": time.Now().Format(time.RFC3339),
+				})
 				if err := r.Start(ctx); err != nil {
 					logError("Runner failed: %v", err)
 					sendWSError(runID, err.Error())

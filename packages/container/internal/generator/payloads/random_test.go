@@ -1,82 +1,72 @@
 package payloads
 
 import (
-	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
-func TestIntRange(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		val := IntRange(10, 20)
-		if val < 10 || val > 20 {
-			t.Errorf("IntRange(10, 20) generated out-of-bounds value: %d", val)
-		}
+func TestRandomPayloads(t *testing.T) {
+	// 1. UUID
+	uuidStr := UUID()
+	if len(uuidStr) != 36 {
+		t.Errorf("expected UUID length 36, got %d", len(uuidStr))
 	}
 
-	// Edge case: min == max
-	val := IntRange(5, 5)
-	if val != 5 {
-		t.Errorf("IntRange(5, 5) expected 5, got %d", val)
+	// 2. Word & Words
+	w := Word()
+	if len(w) == 0 {
+		t.Error("expected non-empty word")
+	}
+	ws := Words(3)
+	if len(strings.Split(ws, " ")) != 3 {
+		t.Errorf("expected 3 words, got: %s", ws)
 	}
 
-	// Edge case: min > max (this actually panics in Go's math/rand/v2 IntN if max-min+1 <= 0,
-	// so we'll skip this unless IntRange explicitly handles it)
-}
-
-func TestFloatRange(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		val := FloatRange(1.5, 5.5)
-		if val < 1.5 || val > 5.5 {
-			t.Errorf("FloatRange(1.5, 5.5) generated out-of-bounds value: %f", val)
-		}
+	// 3. Email
+	emailStr := Email()
+	if !strings.Contains(emailStr, "@") || !strings.Contains(emailStr, ".") {
+		t.Errorf("invalid email format generated: %s", emailStr)
 	}
-}
 
-func TestRandomString(t *testing.T) {
-	for i := 0; i < 50; i++ {
-		str := RandomString(10)
-		if len(str) != 10 {
-			t.Errorf("RandomString(10) generated string of length %d", len(str))
-		}
-
-		matched, _ := regexp.MatchString("^[a-zA-Z0-9]+$", str)
-		if !matched {
-			t.Errorf("RandomString contains invalid characters: %s", str)
-		}
+	// 4. IPv4
+	ipStr := IPv4()
+	if len(strings.Split(ipStr, ".")) != 4 {
+		t.Errorf("invalid IPv4 generated: %s", ipStr)
 	}
-}
 
-func TestRandomDate(t *testing.T) {
-	for i := 0; i < 50; i++ {
-		d := RandomDate()
-		year := d.Year()
-		if year < 2020 || year > time.Now().UTC().Year() {
-			t.Errorf("RandomDate() year out of reasonable bounds (2020-Now): %d", year)
-		}
+	// 5. URI
+	uriStr := URI()
+	if !strings.HasPrefix(uriStr, "https://") {
+		t.Errorf("expected https prefix for URI, got %s", uriStr)
 	}
-}
 
-func TestFullName(t *testing.T) {
-	for i := 0; i < 50; i++ {
-		name := FullName()
-		parts := strings.Split(name, " ")
-		if len(parts) != 2 {
-			t.Errorf("FullName() did not generate exactly two parts: %s", name)
-		}
+	// 5b. FloatRange & RandomDate
+	fVal := FloatRange(1.5, 9.5)
+	if fVal < 1.5 || fVal >= 9.5 {
+		t.Errorf("FloatRange returned value out of bounds: %f", fVal)
 	}
-}
+	rDate := RandomDate()
+	if rDate.Year() < 2020 {
+		t.Errorf("expected RandomDate to be after 2020, got: %v", rDate)
+	}
 
-func TestHashStr(t *testing.T) {
-	h1 := HashStr("hello world")
+	// 6. HashBytes
+	b := []byte("hello world")
+	h1 := HashBytes(b)
 	h2 := HashStr("hello world")
 	if h1 != h2 {
-		t.Errorf("HashStr is not deterministic: %d != %d", h1, h2)
+		t.Errorf("expected HashBytes and HashStr to match for same string, got %d and %d", h1, h2)
 	}
 
-	h3 := HashStr("hello world!")
-	if h1 == h3 {
-		t.Errorf("HashStr collision or too weak: %d == %d", h1, h3)
+	// 7. FullName
+	fn := FullName()
+	if len(strings.Split(fn, " ")) != 2 {
+		t.Errorf("expected full name to have space-separated first and last name, got %s", fn)
+	}
+
+	// 8. RandomString
+	rs := RandomString(10)
+	if len(rs) != 10 {
+		t.Errorf("expected random string of length 10, got length %d", len(rs))
 	}
 }

@@ -177,7 +177,7 @@ export function registerRunnersRoutes(app: Hono<{ Bindings: Env }>) {
       }
     }
   
-    const runId = crypto.randomUUID();
+    const runId = body.runId || crypto.randomUUID();
   
     // Insert the scan record in D1 DB so that checkScanMembership (ownership/membership verification) succeeds
     const projectId = body.projectId || "";

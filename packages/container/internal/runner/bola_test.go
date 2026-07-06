@@ -734,4 +734,54 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 	})
 }
 
+func TestBOLALowLevelHelpers(t *testing.T) {
+	// 1. substituteIDInPath
+	resPath := substituteIDInPath("/api/users/{id}/profile", "user-123")
+	if resPath != "/api/users/user-123/profile" {
+		t.Errorf("expected path substitute, got: %s", resPath)
+	}
+
+	// 2. coerceID
+	if coerced := coerceID(int64(42), "100"); coerced.(int64) != 100 {
+		t.Errorf("expected coerced int64, got %v", coerced)
+	}
+	if coerced := coerceID(float64(42.5), "100.5"); coerced.(float64) != 100.5 {
+		t.Errorf("expected coerced float64, got %v", coerced)
+	}
+	if coerced := coerceID(true, "false"); coerced.(string) != "false" {
+		t.Errorf("expected coerced string for bool input fallback, got %v", coerced)
+	}
+	if coerced := coerceID("string", "val"); coerced.(string) != "val" {
+		t.Errorf("expected coerced string, got %v", coerced)
+	}
+
+	// 3. substituteIDsInPayload
+	payload := map[string]any{
+		"user_id": "orig_id",
+		"meta": map[string]any{
+			"id": "meta_orig_id",
+		},
+		"tags": []any{"tag1", "tag2"},
+	}
+	subbed := substituteIDsInPayload(payload, "user_id", "harvested-999")
+	subbedMap := subbed.(map[string]any)
+	if subbedMap["user_id"] != "harvested-999" {
+		t.Errorf("expected payload key substitute, got %v", subbedMap["user_id"])
+	}
+
+	// 4. extractParamsFromPath
+	params := extractParamsFromPath("/api/users/{id}/roles/{role_id}", "/api/users/user-123/roles/admin")
+	if params["id"] != "user-123" || params["role_id"] != "admin" {
+		t.Errorf("expected extracted params, got %v", params)
+	}
+
+	// 5. copyMapAny
+	m := map[string]any{"a": 1, "b": "str"}
+	mCopy := copyMapAny(m)
+	if mCopy["a"] != 1 || mCopy["b"] != "str" {
+		t.Errorf("expected cloned map, got %v", mCopy)
+	}
+}
+
+
 

@@ -17,8 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -33,7 +31,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		return headers, cookies, nil
 	}
 
-	logger.Info("Running authentication sequence (%d steps)...", len(sequence))
+	r.logInfo("Running authentication sequence (%d steps)...", len(sequence))
 
 	reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer reqCancel()
@@ -75,7 +73,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				cfg.Variables[varName] = result
 				r.configMu.Unlock()
 
-				logger.Debug("[Auth] set_variables: {{%s}} = %q", varName, result)
+				r.logDebug("[Auth] set_variables: {{%s}} = %q", varName, result)
 			}
 
 			r.updateReplacer()
@@ -127,7 +125,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		if cfg.Settings.Debug {
 			// codeql[go/request-forgery] false positive: fuzzer auth
 			dump, _ := httputil.DumpRequestOut(req, true) //lgtm[go/request-forgery]
-			logger.Debug("--- [DEBUG] Auth Request ---\n%s\n----------------------------", string(dump))
+			r.logDebug("--- [DEBUG] Auth Request ---\n%s\n----------------------------", string(dump))
 		}
 
 		// codeql[go/request-forgery] false positive: fuzzer auth process needs to request user-specified URLs
@@ -139,10 +137,10 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		if cfg.Settings.Debug {
 			// codeql[go/request-forgery] false positive: fuzzer auth
 			dump, _ := httputil.DumpResponse(resp, false) //lgtm[go/request-forgery]
-			logger.Debug("--- [DEBUG] Auth Response ---\n%s\n-----------------------------", string(dump))
+			r.logDebug("--- [DEBUG] Auth Response ---\n%s\n-----------------------------", string(dump))
 		}
 
-		logger.Debug("[Auth] Step %d: %s %s -> %d", i+1, step.Method, fullURL, resp.StatusCode)
+		r.logDebug("[Auth] Step %d: %s %s -> %d", i+1, step.Method, fullURL, resp.StatusCode)
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -169,7 +167,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 
 			if shouldSave {
 				cookies[cookie.Name] = cookie.Value
-				logger.Debug("[Auth] Saved cookie: %s", cookie.Name)
+				r.logDebug("[Auth] Saved cookie: %s", cookie.Name)
 			}
 		}
 
@@ -190,7 +188,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				if val != nil {
 					strVal := fmt.Sprintf("%v", val)
 					headers[headerName] = strVal
-					logger.Debug("[Auth] Extracted %s -> Header %s", jsonKey, headerName)
+					r.logDebug("[Auth] Extracted %s -> Header %s", jsonKey, headerName)
 				}
 			}
 
@@ -199,7 +197,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				val := extractJSONPath(parsed, jsonKey)
 				if val != nil {
 					cfg.Variables[varName] = val
-					logger.Debug("[Auth] Extracted %s -> Variable {{%s}}", jsonKey, varName)
+					r.logDebug("[Auth] Extracted %s -> Variable {{%s}}", jsonKey, varName)
 					varsUpdated = true
 				}
 			}
@@ -211,7 +209,7 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 		}
 	}
 
-	logger.Info("Authentication sequence complete.")
+	r.logInfo("Authentication sequence complete.")
 	return headers, cookies, nil
 }
 
@@ -485,18 +483,18 @@ func (r *Runner) MaybeReauthenticate(ctx context.Context, reqHeaders, reqCookies
 
 	if hasProbe {
 		if time.Since(r.lastProbeTime) < 5*time.Second {
-			logger.Debug("[Auth] Session considered alive (cached probe check within 5s).")
+			r.logDebug("[Auth] Session considered alive (cached probe check within 5s).")
 			return nil, nil, false, nil
 		}
 
 		if r.isSessionAliveViaProbe(ctx) {
-			logger.Debug("[Auth] Session is still alive via probe, skipping re-authentication.")
+			r.logDebug("[Auth] Session is still alive via probe, skipping re-authentication.")
 			r.lastProbeTime = time.Now()
 			return nil, nil, false, nil
 		}
 	}
 
-	logger.Info("[Session] Session expired. Initiating automatic re-authentication...")
+	r.logInfo("[Session] Session expired. Initiating automatic re-authentication...")
 	if err := r.RunAuthSequence(ctx); err != nil {
 		return nil, nil, false, fmt.Errorf("re-authentication failed: %w", err)
 	}
@@ -530,7 +528,7 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 
 	req, err := http.NewRequestWithContext(reqCtx, "GET", probeURL, nil)
 	if err != nil {
-		logger.Debug("[Auth] Failed to create auth probe request: %v", err)
+		r.logDebug("[Auth] Failed to create auth probe request: %v", err)
 		return false
 	}
 
@@ -542,10 +540,10 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 	}
 
 
-	logger.Debug("[Auth] Sending probe request to %s to check session validity...", probeURL)
+	r.logDebug("[Auth] Sending probe request to %s to check session validity...", probeURL)
 	resp, err := r.client.Do(req)
 	if err != nil {
-		logger.Debug("[Auth] Probe request failed: %v", err)
+		r.logDebug("[Auth] Probe request failed: %v", err)
 		return false
 	}
 	defer func() {
@@ -554,7 +552,7 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 	}()
 
 
-	logger.Debug("[Auth] Probe response status: %d", resp.StatusCode)
+	r.logDebug("[Auth] Probe response status: %d", resp.StatusCode)
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
 
 }

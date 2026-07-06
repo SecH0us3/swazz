@@ -25,7 +25,7 @@ A React 19 Single Page Application built with Vite.
 - **Service Layer**: All external API calls to the Go backend are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
 
 ### 3. `packages/edge` (Optional)
-Reserved for Cloudflare Workers integration and edge-deployments. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.md).
+Reserved for Cloudflare Workers integration and edge-deployments. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.md). To monitor database queries for performance regressions, refer to the [D1 Slow Query Monitoring Guide](./slow_queries.md).
 
 ## Smart Fuzzing Workflow
 
@@ -58,4 +58,55 @@ Swazz implements a double-submit cookie validation pattern to protect all state-
 
 [← Back to Usage](./usage.md)
 
+---
+
+## Audit Trail System
+
+Swazz maintains an immutable, per-project audit log of all state-changing operations to support compliance and governance requirements.
+
+### Table Schema (`audit_logs`)
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | TEXT (ULID) | Primary key |
+| `project_id` | TEXT | FK → `projects.id` (ON DELETE CASCADE) |
+| `user_id` | TEXT (nullable) | Actor's user ID — no FK cascade, survives user deletion |
+| `actor_username` | TEXT | Snapshot of username at time of action |
+| `actor_role` | TEXT | Snapshot of role at time of action |
+| `action` | TEXT | RBAC permission key, e.g. `patch:/api/projects/:id` |
+| `action_label` | TEXT | Human-readable label, e.g. `Updated project settings` |
+| `source` | TEXT | `web` \| `api_key` \| `mcp` |
+| `ip_address` | TEXT | Caller's IP address |
+| `timestamp` | DATETIME | UTC, auto-set |
+
+### Source Detection
+
+| Value | Detection logic |
+|---|---|
+| `mcp` | Request path starts with `/api/mcp` OR `X-MCP-Client` header is present |
+| `api_key` | Bearer token starts with `swazz_live_` |
+| `web` | All other authenticated requests (JWT session) |
+
+### Logged Actions
+
+All project-scoped mutating routes are automatically instrumented via the `auditLog()` Hono middleware:
+
+- Project settings updated / deleted
+- Scan configuration saved
+- Scan schedule updated
+- Scan launched
+- Member invited / removed / role updated
+- Custom role created / updated / deleted
+
+### RBAC Access
+
+The `get:/api/projects/:id/audit-logs` permission is granted to **owner** and **editor** roles only. Viewers cannot access audit data.
+
+### User Deletion Resilience
+
+`actor_username` is denormalised (snapshotted at write time) into every audit row. The `user_id` column has no `ON DELETE CASCADE` constraint. This ensures audit history remains intact and human-readable even after a user account is deleted — deleted actors are displayed as `[deleted user]` in the UI.
+
+### Export
+
+The Audit Trail UI tab supports CSV export of filtered results via a client-side `Blob` download, preserving all active filters (search query, source type) at export time.
 

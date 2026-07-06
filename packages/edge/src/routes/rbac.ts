@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Env } from '../env';
 import { getDB } from '../utils/db';
 import { requirePermission } from '../middleware/rbac';
+import { auditLog } from '../middleware/auditLog';
 import { PERMISSIONS, DEFAULT_ROLES, PermissionKey } from '../config/rbac';
 import { ulid } from 'ulidx';
 import { getUserIdFromRequest } from '../utils/auth';
@@ -61,7 +62,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ roles: [...defaults, ...custom] });
   });
 
-  app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), async (c) => {
+  app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), auditLog('post:/api/projects/:id/roles', 'Created custom role'), async (c) => {
     const guestCheck = await verifyNotGuest(c);
     if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
@@ -185,7 +186,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     });
   });
 
-  app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), async (c) => {
+  app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), auditLog('put:/api/projects/:id/members/:user_id', 'Updated member role'), async (c) => {
     const guestCheck = await verifyNotGuest(c);
     if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
@@ -264,7 +265,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'updated' });
   });
 
-  app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), async (c) => {
+  app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), auditLog('delete:/api/projects/:id/members/:user_id', 'Removed a member'), async (c) => {
     const guestCheck = await verifyNotGuest(c);
     if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
@@ -316,7 +317,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'removed' });
   });
 
-  app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), async (c) => {
+  app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), auditLog('put:/api/projects/:id/roles/:role_id', 'Updated custom role'), async (c) => {
     const guestCheck = await verifyNotGuest(c);
     if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
@@ -382,7 +383,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ status: 'updated' });
   });
 
-  app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), async (c) => {
+  app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), auditLog('delete:/api/projects/:id/roles/:role_id', 'Deleted custom role'), async (c) => {
     const guestCheck = await verifyNotGuest(c);
     if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
@@ -425,7 +426,7 @@ export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
   });
 
 
-  app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), async (c) => {
+  app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), auditLog('post:/api/projects/:id/invitations', 'Invited a member'), async (c) => {
     const guestCheck = await verifyNotGuest(c);
     if (guestCheck) return guestCheck;
     const projectId = (c.req.param('id') as string);
