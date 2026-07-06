@@ -1365,6 +1365,8 @@ app.post('/api/admin/users/plan', async (c) => {
             db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')")
               .bind(projectId),
             db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')")
+              .bind(projectId, userId),
+            db.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')")
               .bind(projectId, userId)
           ]);
         }
