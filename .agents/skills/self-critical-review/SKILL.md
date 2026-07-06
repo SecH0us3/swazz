@@ -1,6 +1,6 @@
 ---
 name: self-critical-review
-description: Perform a comprehensive, self-critical, and rigorous code review of changes to identify dead/redundant code, unused styling, logic bugs, security issues, performance hotspots, and design mismatch.
+description: Trigger this skill automatically before completing any roadmap task, or when making significant code changes. Perform a comprehensive, self-critical, and rigorous code review of changes to identify dead/redundant code, unused styling, logic bugs, security issues, performance hotspots, and design mismatch.
 ---
 
 # Self-Critical Review Skill

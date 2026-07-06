@@ -49,6 +49,28 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       return c.json({ error: 'Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens' }, 400);
     }
 
+    // Closed Beta registration limit check
+    const betaModeEnabled = c.env.BETA_MODE_ENABLED !== 'false';
+    if (betaModeEnabled) {
+      const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : '';
+      let totalUsers = 0;
+      try {
+        const countRes = await getDB(c.env).prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+        if (countRes) {
+          totalUsers = countRes.count;
+        }
+      } catch (err) {
+        console.error("Failed to query user count for beta limit check:", err);
+      }
+
+      const betaLimit = c.env.BETA_USER_LIMIT ? parseInt(c.env.BETA_USER_LIMIT, 10) : 50;
+      if (totalUsers >= betaLimit) {
+        if (!c.env.BETA_BYPASS_CODE || inviteCode !== c.env.BETA_BYPASS_CODE) {
+          return c.json({ error: 'Beta registration limit reached. Please provide a valid invite code to signup.' }, 403);
+        }
+      }
+    }
+
     const password = body.password;
     if (password.length < 12) {
       return c.json({ error: 'Password must be at least 12 characters long' }, 400);

@@ -69,6 +69,10 @@ export function useAuth() {
                 if (data.turnstile_site_key) {
                     useAppStore.setState({ turnstileSiteKey: data.turnstile_site_key });
                 }
+                useAppStore.setState({
+                    betaModeEnabled: data.beta_mode_enabled ?? true,
+                    betaLimitReached: data.beta_limit_reached ?? false
+                });
                 setIsLoading(false);
             })
             .catch(() => {
@@ -168,7 +172,7 @@ export function useAuth() {
         return { success: true };
     };
 
-    const register = async (username: string, password: string, email?: string, turnstileToken?: string) => {
+    const register = async (username: string, password: string, email?: string, turnstileToken?: string, inviteCode?: string) => {
         const csrfToken = useAppStore.getState().csrfToken;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrfToken) {
@@ -182,7 +186,8 @@ export function useAuth() {
                 username, 
                 password, 
                 email,
-                'cf-turnstile-response': turnstileToken
+                'cf-turnstile-response': turnstileToken,
+                inviteCode
             })
         });
         const data = await res.json();

@@ -938,3 +938,9 @@ This file contains completed tasks.
     - Frontend UserSettings key rotation & masking UI and automated E2E & unit tests.
 
 
+- [x] **Task 97: Closed Beta Launch & Infrastructure Capacity Control**
+  - **Design Goal:** Establish a closed beta registration limit (max 50 users) to progressively scale and stress-test target coordination infrastructure without running into capacity exhaustion.
+  - **Implementation Details:**
+    - Implement a registration counter check in `POST /api/auth/register` to reject new signups once the user registry count reaches 50.
+    - Support admin invites or bypass codes to register extra users manually during the beta phase.
+    - Design status banners in the web client dashboard alerting users about the current beta limits.

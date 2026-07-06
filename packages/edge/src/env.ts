@@ -18,5 +18,8 @@ export interface Env {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   GITHUB_REDIRECT_URI?: string;
+  BETA_BYPASS_CODE?: string;
+  BETA_MODE_ENABLED?: string;
+  BETA_USER_LIMIT?: string;
 }
 

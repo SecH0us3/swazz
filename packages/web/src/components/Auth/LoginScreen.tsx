@@ -8,7 +8,7 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 interface LoginScreenProps {
     onLogin: (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
-    onRegister: (username: string, password: string, email?: string, turnstileToken?: string) => Promise<void>;
+    onRegister: (username: string, password: string, email?: string, turnstileToken?: string, inviteCode?: string) => Promise<void>;
     onGuest?: (turnstileToken?: string) => Promise<void>;
 }
 
@@ -22,8 +22,13 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [email, setEmail] = useState('');
+    const [inviteCode, setInviteCode] = useState('');
+    const [hasInviteCode, setHasInviteCode] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+
+    const betaModeEnabled = useAppStore(state => state.betaModeEnabled);
+    const betaLimitReached = useAppStore(state => state.betaLimitReached);
     const [showPassword, setShowPassword] = useState(false);
     const [twoFactorRequired, setTwoFactorRequired] = useState(false);
     const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -147,7 +152,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                 if (score < 4) {
                     throw new Error('Password must be at least 12 characters long.');
                 }
-                await onRegister(username, password, email || undefined, turnstileResponse);
+                await onRegister(username, password, email || undefined, turnstileResponse, inviteCode || undefined);
             } else {
                 const res = await onLogin(username, password, twoFactorRequired ? twoFactorCode : undefined, turnstileResponse);
                 if (res && res.twoFactorRequired) {
@@ -182,7 +187,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     if (score < 4) {
                         throw new Error('Password must be at least 12 characters long.');
                     }
-                    await onRegister(username, password, email || undefined, turnstileResponse);
+                    await onRegister(username, password, email || undefined, turnstileResponse, inviteCode || undefined);
                     return;
                 } catch (err: any) {
                     setError(err.message);
@@ -281,6 +286,8 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         setShowModal(false);
         setTwoFactorRequired(false);
         setError('');
+        setInviteCode('');
+        setHasInviteCode(false);
     };
 
     return (
@@ -399,6 +406,15 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     )}
                                 </div>
 
+                                {isRegistering && betaModeEnabled && (
+                                    <div className={`beta-status-banner ${betaLimitReached ? 'filled' : 'normal'}`}>
+                                        {betaLimitReached
+                                            ? 'Closed Beta · Invite code required'
+                                            : 'Closed Beta · Limited availability'
+                                        }
+                                    </div>
+                                )}
+
                                 {error && (
                                     <div className="login-error">
                                         <div className="error-content">
@@ -511,6 +527,55 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                             )}
                                         </div>
 
+                                        {isRegistering && betaModeEnabled && (
+                                            <>
+                                                {betaLimitReached && (
+                                                    <div className="form-group">
+                                                        <label htmlFor="inviteCode">
+                                                            Invite Code <span style={{ color: '#f43f5e' }}>*</span>
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            id="inviteCode"
+                                                            name="inviteCode"
+                                                            value={inviteCode}
+                                                            onChange={(e) => setInviteCode(e.target.value)}
+                                                            placeholder="Required (Beta limit reached)"
+                                                            data-1p-ignore
+                                                            required
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {!betaLimitReached && (
+                                                    <div className="form-group invite-code-group">
+                                                        {!hasInviteCode ? (
+                                                            <button
+                                                                type="button"
+                                                                className="invite-code-toggle-btn"
+                                                                onClick={() => setHasInviteCode(true)}
+                                                            >
+                                                                I have an invite code
+                                                            </button>
+                                                        ) : (
+                                                            <>
+                                                                <label htmlFor="inviteCode">Invite Code (Optional)</label>
+                                                                <input
+                                                                    type="text"
+                                                                    id="inviteCode"
+                                                                    name="inviteCode"
+                                                                    value={inviteCode}
+                                                                    onChange={(e) => setInviteCode(e.target.value)}
+                                                                    placeholder="XXXX-XXXX-XXXX"
+                                                                    data-1p-ignore
+                                                                />
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+
                                         <div className="login-actions">
                                             <button type="submit" disabled={isLoading} className="login-btn">
                                                 {isLoading ? (
@@ -529,7 +594,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                 </button>
                                             )}
                                             {isRegistering && (
-                                                <button type="button" onClick={() => { setIsRegistering(false); setError(''); }} disabled={isLoading} className="register-btn">
+                                                <button type="button" onClick={() => { setIsRegistering(false); setError(''); setInviteCode(''); setHasInviteCode(false); }} disabled={isLoading} className="register-btn">
                                                     Back to Login
                                                 </button>
                                             )}
@@ -540,6 +605,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                 <div className="oauth-divider">
                                                     <span className="oauth-divider-text">or connect with</span>
                                                 </div>
+
                                                 <button 
                                                     type="button" 
                                                     onClick={handleGithubLogin} 

@@ -67,12 +67,16 @@ export interface UserSlice {
     userProfile: { username: string; apiKey: string; publicKey?: string | null; isGuest?: boolean; deleteRequestedAt?: string | null; twoFactorEnabled?: boolean; githubId?: string | null; plan?: string } | null;
     csrfToken: string | null;
     turnstileSiteKey: string | null;
+    betaModeEnabled: boolean;
+    betaLimitReached: boolean;
 }
 
 const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
     userProfile: null,
     csrfToken: null,
     turnstileSiteKey: null,
+    betaModeEnabled: true,
+    betaLimitReached: false,
 });
 
 export interface ProjectSlice {
