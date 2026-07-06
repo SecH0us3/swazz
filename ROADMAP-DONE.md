@@ -23,6 +23,8 @@ This file contains completed tasks.
   - **Design Goal:** Fully rebuild the documentation site using a modern framework (e.g. VitePress or Docusaurus) to provide a more convenient and structured layout, featuring full offline-capable search and interactive code blocks.
   - **Implementation Details:**
     - Initialize VitePress or Docusaurus in the documentation workspace.
+    - Port existing markdown guides to the new site layout.
+    - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
 
 - [x] **Task 123: User Action Audit Trail Logging**
   - **Design Goal:** Maintain a secure and auditable history of important user actions within projects, tracking state-changing operations (non-GET requests) to meet compliance and governance needs.
@@ -32,8 +34,6 @@ This file contains completed tasks.
     - Automatically log details of key actions (e.g. member additions/removals, role modifications, settings updates, scan executions) into the `audit_logs` table.
     - Expose an API endpoint `GET /api/projects/:id/audit-logs` (accessible only to owners/admins).
     - Design an "Audit Trail" tab in Project Settings to view, search, and export the logs.
-    - Port existing markdown guides to the new site layout.
-    - Configure search capabilities (such as local search) and deploy themes fitting the project's aesthetics.
 
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
