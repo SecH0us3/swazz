@@ -8,6 +8,7 @@ import { splitSql } from "./splitSql";
 import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
 import { hashApiKey } from "./utils/auth";
+import { getDB } from "./utils/db";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -2759,6 +2760,194 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(res.status).toBe(401);
       const data = await res.json() as any;
       expect(data.error).toBe("Unauthorized: Admin secret is not configured");
+    });
+  });
+
+  describe("Admin Slow Queries API", () => {
+    function createMockKV() {
+      const store = new Map<string, string>();
+      return {
+        get: async (key: string) => store.get(key) || null,
+        put: async (key: string, value: string) => { store.set(key, value); }
+      };
+    }
+
+    it("should reject unauthorized requests to /api/admin/slow-queries", async () => {
+      const req = new Request("http://localhost/api/admin/slow-queries");
+      const res = await appFetchWrapper(req, testEnv);
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject with 401 if ADMIN_SECRET is not configured", async () => {
+      const customEnv = {
+        ...testEnv,
+        ADMIN_SECRET: undefined
+      };
+      const req = new Request("http://localhost/api/admin/slow-queries", {
+        headers: { 'Authorization': `Bearer admin-secret` }
+      });
+      const res = await appFetchWrapper(req, customEnv);
+      expect(res.status).toBe(401);
+    });
+
+    it("should return empty list if SESSION_CACHE is not bound", async () => {
+      const customEnv = {
+        ...testEnv,
+        SESSION_CACHE: undefined
+      };
+      const req = new Request("http://localhost/api/admin/slow-queries", {
+        headers: { 'Authorization': `Bearer admin-secret` }
+      });
+      const res = await appFetchWrapper(req, customEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data).toEqual([]);
+    });
+
+    it("should return slow queries when valid admin secret is provided", async () => {
+      const mockKV = createMockKV();
+      const mockQueries = [{ event: 'slow_query', query: 'SELECT * FROM users', duration: 250, threshold: 200, timestamp: new Date().toISOString() }];
+      await mockKV.put('admin:slow-queries', JSON.stringify(mockQueries));
+
+      const customEnv = {
+        ...testEnv,
+        SESSION_CACHE: mockKV as any
+      };
+
+      const req = new Request("http://localhost/api/admin/slow-queries", {
+        headers: { 'Authorization': `Bearer admin-secret` }
+      });
+      const res = await appFetchWrapper(req, customEnv);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.length).toBe(1);
+      expect(data[0].query).toBe('SELECT * FROM users');
+    });
+
+    it("should intercept D1 queries and record slow queries when threshold is exceeded", async () => {
+      const mockKV = createMockKV();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Mock database structure
+      const mockDb = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => {
+              // Simulate slow query execution delay (e.g. 50ms)
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return { success: true };
+            }
+          })
+        })
+      };
+
+      const customEnv = {
+        ...testEnv,
+        DB: mockDb as any,
+        SESSION_CACHE: mockKV as any,
+        SLOW_QUERY_THRESHOLD_MS: 10 // Set low threshold to trigger slow query logging
+      };
+
+      const db = getDB(customEnv);
+      await db.prepare('SELECT * FROM dummy').bind().first();
+
+      // Verify console.warn was called with a slow query event
+      expect(warnSpy).toHaveBeenCalled();
+      const calls = warnSpy.mock.calls;
+      const lastCall = calls[calls.length - 1][0];
+      const parsedLog = JSON.parse(lastCall);
+      expect(parsedLog.event).toBe('slow_query');
+      expect(parsedLog.query).toBe('SELECT * FROM dummy');
+      expect(parsedLog.threshold).toBe(10);
+      expect(parsedLog.duration).toBeGreaterThanOrEqual(10);
+
+      // Verify it was saved to SESSION_CACHE
+      const cached = await mockKV.get('admin:slow-queries');
+      expect(cached).not.toBeNull();
+      const parsedCache = JSON.parse(cached!);
+      expect(parsedCache.length).toBe(1);
+      expect(parsedCache[0].query).toBe('SELECT * FROM dummy');
+
+      warnSpy.mockRestore();
+    });
+
+    it("should record slow queries for exec, batch, dump, and other statement methods", async () => {
+      const mockKV = createMockKV();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const mockDb = {
+        prepare: () => ({
+          bind: () => ({
+            all: async () => {
+              await new Promise(resolve => setTimeout(resolve, 20));
+              return { results: [] };
+            },
+            run: async () => {
+              await new Promise(resolve => setTimeout(resolve, 20));
+              return { success: true };
+            },
+            raw: async () => {
+              await new Promise(resolve => setTimeout(resolve, 20));
+              return [];
+            }
+          })
+        }),
+        exec: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return { count: 1 };
+        },
+        batch: async (stmts: any[]) => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return [];
+        },
+        dump: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return new ArrayBuffer(0);
+        }
+      };
+
+      const customEnv = {
+        ...testEnv,
+        DB: mockDb as any,
+        SESSION_CACHE: mockKV as any,
+        SLOW_QUERY_THRESHOLD_MS: 10
+      };
+
+      const db = getDB(customEnv);
+      
+      // Test stmt.all()
+      await db.prepare('SELECT * FROM all').bind().all();
+      // Test stmt.run()
+      await db.prepare('SELECT * FROM run').bind().run();
+      // Test stmt.raw()
+      await db.prepare('SELECT * FROM raw').bind().raw();
+      // Test db.exec()
+      await db.exec('INSERT INTO exec VALUES (1)');
+      // Test db.batch()
+      const stmt1 = db.prepare('INSERT INTO batch1 VALUES (1)');
+      const stmt2 = db.prepare('INSERT INTO batch2 VALUES (2)');
+      await db.batch([stmt1, stmt2]);
+      // Test db.dump()
+      await db.dump();
+
+      expect(warnSpy).toHaveBeenCalledTimes(6);
+      
+      // Verify KV cache has all queries
+      const cached = await mockKV.get('admin:slow-queries');
+      expect(cached).not.toBeNull();
+      const parsedCache = JSON.parse(cached!);
+      expect(parsedCache.length).toBe(6);
+
+      // Verify some queries
+      const queries = parsedCache.map((q: any) => q.query);
+      expect(queries).toContain('SELECT * FROM all');
+      expect(queries).toContain('SELECT * FROM run');
+      expect(queries).toContain('SELECT * FROM raw');
+      expect(queries).toContain('INSERT INTO exec VALUES (1)');
+      expect(queries).toContain('BATCH: INSERT INTO batch1 VALUES (1); INSERT INTO batch2 VALUES (2)');
+      expect(queries).toContain('DUMP DATABASE');
+
+      warnSpy.mockRestore();
     });
   });
 
