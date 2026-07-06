@@ -1,9 +1,9 @@
 // @ts-nocheck
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env as rawEnv } from 'cloudflare:test';
-import { Env } from '../env';
-import { ProjectServices } from './projects';
-import { splitSql } from '../splitSql';
+import { Env } from '../../src/env';
+import { ProjectServices } from '../../src/services/projects';
+import { splitSql } from '../../src/splitSql';
 import { ulid } from 'ulidx';
 
 const env = rawEnv as unknown as Env;
