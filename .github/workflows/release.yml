@@ -226,6 +226,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Build and push Server
+        id: build-server
         # v7.1.0
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
@@ -238,6 +239,7 @@ jobs:
             DOCKER_TAG=${{ env.DOCKER_TAG }}
 
       - name: Build and push CLI
+        id: build-cli
         # v7.1.0
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
@@ -249,6 +251,20 @@ jobs:
           labels: ${{ steps.meta-cli.outputs.labels }}
           build-args: |
             DOCKER_TAG=${{ env.DOCKER_TAG }}
+
+      - name: Install Cosign
+        # v3.5.0
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20
+
+      - name: Sign the built images
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          SERVER_DIGEST: ${{ steps.build-server.outputs.digest }}
+          CLI_DIGEST: ${{ steps.build-cli.outputs.digest }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "ghcr.io/${{ env.REPO_LC }}@${SERVER_DIGEST}"
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "ghcr.io/${{ env.REPO_LC }}-cli@${CLI_DIGEST}"
 
   deploy:
     name: Deploy to Cloudflare

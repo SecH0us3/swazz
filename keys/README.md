@@ -2,7 +2,7 @@
 
 To ensure that the Docker images for Swazz have not been tampered with in transit or on the registry, we sign all release images using **Cosign**.
 
-The public verification key is stored in this directory as [cosign.pub](file:///Users/alex/.gemini/antigravity/worktrees/swazz/cosign-image-signing-verification/keys/cosign.pub).
+The public verification key is stored in this directory as [cosign.pub](cosign.pub).
 
 ## Verification Steps
 

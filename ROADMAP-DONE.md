@@ -201,6 +201,14 @@ This file contains completed tasks.
     - Validate that the target `:user_id` is a member of project `:id` to prevent cross-project scanning.
     - Created a React UI tab/panel under Project Members or User Settings to display login logs in a clear, paginated table format with browser icons and geo-resolved information.
 
+- [x] **Task 121: Container Image Signing & Verification via Cosign**
+  - **Design Goal:** Secure built runner agent container images against supply chain tampering by signing release images with Cosign.
+  - **Implementation Details:**
+    - Generate a key pair for image signing (`cosign generate-key-pair`).
+    - Store the public verification key (`cosign.pub`) in the repository under a `keys/` directory and document image verification steps.
+    - Save the private key as a GitHub Action Secret `COSIGN_PRIVATE_KEY` (along with its password secret).
+    - Update the build & publish CI workflow to install Cosign and sign the built Docker images after pushing them to the registry.
+
 ## ⚡️ Performance & Architecture
 
 - [x] **Task 16:** Replace the blocking select-timeout SSE Broadcast implementation with a non-blocking lock-free concurrent collection or ring-buffer pattern (similar to LMAX Disruptor or a lock-free MPSC ring-buffer queue).
