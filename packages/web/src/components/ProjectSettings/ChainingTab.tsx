@@ -22,9 +22,9 @@ export function ChainingTab() {
                 Configure chaining rules to extract dynamic variables (like CSRF tokens or session IDs) from responses and inject them into subsequent test requests.
             </p>
             <div className="alert-banner alert-info">
-                <div className="alert-banner-header">Совет</div>
+                <div className="alert-banner-header">Tip</div>
                 <div className="alert-banner-message">
-                    Попроси ИИ ассистента помочь составить конфиг для CI/CD — это будет проще.
+                    Ask the AI assistant to help configure CI/CD — it will be easier.
                 </div>
             </div>
             <ChainingRulesEditor 
