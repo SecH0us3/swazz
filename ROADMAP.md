@@ -29,6 +29,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🟡 Medium Complexity
 
+- [ ] **Task 124: Refactor remaining edge routes to Service Classes**
+  - **Design Goal:** Apply the architecture used in `projects.ts` (extracting logic to `*Services` class, inheriting from `BaseService`, and injecting via DI) to the rest of the edge application routes (e.g. `scans`, `runners`, `auth`).
+  - **Implementation Details:**
+    - Isolate D1 queries and business logic from Hono HTTP handlers.
+    - Setup dependency injection factories for testing.
+    - Write robust unit tests with mocked services for each refactored route.
+
 - [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
   - **Design Goal:** Provide secure password management tools including dynamic password changes, email-based password recovery (forgot password flow), and 2FA backup codes.
   - **Implementation Details:**

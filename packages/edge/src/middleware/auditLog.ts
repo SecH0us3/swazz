@@ -34,7 +34,7 @@ function detectSource(c: Context<{ Bindings: Env }>): AuditSource {
  * @param label   - Human-readable description, e.g. 'Updated project settings'
  */
 export function auditLog(action: PermissionKey | string, label: string) {
-  return async (c: Context<{ Bindings: Env }>, next: Next) => {
+  return async (c: Context<{ Bindings: Env; Variables: { auditDetails: any } }>, next: Next) => {
     await next();
 
     // Only log successful mutations
