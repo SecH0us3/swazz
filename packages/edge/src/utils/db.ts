@@ -89,6 +89,8 @@ export async function recordQueryTime(query: string, duration: number, env: Env,
       ctx.waitUntil(recordPromise);
     } else if (ctx && typeof ctx.executionCtx?.waitUntil === 'function') {
       ctx.executionCtx.waitUntil(recordPromise);
+    } else {
+      await recordPromise;
     }
   }
 }
@@ -111,17 +113,20 @@ function wrapD1Database(db: D1Database, env: Env, ctx?: any): D1Database {
           const unwrappedStatements = statements.map(s => (s as any).__originalStmt || s);
           try {
             const res = await target.batch(unwrappedStatements);
-            const duration = Date.now() - startTime;
-            const label = statements.map(s => (s as any).__query || 'unknown').join('; ');
-            const timingPromise = recordQueryTime(`BATCH: ${label}`, duration, env, ctx);
-            if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
-              // Non-blocking
-            } else {
-              await timingPromise;
-            }
             return res;
-          } catch (err) {
-            throw err;
+          } finally {
+            try {
+              const duration = Date.now() - startTime;
+              const label = statements.map(s => (s as any).__query || 'unknown').join('; ');
+              const timingPromise = recordQueryTime(`BATCH: ${label}`, duration, env, ctx);
+              if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
+                // Non-blocking
+              } else {
+                await timingPromise;
+              }
+            } catch (err) {
+              console.error('Failed to record slow query for batch:', err);
+            }
           }
         };
       }
@@ -130,16 +135,19 @@ function wrapD1Database(db: D1Database, env: Env, ctx?: any): D1Database {
           const startTime = Date.now();
           try {
             const res = await target.exec(query);
-            const duration = Date.now() - startTime;
-            const timingPromise = recordQueryTime(query, duration, env, ctx);
-            if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
-              // Non-blocking
-            } else {
-              await timingPromise;
-            }
             return res;
-          } catch (err) {
-            throw err;
+          } finally {
+            try {
+              const duration = Date.now() - startTime;
+              const timingPromise = recordQueryTime(query, duration, env, ctx);
+              if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
+                // Non-blocking
+              } else {
+                await timingPromise;
+              }
+            } catch (err) {
+              console.error('Failed to record slow query for exec:', err);
+            }
           }
         };
       }
@@ -148,16 +156,19 @@ function wrapD1Database(db: D1Database, env: Env, ctx?: any): D1Database {
           const startTime = Date.now();
           try {
             const res = await target.dump();
-            const duration = Date.now() - startTime;
-            const timingPromise = recordQueryTime('DUMP DATABASE', duration, env, ctx);
-            if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
-              // Non-blocking
-            } else {
-              await timingPromise;
-            }
             return res;
-          } catch (err) {
-            throw err;
+          } finally {
+            try {
+              const duration = Date.now() - startTime;
+              const timingPromise = recordQueryTime('DUMP DATABASE', duration, env, ctx);
+              if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
+                // Non-blocking
+              } else {
+                await timingPromise;
+              }
+            } catch (err) {
+              console.error('Failed to record slow query for dump:', err);
+            }
           }
         };
       }
@@ -193,16 +204,19 @@ function wrapD1PreparedStatement(stmt: D1PreparedStatement, query: string, env: 
           try {
             const method = prop;
             const res = await (target as any)[method](...args);
-            const duration = Date.now() - startTime;
-            const timingPromise = recordQueryTime(query, duration, env, ctx);
-            if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
-              // Non-blocking
-            } else {
-              await timingPromise;
-            }
             return res;
-          } catch (err) {
-            throw err;
+          } finally {
+            try {
+              const duration = Date.now() - startTime;
+              const timingPromise = recordQueryTime(query, duration, env, ctx);
+              if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
+                // Non-blocking
+              } else {
+                await timingPromise;
+              }
+            } catch (err) {
+              console.error('Failed to record slow query for statement execution:', err);
+            }
           }
         };
       }
