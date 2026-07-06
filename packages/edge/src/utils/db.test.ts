@@ -7,13 +7,13 @@ describe('getDB Helper', () => {
   it('returns the default DB binding when no routingKey is provided', () => {
     const mockDB = {} as D1Database;
     const mockEnv = { DB: mockDB } as unknown as Env;
-    expect(getDB(mockEnv)).toBe(mockDB);
+    expect((getDB(mockEnv) as any).__originalDb).toBe(mockDB);
   });
 
   it('returns the default DB binding even when routingKey is provided (current behavior)', () => {
     const mockDB = {} as D1Database;
     const mockEnv = { DB: mockDB } as unknown as Env;
-    expect(getDB(mockEnv, 'user-123')).toBe(mockDB);
+    expect((getDB(mockEnv, 'user-123') as any).__originalDb).toBe(mockDB);
   });
 
   it('routes to correct database shards based on routingKey (sharding routing implementation)', () => {
@@ -27,7 +27,7 @@ describe('getDB Helper', () => {
     } as unknown as Env;
     
     // Verifies that routing resolves to correct databases
-    expect(getDB(mockEnv, 'project-routing-to-primary')).toBe(mockPrimaryDB);
-    expect(getDB(mockEnv, 'project-routing-to-shard-1')).toBe(mockShard1DB);
+    expect((getDB(mockEnv, 'project-routing-to-primary') as any).__originalDb).toBe(mockPrimaryDB);
+    expect((getDB(mockEnv, 'project-routing-to-shard-1') as any).__originalDb).toBe(mockShard1DB);
   });
 });

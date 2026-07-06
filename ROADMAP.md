@@ -37,7 +37,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
 
-- [ ] **Task 114: Slow Query Monitoring**
+- [/] **Task 114: Slow Query Monitoring**
   - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
   - **Implementation Details:**
     - Wrap all D1 `prepare().bind().run() / .first() / .all()` calls in a thin timing helper (e.g. `timedQuery(stmt, label, env)`) that records wall-clock duration.
