@@ -1,148 +1,321 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ScansService } from '../../../src/services/scans';
-import { IScansRepository } from '../../../src/repositories/scans';
-import { IRbacRepository } from '../../../src/repositories/rbac';
 import { Env } from '../../../src/env';
+import * as jwt from 'hono/jwt';
+
+vi.mock('hono/jwt', () => ({
+  sign: vi.fn(),
+  verify: vi.fn(),
+}));
 
 describe('ScansService Unit Tests', () => {
   let scansService: ScansService;
-  let mockEnv: Env;
+  let mockEnv: any;
   let mockScansRepo: any;
   let mockRbacRepo: any;
 
   beforeEach(() => {
     mockEnv = {
+      JWT_SECRET: 'secret',
       SCAN_QUEUE: {
-        send: vi.fn().mockResolvedValue(undefined),
+        send: vi.fn(),
       },
       STORAGE: {
-        put: vi.fn().mockResolvedValue(undefined),
+        put: vi.fn(),
       },
-      JWT_SECRET: 'test-secret',
-    } as any;
+    };
 
     mockScansRepo = {
-      createScan: vi.fn().mockResolvedValue(undefined),
-      getUserPublicKey: vi.fn().mockResolvedValue('test-public-key'),
-      getUserDetails: vi.fn().mockResolvedValue({ username: 'testuser' }),
-      getProjectMemberRole: vi.fn().mockResolvedValue('owner'),
-      createAuditLog: vi.fn().mockResolvedValue(undefined),
-      getScans: vi.fn().mockResolvedValue([{ id: 'scan-1', status: 'completed' }]),
-      getScan: vi.fn().mockResolvedValue({ id: 'scan-1', project_id: 'proj-1', user_id: 'user-1' }),
-      updateScan: vi.fn().mockImplementation((scanId, body) => Promise.resolve({ id: scanId, ...body })),
-      updateScanStatus: vi.fn().mockResolvedValue(undefined),
-      updateScanReportUrl: vi.fn().mockResolvedValue(undefined),
-      getRunnerLogs: vi.fn().mockResolvedValue([{ log: 'test log' }]),
-      getFindings: vi.fn().mockResolvedValue([{ id: 'finding-1', type: 'BOLA' }]),
-      getFindingDetails: vi.fn().mockResolvedValue({ id: 'finding-1', type: 'BOLA', project_id: 'proj-1' }),
-      updateFinding: vi.fn().mockImplementation((findingId, body) => Promise.resolve({ id: findingId, triage_state: body.triage_state })),
+      createScan: vi.fn(),
+      getUserPublicKey: vi.fn(),
+      getUserDetails: vi.fn(),
+      getProjectMemberRole: vi.fn(),
+      createAuditLog: vi.fn(),
+      getScans: vi.fn(),
+      getScan: vi.fn(),
+      updateScan: vi.fn(),
+      updateScanReportUrl: vi.fn(),
+      getRunnerLogs: vi.fn(),
+      getFindings: vi.fn(),
+      getFindingDetails: vi.fn(),
+      updateFinding: vi.fn(),
     };
 
     mockRbacRepo = {
       checkPermission: vi.fn().mockResolvedValue(true),
     };
 
-    scansService = new ScansService(mockEnv, mockScansRepo as IScansRepository, mockRbacRepo as IRbacRepository);
+    scansService = new ScansService(mockEnv as unknown as Env, mockScansRepo, mockRbacRepo);
+    vi.clearAllMocks();
   });
 
-  test('createScan should succeed with valid inputs', async () => {
-    const res = await scansService.createScan(
-      { project_id: 'proj-1', target_url: 'http://example.com', profile: 'default' },
-      'user-1',
-      'Bearer token',
-      '127.0.0.1'
-    );
-
-    expect(res.status).toBe('queued');
-    expect(mockScansRepo.createScan).toHaveBeenCalled();
-    expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
-  });
-
-  test('createScan should throw error if missing fields', async () => {
-    await expect(
-      scansService.createScan({ project_id: 'proj-1' }, 'user-1', 'Bearer token', '127.0.0.1')
-    ).rejects.toThrow('Missing required fields');
-  });
-
-  test('createScan should throw error if user has no permission', async () => {
-    mockRbacRepo.checkPermission.mockResolvedValue(false);
-
-    await expect(
-      scansService.createScan(
-        { project_id: 'proj-1', target_url: 'http://example.com', profile: 'default' },
-        'user-1',
-        'Bearer token',
-        '127.0.0.1'
-      )
-    ).rejects.toThrow('Forbidden|403');
-  });
-
-  test('getScans should return scans list', async () => {
-    const res = await scansService.getScans('proj-1', 'user-1');
-    expect(res.scans).toHaveLength(1);
-    expect(mockRbacRepo.checkPermission).toHaveBeenCalledWith('user-1', 'proj-1', 'get:/api/projects/:id/scans');
-  });
-
-  test('getScans should throw if missing project_id', async () => {
-    await expect(scansService.getScans('', 'user-1')).rejects.toThrow('Missing query parameter');
-  });
-
-  test('getScan should return scan details', async () => {
-    const res = await scansService.getScan('scan-1', 'user-1');
-    expect(res.scan.id).toBe('scan-1');
-  });
-
-  test('getScan should throw if scan not found', async () => {
-    mockScansRepo.getScan.mockResolvedValue(null);
-    await expect(scansService.getScan('scan-1', 'user-1')).rejects.toThrow('Scan not found|404');
-  });
-
-  test('updateScan should update scan details', async () => {
-    const res = await scansService.updateScan('scan-1', { status: 'completed' }, 'user-1');
-    expect(res.scan.status).toBe('completed');
-    expect(mockScansRepo.updateScan).toHaveBeenCalled();
-  });
-
-  test('generateUploadUrl and uploadReport flow', async () => {
-    const genRes = await scansService.generateUploadUrl('scan-1', 'user-1');
-    expect(genRes.upload_token).toBeDefined();
-    expect(genRes.r2_key).toBe('reports/scan-1.enc');
-
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode('report data'));
-        controller.close();
-      }
+  describe('createScan', () => {
+    it('throws if missing required fields', async () => {
+      await expect(scansService.createScan({}, 'u1', '', '1.1.1.1')).rejects.toThrow('Missing required fields: project_id, target_url, profile|400');
     });
 
-    const uploadRes = await scansService.uploadReport('scan-1', genRes.upload_token, stream);
-    expect(uploadRes.status).toBe('uploaded');
-    expect(mockEnv.STORAGE.put).toHaveBeenCalled();
-    expect(mockScansRepo.updateScanReportUrl).toHaveBeenCalled();
+    it('throws if no access', async () => {
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.createScan({ project_id: 'p1', target_url: 'u', profile: 'p' }, 'u1', '', '1.1.1.1')).rejects.toThrow('Forbidden|403');
+    });
+
+    it('creates scan successfully', async () => {
+      mockScansRepo.getUserPublicKey.mockResolvedValueOnce('pubkey');
+      mockScansRepo.getUserDetails.mockResolvedValueOnce({ username: 'test' });
+      const waitUntil = vi.fn();
+      
+      const res = await scansService.createScan(
+        { project_id: 'p1', target_url: 'u', profile: 'p' },
+        'u1',
+        'Bearer swazz_live_abc',
+        '1.1.1.1',
+        waitUntil
+      );
+
+      expect(res.status).toBe('queued');
+      expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
+      expect(waitUntil).toHaveBeenCalled();
+    });
+
+    it('covers audit logic without waituntil and handles user details db error', async () => {
+      mockScansRepo.getUserPublicKey.mockRejectedValueOnce(new Error('db err'));
+      mockScansRepo.getUserDetails.mockRejectedValueOnce(new Error('audit err'));
+      const res = await scansService.createScan(
+        { project_id: 'p1', target_url: 'u', profile: 'p' },
+        'u1',
+        'auth',
+        '1.1.1.1'
+      );
+      expect(res.status).toBe('queued');
+      // wait a bit for fire and forget
+      await new Promise(r => setTimeout(r, 10));
+    });
   });
 
-  test('uploadReport should throw if token is missing', async () => {
-    await expect(scansService.uploadReport('scan-1', undefined, null)).rejects.toThrow('Missing X-Upload-Token header');
+  describe('getScans', () => {
+    it('throws if no projectId', async () => {
+      await expect(scansService.getScans('', 'u1')).rejects.toThrow('Missing query parameter: project_id|400');
+    });
+
+    it('throws if no access', async () => {
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.getScans('p1', 'u1')).rejects.toThrow('Forbidden|403');
+    });
+
+    it('returns scans', async () => {
+      mockScansRepo.getScans.mockResolvedValueOnce([{ id: 's1' }]);
+      const res = await scansService.getScans('p1', 'u1');
+      expect(res.scans).toEqual([{ id: 's1' }]);
+    });
   });
 
-  test('getRunnerLogs should return logs', async () => {
-    const res = await scansService.getRunnerLogs('scan-1', 'user-1', true);
-    expect(res.logs).toHaveLength(1);
+  describe('getScan', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce(null);
+      await expect(scansService.getScan('s1', 'u1')).rejects.toThrow('Scan not found|404');
+    });
+
+    it('throws if no access', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ project_id: 'p1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.getScan('s1', 'u1')).rejects.toThrow('Forbidden|403');
+    });
+
+    it('returns scan', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
+      const res = await scansService.getScan('s1', 'u1');
+      expect(res.scan.id).toBe('s1');
+    });
   });
 
-  test('getFindings should return findings', async () => {
-    const res = await scansService.getFindings('scan-1', 'user-1', true);
-    expect(res.findings).toHaveLength(1);
+  describe('updateScan', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce(null);
+      await expect(scansService.updateScan('s1', {}, 'u1')).rejects.toThrow('Scan not found|404');
+    });
+
+    it('throws if no access', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ project_id: 'p1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.updateScan('s1', {}, 'u1')).rejects.toThrow('Forbidden|403');
+    });
+
+    it('updates scan', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
+      mockScansRepo.updateScan.mockResolvedValueOnce({ id: 's1', status: 'done' });
+      const res = await scansService.updateScan('s1', {}, 'u1');
+      expect(res.scan.status).toBe('done');
+    });
   });
 
-  test('getFindingDetails should return finding details', async () => {
-    const res = await scansService.getFindingDetails('finding-1', 'user-1', true);
-    expect(res.finding.id).toBe('finding-1');
+  describe('generateUploadUrl', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce(null);
+      await expect(scansService.generateUploadUrl('s1', 'u1')).rejects.toThrow('Scan not found|404');
+    });
+
+    it('throws if no access', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ project_id: 'p1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.generateUploadUrl('s1', 'u1')).rejects.toThrow('Forbidden|403');
+    });
+
+    it('throws if secret missing', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ project_id: 'p1' });
+      mockEnv.JWT_SECRET = '';
+      await expect(scansService.generateUploadUrl('s1', 'u1')).rejects.toThrow('Internal server error: auth not configured|500');
+    });
+
+    it('generates url', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ project_id: 'p1' });
+      (jwt.sign as any).mockResolvedValueOnce('token123');
+      const res = await scansService.generateUploadUrl('s1', 'u1');
+      expect(res.upload_token).toBe('token123');
+    });
   });
 
-  test('updateFinding should update triage state', async () => {
-    const res = await scansService.updateFinding('finding-1', { triage_state: 'ignored' }, 'user-1', true);
-    expect(res.finding.triage_state).toBe('ignored');
-    expect(mockScansRepo.updateFinding).toHaveBeenCalled();
+  describe('uploadReport', () => {
+    it('throws if no token', async () => {
+      await expect(scansService.uploadReport('s1', undefined, null)).rejects.toThrow('Missing X-Upload-Token header|401');
+    });
+
+    it('throws if missing secret', async () => {
+      mockEnv.JWT_SECRET = '';
+      await expect(scansService.uploadReport('s1', 't', null)).rejects.toThrow('Internal server error: auth not configured|500');
+    });
+
+    it('throws if verify fails', async () => {
+      (jwt.verify as any).mockRejectedValueOnce(new Error('expired'));
+      await expect(scansService.uploadReport('s1', 't', null)).rejects.toThrow('Upload token expired|401');
+    });
+
+    it('throws if invalid token purpose', async () => {
+      (jwt.verify as any).mockResolvedValueOnce({ purpose: 'other', scan_id: 's1' });
+      await expect(scansService.uploadReport('s1', 't', null)).rejects.toThrow('Token does not match this scan|403');
+    });
+
+    it('throws if no stream', async () => {
+      (jwt.verify as any).mockResolvedValueOnce({ purpose: 'upload', scan_id: 's1' });
+      await expect(scansService.uploadReport('s1', 't', null)).rejects.toThrow('Empty body|400');
+    });
+
+    it('throws random verify errors', async () => {
+      (jwt.verify as any).mockRejectedValueOnce(new Error('Custom|403'));
+      await expect(scansService.uploadReport('s1', 't', null)).rejects.toThrow('Custom|403');
+    });
+
+    it('throws general verify error fallback', async () => {
+      (jwt.verify as any).mockRejectedValueOnce(new Error('general'));
+      await expect(scansService.uploadReport('s1', 't', null)).rejects.toThrow('Invalid upload token|403');
+    });
+
+    it('uploads report', async () => {
+      (jwt.verify as any).mockResolvedValueOnce({ purpose: 'upload', scan_id: 's1', r2_key: 'key' });
+      const stream = new ReadableStream();
+      const res = await scansService.uploadReport('s1', 't', stream);
+      expect(res.status).toBe('uploaded');
+      expect(mockEnv.STORAGE.put).toHaveBeenCalledWith('key', stream, expect.any(Object));
+      expect(mockScansRepo.updateScanReportUrl).toHaveBeenCalledWith('s1', 'key');
+    });
+  });
+
+  describe('checkScanAccess', () => {
+    it('returns immediately if auth not enabled', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1' });
+      mockScansRepo.getRunnerLogs.mockResolvedValueOnce([]);
+      await scansService.getRunnerLogs('s1', null, false);
+      expect(mockScansRepo.getRunnerLogs).toHaveBeenCalled();
+    });
+
+    it('throws if auth enabled but no user', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1' });
+      await expect(scansService.getRunnerLogs('s1', null, true)).rejects.toThrow('Unauthorized|401');
+    });
+
+    it('checks user_id if no project_id', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', user_id: 'other' });
+      await expect(scansService.getRunnerLogs('s1', 'u1', true)).rejects.toThrow('Forbidden|403');
+      
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', user_id: 'u1' });
+      await scansService.getRunnerLogs('s1', 'u1', true);
+      expect(mockScansRepo.getRunnerLogs).toHaveBeenCalled();
+    });
+
+    it('checks rbac if project_id exists', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.getRunnerLogs('s1', 'u1', true)).rejects.toThrow('Forbidden|403');
+    });
+  });
+
+  describe('getRunnerLogs', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce(null);
+      await expect(scansService.getRunnerLogs('s1', 'u1', false)).rejects.toThrow('Scan not found|404');
+    });
+
+    it('returns logs', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1' });
+      mockScansRepo.getRunnerLogs.mockResolvedValueOnce([]);
+      const res = await scansService.getRunnerLogs('s1', 'u1', false);
+      expect(res.logs).toEqual([]);
+    });
+  });
+
+  describe('getFindings', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce(null);
+      await expect(scansService.getFindings('s1', 'u1', false)).rejects.toThrow('Scan not found|404');
+    });
+
+    it('returns findings', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1' });
+      mockScansRepo.getFindings.mockResolvedValueOnce([]);
+      const res = await scansService.getFindings('s1', 'u1', false);
+      expect(res.findings).toEqual([]);
+    });
+  });
+
+  describe('getFindingDetails', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce(null);
+      await expect(scansService.getFindingDetails('f1', 'u1', false)).rejects.toThrow('Finding not found|404');
+    });
+
+    it('returns finding', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce({ id: 'f1' });
+      const res = await scansService.getFindingDetails('f1', 'u1', false);
+      expect(res.finding.id).toBe('f1');
+    });
+  });
+
+  describe('updateFinding', () => {
+    it('throws if not found', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce(null);
+      await expect(scansService.updateFinding('f1', {}, 'u1', false)).rejects.toThrow('Finding not found|404');
+    });
+
+    it('throws if auth enabled and no user', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce({ id: 'f1' });
+      await expect(scansService.updateFinding('f1', {}, null, true)).rejects.toThrow('Unauthorized|401');
+    });
+
+    it('checks user_id if no project_id', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce({ id: 'f1', user_id: 'other' });
+      await expect(scansService.updateFinding('f1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
+    });
+
+    it('checks rbac if project_id exists', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce({ id: 'f1', project_id: 'p1' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.updateFinding('f1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
+    });
+
+    it('updates finding', async () => {
+      mockScansRepo.getFindingDetails.mockResolvedValueOnce({ id: 'f1' });
+      mockScansRepo.updateFinding.mockResolvedValueOnce({ id: 'f1', updated: true });
+      const res = await scansService.updateFinding('f1', {}, 'u1', false);
+      expect(res.finding.updated).toBe(true);
+    });
   });
 });

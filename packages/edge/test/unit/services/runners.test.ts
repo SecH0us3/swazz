@@ -102,29 +102,101 @@ describe('RunnersService Unit Tests', () => {
   });
 
   test('queueRun should update scan status and return run info', async () => {
+    (mockEnv.COORDINATOR_DO.get().fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'r1', status: 'queued' }) });
     const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);
     expect(res.id).toBeDefined();
     expect(res.status).toBe('queued');
     expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
   });
 
+  test('queueRun should cover createScanRecord error log', async () => {
+    mockRunnersRepo.createScanRecord.mockRejectedValueOnce(new Error('db error'));
+    const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);
+    expect(res.id).toBeDefined();
+    expect(mockRunnersRepo.createScanRecord).toHaveBeenCalled();
+  });
+
+  test('queueRun should cover getUserPublicKey error log', async () => {
+    mockRunnersRepo.getUserPublicKey.mockRejectedValueOnce(new Error('db error'));
+    const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);
+    expect(res.id).toBeDefined();
+  });
+
+  test('queueRun should throw if anon limit reached', async () => {
+    mockEnv.LIMIT_ANONYMOUS = 'true';
+    await expect(
+      runnersService.queueRun({ config: { endpoints: Array(51).fill('test') } }, 'anon', true, true)
+    ).rejects.toThrow('Anonymous limit reached: You can only scan up to 50 endpoints.|403');
+  });
+
+  test('queueRun should throw if projectId present and isAnon', async () => {
+    await expect(runnersService.queueRun({ projectId: 'p1' }, 'anon', true, true)).rejects.toThrow('Forbidden|403');
+  });
+
+  test('queueRun should throw if isWeb, has projectId and no rbac permission', async () => {
+    mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+    await expect(runnersService.queueRun({ projectId: 'p1' }, 'user-1', true, false)).rejects.toThrow('Forbidden|403');
+  });
+
   test('stopRun should succeed', async () => {
+    mockEnv.COORDINATOR_DO.get = vi.fn().mockReturnValue({
+      fetch: vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'stopped' }) })
+    });
     const res = await runnersService.stopRun('scan-1', 'user-1');
     expect(res.status).toBe('stopped');
   });
 
+  test('stopRun should throw 401 if unauthorized', async () => {
+    await expect(runnersService.stopRun('scan-1', null)).rejects.toThrow('Unauthorized|401');
+  });
+
+  test('stopRun should throw if checkScanAccess fails', async () => {
+    mockRunnersRepo.getScanDetails.mockResolvedValueOnce(null);
+    await expect(runnersService.stopRun('scan-1', 'user-1')).rejects.toThrow('Run/Scan not found|404');
+  });
+
   test('pauseRun should succeed', async () => {
+    mockEnv.COORDINATOR_DO.get = vi.fn().mockReturnValue({
+      fetch: vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'paused' }) })
+    });
     const res = await runnersService.pauseRun('scan-1', 'user-1');
     expect(res.status).toBe('paused');
   });
 
+  test('pauseRun should throw 401 if unauthorized', async () => {
+    await expect(runnersService.pauseRun('scan-1', null)).rejects.toThrow('Unauthorized|401');
+  });
+
   test('resumeRun should succeed', async () => {
+    mockEnv.COORDINATOR_DO.get = vi.fn().mockReturnValue({
+      fetch: vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'resumed' }) })
+    });
     const res = await runnersService.resumeRun('scan-1', 'user-1');
     expect(res.status).toBe('resumed');
   });
 
+  test('resumeRun should throw 401 if unauthorized', async () => {
+    await expect(runnersService.resumeRun('scan-1', null)).rejects.toThrow('Unauthorized|401');
+  });
+
   test('restartRunner should reboot active runner', async () => {
+    (mockEnv.COORDINATOR_DO.get().fetch as any).mockResolvedValueOnce({ ok: true });
     const res = await runnersService.restartRunner('conn-1', 'user-1');
     expect(res.status).toBe('restarted');
+  });
+
+  test('restartRunner should throw 500 on db error', async () => {
+    mockRunnersRepo.getUserPublicKey.mockRejectedValueOnce(new Error('db error'));
+    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('Internal Server Error|500');
+  });
+
+  test('restartRunner should throw 403 if no public key', async () => {
+    mockRunnersRepo.getUserPublicKey.mockResolvedValueOnce(null);
+    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('Forbidden: You do not own any runners|403');
+  });
+
+  test('restartRunner should throw error if DO returns !ok', async () => {
+    (mockEnv.COORDINATOR_DO.get().fetch as any).mockResolvedValueOnce({ ok: false, text: async () => 'DO Error', status: 400 });
+    await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('DO Error|400');
   });
 });

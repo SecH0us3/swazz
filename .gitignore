@@ -93,3 +93,4 @@ thread_ids.json
 wordlists/
 
 packages/edge/coverage/
+packages/edge/coverage_report.txt

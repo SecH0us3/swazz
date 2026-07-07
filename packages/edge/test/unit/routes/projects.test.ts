@@ -72,6 +72,12 @@ describe('Projects Routes', () => {
       expect(await res.json()).toEqual({ error: 'Unauthorized' });
       expect(mockServices.getProjects).toHaveBeenCalledWith(null, true);
     });
+
+    it('should return 500 on other errors', async () => {
+      (mockServices.getProjects as any).mockRejectedValue(new Error('Internal'));
+      const res = await app.request('/api/projects');
+      expect(res.status).toBe(500);
+    });
   });
 
   describe('POST /api/projects', () => {
@@ -88,6 +94,18 @@ describe('Projects Routes', () => {
       expect(await res.json()).toEqual({ id: 'new_p', status: 'created' });
       expect(mockServices.createProject).toHaveBeenCalledWith('user_123', true, { name: 'New Project' });
     });
+
+    it('should return 401 on Unauthorized', async () => {
+      (mockServices.createProject as any).mockRejectedValue(new Error('Unauthorized'));
+      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 500 on other errors', async () => {
+      (mockServices.createProject as any).mockRejectedValue(new Error('Internal'));
+      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      expect(res.status).toBe(500);
+    });
   });
 
   describe('GET /api/projects/:id/config', () => {
@@ -98,6 +116,22 @@ describe('Projects Routes', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ config_json: '{}' });
       expect(mockServices.getProjectConfig).toHaveBeenCalledWith('proj_1');
+    });
+  });
+
+  describe('POST /api/projects/:id/config', () => {
+    it('should save project config', async () => {
+      (mockServices.saveProjectConfig as any).mockResolvedValue({ status: 'saved' });
+      
+      const res = await app.request('/api/projects/proj_1/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: { a: 1 } })
+      });
+      
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ status: 'saved' });
+      expect(mockServices.saveProjectConfig).toHaveBeenCalledWith('proj_1', { a: 1 });
     });
   });
 
@@ -116,6 +150,24 @@ describe('Projects Routes', () => {
       const res = await app.request('/api/projects/proj_1/analytics?period=24h');
       expect(res.status).toBe(200);
       expect(mockServices.getProjectAnalytics).toHaveBeenCalledWith('proj_1', 'user_123', '24h', true);
+    });
+
+    it('should return 401 on Unauthorized', async () => {
+      (mockServices.getProjectAnalytics as any).mockRejectedValue(new Error('Unauthorized|401'));
+      const res = await app.request('/api/projects/proj_1/analytics');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 403 on Forbidden', async () => {
+      (mockServices.getProjectAnalytics as any).mockRejectedValue(new Error('Forbidden|403'));
+      const res = await app.request('/api/projects/proj_1/analytics');
+      expect(res.status).toBe(403);
+    });
+
+    it('should return 500 on other errors', async () => {
+      (mockServices.getProjectAnalytics as any).mockRejectedValue(new Error('Internal'));
+      const res = await app.request('/api/projects/proj_1/analytics');
+      expect(res.status).toBe(500);
     });
   });
 
@@ -142,6 +194,12 @@ describe('Projects Routes', () => {
       const res = await app.request('/api/projects/proj_1/members/usr_2/login-history');
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: 'User is not a member of this project' });
+    });
+
+    it('should return 500 on internal errors', async () => {
+      (mockServices.getUserLoginHistory as any).mockRejectedValue(new Error('Internal Server Error'));
+      const res = await app.request('/api/projects/proj_1/members/usr_2/login-history');
+      expect(res.status).toBe(500);
     });
   });
 
@@ -191,6 +249,36 @@ describe('Projects Routes', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ status: 'saved', cron_schedule: '30 2 * * *' });
       expect(mockServices.updateProjectSchedule).toHaveBeenCalledWith('proj_1', { cron_schedule: '30 2 * * *' });
+    });
+
+    it('should return auditDetails if present', async () => {
+      (mockServices.updateProjectSchedule as any).mockResolvedValue({ status: 'saved', cron_schedule: '30 2 * * *', auditDetails: { foo: 'bar' } });
+      const res = await app.request('/api/projects/proj_1/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_schedule: '30 2 * * *' })
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it('should return 400 on validation error', async () => {
+      (mockServices.updateProjectSchedule as any).mockRejectedValue(new Error('Invalid cron format. Must have exactly 5 fields.|400'));
+      const res = await app.request('/api/projects/proj_1/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_schedule: 'invalid' })
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('should return 500 on internal errors', async () => {
+      (mockServices.updateProjectSchedule as any).mockRejectedValue(new Error('Internal Server Error'));
+      const res = await app.request('/api/projects/proj_1/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_schedule: '30 2 * * *' })
+      });
+      expect(res.status).toBe(500);
     });
   });
 
