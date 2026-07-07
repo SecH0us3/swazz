@@ -348,6 +348,11 @@ The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. Th
 - **Localized Cell Hover**: Heatmap cells manage their own hover states locally. Moving the cursor over the grid does not trigger expensive dashboard or full-grid re-renders.
 - **Memoized Rows**: Endpoint rows use `React.memo` with custom value comparison. A row only updates when its specific endpoint stats change.
 - **Findings Pagination**: Both the **Grouped Errors** and **OWASP Top 10** lists cap expanded category views to 50 items by default. A "Show More" button allows loading additional results incrementally, avoiding DOM bloat and lagging.
+
+### Beta Mode
+
+During beta, registrations may be capped (default 50 users) to ensure stability. Once the limit is reached, new users can only register using a `BETA_BYPASS_CODE` provided by the administrator.
+
 ## 🔒 Privacy & Account Deletion (Right to be Forgotten)
 
 Swazz values user privacy and complies with GDPR requirements. If you wish to delete your account and all associated data, you can do so immediately from the dashboard settings page:

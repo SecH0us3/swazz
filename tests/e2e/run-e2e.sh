@@ -91,10 +91,14 @@ else
   echo "→ Seeding CI runner user..."
   npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
   echo "→ Starting Edge Coordinator..."
-  NODE_OPTIONS="--max-old-space-size=4096" JWT_SECRET="test-secret" npx wrangler dev --cwd packages/edge --log-level error > edge.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --cwd packages/edge --var JWT_SECRET:test-secret --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error > edge.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8787 "Edge Coordinator"
 fi
+
+# Always clean up test users left over from previous runs (keep ci_user)
+echo "→ Cleaning up test users from previous runs..."
+npx wrangler d1 execute swazz_db --local --command "DELETE FROM users WHERE username != 'ci_user';" --cwd packages/edge || true
 
 # 3. Start React Web Frontend (Port 5173)
 if check_port 5173; then

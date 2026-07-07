@@ -7,13 +7,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🟢 Low Complexity
 
-- [ ] **Task 97: Closed Beta Launch & Infrastructure Capacity Control**
-  - **Design Goal:** Establish a closed beta registration limit (max 50 users) to progressively scale and stress-test target coordination infrastructure without running into capacity exhaustion.
-  - **Implementation Details:**
-    - Implement a registration counter check in `POST /api/auth/register` to reject new signups once the user registry count reaches 50.
-    - Support admin invites or bypass codes to register extra users manually during the beta phase.
-    - Design status banners in the web client dashboard alerting users about the current beta limits.
-
 
 - [ ] **Task 98: RSS Feed Integration**
   - **Design Goal:** Provide a standard RSS feed for product updates, security disclosures, or public scan releases.

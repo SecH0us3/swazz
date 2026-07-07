@@ -72,6 +72,7 @@ export function MainWorkspace({
         activeProject: state.activeProject
     })));
 
+    const betaModeEnabled = useAppStore((state) => state.betaModeEnabled);
     const encryption = useEncryption(activeProject?.id);
     const { hasKeyPair, isLoading: isEncryptionLoading } = encryption;
 
@@ -170,7 +171,15 @@ export function MainWorkspace({
                     encryption={encryption}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', flex: 1, minHeight: 0 }}>
+                <div className="workspace-main-layout">
+                    {betaModeEnabled && (
+                        <div className="beta-status-alert">
+                            <span className="beta-alert-dot" />
+                            <span className="beta-alert-text">
+                                <strong>Closed Beta Phase:</strong> System capacity is currently limited. Signups are subject to invite controls.
+                            </span>
+                        </div>
+                    )}
                     <div className="tab-bar">
                         <button
                             className={`tab-bar-btn ${activeTab === 'heatmap' ? 'active' : ''}`}

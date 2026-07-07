@@ -1385,7 +1385,34 @@ body.resizing .sidebar-resizer {
   align-items: center;
 }
 
-/* ─── Tab Bar (main content tabs) ────────────────────────── */
+.workspace-main-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+}
+
+.beta-status-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.beta-alert-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--accent-light);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 8px var(--accent-light);
+  flex-shrink: 0;
+}
 
 .tab-bar {
   display: flex;

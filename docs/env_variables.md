@@ -39,6 +39,9 @@ These configurations apply to the Edge Coordinator service located in `packages/
 | **`ALLOWED_ORIGINS`** | CORS allowed origins list. | `"*"` |
 | **`TURNSTILE_SITE_KEY`** | Public site key for Cloudflare Turnstile CAPTCHA. | `0x4AAAAAAD...` |
 | **`VERSION`** | Deployed Edge Worker version. | `"1.0.0"` |
+| `BETA_MODE_ENABLED`| `true` | (Optional) Set to `false` to disable the closed beta limits and hide beta banners entirely. |
+| `BETA_USER_LIMIT`| `50` | (Optional) The maximum number of users allowed to register before requiring an invite code (when beta is enabled). |
+| `BETA_BYPASS_CODE`| `SWAZZ_BETA_2026` | (Optional) The invite code that allows bypassing the beta limit. |
 
 ---
 

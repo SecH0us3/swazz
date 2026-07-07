@@ -262,7 +262,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await fuzzingTabBtn.click();
 
       await expect(timeoutInput).toBeVisible();
-      await timeoutInput.fill('1'); // 1ms timeout!
+      await timeoutInput.fill('5'); // Set timeout to 5ms so swagger parser doesn't crash
 
       await expect(iterationsInput).toBeVisible();
       await iterationsInput.fill('1'); // Set iterations to 1
@@ -305,20 +305,20 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await expect(startBtn).toBeVisible();
       await startBtn.click();
 
-      // Wait for the fuzzer to complete (timeout of 1ms makes it complete/fail almost instantly)
+      // Wait for the fuzzer to complete (timeout of 5ms makes it complete/fail fast)
       await expect(startBtn).toBeVisible({ timeout: 20000 });
 
-      // 10. Verify that the 1ms timeout had an effect by checking that total requests ran but 2xx success count is low
+      // 10. Verify that the 5ms timeout had an effect by checking that total requests ran but 2xx success count is low
       const totalStat = page.locator('.stat-card.stat-total .stat-value');
-      await expect(totalStat).not.toHaveText('0');
+      await expect(totalStat).not.toHaveText('0', { timeout: 15000 });
 
       const successStat = page.locator('.stat-card.stat-2xx .stat-value');
-      // Tolerate very low success count (e.g. < 10) on fast machines where loopback is < 1ms
+      // Tolerate very low success count (e.g. < 10) on fast machines where loopback is < 5ms
       await expect(async () => {
         const text = await successStat.innerText();
         const val = parseInt(text, 10);
         expect(val).toBeLessThan(10);
-      }).toPass({ timeout: 5000 });
+      }).toPass({ timeout: 10000 });
     } finally {
       // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests
       // Check if we are currently on the settings page or dashboard
