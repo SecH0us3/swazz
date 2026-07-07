@@ -54,6 +54,10 @@ export class ScansService implements IScansService {
       throw new Error('Missing required fields: project_id, target_url, profile|400');
     }
 
+    const isAuthEnabled = this.env.AUTH_ENABLED === 'true';
+    if (isAuthEnabled && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       const hasAccess = await this.rbacRepo.checkPermission(userId, body.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
@@ -125,6 +129,10 @@ export class ScansService implements IScansService {
       throw new Error('Missing query parameter: project_id|400');
     }
 
+    const isAuthEnabled = this.env.AUTH_ENABLED === 'true';
+    if (isAuthEnabled && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       const hasAccess = await this.rbacRepo.checkPermission(userId, projectId, 'get:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
@@ -138,6 +146,10 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
+    const isAuthEnabled = this.env.AUTH_ENABLED === 'true';
+    if (isAuthEnabled && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
@@ -150,6 +162,10 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
+    const isAuthEnabled = this.env.AUTH_ENABLED === 'true';
+    if (isAuthEnabled && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
@@ -163,6 +179,10 @@ export class ScansService implements IScansService {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 
+    const isAuthEnabled = this.env.AUTH_ENABLED === 'true';
+    if (isAuthEnabled && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');

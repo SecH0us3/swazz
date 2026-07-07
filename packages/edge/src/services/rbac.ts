@@ -337,7 +337,8 @@ export class RbacService implements IRbacService {
   }
 
   async acceptInvitation(userId: string | null, body: any) {
-    if (!body.token || typeof body.token !== 'string' || body.token.trim() === '') throw new Error('Invalid invitation token|400');
+    if (!body || typeof body.token !== 'string') throw new TypeError('body.token must be a string');
+    if (body.token.trim() === '') throw new Error('Invalid invitation token|400');
     if (!userId) throw new Error('Unauthorized|401');
 
     const user = await this.rbacRepo.getUserDetails(userId);
@@ -364,7 +365,8 @@ export class RbacService implements IRbacService {
   }
 
   async declineInvitation(userId: string | null, body: any) {
-    if (!body.token || typeof body.token !== 'string' || body.token.trim() === '') throw new Error('Invalid invitation token|400');
+    if (!body || typeof body.token !== 'string') throw new TypeError('body.token must be a string');
+    if (body.token.trim() === '') throw new Error('Invalid invitation token|400');
     if (!userId) throw new Error('Unauthorized|401');
 
     const user = await this.rbacRepo.getUserDetails(userId);

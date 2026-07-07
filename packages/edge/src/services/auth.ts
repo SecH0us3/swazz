@@ -455,7 +455,7 @@ export class AuthService implements IAuthService {
     await this.authRepo.updateUserTwoFactorSecret(userId, encryptedSecret, 0);
 
     const issuer = 'Swazz';
-    return { status: 'ok', secret, otpauth_url: `otpauth://totp/${issuer}:${user.username}?secret=${secret}&issuer=${issuer}` };
+    return { status: 'ok', secret, otpauth_url: "otpauth://totp/" + encodeURIComponent(issuer) + ":" + encodeURIComponent(user.username) + "?secret=" + secret + "&issuer=" + encodeURIComponent(issuer) };
   }
 
   async verify2FA(userId: string, body: any): Promise<any> {

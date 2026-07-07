@@ -281,33 +281,20 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async recordFailedLogin(username: string): Promise<void> {
-    const MAX_LOGIN_ATTEMPTS = 5;
     const LOCKOUT_MINUTES = 15;
-    
-    const row = await this.db
-      .prepare('SELECT failed_count FROM login_attempts WHERE username = ?')
-      .bind(username)
-      .first<{ failed_count: number }>();
+    const lockDate = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
+    const lockedUntil = lockDate.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
 
-    const newCount = (row?.failed_count ?? 0) + 1;
-    let lockedUntil: string | null = null;
-
-    if (newCount >= MAX_LOGIN_ATTEMPTS) {
-      const lockDate = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
-      lockedUntil = lockDate.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
-    }
-
-    if (!row) {
-      await this.db
-        .prepare('INSERT INTO login_attempts (username, failed_count, locked_until) VALUES (?, ?, ?)')
-        .bind(username, newCount, lockedUntil)
-        .run();
-    } else {
-      await this.db
-        .prepare('UPDATE login_attempts SET failed_count = ?, locked_until = ? WHERE username = ?')
-        .bind(newCount, lockedUntil, username)
-        .run();
-    }
+    await this.db
+      .prepare(
+        "INSERT INTO login_attempts (username, failed_count, locked_until) " +
+        "VALUES (?1, 1, NULL) " +
+        "ON CONFLICT(username) DO UPDATE SET " +
+          "failed_count = failed_count + 1, " +
+          "locked_until = CASE WHEN failed_count + 1 >= 5 THEN ?2 ELSE NULL END"
+      )
+      .bind(username, lockedUntil)
+      .run();
   }
 
   async resetLoginAttempts(username: string): Promise<void> {
