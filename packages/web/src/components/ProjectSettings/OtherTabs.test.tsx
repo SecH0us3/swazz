@@ -88,7 +88,7 @@ describe('Other ProjectSettings components', () => {
     it('renders ChainingTab', async () => {
         render(<ChainingTab />);
         await waitFor(() => {
-            expect(screen.getByText(/Request Chaining Rules/i)).toBeTruthy();
+            expect(screen.getByRole('heading', { name: /Request Chaining Rules/i })).toBeTruthy();
         });
     });
 

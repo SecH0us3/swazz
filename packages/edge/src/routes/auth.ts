@@ -14,6 +14,7 @@ export function registerAuthRoutes(
       if (typeof body.username !== 'string' || typeof body.password !== 'string') {
         return c.json({ error: 'Missing username or password' }, 400);
       }
+
       const usernameRegex = /^[a-zA-Z0-9_\-]{3,20}$/;
       if (!usernameRegex.test(body.username.trim())) {
         return c.json({ error: 'Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens' }, 400);
