@@ -14,18 +14,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Create a public route (`GET /api/feed.xml` or `/feed.rss`) serving well-formatted RSS XML content.
     - Render posts, updates, or public releases with proper XML namespaces, publishing dates, and author credits.
 
-- [ ] **Task 105: Fix RBAC Logical Gaps (Validation Checks)**
-  - **Design Goal:** Ensure API robustness by verifying the existence of entities before modifying them.
-  - **Implementation Details:**
-    - `updateMemberRoles`: Verify user is a project member before applying updates.
-    - `updateCustomRole` & `deleteCustomRole`: Verify the role exists before performing updates/deletes.
-    - `createInvitation`: Prevent sending multiple active invitations to the same user/email in the same project.
 
-- [ ] **Task 106: Fix Authentication Bypasses in Scans Service**
-  - **Design Goal:** Ensure that unauthenticated requests do not bypass RBAC checks when `AUTH_ENABLED` is true.
-  - **Implementation Details:**
-    - In `ScansService`, methods like `createScan`, `getScans`, `getScan`, `updateScan`, and `generateUploadUrl` currently skip RBAC checks if `userId` is `null` (e.g. unauthenticated request), allowing them to bypass `project_id` restrictions.
-    - Require `userId` to be present if `AUTH_ENABLED === 'true'` and the target entity is tied to a `project_id`.
 
 - [ ] **Task 99: Secondary Product Blog**
   - **Design Goal:** Design and mount a realistic secondary blog section/layout to publish technical articles, vulnerability writeups, and security research related to Swazz fuzzer findings.

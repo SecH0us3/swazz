@@ -63,7 +63,6 @@ export interface IAuthService {
 }
 
 export class AuthService implements IAuthService {
-  private static tempOauthCodes = new Map<string, string>();
   constructor(private env: Env, private authRepo: IAuthRepository) {}
 
   private extractLoginMeta(c: Context<{ Bindings: Env }>): LoginHistoryMeta {
@@ -104,7 +103,7 @@ export class AuthService implements IAuthService {
         let isBypassValid = false;
         
         // 1. Check if it's the global bypass code
-        if (this.env.BETA_BYPASS_CODE && inviteCode === this.env.BETA_BYPASS_CODE) {
+        if (this.env.BETA_BYPASS_CODE && safeCompare(inviteCode, this.env.BETA_BYPASS_CODE)) {
           isBypassValid = true;
         }
 
@@ -739,8 +738,7 @@ export class AuthService implements IAuthService {
         if (this.env.SESSION_CACHE) {
           await this.env.SESSION_CACHE.put(`oauth_code:${exchangeCode}`, jwtToken, { expirationTtl: 60 });
         } else {
-          AuthService.tempOauthCodes.set(`oauth_code:${exchangeCode}`, jwtToken);
-          setTimeout(() => AuthService.tempOauthCodes.delete(`oauth_code:${exchangeCode}`), 60 * 1000);
+          throw new Error('Internal server error: SESSION_CACHE is not configured|500');
         }
         
         return { redirectUrl: `${frontendUrl}/?exchange_code=${exchangeCode}` };
@@ -759,8 +757,7 @@ export class AuthService implements IAuthService {
       token = await cache.get(key);
       if (token) await cache.delete(key);
     } else {
-      token = AuthService.tempOauthCodes.get(key) || null;
-      if (token) AuthService.tempOauthCodes.delete(key);
+      throw new Error('Internal server error: SESSION_CACHE is not configured|500');
     }
     if (!token) throw new Error('Invalid or expired exchange code|400');
     return { status: 'ok', token };

@@ -55,6 +55,8 @@ export interface IAuthRepository {
   cleanupExpiredGuests(): Promise<void>;
   getUserCount(): Promise<number>;
   checkInvitationTokenValid(token: string): Promise<boolean>;
+  verifyApiKey(hashedToken: string, plainToken: string): Promise<string | null>;
+  getUserDeleteRequestedAt(userId: string): Promise<string | null>;
 }
 
 export class AuthRepository extends BaseService implements IAuthRepository {

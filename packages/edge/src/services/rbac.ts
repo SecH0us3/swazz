@@ -36,6 +36,7 @@ export class RbacService implements IRbacService {
   }
 
   async getRoles(projectId: string) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
     const customRoles = await this.rbacRepo.getCustomRoles(projectId);
 
     let allCustomPermissions: { role_id: string; permission_key: string }[] = [];
@@ -67,6 +68,7 @@ export class RbacService implements IRbacService {
   }
 
   async createCustomRole(projectId: string, userId: string | null, body: any) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
     await this.assertNotGuest(userId);
 
     const roleId = 'c_' + ulid();
@@ -113,6 +115,7 @@ export class RbacService implements IRbacService {
   }
 
   async getMembers(projectId: string) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
     const results = await this.rbacRepo.getProjectMembers(projectId);
 
     const usersMap = new Map();
@@ -148,6 +151,8 @@ export class RbacService implements IRbacService {
   }
 
   async updateMemberRoles(projectId: string, userId: string | null, memberId: string, body: any) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
+    if (!memberId || typeof memberId !== 'string' || memberId.trim() === '') throw new Error('Invalid member ID|400');
     await this.assertNotGuest(userId);
 
     if (memberId === userId) {
@@ -194,6 +199,8 @@ export class RbacService implements IRbacService {
   }
 
   async removeMember(projectId: string, userId: string | null, memberId: string) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
+    if (!memberId || typeof memberId !== 'string' || memberId.trim() === '') throw new Error('Invalid member ID|400');
     await this.assertNotGuest(userId);
 
     if (memberId === userId) {
@@ -223,6 +230,8 @@ export class RbacService implements IRbacService {
   }
 
   async updateCustomRole(projectId: string, userId: string | null, roleId: string, body: any) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
+    if (!roleId || typeof roleId !== 'string' || roleId.trim() === '') throw new Error('Invalid role ID|400');
     await this.assertNotGuest(userId);
 
     if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
@@ -270,6 +279,8 @@ export class RbacService implements IRbacService {
   }
 
   async deleteCustomRole(projectId: string, userId: string | null, roleId: string) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
+    if (!roleId || typeof roleId !== 'string' || roleId.trim() === '') throw new Error('Invalid role ID|400');
     await this.assertNotGuest(userId);
 
     if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
@@ -293,6 +304,7 @@ export class RbacService implements IRbacService {
   }
 
   async createInvitation(projectId: string, userId: string | null, body: any) {
+    if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
     await this.assertNotGuest(userId);
 
     if ((!body.email || typeof body.email !== 'string' || body.email.trim() === '') &&
@@ -325,6 +337,7 @@ export class RbacService implements IRbacService {
   }
 
   async acceptInvitation(userId: string | null, body: any) {
+    if (!body.token || typeof body.token !== 'string' || body.token.trim() === '') throw new Error('Invalid invitation token|400');
     if (!userId) throw new Error('Unauthorized|401');
 
     const user = await this.rbacRepo.getUserDetails(userId);
@@ -351,6 +364,7 @@ export class RbacService implements IRbacService {
   }
 
   async declineInvitation(userId: string | null, body: any) {
+    if (!body.token || typeof body.token !== 'string' || body.token.trim() === '') throw new Error('Invalid invitation token|400');
     if (!userId) throw new Error('Unauthorized|401');
 
     const user = await this.rbacRepo.getUserDetails(userId);
