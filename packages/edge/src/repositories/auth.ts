@@ -53,6 +53,8 @@ export interface IAuthRepository {
   resetLoginAttempts(username: string): Promise<void>;
   recordLoginHistory(userId: string, status: 'success' | 'failed_password' | 'failed_2fa' | 'locked', authMethod: 'password' | 'github', twoFactorActive: boolean, meta: LoginHistoryMeta): Promise<void>;
   cleanupExpiredGuests(): Promise<void>;
+  getUserCount(): Promise<number>;
+  checkInvitationTokenValid(token: string): Promise<boolean>;
 }
 
 export class AuthRepository extends BaseService implements IAuthRepository {
@@ -368,5 +370,17 @@ export class AuthRepository extends BaseService implements IAuthRepository {
       .bind(userId)
       .first<{ delete_requested_at: string | null }>();
     return user ? user.delete_requested_at : null;
+  }
+
+  async getUserCount(): Promise<number> {
+    const res = await this.db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+    return res ? res.count : 0;
+  }
+
+  async checkInvitationTokenValid(token: string): Promise<boolean> {
+    const inv = await this.db.prepare(
+      "SELECT id FROM project_invitations WHERE token = ? AND status = 'Pending' AND strftime('%s', expires_at) > strftime('%s', 'now')"
+    ).bind(token).first<{ id: string }>();
+    return !!inv;
   }
 }

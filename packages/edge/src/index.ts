@@ -80,10 +80,8 @@ app.get('/api/info', async (c) => {
 
   let betaUserCount = 0;
   try {
-    const res = await getDB(c.env).prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
-    if (res) {
-      betaUserCount = res.count;
-    }
+    const authRepo = new AuthRepository(c.env);
+    betaUserCount = await authRepo.getUserCount();
   } catch (err) {
     console.error("Failed to query user count for beta info:", err);
   }

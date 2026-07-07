@@ -2,6 +2,7 @@ import { verify } from 'hono/jwt';
 import { Env } from '../env';
 import { Context } from 'hono';
 import { ulid } from 'ulidx';
+import { AuthRepository } from '../repositories/auth';
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
@@ -47,29 +48,8 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
 
     // 2. Cache miss — query D1
     try {
-      let user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-        .bind(hashedToken)
-        .first<{ id: string }>();
-
-      if (!user) {
-        // Fallback for legacy plain-text keys
-        user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-          .bind(token)
-          .first<{ id: string }>();
-
-        if (user) {
-          // Auto-upgrade plain-text key to hashed key in DB
-          try {
-            await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
-              .bind(hashedToken, user.id)
-              .run();
-          } catch {
-            // Auto-upgrade update failed — non-critical
-          }
-        }
-      }
-
-      const userId = user ? user.id : null;
+      const authRepo = new AuthRepository(c.env);
+      const userId = await authRepo.verifyApiKey(hashedToken, token);
 
       // 3. Write to KV (positive or negative cache)
       if (kv) {
@@ -297,7 +277,7 @@ export function getClientIp(c: Context<{ Bindings: Env }>): string {
 
 export const deletionCache = new Map<string, { deleteRequestedAt: string | null; expiry: number }>();
 
-import { AuthRepository } from '../repositories/auth';
+
 export async function getDeleteRequestedAt(authRepo: AuthRepository, userId: string): Promise<string | null> {
   const now = Date.now();
   const cached = deletionCache.get(userId);

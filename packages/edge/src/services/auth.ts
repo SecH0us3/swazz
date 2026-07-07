@@ -84,6 +84,45 @@ export class AuthService implements IAuthService {
     const password = body.password;
     const email = typeof body.email === 'string' ? body.email.trim() : null;
     
+    // Closed Beta registration limit check
+    const betaModeEnabled = this.env.BETA_MODE_ENABLED !== 'false';
+    if (betaModeEnabled) {
+      const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : '';
+      let totalUsers = 0;
+      try {
+        totalUsers = await this.authRepo.getUserCount();
+      } catch (err) {
+        console.error("Failed to query user count for beta limit check:", err);
+      }
+
+      const rawLimit = this.env.BETA_USER_LIMIT;
+      if (rawLimit && isNaN(parseInt(rawLimit, 10))) {
+        throw new TypeError("BETA_USER_LIMIT must be a valid integer");
+      }
+      const betaLimit = rawLimit ? parseInt(rawLimit, 10) : 50;
+      if (totalUsers >= betaLimit) {
+        let isBypassValid = false;
+        
+        // 1. Check if it's the global bypass code
+        if (this.env.BETA_BYPASS_CODE && inviteCode === this.env.BETA_BYPASS_CODE) {
+          isBypassValid = true;
+        }
+
+        // 2. Check if it's a valid project invitation token
+        if (!isBypassValid && inviteCode) {
+          try {
+            isBypassValid = await this.authRepo.checkInvitationTokenValid(inviteCode);
+          } catch (err) {
+            console.error("Failed to check invitation token validity:", err);
+          }
+        }
+
+        if (!isBypassValid) {
+          throw new Error('Beta registration limit reached. Please provide a valid invite code to signup.|403');
+        }
+      }
+    }
+
     const turnstileSecret = this.env.TURNSTILE_SECRET;
     if (turnstileSecret && this.env.JWT_SECRET !== 'test-secret') {
       if (!turnstileToken) throw new Error('Missing Turnstile token|403');
