@@ -1,100 +1,42 @@
-// @ts-nocheck
 import { Hono } from 'hono';
 import { Env } from '../env';
-import { getDB } from '../utils/db';
-import { getUserIdFromRequest, hashPassword, verifyPassword, recordFailedLogin, verifyTurnstile, checkProjectMembership, checkScanMembership, resetLoginAttempts, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
-import { ulid } from 'ulidx';
-import { sign } from 'hono/jwt';
+import { getUserIdFromRequest, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
+import { IMiscRepository, MiscRepository } from '../repositories/misc';
+import { IMiscService, MiscService } from '../services/misc';
 
-export function registerMiscRoutes(app: Hono<{ Bindings: Env }>) {
+export function registerMiscRoutes(
+  app: Hono<{ Bindings: Env }>,
+  miscServicesFactory: (env: Env) => IMiscService = (env) => new MiscService(env, new MiscRepository(env))
+) {
   app.all('/api/proxy', async (c) => {
+    const services = miscServicesFactory(c.env);
     try {
       const bodyText = await c.req.text();
       const payload = JSON.parse(bodyText) as any;
-      const targetUrl = payload.url;
-      if (!targetUrl) return c.json({ error: 'Missing target url' }, 400);
-  
-      const startTime = Date.now();
-      const fetchOpts: RequestInit = {
-        method: payload.method || 'GET',
-        headers: payload.headers || {},
-        body: ['GET', 'HEAD'].includes(payload.method || 'GET') ? undefined : payload.body,
-        redirect: 'manual'
-      };
-  
-      const response = await fetch(targetUrl, fetchOpts);
-      const duration = Date.now() - startTime;
-      
-      let resBody = await response.text();
-      try { resBody = JSON.parse(resBody); } catch {}
-      
-      return c.json({
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        body: resBody,
-        duration
-      });
+      const result = await services.proxy(payload);
+      return c.json(result);
     } catch (err: any) {
-      return c.json({ error: err.message }, 502);
+      const parts = err.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 502;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
   });
   
   app.post('/api/parse', async (c) => {
+    const services = miscServicesFactory(c.env);
     const body = await c.req.text();
-  
-    if (c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
-      const isAnon = await isAnonymousUser(c);
-      if (isAnon) {
-        const ip = getClientIp(c);
-        
-        const usage = await getDB(c.env).prepare('SELECT json_count FROM anonymous_usage WHERE ip = ?')
-          .bind(ip)
-          .first<{ json_count: number }>();
-  
-        if (usage && usage.json_count >= 1) {
-          return c.json({ error: 'Anonymous limit reached: You can only import/parse 1 JSON spec by IP.' }, 403);
-        }
-      }
-    }
-  
-    let userPublicKey = "";
+    const isAnon = await isAnonymousUser(c);
+    const ip = getClientIp(c);
     const userId = await getUserIdFromRequest(c);
-    if (userId) {
-      try {
-        const user = await getDB(c.env).prepare('SELECT public_key FROM users WHERE id = ?')
-          .bind(userId)
-          .first<{ public_key: string | null }>();
-        if (user && user.public_key) {
-          userPublicKey = user.public_key;
-        }
-      } catch (dbErr) {
-        console.error("Failed to query user public key in /api/parse:", dbErr);
-      }
-    }
-  
-    let parsedBody: any = {};
+    const isWeb = isWebRequest(c);
+
     try {
-      parsedBody = JSON.parse(body);
-    } catch { /* ignored */ }
-    parsedBody.userPublicKey = userPublicKey;
-    const newBodyText = JSON.stringify(parsedBody);
-  
-    const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
-    const stub = c.env.COORDINATOR_DO.get(id);
-    const res = await stub.fetch(new Request('http://internal/parse', { method: 'POST', body: newBodyText }));
-  
-    if (res.ok && c.env.LIMIT_ANONYMOUS === 'true' && isWebRequest(c)) {
-      const isAnon = await isAnonymousUser(c);
-      if (isAnon) {
-        const ip = getClientIp(c);
-        await getDB(c.env).prepare(
-          `INSERT INTO anonymous_usage (ip, json_count) VALUES (?, 1)
-           ON CONFLICT(ip) DO UPDATE SET json_count = json_count + 1`
-        ).bind(ip).run();
-      }
+      const result = await services.parseSpec(body, userId, isAnon, ip, isWeb);
+      return c.text(result.bodyText, result.status as any, { 'Content-Type': 'application/json' });
+    } catch (err: any) {
+      const parts = err.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-  
-    return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json' } });
   });
-  
 }
