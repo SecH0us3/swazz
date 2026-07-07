@@ -2,7 +2,7 @@ import { verify } from 'hono/jwt';
 import { Env } from '../env';
 import { Context } from 'hono';
 import { ulid } from 'ulidx';
-import { AuthRepository } from '../repositories/auth';
+import type { AuthRepository } from '../repositories/auth';
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
@@ -48,7 +48,8 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
 
     // 2. Cache miss — query D1
     try {
-      const authRepo = new AuthRepository(c.env);
+      const { AuthRepository: AuthRepoClass } = await import('../repositories/auth');
+      const authRepo = new AuthRepoClass(c.env);
       const userId = await authRepo.verifyApiKey(hashedToken, token);
 
       // 3. Write to KV (positive or negative cache)
