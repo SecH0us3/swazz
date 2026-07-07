@@ -406,6 +406,7 @@ export class AuthService implements IAuthService {
     if (user.two_factor_enabled === 1) throw new Error('2FA is already enabled. Disable it first.|400');
     
     const userPass = await this.authRepo.getUserByUsername(user.username);
+    if (!userPass) throw new Error('User not found|404');
     const isPasswordValid = await verifyPassword(body.password, userPass.password_hash);
     if (!isPasswordValid) throw new Error('Invalid password|401');
 
