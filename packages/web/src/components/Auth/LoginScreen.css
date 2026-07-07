@@ -1464,11 +1464,6 @@
     box-shadow: 0 0 6px rgba(244, 63, 94, 0.6);
 }
 
-.beta-status-subtext {
-    font-size: 11px;
-    margin-top: 4px;
-    opacity: 0.9;
-}
 
 .invite-code-toggle-btn {
     font-size: var(--font-size-sm);

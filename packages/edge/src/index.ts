@@ -85,7 +85,11 @@ app.get('/api/info', async (c) => {
     console.error("Failed to query user count for beta info:", err);
   }
 
-  const betaLimit = c.env.BETA_USER_LIMIT ? parseInt(c.env.BETA_USER_LIMIT, 10) : 50;
+  const rawLimit = c.env.BETA_USER_LIMIT;
+  if (rawLimit && isNaN(parseInt(rawLimit, 10))) {
+    throw new TypeError("BETA_USER_LIMIT must be a valid integer");
+  }
+  const betaLimit = rawLimit ? parseInt(rawLimit, 10) : 50;
 
   return c.json({
     auth_enabled: authEnabled,

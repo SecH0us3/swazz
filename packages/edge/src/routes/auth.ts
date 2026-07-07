@@ -63,7 +63,11 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
         console.error("Failed to query user count for beta limit check:", err);
       }
 
-      const betaLimit = c.env.BETA_USER_LIMIT ? parseInt(c.env.BETA_USER_LIMIT, 10) : 50;
+      const rawLimit = c.env.BETA_USER_LIMIT;
+      if (rawLimit && isNaN(parseInt(rawLimit, 10))) {
+        throw new TypeError("BETA_USER_LIMIT must be a valid integer");
+      }
+      const betaLimit = rawLimit ? parseInt(rawLimit, 10) : 50;
       if (totalUsers >= betaLimit) {
         if (!c.env.BETA_BYPASS_CODE || inviteCode !== c.env.BETA_BYPASS_CODE) {
           return c.json({ error: 'Beta registration limit reached. Please provide a valid invite code to signup.' }, 403);
