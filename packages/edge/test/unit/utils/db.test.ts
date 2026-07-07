@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getDB } from './db';
-import { Env } from '../env';
+import { getDB } from '../../../src/utils/db';
+import { Env } from '../../../src/env';
 import { D1Database } from '@cloudflare/workers-types';
 
 describe('getDB Helper', () => {

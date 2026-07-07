@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { registerProjectsRoutes } from '../../../src/routes/projects';
-import { IProjectServices } from '../../../src/services/projects';
+import { IProjectService } from '../../../src/services/projects';
 
 // Mock middleware and auth utils so we can test routes in isolation
 vi.mock('../../../src/utils/auth', () => ({
@@ -23,7 +23,7 @@ vi.mock('../../../src/middleware/auditLog', () => ({
 }));
 
 describe('Projects Routes', () => {
-  let mockServices: Partial<IProjectServices>;
+  let mockServices: Partial<IProjectService>;
   let app: Hono<any>;
 
   beforeEach(() => {
@@ -36,12 +36,11 @@ describe('Projects Routes', () => {
       updateProjectSettings: vi.fn(),
       deleteProject: vi.fn(),
       getProjectAnalytics: vi.fn(),
-      checkUserIsMember: vi.fn(),
       getUserLoginHistory: vi.fn(),
       getProjectAuditLogs: vi.fn(),
     };
 
-    const mockFactory = () => mockServices as IProjectServices;
+    const mockFactory = () => mockServices as IProjectService;
 
     app = new Hono();
     app.use('*', async (c, next) => {
@@ -53,12 +52,12 @@ describe('Projects Routes', () => {
 
   describe('GET /api/projects', () => {
     it('should return projects for authenticated user', async () => {
-      (mockServices.getProjects as any).mockResolvedValue([{ id: 'p1', name: 'Test' }]);
+      (mockServices.getProjects as any).mockResolvedValue({ projects: [{ id: 'p1', name: 'Test' }] });
       
       const res = await app.request('/api/projects');
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ projects: [{ id: 'p1', name: 'Test' }] });
-      expect(mockServices.getProjects).toHaveBeenCalledWith('user_123');
+      expect(mockServices.getProjects).toHaveBeenCalledWith('user_123', true);
     });
 
     it('should return 401 if unauthenticated and auth is enabled', async () => {
@@ -66,16 +65,24 @@ describe('Projects Routes', () => {
       const auth = await import('../../../src/utils/auth');
       (auth.getUserIdFromRequest as any).mockResolvedValueOnce(null);
 
+      (mockServices.getProjects as any).mockRejectedValue(new Error('Unauthorized'));
+
       const res = await app.request('/api/projects');
       expect(res.status).toBe(401);
       expect(await res.json()).toEqual({ error: 'Unauthorized' });
-      expect(mockServices.getProjects).not.toHaveBeenCalled();
+      expect(mockServices.getProjects).toHaveBeenCalledWith(null, true);
+    });
+
+    it('should return 500 on other errors', async () => {
+      (mockServices.getProjects as any).mockRejectedValue(new Error('Internal'));
+      const res = await app.request('/api/projects');
+      expect(res.status).toBe(500);
     });
   });
 
   describe('POST /api/projects', () => {
     it('should create a project and return id', async () => {
-      (mockServices.createProject as any).mockResolvedValue({ id: 'new_p' });
+      (mockServices.createProject as any).mockResolvedValue({ id: 'new_p', status: 'created' });
       
       const res = await app.request('/api/projects', {
         method: 'POST',
@@ -85,7 +92,19 @@ describe('Projects Routes', () => {
       
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ id: 'new_p', status: 'created' });
-      expect(mockServices.createProject).toHaveBeenCalledWith('user_123', { name: 'New Project' });
+      expect(mockServices.createProject).toHaveBeenCalledWith('user_123', true, { name: 'New Project' });
+    });
+
+    it('should return 401 on Unauthorized', async () => {
+      (mockServices.createProject as any).mockRejectedValue(new Error('Unauthorized'));
+      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 500 on other errors', async () => {
+      (mockServices.createProject as any).mockRejectedValue(new Error('Internal'));
+      const res = await app.request('/api/projects', { method: 'POST', body: '{}' });
+      expect(res.status).toBe(500);
     });
   });
 
@@ -100,13 +119,29 @@ describe('Projects Routes', () => {
     });
   });
 
+  describe('POST /api/projects/:id/config', () => {
+    it('should save project config', async () => {
+      (mockServices.saveProjectConfig as any).mockResolvedValue({ status: 'saved' });
+      
+      const res = await app.request('/api/projects/proj_1/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: { a: 1 } })
+      });
+      
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ status: 'saved' });
+      expect(mockServices.saveProjectConfig).toHaveBeenCalledWith('proj_1', { a: 1 });
+    });
+  });
+
   describe('GET /api/projects/:id/analytics', () => {
     it('should pass correct default period', async () => {
       (mockServices.getProjectAnalytics as any).mockResolvedValue({ metrics: [] });
       
       const res = await app.request('/api/projects/proj_1/analytics');
       expect(res.status).toBe(200);
-      expect(mockServices.getProjectAnalytics).toHaveBeenCalledWith('proj_1', 'user_123', '30d');
+      expect(mockServices.getProjectAnalytics).toHaveBeenCalledWith('proj_1', 'user_123', '30d', true);
     });
 
     it('should pass provided period', async () => {
@@ -114,47 +149,57 @@ describe('Projects Routes', () => {
       
       const res = await app.request('/api/projects/proj_1/analytics?period=24h');
       expect(res.status).toBe(200);
-      expect(mockServices.getProjectAnalytics).toHaveBeenCalledWith('proj_1', 'user_123', '24h');
+      expect(mockServices.getProjectAnalytics).toHaveBeenCalledWith('proj_1', 'user_123', '24h', true);
+    });
+
+    it('should return 401 on Unauthorized', async () => {
+      (mockServices.getProjectAnalytics as any).mockRejectedValue(new Error('Unauthorized|401'));
+      const res = await app.request('/api/projects/proj_1/analytics');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 403 on Forbidden', async () => {
+      (mockServices.getProjectAnalytics as any).mockRejectedValue(new Error('Forbidden|403'));
+      const res = await app.request('/api/projects/proj_1/analytics');
+      expect(res.status).toBe(403);
+    });
+
+    it('should return 500 on other errors', async () => {
+      (mockServices.getProjectAnalytics as any).mockRejectedValue(new Error('Internal'));
+      const res = await app.request('/api/projects/proj_1/analytics');
+      expect(res.status).toBe(500);
     });
   });
 
   describe('GET /api/projects/:id/members/:user_id/login-history', () => {
     it('should handle pagination and return history', async () => {
-      (mockServices.checkUserIsMember as any).mockResolvedValue(true);
       (mockServices.getUserLoginHistory as any).mockResolvedValue({ items: [], total: 0 });
       
       const res = await app.request('/api/projects/proj_1/members/usr_2/login-history?page=2&limit=50');
       expect(res.status).toBe(200);
-      expect(mockServices.getUserLoginHistory).toHaveBeenCalledWith('usr_2', 2, 50);
+      expect(mockServices.getUserLoginHistory).toHaveBeenCalledWith('proj_1', 'usr_2', '2', '50');
     });
 
-    it('should fallback to default page and limit for invalid/negative inputs', async () => {
-      (mockServices.checkUserIsMember as any).mockResolvedValue(true);
+    it('should pass negative inputs raw to the service', async () => {
       (mockServices.getUserLoginHistory as any).mockResolvedValue({ items: [], total: 0 });
       
-      // Pass negative page, negative limit, etc
       const res = await app.request('/api/projects/proj_1/members/usr_2/login-history?page=-5&limit=-10');
       expect(res.status).toBe(200);
-      // Math.max(1, -5) -> 1
-      // Math.min(1000, Math.max(1, -10)) -> 1
-      expect(mockServices.getUserLoginHistory).toHaveBeenCalledWith('usr_2', 1, 1);
+      expect(mockServices.getUserLoginHistory).toHaveBeenCalledWith('proj_1', 'usr_2', '-5', '-10');
     });
 
-    it('should cap the limit parameter', async () => {
-      (mockServices.checkUserIsMember as any).mockResolvedValue(true);
-      (mockServices.getUserLoginHistory as any).mockResolvedValue({ items: [], total: 0 });
-      
-      const res = await app.request('/api/projects/proj_1/members/usr_2/login-history?limit=5000');
-      expect(res.status).toBe(200);
-      expect(mockServices.getUserLoginHistory).toHaveBeenCalledWith('usr_2', 1, 1000);
-    });
-
-    it('should return 403 if user is not a member', async () => {
-      (mockServices.checkUserIsMember as any).mockResolvedValue(false);
+    it('should return 404 if user is not a member', async () => {
+      (mockServices.getUserLoginHistory as any).mockRejectedValue(new Error('User is not a member of this project|404'));
       
       const res = await app.request('/api/projects/proj_1/members/usr_2/login-history');
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: 'User is not a member of this project' });
+    });
+
+    it('should return 500 on internal errors', async () => {
+      (mockServices.getUserLoginHistory as any).mockRejectedValue(new Error('Internal Server Error'));
+      const res = await app.request('/api/projects/proj_1/members/usr_2/login-history');
+      expect(res.status).toBe(500);
     });
   });
 
@@ -164,28 +209,21 @@ describe('Projects Routes', () => {
       
       const res = await app.request('/api/projects/proj_1/audit-logs?search=test&source=web&action=login');
       expect(res.status).toBe(200);
-      expect(mockServices.getProjectAuditLogs).toHaveBeenCalledWith('proj_1', 1, 20, 'test', 'web', 'login');
+      expect(mockServices.getProjectAuditLogs).toHaveBeenCalledWith('proj_1', '1', '20', 'test', 'web', 'login');
     });
 
-    it('should enforce limits on page and limit parameters', async () => {
+    it('should pass invalid limits raw to service', async () => {
       (mockServices.getProjectAuditLogs as any).mockResolvedValue({ items: [], total: 0 });
       
-      // Passing 0 or invalid triggers default handling
       const res = await app.request('/api/projects/proj_1/audit-logs?page=0&limit=500');
       expect(res.status).toBe(200);
-      // Math.max(1, 0) -> 1
-      // limit is min(100, 500) -> 100
-      expect(mockServices.getProjectAuditLogs).toHaveBeenCalledWith('proj_1', 1, 100, '', '', '');
+      expect(mockServices.getProjectAuditLogs).toHaveBeenCalledWith('proj_1', '0', '500', '', '', '');
     });
   });
 
   describe('PATCH /api/projects/:id', () => {
     it('should update settings and set auditDetails', async () => {
-      (mockServices.updateProjectSettings as any).mockResolvedValue({
-        beforeDiff: { name: 'Old' },
-        afterDiff: { name: 'New' },
-        updated: true
-      });
+      (mockServices.updateProjectSettings as any).mockResolvedValue({ status: 'updated', auditDetails: { before: { name: 'Old' }, after: { name: 'New' } } });
       
       const res = await app.request('/api/projects/proj_1', {
         method: 'PATCH',
@@ -200,7 +238,7 @@ describe('Projects Routes', () => {
 
   describe('POST /api/projects/:id/schedule', () => {
     it('should update schedule', async () => {
-      (mockServices.updateProjectSchedule as any).mockResolvedValue({ oldSchedule: '0 0 * * *' });
+      (mockServices.updateProjectSchedule as any).mockResolvedValue({ status: 'saved', cron_schedule: '30 2 * * *' });
       
       const res = await app.request('/api/projects/proj_1/schedule', {
         method: 'POST',
@@ -210,13 +248,43 @@ describe('Projects Routes', () => {
       
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ status: 'saved', cron_schedule: '30 2 * * *' });
-      expect(mockServices.updateProjectSchedule).toHaveBeenCalledWith('proj_1', '30 2 * * *');
+      expect(mockServices.updateProjectSchedule).toHaveBeenCalledWith('proj_1', { cron_schedule: '30 2 * * *' });
+    });
+
+    it('should return auditDetails if present', async () => {
+      (mockServices.updateProjectSchedule as any).mockResolvedValue({ status: 'saved', cron_schedule: '30 2 * * *', auditDetails: { foo: 'bar' } });
+      const res = await app.request('/api/projects/proj_1/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_schedule: '30 2 * * *' })
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it('should return 400 on validation error', async () => {
+      (mockServices.updateProjectSchedule as any).mockRejectedValue(new Error('Invalid cron format. Must have exactly 5 fields.|400'));
+      const res = await app.request('/api/projects/proj_1/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_schedule: 'invalid' })
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('should return 500 on internal errors', async () => {
+      (mockServices.updateProjectSchedule as any).mockRejectedValue(new Error('Internal Server Error'));
+      const res = await app.request('/api/projects/proj_1/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_schedule: '30 2 * * *' })
+      });
+      expect(res.status).toBe(500);
     });
   });
 
   describe('DELETE /api/projects/:id', () => {
     it('should delete project', async () => {
-      (mockServices.deleteProject as any).mockResolvedValue(undefined);
+      (mockServices.deleteProject as any).mockResolvedValue({ status: 'deleted' });
       
       const res = await app.request('/api/projects/proj_1', {
         method: 'DELETE'

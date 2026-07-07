@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashUsername } from './auth';
+import { hashUsername } from '../../../src/utils/auth';
 
 describe('Auth Utils - Username Hashing', () => {
   it('should generate a valid 64-character SHA-256 hex string', async () => {

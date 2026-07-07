@@ -92,3 +92,5 @@ thread_ids.json
 # Local auto-generated wordlists for development and E2E tests
 wordlists/
 
+packages/edge/coverage/
+packages/edge/coverage_report.txt

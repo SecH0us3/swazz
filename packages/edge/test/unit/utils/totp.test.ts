@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { base32Encode, base32Decode, generateTOTPSecret, generateTOTP, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from './totp';
+import { base32Encode, base32Decode, generateTOTPSecret, generateTOTP, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../../../src/utils/totp';
 
 describe('TOTP Utils', () => {
   it('should encode and decode base32 correctly', () => {

@@ -1,14 +1,14 @@
 // @ts-nocheck
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { env as rawEnv } from "cloudflare:test";
-import { Env } from "./env";
-import app from "./index";
-import { cleanupScheduledDeletions } from "./utils/cleanup";
-import { splitSql } from "./splitSql";
+import { Env } from "../src/env";
+import app from "../src/index";
+import { cleanupScheduledDeletions } from "../src/utils/cleanup";
+import { splitSql } from "../src/splitSql";
 import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
-import { hashApiKey } from "./utils/auth";
-import { getDB } from "./utils/db";
+import { hashApiKey } from "../src/utils/auth";
+import { getDB } from "../src/utils/db";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -335,7 +335,7 @@ describe("D1 Database Migrations & API", () => {
       .bind(guestBody.username)
       .run();
 
-    const { cleanupExpiredGuests } = await import("./utils/cleanup");
+    const { cleanupExpiredGuests } = await import("../src/utils/cleanup");
     await cleanupExpiredGuests(env.DB);
 
     // Verify guest user and their projects/scans are deleted
@@ -346,7 +346,7 @@ describe("D1 Database Migrations & API", () => {
   });
 
   it("cleans up audit logs older than 45 days", async () => {
-    const { cleanupSecurityTables } = await import("./utils/cleanup");
+    const { cleanupSecurityTables } = await import("../src/utils/cleanup");
     
     const pid = "test_pid";
     
@@ -643,7 +643,7 @@ describe("D1 Database Migrations & API", () => {
     const verifyRes1 = await appFetchWrapper(verifyReq1 as any, testEnv);
     expect(verifyRes1.status).toBe(401);
 
-    const { generateTOTP } = await import("./utils/totp");
+    const { generateTOTP } = await import("../src/utils/totp");
     const validCode = await generateTOTP(setupBody.secret);
     
     const verifyReq2 = new Request("http://localhost/api/auth/2fa/verify", {

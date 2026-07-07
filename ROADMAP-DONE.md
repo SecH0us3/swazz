@@ -977,3 +977,24 @@ This file contains completed tasks.
     - Save these logs in a new D1 table `runner_logs` (schema: `id, scan_id, timestamp, level, message`) or reuse the `scan_events` table with a custom payload structure.
     - Implement a backend route `GET /api/scans/:id/runner-logs` (scoped to project viewer permissions) fetching logs for the specified scan.
     - Build a "Runner Logs" tab in the Active Scan and Scans History UI pages to view, search, and copy logs.
+
+- [x] **Task 124: Refactor remaining edge routes to Service Classes**
+  - **Design Goal:** Apply the architecture used in `projects.ts` (extracting logic to `*Services` class, inheriting from `BaseService`, and injecting via DI) to the rest of the edge application routes (e.g. `scans`, `runners`, `auth`, `misc`, `rbac`).
+  - **Implementation Details:**
+    - Isolate D1 queries and business logic from Hono HTTP handlers.
+    - Setup dependency injection factories for testing.
+    - Write robust unit tests with mocked services for each refactored route.
+
+
+- [x] **Task 105: Fix RBAC Logical Gaps (Validation Checks)**
+  - **Design Goal:** Ensure API robustness by verifying the existence of entities before modifying them.
+  - **Implementation Details:**
+    - `updateMemberRoles`: Verify user is a project member before applying updates.
+    - `updateCustomRole` & `deleteCustomRole`: Verify the role exists before performing updates/deletes.
+    - `createInvitation`: Prevent sending multiple active invitations to the same user/email in the same project.
+
+- [x] **Task 106: Fix Authentication Bypasses in Scans Service**
+  - **Design Goal:** Ensure that unauthenticated requests do not bypass RBAC checks when `AUTH_ENABLED` is true.
+  - **Implementation Details:**
+    - In `ScansService`, methods like `createScan`, `getScans`, `getScan`, `updateScan`, and `generateUploadUrl` currently skip RBAC checks if `userId` is `null` (e.g. unauthenticated request), allowing them to bypass `project_id` restrictions.
+    - Require `userId` to be present if `AUTH_ENABLED === 'true'` and the target entity is tied to a `project_id`.

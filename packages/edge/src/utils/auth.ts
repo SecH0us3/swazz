@@ -2,6 +2,7 @@ import { verify } from 'hono/jwt';
 import { Env } from '../env';
 import { Context } from 'hono';
 import { ulid } from 'ulidx';
+import type { AuthRepository } from '../repositories/auth';
 
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
@@ -47,29 +48,9 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
 
     // 2. Cache miss — query D1
     try {
-      let user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-        .bind(hashedToken)
-        .first<{ id: string }>();
-
-      if (!user) {
-        // Fallback for legacy plain-text keys
-        user = await c.env.DB.prepare('SELECT id FROM users WHERE api_key = ?')
-          .bind(token)
-          .first<{ id: string }>();
-
-        if (user) {
-          // Auto-upgrade plain-text key to hashed key in DB
-          try {
-            await c.env.DB.prepare('UPDATE users SET api_key = ? WHERE id = ?')
-              .bind(hashedToken, user.id)
-              .run();
-          } catch {
-            // Auto-upgrade update failed — non-critical
-          }
-        }
-      }
-
-      const userId = user ? user.id : null;
+      const { AuthRepository: AuthRepoClass } = await import('../repositories/auth');
+      const authRepo = new AuthRepoClass(c.env);
+      const userId = await authRepo.verifyApiKey(hashedToken, token);
 
       // 3. Write to KV (positive or negative cache)
       if (kv) {
@@ -82,7 +63,8 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
       }
 
       return userId;
-    } catch {
+    } catch (e: any) {
+      console.error("Cache miss query D1 failed:", e);
       return null;
     }
   }
@@ -215,31 +197,7 @@ export async function verifyTurnstile(token: string, secret: string, remoteip?: 
  * Check if a login is rate-limited for the given username.
  * Returns { locked: true, retryAfter } if the account is locked.
  */
-export async function checkLoginRateLimit(
-  db: D1Database,
-  username: string
-): Promise<{ locked: boolean; retryAfter?: string }> {
-  const row = await db
-    .prepare('SELECT failed_count, locked_until FROM login_attempts WHERE username = ?')
-    .bind(username)
-    .first<{ failed_count: number; locked_until: string | null }>();
 
-  if (!row) return { locked: false };
-
-  if (row.locked_until) {
-    const lockedUntil = new Date(row.locked_until + 'Z'); // D1 stores UTC without Z suffix
-    if (lockedUntil > new Date()) {
-      return { locked: true, retryAfter: row.locked_until };
-    }
-    // Lock has expired — reset the counter
-    await db
-      .prepare('UPDATE login_attempts SET failed_count = 0, locked_until = NULL WHERE username = ?')
-      .bind(username)
-      .run();
-  }
-
-  return { locked: false };
-}
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -248,39 +206,12 @@ const LOCKOUT_MINUTES = 15;
  * Record a failed login attempt. After MAX_LOGIN_ATTEMPTS consecutive failures,
  * lock the account for LOCKOUT_MINUTES.
  */
-export async function recordFailedLogin(db: D1Database, username: string): Promise<void> {
-  const row = await db
-    .prepare('SELECT failed_count FROM login_attempts WHERE username = ?')
-    .bind(username)
-    .first<{ failed_count: number }>();
 
-  const newCount = (row?.failed_count ?? 0) + 1;
-  let lockedUntil: string | null = null;
-
-  if (newCount >= MAX_LOGIN_ATTEMPTS) {
-    const lockDate = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
-    lockedUntil = lockDate.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
-  }
-
-  await db
-    .prepare(
-      `INSERT INTO login_attempts (username, failed_count, locked_until)
-       VALUES (?, ?, ?)
-       ON CONFLICT(username) DO UPDATE SET failed_count = ?, locked_until = ?`
-    )
-    .bind(username, newCount, lockedUntil, newCount, lockedUntil)
-    .run();
-}
 
 /**
  * Reset the failed login counter on successful login.
  */
-export async function resetLoginAttempts(db: D1Database, username: string): Promise<void> {
-  await db
-    .prepare('DELETE FROM login_attempts WHERE username = ?')
-    .bind(username)
-    .run();
-}
+
 
 export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<number | null> {
   let token = null;
@@ -313,63 +244,10 @@ export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<numb
   return null;
 }
 
-export async function checkProjectMembership(c: Context<{ Bindings: Env }>, projectId: string, userId: string, requiredRole?: string): Promise<{ authorized: boolean; error?: any }> {
-  const member = await c.env.DB.prepare(
-    'SELECT role FROM project_members WHERE project_id = ? AND user_id = ?'
-  )
-  .bind(projectId, userId)
-  .first<{ role: string }>();
 
-  if (!member) return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
-  if (requiredRole && member.role !== requiredRole) return { authorized: false, error: c.json({ error: 'Forbidden: Owner role required' }, 403) };
 
-  try {
-    const project = await c.env.DB.prepare(
-      'SELECT member_session_timeout FROM projects WHERE id = ?'
-    ).bind(projectId).first<{ member_session_timeout: number | null }>();
 
-    if (project && project.member_session_timeout && project.member_session_timeout > 0) {
-      const iat = await getSessionIat(c);
-      if (iat) {
-        const elapsed = Math.floor(Date.now() / 1000) - iat;
-        if (elapsed > project.member_session_timeout) {
-          return { authorized: false, error: c.json({ error: 'Session expired: Project requires re-authentication' }, 401) };
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Failed to validate project session timeout in checkProjectMembership:", err);
-  }
-  
-  return { authorized: true };
-}
 
-import { checkPermission } from './rbac';
-import { PermissionKey } from '../config/rbac';
-
-export async function checkScanMembership(c: Context<{ Bindings: Env }>, scanId: string, userId: string, requiredPermission?: PermissionKey): Promise<{ authorized: boolean; error?: any }> {
-  const scan = await c.env.DB.prepare('SELECT project_id, user_id FROM scans WHERE id = ?')
-    .bind(scanId)
-    .first<{ project_id: string; user_id: string | null }>();
-    
-  if (!scan) {
-    return { authorized: false, error: c.json({ error: 'Run/Scan not found' }, 404) };
-  }
-
-  // Standalone scan (no project): check direct user ownership
-  if (!scan.project_id) {
-    if (scan.user_id === userId) return { authorized: true };
-    return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
-  }
-
-  if (requiredPermission) {
-    const hasAccess = await checkPermission(c.env, userId, scan.project_id, requiredPermission);
-    if (!hasAccess) return { authorized: false, error: c.json({ error: 'Forbidden' }, 403) };
-    return { authorized: true };
-  }
-
-  return checkProjectMembership(c, scan.project_id, userId);
-}
 
 export async function isAnonymousUser(c: Context<{ Bindings: Env }>): Promise<boolean> {
   const authHeader = c.req.header('Authorization');
@@ -400,16 +278,14 @@ export function getClientIp(c: Context<{ Bindings: Env }>): string {
 
 export const deletionCache = new Map<string, { deleteRequestedAt: string | null; expiry: number }>();
 
-export async function getDeleteRequestedAt(db: D1Database, userId: string): Promise<string | null> {
+
+export async function getDeleteRequestedAt(authRepo: AuthRepository, userId: string): Promise<string | null> {
   const now = Date.now();
   const cached = deletionCache.get(userId);
   if (cached && cached.expiry > now) {
     return cached.deleteRequestedAt;
   }
-  const user = await db.prepare('SELECT delete_requested_at FROM users WHERE id = ?')
-    .bind(userId)
-    .first<{ delete_requested_at: string | null }>();
-  const deleteRequestedAt = user ? user.delete_requested_at : null;
+  const deleteRequestedAt = await authRepo.getUserDeleteRequestedAt(userId);
   deletionCache.set(userId, { deleteRequestedAt, expiry: now + 60000 }); // cache for 1 minute
   return deleteRequestedAt;
 }
@@ -435,56 +311,7 @@ export async function hashUsername(username: string): Promise<string> {
  * windowSeconds: window duration in seconds
  * Returns { limited: true } if rate limit exceeded.
  */
-export async function checkIpRateLimit(
-  db: D1Database,
-  key: string,
-  maxAttempts: number,
-  windowSeconds: number
-): Promise<{ limited: boolean }> {
-  const now = new Date();
-  const resetTime = new Date(now.getTime() + windowSeconds * 1000);
-  const nowStr = now.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
 
-  // Clean up expired rate limits probabilistically (e.g., 1% of requests) to prevent database bloat without impacting every request
-  if (Math.random() < 0.01) {
-    await db.prepare("DELETE FROM rate_limits WHERE reset_at < datetime('now')").run();
-  }
-
-  const row = await db
-    .prepare('SELECT attempts, reset_at FROM rate_limits WHERE key = ?')
-    .bind(key)
-    .first<{ attempts: number; reset_at: string }>();
-
-  if (!row) {
-    const resetAtStr = resetTime.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
-    await db
-      .prepare('INSERT INTO rate_limits (key, attempts, reset_at) VALUES (?, 1, ?)')
-      .bind(key, resetAtStr)
-      .run();
-    return { limited: false };
-  }
-
-  const resetAt = new Date(row.reset_at + 'Z');
-  if (resetAt < now) {
-    const resetAtStr = resetTime.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
-    await db
-      .prepare('UPDATE rate_limits SET attempts = 1, reset_at = ? WHERE key = ?')
-      .bind(resetAtStr, key)
-      .run();
-    return { limited: false };
-  }
-
-  if (row.attempts >= maxAttempts) {
-    return { limited: true };
-  }
-
-  await db
-    .prepare('UPDATE rate_limits SET attempts = attempts + 1 WHERE key = ?')
-    .bind(key)
-    .run();
-  
-  return { limited: false };
-}
 
 /**
  * Run a dummy verification using a fake hash to match the CPU timing cost of real password checks.
@@ -508,49 +335,6 @@ export function safeCompare(a: string, b: string): boolean {
   return result === 0;
 }
 
-export async function recordLoginHistory(
-  db: any,
-  userId: string,
-  status: 'success' | 'failed_password' | 'failed_2fa' | 'locked',
-  authMethod: 'password' | 'github',
-  twoFactorActive: boolean,
-  c: Context<{ Bindings: Env }>
-): Promise<void> {
-  const id = ulid();
-  const ipAddress = getClientIp(c);
-  const userAgent = c.req.header('User-Agent') || null;
-  const cfRay = c.req.header('CF-Ray') || null;
-  
-  // Geolocation and CF properties
-  const cf = (c.req.raw as any).cf;
-  const country = cf?.country || c.req.header('CF-IPCountry') || null;
-  const city = cf?.city || null;
-  const region = cf?.region || null;
-  const timezone = cf?.timezone || null;
-
-  try {
-    await db.prepare(`
-      INSERT INTO user_login_history (
-        id, user_id, status, ip_address, country, city, region, timezone, cf_ray, user_agent, auth_method, two_factor_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id,
-      userId,
-      status,
-      ipAddress,
-      country,
-      city,
-      region,
-      timezone,
-      cfRay,
-      userAgent,
-      authMethod,
-      twoFactorActive ? 1 : 0
-    ).run();
-  } catch (err) {
-    console.error("Failed to record login history:", err);
-  }
-}
 
 
 

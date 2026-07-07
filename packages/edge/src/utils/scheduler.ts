@@ -1,5 +1,5 @@
 import { Env } from '../env';
-import { getDB } from './db';
+import { ScansRepository } from '../repositories/scans';
 
 function matchCronField(pattern: string, value: number, min: number, max: number): boolean {
   if (pattern === '*') return true;
@@ -53,12 +53,10 @@ export function cronMatches(cronExpr: string, date: Date): boolean {
 }
 
 export async function handleScheduledScans(env: Env): Promise<void> {
-  const db = getDB(env);
+  const scansRepo = new ScansRepository(env);
   const now = new Date();
   
-  const { results: configs } = await db.prepare(
-    "SELECT id, project_id, name, config_json, cron_schedule, last_run_at FROM scan_configs WHERE cron_schedule IS NOT NULL"
-  ).all<{ id: string; project_id: string; name: string; config_json: string; cron_schedule: string; last_run_at: string | null }>();
+  const configs = await scansRepo.getScheduledScanConfigs();
   
   // 1. Filter configs locally first to minimize D1 subrequests and CPU time inside loop
   const matchingConfigs = configs.filter(config => {
@@ -73,15 +71,8 @@ export async function handleScheduledScans(env: Env): Promise<void> {
   
   for (const config of matchingConfigs) {
     try {
-      // Query project owners
-      const { results: owners } = await db.prepare(`
-        SELECT u.id, u.public_key, u.plan
-        FROM project_members pm
-        JOIN users u ON pm.user_id = u.id
-        WHERE pm.project_id = ? AND pm.role = 'owner'
-      `).bind(config.project_id).all<{ id: string; public_key: string | null; plan: string | null }>();
+      const activeOwner = await scansRepo.getProjectOwnerForScan(config.project_id);
       
-      const activeOwner = owners.find(o => o.plan === 'Supporter Plan') || owners[0];
       if (!activeOwner) {
         console.warn(`[Scheduler] Skipping scheduled scan for project ${config.project_id}: no owner found.`);
         continue;
@@ -93,16 +84,7 @@ export async function handleScheduledScans(env: Env): Promise<void> {
       const profile = (parsedConfig.settings?.profiles && parsedConfig.settings.profiles[0]) || "default";
       const status = 'queued';
       
-      // Use batch transaction for database consistency
-      await db.batch([
-        db.prepare(
-          `INSERT INTO scans (id, project_id, target_url, profile, status, user_id)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(runId, config.project_id, targetUrl, profile, status, activeOwner.id),
-        db.prepare(
-          "UPDATE scan_configs SET last_run_at = ? WHERE id = ?"
-        ).bind(now.toISOString(), config.id)
-      ]);
+      await scansRepo.triggerScheduledScan(runId, config.project_id, targetUrl, profile, status, activeOwner.id, config.id, now.toISOString());
       
       // Send message to SCAN_QUEUE
       await env.SCAN_QUEUE.send({

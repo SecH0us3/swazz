@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { Env } from './env';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
+import { AuthRepository } from './repositories/auth';
 import { getDB } from './utils/db';
 import { registerAuthRoutes } from './routes/auth';
 import { registerProjectsRoutes } from './routes/projects';
@@ -15,6 +16,7 @@ import { registerMcpRoutes } from './routes/mcp';
 import { cleanupExpiredGuests, cleanupScheduledDeletions, cleanupSecurityTables } from './utils/cleanup';
 import { csrfMiddleware } from './utils/csrf';
 import { handleScheduledScans } from './utils/scheduler';
+import { ScansRepository } from './repositories/scans';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -60,7 +62,8 @@ app.use('/api/*', async (c, next) => {
 
     const isCancelRoute = path === '/api/users/me/cancel-deletion' && c.req.method === 'POST';
     if (!isCancelRoute) {
-      const deleteRequestedAt = await getDeleteRequestedAt(getDB(c.env, userId, c), userId);
+      const authRepo = new AuthRepository(c.env);
+      const deleteRequestedAt = await getDeleteRequestedAt(authRepo, userId);
       if (deleteRequestedAt !== null) {
         return c.json({ error: 'Forbidden: Account is scheduled for deletion' }, 403);
       }
@@ -77,10 +80,8 @@ app.get('/api/info', async (c) => {
 
   let betaUserCount = 0;
   try {
-    const res = await getDB(c.env).prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
-    if (res) {
-      betaUserCount = res.count;
-    }
+    const authRepo = new AuthRepository(c.env);
+    betaUserCount = await authRepo.getUserCount();
   } catch (err) {
     console.error("Failed to query user count for beta info:", err);
   }
@@ -433,9 +434,8 @@ export default {
           });
           const doRes = await stub.fetch(doReq as any);
           if (doRes.ok) {
-            await getDB(env, msg.body.runId, ctx).prepare('UPDATE scans SET status = ? WHERE id = ?')
-              .bind('dispatched', msg.body.runId)
-              .run();
+            const scansRepo = new ScansRepository(env);
+            await scansRepo.updateScanStatus(msg.body.runId, 'dispatched');
             msg.ack();
           } else if (doRes.status === 503) {
             // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
@@ -450,62 +450,15 @@ export default {
         }
       }
     } else if (batch.queue === 'swazz-findings-queue') {
-      const statements: any[] = [];
-      for (const msg of batch.messages) {
-        const id = crypto.randomUUID();
-        const { scanId, type, payload } = msg.body;
-        const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
-        statements.push(
-          getDB(env, scanId, ctx).prepare(
-            `INSERT INTO scan_events (id, scan_id, type, payload) VALUES (?, ?, ?, ?)`
-          ).bind(id, scanId, type, payloadStr)
-        );
-
-        if (payload && payload.type === 'complete') {
-          statements.push(
-            getDB(env, scanId, ctx).prepare(
-              `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ?`
-            ).bind('completed', JSON.stringify(payload.data || {}), scanId)
-          );
-        } else if (type === 'error' || (payload && payload.type === 'error')) {
-          statements.push(
-            getDB(env, scanId, ctx).prepare(
-              `UPDATE scans SET status = ?, completed_at = datetime('now') WHERE id = ?`
-            ).bind('failed', scanId)
-          );
+      try {
+        const scansRepo = new ScansRepository(env);
+        await scansRepo.processFindingsQueueMessages(batch.messages);
+        for (const msg of batch.messages) {
+          msg.ack();
         }
-
-        // Populate findings table for analytics & detail queries
-        if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
-          for (const finding of payload.data.analyzerFindings) {
-            const findingId = crypto.randomUUID();
-            statements.push(
-              getDB(env, scanId, ctx).prepare(
-                `INSERT INTO findings (id, scan_id, rule_id, level, message, evidence)
-                 VALUES (?, ?, ?, ?, ?, ?)`
-              ).bind(
-                findingId,
-                scanId,
-                finding.ruleId,
-                finding.level,
-                finding.message,
-                finding.evidence || null
-              )
-            );
-          }
-        }
-      }
-
-      if (statements.length > 0) {
-        try {
-          await getDB(env, undefined, ctx).batch(statements);
-          for (const msg of batch.messages) {
-            msg.ack();
-          }
-        } catch (err) {
-          logError(env, "Queue", "Failed to bulk insert findings and events", { error: err });
-          throw err;
-        }
+      } catch (err) {
+        logError(env, "Queue", "Failed to bulk insert findings and events", { error: err });
+        throw err;
       }
     }
   }

@@ -1,540 +1,182 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
-import { getDB } from '../utils/db';
 import { requirePermission } from '../middleware/rbac';
 import { auditLog } from '../middleware/auditLog';
-import { PERMISSIONS, DEFAULT_ROLES, PermissionKey } from '../config/rbac';
-import { ulid } from 'ulidx';
 import { getUserIdFromRequest } from '../utils/auth';
-import { invalidateUserRBAC, invalidateProjectRBAC } from '../utils/rbac';
+import { IRbacRepository, RbacRepository } from '../repositories/rbac';
+import { IRbacService, RbacService } from '../services/rbac';
 
-async function verifyNotGuest(c: any): Promise<Response | null> {
-  const userId = await getUserIdFromRequest(c);
-  if (userId) {
-    const user = await getDB(c.env).prepare('SELECT is_guest FROM users WHERE id = ?')
-      .bind(userId)
-      .first<{ is_guest: number | null }>();
-    if (user && user.is_guest === 1) {
-      return c.json({ error: 'Forbidden: Guest accounts cannot modify members or roles.' }, 403);
-    }
-  }
-  return null;
-}
-
-export function registerRbacRoutes(app: Hono<{ Bindings: Env }>) {
+export function registerRbacRoutes(
+  app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
+  rbacServicesFactory: (env: Env) => IRbacService = (env) => new RbacService(env, new RbacRepository(env))
+) {
   
   app.get('/api/projects/:id/permissions', requirePermission('get:/api/projects/:id'), async (c) => {
-    return c.json({ permissions: PERMISSIONS });
+    const services = rbacServicesFactory(c.env);
+    return c.json(services.getPermissions());
   });
 
   app.get('/api/projects/:id/roles', requirePermission('get:/api/projects/:id/roles'), async (c) => {
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
-    const { results: customRoles } = await getDB(c.env).prepare(
-      'SELECT id, name, created_at FROM project_custom_roles WHERE project_id = ?'
-    ).bind(projectId).all();
-
-    let allCustomPermissions: { role_id: string; permission_key: string }[] = [];
-    let allInheritance: { parent_role_id: string; child_role_id: string }[] = [];
-    
-    if (customRoles && customRoles.length > 0) {
-      const customRoleIds = customRoles.map((r: any) => r.id);
-      const placeholders = customRoleIds.map(() => '?').join(',');
-      allCustomPermissions = (await getDB(c.env).prepare(`SELECT role_id, permission_key FROM custom_role_permissions WHERE role_id IN (${placeholders})`).bind(...customRoleIds).all<{role_id: string, permission_key: string}>()).results || [];
-      allInheritance = (await getDB(c.env).prepare(`SELECT parent_role_id, child_role_id FROM custom_role_inheritance WHERE parent_role_id IN (${placeholders})`).bind(...customRoleIds).all<{parent_role_id: string, child_role_id: string}>()).results || [];
+    try {
+      const result = await services.getRoles(projectId);
+      return c.json(result);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
     }
-
-    const custom = customRoles?.map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      is_default: false,
-      permissions: allCustomPermissions.filter(p => p.role_id === r.id).map(p => p.permission_key),
-      included_roles: allInheritance.filter(i => i.parent_role_id === r.id).map(i => i.child_role_id)
-    })) || [];
-
-    const defaults = Object.keys(DEFAULT_ROLES).map(id => ({
-      id,
-      name: DEFAULT_ROLES[id].name,
-      is_default: true,
-      permissions: DEFAULT_ROLES[id].permissions,
-      included_roles: []
-    }));
-
-    return c.json({ roles: [...defaults, ...custom] });
   });
 
   app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), auditLog('post:/api/projects/:id/roles', 'Created custom role'), async (c) => {
-    const guestCheck = await verifyNotGuest(c);
-    if (guestCheck) return guestCheck;
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
+    const userId = await getUserIdFromRequest(c);
     const body = await c.req.json();
-    const roleId = 'c_' + ulid();
 
-    const permissions: string[] = body.permissions || [];
-    const includedRoles: string[] = body.included_roles || [];
-    
-    // Validate role name: required, string, non-whitespace
-    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
-      return c.json({ error: 'Role name is required and must be a non-empty string' }, 400);
+    try {
+      const result = await services.createCustomRole(projectId, userId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-    const roleName = body.name.trim();
-
-    // Validate permission keys against known permissions
-    const validKeys = Object.keys(PERMISSIONS);
-    const invalidPerms = permissions.filter(p => !validKeys.includes(p));
-    if (invalidPerms.length > 0) {
-      return c.json({ error: `Unknown permission keys: ${invalidPerms.join(', ')}` }, 400);
-    }
-
-    // Validate included_roles exist (must be default roles or custom roles in this project)
-    if (includedRoles.length > 0) {
-      const defaultRoleIds = Object.keys(DEFAULT_ROLES);
-      const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
-      if (customCandidates.length > 0) {
-        const placeholders = customCandidates.map(() => '?').join(',');
-        const { results: found } = await getDB(c.env).prepare(
-          `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
-        ).bind(projectId, ...customCandidates).all<{ id: string }>();
-        const foundIds = new Set((found || []).map(r => r.id));
-        const missing = customCandidates.filter(id => !foundIds.has(id));
-        if (missing.length > 0) {
-          return c.json({ error: `Unknown role IDs: ${missing.join(', ')}` }, 400);
-        }
-      }
-
-      // Circular inheritance check: ensure none of the included roles
-      // would transitively include the new role (which doesn't exist yet, so
-      // we only need to check that included roles don't form a cycle among themselves).
-      // Since the new role has no parents yet, a cycle is impossible on creation.
-      // However, we still guard against self-inclusion.
-      if (includedRoles.includes(roleId)) {
-        return c.json({ error: 'A role cannot include itself' }, 400);
-      }
-    }
-
-    const existingRole = await getDB(c.env).prepare(
-      'SELECT id FROM project_custom_roles WHERE project_id = ? AND name = ?'
-    ).bind(projectId, roleName).first();
-    if (existingRole) {
-      return c.json({ error: 'A role with this name already exists' }, 400);
-    }
-
-    const stmts = [
-      getDB(c.env).prepare('INSERT INTO project_custom_roles (id, project_id, name) VALUES (?, ?, ?)').bind(roleId, projectId, roleName)
-    ];
-
-    permissions.forEach((perm: string) => {
-      stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, perm));
-    });
-
-    includedRoles.forEach((childId: string) => {
-      stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, childId));
-    });
-
-    await getDB(c.env).batch(stmts);
-    
-    // Invalidate project RBAC cache
-    await invalidateProjectRBAC(c.env, projectId);
-
-    return c.json({ status: 'created', id: roleId });
   });
 
   app.get('/api/projects/:id/members', requirePermission('get:/api/projects/:id/members'), async (c) => {
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
-    
-    const { results } = await getDB(c.env).prepare(`
-      SELECT u.id, u.username, u.email, u.two_factor_enabled, u.github_id, m.role_id 
-      FROM project_member_roles m 
-      JOIN users u ON m.user_id = u.id 
-      WHERE m.project_id = ?
-    `).bind(projectId).all<{ id: string; username: string; email: string; two_factor_enabled: number; github_id: string | null; role_id: string }>();
-
-    // Group by user
-    const usersMap = new Map();
-    (results || []).forEach(r => {
-      if (!usersMap.has(r.id)) {
-        usersMap.set(r.id, { 
-          id: r.id, 
-          username: r.username, 
-          email: r.email, 
-          two_factor_enabled: r.two_factor_enabled === 1,
-          auth_method: r.github_id ? 'github' : 'password',
-          roles: [] 
-        });
-      }
-      usersMap.get(r.id).roles.push(r.role_id);
-    });
-
-    const { results: invites } = await getDB(c.env).prepare(`
-      SELECT id, email, username, target_role_ids, expires_at 
-      FROM project_invitations 
-      WHERE project_id = ? AND status = 'Pending' AND strftime('%s', expires_at) > strftime('%s', 'now')
-    `).bind(projectId).all<{ id: string; email: string | null; username: string | null; target_role_ids: string; expires_at: string }>();
-
-    const pendingMembers = (invites || []).map(inv => ({
-      id: inv.id,
-      username: inv.username || '',
-      email: inv.email || '',
-      roles: JSON.parse(inv.target_role_ids),
-      is_pending: true
-    }));
-
-    return c.json({ 
-      members: [
-        ...Array.from(usersMap.values()).map(m => ({ ...m, is_pending: false })),
-        ...pendingMembers
-      ]
-    });
+    try {
+      const result = await services.getMembers(projectId);
+      return c.json(result);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
   });
 
   app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), auditLog('put:/api/projects/:id/members/:user_id', 'Updated member role'), async (c) => {
-    const guestCheck = await verifyNotGuest(c);
-    if (guestCheck) return guestCheck;
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const memberId = (c.req.param('user_id') as string);
-    const body = await c.req.json(); // { roles: [] }
-
     const userId = await getUserIdFromRequest(c);
-    if (memberId === userId) {
-      return c.json({ error: 'You cannot modify your own roles' }, 400);
+    const body = await c.req.json();
+
+    try {
+      const result = await services.updateMemberRoles(projectId, userId, memberId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
-      return c.json({ error: 'At least one role must be specified' }, 400);
-    }
-
-    // Validate roles exist
-    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
-    const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
-    if (customRoles.length > 0) {
-      const placeholders = customRoles.map(() => '?').join(',');
-      const { results } = await getDB(c.env).prepare(
-        `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
-      ).bind(projectId, ...customRoles).all<{id: string}>();
-      const foundRoles = new Set((results || []).map(r => r.id));
-      const missing = customRoles.filter((r: string) => !foundRoles.has(r));
-      if (missing.length > 0) {
-        return c.json({ error: `Invalid role(s): ${missing.join(', ')}` }, 400);
-      }
-    }
-
-    // Check if invitation
-    const isInvite = await getDB(c.env).prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
-    if (isInvite) {
-      await getDB(c.env).prepare('UPDATE project_invitations SET target_role_ids = ? WHERE id = ?').bind(JSON.stringify(body.roles), memberId).run();
-      return c.json({ status: 'updated' });
-    }
-
-    // Update active member roles atomically
-    const currentMemberRoles = await getDB(c.env).prepare(
-      'SELECT role_id FROM project_member_roles WHERE project_id = ? AND user_id = ?'
-    )
-      .bind(projectId, memberId)
-      .all<{ role_id: string }>();
-    
-    const hasOwner = currentMemberRoles.results.some(r => r.role_id === 'owner');
-
-    if (hasOwner && !body.roles.includes('owner')) {
-      const ownersCount = await getDB(c.env).prepare(`
-        SELECT COUNT(DISTINCT user_id) as count FROM (
-          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
-          UNION
-          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner'
-        )
-      `)
-        .bind(projectId, projectId)
-        .first<{ count: number }>();
-      
-      if (ownersCount && ownersCount.count <= 1) {
-        return c.json({ error: 'Cannot remove the owner role from the last owner' }, 400);
-      }
-    }
-
-    const stmts = [
-      getDB(c.env).prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
-    ];
-
-    body.roles.forEach((r: string) => {
-      stmts.push(getDB(c.env).prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, memberId, r));
-    });
-
-    await getDB(c.env).batch(stmts);
-    
-    // Invalidate user RBAC cache
-    await(invalidateUserRBAC(c.env, projectId, memberId));
-
-    return c.json({ status: 'updated' });
   });
 
   app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), auditLog('delete:/api/projects/:id/members/:user_id', 'Removed a member'), async (c) => {
-    const guestCheck = await verifyNotGuest(c);
-    if (guestCheck) return guestCheck;
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const memberId = (c.req.param('user_id') as string);
-
     const userId = await getUserIdFromRequest(c);
-    if (memberId === userId) {
-      return c.json({ error: 'You cannot remove yourself from the project' }, 400);
+
+    try {
+      const result = await services.removeMember(projectId, userId, memberId);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    const isInvite = await getDB(c.env).prepare('SELECT 1 FROM project_invitations WHERE id = ? AND project_id = ?').bind(memberId, projectId).first();
-    if (isInvite) {
-      await getDB(c.env).prepare("UPDATE project_invitations SET status = 'Revoked' WHERE id = ?").bind(memberId).run();
-      return c.json({ status: 'revoked' });
-    }
-
-    const currentMemberRoles = await getDB(c.env).prepare(
-      'SELECT role_id FROM project_member_roles WHERE project_id = ? AND user_id = ?'
-    )
-      .bind(projectId, memberId)
-      .all<{ role_id: string }>();
-    
-    const hasOwner = currentMemberRoles.results.some(r => r.role_id === 'owner');
-
-    if (hasOwner) {
-      const ownersCount = await getDB(c.env).prepare(`
-        SELECT COUNT(DISTINCT user_id) as count FROM (
-          SELECT user_id FROM project_member_roles WHERE project_id = ? AND role_id = 'owner'
-          UNION
-          SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner'
-        )
-      `)
-        .bind(projectId, projectId)
-        .first<{ count: number }>();
-      
-      if (ownersCount && ownersCount.count <= 1) {
-        return c.json({ error: 'Cannot remove the last owner of the project' }, 400);
-      }
-    }
-
-    await getDB(c.env).batch([
-      getDB(c.env).prepare('DELETE FROM project_member_roles WHERE project_id = ? AND user_id = ?').bind(projectId, memberId),
-      getDB(c.env).prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, memberId)
-    ]);
-
-    // Invalidate user RBAC cache
-    await(invalidateUserRBAC(c.env, projectId, memberId));
-
-    return c.json({ status: 'removed' });
   });
 
   app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), auditLog('put:/api/projects/:id/roles/:role_id', 'Updated custom role'), async (c) => {
-    const guestCheck = await verifyNotGuest(c);
-    if (guestCheck) return guestCheck;
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const roleId = c.req.param('role_id') as string;
-    const body = await c.req.json(); // { name, permissions: [], included_roles: [] }
+    const userId = await getUserIdFromRequest(c);
+    const body = await c.req.json();
 
-    if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
-      return c.json({ error: 'Default roles cannot be edited' }, 400);
+    try {
+      const result = await services.updateCustomRole(projectId, userId, roleId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
-      return c.json({ error: 'Role name is required and must be a non-empty string' }, 400);
-    }
-    const roleName = body.name.trim();
-
-    const existing = await getDB(c.env).prepare('SELECT 1 FROM project_custom_roles WHERE project_id = ? AND name = ? AND id != ?').bind(projectId, roleName, roleId).first();
-    if (existing) {
-      return c.json({ error: 'A role with this name already exists' }, 400);
-    }
-
-    const permissions: string[] = body.permissions || [];
-    const includedRoles: string[] = body.included_roles || [];
-
-    const validKeys = Object.keys(PERMISSIONS);
-    const invalidPerms = permissions.filter(p => !validKeys.includes(p));
-    if (invalidPerms.length > 0) {
-      return c.json({ error: `Unknown permission keys: ${invalidPerms.join(', ')}` }, 400);
-    }
-
-    if (includedRoles.length > 0) {
-      const defaultRoleIds = Object.keys(DEFAULT_ROLES);
-      const customCandidates = includedRoles.filter(id => !defaultRoleIds.includes(id));
-      if (customCandidates.length > 0) {
-        const placeholders = customCandidates.map(() => '?').join(',');
-        const { results: found } = await getDB(c.env).prepare(
-          `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
-        ).bind(projectId, ...customCandidates).all<{ id: string }>();
-        const foundIds = new Set((found || []).map(r => r.id));
-        const missing = customCandidates.filter(id => !foundIds.has(id));
-        if (missing.length > 0) {
-          return c.json({ error: `Unknown role IDs: ${missing.join(', ')}` }, 400);
-        }
-      }
-      if (includedRoles.includes(roleId)) {
-        return c.json({ error: 'A role cannot include itself' }, 400);
-      }
-    }
-
-    const stmts = [
-      getDB(c.env).prepare('UPDATE project_custom_roles SET name = ? WHERE id = ?').bind(roleName, roleId),
-      getDB(c.env).prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
-      getDB(c.env).prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ?').bind(roleId)
-    ];
-
-    permissions.forEach(p => stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_permissions (role_id, permission_key) VALUES (?, ?)').bind(roleId, p)));
-    includedRoles.forEach(child => stmts.push(getDB(c.env).prepare('INSERT INTO custom_role_inheritance (parent_role_id, child_role_id) VALUES (?, ?)').bind(roleId, child)));
-
-    await getDB(c.env).batch(stmts);
-    
-    // Invalidate project RBAC cache since role definition changed
-    await invalidateProjectRBAC(c.env, projectId);
-
-    return c.json({ status: 'updated' });
   });
 
   app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), auditLog('delete:/api/projects/:id/roles/:role_id', 'Deleted custom role'), async (c) => {
-    const guestCheck = await verifyNotGuest(c);
-    if (guestCheck) return guestCheck;
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const roleId = c.req.param('role_id') as string;
+    const userId = await getUserIdFromRequest(c);
 
-    if (roleId.startsWith('owner') || roleId.startsWith('editor') || roleId.startsWith('viewer')) {
-      return c.json({ error: 'Default roles cannot be deleted' }, 400);
+    try {
+      const result = await services.deleteCustomRole(projectId, userId, roleId);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    await getDB(c.env).batch([
-      getDB(c.env).prepare('DELETE FROM project_custom_roles WHERE id = ?').bind(roleId),
-      getDB(c.env).prepare('DELETE FROM custom_role_permissions WHERE role_id = ?').bind(roleId),
-      getDB(c.env).prepare('DELETE FROM custom_role_inheritance WHERE parent_role_id = ? OR child_role_id = ?').bind(roleId, roleId),
-      getDB(c.env).prepare('DELETE FROM project_member_roles WHERE role_id = ?').bind(roleId)
-    ]);
-
-    // Invalidate project RBAC cache since a role was deleted
-    await invalidateProjectRBAC(c.env, projectId);
-
-    return c.json({ status: 'deleted' });
   });
 
   app.get('/api/auth/invitations', async (c) => {
+    const services = rbacServicesFactory(c.env);
     const userId = await getUserIdFromRequest(c);
-    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const user = await getDB(c.env).prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
-    if (!user) return c.json({ error: 'User not found' }, 404);
-
-    const { results } = await getDB(c.env).prepare(`
-      SELECT i.id, i.token, i.project_id, p.name as project_name, i.expires_at 
-      FROM project_invitations i
-      JOIN projects p ON i.project_id = p.id
-      WHERE i.status = 'Pending' 
-        AND strftime('%s', i.expires_at) > strftime('%s', 'now')
-        AND (i.email = ?1 OR i.username = ?2)
-    `).bind(user.email, user.username).all<{ id: string; token: string; project_id: string; project_name: string; expires_at: string }>();
-
-    return c.json({ invitations: results || [] });
+    try {
+      const result = await services.getInvitations(userId);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
   });
 
-
   app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), auditLog('post:/api/projects/:id/invitations', 'Invited a member'), async (c) => {
-    const guestCheck = await verifyNotGuest(c);
-    if (guestCheck) return guestCheck;
+    const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
-    const body = await c.req.json(); // { username, email, roles: [] }
-    
-    if ((!body.email || typeof body.email !== 'string' || body.email.trim() === '') &&
-        (!body.username || typeof body.username !== 'string' || body.username.trim() === '')) {
-      return c.json({ error: 'Either email or username must be specified' }, 400);
+    const userId = await getUserIdFromRequest(c);
+    const body = await c.req.json();
+
+    try {
+      const result = await services.createInvitation(projectId, userId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
-      return c.json({ error: 'At least one role must be specified' }, 400);
-    }
-
-    // Validate roles exist
-    const defaultRoles = ['owner', 'editor', 'viewer', 'runner'];
-    const customRoles = body.roles.filter((r: string) => !defaultRoles.includes(r));
-    if (customRoles.length > 0) {
-      const placeholders = customRoles.map(() => '?').join(',');
-      const { results } = await getDB(c.env).prepare(
-        `SELECT id FROM project_custom_roles WHERE project_id = ? AND id IN (${placeholders})`
-      ).bind(projectId, ...customRoles).all<{id: string}>();
-      const foundRoles = new Set((results || []).map(r => r.id));
-      const missing = customRoles.filter((r: string) => !foundRoles.has(r));
-      if (missing.length > 0) {
-        return c.json({ error: `Invalid role(s): ${missing.join(', ')}` }, 400);
-      }
-    }
-
-    const id = ulid();
-    const token = ulid() + ulid();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-
-    await getDB(c.env).prepare(`
-      INSERT INTO project_invitations (id, project_id, email, username, target_role_ids, status, token, expires_at)
-      VALUES (?, ?, ?, ?, ?, 'Pending', ?, ?)
-    `).bind(id, projectId, body.email || null, body.username || null, JSON.stringify(body.roles), token, expiresAt).run();
-
-    // In a real app we would send an email here.
-    return c.json({ status: 'created', token, invitation_url: '/accept-invite?token=' + token });
   });
 
   app.post('/api/auth/invitations/accept', async (c) => {
-    const body = await c.req.json(); // { token }
+    const services = rbacServicesFactory(c.env);
     const userId = await getUserIdFromRequest(c);
-    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+    const body = await c.req.json();
 
-    const user = await getDB(c.env).prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
-    if (!user) return c.json({ error: 'User not found' }, 404);
-
-    // Atomically claim the token if it's valid, not expired, and matches user (or is open)
-    const inv = await getDB(c.env).prepare(`
-      UPDATE project_invitations 
-      SET status = 'Accepted' 
-      WHERE token = ?1 
-        AND status = 'Pending' 
-        AND strftime('%s', expires_at) > strftime('%s', 'now')
-        AND (username IS NULL OR username = ?2)
-        AND (email IS NULL OR email = ?3)
-      RETURNING *
-    `).bind(body.token, user.username, user.email).first<any>();
-
-    if (!inv) {
-      // Check why it failed to provide better error
-      const existing = await getDB(c.env).prepare("SELECT username, email FROM project_invitations WHERE token = ? AND status = 'Pending'").bind(body.token).first<{username: string|null, email: string|null}>();
-      if (existing) {
-        if (existing.username && existing.username !== user.username) return c.json({ error: 'Invitation is for a different username' }, 403);
-        if (existing.email && existing.email !== user.email) return c.json({ error: 'Invitation is for a different email' }, 403);
-      }
-      return c.json({ error: 'Invalid or expired invitation' }, 400);
+    try {
+      const result = await services.acceptInvitation(userId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    const roles = JSON.parse(inv.target_role_ids);
-    const stmts: any[] = [];
-
-    roles.forEach((r: string) => {
-      stmts.push(getDB(c.env).prepare('INSERT OR IGNORE INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(inv.project_id, userId, r));
-    });
-    // Add to legacy project_members just in case for other endpoints
-    stmts.push(getDB(c.env).prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'viewer')").bind(inv.project_id, userId));
-
-    await getDB(c.env).batch(stmts);
-    await invalidateUserRBAC(c.env, inv.project_id, userId);
-
-    return c.json({ status: 'accepted', project_id: inv.project_id });
   });
 
   app.post('/api/auth/invitations/decline', async (c) => {
-    const body = await c.req.json(); // { token }
+    const services = rbacServicesFactory(c.env);
     const userId = await getUserIdFromRequest(c);
-    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+    const body = await c.req.json();
 
-    const user = await getDB(c.env).prepare('SELECT email, username FROM users WHERE id = ?').bind(userId).first<{email: string, username: string}>();
-    if (!user) return c.json({ error: 'User not found' }, 404);
-
-    const res = await getDB(c.env).prepare(`
-      UPDATE project_invitations 
-      SET status = 'Revoked' 
-      WHERE token = ?1 
-        AND status = 'Pending' 
-        AND (username IS NULL OR username = ?2)
-        AND (email IS NULL OR email = ?3)
-    `).bind(body.token, user.username, user.email).run();
-
-    if (res.meta.changes === 0) {
-      return c.json({ error: 'Invalid or expired invitation' }, 400);
+    try {
+      const result = await services.declineInvitation(userId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
     }
-
-    return c.json({ status: 'declined' });
   });
 }
