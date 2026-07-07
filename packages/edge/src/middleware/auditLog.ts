@@ -51,8 +51,8 @@ export function auditLog(action: PermissionKey | string, label: string) {
 
     // Retrieve details set by the route handler
     const auditDetailsVal = c.get('auditDetails');
-    const details = auditDetailsVal 
-      ? (typeof auditDetailsVal === 'string' ? auditDetailsVal : JSON.stringify(auditDetailsVal)) 
+    const details = auditDetailsVal
+      ? (typeof auditDetailsVal === 'string' ? auditDetailsVal : JSON.stringify(auditDetailsVal))
       : null;
 
     c.executionCtx.waitUntil(
