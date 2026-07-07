@@ -2,10 +2,6 @@ import { Env } from '../env';
 import { BaseService } from './base';
 import { ulid } from 'ulidx';
 import {
-  checkIpRateLimit as _checkIpRateLimit,
-  checkLoginRateLimit as _checkLoginRateLimit,
-  recordFailedLogin as _recordFailedLogin,
-  resetLoginAttempts as _resetLoginAttempts,
   getClientIp,
 } from '../utils/auth';
 import { cleanupExpiredGuests } from '../utils/cleanup';
@@ -212,19 +208,109 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async checkIpRateLimit(key: string, maxAttempts: number, windowSeconds: number): Promise<{ limited: boolean }> {
-    return _checkIpRateLimit(this.db, key, maxAttempts, windowSeconds);
+    const now = new Date();
+    const resetTime = new Date(now.getTime() + windowSeconds * 1000);
+    const nowStr = now.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+
+    // Clean up expired rate limits probabilistically (e.g., 1% of requests)
+    if (Math.random() < 0.01) {
+      await this.db.prepare("DELETE FROM rate_limits WHERE reset_at < datetime('now')").run();
+    }
+
+    const row = await this.db
+      .prepare('SELECT attempts, reset_at FROM rate_limits WHERE key = ?')
+      .bind(key)
+      .first<{ attempts: number; reset_at: string }>();
+
+    if (!row) {
+      const resetAtStr = resetTime.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+      await this.db
+        .prepare('INSERT INTO rate_limits (key, attempts, reset_at) VALUES (?, 1, ?)')
+        .bind(key, resetAtStr)
+        .run();
+      return { limited: false };
+    }
+
+    const resetAt = new Date(row.reset_at + 'Z');
+    if (resetAt < now) {
+      const resetAtStr = resetTime.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+      await this.db
+        .prepare('UPDATE rate_limits SET attempts = 1, reset_at = ? WHERE key = ?')
+        .bind(resetAtStr, key)
+        .run();
+      return { limited: false };
+    }
+
+    if (row.attempts >= maxAttempts) {
+      return { limited: true };
+    }
+
+    await this.db
+      .prepare('UPDATE rate_limits SET attempts = attempts + 1 WHERE key = ?')
+      .bind(key)
+      .run();
+    
+    return { limited: false };
   }
 
   async checkLoginRateLimit(username: string): Promise<{ locked: boolean; retryAfter?: string }> {
-    return _checkLoginRateLimit(this.db, username);
+    const row = await this.db
+      .prepare('SELECT failed_count, locked_until FROM login_attempts WHERE username = ?')
+      .bind(username)
+      .first<{ failed_count: number; locked_until: string | null }>();
+
+    if (!row) return { locked: false };
+
+    if (row.locked_until) {
+      const lockedUntil = new Date(row.locked_until + 'Z'); // D1 stores UTC without Z suffix
+      if (lockedUntil > new Date()) {
+        return { locked: true, retryAfter: row.locked_until };
+      }
+      // Lock has expired — reset the counter
+      await this.db
+        .prepare('UPDATE login_attempts SET failed_count = 0, locked_until = NULL WHERE username = ?')
+        .bind(username)
+        .run();
+    }
+
+    return { locked: false };
   }
 
   async recordFailedLogin(username: string): Promise<void> {
-    return _recordFailedLogin(this.db, username);
+    const MAX_LOGIN_ATTEMPTS = 5;
+    const LOCKOUT_MINUTES = 15;
+    
+    const row = await this.db
+      .prepare('SELECT failed_count FROM login_attempts WHERE username = ?')
+      .bind(username)
+      .first<{ failed_count: number }>();
+
+    const newCount = (row?.failed_count ?? 0) + 1;
+    let lockedUntil: string | null = null;
+
+    if (newCount >= MAX_LOGIN_ATTEMPTS) {
+      const lockDate = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
+      lockedUntil = lockDate.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+    }
+
+    if (!row) {
+      await this.db
+        .prepare('INSERT INTO login_attempts (username, failed_count, locked_until) VALUES (?, ?, ?)')
+        .bind(username, newCount, lockedUntil)
+        .run();
+    } else {
+      await this.db
+        .prepare('UPDATE login_attempts SET failed_count = ?, locked_until = ? WHERE username = ?')
+        .bind(newCount, lockedUntil, username)
+        .run();
+    }
   }
 
   async resetLoginAttempts(username: string): Promise<void> {
-    return _resetLoginAttempts(this.db, username);
+    await this.db
+      .prepare('DELETE FROM login_attempts WHERE username = ?')
+      .bind(username)
+      .run();
   }
 
   async recordLoginHistory(
@@ -252,5 +338,35 @@ export class AuthRepository extends BaseService implements IAuthRepository {
 
   async cleanupExpiredGuests(): Promise<void> {
     await cleanupExpiredGuests(this.db);
+  }
+
+  async verifyApiKey(hashedToken: string, plainToken: string): Promise<string | null> {
+    let user = await this.db.prepare('SELECT id FROM users WHERE api_key = ?')
+      .bind(hashedToken)
+      .first<{ id: string }>();
+
+    if (!user) {
+      user = await this.db.prepare('SELECT id FROM users WHERE api_key = ?')
+        .bind(plainToken)
+        .first<{ id: string }>();
+
+      if (user) {
+        try {
+          await this.db.prepare('UPDATE users SET api_key = ? WHERE id = ?')
+            .bind(hashedToken, user.id)
+            .run();
+        } catch {
+          // Ignore
+        }
+      }
+    }
+    return user ? user.id : null;
+  }
+
+  async getUserDeleteRequestedAt(userId: string): Promise<string | null> {
+    const user = await this.db.prepare('SELECT delete_requested_at FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ delete_requested_at: string | null }>();
+    return user ? user.delete_requested_at : null;
   }
 }

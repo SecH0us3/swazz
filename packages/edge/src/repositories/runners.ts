@@ -1,6 +1,5 @@
 import { Env } from '../env';
 import { BaseService } from './base';
-import { getDeleteRequestedAt } from '../utils/auth';
 
 export interface IRunnersRepository {
   getUserByPublicKey(publicKey: string): Promise<{ id: string } | null>;
@@ -38,7 +37,10 @@ export class RunnersRepository extends BaseService implements IRunnersRepository
   }
 
   async getDeleteRequestedAt(userId: string): Promise<string | null> {
-    return getDeleteRequestedAt(this.db, userId);
+    const user = await this.db.prepare('SELECT delete_requested_at FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ delete_requested_at: string | null }>();
+    return user ? user.delete_requested_at : null;
   }
 
   async getUserPublicKey(userId: string): Promise<string | null> {

@@ -1,6 +1,6 @@
 import { Env } from '../env';
 import { IProjectRepository } from '../repositories/projects';
-import { checkPermission } from '../utils/rbac';
+import { IRbacRepository } from '../repositories/rbac';
 
 export interface IProjectService {
   getProjects(userId: string | null, isAuthEnabled: boolean): Promise<{ projects: any[] }>;
@@ -16,7 +16,11 @@ export interface IProjectService {
 }
 
 export class ProjectService implements IProjectService {
-  constructor(private env: Env, private projectRepo: IProjectRepository) {}
+  constructor(
+    private env: Env, 
+    private projectRepo: IProjectRepository,
+    private rbacRepo: IRbacRepository
+  ) {}
 
   async getProjects(userId: string | null, isAuthEnabled: boolean) {
     if (!userId && isAuthEnabled) {
@@ -101,7 +105,7 @@ export class ProjectService implements IProjectService {
   async getProjectAnalytics(projectId: string, userId: string | null, period: string, isAuthEnabled: boolean) {
     if (isAuthEnabled) {
       if (!userId) throw new Error('Unauthorized|401');
-      const hasAccess = await checkPermission(this.env, userId, projectId, 'get:/api/projects/:id/scans');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, projectId, 'get:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
     }
     return this.projectRepo.getProjectAnalytics(projectId, userId, period);

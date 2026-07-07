@@ -1,7 +1,7 @@
 import { Env } from '../env';
 import { IRbacRepository } from '../repositories/rbac';
 import { PERMISSIONS, DEFAULT_ROLES } from '../config/rbac';
-import { invalidateUserRBAC, invalidateProjectRBAC } from '../utils/rbac';
+
 import { ulid } from 'ulidx';
 
 export interface IRbacService {
@@ -107,7 +107,7 @@ export class RbacService implements IRbacService {
     }
 
     await this.rbacRepo.createCustomRole(roleId, projectId, roleName, permissions, includedRoles);
-    await invalidateProjectRBAC(this.env, projectId);
+    await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'created', id: roleId };
   }
@@ -188,7 +188,7 @@ export class RbacService implements IRbacService {
     }
 
     await this.rbacRepo.updateMemberRoles(projectId, memberId, body.roles);
-    await invalidateUserRBAC(this.env, projectId, memberId);
+    await this.rbacRepo.invalidateUserRBAC(projectId, memberId);
 
     return { status: 'updated' };
   }
@@ -217,7 +217,7 @@ export class RbacService implements IRbacService {
     }
 
     await this.rbacRepo.removeProjectMember(projectId, memberId);
-    await invalidateUserRBAC(this.env, projectId, memberId);
+    await this.rbacRepo.invalidateUserRBAC(projectId, memberId);
 
     return { status: 'removed' };
   }
@@ -264,7 +264,7 @@ export class RbacService implements IRbacService {
     }
 
     await this.rbacRepo.updateCustomRole(roleId, roleName, permissions, includedRoles);
-    await invalidateProjectRBAC(this.env, projectId);
+    await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'updated' };
   }
@@ -277,7 +277,7 @@ export class RbacService implements IRbacService {
     }
 
     await this.rbacRepo.deleteCustomRole(roleId);
-    await invalidateProjectRBAC(this.env, projectId);
+    await this.rbacRepo.invalidateProjectRBAC(projectId);
 
     return { status: 'deleted' };
   }
@@ -345,7 +345,7 @@ export class RbacService implements IRbacService {
       throw new Error('Invalid or expired invitation|400');
     }
 
-    await invalidateUserRBAC(this.env, inv.project_id, userId);
+    await this.rbacRepo.invalidateUserRBAC(inv.project_id, userId);
 
     return { status: 'accepted', project_id: inv.project_id };
   }

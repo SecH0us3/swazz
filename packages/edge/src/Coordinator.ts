@@ -1,5 +1,5 @@
 import { Env } from './env';
-import { getDB } from './utils/db';
+import { ScansRepository } from './repositories/scans';
 import { ulid } from 'ulidx';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
 
@@ -259,9 +259,8 @@ export class RunnerCoordinator {
       
       if (body.url && !body.forceRebuild) {
         try {
-          const cached = await getDB(this.env, body.url).prepare('SELECT base_path, endpoints_r2_key, fetched_at FROM swagger_cache WHERE url = ?')
-            .bind(body.url)
-            .first() as { base_path: string; endpoints_r2_key: string; fetched_at: string } | null;
+          const scansRepo = new ScansRepository(this.env);
+          const cached = await scansRepo.getCachedSwagger(body.url);
             
           if (cached && cached.endpoints_r2_key) {
             const r2Object = await this.env.STORAGE.get(cached.endpoints_r2_key);
@@ -657,7 +656,7 @@ export class RunnerCoordinator {
             
             // Background write to DB/R2
             if (msg.payload && !msg.payload.error && urlStr && urlStr !== 'rawSpec') {
-              const db = getDB(this.env, urlStr);
+              const scansRepo = new ScansRepository(this.env);
               const storage = this.env.STORAGE;
               
               (async () => {
@@ -671,9 +670,7 @@ export class RunnerCoordinator {
                   const hashArray = Array.from(new Uint8Array(hashBuffer));
                   const endpointsHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
                   
-                  const existing = await db.prepare('SELECT endpoints_hash, endpoints_r2_key, raw_spec_r2_key FROM swagger_cache WHERE url = ?')
-                    .bind(urlStr)
-                    .first() as { endpoints_hash: string; endpoints_r2_key: string; raw_spec_r2_key: string } | null;
+                  const existing = await scansRepo.getCachedSwaggerDetails(urlStr);
                     
                   let endpointsR2Key = existing?.endpoints_r2_key;
                   let rawSpecR2Key = existing?.raw_spec_r2_key;
@@ -694,9 +691,7 @@ export class RunnerCoordinator {
                     }
                   }
                   
-                  await db.prepare('INSERT OR REPLACE INTO swagger_cache (url, base_path, endpoints_hash, endpoints_r2_key, raw_spec_r2_key, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)')
-                    .bind(urlStr, basePath, endpointsHash, endpointsR2Key, rawSpecR2Key)
-                    .run();
+                  await scansRepo.upsertSwaggerCache(urlStr, basePath, endpointsHash, endpointsR2Key, rawSpecR2Key);
                 } catch (cacheErr) {
                   logError(this.env, "Coordinator", "Failed to write swagger cache in background", { error: cacheErr });
                 }
@@ -738,17 +733,26 @@ export class RunnerCoordinator {
           if (runId) {
             if (msg.type === 'error' || (msg.payload && msg.payload.type === 'error')) {
               this.state.waitUntil(
-                getDB(this.env, runId).prepare("UPDATE scans SET status = 'failed', completed_at = datetime('now') WHERE id = ?")
-                  .bind(runId)
-                  .run()
-                  .catch(dbErr => logError(this.env, "Coordinator", "Failed to update scan status to failed in D1", { error: dbErr }))
+                (async () => {
+                  try {
+                    const scansRepo = new ScansRepository(this.env);
+                    await scansRepo.updateScanStatus(runId, 'failed');
+                  } catch (dbErr) {
+                    logError(this.env, "Coordinator", "Failed to update scan status to failed in D1", { error: dbErr });
+                  }
+                })()
               );
             } else if (msg.type === 'event' && msg.payload && msg.payload.type === 'complete') {
               this.state.waitUntil(
-                getDB(this.env, runId).prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?")
-                  .bind(JSON.stringify(msg.payload.data || {}), runId)
-                  .run()
-                  .catch(dbErr => logError(this.env, "Coordinator", "Failed to update scan status to completed in D1", { error: dbErr }))
+                (async () => {
+                  try {
+                    const scansRepo = new ScansRepository(this.env);
+                    const summaryStats = JSON.stringify(msg.payload.data || {});
+                    await scansRepo.updateScanStatus(runId, 'completed', summaryStats);
+                  } catch (dbErr) {
+                    logError(this.env, "Coordinator", "Failed to update scan status to completed in D1", { error: dbErr });
+                  }
+                })()
               );
             }
           }
@@ -801,33 +805,20 @@ export class RunnerCoordinator {
         !t.startsWith('user_id:')
       ) || null;
 
-      const queuedScans = await getDB(this.env).prepare(`
-        SELECT scans.*, users.public_key AS userPublicKey
-        FROM scans
-        LEFT JOIN users ON scans.user_id = users.id
-        WHERE scans.status = 'queued'
-        ORDER BY scans.created_at ASC
-      `).all<{
-        id: string;
-        project_id: string;
-        target_url: string;
-        profile: string;
-        status: string;
-        user_id: string | null;
-        userPublicKey: string | null;
-      }>();
+      const scansRepo = new ScansRepository(this.env);
+      const queuedScans = await scansRepo.getQueuedScans();
 
-      if (!queuedScans.results || queuedScans.results.length === 0) {
+      if (!queuedScans || queuedScans.length === 0) {
         return;
       }
 
-      const keys = queuedScans.results.flatMap(scan => [
+      const keys = queuedScans.flatMap(scan => [
         `config:${scan.id}`,
         `user_public_key:${scan.id}`
       ]);
       const storedData = await this.state.storage.get<any>(keys);
 
-      for (const scan of queuedScans.results) {
+      for (const scan of queuedScans) {
         // Get config and userPublicKey from DO storage, or scan_configs / fallback
         const storedConfig = storedData.get(`config:${scan.id}`);
         const storedPubKey = storedData.get(`user_public_key:${scan.id}`);
@@ -837,13 +828,9 @@ export class RunnerCoordinator {
         
         if (!config && scan.project_id) {
           try {
-            const row = await getDB(this.env, scan.project_id).prepare(
-              'SELECT config_json FROM scan_configs WHERE project_id = ? AND name = ?'
-            )
-              .bind(scan.project_id, scan.profile)
-              .first<{ config_json: string }>();
-            if (row && row.config_json) {
-              config = JSON.parse(row.config_json);
+            const configJson = await scansRepo.getScanConfigByProject(scan.project_id, scan.profile);
+            if (configJson) {
+              config = JSON.parse(configJson);
             }
           } catch (err) {
             logError(this.env, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
@@ -891,10 +878,12 @@ export class RunnerCoordinator {
 
           ws.send(dispatchMsg);
 
-          // Update scan status to 'dispatched' in D1
-          await getDB(this.env, runId).prepare('UPDATE scans SET status = ? WHERE id = ?')
-            .bind('dispatched', runId)
-            .run();
+          // Update scan status to 'dispatched'
+          try {
+            await scansRepo.updateScanStatus(runId, 'dispatched');
+          } catch (dbErr) {
+            logError(this.env, "Coordinator", "Failed to update scan status to dispatched", { error: dbErr });
+          }
 
           // Clean up DO storage
           await this.state.storage.delete(`config:${runId}`);

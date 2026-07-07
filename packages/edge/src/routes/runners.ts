@@ -4,9 +4,11 @@ import { getUserIdFromRequest, isWebRequest, isAnonymousUser } from '../utils/au
 import { IRunnersRepository, RunnersRepository } from '../repositories/runners';
 import { IRunnersService, RunnersService } from '../services/runners';
 
+import { RbacRepository } from '../repositories/rbac';
+
 export function registerRunnersRoutes(
   app: Hono<{ Bindings: Env }>,
-  runnersServicesFactory: (env: Env) => IRunnersService = (env) => new RunnersService(env, new RunnersRepository(env))
+  runnersServicesFactory: (env: Env) => IRunnersService = (env) => new RunnersService(env, new RunnersRepository(env), new RbacRepository(env))
 ) {
   app.get('/api/runners/connect', async (c) => {
     const services = runnersServicesFactory(c.env);

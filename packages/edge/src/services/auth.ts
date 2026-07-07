@@ -4,9 +4,9 @@ import { sign, verify } from 'hono/jwt';
 import { Context } from 'hono';
 import { IAuthRepository, LoginHistoryMeta } from '../repositories/auth';
 import {
-  hashPassword, verifyPassword, verifyTurnstile,
-  hashUsername, checkIpRateLimit, verifyDummyPassword,
-  hashApiKey, deletionCache, getClientIp,
+  hashPassword, verifyPassword, hashApiKey, getClientIp,
+  hashUsername, verifyDummyPassword, verifyTurnstile, deletionCache,
+  safeCompare
 } from '../utils/auth';
 import { generateTOTPSecret, verifyTOTP, encryptTOTPSecret, decryptTOTPSecret } from '../utils/totp';
 import {

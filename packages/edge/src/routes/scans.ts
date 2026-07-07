@@ -3,10 +3,11 @@ import { Env } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { IScansRepository, ScansRepository } from '../repositories/scans';
 import { IScansService, ScansService } from '../services/scans';
+import { RbacRepository } from '../repositories/rbac';
 
 export function registerScansRoutes(
   app: Hono<{ Bindings: Env }>,
-  scansServicesFactory: (env: Env) => IScansService = (env) => new ScansService(env, new ScansRepository(env))
+  scansServicesFactory: (env: Env) => IScansService = (env) => new ScansService(env, new ScansRepository(env), new RbacRepository(env))
 ) {
   app.post('/api/scans', async (c) => {
     const services = scansServicesFactory(c.env);

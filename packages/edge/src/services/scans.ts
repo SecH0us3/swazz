@@ -1,6 +1,6 @@
 import { Env } from '../env';
 import { IScansRepository } from '../repositories/scans';
-import { checkPermission } from '../utils/rbac';
+import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
 
@@ -24,7 +24,11 @@ export interface IScansService {
 }
 
 export class ScansService implements IScansService {
-  constructor(private env: Env, private scansRepo: IScansRepository) {}
+  constructor(
+    private env: Env, 
+    private scansRepo: IScansRepository,
+    private rbacRepo: IRbacRepository
+  ) {}
 
   private async checkScanAccess(scan: any, userId: string | null, isAuthEnabled: boolean): Promise<void> {
     if (!isAuthEnabled || !userId) return;
@@ -34,7 +38,7 @@ export class ScansService implements IScansService {
       return;
     }
 
-    const hasAccess = await checkPermission(this.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+    const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
     if (!hasAccess) throw new Error('Forbidden|403');
   }
 
@@ -50,7 +54,7 @@ export class ScansService implements IScansService {
     }
 
     if (userId) {
-      const hasAccess = await checkPermission(this.env, userId, body.project_id, 'post:/api/projects/:id/scans');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, body.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
@@ -121,7 +125,7 @@ export class ScansService implements IScansService {
     }
 
     if (userId) {
-      const hasAccess = await checkPermission(this.env, userId, projectId, 'get:/api/projects/:id/scans');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, projectId, 'get:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
@@ -134,7 +138,7 @@ export class ScansService implements IScansService {
     if (!scan) throw new Error('Scan not found|404');
 
     if (userId) {
-      const hasAccess = await checkPermission(this.env, userId, scan.project_id, 'get:/api/projects/:id/scans');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
@@ -146,7 +150,7 @@ export class ScansService implements IScansService {
     if (!scan) throw new Error('Scan not found|404');
 
     if (userId) {
-      const hasAccess = await checkPermission(this.env, userId, scan.project_id, 'post:/api/projects/:id/scans');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
@@ -159,7 +163,7 @@ export class ScansService implements IScansService {
     if (!scan) throw new Error('Scan not found|404');
 
     if (userId) {
-      const hasAccess = await checkPermission(this.env, userId, scan.project_id, 'post:/api/projects/:id/scans');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
     }
 
@@ -262,7 +266,7 @@ export class ScansService implements IScansService {
       if (!finding.project_id) {
         if (finding.user_id !== userId) throw new Error('Forbidden|403');
       } else {
-        const hasAccess = await checkPermission(this.env, userId, finding.project_id, 'post:/api/projects/:id/scans');
+        const hasAccess = await this.rbacRepo.checkPermission(userId, finding.project_id, 'post:/api/projects/:id/scans');
         if (!hasAccess) throw new Error('Forbidden|403');
       }
     }

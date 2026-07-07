@@ -5,10 +5,11 @@ import { requirePermission } from '../middleware/rbac';
 import { auditLog } from '../middleware/auditLog';
 import { IProjectRepository, ProjectRepository } from '../repositories/projects';
 import { IProjectService, ProjectService } from '../services/projects';
+import { RbacRepository } from '../repositories/rbac';
 
 export function registerProjectsRoutes(
   app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
-  projectServicesFactory: (env: Env) => IProjectService = (env) => new ProjectService(env, new ProjectRepository(env))
+  projectServicesFactory: (env: Env) => IProjectService = (env) => new ProjectService(env, new ProjectRepository(env), new RbacRepository(env))
 ) {
   app.get('/api/projects', async (c) => {
     const services = projectServicesFactory(c.env);
@@ -110,9 +111,10 @@ export function registerProjectsRoutes(
       const analytics = await services.getProjectAnalytics(projectId, userId || null, period, isAuthEnabled);
       return c.json(analytics);
     } catch (e: any) {
+      console.error("GET /api/projects/:id/analytics error:", e);
       if (e.message.startsWith('Unauthorized')) return c.json({ error: 'Unauthorized' }, 401);
       if (e.message.startsWith('Forbidden')) return c.json({ error: 'Forbidden' }, 403);
-      return c.json({ error: 'Internal Server Error' }, 500);
+      return c.json({ error: 'Internal Server Error', message: e.message, stack: e.stack }, 500);
     }
   });
 

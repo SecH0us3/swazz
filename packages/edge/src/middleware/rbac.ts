@@ -1,7 +1,6 @@
 import { Context, Next } from 'hono';
 import { Env } from '../env';
 import { getUserIdFromRequest, getSessionIat } from '../utils/auth';
-import { checkPermission } from '../utils/rbac';
 import { PermissionKey } from '../config/rbac';
 import { RbacRepository } from '../repositories/rbac';
 
@@ -17,8 +16,9 @@ export const requirePermission = (permission: PermissionKey) => {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
+    const rbacRepo = new RbacRepository(c.env);
+    
     try {
-      const rbacRepo = new RbacRepository(c.env);
       const memberSessionTimeout = await rbacRepo.getProjectSessionTimeout(projectId);
 
       if (memberSessionTimeout && memberSessionTimeout > 0) {
@@ -34,7 +34,7 @@ export const requirePermission = (permission: PermissionKey) => {
       console.error("Failed to check project session timeout in requirePermission:", err);
     }
 
-    const hasAccess = await checkPermission(c.env, userId, projectId, permission);
+    const hasAccess = await rbacRepo.checkPermission(userId, projectId, permission);
     if (!hasAccess) {
       return c.json({ error: 'Forbidden: Missing permission ' + permission }, 403);
     }

@@ -1,7 +1,7 @@
 import { Env } from '../env';
 import { IRunnersRepository } from '../repositories/runners';
+import { IRbacRepository } from '../repositories/rbac';
 import { hashApiKey } from '../utils/auth';
-import { checkPermission } from '../utils/rbac';
 
 export interface IRunnersService {
   connect(
@@ -27,7 +27,11 @@ export interface IRunnersService {
 }
 
 export class RunnersService implements IRunnersService {
-  constructor(private env: Env, private runnersRepo: IRunnersRepository) {}
+  constructor(
+    private env: Env, 
+    private runnersRepo: IRunnersRepository,
+    private rbacRepo: IRbacRepository
+  ) {}
 
   private async checkScanAccess(scanId: string, userId: string, permission?: string): Promise<void> {
     const scan = await this.runnersRepo.getScanDetails(scanId);
@@ -39,7 +43,7 @@ export class RunnersService implements IRunnersService {
     }
 
     const perm = permission || 'get:/api/projects/:id';
-    const hasAccess = await checkPermission(this.env, userId, scan.project_id, perm as any);
+    const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, perm);
     if (!hasAccess) throw new Error('Forbidden|403');
   }
 
@@ -166,12 +170,20 @@ export class RunnersService implements IRunnersService {
     }
 
     let userPublicKey = "";
-    if (userId) {
-      if (body.projectId) {
-        const hasAccess = await checkPermission(this.env, userId, body.projectId, 'post:/api/projects/:id/scans');
-        if (!hasAccess) throw new Error('Forbidden|403');
+    // For standalone scans, we just proceed. For project scans, check permissions.
+    if (body.projectId) {
+      if (isAnon) {
+        throw new Error('Forbidden|403');
       }
-
+      if (userId) {
+        const hasAccess = await this.rbacRepo.checkPermission(userId, body.projectId, 'post:/api/projects/:id/scans');
+        if (!hasAccess) {
+          throw new Error('Forbidden|403');
+        }
+      }
+    }
+    
+    if (userId) {
       try {
         const key = await this.runnersRepo.getUserPublicKey(userId);
         if (key) {
