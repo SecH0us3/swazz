@@ -3,6 +3,7 @@ import { Env } from '../env';
 import { getUserIdFromRequest, getSessionIat } from '../utils/auth';
 import { checkPermission } from '../utils/rbac';
 import { PermissionKey } from '../config/rbac';
+import { RbacRepository } from '../repositories/rbac';
 
 export const requirePermission = (permission: PermissionKey) => {
   return async (c: Context<{ Bindings: Env }>, next: Next) => {
@@ -17,15 +18,14 @@ export const requirePermission = (permission: PermissionKey) => {
     }
 
     try {
-      const project = await c.env.DB.prepare(
-        'SELECT member_session_timeout FROM projects WHERE id = ?'
-      ).bind(projectId).first<{ member_session_timeout: number | null }>();
+      const rbacRepo = new RbacRepository(c.env);
+      const memberSessionTimeout = await rbacRepo.getProjectSessionTimeout(projectId);
 
-      if (project && project.member_session_timeout && project.member_session_timeout > 0) {
+      if (memberSessionTimeout && memberSessionTimeout > 0) {
         const iat = await getSessionIat(c);
         if (iat) {
           const elapsed = Math.floor(Date.now() / 1000) - iat;
-          if (elapsed > project.member_session_timeout) {
+          if (elapsed > memberSessionTimeout) {
             return c.json({ error: 'Session expired: Project requires re-authentication' }, 401);
           }
         }

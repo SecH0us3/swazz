@@ -970,3 +970,11 @@ This file contains completed tasks.
     - Save these logs in a new D1 table `runner_logs` (schema: `id, scan_id, timestamp, level, message`) or reuse the `scan_events` table with a custom payload structure.
     - Implement a backend route `GET /api/scans/:id/runner-logs` (scoped to project viewer permissions) fetching logs for the specified scan.
     - Build a "Runner Logs" tab in the Active Scan and Scans History UI pages to view, search, and copy logs.
+
+- [x] **Task 124: Refactor remaining edge routes to Service Classes**
+  - **Design Goal:** Apply the architecture used in `projects.ts` (extracting logic to `*Services` class, inheriting from `BaseService`, and injecting via DI) to the rest of the edge application routes (e.g. `scans`, `runners`, `auth`, `misc`, `rbac`).
+  - **Implementation Details:**
+    - Isolate D1 queries and business logic from Hono HTTP handlers.
+    - Setup dependency injection factories for testing.
+    - Write robust unit tests with mocked services for each refactored route.
+

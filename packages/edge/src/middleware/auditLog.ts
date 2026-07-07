@@ -1,8 +1,7 @@
 import { Context, Next } from 'hono';
 import { Env } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
-import { getDB } from '../utils/db';
-import { ulid } from 'ulidx';
+import { AuditLogRepository } from '../repositories/auditLog';
 import { PermissionKey } from '../config/rbac';
 
 type AuditSource = 'web' | 'api_key' | 'mcp';
@@ -59,39 +58,8 @@ export function auditLog(action: PermissionKey | string, label: string) {
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const db = getDB(c.env);
-
-          const [userRow, memberRow] = await Promise.all([
-            userId
-              ? db.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first<{ username: string }>()
-              : Promise.resolve(null),
-            userId && projectId
-              ? db
-                  .prepare('SELECT role FROM project_members WHERE project_id = ? AND user_id = ?')
-                  .bind(projectId, userId)
-                  .first<{ role: string }>()
-              : Promise.resolve(null),
-          ]);
-
-          await db
-            .prepare(
-              `INSERT INTO audit_logs
-                 (id, project_id, user_id, actor_username, actor_role, action, action_label, source, details, ip_address)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            )
-            .bind(
-              ulid(),
-              projectId,
-              userId ?? null,
-              userRow?.username ?? null,
-              memberRow?.role ?? null,
-              action,
-              label,
-              source,
-              details,
-              ip ?? null
-            )
-            .run();
+          const repo = new AuditLogRepository(c.env);
+          await repo.createAuditLog(projectId, userId ?? null, action, label, source, details, ip ?? null);
         } catch (err) {
           // Audit log write failure must never break the app — silently swallow.
           console.error('[auditLog] Failed to write audit log entry:', err);
