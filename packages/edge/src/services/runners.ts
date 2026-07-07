@@ -139,6 +139,9 @@ export class RunnersService implements IRunnersService {
       return new Response('Expected Upgrade: websocket', { status: 426 });
     }
 
+    if (this.env.AUTH_ENABLED === 'true' && !userId) {
+      return new Response('Unauthorized', { status: 401 });
+    }
     if (userId) {
       await this.checkScanAccess(runId, userId, 'get:/api/projects/:id/scans');
     }
@@ -175,7 +178,15 @@ export class RunnersService implements IRunnersService {
       if (isAnon) {
         throw new Error('Forbidden|403');
       }
-      if (userId) {
+      if (this.env.AUTH_ENABLED === 'true') {
+        if (!userId) {
+          throw new Error('Unauthorized|401');
+        }
+        const hasAccess = await this.rbacRepo.checkPermission(userId, body.projectId, 'post:/api/projects/:id/scans');
+        if (!hasAccess) {
+          throw new Error('Forbidden|403');
+        }
+      } else if (userId) {
         const hasAccess = await this.rbacRepo.checkPermission(userId, body.projectId, 'post:/api/projects/:id/scans');
         if (!hasAccess) {
           throw new Error('Forbidden|403');
@@ -220,6 +231,9 @@ export class RunnersService implements IRunnersService {
   }
 
   async stopRun(runId: string, userId: string | null) {
+    if (this.env.AUTH_ENABLED === 'true' && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       await this.checkScanAccess(runId, userId, 'post:/api/projects/:id/scans');
     }
@@ -235,6 +249,9 @@ export class RunnersService implements IRunnersService {
   }
 
   async pauseRun(runId: string, userId: string | null) {
+    if (this.env.AUTH_ENABLED === 'true' && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       await this.checkScanAccess(runId, userId, 'post:/api/projects/:id/scans');
     }
@@ -250,6 +267,9 @@ export class RunnersService implements IRunnersService {
   }
 
   async resumeRun(runId: string, userId: string | null) {
+    if (this.env.AUTH_ENABLED === 'true' && !userId) {
+      throw new Error('Unauthorized|401');
+    }
     if (userId) {
       await this.checkScanAccess(runId, userId, 'post:/api/projects/:id/scans');
     }

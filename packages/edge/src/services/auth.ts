@@ -63,6 +63,7 @@ export interface IAuthService {
 }
 
 export class AuthService implements IAuthService {
+  private static tempOauthCodes = new Map<string, string>();
   constructor(private env: Env, private authRepo: IAuthRepository) {}
 
   private extractLoginMeta(c: Context<{ Bindings: Env }>): LoginHistoryMeta {
@@ -589,7 +590,7 @@ export class AuthService implements IAuthService {
   }
 
   async updateAdminUserPlan(adminSecret: string, providedSecret: string | undefined, body: any): Promise<any> {
-    if (providedSecret !== adminSecret) throw new Error('Unauthorized|401');
+    if (!providedSecret || !safeCompare(providedSecret, adminSecret)) throw new Error('Unauthorized|401');
     const { username, plan } = body;
     if (!username || !plan) throw new Error('Missing username or plan|400');
     if (plan !== 'Free' && plan !== 'Supporter Plan') throw new Error('Invalid plan. Allowed plans: Free, Supporter Plan|400');
@@ -698,6 +699,9 @@ export class AuthService implements IAuthService {
         
         if (this.env.SESSION_CACHE) {
           await this.env.SESSION_CACHE.put(`oauth_code:${exchangeCode}`, jwtToken, { expirationTtl: 60 });
+        } else {
+          AuthService.tempOauthCodes.set(`oauth_code:${exchangeCode}`, jwtToken);
+          setTimeout(() => AuthService.tempOauthCodes.delete(`oauth_code:${exchangeCode}`), 60 * 1000);
         }
         
         return { redirectUrl: `${frontendUrl}/?exchange_code=${exchangeCode}` };
@@ -715,6 +719,9 @@ export class AuthService implements IAuthService {
     if (cache) {
       token = await cache.get(key);
       if (token) await cache.delete(key);
+    } else {
+      token = AuthService.tempOauthCodes.get(key) || null;
+      if (token) AuthService.tempOauthCodes.delete(key);
     }
     if (!token) throw new Error('Invalid or expired exchange code|400');
     return { status: 'ok', token };

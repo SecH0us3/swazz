@@ -31,7 +31,8 @@ export class ScansService implements IScansService {
   ) {}
 
   private async checkScanAccess(scan: any, userId: string | null, isAuthEnabled: boolean): Promise<void> {
-    if (!isAuthEnabled || !userId) return;
+    if (!isAuthEnabled) return;
+    if (!userId) throw new Error('Unauthorized|401');
 
     if (!scan.project_id) {
       if (scan.user_id !== userId) throw new Error('Forbidden|403');
@@ -262,7 +263,8 @@ export class ScansService implements IScansService {
     const finding = await this.scansRepo.getFindingDetails(findingId);
     if (!finding) throw new Error('Finding not found|404');
 
-    if (isAuthEnabled && userId) {
+    if (isAuthEnabled) {
+      if (!userId) throw new Error('Unauthorized|401');
       if (!finding.project_id) {
         if (finding.user_id !== userId) throw new Error('Forbidden|403');
       } else {
