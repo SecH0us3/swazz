@@ -69,7 +69,22 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Env }>) {
       }
       const betaLimit = rawLimit ? parseInt(rawLimit, 10) : 50;
       if (totalUsers >= betaLimit) {
-        if (!c.env.BETA_BYPASS_CODE || inviteCode !== c.env.BETA_BYPASS_CODE) {
+        let isBypassValid = false;
+        
+        // 1. Check if it's the global bypass code
+        if (c.env.BETA_BYPASS_CODE && inviteCode === c.env.BETA_BYPASS_CODE) {
+          isBypassValid = true;
+        }
+
+        // 2. Check if it's a valid project invitation token
+        if (!isBypassValid && inviteCode) {
+          const inv = await getDB(c.env).prepare(
+            "SELECT id FROM project_invitations WHERE token = ? AND status = 'Pending' AND strftime('%s', expires_at) > strftime('%s', 'now')"
+          ).bind(inviteCode).first();
+          if (inv) isBypassValid = true;
+        }
+
+        if (!isBypassValid) {
           return c.json({ error: 'Beta registration limit reached. Please provide a valid invite code to signup.' }, 403);
         }
       }

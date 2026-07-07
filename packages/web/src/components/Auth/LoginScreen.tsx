@@ -40,6 +40,18 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
         return typeof window !== 'undefined' && (window.navigator?.webdriver || window.location.search.includes('e2e'));
     });
 
+    // Automatically pick up project invitation token from URL and open registration
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        if (token) {
+            setInviteCode(token);
+            setHasInviteCode(true);
+            setIsRegistering(true);
+            setShowModal(true);
+        }
+    }, []);
+
     const handleGithubLogin = () => {
         window.location.href = '/api/auth/login/github';
     };
