@@ -41,7 +41,7 @@ export interface IScansRepository {
   updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void>;
   getQueuedScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
-  processFindingsQueueMessages(messages: any[]): Promise<void>;
+  processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void>;
 }
 
 export class ScansRepository extends BaseService implements IScansRepository {
@@ -195,7 +195,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     const updatedFinding = await this.getFindingDetails(findingId);
     if (updatedFinding && updatedFinding.project_id) {
       const dispatchPromise = dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding).catch(err => {
-        logError(this.env, 'Webhook', "Failed to dispatch finding.triaged webhook", { error: err });
+        logError({ env: this.env, executionCtx: ctx }, 'Webhook', "Failed to dispatch finding.triaged webhook", { error: err });
       });
       if (ctx && typeof ctx.waitUntil === 'function') {
         ctx.waitUntil(dispatchPromise);
@@ -258,7 +258,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .run();
   }
 
-  async updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void> {
+  async updateScanStatus(scanId: string, status: string, summaryStats?: string, ctx?: any): Promise<void> {
     if (status === 'completed' && summaryStats) {
       await this.db.prepare("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?").bind(summaryStats, scanId).run();
     } else if (status === 'failed') {
@@ -289,12 +289,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
               completed_at: scan.completed_at
             });
           } catch (err) {
-            logError(this.env, 'Webhook', "Webhook dispatch failed", { error: err });
+            logError({ env: this.env, executionCtx: ctx }, 'Webhook', "Webhook dispatch failed", { error: err });
           }
         }
       }
     } catch (webhookErr) {
-      logError(this.env, 'Webhook', "Failed to trigger webhook from updateScanStatus", { error: webhookErr });
+      logError({ env: this.env, executionCtx: ctx }, 'Webhook', "Failed to trigger webhook from updateScanStatus", { error: webhookErr });
     }
   }
 
@@ -314,7 +314,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return row ? row.config_json : null;
   }
 
-  async processFindingsQueueMessages(messages: any[]): Promise<void> {
+  async processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void> {
     const statements: any[] = [];
     const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
 
@@ -418,7 +418,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
       await Promise.all(
         webhooksToDispatch.map(item =>
           dispatchWebhook(this.env, item.projectId, item.eventType, item.payload).catch(err => {
-            logError(this.env, 'Webhook', `Failed to dispatch webhook for event ${item.eventType}`, { error: err });
+            logError({ env: this.env, executionCtx: ctx }, 'Webhook', `Failed to dispatch webhook for event ${item.eventType}`, { error: err });
           })
         )
       );
