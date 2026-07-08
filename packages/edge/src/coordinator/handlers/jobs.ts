@@ -109,7 +109,12 @@ export class StartRunHandler implements RouteHandler {
       activeJobs.push(runId);
       runnerWs.serializeAttachment({ ...attachment, activeJobs });
     }
-    const parsedConfig = JSON.parse(configText).config;
+    let parsedConfig: any;
+    try {
+      parsedConfig = JSON.parse(configText).config;
+    } catch (err) {
+      return new Response('Invalid JSON config', { status: 400 });
+    }
     try {
       runnerWs.send(JSON.stringify({ type: 'start', runId, config: parsedConfig }));
     } catch (err) {
