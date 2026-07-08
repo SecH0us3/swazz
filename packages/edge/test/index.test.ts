@@ -2893,10 +2893,12 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const calls = warnSpy.mock.calls;
       const lastCall = calls[calls.length - 1][0];
       const parsedLog = JSON.parse(lastCall);
-      expect(parsedLog.event).toBe('slow_query');
-      expect(parsedLog.query).toBe('SELECT * FROM dummy');
-      expect(parsedLog.threshold).toBe(10);
-      expect(parsedLog.duration).toBeGreaterThanOrEqual(10);
+      expect(parsedLog.level).toBe('warn');
+      expect(parsedLog.module).toBe('Database');
+      expect(parsedLog.payload.event).toBe('slow_query');
+      expect(parsedLog.payload.query).toBe('SELECT * FROM dummy');
+      expect(parsedLog.payload.threshold).toBe(10);
+      expect(parsedLog.payload.duration).toBeGreaterThanOrEqual(10);
 
       // Verify it was saved to SESSION_CACHE
       const cached = await mockKV.get('admin:slow-queries');
