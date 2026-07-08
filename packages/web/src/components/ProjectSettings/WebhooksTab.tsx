@@ -22,7 +22,7 @@ export function WebhooksTab() {
     const [formState, setFormState] = useState<WebhookFormState>({
         url: '',
         headers: '{\n  "Authorization": "Bearer token_here"\n}',
-        event_types: ['scan.completed', 'finding.created']
+        event_types: ['scan.completed', 'finding.triaged']
     });
 
     const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
@@ -31,7 +31,6 @@ export function WebhooksTab() {
         { key: 'scan.started', label: 'Scan Started', desc: 'Triggered when a fuzzer scan run is dispatched to an active agent.' },
         { key: 'scan.completed', label: 'Scan Completed', desc: 'Triggered when a fuzzer scan run finishes successfully.' },
         { key: 'scan.failed', label: 'Scan Failed', desc: 'Triggered when a fuzzer scan run encounters errors and fails.' },
-        { key: 'finding.created', label: 'Vulnerability Discovered', desc: 'Triggered when a new API vulnerability is identified.' },
         { key: 'finding.triaged', label: 'AI Triage / Patch Generated', desc: 'Triggered when AI classification or patch validation completes.' }
     ];
 
@@ -132,7 +131,7 @@ export function WebhooksTab() {
                 setFormState({
                     url: '',
                     headers: '{\n  "Authorization": "Bearer token_here"\n}',
-                    event_types: ['scan.completed', 'finding.created']
+                    event_types: ['scan.completed', 'finding.triaged']
                 });
                 fetchWebhooks();
             } else {
@@ -244,7 +243,7 @@ export function WebhooksTab() {
                             setFormState({
                                 url: '',
                                 headers: '{\n  "Authorization": "Bearer token_here"\n}',
-                                event_types: ['scan.completed', 'finding.created']
+                                event_types: ['scan.completed', 'finding.triaged']
                             });
                             setShowForm(true);
                         }}

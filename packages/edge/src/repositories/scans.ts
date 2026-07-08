@@ -403,20 +403,6 @@ export class ScansRepository extends BaseService implements IScansRepository {
               finding.evidence || null
             )
           );
-          if (projectId) {
-            webhooksToDispatch.push({
-              projectId,
-              eventType: 'finding.created',
-              payload: {
-                id: findingId,
-                scan_id: scanId,
-                rule_id: finding.ruleId,
-                level: finding.level,
-                message: finding.message,
-                evidence: finding.evidence || null
-              }
-            });
-          }
         }
       }
     }

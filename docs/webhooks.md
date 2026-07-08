@@ -26,7 +26,6 @@ You can configure webhooks under **Project Settings > Webhooks** in the dashboar
 | `scan.started` | Scan Started | Triggered when a new fuzzer scan run starts and gets assigned to a runner agent. |
 | `scan.completed` | Scan Completed | Triggered when a fuzzer scan completes successfully. |
 | `scan.failed` | Scan Failed | Triggered when a fuzzer scan run fails or encounters errors. |
-| `finding.created` | Vulnerability Discovered | Triggered as soon as a new API vulnerability is identified by the fuzzer. |
 | `finding.triaged` | AI Triage / Patch | Triggered when AI analysis completes triage and generates proposed remediation patches. |
 
 ---
@@ -71,22 +70,6 @@ Every webhook payload conforms to the following schema:
 }
 ```
 
-#### `finding.created`
-```json
-{
-  "event": "finding.created",
-  "timestamp": "2026-07-08T19:02:10.456Z",
-  "project_id": "01KX17S88YXW30R7YAKDBVTGKR",
-  "data": {
-    "id": "7ca647dc-fa2b-474c-8822-26cb49bb55af",
-    "scan_id": "01KX17S88YXW30R7YAKDBVTG12",
-    "rule_id": "malicious_sqli",
-    "level": "error",
-    "message": "Potential SQL Injection vulnerability detected on GET /api/v1/users/{id} via parameter 'id'.",
-    "evidence": "..."
-  }
-}
-```
 
 #### `finding.triaged`
 ```json

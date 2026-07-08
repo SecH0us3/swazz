@@ -3585,7 +3585,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({
           url: "https://example.com/webhook",
           headers: { "X-Custom-Auth": "SecretTokenValue" },
-          event_types: ["scan.completed", "finding.created"]
+          event_types: ["scan.completed", "finding.triaged"]
         })
       }), testEnv);
       expect(createRes.status).toBe(201);
@@ -3603,7 +3603,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({
           url: "https://example.com/webhook-updated",
           headers: { "X-Custom-Auth": "SecretTokenValue2" },
-          event_types: ["scan.completed", "finding.created", "finding.triaged"]
+          event_types: ["scan.completed", "finding.triaged"]
         })
       }), testEnv);
       expect(updateRes.status).toBe(200);

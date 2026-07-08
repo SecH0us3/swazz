@@ -186,7 +186,7 @@ export class ProjectService implements IProjectService {
     if (!event_types || !Array.isArray(event_types) || event_types.length === 0) {
       throw new Error('Event types must be a non-empty array|400');
     }
-    const validEvents = ["scan.started", "scan.completed", "scan.failed", "finding.created", "finding.triaged"];
+    const validEvents = ["scan.started", "scan.completed", "scan.failed", "finding.triaged"];
     for (const event of event_types) {
       if (!validEvents.includes(event)) {
         throw new Error(`Invalid event type: ${event}|400`);
@@ -235,7 +235,7 @@ export class ProjectService implements IProjectService {
     if (!event_types || !Array.isArray(event_types) || event_types.length === 0) {
       throw new Error('Event types must be a non-empty array|400');
     }
-    const validEvents = ["scan.started", "scan.completed", "scan.failed", "finding.created", "finding.triaged"];
+    const validEvents = ["scan.started", "scan.completed", "scan.failed", "finding.triaged"];
     for (const event of event_types) {
       if (!validEvents.includes(event)) {
         throw new Error(`Invalid event type: ${event}|400`);
