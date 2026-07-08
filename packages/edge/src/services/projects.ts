@@ -290,7 +290,8 @@ export class ProjectService implements IProjectService {
       const response = await fetch(webhook.url, {
         method: 'POST',
         headers: headersObj,
-        body: JSON.stringify(testPayload)
+        body: JSON.stringify(testPayload),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {

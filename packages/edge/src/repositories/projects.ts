@@ -455,18 +455,48 @@ export class ProjectRepository extends BaseService implements IProjectRepository
   }
 
   async createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string): Promise<void> {
+    if (typeof id !== 'string') {
+      throw new TypeError('id must be a string');
+    }
+    if (typeof projectId !== 'string') {
+      throw new TypeError('projectId must be a string');
+    }
+    if (typeof url !== 'string') {
+      throw new TypeError('url must be a string');
+    }
+    if (headers !== null && typeof headers !== 'string') {
+      throw new TypeError('headers must be a string or null');
+    }
+    if (typeof eventTypes !== 'string') {
+      throw new TypeError('eventTypes must be a string');
+    }
     await this.db.prepare(
       'INSERT INTO project_webhooks (id, project_id, url, headers, event_types) VALUES (?, ?, ?, ?, ?)'
     ).bind(id, projectId, url, headers, eventTypes).run();
   }
 
   async updateProjectWebhook(id: string, url: string, headers: string | null, eventTypes: string): Promise<void> {
+    if (typeof id !== 'string') {
+      throw new TypeError('id must be a string');
+    }
+    if (typeof url !== 'string') {
+      throw new TypeError('url must be a string');
+    }
+    if (headers !== null && typeof headers !== 'string') {
+      throw new TypeError('headers must be a string or null');
+    }
+    if (typeof eventTypes !== 'string') {
+      throw new TypeError('eventTypes must be a string');
+    }
     await this.db.prepare(
       'UPDATE project_webhooks SET url = ?, headers = ?, event_types = ? WHERE id = ?'
     ).bind(url, headers, eventTypes, id).run();
   }
 
   async deleteProjectWebhook(id: string): Promise<void> {
+    if (typeof id !== 'string') {
+      throw new TypeError('id must be a string');
+    }
     await this.db.prepare('DELETE FROM project_webhooks WHERE id = ?').bind(id).run();
   }
 }

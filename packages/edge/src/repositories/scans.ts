@@ -29,7 +29,7 @@ export interface IScansRepository {
   getRunnerLogs(scanId: string): Promise<any[]>;
   getFindings(scanId: string): Promise<any[]>;
   getFindingDetails(findingId: string): Promise<any | null>;
-  updateFinding(findingId: string, fields: Record<string, any>): Promise<any>;
+  updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any>;
 
   getScheduledScanConfigs(): Promise<{ id: string; project_id: string; name: string; config_json: string; cron_schedule: string; last_run_at: string | null }[]>;
   getProjectOwnerForScan(projectId: string): Promise<{ id: string; public_key: string | null; plan: string | null } | undefined>;
@@ -163,7 +163,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return row || null;
   }
 
-  async updateFinding(findingId: string, fields: Record<string, any>): Promise<any> {
+  async updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any> {
     const allowedFields = [
       'ai_status',
       'ai_relevance',
@@ -194,10 +194,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
 
     const updatedFinding = await this.getFindingDetails(findingId);
     if (updatedFinding && updatedFinding.project_id) {
-      try {
-        await dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding);
-      } catch (err) {
+      const dispatchPromise = dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding).catch(err => {
         logError(this.env, 'Webhook', "Failed to dispatch finding.triaged webhook", { error: err });
+      });
+      if (ctx && typeof ctx.waitUntil === 'function') {
+        ctx.waitUntil(dispatchPromise);
+      } else {
+        await dispatchPromise;
       }
     }
 

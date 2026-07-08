@@ -214,7 +214,7 @@ describe('Scans Routes Unit Tests', () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ status: 'updated', auditDetails: { foo: 'bar' } });
-      expect(mockServices.updateFinding).toHaveBeenCalledWith('f1', { status: 'resolved' }, 'user_123', true);
+      expect(mockServices.updateFinding).toHaveBeenCalledWith('f1', { status: 'resolved' }, 'user_123', true, undefined);
     });
 
     it('returns error', async () => {

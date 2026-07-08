@@ -165,8 +165,13 @@ export function registerScansRoutes(
     const userId = await getUserIdFromRequest(c);
     const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
 
+    let executionCtx: any = undefined;
     try {
-      const result = await services.updateFinding(findingId, body, userId, isAuthEnabled);
+      executionCtx = c.executionCtx;
+    } catch {}
+
+    try {
+      const result = await services.updateFinding(findingId, body, userId, isAuthEnabled, executionCtx);
       return c.json(result);
     } catch (err: any) {
       const parts = err.message.split('|');
