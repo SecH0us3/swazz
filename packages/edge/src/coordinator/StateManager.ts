@@ -1,3 +1,5 @@
+import { getPublicKeyFromTags, getRunIdFromTags } from './utils';
+
 export class StateManager {
   runners = new Set<WebSocket>();
   clients = new Map<string, Set<WebSocket>>();
@@ -27,7 +29,7 @@ export class StateManager {
           this.pendingChallenges.set(ws, attachment.nonce);
         }
       } else if (tags.includes('client')) {
-        const runId = tags.find(t => t !== 'client');
+        const runId = getRunIdFromTags(tags);
         if (runId) {
           if (!this.clients.has(runId)) {
             this.clients.set(runId, new Set());
@@ -40,12 +42,6 @@ export class StateManager {
 
   isPrivateRunner(ws: WebSocket): boolean {
     const tags = this.state.getTags(ws);
-    return tags.some(tag => 
-      tag !== 'runner' && 
-      tag !== 'runner-pending' && 
-      !tag.startsWith('name:') && 
-      !tag.startsWith('version:') &&
-      !tag.startsWith('user_id:')
-    );
+    return !!getPublicKeyFromTags(tags);
   }
 }

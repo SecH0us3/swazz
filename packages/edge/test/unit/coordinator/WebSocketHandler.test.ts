@@ -256,4 +256,27 @@ describe('WebSocketHandler', () => {
 
     expect(spyClose).toHaveBeenCalledWith(mockWs, 1011, 'Error', false);
   });
+
+  it('should decode and parse ArrayBuffer messages correctly', async () => {
+    mockState.getTags.mockReturnValue(['runner-pending', 'name:test-runner', 'version:1.2.3', 'user_id:user-1', 'aabbccddeeff']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    stateManager.pendingChallenges.set(mockWs, 'challenge-nonce-123');
+
+    const msg = {
+      type: 'challenge_response',
+      signature: '1122334455'
+    };
+
+    const arrayBuffer = new TextEncoder().encode(JSON.stringify(msg)).buffer;
+    vi.spyOn(queueService, 'checkAndDispatchQueuedScans').mockResolvedValue();
+
+    await handler.handleMessage(mockWs, arrayBuffer);
+
+    expect(spyImportKey).toHaveBeenCalled();
+    expect(spyVerify).toHaveBeenCalled();
+    expect(stateManager.runners.has(mockWs)).toBe(true);
+  });
 });

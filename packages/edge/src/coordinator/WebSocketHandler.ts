@@ -3,7 +3,7 @@ import { StateManager } from './StateManager';
 import { QueueService } from './QueueService';
 import { ScansRepository } from '../repositories/scans';
 import { ulid } from 'ulidx';
-import { isVersionOutdated } from './utils';
+import { isVersionOutdated, getPublicKeyFromTags, getRunIdFromTags } from './utils';
 import { logError, logWarn } from '../../../common/logging/logger';
 
 export class WebSocketHandler {
@@ -15,20 +15,23 @@ export class WebSocketHandler {
   ) {}
 
   async handleMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    let messageStr: string;
+    if (typeof message === 'string') {
+      messageStr = message;
+    } else if (message instanceof ArrayBuffer) {
+      messageStr = new TextDecoder().decode(message);
+    } else {
+      return;
+    }
+
     const tags = this.state.getTags(ws);
     
     if (tags.includes('runner-pending') && !this.stateManager.runners.has(ws)) {
       try {
-        const msg = JSON.parse(message as string);
+        const msg = JSON.parse(messageStr);
         if (msg.type === 'challenge_response') {
           const nonce = this.stateManager.pendingChallenges.get(ws);
-          const publicKey = tags.find(t => 
-            t !== 'runner-pending' && 
-            t !== 'runner' && 
-            !t.startsWith('name:') && 
-            !t.startsWith('version:') && 
-            !t.startsWith('user_id:')
-          );
+          const publicKey = getPublicKeyFromTags(tags);
           if (!nonce || !publicKey) {
             ws.close(1008, "Invalid authentication state");
             return;
@@ -89,7 +92,7 @@ export class WebSocketHandler {
     
     if (tags.includes('runner') || this.stateManager.runners.has(ws)) {
       try {
-        const msg = JSON.parse(message as string);
+        const msg = JSON.parse(messageStr);
         
         if (msg.type === 'parse_result') {
           const resolve = this.stateManager.pendingParses.get(msg.reqId);
@@ -221,14 +224,7 @@ export class WebSocketHandler {
         }
       }
     } else if (tags.includes('client')) {
-      const runId = tags.find(t => 
-        t !== 'client' &&
-        t !== 'runner' &&
-        t !== 'runner-pending' &&
-        !t.startsWith('name:') &&
-        !t.startsWith('version:') &&
-        !t.startsWith('user_id:')
-      );
+      const runId = getRunIdFromTags(tags);
       if (runId && this.stateManager.clients.has(runId)) {
         this.stateManager.clients.get(runId)!.delete(ws);
         if (this.stateManager.clients.get(runId)!.size === 0) {

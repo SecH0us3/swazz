@@ -36,3 +36,24 @@ export function isVersionOutdated(runnerVer: string, coordVer: string): boolean 
   
   return false;
 }
+
+export function getPublicKeyFromTags(tags: string[]): string | undefined {
+  return tags.find(t =>
+    t !== 'runner-pending' &&
+    t !== 'runner' &&
+    !t.startsWith('name:') &&
+    !t.startsWith('version:') &&
+    !t.startsWith('user_id:')
+  );
+}
+
+export function getRunIdFromTags(tags: string[]): string | undefined {
+  return tags.find(t =>
+    t !== 'client' &&
+    t !== 'runner' &&
+    t !== 'runner-pending' &&
+    !t.startsWith('name:') &&
+    !t.startsWith('version:') &&
+    !t.startsWith('user_id:')
+  );
+}

@@ -4,7 +4,7 @@ import { QueueService } from './QueueService';
 import { ScansRepository } from '../repositories/scans';
 import { ulid } from 'ulidx';
 import { logError, logWarn } from '../../../common/logging/logger';
-import { isVersionOutdated } from './utils';
+import { isVersionOutdated, getPublicKeyFromTags } from './utils';
 
 export class RequestHandler {
   constructor(
@@ -332,13 +332,7 @@ export class RequestHandler {
       for (const ws of this.stateManager.runners) {
         const tags = this.state.getTags(ws);
         const isPending = tags.includes('runner-pending');
-        const pubKey = tags.find(t => 
-          t !== 'runner-pending' && 
-          t !== 'runner' && 
-          !t.startsWith('name:') && 
-          !t.startsWith('version:') && 
-          !t.startsWith('user_id:')
-        ) || null;
+        const pubKey = getPublicKeyFromTags(tags) || null;
         const nameTag = tags.find(t => t.startsWith('name:'));
         const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
         const versionTag = tags.find(t => t.startsWith('version:'));
@@ -397,13 +391,7 @@ export class RequestHandler {
       }
 
       const tags = this.state.getTags(runnerWs);
-      const pubKey = tags.find(t => 
-        t !== 'runner-pending' && 
-        t !== 'runner' && 
-        !t.startsWith('name:') && 
-        !t.startsWith('version:') && 
-        !t.startsWith('user_id:')
-      ) || null;
+      const pubKey = getPublicKeyFromTags(tags) || null;
 
       if (!pubKey) {
         return new Response('Forbidden: Shared runners cannot be restarted', { status: 403 });
@@ -446,11 +434,9 @@ export class RequestHandler {
         const connectionId = ulid();
         server.serializeAttachment({ authenticated: false, nonce, connectionId });
         
-        setTimeout(() => {
-          try {
-            server.send(JSON.stringify({ type: 'challenge', nonce }));
-          } catch { /* ignored */ }
-        }, 50);
+        try {
+          server.send(JSON.stringify({ type: 'challenge', nonce }));
+        } catch { /* ignored */ }
         
         setTimeout(() => {
           try {
