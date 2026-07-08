@@ -73,6 +73,7 @@ describe('WebSocketHandler', () => {
   });
 
   it('should correctly handle WebSocket close for clients', async () => {
+    mockState.getTags.mockReturnValue(['client', 'name:cli', 'version:1.0', 'user_id:admin', 'run-123']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -84,7 +85,7 @@ describe('WebSocketHandler', () => {
   });
 
   it('should authenticate a pending runner with a valid challenge response', async () => {
-    mockState.getTags.mockReturnValue(['runner-pending', 'aabbccddeeff']);
+    mockState.getTags.mockReturnValue(['runner-pending', 'name:test-runner', 'version:1.2.3', 'user_id:user-1', 'aabbccddeeff']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
     const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
@@ -165,8 +166,11 @@ describe('WebSocketHandler', () => {
     // rawSpec should be deleted from client payload
     expect(body.rawSpec).toBeUndefined();
 
-    // R2 storage should have been updated in background (allow async loop to trigger)
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // Await the promise passed to state.waitUntil
+    const waitUntilPromise = mockState.waitUntil.mock.calls[0]?.[0];
+    if (waitUntilPromise) {
+      await waitUntilPromise;
+    }
     expect(mockEnv.STORAGE.put).toHaveBeenCalled();
     expect(mockUpsertSwaggerCache).toHaveBeenCalled();
   });

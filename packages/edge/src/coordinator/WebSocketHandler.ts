@@ -22,7 +22,13 @@ export class WebSocketHandler {
         const msg = JSON.parse(message as string);
         if (msg.type === 'challenge_response') {
           const nonce = this.stateManager.pendingChallenges.get(ws);
-          const publicKey = tags.find(t => t !== 'runner-pending');
+          const publicKey = tags.find(t => 
+            t !== 'runner-pending' && 
+            t !== 'runner' && 
+            !t.startsWith('name:') && 
+            !t.startsWith('version:') && 
+            !t.startsWith('user_id:')
+          );
           if (!nonce || !publicKey) {
             ws.close(1008, "Invalid authentication state");
             return;
@@ -97,7 +103,7 @@ export class WebSocketHandler {
               const scansRepo = new ScansRepository(this.env);
               const storage = this.env.STORAGE;
               
-              (async () => {
+              this.state.waitUntil((async () => {
                 try {
                   const basePath = msg.payload.basePath || '';
                   const endpoints = msg.payload.endpoints || [];
@@ -133,7 +139,7 @@ export class WebSocketHandler {
                 } catch (cacheErr) {
                   logError(this.env, "Coordinator", "Failed to write swagger cache in background", { error: cacheErr });
                 }
-              })();
+              })());
             }
 
             const clientPayload = { ...msg.payload };
@@ -215,7 +221,14 @@ export class WebSocketHandler {
         }
       }
     } else if (tags.includes('client')) {
-      const runId = tags.find(t => t !== 'client');
+      const runId = tags.find(t => 
+        t !== 'client' &&
+        t !== 'runner' &&
+        t !== 'runner-pending' &&
+        !t.startsWith('name:') &&
+        !t.startsWith('version:') &&
+        !t.startsWith('user_id:')
+      );
       if (runId && this.stateManager.clients.has(runId)) {
         this.stateManager.clients.get(runId)!.delete(ws);
         if (this.stateManager.clients.get(runId)!.size === 0) {
