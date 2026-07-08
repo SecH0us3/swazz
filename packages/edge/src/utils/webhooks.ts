@@ -65,7 +65,8 @@ export async function dispatchWebhook(
       const response = await fetch(webhook.url, {
         method: 'POST',
         headers: headersObj,
-        body: JSON.stringify(webhookPayload)
+        body: JSON.stringify(webhookPayload),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {

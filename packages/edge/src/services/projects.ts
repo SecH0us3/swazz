@@ -141,7 +141,20 @@ export class ProjectService implements IProjectService {
 
   async getProjectWebhooks(projectId: string) {
     const webhooks = await this.projectRepo.getProjectWebhooks(projectId);
-    return { webhooks };
+    const parsedWebhooks = webhooks.map(w => {
+      try {
+        return {
+          ...w,
+          event_types: typeof w.event_types === 'string' ? JSON.parse(w.event_types) : w.event_types
+        };
+      } catch {
+        return {
+          ...w,
+          event_types: []
+        };
+      }
+    });
+    return { webhooks: parsedWebhooks };
   }
 
   async createProjectWebhook(projectId: string, body: any) {

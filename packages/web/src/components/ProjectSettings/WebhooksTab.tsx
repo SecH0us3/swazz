@@ -147,7 +147,7 @@ export function WebhooksTab() {
     };
 
     const handleEdit = (webhook: Webhook) => {
-        let headersFormatted = '{\n  "Authorization": "Bearer token_here"\n}';
+        let headersFormatted = '';
         if (webhook.headers) {
             try {
                 headersFormatted = JSON.stringify(JSON.parse(webhook.headers), null, 2);
@@ -339,7 +339,9 @@ export function WebhooksTab() {
                             {webhooks.map(webhook => {
                                 const events: string[] = [];
                                 try {
-                                    const parsed = JSON.parse(webhook.event_types as any);
+                                    const parsed = typeof webhook.event_types === 'string'
+                                        ? JSON.parse(webhook.event_types)
+                                        : webhook.event_types;
                                     if (Array.isArray(parsed)) {
                                         events.push(...parsed);
                                     }

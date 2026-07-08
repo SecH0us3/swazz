@@ -3615,7 +3615,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const getBody2 = await getRes2.json();
       expect(getBody2.webhooks.length).toBe(1);
       expect(getBody2.webhooks[0].url).toBe("https://example.com/webhook-updated");
-      expect(JSON.parse(getBody2.webhooks[0].event_types)).toContain("finding.triaged");
+      expect(getBody2.webhooks[0].event_types).toContain("finding.triaged");
     });
 
     it("triggers test webhook request", async () => {
