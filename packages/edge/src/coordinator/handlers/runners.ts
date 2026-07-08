@@ -136,7 +136,7 @@ export class ConnectRunnerHandler implements RouteHandler {
 
       const coordinatorVersion = context.env.VERSION || '1.0.0';
       if (isVersionOutdated(version, coordinatorVersion)) {
-        logWarn(context.env, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' (Shared) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+        logWarn({ env: context.env, executionCtx: context.state }, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' (Shared) is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
       }
 
       await context.queueService.checkAndDispatchQueuedScans(server);

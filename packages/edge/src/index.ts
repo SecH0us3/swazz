@@ -413,9 +413,9 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: any, env: Env, ctx: any) {
-    ctx.waitUntil(cleanupExpiredGuests(getDB(env, undefined, ctx), env));
-    ctx.waitUntil(cleanupScheduledDeletions(env));
-    ctx.waitUntil(cleanupSecurityTables(getDB(env, undefined, ctx), env));
+    ctx.waitUntil(cleanupExpiredGuests(getDB(env, undefined, ctx), env, ctx));
+    ctx.waitUntil(cleanupScheduledDeletions(env, ctx));
+    ctx.waitUntil(cleanupSecurityTables(getDB(env, undefined, ctx), env, ctx));
     ctx.waitUntil(handleScheduledScans(env));
   },
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
@@ -435,29 +435,29 @@ export default {
           const doRes = await stub.fetch(doReq as any);
           if (doRes.ok) {
             const scansRepo = new ScansRepository(env);
-            await scansRepo.updateScanStatus(msg.body.runId, 'dispatched');
+            await scansRepo.updateScanStatus(msg.body.runId, 'dispatched', undefined, ctx);
             msg.ack();
           } else if (doRes.status === 503) {
             // Keep status as 'queued' in D1 and acknowledge the message so that when a runner connects, the coordinator DO will pull and assign it.
             msg.ack();
           } else {
-            logError(env, "Queue", `SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
+            logError({ env, executionCtx: ctx }, "Queue", `SCAN_QUEUE dispatch failed with status ${doRes.status} for run ${msg.body.runId}`);
             msg.retry();
           }
         } catch (err) {
-          logError(env, "Queue", `SCAN_QUEUE dispatch failed for run ${msg.body.runId}`, { error: err });
+          logError({ env, executionCtx: ctx }, "Queue", `SCAN_QUEUE dispatch failed for run ${msg.body.runId}`, { error: err });
           msg.retry();
         }
       }
     } else if (batch.queue === 'swazz-findings-queue') {
       try {
         const scansRepo = new ScansRepository(env);
-        await scansRepo.processFindingsQueueMessages(batch.messages);
+        await scansRepo.processFindingsQueueMessages(batch.messages, ctx);
         for (const msg of batch.messages) {
           msg.ack();
         }
       } catch (err) {
-        logError(env, "Queue", "Failed to bulk insert findings and events", { error: err });
+        logError({ env, executionCtx: ctx }, "Queue", "Failed to bulk insert findings and events", { error: err });
         throw err;
       }
     }

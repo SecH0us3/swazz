@@ -100,7 +100,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
       'User-Agent': 'Swazz-Webhook-Dispatcher/1.0'
     });
 
-    expect(logInfo).toHaveBeenCalledWith(mockEnv, 'Webhook', expect.stringContaining('Dispatching scan.completed webhook'));
+    expect(logInfo).toHaveBeenCalledWith({ env: mockEnv, executionCtx: ctx }, 'Webhook', expect.stringContaining('Dispatching scan.completed webhook'));
   });
 
   it('should fallback to direct await if ctx.waitUntil is not provided', async () => {
@@ -129,7 +129,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(logError).toHaveBeenCalledWith(
-      mockEnv,
+      { env: mockEnv, executionCtx: undefined },
       'Webhook',
       'Failed to retrieve webhooks for project proj-123',
       { error: dbError }
@@ -190,7 +190,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
       'User-Agent': 'Swazz-Webhook-Dispatcher/1.0'
     });
     expect(logError).toHaveBeenCalledWith(
-      mockEnv,
+      { env: mockEnv, executionCtx: undefined },
       'Webhook',
       'Failed to parse custom headers for webhook wh-1',
       { error: expect.any(SyntaxError) }
@@ -217,7 +217,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(logError).toHaveBeenCalledWith(
-      mockEnv,
+      { env: mockEnv, executionCtx: undefined },
       'Webhook',
       'Webhook wh-1 returned non-OK status 502 for event scan.completed'
     );
@@ -241,7 +241,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(logError).toHaveBeenCalledWith(
-      mockEnv,
+      { env: mockEnv, executionCtx: undefined },
       'Webhook',
       'Failed to dispatch webhook wh-1 to https://example.com/webhook1',
       { error: networkError }

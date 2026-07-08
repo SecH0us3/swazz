@@ -58,7 +58,7 @@ export class WebSocketHandler {
               nonceBuffer
             );
           } catch (err) {
-            logError(this.env, "Coordinator", "Runner Ed25519 verify failed", { error: err });
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Runner Ed25519 verify failed", { error: err });
           }
           
           if (isValid) {
@@ -74,7 +74,7 @@ export class WebSocketHandler {
             const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
             const coordinatorVersion = this.env.VERSION || '1.0.0';
             if (isVersionOutdated(version, coordinatorVersion)) {
-              logWarn(this.env, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
+              logWarn({ env: this.env, executionCtx: this.state }, "Coordinator", `[Runner Connection] Outdated runner agent connected: '${name}' is running version ${version}, but coordinator expects version ${coordinatorVersion}. Please update the agent.`);
             }
 
             await this.queueService.checkAndDispatchQueuedScans(ws);
@@ -84,7 +84,7 @@ export class WebSocketHandler {
           }
         }
       } catch (err) {
-        logError(this.env, "Coordinator", "Failed to process runner challenge response", { error: err });
+        logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to process runner challenge response", { error: err });
         ws.close(1008, "Invalid auth request format");
       }
       return;
@@ -140,7 +140,7 @@ export class WebSocketHandler {
                   
                   await scansRepo.upsertSwaggerCache(urlStr, basePath, endpointsHash, endpointsR2Key, rawSpecR2Key);
                 } catch (cacheErr) {
-                  logError(this.env, "Coordinator", "Failed to write swagger cache in background", { error: cacheErr });
+                  logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to write swagger cache in background", { error: cacheErr });
                 }
               })());
             }
@@ -173,7 +173,7 @@ export class WebSocketHandler {
               type: msg.type,
               payload: msg.payload
             }).catch(qErr => {
-              logError(this.env, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
+              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
             })
           );
 
@@ -208,7 +208,7 @@ export class WebSocketHandler {
           }
         }
       } catch (e) {
-        logError(this.env, "Coordinator", "Failed to parse runner message", { error: e });
+        logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to parse runner message", { error: e });
       }
     }
   }

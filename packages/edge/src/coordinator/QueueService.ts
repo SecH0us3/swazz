@@ -45,7 +45,7 @@ export class QueueService {
               config = JSON.parse(configJson);
             }
           } catch (err) {
-            logError(this.env, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to fetch config from scan_configs", { error: err });
           }
         }
         if (!config) {
@@ -91,7 +91,7 @@ export class QueueService {
           try {
             await scansRepo.updateScanStatus(runId, 'dispatched');
           } catch (dbErr) {
-            logError(this.env, "Coordinator", "Failed to update scan status to dispatched", { error: dbErr });
+            logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to update scan status to dispatched", { error: dbErr });
           }
 
           await this.state.storage.delete(`config:${runId}`);
@@ -100,7 +100,7 @@ export class QueueService {
         }
       }
     } catch (err) {
-      logError(this.env, "Coordinator", "Error in checkAndDispatchQueuedScans", { error: err });
+      logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Error in checkAndDispatchQueuedScans", { error: err });
     }
   }
 }

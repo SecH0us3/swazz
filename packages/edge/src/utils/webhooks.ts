@@ -20,7 +20,7 @@ export async function dispatchWebhook(
     ).bind(projectId).all<Webhook>();
     webhooks = results || [];
   } catch (err) {
-    logError(env, 'Webhook', `Failed to retrieve webhooks for project ${projectId}`, { error: err });
+    logError({ env, executionCtx: ctx }, 'Webhook', `Failed to retrieve webhooks for project ${projectId}`, { error: err });
     return;
   }
 
@@ -56,12 +56,12 @@ export async function dispatchWebhook(
         const parsed = JSON.parse(webhook.headers);
         Object.assign(headersObj, parsed);
       } catch (err) {
-        logError(env, 'Webhook', `Failed to parse custom headers for webhook ${webhook.id}`, { error: err });
+        logError({ env, executionCtx: ctx }, 'Webhook', `Failed to parse custom headers for webhook ${webhook.id}`, { error: err });
       }
     }
 
     try {
-      logInfo(env, 'Webhook', `Dispatching ${eventType} webhook to ${webhook.url}`);
+      logInfo({ env, executionCtx: ctx }, 'Webhook', `Dispatching ${eventType} webhook to ${webhook.url}`);
       const response = await fetch(webhook.url, {
         method: 'POST',
         headers: headersObj,
@@ -70,12 +70,12 @@ export async function dispatchWebhook(
       });
 
       if (!response.ok) {
-        logError(env, 'Webhook', `Webhook ${webhook.id} returned non-OK status ${response.status} for event ${eventType}`);
+        logError({ env, executionCtx: ctx }, 'Webhook', `Webhook ${webhook.id} returned non-OK status ${response.status} for event ${eventType}`);
       } else {
-        logInfo(env, 'Webhook', `Webhook ${webhook.id} dispatched successfully`);
+        logInfo({ env, executionCtx: ctx }, 'Webhook', `Webhook ${webhook.id} dispatched successfully`);
       }
     } catch (err) {
-      logError(env, 'Webhook', `Failed to dispatch webhook ${webhook.id} to ${webhook.url}`, { error: err });
+      logError({ env, executionCtx: ctx }, 'Webhook', `Failed to dispatch webhook ${webhook.id} to ${webhook.url}`, { error: err });
     }
   });
 

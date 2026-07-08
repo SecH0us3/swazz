@@ -53,7 +53,7 @@ export class ParseHandler implements RouteHandler {
           }
         }
       } catch (dbErr) {
-        logError(context.env, "Coordinator", "Failed to read swagger cache from DB/R2", { error: dbErr });
+        logError({ env: context.env, executionCtx: context.state }, "Coordinator", "Failed to read swagger cache from DB/R2", { error: dbErr });
       }
     }
 

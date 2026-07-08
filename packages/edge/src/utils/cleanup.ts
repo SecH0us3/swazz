@@ -4,32 +4,32 @@ import { hashApiKey } from './auth';
 import { CleanupRepository } from '../repositories/cleanup';
 import type { Env } from '../env';
 
-export async function cleanupSecurityTables(db: D1Database, env?: any): Promise<void> {
+export async function cleanupSecurityTables(db: D1Database, env?: any, ctx?: any): Promise<void> {
   try {
     const repo = new CleanupRepository({ DB: db } as any);
     const changes = await repo.cleanupSecurityTables();
 
     if (changes.challenges > 0) {
-      logInfo(env, "Cleanup", `Cleaned up ${changes.challenges} expired login challenges.`);
+      logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.challenges} expired login challenges.`);
     }
     if (changes.rateLimits > 0) {
-      logInfo(env, "Cleanup", `Cleaned up ${changes.rateLimits} expired rate limits.`);
+      logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.rateLimits} expired rate limits.`);
     }
     if (changes.loginHistory > 0) {
-      logInfo(env, "Cleanup", `Cleaned up ${changes.loginHistory} user login history logs older than 90 days.`);
+      logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.loginHistory} user login history logs older than 90 days.`);
     }
     if (changes.auditLogs > 0) {
-      logInfo(env, "Cleanup", `Cleaned up ${changes.auditLogs} audit logs older than 45 days.`);
+      logInfo({ env, executionCtx: ctx }, "Cleanup", `Cleaned up ${changes.auditLogs} audit logs older than 45 days.`);
     }
   } catch (err) {
-    logError(env, "Cleanup", "Failed to clean up security tables", { error: err });
+    logError({ env, executionCtx: ctx }, "Cleanup", "Failed to clean up security tables", { error: err });
   }
 }
 
-export async function cleanupExpiredGuests(db: D1Database, env?: any): Promise<void> {
+export async function cleanupExpiredGuests(db: D1Database, env?: any, ctx?: any): Promise<void> {
   try {
     // Run security tables cleanup at the same time
-    await cleanupSecurityTables(db, env);
+    await cleanupSecurityTables(db, env, ctx);
 
     const repo = new CleanupRepository({ DB: db } as any);
     const expiredGuests = await repo.getExpiredGuestUsers();
@@ -38,19 +38,19 @@ export async function cleanupExpiredGuests(db: D1Database, env?: any): Promise<v
       return;
     }
 
-    logInfo(env, "Cleanup", `Found ${expiredGuests.length} expired guest users to clean up.`);
+    logInfo({ env, executionCtx: ctx }, "Cleanup", `Found ${expiredGuests.length} expired guest users to clean up.`);
 
     for (const user of expiredGuests) {
       const projectIds = await repo.getProjectsOwnedByUser(user.id);
       await repo.deleteGuestUserData(user.id, projectIds, user.username);
     }
-    logInfo(env, "Cleanup", "Cleanup of expired guest users completed successfully.");
+    logInfo({ env, executionCtx: ctx }, "Cleanup", "Cleanup of expired guest users completed successfully.");
   } catch (err) {
-    logError(env, "Cleanup", "Failed to clean up expired guest users", { error: err });
+    logError({ env, executionCtx: ctx }, "Cleanup", "Failed to clean up expired guest users", { error: err });
   }
 }
 
-export async function cleanupScheduledDeletions(env: Env): Promise<void> {
+export async function cleanupScheduledDeletions(env: Env, ctx?: any): Promise<void> {
   try {
     const repo = new CleanupRepository(env);
     const expiredDeletions = await repo.getExpiredScheduledDeletions();
@@ -62,7 +62,7 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
     const userIds = expiredDeletions.map(u => u.id);
     const usernames = expiredDeletions.map(u => u.username);
 
-    logInfo(env, "Cleanup", `Found ${userIds.length} accounts to permanently delete (grace period expired).`);
+    logInfo({ env, executionCtx: ctx }, "Cleanup", `Found ${userIds.length} accounts to permanently delete (grace period expired).`);
 
     // 1. Fetch projects owned by these users (to cascade delete owned projects/scans)
     const ownedProjectIds = await repo.getProjectsOwnedByUsers(userIds);
@@ -73,7 +73,7 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
       try {
         await env.STORAGE.delete(url);
       } catch (r2Err) {
-        logError(env, "Cleanup", `Failed to delete R2 report object ${url}`, { error: r2Err });
+        logError({ env, executionCtx: ctx }, "Cleanup", `Failed to delete R2 report object ${url}`, { error: r2Err });
       }
     }
 
@@ -86,10 +86,10 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
           method: 'POST'
         }) as any);
         if (!doRes.ok) {
-          logError(env, "Cleanup", `Failed to revoke runner connections in DO for user ${userId}`, { error: await doRes.text() });
+          logError({ env, executionCtx: ctx }, "Cleanup", `Failed to revoke runner connections in DO for user ${userId}`, { error: await doRes.text() });
         }
       } catch (doErr) {
-        logError(env, "Cleanup", `Failed to invoke DO /revoke-user for user ${userId}`, { error: doErr });
+        logError({ env, executionCtx: ctx }, "Cleanup", `Failed to invoke DO /revoke-user for user ${userId}`, { error: doErr });
       }
     }));
 
@@ -121,8 +121,8 @@ export async function cleanupScheduledDeletions(env: Env): Promise<void> {
       }
     }
 
-    logInfo(env, "Cleanup", `Permanently deleted ${userIds.length} users after grace period.`);
+    logInfo({ env, executionCtx: ctx }, "Cleanup", `Permanently deleted ${userIds.length} users after grace period.`);
   } catch (err) {
-    logError(env, "Cleanup", "Failed to process scheduled account deletions", { error: err });
+    logError({ env, executionCtx: ctx }, "Cleanup", "Failed to process scheduled account deletions", { error: err });
   }
 }
