@@ -87,6 +87,14 @@ This file contains completed tasks.
     - Implemented import/recovery fields in the project initialization UI flow to allow users to enter a seed phrase or upload a `.swazzkey` file to restore the private key to local IndexedDB (`KeyStorage`).
     - Derived the X25519 private key from the mnemonic seed phrase using PBKDF2 client-side derivation and standard wordlist validation.
 
+- [x] **Task 112: Webhook Notifications & Report Upload Integration**
+  - **Design Goal:** Support webhook notifications to allow uploading fuzzer findings/reports (including validated AI findings/remediation recommendations) to user-specified URLs.
+  - **Implementation Details:**
+    - Add a `webhooks` configuration section to Project Settings (allowing users to define target URLs, authentication headers, and toggle event types).
+    - Save webhook configurations in D1.
+    - When fuzzer events or findings are logged (including after LLM triage and patch validation), serialize the finding reports and queue a webhook delivery.
+    - The edge backend stores the original reports in the D1 database, but the webhook delivery must dispatch the reports out to the client's destination URL asynchronously (e.g. using Cloudflare Workers outbound fetch, decoupled via findings queues).
+
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.
