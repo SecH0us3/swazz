@@ -90,7 +90,10 @@ export class CommandHandler implements RouteHandler {
 
 export class StartRunHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
-    const runId = url.searchParams.get('runId')!;
+    const runId = url.searchParams.get('runId');
+    if (!runId) {
+      return new Response('Missing runId', { status: 400 });
+    }
     const configText = await request.text();
     const activeRunners = Array.from(context.stateManager.runners);
     if (activeRunners.length === 0) return new Response("No runners available", { status: 503 });
@@ -127,8 +130,11 @@ export class StartRunHandler implements RouteHandler {
 
 export class ControlRunHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
-    const runId = url.searchParams.get('runId')!;
-    const action = url.searchParams.get('action')!;
+    const runId = url.searchParams.get('runId');
+    const action = url.searchParams.get('action');
+    if (!runId || !action) {
+      return new Response('Missing runId or action', { status: 400 });
+    }
     const runnerWs = context.stateManager.jobs.get(runId);
     if (runnerWs) {
       try {
