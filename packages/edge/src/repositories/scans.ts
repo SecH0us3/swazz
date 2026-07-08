@@ -197,7 +197,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
       try {
         await dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding);
       } catch (err) {
-        logError("Failed to dispatch finding.triaged webhook", err);
+        logError(this.env, 'Webhook', "Failed to dispatch finding.triaged webhook", { error: err });
       }
     }
 
@@ -286,12 +286,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
               completed_at: scan.completed_at
             });
           } catch (err) {
-            logError("Webhook dispatch failed", err);
+            logError(this.env, 'Webhook', "Webhook dispatch failed", { error: err });
           }
         }
       }
     } catch (webhookErr) {
-      console.error("Failed to trigger webhook from updateScanStatus", webhookErr);
+      logError(this.env, 'Webhook', "Failed to trigger webhook from updateScanStatus", { error: webhookErr });
     }
   }
 
@@ -429,7 +429,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
       await Promise.all(
         webhooksToDispatch.map(item =>
           dispatchWebhook(this.env, item.projectId, item.eventType, item.payload).catch(err => {
-            logError(`Failed to dispatch webhook for event ${item.eventType}`, err);
+            logError(this.env, 'Webhook', `Failed to dispatch webhook for event ${item.eventType}`, { error: err });
           })
         )
       );
