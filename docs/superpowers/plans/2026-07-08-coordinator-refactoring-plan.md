@@ -226,7 +226,7 @@
 - Consumes: `StateManager`
 - Produces: `QueueService` with `checkAndDispatchQueuedScans(ws)`
 
-- [ ] **Step 1: Create `packages/edge/src/coordinator/QueueService.ts`**
+- [x] **Step 1: Create `packages/edge/src/coordinator/QueueService.ts`**
   ```typescript
   import { Env } from '../env';
   import { StateManager } from './StateManager';
@@ -336,7 +336,7 @@
   }
   ```
 
-- [ ] **Step 2: Create unit tests in `packages/edge/test/unit/coordinator/QueueService.test.ts`**
+- [x] **Step 2: Create unit tests in `packages/edge/test/unit/coordinator/QueueService.test.ts`**
   ```typescript
   import { describe, it, expect, vi, beforeEach } from 'vitest';
   import { QueueService } from '../../../src/coordinator/QueueService';
@@ -387,11 +387,11 @@
   });
   ```
 
-- [ ] **Step 3: Run Vitest unit tests**
+- [x] **Step 3: Run Vitest unit tests**
   Run: `rtk npm test test/unit/coordinator/QueueService.test.ts`
   Expected: PASS
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
   Run:
   ```bash
   git add packages/edge/src/coordinator/QueueService.ts packages/edge/test/unit/coordinator/QueueService.test.ts
