@@ -14,6 +14,7 @@ import { ApiSpecsTab } from './ProjectSettings/ApiSpecsTab.js';
 import { KeysTab } from './ProjectSettings/KeysTab.js';
 import { ScheduleTab } from './ProjectSettings/ScheduleTab.js';
 import { AuditTrailTab } from './ProjectSettings/AuditTrailTab.js';
+import { WebhooksTab } from './ProjectSettings/WebhooksTab.js';
 
 interface Runner {
     connectionId: string | null;
@@ -26,7 +27,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -258,6 +259,16 @@ export function ProjectSettings() {
                         </svg>
                         Audit Trail
                     </button>
+                    <button
+                        id="tab-webhooks"
+                        className={`tab-bar-btn ${activeSubTab === 'webhooks' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('webhooks')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                        Webhooks
+                    </button>
                 </div>
 
                 {/* Main Content Area */}
@@ -283,6 +294,7 @@ export function ProjectSettings() {
                     {activeSubTab === 'raw_config' && <RawConfigTab />}
                     {activeSubTab === 'schedule' && <ScheduleTab />}
                     {activeSubTab === 'audit_trail' && <AuditTrailTab />}
+                    {activeSubTab === 'webhooks' && <WebhooksTab />}
                 </div>
             </div>
         </div>

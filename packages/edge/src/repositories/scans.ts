@@ -1,5 +1,6 @@
 import { Env } from '../env';
 import { BaseService } from './base';
+import { dispatchWebhook } from '../utils/webhooks';
 
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null): Promise<void>;
@@ -190,7 +191,14 @@ export class ScansRepository extends BaseService implements IScansRepository {
       .bind(...values)
       .run();
 
-    return this.getFindingDetails(findingId);
+    const updatedFinding = await this.getFindingDetails(findingId);
+    if (updatedFinding && updatedFinding.project_id) {
+      dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding).catch(err => {
+        console.error("Failed to dispatch finding.triaged webhook", err);
+      });
+    }
+
+    return updatedFinding;
   }
 
   async getScheduledScanConfigs(): Promise<{ id: string; project_id: string; name: string; config_json: string; cron_schedule: string; last_run_at: string | null }[]> {
@@ -254,6 +262,30 @@ export class ScansRepository extends BaseService implements IScansRepository {
     } else {
       await this.db.prepare('UPDATE scans SET status = ? WHERE id = ?').bind(status, scanId).run();
     }
+
+    try {
+      const scan = await this.getScan(scanId);
+      if (scan && scan.project_id) {
+        let eventType = '';
+        if (status === 'dispatched') eventType = 'scan.started';
+        else if (status === 'completed') eventType = 'scan.completed';
+        else if (status === 'failed') eventType = 'scan.failed';
+
+        if (eventType) {
+          dispatchWebhook(this.env, scan.project_id, eventType, {
+            scan_id: scan.id,
+            status: scan.status,
+            target_url: scan.target_url,
+            profile: scan.profile,
+            summary_stats: scan.summary_stats ? JSON.parse(scan.summary_stats) : null,
+            created_at: scan.created_at,
+            completed_at: scan.completed_at
+          }).catch(err => console.error("Webhook dispatch failed", err));
+        }
+      }
+    } catch (webhookErr) {
+      console.error("Failed to trigger webhook from updateScanStatus", webhookErr);
+    }
   }
 
   async getQueuedScans(): Promise<any[]> {
@@ -274,6 +306,26 @@ export class ScansRepository extends BaseService implements IScansRepository {
 
   async processFindingsQueueMessages(messages: any[]): Promise<void> {
     const statements: any[] = [];
+    const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
+
+    const scanIds = Array.from(new Set(messages.map(m => m.body.scanId).filter(Boolean)));
+    const scanToProject: Record<string, { projectId: string; targetUrl: string; profile: string }> = {};
+    if (scanIds.length > 0) {
+      const placeholders = scanIds.map(() => '?').join(',');
+      const { results } = await this.db.prepare(
+        `SELECT id, project_id, target_url, profile FROM scans WHERE id IN (${placeholders})`
+      ).bind(...scanIds).all<any>();
+      if (results) {
+        results.forEach(r => {
+          scanToProject[r.id] = {
+            projectId: r.project_id,
+            targetUrl: r.target_url,
+            profile: r.profile
+          };
+        });
+      }
+    }
+
     for (const msg of messages) {
       const id = crypto.randomUUID();
       const { scanId, type, payload } = msg.body;
@@ -285,21 +337,49 @@ export class ScansRepository extends BaseService implements IScansRepository {
         ).bind(id, scanId, type, payloadStr)
       );
 
+      const projInfo = scanToProject[scanId];
+      const projectId = projInfo?.projectId;
+
       if (payload && payload.type === 'complete') {
+        const stats = JSON.stringify(payload.data || {});
         statements.push(
           this.db.prepare(
             `UPDATE scans SET status = ?, completed_at = datetime('now'), summary_stats = ? WHERE id = ?`
-          ).bind('completed', JSON.stringify(payload.data || {}), scanId)
+          ).bind('completed', stats, scanId)
         );
+        if (projectId) {
+          webhooksToDispatch.push({
+            projectId,
+            eventType: 'scan.completed',
+            payload: {
+              scan_id: scanId,
+              status: 'completed',
+              target_url: projInfo.targetUrl,
+              profile: projInfo.profile,
+              summary_stats: payload.data || {}
+            }
+          });
+        }
       } else if (type === 'error' || (payload && payload.type === 'error')) {
         statements.push(
           this.db.prepare(
             `UPDATE scans SET status = ?, completed_at = datetime('now') WHERE id = ?`
           ).bind('failed', scanId)
         );
+        if (projectId) {
+          webhooksToDispatch.push({
+            projectId,
+            eventType: 'scan.failed',
+            payload: {
+              scan_id: scanId,
+              status: 'failed',
+              target_url: projInfo.targetUrl,
+              profile: projInfo.profile
+            }
+          });
+        }
       }
 
-      // Populate findings table for analytics & detail queries
       if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
         for (const finding of payload.data.analyzerFindings) {
           const findingId = crypto.randomUUID();
@@ -316,12 +396,34 @@ export class ScansRepository extends BaseService implements IScansRepository {
               finding.evidence || null
             )
           );
+          if (projectId) {
+            webhooksToDispatch.push({
+              projectId,
+              eventType: 'finding.created',
+              payload: {
+                id: findingId,
+                scan_id: scanId,
+                rule_id: finding.ruleId,
+                level: finding.level,
+                message: finding.message,
+                evidence: finding.evidence || null
+              }
+            });
+          }
         }
       }
     }
 
     if (statements.length > 0) {
       await this.db.batch(statements);
+    }
+
+    if (webhooksToDispatch.length > 0) {
+      for (const item of webhooksToDispatch) {
+        dispatchWebhook(this.env, item.projectId, item.eventType, item.payload).catch(err => {
+          console.error(`Failed to dispatch webhook for event ${item.eventType}`, err);
+        });
+      }
     }
   }
 }

@@ -56,7 +56,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
 
-- [ ] **Task 112: Webhook Notifications & Report Upload Integration**
+- [/] **Task 112: Webhook Notifications & Report Upload Integration**
   - **Design Goal:** Support webhook notifications to allow uploading fuzzer findings/reports (including validated AI findings/remediation recommendations) to user-specified URLs.
   - **Implementation Details:**
     - Add a `webhooks` configuration section to Project Settings (allowing users to define target URLs, authentication headers, and toggle event types).

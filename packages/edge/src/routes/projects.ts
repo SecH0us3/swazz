@@ -148,4 +148,75 @@ export function registerProjectsRoutes(
 
     return c.json(result);
   });
+
+  app.get('/api/projects/:id/webhooks', requirePermission('get:/api/projects/:id/webhooks'), async (c) => {
+    const services = projectServicesFactory(c.env);
+    const projectId = c.req.param('id') as string;
+    try {
+      const result = await services.getProjectWebhooks(projectId);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
+
+  app.post('/api/projects/:id/webhooks', requirePermission('post:/api/projects/:id/webhooks'), auditLog('post:/api/projects/:id/webhooks', 'Created project webhook'), async (c) => {
+    const services = projectServicesFactory(c.env);
+    const projectId = c.req.param('id') as string;
+    const body = await c.req.json();
+    try {
+      const result = await services.createProjectWebhook(projectId, body);
+      return c.json(result, 201);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
+
+  app.put('/api/projects/:id/webhooks/:webhook_id', requirePermission('put:/api/projects/:id/webhooks/:webhook_id'), auditLog('put:/api/projects/:id/webhooks/:webhook_id', 'Updated project webhook'), async (c) => {
+    const services = projectServicesFactory(c.env);
+    const projectId = c.req.param('id') as string;
+    const webhookId = c.req.param('webhook_id') as string;
+    const body = await c.req.json();
+    try {
+      const result = await services.updateProjectWebhook(projectId, webhookId, body);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
+
+  app.delete('/api/projects/:id/webhooks/:webhook_id', requirePermission('delete:/api/projects/:id/webhooks/:webhook_id'), auditLog('delete:/api/projects/:id/webhooks/:webhook_id', 'Deleted project webhook'), async (c) => {
+    const services = projectServicesFactory(c.env);
+    const projectId = c.req.param('id') as string;
+    const webhookId = c.req.param('webhook_id') as string;
+    try {
+      const result = await services.deleteProjectWebhook(projectId, webhookId);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
+
+  app.post('/api/projects/:id/webhooks/:webhook_id/test', requirePermission('post:/api/projects/:id/webhooks/:webhook_id/test'), async (c) => {
+    const services = projectServicesFactory(c.env);
+    const projectId = c.req.param('id') as string;
+    const webhookId = c.req.param('webhook_id') as string;
+    try {
+      const result = await services.testProjectWebhook(projectId, webhookId);
+      return c.json(result);
+    } catch (e: any) {
+      const parts = e.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
 }
+

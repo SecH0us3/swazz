@@ -1,5 +1,5 @@
 import { Env } from '../env';
-import { Project } from '../types';
+import { Project, Webhook } from '../types';
 import { ulid } from 'ulidx';
 import { BaseService } from './base';
 
@@ -15,6 +15,11 @@ export interface IProjectRepository {
   checkUserIsMember(projectId: string, userId: string): Promise<boolean>;
   getUserLoginHistory(userId: string, page: number, limit: number): Promise<{ history: any[]; pagination: any }>;
   getProjectAuditLogs(projectId: string, page: number, limit: number, search: string, source: string, action: string): Promise<{ logs: any[]; pagination: any }>;
+  getProjectWebhooks(projectId: string): Promise<Webhook[]>;
+  getProjectWebhook(webhookId: string): Promise<Webhook | null>;
+  createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string): Promise<void>;
+  updateProjectWebhook(id: string, url: string, headers: string | null, eventTypes: string): Promise<void>;
+  deleteProjectWebhook(id: string): Promise<void>;
 }
 
 export class ProjectRepository extends BaseService implements IProjectRepository {
@@ -427,5 +432,41 @@ export class ProjectRepository extends BaseService implements IProjectRepository
         pages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async getProjectWebhooks(projectId: string): Promise<Webhook[]> {
+    if (typeof projectId !== 'string') {
+      throw new TypeError('projectId must be a string');
+    }
+    const { results } = await this.db.prepare(
+      'SELECT * FROM project_webhooks WHERE project_id = ? ORDER BY created_at DESC'
+    ).bind(projectId).all<Webhook>();
+    return results || [];
+  }
+
+  async getProjectWebhook(webhookId: string): Promise<Webhook | null> {
+    if (typeof webhookId !== 'string') {
+      throw new TypeError('webhookId must be a string');
+    }
+    const row = await this.db.prepare(
+      'SELECT * FROM project_webhooks WHERE id = ?'
+    ).bind(webhookId).first<Webhook>();
+    return row || null;
+  }
+
+  async createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string): Promise<void> {
+    await this.db.prepare(
+      'INSERT INTO project_webhooks (id, project_id, url, headers, event_types) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, projectId, url, headers, eventTypes).run();
+  }
+
+  async updateProjectWebhook(id: string, url: string, headers: string | null, eventTypes: string): Promise<void> {
+    await this.db.prepare(
+      'UPDATE project_webhooks SET url = ?, headers = ?, event_types = ? WHERE id = ?'
+    ).bind(url, headers, eventTypes, id).run();
+  }
+
+  async deleteProjectWebhook(id: string): Promise<void> {
+    await this.db.prepare('DELETE FROM project_webhooks WHERE id = ?').bind(id).run();
   }
 }

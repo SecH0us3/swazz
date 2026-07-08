@@ -17,6 +17,11 @@ export const PERMISSIONS = {
   'post:/api/projects/:id/schedule': 'Configure scan schedule',
   'get:/api/projects/:id/members/:user_id/login-history': 'View member login history',
   'get:/api/projects/:id/audit-logs': 'View project audit trail',
+  'get:/api/projects/:id/webhooks': 'View project webhooks',
+  'post:/api/projects/:id/webhooks': 'Create project webhooks',
+  'put:/api/projects/:id/webhooks/:webhook_id': 'Edit project webhooks',
+  'delete:/api/projects/:id/webhooks/:webhook_id': 'Delete project webhooks',
+  'post:/api/projects/:id/webhooks/:webhook_id/test': 'Test project webhooks',
 };
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -45,7 +50,12 @@ export const DEFAULT_ROLES: Record<string, { name: string; permissions: Permissi
       'post:/api/projects/:id/scans',
       'get:/api/projects/:id/scans',
       'get:/api/projects/:id/members/:user_id/login-history',
-      'get:/api/projects/:id/audit-logs'
+      'get:/api/projects/:id/audit-logs',
+      'get:/api/projects/:id/webhooks',
+      'post:/api/projects/:id/webhooks',
+      'put:/api/projects/:id/webhooks/:webhook_id',
+      'delete:/api/projects/:id/webhooks/:webhook_id',
+      'post:/api/projects/:id/webhooks/:webhook_id/test'
     ]
   },
   'viewer': {
