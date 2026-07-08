@@ -1,6 +1,7 @@
 import { Env } from '../env';
 import { BaseService } from './base';
 import { dispatchWebhook } from '../utils/webhooks';
+import { logError } from '../../../common/logging/logger';
 
 export interface IScansRepository {
   createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null): Promise<void>;
@@ -193,9 +194,11 @@ export class ScansRepository extends BaseService implements IScansRepository {
 
     const updatedFinding = await this.getFindingDetails(findingId);
     if (updatedFinding && updatedFinding.project_id) {
-      dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding).catch(err => {
-        console.error("Failed to dispatch finding.triaged webhook", err);
-      });
+      try {
+        await dispatchWebhook(this.env, updatedFinding.project_id, 'finding.triaged', updatedFinding);
+      } catch (err) {
+        logError("Failed to dispatch finding.triaged webhook", err);
+      }
     }
 
     return updatedFinding;
@@ -272,15 +275,19 @@ export class ScansRepository extends BaseService implements IScansRepository {
         else if (status === 'failed') eventType = 'scan.failed';
 
         if (eventType) {
-          dispatchWebhook(this.env, scan.project_id, eventType, {
-            scan_id: scan.id,
-            status: scan.status,
-            target_url: scan.target_url,
-            profile: scan.profile,
-            summary_stats: scan.summary_stats ? JSON.parse(scan.summary_stats) : null,
-            created_at: scan.created_at,
-            completed_at: scan.completed_at
-          }).catch(err => console.error("Webhook dispatch failed", err));
+          try {
+            await dispatchWebhook(this.env, scan.project_id, eventType, {
+              scan_id: scan.id,
+              status: scan.status,
+              target_url: scan.target_url,
+              profile: scan.profile,
+              summary_stats: scan.summary_stats ? JSON.parse(scan.summary_stats) : null,
+              created_at: scan.created_at,
+              completed_at: scan.completed_at
+            });
+          } catch (err) {
+            logError("Webhook dispatch failed", err);
+          }
         }
       }
     } catch (webhookErr) {
@@ -419,11 +426,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
 
     if (webhooksToDispatch.length > 0) {
-      for (const item of webhooksToDispatch) {
-        dispatchWebhook(this.env, item.projectId, item.eventType, item.payload).catch(err => {
-          console.error(`Failed to dispatch webhook for event ${item.eventType}`, err);
-        });
-      }
+      await Promise.all(
+        webhooksToDispatch.map(item =>
+          dispatchWebhook(this.env, item.projectId, item.eventType, item.payload).catch(err => {
+            logError(`Failed to dispatch webhook for event ${item.eventType}`, err);
+          })
+        )
+      );
     }
   }
 }

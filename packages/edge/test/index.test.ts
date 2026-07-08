@@ -3546,6 +3546,35 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const getBody = await getRes.json();
       expect(getBody.webhooks).toEqual([]);
 
+      // 1b. Attempt to create with invalid protocol (ftp)
+      const invalidProtoRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: "ftp://example.com/webhook",
+          event_types: ["scan.completed"]
+        })
+      }), testEnv);
+      expect(invalidProtoRes.status).toBe(400);
+
+      // 1c. Attempt to create with invalid headers format (string that is not JSON)
+      const invalidHeadersRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: "https://example.com/webhook",
+          headers: "{ invalid json",
+          event_types: ["scan.completed"]
+        })
+      }), testEnv);
+      expect(invalidHeadersRes.status).toBe(400);
+
       // 2. Create a webhook
       const createRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
         method: "POST",

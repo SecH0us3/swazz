@@ -71,7 +71,7 @@ test.describe('Webhooks Tab E2E Tests', () => {
     await testBtn.click();
 
     // Check toast/notification
-    await expect(page.locator('.toast, div[role="status"]')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Test payload sent successfully')).toBeVisible({ timeout: 10000 });
 
     // 9. Edit Webhook
     await page.locator('button.webhook-edit-btn').click();

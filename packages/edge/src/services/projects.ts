@@ -150,15 +150,24 @@ export class ProjectService implements IProjectService {
       throw new Error('URL is required and must be a string|400');
     }
     try {
-      new URL(url);
-    } catch {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('URL protocol must be http or https|400');
+      }
+    } catch (urlErr: any) {
+      if (urlErr.message?.includes('|400')) {
+        throw urlErr;
+      }
       throw new Error('Invalid URL format|400');
     }
-    if (headers && typeof headers !== 'string') {
+    if (headers) {
       try {
-        JSON.stringify(headers);
+        const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error();
+        }
       } catch {
-        throw new Error('Headers must be a valid JSON object or string|400');
+        throw new Error('Headers must be a valid JSON object or JSON string|400');
       }
     }
     if (!event_types || !Array.isArray(event_types) || event_types.length === 0) {
@@ -190,15 +199,24 @@ export class ProjectService implements IProjectService {
       throw new Error('URL is required and must be a string|400');
     }
     try {
-      new URL(url);
-    } catch {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('URL protocol must be http or https|400');
+      }
+    } catch (urlErr: any) {
+      if (urlErr.message?.includes('|400')) {
+        throw urlErr;
+      }
       throw new Error('Invalid URL format|400');
     }
-    if (headers && typeof headers !== 'string') {
+    if (headers) {
       try {
-        JSON.stringify(headers);
+        const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error();
+        }
       } catch {
-        throw new Error('Headers must be a valid JSON object or string|400');
+        throw new Error('Headers must be a valid JSON object or JSON string|400');
       }
     }
     if (!event_types || !Array.isArray(event_types) || event_types.length === 0) {
