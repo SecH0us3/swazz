@@ -279,7 +279,7 @@ export class ScansService implements IScansService {
     return { finding: row };
   }
 
-  async updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean) {
+  async updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean, ctx?: any) {
     const finding = await this.scansRepo.getFindingDetails(findingId);
     if (!finding) throw new Error('Finding not found|404');
 
@@ -293,7 +293,7 @@ export class ScansService implements IScansService {
       }
     }
 
-    const updated = await this.scansRepo.updateFinding(findingId, body);
+    const updated = await this.scansRepo.updateFinding(findingId, body, ctx);
     return { finding: updated };
   }
 }

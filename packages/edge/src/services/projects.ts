@@ -13,6 +13,11 @@ export interface IProjectService {
   getProjectAnalytics(projectId: string, userId: string | null, period: string, isAuthEnabled: boolean): Promise<any>;
   getUserLoginHistory(projectId: string, userId: string, queryPage: string, queryLimit: string): Promise<any>;
   getProjectAuditLogs(projectId: string, queryPage: string, queryLimit: string, search: string, source: string, action: string): Promise<any>;
+  getProjectWebhooks(projectId: string): Promise<any>;
+  createProjectWebhook(projectId: string, body: any): Promise<any>;
+  updateProjectWebhook(projectId: string, webhookId: string, body: any): Promise<any>;
+  deleteProjectWebhook(projectId: string, webhookId: string): Promise<any>;
+  testProjectWebhook(projectId: string, webhookId: string): Promise<any>;
 }
 
 export class ProjectService implements IProjectService {
@@ -132,5 +137,170 @@ export class ProjectService implements IProjectService {
     const cleanAction = (action || '').trim();
 
     return this.projectRepo.getProjectAuditLogs(projectId, page, limit, cleanSearch, cleanSource, cleanAction);
+  }
+
+  async getProjectWebhooks(projectId: string) {
+    const webhooks = await this.projectRepo.getProjectWebhooks(projectId);
+    const parsedWebhooks = webhooks.map(w => {
+      try {
+        return {
+          ...w,
+          event_types: typeof w.event_types === 'string' ? JSON.parse(w.event_types) : w.event_types
+        };
+      } catch {
+        return {
+          ...w,
+          event_types: []
+        };
+      }
+    });
+    return { webhooks: parsedWebhooks };
+  }
+
+  async createProjectWebhook(projectId: string, body: any) {
+    const { url, headers, event_types } = body;
+    if (!url || typeof url !== 'string') {
+      throw new Error('URL is required and must be a string|400');
+    }
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('URL protocol must be http or https|400');
+      }
+    } catch (urlErr: any) {
+      if (urlErr.message?.includes('|400')) {
+        throw urlErr;
+      }
+      throw new Error('Invalid URL format|400');
+    }
+    if (headers) {
+      try {
+        const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error();
+        }
+      } catch {
+        throw new Error('Headers must be a valid JSON object or JSON string|400');
+      }
+    }
+    if (!event_types || !Array.isArray(event_types) || event_types.length === 0) {
+      throw new Error('Event types must be a non-empty array|400');
+    }
+    const validEvents = ["scan.started", "scan.completed", "scan.failed", "finding.triaged"];
+    for (const event of event_types) {
+      if (!validEvents.includes(event)) {
+        throw new Error(`Invalid event type: ${event}|400`);
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const headersStr = headers ? (typeof headers === 'string' ? headers : JSON.stringify(headers)) : null;
+    const eventTypesStr = JSON.stringify(event_types);
+
+    await this.projectRepo.createProjectWebhook(id, projectId, url, headersStr, eventTypesStr);
+    return { id, status: 'created' };
+  }
+
+  async updateProjectWebhook(projectId: string, webhookId: string, body: any) {
+    const webhook = await this.projectRepo.getProjectWebhook(webhookId);
+    if (!webhook || webhook.project_id !== projectId) {
+      throw new Error('Webhook not found|404');
+    }
+
+    const { url, headers, event_types } = body;
+    if (!url || typeof url !== 'string') {
+      throw new Error('URL is required and must be a string|400');
+    }
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('URL protocol must be http or https|400');
+      }
+    } catch (urlErr: any) {
+      if (urlErr.message?.includes('|400')) {
+        throw urlErr;
+      }
+      throw new Error('Invalid URL format|400');
+    }
+    if (headers) {
+      try {
+        const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error();
+        }
+      } catch {
+        throw new Error('Headers must be a valid JSON object or JSON string|400');
+      }
+    }
+    if (!event_types || !Array.isArray(event_types) || event_types.length === 0) {
+      throw new Error('Event types must be a non-empty array|400');
+    }
+    const validEvents = ["scan.started", "scan.completed", "scan.failed", "finding.triaged"];
+    for (const event of event_types) {
+      if (!validEvents.includes(event)) {
+        throw new Error(`Invalid event type: ${event}|400`);
+      }
+    }
+
+    const headersStr = headers ? (typeof headers === 'string' ? headers : JSON.stringify(headers)) : null;
+    const eventTypesStr = JSON.stringify(event_types);
+
+    await this.projectRepo.updateProjectWebhook(webhookId, url, headersStr, eventTypesStr);
+    return { status: 'updated' };
+  }
+
+  async deleteProjectWebhook(projectId: string, webhookId: string) {
+    const webhook = await this.projectRepo.getProjectWebhook(webhookId);
+    if (!webhook || webhook.project_id !== projectId) {
+      throw new Error('Webhook not found|404');
+    }
+    await this.projectRepo.deleteProjectWebhook(webhookId);
+    return { status: 'deleted' };
+  }
+
+  async testProjectWebhook(projectId: string, webhookId: string) {
+    const webhook = await this.projectRepo.getProjectWebhook(webhookId);
+    if (!webhook || webhook.project_id !== projectId) {
+      throw new Error('Webhook not found|404');
+    }
+
+    const testPayload = {
+      event: 'test.ping',
+      timestamp: new Date().toISOString(),
+      project_id: projectId,
+      webhook_id: webhookId,
+      data: {
+        message: 'This is a test notification from Swazz API Fuzzer webhook configuration.'
+      }
+    };
+
+    const headersObj: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Swazz-Webhook-Dispatcher/1.0'
+    };
+
+    if (webhook.headers) {
+      try {
+        const parsed = JSON.parse(webhook.headers);
+        Object.assign(headersObj, parsed);
+      } catch {}
+    }
+
+    try {
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers: headersObj,
+        body: JSON.stringify(testPayload),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook target returned status ${response.status}`);
+      }
+
+      return { status: 'success', statusCode: response.status };
+    } catch (err: any) {
+      throw new Error(`Webhook test failed: ${err.message}|400`);
+    }
   }
 }

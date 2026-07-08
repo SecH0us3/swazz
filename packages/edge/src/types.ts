@@ -26,3 +26,13 @@ export interface Finding {
   ai_proposed_patch?: string;
   pr_link?: string;
 }
+
+export interface Webhook {
+  id: string;
+  project_id: string;
+  url: string;
+  headers?: string | null;
+  event_types: string; // JSON array string
+  created_at?: string;
+}
+

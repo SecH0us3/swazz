@@ -262,3 +262,13 @@ export interface LoginHistoryEntry {
     two_factor_active: number;
     created_at: string;
 }
+
+export interface Webhook {
+    id: string;
+    project_id: string;
+    url: string;
+    headers?: string | null;
+    event_types: string[]; // parsed from JSON array
+    created_at?: string;
+}
+

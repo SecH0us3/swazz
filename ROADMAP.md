@@ -32,6 +32,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a tokenized forgot password flow: send recovery links/tokens via email using the [Cloudflare Email Routing Send Emails API](https://developers.cloudflare.com/email-service/get-started/send-emails/), verifying them at `/api/auth/password/reset`.
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
+- [ ] **Task 89: Webhook HMAC Signature Verification**
+  - **Design Goal:** Secure outbound webhook requests by signing payloads with a secret key using HMAC-SHA256, allowing receiver endpoints to verify request authenticity.
+  - **Implementation Details:**
+    - Generate a unique secret key (e.g., `whsec_...`) automatically upon creating a new project webhook, persisting it in the database.
+    - Display the secret key in the Project Settings webhooks configuration UI so that users can configure it on their target servers.
+    - Sign the JSON payload using Web Crypto's HMAC-SHA256 and attach the signature along with a timestamp in a custom header (e.g. `X-Swazz-Signature: t=1720000000,v1=signature_hex`) to prevent replay attacks.
+
 
 
 
@@ -55,16 +62,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Capture HTTP/HTTPS requests on specified domains in background service workers.
     - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
-
-- [ ] **Task 112: Webhook Notifications & Report Upload Integration**
-  - **Design Goal:** Support webhook notifications to allow uploading fuzzer findings/reports (including validated AI findings/remediation recommendations) to user-specified URLs.
-  - **Implementation Details:**
-    - Add a `webhooks` configuration section to Project Settings (allowing users to define target URLs, authentication headers, and toggle event types).
-    - Save webhook configurations in D1.
-    - When fuzzer events or findings are logged (including after LLM triage and patch validation), serialize the finding reports and queue a webhook delivery.
-    - The edge backend stores the original reports in the D1 database, but the webhook delivery must dispatch the reports out to the client's destination URL asynchronously (e.g. using Cloudflare Workers outbound fetch, decoupled via findings queues).
-
-
 - [ ] **Task 122: Enterprise SAML Authentication & Organizations**
   - **Design Goal:** Support SAML SSO for enterprise customers by introducing an Organizations layer to group projects and configure IdP authentication details.
   - **Implementation Details:**

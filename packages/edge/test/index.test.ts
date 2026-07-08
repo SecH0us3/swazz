@@ -3501,5 +3501,154 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(dbUser?.api_key).toBe(expectedHash);
     });
   });
+
+  describe("Webhooks API & Dispatching Integration", () => {
+    let projectId: string;
+    let token: string;
+    let webhookId: string;
+
+    beforeAll(async () => {
+      // 1. Create a project to use
+      const username = `u_webh_${Math.floor(Math.random() * 1000000)}`;
+      const pass = "Password123!";
+      await appFetchWrapper(new Request("http://localhost/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: pass })
+      }), testEnv);
+
+      const loginRes = await appFetchWrapper(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: pass })
+      }), testEnv);
+      const loginBody = await loginRes.json();
+      token = loginBody.token;
+
+      const projRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: "Webhook Project", description: "Project for testing webhooks" })
+      }), testEnv);
+      const projBody = await projRes.json();
+      projectId = projBody.id;
+    });
+
+    it("CRUD operations for project webhooks", async () => {
+      // 1. Get webhooks (should be empty initially)
+      const getRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      }), testEnv);
+      expect(getRes.status).toBe(200);
+      const getBody = await getRes.json();
+      expect(getBody.webhooks).toEqual([]);
+
+      // 1b. Attempt to create with invalid protocol (ftp)
+      const invalidProtoRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: "ftp://example.com/webhook",
+          event_types: ["scan.completed"]
+        })
+      }), testEnv);
+      expect(invalidProtoRes.status).toBe(400);
+
+      // 1c. Attempt to create with invalid headers format (string that is not JSON)
+      const invalidHeadersRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: "https://example.com/webhook",
+          headers: "{ invalid json",
+          event_types: ["scan.completed"]
+        })
+      }), testEnv);
+      expect(invalidHeadersRes.status).toBe(400);
+
+      // 2. Create a webhook
+      const createRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: "https://example.com/webhook",
+          headers: { "X-Custom-Auth": "SecretTokenValue" },
+          event_types: ["scan.completed", "finding.triaged"]
+        })
+      }), testEnv);
+      expect(createRes.status).toBe(201);
+      const createBody = await createRes.json();
+      expect(createBody.status).toBe("created");
+      webhookId = createBody.id;
+
+      // 3. Update the webhook
+      const updateRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks/${webhookId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: "https://example.com/webhook-updated",
+          headers: { "X-Custom-Auth": "SecretTokenValue2" },
+          event_types: ["scan.completed", "finding.triaged"]
+        })
+      }), testEnv);
+      expect(updateRes.status).toBe(200);
+
+      // Verify updated values
+      const getRes2 = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      }), testEnv);
+      const getBody2 = await getRes2.json();
+      expect(getBody2.webhooks.length).toBe(1);
+      expect(getBody2.webhooks[0].url).toBe("https://example.com/webhook-updated");
+      expect(getBody2.webhooks[0].event_types).toContain("finding.triaged");
+    });
+
+    it("triggers test webhook request", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      });
+
+      const testRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks/${webhookId}/test`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      }), testEnv);
+
+      expect(testRes.status).toBe(200);
+      const testBody = await testRes.json();
+      expect(testBody.status).toBe("success");
+      expect(fetchSpy).toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("deletes the webhook", async () => {
+      const deleteRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks/${webhookId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      }), testEnv);
+      expect(deleteRes.status).toBe(200);
+
+      const getRes = await appFetchWrapper(new Request(`http://localhost/api/projects/${projectId}/webhooks`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      }), testEnv);
+      const getBody = await getRes.json();
+      expect(getBody.webhooks).toEqual([]);
+    });
+  });
 });
+
 
