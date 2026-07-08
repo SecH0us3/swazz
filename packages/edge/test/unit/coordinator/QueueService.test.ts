@@ -18,6 +18,13 @@ vi.mock('../../../src/repositories/scans', () => {
   };
 });
 
+const mockLogError = vi.fn();
+
+vi.mock('../../../../common/logging/logger', () => ({
+  logError: (...args: any[]) => mockLogError(...args),
+  logWarn: vi.fn()
+}));
+
 describe('QueueService', () => {
   let mockState: any;
   let mockEnv: any;
@@ -78,9 +85,7 @@ describe('QueueService', () => {
   });
 
   it('should dispatch public scan to shared runner (no public key tag)', async () => {
-    // Runner has no public key tag, is a shared runner
     mockState.getTags = vi.fn().mockReturnValue(['runner']);
-    // Scan is public (no userPublicKey)
     mockGetQueuedScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
@@ -97,13 +102,10 @@ describe('QueueService', () => {
   });
 
   it('should not dispatch public scan to shared runner if disable_shared_runners is set to true', async () => {
-    // Runner is a shared runner
     mockState.getTags = vi.fn().mockReturnValue(['runner']);
-    // Scan is public (no userPublicKey)
     mockGetQueuedScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
-    // Config in storage disables shared runners
     const mockStorageMap = new Map();
     mockStorageMap.set('config:scan-1', { settings: { disable_shared_runners: true } });
     mockState.storage.get = vi.fn().mockResolvedValue(mockStorageMap);
@@ -164,8 +166,32 @@ describe('QueueService', () => {
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
 
-    // Should not throw
     await expect(queueService.checkAndDispatchQueuedScans(mockWs)).resolves.not.toThrow();
     expect(mockWs.send).toHaveBeenCalled();
+  });
+
+  it('should handle errors during config fetching from DB gracefully', async () => {
+    mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
+    mockGetQueuedScans.mockResolvedValue([
+      { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
+    ]);
+    mockGetScanConfigByProject.mockRejectedValue(new Error('DB failure'));
+
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await expect(queueService.checkAndDispatchQueuedScans(mockWs)).resolves.not.toThrow();
+    expect(mockLogError).toHaveBeenCalled();
+  });
+
+  it('should handle general runtime errors gracefully by logging', async () => {
+    // Force a runtime error (e.g. mockGetQueuedScans rejects)
+    mockGetQueuedScans.mockRejectedValue(new Error('Fetch queue error'));
+    
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+
+    await expect(queueService.checkAndDispatchQueuedScans(mockWs)).resolves.not.toThrow();
+    expect(mockLogError).toHaveBeenCalled();
   });
 });

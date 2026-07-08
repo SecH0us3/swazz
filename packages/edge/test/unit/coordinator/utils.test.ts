@@ -18,6 +18,23 @@ describe('isVersionOutdated', () => {
     expect(isVersionOutdated('2.0.0', '1.1.0')).toBe(false);
     expect(isVersionOutdated('v1.0.2', '1.0.1')).toBe(false);
   });
+
+  it('throws TypeError if runnerVer or coordVer are not strings', () => {
+    expect(() => isVersionOutdated(123 as any, '1.0.0')).toThrow(TypeError);
+    expect(() => isVersionOutdated('1.0.0', 123 as any)).toThrow(TypeError);
+  });
+
+  it('compares non-numeric version releases alphabetically', () => {
+    expect(isVersionOutdated('1.x.0', '1.y.0')).toBe(true);
+    expect(isVersionOutdated('1.y.0', '1.x.0')).toBe(false);
+    expect(isVersionOutdated('1.x.0', '1.x.0')).toBe(false);
+  });
+
+  it('compares pre-release tags correctly', () => {
+    expect(isVersionOutdated('1.0.0-alpha', '1.0.0')).toBe(true);
+    expect(isVersionOutdated('1.0.0', '1.0.0-alpha')).toBe(false);
+    expect(isVersionOutdated('1.0.0-alpha', '1.0.0-beta')).toBe(true);
+  });
 });
 
 describe('getPublicKeyFromTags', () => {
@@ -43,4 +60,3 @@ describe('getRunIdFromTags', () => {
     expect(getRunIdFromTags(tags)).toBeUndefined();
   });
 });
-

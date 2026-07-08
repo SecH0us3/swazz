@@ -5,6 +5,8 @@ import { QueueService } from '../../../src/coordinator/QueueService';
 
 const mockGetCachedSwaggerDetails = vi.fn();
 const mockUpsertSwaggerCache = vi.fn();
+const mockLogError = vi.fn();
+const mockLogWarn = vi.fn();
 
 vi.mock('../../../src/repositories/scans', () => {
   return {
@@ -16,6 +18,11 @@ vi.mock('../../../src/repositories/scans', () => {
     })
   };
 });
+
+vi.mock('../../../../common/logging/logger', () => ({
+  logError: (...args: any[]) => mockLogError(...args),
+  logWarn: (...args: any[]) => mockLogWarn(...args)
+}));
 
 describe('WebSocketHandler', () => {
   let mockState: any;
@@ -97,7 +104,6 @@ describe('WebSocketHandler', () => {
       signature: '1122334455'
     };
 
-    // Spy on checkAndDispatchQueuedScans
     const spyDispatch = vi.spyOn(queueService, 'checkAndDispatchQueuedScans').mockResolvedValue();
 
     await handler.handleMessage(mockWs, JSON.stringify(msg));
@@ -161,12 +167,9 @@ describe('WebSocketHandler', () => {
     expect(responseArg.status).toBe(200);
 
     const body = await responseArg.json();
-    // basePath should be rewritten because JWT_SECRET = 'test-secret' and bbad.secmy.app is present
     expect(body.basePath).toBe('http://127.0.0.1:8788/api');
-    // rawSpec should be deleted from client payload
     expect(body.rawSpec).toBeUndefined();
 
-    // Await the promise passed to state.waitUntil
     const waitUntilPromise = mockState.waitUntil.mock.calls[0]?.[0];
     if (waitUntilPromise) {
       await waitUntilPromise;
@@ -278,5 +281,250 @@ describe('WebSocketHandler', () => {
     expect(spyImportKey).toHaveBeenCalled();
     expect(spyVerify).toHaveBeenCalled();
     expect(stateManager.runners.has(mockWs)).toBe(true);
+  });
+
+  it('should return early on message if type is invalid', async () => {
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    await handler.handleMessage(mockWs, {} as any);
+    expect(spyImportKey).not.toHaveBeenCalled();
+  });
+
+  it('should log verify fail if verification throws error', async () => {
+    mockState.getTags.mockReturnValue(['runner-pending', 'aabbccddeeff']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    stateManager.pendingChallenges.set(mockWs, 'challenge-nonce-123');
+    spyVerify.mockRejectedValue(new Error('verification logic failure'));
+
+    const msg = {
+      type: 'challenge_response',
+      signature: '1122334455'
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+    expect(mockLogError).toHaveBeenCalled();
+    expect(mockWs.close).toHaveBeenCalledWith(1008, 'Authentication failed');
+  });
+
+  it('should close pending runner with Invalid auth request format if message JSON is invalid', async () => {
+    mockState.getTags.mockReturnValue(['runner-pending', 'aabbccddeeff']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    stateManager.pendingChallenges.set(mockWs, 'challenge-nonce-123');
+
+    await handler.handleMessage(mockWs, 'invalid_json');
+    expect(mockLogError).toHaveBeenCalled();
+    expect(mockWs.close).toHaveBeenCalledWith(1008, 'Invalid auth request format');
+  });
+
+  it('should log error if background swagger cache write fails', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    const mockResolve = vi.fn();
+    stateManager.pendingParses.set('req-123', mockResolve);
+    stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+
+    mockGetCachedSwaggerDetails.mockRejectedValue(new Error('R2 write error'));
+
+    const msg = {
+      type: 'parse_result',
+      reqId: 'req-123',
+      payload: {
+        basePath: 'http://example.com',
+        endpoints: []
+      }
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+
+    const waitUntilPromise = mockState.waitUntil.mock.calls[0]?.[0];
+    if (waitUntilPromise) {
+      await waitUntilPromise;
+    }
+    expect(mockLogError).toHaveBeenCalled();
+  });
+
+  it('should catch and log error if clientPayload.basePath is not a string', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    const mockResolve = vi.fn();
+    stateManager.pendingParses.set('req-123', mockResolve);
+    stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+
+    const msg = {
+      type: 'parse_result',
+      reqId: 'req-123',
+      payload: {
+        basePath: 1234, // not a string
+        endpoints: []
+      }
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+    expect(mockLogError).toHaveBeenCalled();
+  });
+
+  it('should log error if FINDINGS_QUEUE.send fails', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    mockEnv.FINDINGS_QUEUE.send.mockRejectedValue(new Error('Queue unavailable'));
+
+    const msg = {
+      type: 'event',
+      runId: 'run-456',
+      payload: {
+        type: 'log',
+        message: 'Scan started'
+      }
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+
+    const waitUntilPromise = mockState.waitUntil.mock.calls[0]?.[0];
+    if (waitUntilPromise) {
+      await waitUntilPromise;
+    }
+    expect(mockLogError).toHaveBeenCalled();
+  });
+
+  it('should log error if runner message is invalid JSON', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    await handler.handleMessage(mockWs, 'invalid_json');
+    expect(mockLogError).toHaveBeenCalled();
+  });
+
+  it('should handle client connection ws.send throwing error gracefully', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    const throwingClientWs = {
+      send: vi.fn().mockImplementation(() => {
+        throw new Error('connection closed');
+      })
+    };
+    stateManager.clients.set('run-456', new Set([throwingClientWs as any]));
+
+    const msg = {
+      type: 'event',
+      runId: 'run-456',
+      payload: {
+        type: 'log',
+        message: 'Scan status'
+      }
+    };
+
+    await expect(handler.handleMessage(mockWs, JSON.stringify(msg))).resolves.not.toThrow();
+  });
+
+  it('should support cleanups when event payload has type: complete', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    stateManager.jobs.set('run-456', mockWs);
+    mockWs.deserializeAttachment.mockReturnValue({ activeJobs: ['run-456'] });
+
+    const msg = {
+      type: 'event',
+      runId: 'run-456',
+      payload: {
+        type: 'complete'
+      }
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+
+    expect(stateManager.jobs.has('run-456')).toBe(false);
+  });
+
+  it('should close pending runner when challenge authentication state is missing from pendingChallenges', async () => {
+    mockState.getTags.mockReturnValue(['runner-pending', 'aabbccddeeff']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    const msg = {
+      type: 'challenge_response',
+      signature: '1122334455'
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+    expect(mockWs.close).toHaveBeenCalledWith(1008, 'Invalid authentication state');
+  });
+
+  it('should log warning if verified private runner version is outdated', async () => {
+    mockState.getTags.mockReturnValue(['runner-pending', 'name:my-runner', 'version:v0.9.0', 'aabbccddeeff']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    stateManager.pendingChallenges.set(mockWs, 'challenge-nonce-123');
+
+    const msg = {
+      type: 'challenge_response',
+      signature: '1122334455'
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+    expect(mockLogWarn).toHaveBeenCalled();
+  });
+
+  it('should write cache to R2 when existing swagger details endpoints hash differs from new endpoints hash', async () => {
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    const mockResolve = vi.fn();
+    stateManager.pendingParses.set('req-123', mockResolve);
+    stateManager.pendingParseUrls.set('req-123', 'http://api.target/swagger.json');
+
+    mockGetCachedSwaggerDetails.mockResolvedValue({
+      endpoints_hash: 'different-old-hash',
+      endpoints_r2_key: 'specs/parsed/old-key.json',
+      raw_spec_r2_key: 'specs/raw/old-key.json'
+    });
+
+    const msg = {
+      type: 'parse_result',
+      reqId: 'req-123',
+      payload: {
+        basePath: 'http://example.com',
+        endpoints: [{ path: '/users', method: 'GET' }],
+        rawSpec: 'raw-swagger-content'
+      }
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+
+    const waitUntilPromise = mockState.waitUntil.mock.calls[0]?.[0];
+    if (waitUntilPromise) {
+      await waitUntilPromise;
+    }
+    expect(mockEnv.STORAGE.put).toHaveBeenCalled();
+    expect(mockUpsertSwaggerCache).toHaveBeenCalled();
   });
 });

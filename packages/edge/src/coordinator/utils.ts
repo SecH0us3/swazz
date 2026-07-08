@@ -17,15 +17,18 @@ export function isVersionOutdated(runnerVer: string, coordVer: string): boolean 
   const coordParts = coordRelease.split('.').map(Number);
   
   for (let i = 0; i < Math.max(runnerParts.length, coordParts.length); i++) {
-    const r = runnerParts[i] || 0;
-    const c = coordParts[i] || 0;
-    if (isNaN(r) || isNaN(c)) {
+    const r = runnerParts[i];
+    const c = coordParts[i];
+    if (r === undefined && c === undefined) break;
+    const rNum = r === undefined ? 0 : r;
+    const cNum = c === undefined ? 0 : c;
+    if (isNaN(rNum) || isNaN(cNum)) {
       if (runnerRelease < coordRelease) return true;
       if (runnerRelease > coordRelease) return false;
       break;
     }
-    if (r < c) return true;
-    if (r > c) return false;
+    if (rNum < cNum) return true;
+    if (rNum > cNum) return false;
   }
   
   if (runnerPre && !coordPre) return true;
