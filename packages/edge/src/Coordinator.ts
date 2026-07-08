@@ -730,32 +730,7 @@ export class RunnerCoordinator {
              })
           );
 
-          if (runId) {
-            if (msg.type === 'error' || (msg.payload && msg.payload.type === 'error')) {
-              this.state.waitUntil(
-                (async () => {
-                  try {
-                    const scansRepo = new ScansRepository(this.env);
-                    await scansRepo.updateScanStatus(runId, 'failed');
-                  } catch (dbErr) {
-                    logError(this.env, "Coordinator", "Failed to update scan status to failed in D1", { error: dbErr });
-                  }
-                })()
-              );
-            } else if (msg.type === 'event' && msg.payload && msg.payload.type === 'complete') {
-              this.state.waitUntil(
-                (async () => {
-                  try {
-                    const scansRepo = new ScansRepository(this.env);
-                    const summaryStats = JSON.stringify(msg.payload.data || {});
-                    await scansRepo.updateScanStatus(runId, 'completed', summaryStats);
-                  } catch (dbErr) {
-                    logError(this.env, "Coordinator", "Failed to update scan status to completed in D1", { error: dbErr });
-                  }
-                })()
-              );
-            }
-          }
+
 
           const clientSet = this.clients.get(runId);
           if (clientSet) {
