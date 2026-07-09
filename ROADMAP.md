@@ -32,7 +32,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a tokenized forgot password flow: send recovery links/tokens via email using the [Cloudflare Email Routing Send Emails API](https://developers.cloudflare.com/email-service/get-started/send-emails/), verifying them at `/api/auth/password/reset`.
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
-- [ ] **Task 89: Webhook HMAC Signature Verification**
+- [/] **Task 89: Webhook HMAC Signature Verification**
   - **Design Goal:** Secure outbound webhook requests by signing payloads with a secret key using HMAC-SHA256, allowing receiver endpoints to verify request authenticity.
   - **Implementation Details:**
     - Generate a unique secret key (e.g., `whsec_...`) automatically upon creating a new project webhook, persisting it in the database.

@@ -269,6 +269,7 @@ export interface Webhook {
     url: string;
     headers?: string | null;
     event_types: string[]; // parsed from JSON array
+    secret: string;
     created_at?: string;
 }
 

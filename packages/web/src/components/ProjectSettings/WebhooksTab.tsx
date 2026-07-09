@@ -24,6 +24,14 @@ export function WebhooksTab() {
         headers: '{\n  "Authorization": "Bearer token_here"\n}',
         event_types: ['scan.completed', 'finding.triaged']
     });
+    const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
+
+    const toggleSecret = (webhookId: string) => {
+        setShowSecret(prev => ({
+            ...prev,
+            [webhookId]: !prev[webhookId]
+        }));
+    };
 
     const token = typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('swazz_token') : null;
 
@@ -385,6 +393,33 @@ export function WebhooksTab() {
                                                 <div className="webhook-detail-group">
                                                     <span className="webhook-detail-label">Custom Headers:</span>
                                                     <span className="webhook-headers-badge">Configured</span>
+                                                </div>
+                                            )}
+                                            {webhook.secret && (
+                                                <div className="webhook-detail-group">
+                                                    <span className="webhook-detail-label">Webhook Secret:</span>
+                                                    <div className="webhook-secret-container">
+                                                        <code className="webhook-secret-value">
+                                                            {showSecret[webhook.id] ? webhook.secret : '••••••••••••••••••••••••••••••••'}
+                                                        </code>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-secondary btn-xs webhook-secret-toggle"
+                                                            onClick={() => toggleSecret(webhook.id)}
+                                                        >
+                                                            {showSecret[webhook.id] ? 'Hide' : 'Reveal'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-secondary btn-xs webhook-secret-copy"
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(webhook.secret);
+                                                                showToast('Secret copied to clipboard', 'success');
+                                                            }}
+                                                        >
+                                                            Copy
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

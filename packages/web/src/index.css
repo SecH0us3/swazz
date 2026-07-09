@@ -8598,4 +8598,45 @@ kbd {
     border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
+.webhook-secret-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    margin-left: 4px;
+}
+
+.webhook-secret-value {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--text-primary);
+    user-select: all;
+    letter-spacing: 0.5px;
+}
+
+.btn-xs {
+    padding: 2px 6px;
+    font-size: 10px;
+    line-height: 1.2;
+    border-radius: var(--radius-sm);
+}
+
+.webhook-secret-toggle,
+.webhook-secret-copy {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.webhook-secret-toggle:hover,
+.webhook-secret-copy:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
 
