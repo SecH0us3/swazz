@@ -426,8 +426,12 @@ export function WebhooksTab() {
                                                                     className="btn btn-secondary btn-xs webhook-secret-copy"
                                                                     onClick={() => {
                                                                         const sec = justCreatedSecrets[webhook.id] || webhook.secret;
-                                                                        navigator.clipboard.writeText(sec);
-                                                                        showToast('Secret copied to clipboard', 'success');
+                                                                        if (navigator.clipboard) {
+                                                                            navigator.clipboard.writeText(sec);
+                                                                            showToast('Secret copied to clipboard', 'success');
+                                                                        } else {
+                                                                            showToast('Clipboard access not available', 'error');
+                                                                        }
                                                                     }}
                                                                 >
                                                                     Copy

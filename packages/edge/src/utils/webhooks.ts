@@ -21,10 +21,7 @@ export async function signWebhookPayload(secret: string, timestamp: number, payl
     key,
     message
   );
-  
-  return Array.from(new Uint8Array(signatureBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  return Array.from(new Uint8Array(signatureBuffer), b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function dispatchWebhook(

@@ -198,8 +198,7 @@ export class ProjectService implements IProjectService {
     }
 
     const id = crypto.randomUUID();
-    const secret = 'whsec_' + Array.from(crypto.getRandomValues(new Uint8Array(24)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
+    const secret = 'whsec_' + Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
     const headersStr = headers ? (typeof headers === 'string' ? headers : JSON.stringify(headers)) : null;
     const eventTypesStr = JSON.stringify(event_types);
 
