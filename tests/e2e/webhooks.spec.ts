@@ -56,6 +56,26 @@ test.describe('Webhooks Tab E2E Tests', () => {
     await expect(page.locator('.webhook-card-url')).toContainText('https://example.com/e2e-webhook');
     await expect(page.locator('.webhook-badge', { hasText: 'scan.started' })).toBeVisible();
 
+    // Verify the secret key is displayed and masked
+    const secretValue = page.locator('.webhook-secret-value');
+    await expect(secretValue).toContainText('••••••••••••••••••••••••••••••••');
+
+    // Click Reveal and verify it displays the whsec_ prefix
+    const toggleSecretBtn = page.locator('button.webhook-secret-toggle');
+    await expect(toggleSecretBtn).toContainText('Reveal');
+    await toggleSecretBtn.click();
+    await expect(secretValue).toContainText('whsec_');
+    await expect(toggleSecretBtn).toContainText('Hide');
+
+    // Click Hide and verify it masks it again
+    await toggleSecretBtn.click();
+    await expect(secretValue).toContainText('••••••••••••••••••••••••••••••••');
+    await expect(toggleSecretBtn).toContainText('Reveal');
+
+    // Verify copy button is present
+    const copySecretBtn = page.locator('button.webhook-secret-copy');
+    await expect(copySecretBtn).toBeVisible();
+
     // 8. Test Connection
     // Stub fetch globally or intercept the route
     await page.route('**/api/projects/*/webhooks/*/test', async (route) => {

@@ -3,6 +3,27 @@ import { getDB } from './db';
 import { logInfo, logError } from '../../../common/logging/logger';
 import { Webhook } from '../types';
 
+export async function signWebhookPayload(secret: string, timestamp: number, payloadStr: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const message = encoder.encode(`${timestamp}.${payloadStr}`);
+  
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signatureBuffer = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    message
+  );
+  return Array.from(new Uint8Array(signatureBuffer), b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function dispatchWebhook(
   env: Env,
   projectId: string,
@@ -16,7 +37,7 @@ export async function dispatchWebhook(
   let webhooks: Webhook[] = [];
   try {
     const { results } = await db.prepare(
-      'SELECT id, url, headers, event_types FROM project_webhooks WHERE project_id = ?'
+      'SELECT id, url, headers, event_types, secret FROM project_webhooks WHERE project_id = ?'
     ).bind(projectId).all<Webhook>();
     webhooks = results || [];
   } catch (err) {
@@ -38,12 +59,14 @@ export async function dispatchWebhook(
     return;
   }
 
+  const timestamp = Math.floor(Date.now() / 1000);
   const webhookPayload = {
     event: eventType,
     timestamp: new Date().toISOString(),
     project_id: projectId,
     data: payload
   };
+  const payloadStr = JSON.stringify(webhookPayload);
 
   const dispatchPromises = matchingWebhooks.map(async (webhook) => {
     const headersObj: Record<string, string> = {
@@ -60,12 +83,21 @@ export async function dispatchWebhook(
       }
     }
 
+    if (webhook.secret) {
+      try {
+        const signature = await signWebhookPayload(webhook.secret, timestamp, payloadStr);
+        headersObj['X-Swazz-Signature'] = `t=${timestamp},v1=${signature}`;
+      } catch (err) {
+        logError({ env, executionCtx: ctx }, 'Webhook', `Failed to sign webhook payload for webhook ${webhook.id}`, { error: err });
+      }
+    }
+
     try {
       logInfo({ env, executionCtx: ctx }, 'Webhook', `Dispatching ${eventType} webhook to ${webhook.url}`);
       const response = await fetch(webhook.url, {
         method: 'POST',
         headers: headersObj,
-        body: JSON.stringify(webhookPayload),
+        body: payloadStr,
         signal: AbortSignal.timeout(5000)
       });
 

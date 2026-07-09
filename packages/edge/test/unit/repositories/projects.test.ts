@@ -319,16 +319,17 @@ describe('ProjectRepository Unit Tests', () => {
   describe('createProjectWebhook', () => {
     it('throws TypeErrors for invalid arguments', async () => {
       const repo = new ProjectRepository(mockEnv);
-      await expect(repo.createProjectWebhook(123 as any, 'p', 'url', null, 'evt')).rejects.toThrow(TypeError);
-      await expect(repo.createProjectWebhook('id', 123 as any, 'url', null, 'evt')).rejects.toThrow(TypeError);
-      await expect(repo.createProjectWebhook('id', 'p', 123 as any, null, 'evt')).rejects.toThrow(TypeError);
-      await expect(repo.createProjectWebhook('id', 'p', 'url', 123 as any, 'evt')).rejects.toThrow(TypeError);
-      await expect(repo.createProjectWebhook('id', 'p', 'url', null, 123 as any)).rejects.toThrow(TypeError);
+      await expect(repo.createProjectWebhook(123 as any, 'p', 'url', null, 'evt', 'secret')).rejects.toThrow(TypeError);
+      await expect(repo.createProjectWebhook('id', 123 as any, 'url', null, 'evt', 'secret')).rejects.toThrow(TypeError);
+      await expect(repo.createProjectWebhook('id', 'p', 123 as any, null, 'evt', 'secret')).rejects.toThrow(TypeError);
+      await expect(repo.createProjectWebhook('id', 'p', 'url', 123 as any, 'evt', 'secret')).rejects.toThrow(TypeError);
+      await expect(repo.createProjectWebhook('id', 'p', 'url', null, 123 as any, 'secret')).rejects.toThrow(TypeError);
+      await expect(repo.createProjectWebhook('id', 'p', 'url', null, 'evt', 123 as any)).rejects.toThrow(TypeError);
     });
 
     it('inserts project webhook record', async () => {
       const repo = new ProjectRepository(mockEnv);
-      await repo.createProjectWebhook('w1', 'p1', 'http://hook.io', 'headers', 'events');
+      await repo.createProjectWebhook('w1', 'p1', 'http://hook.io', 'headers', 'events', 'sec1');
       expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO project_webhooks'));
     });
   });

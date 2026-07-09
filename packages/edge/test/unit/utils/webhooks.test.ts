@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { dispatchWebhook } from '../../../src/utils/webhooks';
+import { dispatchWebhook, signWebhookPayload } from '../../../src/utils/webhooks';
 import { Env } from '../../../src/env';
 import { logInfo, logError } from '../../../../common/logging/logger';
 
@@ -45,27 +45,33 @@ describe('Webhook Utility - dispatchWebhook', () => {
         id: 'wh-1',
         url: 'https://example.com/webhook1',
         headers: JSON.stringify({ 'X-Custom-Header': 'value1' }),
-        event_types: JSON.stringify(['scan.completed', 'scan.failed'])
+        event_types: JSON.stringify(['scan.completed', 'scan.failed']),
+        secret: 'sec-123'
       },
       {
         id: 'wh-2',
         url: 'https://example.com/webhook2',
         headers: null,
-        event_types: JSON.stringify(['scan.completed'])
+        event_types: JSON.stringify(['scan.completed']),
+        secret: 'sec-456'
       }
     ];
 
     mockAll.mockResolvedValue({ results: webhooks });
 
     const payload = { scanId: 'scan-123', status: 'completed' };
+    const promises: Promise<any>[] = [];
     const ctx = {
-      waitUntil: vi.fn()
+      waitUntil: vi.fn().mockImplementation((p) => {
+        promises.push(p);
+      })
     };
 
     await dispatchWebhook(mockEnv, 'proj-123', 'scan.completed', payload, ctx);
+    await Promise.all(promises);
 
     expect(mockPrepare).toHaveBeenCalledWith(
-      'SELECT id, url, headers, event_types FROM project_webhooks WHERE project_id = ?'
+      'SELECT id, url, headers, event_types, secret FROM project_webhooks WHERE project_id = ?'
     );
     expect(mockBind).toHaveBeenCalledWith('proj-123');
     expect(mockAll).toHaveBeenCalled();
@@ -80,11 +86,20 @@ describe('Webhook Utility - dispatchWebhook', () => {
     const firstCall = mockFetch.mock.calls[0];
     expect(firstCall[0]).toBe('https://example.com/webhook1');
     expect(firstCall[1].method).toBe('POST');
-    expect(firstCall[1].headers).toEqual({
-      'Content-Type': 'application/json',
-      'User-Agent': 'Swazz-Webhook-Dispatcher/1.0',
-      'X-Custom-Header': 'value1'
-    });
+    
+    // Check signature header exists and is valid
+    const firstSigHeader = firstCall[1].headers['X-Swazz-Signature'];
+    expect(firstSigHeader).toBeDefined();
+    const firstMatch = firstSigHeader.match(/^t=(\d+),v1=([a-f0-9]{64})$/);
+    expect(firstMatch).not.toBeNull();
+    const firstTimestamp = parseInt(firstMatch[1], 10);
+    const firstSignature = firstMatch[2];
+    const expectedFirstSig = await signWebhookPayload('sec-123', firstTimestamp, firstCall[1].body);
+    expect(firstSignature).toBe(expectedFirstSig);
+
+    expect(firstCall[1].headers['Content-Type']).toBe('application/json');
+    expect(firstCall[1].headers['User-Agent']).toBe('Swazz-Webhook-Dispatcher/1.0');
+    expect(firstCall[1].headers['X-Custom-Header']).toBe('value1');
 
     const parsedBody = JSON.parse(firstCall[1].body);
     expect(parsedBody.event).toBe('scan.completed');
@@ -95,10 +110,18 @@ describe('Webhook Utility - dispatchWebhook', () => {
     // Verify second fetch details (no custom headers)
     const secondCall = mockFetch.mock.calls[1];
     expect(secondCall[0]).toBe('https://example.com/webhook2');
-    expect(secondCall[1].headers).toEqual({
-      'Content-Type': 'application/json',
-      'User-Agent': 'Swazz-Webhook-Dispatcher/1.0'
-    });
+    
+    const secondSigHeader = secondCall[1].headers['X-Swazz-Signature'];
+    expect(secondSigHeader).toBeDefined();
+    const secondMatch = secondSigHeader.match(/^t=(\d+),v1=([a-f0-9]{64})$/);
+    expect(secondMatch).not.toBeNull();
+    const secondTimestamp = parseInt(secondMatch[1], 10);
+    const secondSignature = secondMatch[2];
+    const expectedSecondSig = await signWebhookPayload('sec-456', secondTimestamp, secondCall[1].body);
+    expect(secondSignature).toBe(expectedSecondSig);
+
+    expect(secondCall[1].headers['Content-Type']).toBe('application/json');
+    expect(secondCall[1].headers['User-Agent']).toBe('Swazz-Webhook-Dispatcher/1.0');
 
     expect(logInfo).toHaveBeenCalledWith({ env: mockEnv, executionCtx: ctx }, 'Webhook', expect.stringContaining('Dispatching scan.completed webhook'));
   });

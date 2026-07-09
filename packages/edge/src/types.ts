@@ -33,6 +33,7 @@ export interface Webhook {
   url: string;
   headers?: string | null;
   event_types: string; // JSON array string
+  secret: string;
   created_at?: string;
 }
 

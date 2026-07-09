@@ -1,6 +1,7 @@
 import { Env } from '../env';
 import { IProjectRepository } from '../repositories/projects';
 import { IRbacRepository } from '../repositories/rbac';
+import { signWebhookPayload } from '../utils/webhooks';
 
 export interface IProjectService {
   getProjects(userId: string | null, isAuthEnabled: boolean): Promise<{ projects: any[] }>;
@@ -142,14 +143,17 @@ export class ProjectService implements IProjectService {
   async getProjectWebhooks(projectId: string) {
     const webhooks = await this.projectRepo.getProjectWebhooks(projectId);
     const parsedWebhooks = webhooks.map(w => {
+      const maskedSecret = w.secret ? 'whsec_••••••••••••••••••••••••••••••••' : '';
       try {
         return {
           ...w,
+          secret: maskedSecret,
           event_types: typeof w.event_types === 'string' ? JSON.parse(w.event_types) : w.event_types
         };
       } catch {
         return {
           ...w,
+          secret: maskedSecret,
           event_types: []
         };
       }
@@ -194,11 +198,12 @@ export class ProjectService implements IProjectService {
     }
 
     const id = crypto.randomUUID();
+    const secret = 'whsec_' + Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
     const headersStr = headers ? (typeof headers === 'string' ? headers : JSON.stringify(headers)) : null;
     const eventTypesStr = JSON.stringify(event_types);
 
-    await this.projectRepo.createProjectWebhook(id, projectId, url, headersStr, eventTypesStr);
-    return { id, status: 'created' };
+    await this.projectRepo.createProjectWebhook(id, projectId, url, headersStr, eventTypesStr, secret);
+    return { id, secret, status: 'created' };
   }
 
   async updateProjectWebhook(projectId: string, webhookId: string, body: any) {
@@ -268,11 +273,12 @@ export class ProjectService implements IProjectService {
       event: 'test.ping',
       timestamp: new Date().toISOString(),
       project_id: projectId,
-      webhook_id: webhookId,
       data: {
+        webhook_id: webhookId,
         message: 'This is a test notification from Swazz API Fuzzer webhook configuration.'
       }
     };
+    const payloadStr = JSON.stringify(testPayload);
 
     const headersObj: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -286,11 +292,21 @@ export class ProjectService implements IProjectService {
       } catch {}
     }
 
+    if (webhook.secret) {
+      try {
+        const timestamp = Math.floor(Date.now() / 1000);
+        const signature = await signWebhookPayload(webhook.secret, timestamp, payloadStr);
+        headersObj['X-Swazz-Signature'] = `t=${timestamp},v1=${signature}`;
+      } catch (err: any) {
+        console.error('Failed to sign test webhook payload:', err);
+      }
+    }
+
     try {
       const response = await fetch(webhook.url, {
         method: 'POST',
         headers: headersObj,
-        body: JSON.stringify(testPayload),
+        body: payloadStr,
         signal: AbortSignal.timeout(5000)
       });
 

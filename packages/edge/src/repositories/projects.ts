@@ -17,7 +17,7 @@ export interface IProjectRepository {
   getProjectAuditLogs(projectId: string, page: number, limit: number, search: string, source: string, action: string): Promise<{ logs: any[]; pagination: any }>;
   getProjectWebhooks(projectId: string): Promise<Webhook[]>;
   getProjectWebhook(webhookId: string): Promise<Webhook | null>;
-  createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string): Promise<void>;
+  createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string, secret: string): Promise<void>;
   updateProjectWebhook(id: string, url: string, headers: string | null, eventTypes: string): Promise<void>;
   deleteProjectWebhook(id: string): Promise<void>;
 }
@@ -454,7 +454,7 @@ export class ProjectRepository extends BaseService implements IProjectRepository
     return row || null;
   }
 
-  async createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string): Promise<void> {
+  async createProjectWebhook(id: string, projectId: string, url: string, headers: string | null, eventTypes: string, secret: string): Promise<void> {
     if (typeof id !== 'string') {
       throw new TypeError('id must be a string');
     }
@@ -470,9 +470,12 @@ export class ProjectRepository extends BaseService implements IProjectRepository
     if (typeof eventTypes !== 'string') {
       throw new TypeError('eventTypes must be a string');
     }
+    if (typeof secret !== 'string') {
+      throw new TypeError('secret must be a string');
+    }
     await this.db.prepare(
-      'INSERT INTO project_webhooks (id, project_id, url, headers, event_types) VALUES (?, ?, ?, ?, ?)'
-    ).bind(id, projectId, url, headers, eventTypes).run();
+      'INSERT INTO project_webhooks (id, project_id, url, headers, event_types, secret) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, projectId, url, headers, eventTypes, secret).run();
   }
 
   async updateProjectWebhook(id: string, url: string, headers: string | null, eventTypes: string): Promise<void> {
