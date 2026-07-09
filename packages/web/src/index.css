@@ -8639,4 +8639,11 @@ kbd {
     color: var(--text-primary);
 }
 
+.webhook-secret-only-once {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.8;
+}
+
 

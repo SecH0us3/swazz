@@ -95,6 +95,13 @@ This file contains completed tasks.
     - When fuzzer events or findings are logged (including after LLM triage and patch validation), serialize the finding reports and queue a webhook delivery.
     - The edge backend stores the original reports in the D1 database, but the webhook delivery must dispatch the reports out to the client's destination URL asynchronously (e.g. using Cloudflare Workers outbound fetch, decoupled via findings queues).
 
+- [x] **Task 89: Webhook HMAC Signature Verification**
+  - **Design Goal:** Secure outbound webhook requests by signing payloads with a secret key using HMAC-SHA256, allowing receiver endpoints to verify request authenticity.
+  - **Implementation Details:**
+    - Generate a unique secret key (e.g., `whsec_...`) automatically upon creating a new project webhook, persisting it in the database.
+    - Display the secret key in the Project Settings webhooks configuration UI so that users can configure it on their target servers.
+    - Sign the JSON payload using Web Crypto's HMAC-SHA256 and attach the signature along with a timestamp in a custom header (e.g. `X-Swazz-Signature: t=1720000000,v1=signature_hex`) to prevent replay attacks.
+
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.

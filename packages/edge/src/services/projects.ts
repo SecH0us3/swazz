@@ -143,14 +143,17 @@ export class ProjectService implements IProjectService {
   async getProjectWebhooks(projectId: string) {
     const webhooks = await this.projectRepo.getProjectWebhooks(projectId);
     const parsedWebhooks = webhooks.map(w => {
+      const maskedSecret = w.secret ? 'whsec_••••••••••••••••••••••••••••••••' : '';
       try {
         return {
           ...w,
+          secret: maskedSecret,
           event_types: typeof w.event_types === 'string' ? JSON.parse(w.event_types) : w.event_types
         };
       } catch {
         return {
           ...w,
+          secret: maskedSecret,
           event_types: []
         };
       }
@@ -271,8 +274,8 @@ export class ProjectService implements IProjectService {
       event: 'test.ping',
       timestamp: new Date().toISOString(),
       project_id: projectId,
-      webhook_id: webhookId,
       data: {
+        webhook_id: webhookId,
         message: 'This is a test notification from Swazz API Fuzzer webhook configuration.'
       }
     };
