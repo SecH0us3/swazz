@@ -184,7 +184,7 @@ jobs:
 
       - name: Build and export Server to Docker
         # v7.1.0
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: packages/container
           load: true
@@ -194,7 +194,7 @@ jobs:
 
       - name: Build and export CLI to Docker
         # v7.1.0
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: packages/container
           file: packages/container/Dockerfile.cli
@@ -228,7 +228,7 @@ jobs:
       - name: Build and push Server
         id: build-server
         # v7.1.0
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: packages/container
           platforms: linux/amd64,linux/arm64
@@ -241,7 +241,7 @@ jobs:
       - name: Build and push CLI
         id: build-cli
         # v7.1.0
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: packages/container
           file: packages/container/Dockerfile.cli
