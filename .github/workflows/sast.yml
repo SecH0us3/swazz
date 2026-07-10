@@ -48,7 +48,7 @@ jobs:
       - name: Upload SARIF to GitHub Code Scanning
         if: always()  # upload findings even when gosec exits with code 1
         # v4.35.5
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9
         with:
           sarif_file: packages/container/gosec.sarif
   codeql:
