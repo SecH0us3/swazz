@@ -15,7 +15,7 @@
     "@vitest/coverage-istanbul": "^4.1.10",
     "@vitest/coverage-v8": "^4.1.10",
     "@vitest/snapshot": "^4.1.9",
-    "miniflare": "^4.20260609.0",
+    "miniflare": "^4.20260708.1",
     "pretty-format": "^30.4.1",
     "vitest": "^4.1.9",
     "workerd": "1.20260704.1"
