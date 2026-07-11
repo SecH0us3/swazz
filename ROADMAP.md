@@ -36,15 +36,15 @@ This roadmap tracks planned features, documentation improvements, and architectu
 - [ ] **Task 125: Domain WAF Analysis via waf.secmy.app**
   - **Design Goal:** Enable runner agents to perform active or passive WAF checks on target domains using `https://waf.secmy.app/` to identify defensive layers, active protections, and potential firewall bypass vectors.
   - **Implementation Details:**
-    - Introduce configuration parameter to toggle WAF checks in the runner configuration.
-    - Implement a Go analyzer/scanner module within the runner agent that interacts with `https://waf.secmy.app/`.
+    - Introduce configuration parameters to toggle WAF checks and customize the WAF API endpoint (defaulting to https://waf.secmy.app/).
+    - Implement a Go analyzer/scanner module within the runner agent that interacts with the configured WAF API endpoint.
     - Retrieve, parse, and incorporate WAF detection and bypass recommendation findings into the final scan report.
 
 - [ ] **Task 126: Domain Reconnaissance via recon1.secmy.app**
   - **Design Goal:** Enable runners to automatically discover subdomains, open ports, and map IP details of a target domain using `https://recon1.secmy.app/` during initial scanning phases.
   - **Implementation Details:**
-    - Add reconnaissance toggles and parameters to runner settings.
-    - Build a recon module inside the Go runner to query `https://recon1.secmy.app/` API.
+    - Add reconnaissance toggles and parameters (including a configurable API endpoint defaulting to https://recon1.secmy.app/) to runner settings.
+    - Build a recon module inside the Go runner to query the configured reconnaissance API.
     - Log discovered assets and append discovered HTTP/HTTPS endpoints to the runner's fuzz target list or output metadata.
 
 
