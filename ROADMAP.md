@@ -22,6 +22,16 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Set up a clean, modern blog index and article layout in the frontend web application.
     - Support markdown article rendering and sharing actions to drive organic technical traffic.
 
+- [ ] **Task 127: Add examples/ directory and cookbook documentation**
+  - **Design Goal:** Provide a dedicated space for practical configuration recipes and usage examples of the Swazz fuzzer, helping users get started quickly and master advanced scenarios.
+  - **Implementation Details:**
+    - Create a new directory `/examples` in the repository root.
+    - Move existing root config files (e.g., `swazz.config.example.jsonc`, `swazz.config.bola-test.json`, `swazz.config.petstore.json`, `wraggler.config.example.jsonc`, etc.) to `/examples` to clean up the repository root.
+    - Add a `README.md` file in `/examples` describing the cookbook and linking to the recipe documentation.
+    - Populate the examples directory with recipes covering configurations from basic HTTP requests and API scans to advanced multi-auth, chaining rules, and custom wordlist scans.
+
+
+
 ## 🟡 Medium Complexity
 
 
