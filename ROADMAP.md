@@ -32,6 +32,23 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a tokenized forgot password flow: send recovery links/tokens via email using the [Cloudflare Email Routing Send Emails API](https://developers.cloudflare.com/email-service/get-started/send-emails/), verifying them at `/api/auth/password/reset`.
     - Generate a set of 8-character numeric backup codes when 2FA is set up, saving their hashes in the database. Support logging in with a backup code in place of a TOTP code.
 
+
+- [ ] **Task 125: Domain WAF Analysis via waf.secmy.app**
+  - **Design Goal:** Enable runner agents to perform active or passive WAF checks on target domains using `https://waf.secmy.app/` to identify defensive layers, active protections, and potential firewall bypass vectors.
+  - **Implementation Details:**
+    - Introduce configuration parameter to toggle WAF checks in the runner configuration.
+    - Implement a Go analyzer/scanner module within the runner agent that interacts with `https://waf.secmy.app/`.
+    - Retrieve, parse, and incorporate WAF detection and bypass recommendation findings into the final scan report.
+
+- [ ] **Task 126: Domain Reconnaissance via recon1.secmy.app**
+  - **Design Goal:** Enable runners to automatically discover subdomains, open ports, and map IP details of a target domain using `https://recon1.secmy.app/` during initial scanning phases.
+  - **Implementation Details:**
+    - Add reconnaissance toggles and parameters to runner settings.
+    - Build a recon module inside the Go runner to query `https://recon1.secmy.app/` API.
+    - Log discovered assets and append discovered HTTP/HTTPS endpoints to the runner's fuzz target list or output metadata.
+
+
+
 ## 🔴 High Complexity
 
 - [ ] **Task 48: Implement Active Web Crawler (Spider)**
