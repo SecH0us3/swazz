@@ -62,7 +62,8 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Add a "Create User / Service Account" modal next to the invite options in `packages/web/src/components/ProjectSettings/MembersRolesTab.tsx`.
     - Implement a backend endpoint (e.g., `POST /api/projects/:id/members/create`) in `packages/edge/` to register and automatically join a new user to the project, assigning roles immediately.
-    - Provide secure generation of credentials (a generated password or permanent API key) that are displayed once to the admin upon creation.
+    - Define corresponding RBAC permissions (e.g., `post:/api/projects/:id/members/create`) in `packages/edge/src/config/rbac.ts` and assign to default roles (like `owner` and `editor`).
+    - Provide secure generation of credentials (a generated password or permanent API key) that are stored using a strong one-way cryptographic hash (e.g., bcrypt or SHA-256) in the database and displayed only once to the admin upon creation.
     - Add validation ensuring the username is between 3 and 20 characters, matching the project's standard criteria `^[a-zA-Z0-9_\-]{3,20}$`.
     - Ensure service accounts can be flagged as non-interactive (API-only) to restrict interactive UI login.
 
