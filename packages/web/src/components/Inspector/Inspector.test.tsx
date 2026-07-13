@@ -145,4 +145,29 @@ describe('Inspector Component', () => {
         // The button should be gone now since all items are shown
         expect(screen.queryByRole('button', { name: /Show More/i })).toBeNull();
     });
+
+    it('displays findings count text in findingsOnly mode', async () => {
+        const rows = createMockResults(5);
+        mockQueryResults.mockResolvedValue({
+            rows,
+            total: 5
+        });
+
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('5 findings')).toBeTruthy();
+        });
+    });
 });
+

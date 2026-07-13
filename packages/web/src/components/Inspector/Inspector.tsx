@@ -320,7 +320,7 @@ export function Inspector({
             search: debouncedSearch,
             sortKey: sortConfig.key,
             sortDir: sortConfig.direction,
-            limit,
+            limit: findingsOnly ? 100000 : limit,
             findingsOnly,
             identityFilter,
         });
@@ -401,14 +401,6 @@ export function Inspector({
                     </div>
                 ) : findingsOnly ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-warning)' }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                            Detected Vulnerability Findings
-                        </div>
                         {groupedFindings.length > 0 && (
                             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                                 <button
@@ -493,8 +485,8 @@ export function Inspector({
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
                     )}
                     <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {total.toLocaleString()} req{total !== 1 ? 's' : ''}
-                        {total > limit && (
+                        {total.toLocaleString()} {findingsOnly ? `finding${total !== 1 ? 's' : ''}` : `req${total !== 1 ? 's' : ''}`}
+                        {!findingsOnly && total > limit && (
                             <>
                                 <span>(showing {Math.min(rows.length, limit).toLocaleString()})</span>
                                 <button
@@ -581,7 +573,7 @@ export function Inspector({
                                  })()}
                             </div>
                         ))}
-                        {total > rows.length && (
+                        {!findingsOnly && total > rows.length && (
                             <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-4)' }}>
                                 <button
                                     className="btn btn-ghost btn-sm"
