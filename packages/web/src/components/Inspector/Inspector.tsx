@@ -6,6 +6,15 @@ import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding, SwazzConfig } from '../../types.js';
 import { extractErrorSubtype } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
+import { FindingItem } from './FindingItem.js';
+import { StatusFilterDropdown } from './StatusFilterDropdown.js';
+import {
+    getStatusClass,
+    getBadgeClass,
+    formatBytes,
+    formatTime,
+    formatIdentityName
+} from './utils.js';
 
 export type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
 
@@ -21,110 +30,6 @@ interface Props {
     findingsOnly?: boolean;
     config?: SwazzConfig;
 }
-
-function getStatusClass(status: number): string {
-    if (status >= 500) return 'status-5xx';
-    if (status >= 400) return 'status-4xx';
-    return '';
-}
-
-function getBadgeClass(status: number): string {
-    if (status >= 500) return 'badge badge-error';
-    if (status >= 400) return 'badge badge-warning';
-    if (status >= 200 && status < 300) return 'badge badge-success';
-    return 'badge';
-}
-
-function formatBytes(bytes: number): string {
-    if (bytes === 0 || !bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-function formatTime(ts: number): string {
-    const d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
-}
-
-
-function formatIdentityName(name: string): string {
-    const lower = name.toLowerCase();
-    if (lower === 'user a') return 'User A (Primary)';
-    if (lower === 'user b') return 'User B';
-    if (lower === 'anonymous') return 'Anonymous';
-    if (name.length === 5 && lower.startsWith('user')) {
-        return 'User ' + name.charAt(4).toUpperCase();
-    }
-    return name;
-}
-
-interface FindingItemProps {
-    item: { result: ResultSummary; finding?: AnalysisFinding };
-    groupColor: string;
-    onSelect: (row: ResultSummary) => void;
-}
-
-const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, groupColor, onSelect }) => {
-    const triageBadge = (() => {
-        if (!item.result.triage || item.result.triage === 'none') return null;
-        const labels: Record<string, string> = {
-            false_positive: 'FP',
-            ignored: 'Ignored',
-            acknowledged: 'Ack'
-        };
-        const classes: Record<string, string> = {
-            false_positive: 'badge badge-warning',
-            ignored: 'badge',
-            acknowledged: 'badge badge-success'
-        };
-        return (
-            <span className={classes[item.result.triage]} style={{ marginLeft: 'var(--space-2)' }}>
-                {labels[item.result.triage]}
-            </span>
-        );
-    })();
-
-    const isIgnoredOrFp = item.result.triage === 'ignored' || item.result.triage === 'false_positive';
-
-    return (
-        <div 
-            className="finding-item" 
-            onClick={() => onSelect(item.result)}
-            style={{ 
-                borderLeft: `3px solid ${groupColor}`,
-                opacity: isIgnoredOrFp ? 0.6 : 1
-            }}
-        >
-            <div className="finding-item-row">
-                <div className="finding-item-endpoint">
-                    <span className={`method method-${item.result.method.toLowerCase()}`}>{item.result.method}</span>
-                    <span className="finding-item-path">{item.result.endpoint}</span>
-                    {triageBadge}
-                </div>
-                <span className={getBadgeClass(item.result.status)}>
-                    {item.result.status || 'ERR'}
-                </span>
-            </div>
-            {item.finding?.message && (
-                <div className="finding-item-message">
-                    {item.finding.message}
-                </div>
-            )}
-            {item.result.status >= 500 && !item.finding && (
-                <div className="finding-item-message">
-                    Server returned unhandled error status {item.result.status}
-                </div>
-            )}
-            {item.finding?.evidence && (
-                <div className="finding-item-evidence" title={item.finding.evidence}>
-                    <strong>Evidence:</strong> {item.finding.evidence}
-                </div>
-            )}
-        </div>
-    );
-});
 
 const PAGE_SIZE = 1000;
 
@@ -154,6 +59,8 @@ export function Inspector({
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
     const [groupLimits, setGroupLimits] = useState<Record<string, number>>({});
     const [limit, setLimit] = useState(PAGE_SIZE);
+    const [total, setTotal] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
 
     const [identityFilter, setIdentityFilter] = useState<string>('all');
     const [seenIdentities, setSeenIdentities] = useState<Set<string>>(new Set(['User A']));
@@ -188,6 +95,37 @@ export function Inspector({
         }
     }, [rows]);
 
+    const [excludedStatuses, setExcludedStatuses] = useState<Set<number>>(() => {
+        try {
+            const saved = localStorage.getItem('swazz_excluded_statuses');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    return new Set(parsed.map(Number));
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load excluded statuses from localStorage', e);
+        }
+        return new Set();
+    });
+    const availableStatuses = useMemo(() => {
+        if (!findingsOnly) return [];
+        const statuses = new Set<number>();
+        for (const row of rows) {
+            statuses.add(row.status);
+        }
+        return Array.from(statuses).sort((a, b) => a - b);
+    }, [rows, findingsOnly]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('swazz_excluded_statuses', JSON.stringify(Array.from(excludedStatuses)));
+        } catch (e) {
+            console.error('Failed to save excluded statuses to localStorage', e);
+        }
+    }, [excludedStatuses]);
+
     // Reset limit to PAGE_SIZE when runId changes
     useEffect(() => {
         setLimit(PAGE_SIZE);
@@ -206,7 +144,9 @@ export function Inspector({
             }
         > = {};
 
-        for (const row of rows) {
+        const filteredRows = rows.filter(row => !excludedStatuses.has(row.status));
+
+        for (const row of filteredRows) {
             let placed = false;
             if (row.analyzerFindings && row.analyzerFindings.length > 0) {
                 for (const f of row.analyzerFindings) {
@@ -272,7 +212,12 @@ export function Inspector({
                 if (prioA !== prioB) return prioA - prioB;
                 return a.title.localeCompare(b.title);
             });
-    }, [rows, findingsOnly]);
+    }, [rows, findingsOnly, excludedStatuses]);
+
+    const filteredFindingsCount = useMemo(() => {
+        if (!findingsOnly) return total;
+        return groupedFindings.reduce((sum, g) => sum + g.items.length, 0);
+    }, [groupedFindings, findingsOnly, total]);
 
     const toggleGroup = (key: string) => {
         setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -289,8 +234,6 @@ export function Inspector({
     const handleCollapseAll = () => {
         setExpandedGroups({});
     };
-    const [total, setTotal] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
 
     // Debounce search
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -320,7 +263,8 @@ export function Inspector({
             search: debouncedSearch,
             sortKey: sortConfig.key,
             sortDir: sortConfig.direction,
-            limit,
+            // Query all findings at once for client-side grouping so pagination doesn't break groups
+            limit: findingsOnly ? 100000 : limit,
             findingsOnly,
             identityFilter,
         });
@@ -401,14 +345,6 @@ export function Inspector({
                     </div>
                 ) : findingsOnly ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-warning)' }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                            Detected Vulnerability Findings
-                        </div>
                         {groupedFindings.length > 0 && (
                             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                                 <button
@@ -489,12 +425,23 @@ export function Inspector({
                             ))}
                         </select>
                     )}
-                    {isLoading && (
+                    {findingsOnly && availableStatuses.length > 0 && (
+                        <StatusFilterDropdown
+                            availableStatuses={availableStatuses}
+                            excludedStatuses={excludedStatuses}
+                            setExcludedStatuses={setExcludedStatuses}
+                        />
+                    )}
+                    {isLoading && !findingsOnly && (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
                     )}
                     <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {total.toLocaleString()} req{total !== 1 ? 's' : ''}
-                        {total > limit && (
+                        {findingsOnly ? (
+                            `${filteredFindingsCount.toLocaleString()} finding${filteredFindingsCount !== 1 ? 's' : ''}`
+                        ) : (
+                            `${total.toLocaleString()} req${total !== 1 ? 's' : ''}`
+                        )}
+                        {!findingsOnly && total > limit && (
                             <>
                                 <span>(showing {Math.min(rows.length, limit).toLocaleString()})</span>
                                 <button
@@ -581,7 +528,7 @@ export function Inspector({
                                  })()}
                             </div>
                         ))}
-                        {total > rows.length && (
+                        {!findingsOnly && total > rows.length && (
                             <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-4)' }}>
                                 <button
                                     className="btn btn-ghost btn-sm"

@@ -30,6 +30,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `README.md` file in `/examples` describing the cookbook and linking to the recipe documentation.
     - Populate the examples directory with recipes covering configurations from basic HTTP requests and API scans to advanced multi-auth, chaining rules, and custom wordlist scans.
 
+- [ ] **Task 130: Render Infinity (∞) for Timeout status code (HTTP 0)**
+  - **Design Goal:** Improve status code visibility in result lists and logs by displaying the infinity symbol (∞) instead of `0` when a request times out or encounters a network error.
+  - **Implementation Details:**
+    - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
+
 
 
 ## 🟡 Medium Complexity
@@ -56,6 +61,19 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add reconnaissance toggles and parameters (including a configurable API endpoint defaulting to https://recon1.secmy.app/) to runner settings.
     - Build a recon module inside the Go runner to query the configured reconnaissance API.
     - Log discovered assets and append discovered HTTP/HTTPS endpoints to the runner's fuzz target list or output metadata.
+
+- [ ] **Task 128: Dynamic SSTI Math Expressions**
+  - **Design Goal:** Reduce false positives in SSTI detection by replacing the static `7*7` mathematical evaluation check with dynamic multiplication or addition of random prime numbers less than 100.
+  - **Implementation Details:**
+    - Generate SSTI payloads dynamically with randomized math expressions (e.g. multiplying or adding two random prime numbers less than 100).
+    - Evaluate these expressions during analyzer checks dynamically instead of relying on a hardcoded string `49`.
+
+- [ ] **Task 129: Optimize OWASP Top 10 Tab Performance**
+  - **Design Goal:** Prevent the OWASP Top 10 tab from showing an infinite loading state during active scans, and implement category highlighting and direct deduplicated filtering upon card click.
+  - **Implementation Details:**
+    - Replace the clearing/debouncing `setTimeout` in the `useEffect` hook in `packages/web/src/components/OWASPTop10/OWASPTop10.tsx` with a throttled query or a low-frequency polling mechanism during scans to ensure results load incrementally.
+    - Highlight categories with matching findings immediately.
+    - Implement category filtering upon clicking cards, deduplicating the list of results (removing duplicate findings).
 
 
 ## 🔴 High Complexity
