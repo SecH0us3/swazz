@@ -190,7 +190,20 @@ export function Inspector({
         }
     }, [rows]);
 
-    const [excludedStatuses, setExcludedStatuses] = useState<Set<number>>(new Set());
+    const [excludedStatuses, setExcludedStatuses] = useState<Set<number>>(() => {
+        try {
+            const saved = localStorage.getItem('swazz_excluded_statuses');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    return new Set(parsed.map(Number));
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load excluded statuses from localStorage', e);
+        }
+        return new Set();
+    });
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -216,6 +229,14 @@ export function Inspector({
     };
 
     useEffect(() => {
+        try {
+            localStorage.setItem('swazz_excluded_statuses', JSON.stringify(Array.from(excludedStatuses)));
+        } catch (e) {
+            console.error('Failed to save excluded statuses to localStorage', e);
+        }
+    }, [excludedStatuses]);
+
+    useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsStatusDropdownOpen(false);
@@ -229,10 +250,9 @@ export function Inspector({
         };
     }, [isStatusDropdownOpen]);
 
-    // Reset limit to PAGE_SIZE and excluded statuses when runId changes
+    // Reset limit to PAGE_SIZE when runId changes
     useEffect(() => {
         setLimit(PAGE_SIZE);
-        setExcludedStatuses(new Set());
     }, [runId]);
 
     const groupedFindings = useMemo(() => {

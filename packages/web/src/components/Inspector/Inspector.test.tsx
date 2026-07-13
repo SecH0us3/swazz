@@ -266,6 +266,95 @@ describe('Inspector Component', () => {
         expect(screen.queryByText('HTTP 400 Error')).toBeNull();
         expect(screen.getByText('0 findings')).toBeTruthy();
     });
+
+    it('persists status filter exclusions in localStorage', async () => {
+        localStorage.clear();
+
+        const rows = [
+            {
+                id: '1',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/users/1',
+                resolvedPath: '/users/1',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+            },
+            {
+                id: '2',
+                timestamp: Date.now() - 1000,
+                method: 'POST',
+                endpoint: '/users/2',
+                resolvedPath: '/users/2',
+                status: 400,
+                profile: 'RANDOM',
+                duration: 12,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Bad Request',
+                responseSize: 100,
+            }
+        ] as ResultSummary[];
+        mockQueryResults.mockResolvedValue({
+            rows,
+            total: 2
+        });
+
+        const { unmount } = render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        // Open dropdown and uncheck 500
+        const dropdownBtn = await screen.findByRole('button', { name: /Statuses/i });
+        fireEvent.click(dropdownBtn);
+        const checkbox500 = screen.getByLabelText('500') as HTMLInputElement;
+        fireEvent.click(checkbox500);
+
+        // Expect 500 to be saved to localStorage as excluded
+        await waitFor(() => {
+            const saved = localStorage.getItem('swazz_excluded_statuses');
+            expect(saved).toBeTruthy();
+            expect(JSON.parse(saved!)).toContain(500);
+        });
+
+        // Unmount component
+        unmount();
+
+        // Render again - should load from localStorage and hide 500 automatically
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        // Group 500 should be gone from the start
+        await waitFor(() => {
+            expect(screen.queryByText('HTTP 500 Error')).toBeNull();
+        });
+        expect(screen.getByText('HTTP 400 Error')).toBeTruthy();
+        expect(screen.getByText('1 finding')).toBeTruthy();
+    });
 });
 
 
