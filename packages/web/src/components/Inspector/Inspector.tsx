@@ -216,6 +216,10 @@ export function Inspector({
         return Array.from(statuses).sort((a, b) => a - b);
     }, [rows, findingsOnly]);
 
+    const checkedCount = useMemo(() => {
+        return availableStatuses.filter(status => !excludedStatuses.has(status)).length;
+    }, [availableStatuses, excludedStatuses]);
+
     const toggleStatus = (status: number) => {
         setExcludedStatuses(prev => {
             const next = new Set(prev);
@@ -387,6 +391,7 @@ export function Inspector({
             search: debouncedSearch,
             sortKey: sortConfig.key,
             sortDir: sortConfig.direction,
+            // Query all findings at once for client-side grouping so pagination doesn't break groups
             limit: findingsOnly ? 100000 : limit,
             findingsOnly,
             identityFilter,
@@ -558,7 +563,7 @@ export function Inspector({
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                                 </svg>
-                                Statuses ({availableStatuses.length - excludedStatuses.size}/{availableStatuses.length})
+                                 Statuses ({checkedCount}/{availableStatuses.length})
                             </button>
                             {isStatusDropdownOpen && (
                                 <div className="status-dropdown-menu">
@@ -573,7 +578,11 @@ export function Inspector({
                                         <button
                                             type="button"
                                             className="status-dropdown-action-btn"
-                                            onClick={() => setExcludedStatuses(new Set(availableStatuses))}
+                                            onClick={() => setExcludedStatuses(prev => {
+                                                const next = new Set(prev);
+                                                availableStatuses.forEach(status => next.add(status));
+                                                return next;
+                                            })}
                                         >
                                             Clear All
                                         </button>
