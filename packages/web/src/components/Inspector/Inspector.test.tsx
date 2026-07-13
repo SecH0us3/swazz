@@ -169,5 +169,103 @@ describe('Inspector Component', () => {
             expect(screen.getByText('5 findings')).toBeTruthy();
         });
     });
+
+    it('supports filtering grouped errors by status code via dropdown list', async () => {
+        const rows = [
+            {
+                id: '1',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/users/1',
+                resolvedPath: '/users/1',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+            },
+            {
+                id: '2',
+                timestamp: Date.now() - 1000,
+                method: 'POST',
+                endpoint: '/users/2',
+                resolvedPath: '/users/2',
+                status: 400,
+                profile: 'RANDOM',
+                duration: 12,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Bad Request',
+                responseSize: 100,
+            }
+        ] as ResultSummary[];
+        mockQueryResults.mockResolvedValue({
+            rows,
+            total: 2
+        });
+
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        // Expect to see both group headers initially
+        const group500 = await screen.findByText('HTTP 500 Error');
+        const group400 = await screen.findByText('HTTP 400 Error');
+        expect(group500).toBeTruthy();
+        expect(group400).toBeTruthy();
+        expect(screen.getByText('2 findings')).toBeTruthy();
+
+        // Click the Statuses dropdown button to open it
+        const dropdownBtn = screen.getByRole('button', { name: /Statuses/i });
+        fireEvent.click(dropdownBtn);
+
+        // Find checkbox for 500 status and uncheck it
+        const checkbox500 = screen.getByLabelText('500') as HTMLInputElement;
+        expect(checkbox500.checked).toBe(true);
+        fireEvent.click(checkbox500);
+        expect(checkbox500.checked).toBe(false);
+
+        // 500 group should be filtered out, so it should be gone
+        await waitFor(() => {
+            expect(screen.queryByText('HTTP 500 Error')).toBeNull();
+        });
+        expect(screen.getByText('HTTP 400 Error')).toBeTruthy();
+        expect(screen.getByText('1 finding')).toBeTruthy();
+
+        // Click "Select All" button to restore all
+        const selectAllBtn = screen.getByRole('button', { name: /Select All/i });
+        fireEvent.click(selectAllBtn);
+
+        // Both groups should be back
+        await waitFor(() => {
+            expect(screen.getByText('HTTP 500 Error')).toBeTruthy();
+        });
+        expect(screen.getByText('HTTP 400 Error')).toBeTruthy();
+        expect(screen.getByText('2 findings')).toBeTruthy();
+
+        // Click "Clear All" button to hide all
+        const clearAllBtn = screen.getByRole('button', { name: /Clear All/i });
+        fireEvent.click(clearAllBtn);
+
+        // No groups should be visible
+        await waitFor(() => {
+            expect(screen.queryByText('HTTP 500 Error')).toBeNull();
+        });
+        expect(screen.queryByText('HTTP 400 Error')).toBeNull();
+        expect(screen.getByText('0 findings')).toBeTruthy();
+    });
 });
+
 

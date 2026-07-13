@@ -154,6 +154,8 @@ export function Inspector({
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
     const [groupLimits, setGroupLimits] = useState<Record<string, number>>({});
     const [limit, setLimit] = useState(PAGE_SIZE);
+    const [total, setTotal] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
 
     const [identityFilter, setIdentityFilter] = useState<string>('all');
     const [seenIdentities, setSeenIdentities] = useState<Set<string>>(new Set(['User A']));
@@ -188,9 +190,49 @@ export function Inspector({
         }
     }, [rows]);
 
-    // Reset limit to PAGE_SIZE when runId changes
+    const [excludedStatuses, setExcludedStatuses] = useState<Set<number>>(new Set());
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const availableStatuses = useMemo(() => {
+        if (!findingsOnly) return [];
+        const statuses = new Set<number>();
+        for (const row of rows) {
+            statuses.add(row.status);
+        }
+        return Array.from(statuses).sort((a, b) => a - b);
+    }, [rows, findingsOnly]);
+
+    const toggleStatus = (status: number) => {
+        setExcludedStatuses(prev => {
+            const next = new Set(prev);
+            if (next.has(status)) {
+                next.delete(status);
+            } else {
+                next.add(status);
+            }
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsStatusDropdownOpen(false);
+            }
+        };
+        if (isStatusDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isStatusDropdownOpen]);
+
+    // Reset limit to PAGE_SIZE and excluded statuses when runId changes
     useEffect(() => {
         setLimit(PAGE_SIZE);
+        setExcludedStatuses(new Set());
     }, [runId]);
 
     const groupedFindings = useMemo(() => {
@@ -206,7 +248,9 @@ export function Inspector({
             }
         > = {};
 
-        for (const row of rows) {
+        const filteredRows = rows.filter(row => !excludedStatuses.has(row.status));
+
+        for (const row of filteredRows) {
             let placed = false;
             if (row.analyzerFindings && row.analyzerFindings.length > 0) {
                 for (const f of row.analyzerFindings) {
@@ -272,7 +316,12 @@ export function Inspector({
                 if (prioA !== prioB) return prioA - prioB;
                 return a.title.localeCompare(b.title);
             });
-    }, [rows, findingsOnly]);
+    }, [rows, findingsOnly, excludedStatuses]);
+
+    const filteredFindingsCount = useMemo(() => {
+        if (!findingsOnly) return total;
+        return groupedFindings.reduce((sum, g) => sum + g.items.length, 0);
+    }, [groupedFindings, findingsOnly, total]);
 
     const toggleGroup = (key: string) => {
         setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -289,8 +338,6 @@ export function Inspector({
     const handleCollapseAll = () => {
         setExpandedGroups({});
     };
-    const [total, setTotal] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
 
     // Debounce search
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -481,11 +528,63 @@ export function Inspector({
                             ))}
                         </select>
                     )}
-                    {isLoading && (
+                    {findingsOnly && availableStatuses.length > 0 && (
+                        <div className="status-dropdown-container" ref={dropdownRef}>
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm status-dropdown-btn"
+                                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                                </svg>
+                                Statuses ({availableStatuses.length - excludedStatuses.size}/{availableStatuses.length})
+                            </button>
+                            {isStatusDropdownOpen && (
+                                <div className="status-dropdown-menu">
+                                    <div className="status-dropdown-actions">
+                                        <button
+                                            type="button"
+                                            className="status-dropdown-action-btn"
+                                            onClick={() => setExcludedStatuses(new Set())}
+                                        >
+                                            Select All
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="status-dropdown-action-btn"
+                                            onClick={() => setExcludedStatuses(new Set(availableStatuses))}
+                                        >
+                                            Clear All
+                                        </button>
+                                    </div>
+                                    {availableStatuses.map(status => {
+                                        const isChecked = !excludedStatuses.has(status);
+                                        const label = status === 0 ? 'ERR' : String(status);
+                                        return (
+                                            <label key={status} className="status-dropdown-item">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => toggleStatus(status)}
+                                                />
+                                                <span>{label}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {isLoading && !findingsOnly && (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
                     )}
                     <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-disabled)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {total.toLocaleString()} {findingsOnly ? `finding${total !== 1 ? 's' : ''}` : `req${total !== 1 ? 's' : ''}`}
+                        {findingsOnly ? (
+                            `${filteredFindingsCount.toLocaleString()} finding${filteredFindingsCount !== 1 ? 's' : ''}`
+                        ) : (
+                            `${total.toLocaleString()} req${total !== 1 ? 's' : ''}`
+                        )}
                         {!findingsOnly && total > limit && (
                             <>
                                 <span>(showing {Math.min(rows.length, limit).toLocaleString()})</span>
