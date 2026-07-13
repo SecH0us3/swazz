@@ -8646,4 +8646,36 @@ kbd {
     opacity: 0.8;
 }
 
+/* Direct provisioning styles */
+.btn-create-account {
+  margin-left: 0.5rem;
+}
+
+.rbac-alert-warning {
+  background-color: var(--amber-950, #451a03);
+  color: var(--amber-200, #fde68a);
+  border: 1px solid var(--amber-800, #92400e);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.rbac-credential-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.rbac-credential-input {
+  flex-grow: 1;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.rbac-credential-copy {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  height: 38px;
+}
+
 

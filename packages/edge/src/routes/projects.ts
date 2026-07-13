@@ -218,5 +218,36 @@ export function registerProjectsRoutes(
       return c.json({ error: parts[0] }, statusCode as any);
     }
   });
+
+  app.post(
+    '/api/projects/:id/members/create',
+    requirePermission('post:/api/projects/:id/members/create'),
+    auditLog('post:/api/projects/:id/members/create', 'Created project user or service account'),
+    async (c) => {
+      const services = projectServicesFactory(c.env);
+      const projectId = c.req.param('id') as string;
+      let body: any;
+      try {
+        body = await c.req.json();
+      } catch {
+        return c.json({ error: 'Invalid JSON body' }, 400);
+      }
+      
+      try {
+        const result = await services.createProjectMemberAccount(projectId, body);
+        c.set('auditDetails', {
+          username: result.username,
+          userId: result.id,
+          roles: body.roles,
+          is_interactive: body.is_interactive !== false
+        });
+        return c.json(result, 201);
+      } catch (e: any) {
+        const parts = e.message.split('|');
+        const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+        return c.json({ error: parts[0] }, statusCode as any);
+      }
+    }
+  );
 }
 

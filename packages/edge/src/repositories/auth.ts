@@ -116,12 +116,12 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async getUserById(userId: string): Promise<any> {
-    return await this.db.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id FROM users WHERE id = ?')
+    return await this.db.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id, is_interactive FROM users WHERE id = ?')
       .bind(userId).first();
   }
 
   async getUserByUsername(username: string): Promise<any> {
-    return await this.db.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
+    return await this.db.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret, is_interactive FROM users WHERE username = ?')
       .bind(username).first();
   }
 
@@ -191,7 +191,7 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async getUserByGithubId(githubId: string): Promise<any> {
-    return await this.db.prepare('SELECT id, two_factor_enabled FROM users WHERE github_id = ?').bind(githubId).first();
+    return await this.db.prepare('SELECT id, two_factor_enabled, is_interactive FROM users WHERE github_id = ?').bind(githubId).first();
   }
 
   async getUserByEmail(email: string): Promise<any> {

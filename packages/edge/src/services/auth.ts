@@ -369,6 +369,12 @@ export class AuthService implements IAuthService {
       throw new Error('Invalid credentials|401');
     }
 
+    if (user.is_interactive === 0) {
+      await verifyDummyPassword(body.password);
+      await enforceUniformDelay(startTime);
+      throw new Error('Interactive login is disabled for service accounts|403');
+    }
+
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
       await this.authRepo.recordFailedLogin(username);
@@ -563,6 +569,11 @@ export class AuthService implements IAuthService {
       throw new Error('User not found|404');
     }
 
+    if (user.is_interactive === 0) {
+      await new Promise(r => setTimeout(r, 200));
+      throw new Error('Interactive login restricted for this account|403');
+    }
+
     const passkeys = await this.authRepo.getPasskeysByUserId(user.id);
     if (!passkeys || passkeys.length === 0) {
       await new Promise(r => setTimeout(r, 200));
@@ -586,6 +597,14 @@ export class AuthService implements IAuthService {
     const pk = await this.authRepo.getPasskeyByCredentialId(credential_id);
     if (!pk) throw new Error('Credential not found|404');
 
+    const user = await this.authRepo.getUserById(pk.user_id);
+    if (!user) {
+      throw new Error('User not found|404');
+    }
+    if (user.is_interactive === 0) {
+      throw new Error('Interactive login restricted for this account|403');
+    }
+
     let expectedChallenge = '';
     if (this.env.SESSION_CACHE) {
       expectedChallenge = await this.env.SESSION_CACHE.get("passkey_login:" + pk.user_id) || '';
@@ -601,7 +620,6 @@ export class AuthService implements IAuthService {
 
       if (verification.verified && verification.authenticationInfo) {
         await this.authRepo.updatePasskeyCounter(credential_id, verification.authenticationInfo.newCounter);
-        const user = await this.authRepo.getUserById(pk.user_id);
         if (user) await this.authRepo.resetLoginAttempts(user.username);
 
         const payload = { sub: pk.user_id, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
@@ -698,11 +716,18 @@ export class AuthService implements IAuthService {
       if (decodedState.action === 'link') {
         const userId = decodedState.userId;
         if (!userId) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid user session for linking')}` };
+        const user = await this.authRepo.getUserById(userId);
+        if (user && user.is_interactive === 0) {
+          return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Linking GitHub is not allowed for non-interactive service accounts')}` };
+        }
         const linked = await this.authRepo.linkGithubUser(userId, String(userData.id));
         if (!linked) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('GitHub account is already linked to another user')}` };
         return { redirectUrl: `${frontendUrl}/?status=github_linked` };
       } else {
         let user = await this.authRepo.getUserByGithubId(String(userData.id));
+        if (user && user.is_interactive === 0) {
+          return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Interactive login restricted for this account')}` };
+        }
         let userId: string;
         if (user) {
           userId = user.id;

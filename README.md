@@ -153,6 +153,16 @@ npm run test:e2e
 
 ---
 
+## 🔐 Authentication & Administration
+
+### 🤖 Service Accounts & Non-Interactive Users
+
+Administrators can directly provision new user accounts or non-interactive service accounts from the **Members & Roles** project settings tab.
+- **Service Accounts (Non-Interactive)**: Flagged as non-interactive (API-only) to completely restrict logging in through the interactive web dashboard. Upon creation, a permanent API key starting with `swazz_live_` is generated and displayed once. These credentials can be used directly with the Swazz runner agent or automated API scripts.
+- **Interactive Users**: Provisioned directly with a secure temporary password displayed once to the administrator.
+
+---
+
 ## 🔄 CI/CD Integration
 
 Swazz is designed to work seamlessly in continuous integration pipelines. It supports exporting fuzz results to **SARIF (Static Analysis Results Interchange Format)**, allowing you to view and manage vulnerabilities directly inside your version control platform.

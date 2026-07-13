@@ -212,6 +212,13 @@ describe('AuthService', () => {
         .rejects.toThrow('Account temporarily locked due to too many failed attempts|429|60');
     });
 
+    it('fails if account is a non-interactive service account', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 0, is_interactive: 0 });
+      await expect(service.login({ username: 'test', password: 'pw' }, '127.0.0.1', undefined, undefined, mockContext))
+        .rejects.toThrow('Interactive login is disabled for service accounts|403');
+      expect(vi.mocked(verifyDummyPassword)).toHaveBeenCalled();
+    });
+
     it('fails with invalid credentials', async () => {
       mockRepo.getUserByUsername.mockResolvedValue(null);
       await expect(service.login({ username: 'test', password: 'pw' }, '127.0.0.1', undefined, undefined, mockContext))
@@ -369,6 +376,20 @@ describe('AuthService', () => {
       expect(res.token).toBeDefined();
     });
 
+    it('generatePasskeyLoginOptions fails if non-interactive service account', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', is_interactive: 0 });
+      await expect(service.generatePasskeyLoginOptions({ username: 'u' }, 'ip', 'rp', mockContext))
+        .rejects.toThrow('Interactive login restricted for this account|403');
+    });
+
+    it('verifyPasskeyLogin fails if non-interactive service account', async () => {
+      mockRepo.getPasskeyByCredentialId.mockResolvedValue({ user_id: 'u1', public_key: 'AAAA', counter: 0, transports: '' });
+      mockRepo.getUserById.mockResolvedValue({ username: 'u', is_interactive: 0 });
+
+      await expect(service.verifyPasskeyLogin({ id: '1' }, 'ip', 'origin', 'rp', mockContext))
+        .rejects.toThrow('Interactive login restricted for this account|403');
+    });
+
     it('getPasskeys and delete', async () => {
       mockRepo.getPasskeysByUserId.mockResolvedValue([]);
       const pks = await service.getPasskeys('u1');
@@ -460,6 +481,49 @@ describe('AuthService', () => {
       const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
       expect(res.redirectUrl).toContain('status=github_linked');
       expect(mockRepo.linkGithubUser).toHaveBeenCalledWith('u1', '12345');
+    });
+
+    it('handleGithubCallback link fails if non-interactive service account', async () => {
+      const { sign } = await import('hono/jwt');
+      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch;
+
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({ access_token: 'gh-token' })
+      });
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({ id: 12345, login: 'ghuser' })
+      });
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ([{ email: 'test@github.com', primary: true, verified: true }])
+      });
+
+      mockRepo.getUserById.mockResolvedValue({ username: 'u', is_interactive: 0 });
+
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Linking GitHub is not allowed for non-interactive service accounts'));
+    });
+
+    it('handleGithubCallback login fails if non-interactive service account', async () => {
+      const { sign } = await import('hono/jwt');
+      const state = await sign({ action: 'login', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch;
+
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({ access_token: 'gh-token' })
+      });
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({ id: 12345, login: 'ghuser', email: 'test@github.com' })
+      });
+
+      mockRepo.getUserByGithubId.mockResolvedValue({ id: 'u1', is_interactive: 0 });
+
+      const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
+      expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Interactive login restricted for this account'));
     });
   });
 });

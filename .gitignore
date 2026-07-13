@@ -94,3 +94,7 @@ wordlists/
 
 packages/edge/coverage/
 packages/edge/coverage_report.txt
+
+# Git Worktrees
+.worktrees/
+
