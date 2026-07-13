@@ -83,6 +83,11 @@ export function MembersRolesTab() {
                     e.stopPropagation();
                     e.preventDefault();
                 } else if (isCreateAccountOpen) {
+                    if (createdCredentials) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        return;
+                    }
                     setIsCreateAccountOpen(false);
                     resetCreateForm();
                     e.stopPropagation();
@@ -105,7 +110,7 @@ export function MembersRolesTab() {
 
         window.addEventListener('keydown', handleKeyDown, true);
         return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [isInviteModalOpen, isCreateAccountOpen, isRoleModalOpen, editingMember, activeHistoryMember]);
+    }, [isInviteModalOpen, isCreateAccountOpen, isRoleModalOpen, editingMember, activeHistoryMember, createdCredentials]);
 
     const getHeaders = () => {
         const token = localStorage.getItem('swazz_token');
@@ -226,6 +231,11 @@ export function MembersRolesTab() {
     };
 
     const handleCreateAccount = async () => {
+        if (!activeProject?.id) {
+            showToast('Active project not found', 'error');
+            return;
+        }
+
         const usernameVal = createUsername.trim();
         if (!usernameVal) {
             showToast('Username is required', 'error');
@@ -612,6 +622,7 @@ export function MembersRolesTab() {
                                         className="input rbac-input-full" 
                                         readOnly 
                                         value={createdCredentials.username} 
+                                        data-1p-ignore
                                     />
                                 </div>
 
@@ -624,6 +635,7 @@ export function MembersRolesTab() {
                                                 className="input rbac-credential-input" 
                                                 readOnly 
                                                 value={createdCredentials.password} 
+                                                data-1p-ignore
                                             />
                                             <button 
                                                 className="btn btn-secondary btn-sm rbac-credential-copy"
@@ -646,6 +658,7 @@ export function MembersRolesTab() {
                                                 className="input rbac-credential-input" 
                                                 readOnly 
                                                 value={createdCredentials.api_key} 
+                                                data-1p-ignore
                                             />
                                             <button 
                                                 className="btn btn-secondary btn-sm rbac-credential-copy"
