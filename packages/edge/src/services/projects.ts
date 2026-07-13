@@ -325,6 +325,10 @@ export class ProjectService implements IProjectService {
   }
 
   async createProjectMemberAccount(projectId: string, body: any) {
+    if (!body || typeof body !== 'object') {
+      throw new Error('Invalid request body|400');
+    }
+
     const { username, email, roles, is_interactive } = body;
     
     if (typeof username !== 'string') {
@@ -350,8 +354,10 @@ export class ProjectService implements IProjectService {
       throw new Error('At least one role must be assigned|400');
     }
 
+    const uniqueRoles = Array.from(new Set(roles));
+
     const defaultRoles = ['owner', 'editor', 'viewer'];
-    const customRoles = roles.filter(r => !defaultRoles.includes(r));
+    const customRoles = uniqueRoles.filter(r => !defaultRoles.includes(r));
     if (customRoles.length > 0) {
       const existingCustom = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
       if (existingCustom.length !== customRoles.length) {
@@ -376,7 +382,7 @@ export class ProjectService implements IProjectService {
 
     if (isInteractive) {
       // Interactive user: generate secure temporary password
-      password = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(1, '0')).join('').substring(0, 16);
+      password = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(2, '0')).join('').substring(0, 16);
       hash = await hashPassword(password);
     } else {
       // Non-interactive service account: generate permanent API key
@@ -393,10 +399,10 @@ export class ProjectService implements IProjectService {
       this.env.DB.prepare("INSERT INTO users (id, username, password_hash, api_key, email, is_interactive, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')")
         .bind(userId, cleanUsername, hash, hashedApiKey || null, cleanEmail, isInteractive ? 1 : 0),
       this.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)")
-        .bind(projectId, userId, roles[0])
+        .bind(projectId, userId, uniqueRoles[0])
     ];
 
-    roles.forEach((r: string) => {
+    uniqueRoles.forEach((r: string) => {
       stmts.push(this.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, userId, r));
     });
 

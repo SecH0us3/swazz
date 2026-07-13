@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useToast } from '../../hooks/useToast.js';
 import { fetchMemberLoginHistory } from '../../services/projectService.js';
@@ -66,6 +66,15 @@ export function MembersRolesTab() {
     const [historyPages, setHistoryPages] = useState(1);
     const [historyLoading, setHistoryLoading] = useState(false);
 
+    const resetCreateForm = useCallback(() => {
+        setCreateUsername('');
+        setCreateEmail('');
+        setCreateIsInteractive(true);
+        setSelectedCreateRoles([]);
+        setCreatedCredentials(null);
+        setIsCopied(false);
+    }, []);
+
     useEffect(() => {
         if (!activeProject) return;
         fetchPermissions();
@@ -110,7 +119,7 @@ export function MembersRolesTab() {
 
         window.addEventListener('keydown', handleKeyDown, true);
         return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [isInviteModalOpen, isCreateAccountOpen, isRoleModalOpen, editingMember, activeHistoryMember, createdCredentials]);
+    }, [isInviteModalOpen, isCreateAccountOpen, isRoleModalOpen, editingMember, activeHistoryMember, createdCredentials, resetCreateForm]);
 
     const getHeaders = () => {
         const token = localStorage.getItem('swazz_token');
@@ -219,15 +228,6 @@ export function MembersRolesTab() {
         } else {
             showToast('Failed to send invitation', 'error');
         }
-    };
-
-    const resetCreateForm = () => {
-        setCreateUsername('');
-        setCreateEmail('');
-        setCreateIsInteractive(true);
-        setSelectedCreateRoles([]);
-        setCreatedCredentials(null);
-        setIsCopied(false);
     };
 
     const handleCreateAccount = async () => {
@@ -604,7 +604,7 @@ export function MembersRolesTab() {
 
                                 <div className="rbac-modal-footer">
                                     <button className="btn btn-secondary" onClick={() => { setIsCreateAccountOpen(false); resetCreateForm(); }}>Cancel</button>
-                                    <button className="btn btn-primary" onClick={handleCreateAccount} disabled={!createUsername || selectedCreateRoles.length === 0}>Create Account</button>
+                                    <button className="btn btn-primary" onClick={handleCreateAccount} disabled={!createUsername.trim() || selectedCreateRoles.length === 0}>Create Account</button>
                                 </div>
                             </>
                         ) : (
