@@ -63,6 +63,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Generate SSTI payloads dynamically with randomized math expressions (e.g. multiplying or adding two random prime numbers less than 100).
     - Evaluate these expressions during analyzer checks dynamically instead of relying on a hardcoded string `49`.
 
+- [ ] **Task 129: Optimize OWASP Top 10 Tab Performance**
+  - **Design Goal:** Prevent the OWASP Top 10 tab from showing an infinite loading state during active scans, and implement category highlighting and direct deduplicated filtering upon card click.
+  - **Implementation Details:**
+    - Replace the clearing/debouncing `setTimeout` in the `useEffect` hook in `packages/web/src/components/OWASPTop10/OWASPTop10.tsx` with a throttled query or a low-frequency polling mechanism during scans to ensure results load incrementally.
+    - Highlight categories with matching findings immediately.
+    - Implement category filtering upon clicking cards, deduplicating the list of results (removing duplicate findings).
+
 
 ## 🔴 High Complexity
 
