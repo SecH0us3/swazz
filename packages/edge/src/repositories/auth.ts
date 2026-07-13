@@ -121,7 +121,7 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async getUserByUsername(username: string): Promise<any> {
-    return await this.db.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE username = ?')
+    return await this.db.prepare('SELECT id, password_hash, two_factor_enabled, two_factor_secret, is_interactive FROM users WHERE username = ?')
       .bind(username).first();
   }
 

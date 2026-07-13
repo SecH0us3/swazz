@@ -212,6 +212,13 @@ describe('AuthService', () => {
         .rejects.toThrow('Account temporarily locked due to too many failed attempts|429|60');
     });
 
+    it('fails if account is a non-interactive service account', async () => {
+      mockRepo.getUserByUsername.mockResolvedValue({ id: 'u1', password_hash: 'hash', two_factor_enabled: 0, is_interactive: 0 });
+      await expect(service.login({ username: 'test', password: 'pw' }, '127.0.0.1', undefined, undefined, mockContext))
+        .rejects.toThrow('Interactive login is disabled for service accounts|403');
+      expect(vi.mocked(verifyDummyPassword)).toHaveBeenCalled();
+    });
+
     it('fails with invalid credentials', async () => {
       mockRepo.getUserByUsername.mockResolvedValue(null);
       await expect(service.login({ username: 'test', password: 'pw' }, '127.0.0.1', undefined, undefined, mockContext))

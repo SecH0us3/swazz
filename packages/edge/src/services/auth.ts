@@ -369,6 +369,12 @@ export class AuthService implements IAuthService {
       throw new Error('Invalid credentials|401');
     }
 
+    if (user.is_interactive === 0) {
+      await verifyDummyPassword(body.password);
+      await enforceUniformDelay(startTime);
+      throw new Error('Interactive login is disabled for service accounts|403');
+    }
+
     const valid = await verifyPassword(body.password, user.password_hash);
     if (!valid) {
       await this.authRepo.recordFailedLogin(username);
