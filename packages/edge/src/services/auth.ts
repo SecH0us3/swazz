@@ -598,7 +598,10 @@ export class AuthService implements IAuthService {
     if (!pk) throw new Error('Credential not found|404');
 
     const user = await this.authRepo.getUserById(pk.user_id);
-    if (user && user.is_interactive === 0) {
+    if (!user) {
+      throw new Error('User not found|404');
+    }
+    if (user.is_interactive === 0) {
       throw new Error('Interactive login restricted for this account|403');
     }
 

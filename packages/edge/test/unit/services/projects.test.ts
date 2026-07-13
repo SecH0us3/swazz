@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProjectService } from '../../../src/services/projects';
 
 const mockCheckUsernameExists = vi.fn();
+const mockGetUserByEmail = vi.fn();
 
 vi.mock('../../../src/repositories/auth', () => {
   return {
     AuthRepository: vi.fn().mockImplementation(function() {
       return {
         checkUsernameExists: mockCheckUsernameExists,
+        getUserByEmail: mockGetUserByEmail,
       };
     }),
   };
@@ -21,6 +23,7 @@ describe('ProjectService', () => {
 
   beforeEach(() => {
     mockCheckUsernameExists.mockReset();
+    mockGetUserByEmail.mockReset();
     const mockPrepare = vi.fn().mockReturnValue({
       bind: vi.fn().mockReturnThis(),
     });
@@ -202,6 +205,12 @@ describe('ProjectService', () => {
     it('throws if username already exists', async () => {
       mockCheckUsernameExists.mockResolvedValue(true);
       await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['editor'] })).rejects.toThrow('Username already exists|400');
+    });
+
+    it('throws if email already exists', async () => {
+      mockCheckUsernameExists.mockResolvedValue(false);
+      mockGetUserByEmail.mockResolvedValue({ id: 'u123' });
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', email: 'test@example.com', roles: ['editor'] })).rejects.toThrow('Email already exists|400');
     });
 
     it('successfully provisions interactive user', async () => {

@@ -226,7 +226,12 @@ export function registerProjectsRoutes(
     async (c) => {
       const services = projectServicesFactory(c.env);
       const projectId = c.req.param('id') as string;
-      const body = await c.req.json();
+      let body: any;
+      try {
+        body = await c.req.json();
+      } catch {
+        return c.json({ error: 'Invalid JSON body' }, 400);
+      }
       
       try {
         const result = await services.createProjectMemberAccount(projectId, body);

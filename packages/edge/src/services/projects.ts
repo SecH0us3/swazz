@@ -342,11 +342,17 @@ export class ProjectService implements IProjectService {
 
     if (email) {
       if (typeof email !== 'string') {
-        throw new Error('Email must be a string|400');
+        throw new TypeError('Email must be a string|400');
       }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
+      const cleanEmail = email.trim();
+      const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+      if (!emailRegex.test(cleanEmail)) {
         throw new Error('Invalid email format|400');
+      }
+      const authRepo = new AuthRepository(this.env);
+      const existingEmail = await authRepo.getUserByEmail(cleanEmail);
+      if (existingEmail) {
+        throw new Error('Email already exists|400');
       }
     }
 
@@ -381,11 +387,17 @@ export class ProjectService implements IProjectService {
     let hashedApiKey = '';
 
     if (isInteractive) {
-      // Interactive user: generate secure temporary password
+      // Interactive user: generate secure temporary password without modulo bias
       const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      const bytes = new Uint8Array(16);
-      crypto.getRandomValues(bytes);
-      password = Array.from(bytes, b => chars[b % chars.length]).join('');
+      const temp = new Uint8Array(1);
+      password = '';
+      while (password.length < 16) {
+        crypto.getRandomValues(temp);
+        const val = temp[0];
+        if (val < 248) { // 256 - (256 % 62) = 248
+          password += chars[val % 62];
+        }
+      }
       hash = await hashPassword(password);
     } else {
       // Non-interactive service account: generate permanent API key
