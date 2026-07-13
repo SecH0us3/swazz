@@ -36,6 +36,17 @@ export function MembersRolesTab() {
     const [inviteInput, setInviteInput] = useState('');
     const [selectedInviteRoles, setSelectedInviteRoles] = useState<string[]>([]);
     
+    // Direct account creation state
+    const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+    const [createUsername, setCreateUsername] = useState('');
+    const [createEmail, setCreateEmail] = useState('');
+    const [createIsInteractive, setCreateIsInteractive] = useState(true);
+    const [selectedCreateRoles, setSelectedCreateRoles] = useState<string[]>([]);
+    
+    // Credential display state
+    const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password?: string; api_key?: string } | null>(null);
+    const [isCopied, setIsCopied] = useState(false);
+    
     // Custom Role State
     const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -71,6 +82,11 @@ export function MembersRolesTab() {
                     setSelectedInviteRoles([]);
                     e.stopPropagation();
                     e.preventDefault();
+                } else if (isCreateAccountOpen) {
+                    setIsCreateAccountOpen(false);
+                    resetCreateForm();
+                    e.stopPropagation();
+                    e.preventDefault();
                 } else if (isRoleModalOpen) {
                     handleCloseRoleModal();
                     e.stopPropagation();
@@ -89,7 +105,7 @@ export function MembersRolesTab() {
 
         window.addEventListener('keydown', handleKeyDown, true);
         return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [isInviteModalOpen, isRoleModalOpen, editingMember, activeHistoryMember]);
+    }, [isInviteModalOpen, isCreateAccountOpen, isRoleModalOpen, editingMember, activeHistoryMember]);
 
     const getHeaders = () => {
         const token = localStorage.getItem('swazz_token');
@@ -197,6 +213,56 @@ export function MembersRolesTab() {
             showToast('Invitation sent successfully', 'success');
         } else {
             showToast('Failed to send invitation', 'error');
+        }
+    };
+
+    const resetCreateForm = () => {
+        setCreateUsername('');
+        setCreateEmail('');
+        setCreateIsInteractive(true);
+        setSelectedCreateRoles([]);
+        setCreatedCredentials(null);
+        setIsCopied(false);
+    };
+
+    const handleCreateAccount = async () => {
+        const usernameVal = createUsername.trim();
+        if (!usernameVal) {
+            showToast('Username is required', 'error');
+            return;
+        }
+
+        const usernameRegex = /^[a-zA-Z0-9_\-]{3,20}$/;
+        if (!usernameRegex.test(usernameVal)) {
+            showToast('Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens', 'error');
+            return;
+        }
+
+        const payload = {
+            username: usernameVal,
+            email: createEmail.trim() || null,
+            roles: selectedCreateRoles,
+            is_interactive: createIsInteractive
+        };
+
+        try {
+            const res = await fetch(`/api/projects/${activeProject?.id}/members/create`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setCreatedCredentials(data);
+                fetchMembers();
+                showToast('Account provisioned successfully', 'success');
+            } else {
+                const errData = await res.json();
+                showToast(errData.error || 'Failed to provision account', 'error');
+            }
+        } catch (err: any) {
+            showToast('An error occurred during account creation', 'error');
         }
     };
 
@@ -317,7 +383,8 @@ export function MembersRolesTab() {
             {view === 'members' && (
                 <>
                     <div className="rbac-action-bar">
-                        <button className="btn btn-primary" onClick={() => setIsInviteModalOpen(true)} disabled={userProfile?.isGuest}>Invite User</button>
+                        <button className="btn btn-primary btn-invite-user" onClick={() => setIsInviteModalOpen(true)} disabled={userProfile?.isGuest}>Invite User</button>
+                        <button className="btn btn-secondary btn-create-account" onClick={() => setIsCreateAccountOpen(true)} disabled={userProfile?.isGuest}>Create User / Service Account</button>
                     </div>
                     <table className="rbac-table">
                         <thead>
@@ -458,6 +525,147 @@ export function MembersRolesTab() {
                             <button className="btn btn-secondary" onClick={() => setIsInviteModalOpen(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleInvite} disabled={!inviteInput || selectedInviteRoles.length === 0}>Send Invite</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Account Modal */}
+            {isCreateAccountOpen && (
+                <div className="modal-container">
+                    <div className="rbac-modal-content invite-modal">
+                        {!createdCredentials ? (
+                            <>
+                                <h3 className="rbac-tab-title rbac-modal-title">Create User / Service Account</h3>
+                                
+                                <div className="rbac-form-group">
+                                    <label className="rbac-form-label">Username</label>
+                                    <input 
+                                        type="text" 
+                                        className="input rbac-input-full" 
+                                        value={createUsername} 
+                                        onChange={e => setCreateUsername(e.target.value)} 
+                                        placeholder="e.g. scanner-node-1"
+                                        maxLength={20}
+                                        data-1p-ignore
+                                    />
+                                </div>
+
+                                <div className="rbac-form-group">
+                                    <label className="rbac-form-label">Email (Optional)</label>
+                                    <input 
+                                        type="email" 
+                                        className="input rbac-input-full" 
+                                        value={createEmail} 
+                                        onChange={e => setCreateEmail(e.target.value)} 
+                                        placeholder="e.g. scanner@example.com"
+                                        data-1p-ignore
+                                    />
+                                </div>
+
+                                <div className="rbac-form-group">
+                                    <label className="rbac-checkbox-item">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={createIsInteractive} 
+                                            onChange={e => setCreateIsInteractive(e.target.checked)} 
+                                        />
+                                        <span>Interactive login (allow dashboard access)</span>
+                                    </label>
+                                </div>
+
+                                <div className="rbac-form-group">
+                                    <label className="rbac-form-label">Roles to Assign</label>
+                                    <div className="rbac-checkbox-grid rbac-checkbox-grid-scroll">
+                                        {roles.map(r => (
+                                            <label key={r.id} className="rbac-checkbox-item">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedCreateRoles.includes(r.id)}
+                                                    onChange={e => {
+                                                        if (e.target.checked) setSelectedCreateRoles([...selectedCreateRoles, r.id]);
+                                                        else setSelectedCreateRoles(selectedCreateRoles.filter(id => id !== r.id));
+                                                    }}
+                                                />
+                                                <span>{r.name}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="rbac-modal-footer">
+                                    <button className="btn btn-secondary" onClick={() => { setIsCreateAccountOpen(false); resetCreateForm(); }}>Cancel</button>
+                                    <button className="btn btn-primary" onClick={handleCreateAccount} disabled={!createUsername || selectedCreateRoles.length === 0}>Create Account</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="rbac-tab-title rbac-modal-title">Account Created Successfully</h3>
+                                
+                                <div className="rbac-alert-warning">
+                                    <strong>Important:</strong> Copy the credentials below. This information is shown only once and cannot be retrieved later.
+                                </div>
+
+                                <div className="rbac-form-group">
+                                    <label className="rbac-form-label">Username</label>
+                                    <input 
+                                        type="text" 
+                                        className="input rbac-input-full" 
+                                        readOnly 
+                                        value={createdCredentials.username} 
+                                    />
+                                </div>
+
+                                {createdCredentials.password ? (
+                                    <div className="rbac-form-group">
+                                        <label className="rbac-form-label">Generated Password</label>
+                                        <div className="rbac-credential-wrapper">
+                                            <input 
+                                                type="text" 
+                                                className="input rbac-credential-input" 
+                                                readOnly 
+                                                value={createdCredentials.password} 
+                                            />
+                                            <button 
+                                                className="btn btn-secondary btn-sm rbac-credential-copy"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(createdCredentials.password || '');
+                                                    setIsCopied(true);
+                                                    setTimeout(() => setIsCopied(false), 2000);
+                                                }}
+                                            >
+                                                {isCopied ? 'Copied!' : 'Copy'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="rbac-form-group">
+                                        <label className="rbac-form-label">Generated API Key</label>
+                                        <div className="rbac-credential-wrapper">
+                                            <input 
+                                                type="text" 
+                                                className="input rbac-credential-input" 
+                                                readOnly 
+                                                value={createdCredentials.api_key} 
+                                            />
+                                            <button 
+                                                className="btn btn-secondary btn-sm rbac-credential-copy"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(createdCredentials.api_key || '');
+                                                    setIsCopied(true);
+                                                    setTimeout(() => setIsCopied(false), 2000);
+                                                }}
+                                            >
+                                                {isCopied ? 'Copied!' : 'Copy'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="rbac-modal-footer">
+                                    <button className="btn btn-primary" onClick={() => { setIsCreateAccountOpen(false); resetCreateForm(); }}>Done</button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
