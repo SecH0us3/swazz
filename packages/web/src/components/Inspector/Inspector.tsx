@@ -6,6 +6,15 @@ import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding, SwazzConfig } from '../../types.js';
 import { extractErrorSubtype } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
+import { FindingItem } from './FindingItem.js';
+import { StatusFilterDropdown } from './StatusFilterDropdown.js';
+import {
+    getStatusClass,
+    getBadgeClass,
+    formatBytes,
+    formatTime,
+    formatIdentityName
+} from './utils.js';
 
 export type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
 
@@ -21,110 +30,6 @@ interface Props {
     findingsOnly?: boolean;
     config?: SwazzConfig;
 }
-
-function getStatusClass(status: number): string {
-    if (status >= 500) return 'status-5xx';
-    if (status >= 400) return 'status-4xx';
-    return '';
-}
-
-function getBadgeClass(status: number): string {
-    if (status >= 500) return 'badge badge-error';
-    if (status >= 400) return 'badge badge-warning';
-    if (status >= 200 && status < 300) return 'badge badge-success';
-    return 'badge';
-}
-
-function formatBytes(bytes: number): string {
-    if (bytes === 0 || !bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-function formatTime(ts: number): string {
-    const d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
-}
-
-
-function formatIdentityName(name: string): string {
-    const lower = name.toLowerCase();
-    if (lower === 'user a') return 'User A (Primary)';
-    if (lower === 'user b') return 'User B';
-    if (lower === 'anonymous') return 'Anonymous';
-    if (name.length === 5 && lower.startsWith('user')) {
-        return 'User ' + name.charAt(4).toUpperCase();
-    }
-    return name;
-}
-
-interface FindingItemProps {
-    item: { result: ResultSummary; finding?: AnalysisFinding };
-    groupColor: string;
-    onSelect: (row: ResultSummary) => void;
-}
-
-const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, groupColor, onSelect }) => {
-    const triageBadge = (() => {
-        if (!item.result.triage || item.result.triage === 'none') return null;
-        const labels: Record<string, string> = {
-            false_positive: 'FP',
-            ignored: 'Ignored',
-            acknowledged: 'Ack'
-        };
-        const classes: Record<string, string> = {
-            false_positive: 'badge badge-warning',
-            ignored: 'badge',
-            acknowledged: 'badge badge-success'
-        };
-        return (
-            <span className={classes[item.result.triage]} style={{ marginLeft: 'var(--space-2)' }}>
-                {labels[item.result.triage]}
-            </span>
-        );
-    })();
-
-    const isIgnoredOrFp = item.result.triage === 'ignored' || item.result.triage === 'false_positive';
-
-    return (
-        <div 
-            className="finding-item" 
-            onClick={() => onSelect(item.result)}
-            style={{ 
-                borderLeft: `3px solid ${groupColor}`,
-                opacity: isIgnoredOrFp ? 0.6 : 1
-            }}
-        >
-            <div className="finding-item-row">
-                <div className="finding-item-endpoint">
-                    <span className={`method method-${item.result.method.toLowerCase()}`}>{item.result.method}</span>
-                    <span className="finding-item-path">{item.result.endpoint}</span>
-                    {triageBadge}
-                </div>
-                <span className={getBadgeClass(item.result.status)}>
-                    {item.result.status || 'ERR'}
-                </span>
-            </div>
-            {item.finding?.message && (
-                <div className="finding-item-message">
-                    {item.finding.message}
-                </div>
-            )}
-            {item.result.status >= 500 && !item.finding && (
-                <div className="finding-item-message">
-                    Server returned unhandled error status {item.result.status}
-                </div>
-            )}
-            {item.finding?.evidence && (
-                <div className="finding-item-evidence" title={item.finding.evidence}>
-                    <strong>Evidence:</strong> {item.finding.evidence}
-                </div>
-            )}
-        </div>
-    );
-});
 
 const PAGE_SIZE = 1000;
 
@@ -204,9 +109,6 @@ export function Inspector({
         }
         return new Set();
     });
-    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-
     const availableStatuses = useMemo(() => {
         if (!findingsOnly) return [];
         const statuses = new Set<number>();
@@ -216,22 +118,6 @@ export function Inspector({
         return Array.from(statuses).sort((a, b) => a - b);
     }, [rows, findingsOnly]);
 
-    const checkedCount = useMemo(() => {
-        return availableStatuses.filter(status => !excludedStatuses.has(status)).length;
-    }, [availableStatuses, excludedStatuses]);
-
-    const toggleStatus = (status: number) => {
-        setExcludedStatuses(prev => {
-            const next = new Set(prev);
-            if (next.has(status)) {
-                next.delete(status);
-            } else {
-                next.add(status);
-            }
-            return next;
-        });
-    };
-
     useEffect(() => {
         try {
             localStorage.setItem('swazz_excluded_statuses', JSON.stringify(Array.from(excludedStatuses)));
@@ -239,20 +125,6 @@ export function Inspector({
             console.error('Failed to save excluded statuses to localStorage', e);
         }
     }, [excludedStatuses]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsStatusDropdownOpen(false);
-            }
-        };
-        if (isStatusDropdownOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isStatusDropdownOpen]);
 
     // Reset limit to PAGE_SIZE when runId changes
     useEffect(() => {
@@ -554,56 +426,11 @@ export function Inspector({
                         </select>
                     )}
                     {findingsOnly && availableStatuses.length > 0 && (
-                        <div className="status-dropdown-container" ref={dropdownRef}>
-                            <button
-                                type="button"
-                                className="btn btn-ghost btn-sm status-dropdown-btn"
-                                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                            >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                                </svg>
-                                 Statuses ({checkedCount}/{availableStatuses.length})
-                            </button>
-                            {isStatusDropdownOpen && (
-                                <div className="status-dropdown-menu">
-                                    <div className="status-dropdown-actions">
-                                        <button
-                                            type="button"
-                                            className="status-dropdown-action-btn"
-                                            onClick={() => setExcludedStatuses(new Set())}
-                                        >
-                                            Select All
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="status-dropdown-action-btn"
-                                            onClick={() => setExcludedStatuses(prev => {
-                                                const next = new Set(prev);
-                                                availableStatuses.forEach(status => next.add(status));
-                                                return next;
-                                            })}
-                                        >
-                                            Clear All
-                                        </button>
-                                    </div>
-                                    {availableStatuses.map(status => {
-                                        const isChecked = !excludedStatuses.has(status);
-                                        const label = status === 0 ? 'ERR' : String(status);
-                                        return (
-                                            <label key={status} className="status-dropdown-item">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={() => toggleStatus(status)}
-                                                />
-                                                <span>{label}</span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
+                        <StatusFilterDropdown
+                            availableStatuses={availableStatuses}
+                            excludedStatuses={excludedStatuses}
+                            setExcludedStatuses={setExcludedStatuses}
+                        />
                     )}
                     {isLoading && !findingsOnly && (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>loading…</span>
