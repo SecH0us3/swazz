@@ -2,6 +2,9 @@ import { Env } from '../env';
 import { IProjectRepository } from '../repositories/projects';
 import { IRbacRepository } from '../repositories/rbac';
 import { signWebhookPayload } from '../utils/webhooks';
+import { ulid } from 'ulidx';
+import { hashPassword, hashApiKey, hashUsername } from '../utils/auth';
+import { AuthRepository } from '../repositories/auth';
 
 export interface IProjectService {
   getProjects(userId: string | null, isAuthEnabled: boolean): Promise<{ projects: any[] }>;
@@ -19,6 +22,7 @@ export interface IProjectService {
   updateProjectWebhook(projectId: string, webhookId: string, body: any): Promise<any>;
   deleteProjectWebhook(projectId: string, webhookId: string): Promise<any>;
   testProjectWebhook(projectId: string, webhookId: string): Promise<any>;
+  createProjectMemberAccount(projectId: string, body: any): Promise<any>;
 }
 
 export class ProjectService implements IProjectService {
@@ -318,5 +322,91 @@ export class ProjectService implements IProjectService {
     } catch (err: any) {
       throw new Error(`Webhook test failed: ${err.message}|400`);
     }
+  }
+
+  async createProjectMemberAccount(projectId: string, body: any) {
+    const { username, email, roles, is_interactive } = body;
+    
+    if (typeof username !== 'string') {
+      throw new Error('Username is required|400');
+    }
+    const cleanUsername = username.trim();
+    const usernameRegex = /^[a-zA-Z0-9_\-]{3,20}$/;
+    if (!usernameRegex.test(cleanUsername)) {
+      throw new Error('Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens|400');
+    }
+
+    if (email) {
+      if (typeof email !== 'string') {
+        throw new Error('Email must be a string|400');
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        throw new Error('Invalid email format|400');
+      }
+    }
+
+    if (!Array.isArray(roles) || roles.length === 0) {
+      throw new Error('At least one role must be assigned|400');
+    }
+
+    const defaultRoles = ['owner', 'editor', 'viewer'];
+    const customRoles = roles.filter(r => !defaultRoles.includes(r));
+    if (customRoles.length > 0) {
+      const existingCustom = await this.rbacRepo.checkCustomRolesExist(projectId, customRoles);
+      if (existingCustom.length !== customRoles.length) {
+        throw new Error('One or more custom roles are invalid|400');
+      }
+    }
+
+    const authRepo = new AuthRepository(this.env);
+    const usernameHash = await hashUsername(cleanUsername);
+    const exists = await authRepo.checkUsernameExists(usernameHash);
+    if (exists) {
+      throw new Error('Username already exists|400');
+    }
+
+    const isInteractive = is_interactive !== false;
+    const userId = ulid();
+
+    let password = '';
+    let hash = '';
+    let apiKey = '';
+    let hashedApiKey = '';
+
+    if (isInteractive) {
+      // Interactive user: generate secure temporary password
+      password = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(1, '0')).join('').substring(0, 16);
+      hash = await hashPassword(password);
+    } else {
+      // Non-interactive service account: generate permanent API key
+      apiKey = 'swazz_live_' + crypto.randomUUID().replace(/-/g, '');
+      hashedApiKey = await hashApiKey(apiKey);
+      // Set dummy password hash that cannot be matched
+      hash = await hashPassword(crypto.randomUUID());
+    }
+
+    const cleanEmail = email ? email.trim() : null;
+
+    const stmts = [
+      this.env.DB.prepare('INSERT INTO username_registry (username_hash) VALUES (?)').bind(usernameHash),
+      this.env.DB.prepare("INSERT INTO users (id, username, password_hash, api_key, email, is_interactive, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')")
+        .bind(userId, cleanUsername, hash, hashedApiKey || null, cleanEmail, isInteractive ? 1 : 0),
+      this.env.DB.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)")
+        .bind(projectId, userId, roles[0])
+    ];
+
+    roles.forEach((r: string) => {
+      stmts.push(this.env.DB.prepare('INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)').bind(projectId, userId, r));
+    });
+
+    await this.env.DB.batch(stmts);
+
+    return {
+      status: 'ok',
+      id: userId,
+      username: cleanUsername,
+      ...(isInteractive ? { password } : { api_key: apiKey })
+    };
   }
 }

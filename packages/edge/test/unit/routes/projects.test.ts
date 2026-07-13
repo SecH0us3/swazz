@@ -38,6 +38,7 @@ describe('Projects Routes', () => {
       getProjectAnalytics: vi.fn(),
       getUserLoginHistory: vi.fn(),
       getProjectAuditLogs: vi.fn(),
+      createProjectMemberAccount: vi.fn(),
     };
 
     const mockFactory = () => mockServices as IProjectService;
@@ -293,6 +294,36 @@ describe('Projects Routes', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ status: 'deleted' });
       expect(mockServices.deleteProject).toHaveBeenCalledWith('proj_1');
+    });
+  });
+
+  describe('POST /api/projects/:id/members/create', () => {
+    it('should successfully create project member account', async () => {
+      const mockResult = { status: 'ok', id: 'new_usr', username: 'testuser', password: 'generatedpassword' };
+      (mockServices.createProjectMemberAccount as any).mockResolvedValue(mockResult);
+
+      const res = await app.request('/api/projects/proj_1/members/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'testuser', roles: ['editor'], is_interactive: true })
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual(mockResult);
+      expect(mockServices.createProjectMemberAccount).toHaveBeenCalledWith('proj_1', { username: 'testuser', roles: ['editor'], is_interactive: true });
+    });
+
+    it('should return bad request error status if service throws validation error', async () => {
+      (mockServices.createProjectMemberAccount as any).mockRejectedValue(new Error('Username already exists|400'));
+
+      const res = await app.request('/api/projects/proj_1/members/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'testuser', roles: ['editor'] })
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'Username already exists' });
     });
   });
 });

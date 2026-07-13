@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProjectService } from '../../../src/services/projects';
 
+const mockCheckUsernameExists = vi.fn();
+
+vi.mock('../../../src/repositories/auth', () => {
+  return {
+    AuthRepository: vi.fn().mockImplementation(function() {
+      return {
+        checkUsernameExists: mockCheckUsernameExists,
+      };
+    }),
+  };
+});
+
 describe('ProjectService', () => {
   let service: ProjectService;
   let env: any;
@@ -8,7 +20,16 @@ describe('ProjectService', () => {
   let rbacRepo: any;
 
   beforeEach(() => {
-    env = {};
+    mockCheckUsernameExists.mockReset();
+    const mockPrepare = vi.fn().mockReturnValue({
+      bind: vi.fn().mockReturnThis(),
+    });
+    env = {
+      DB: {
+        prepare: mockPrepare,
+        batch: vi.fn().mockResolvedValue([]),
+      }
+    };
     projectRepo = {
       getProjects: vi.fn(),
       createProject: vi.fn(),
@@ -23,7 +44,8 @@ describe('ProjectService', () => {
       getProjectAuditLogs: vi.fn()
     };
     rbacRepo = {
-      checkPermission: vi.fn()
+      checkPermission: vi.fn(),
+      checkCustomRolesExist: vi.fn()
     };
     service = new ProjectService(env, projectRepo, rbacRepo);
   });
@@ -149,6 +171,71 @@ describe('ProjectService', () => {
       projectRepo.getProjectAuditLogs.mockResolvedValue([]);
       await service.getProjectAuditLogs('p1', 'a', '-5', '  term  ', '', null as any);
       expect(projectRepo.getProjectAuditLogs).toHaveBeenCalledWith('p1', 1, 1, 'term', '', '');
+    });
+  });
+
+  describe('createProjectMemberAccount', () => {
+    it('throws if username is not a string', async () => {
+      await expect(service.createProjectMemberAccount('p1', { username: 123 })).rejects.toThrow('Username is required|400');
+    });
+
+    it('throws if username is invalid', async () => {
+      await expect(service.createProjectMemberAccount('p1', { username: 'ab' })).rejects.toThrow('Username must be 3-20 characters long');
+      await expect(service.createProjectMemberAccount('p1', { username: 'a'.repeat(21) })).rejects.toThrow('Username must be 3-20 characters long');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user name' })).rejects.toThrow('Username must be 3-20 characters long');
+    });
+
+    it('throws if email is invalid', async () => {
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', email: 'invalid' })).rejects.toThrow('Invalid email format|400');
+    });
+
+    it('throws if roles is not assigned or not an array', async () => {
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: 'editor' })).rejects.toThrow('At least one role must be assigned|400');
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: [] })).rejects.toThrow('At least one role must be assigned|400');
+    });
+
+    it('throws if custom roles are invalid', async () => {
+      rbacRepo.checkCustomRolesExist.mockResolvedValue([]);
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['custom-role'] })).rejects.toThrow('One or more custom roles are invalid|400');
+    });
+
+    it('throws if username already exists', async () => {
+      mockCheckUsernameExists.mockResolvedValue(true);
+      await expect(service.createProjectMemberAccount('p1', { username: 'user123', roles: ['editor'] })).rejects.toThrow('Username already exists|400');
+    });
+
+    it('successfully provisions interactive user', async () => {
+      mockCheckUsernameExists.mockResolvedValue(false);
+      rbacRepo.checkCustomRolesExist.mockResolvedValue(['custom-role']);
+
+      const res = await service.createProjectMemberAccount('p1', {
+        username: 'newuser',
+        email: 'test@example.com',
+        roles: ['editor', 'custom-role'],
+        is_interactive: true
+      });
+
+      expect(res.status).toBe('ok');
+      expect(res.username).toBe('newuser');
+      expect(res.password).toBeDefined();
+      expect(res.password.length).toBe(16);
+      expect(env.DB.batch).toHaveBeenCalled();
+    });
+
+    it('successfully provisions service account', async () => {
+      mockCheckUsernameExists.mockResolvedValue(false);
+
+      const res = await service.createProjectMemberAccount('p1', {
+        username: 'service-acc',
+        roles: ['viewer'],
+        is_interactive: false
+      });
+
+      expect(res.status).toBe('ok');
+      expect(res.username).toBe('service-acc');
+      expect(res.api_key).toBeDefined();
+      expect(res.api_key.startsWith('swazz_live_')).toBe(true);
+      expect(env.DB.batch).toHaveBeenCalled();
     });
   });
 });
