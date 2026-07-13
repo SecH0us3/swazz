@@ -382,7 +382,10 @@ export class ProjectService implements IProjectService {
 
     if (isInteractive) {
       // Interactive user: generate secure temporary password
-      password = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(2, '0')).join('').substring(0, 16);
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      password = Array.from(bytes, b => chars[b % chars.length]).join('');
       hash = await hashPassword(password);
     } else {
       // Non-interactive service account: generate permanent API key

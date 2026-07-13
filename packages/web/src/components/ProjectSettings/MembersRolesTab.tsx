@@ -640,9 +640,13 @@ export function MembersRolesTab() {
                                             <button 
                                                 className="btn btn-secondary btn-sm rbac-credential-copy"
                                                 onClick={() => {
-                                                    navigator.clipboard.writeText(createdCredentials.password || '');
-                                                    setIsCopied(true);
-                                                    setTimeout(() => setIsCopied(false), 2000);
+                                                    if (navigator.clipboard) {
+                                                        navigator.clipboard.writeText(createdCredentials.password || '');
+                                                        setIsCopied(true);
+                                                        setTimeout(() => setIsCopied(false), 2000);
+                                                    } else {
+                                                        showToast('Clipboard access not supported or blocked', 'error');
+                                                    }
                                                 }}
                                             >
                                                 {isCopied ? 'Copied!' : 'Copy'}
@@ -663,9 +667,13 @@ export function MembersRolesTab() {
                                             <button 
                                                 className="btn btn-secondary btn-sm rbac-credential-copy"
                                                 onClick={() => {
-                                                    navigator.clipboard.writeText(createdCredentials.api_key || '');
-                                                    setIsCopied(true);
-                                                    setTimeout(() => setIsCopied(false), 2000);
+                                                    if (navigator.clipboard) {
+                                                        navigator.clipboard.writeText(createdCredentials.api_key || '');
+                                                        setIsCopied(true);
+                                                        setTimeout(() => setIsCopied(false), 2000);
+                                                    } else {
+                                                        showToast('Clipboard access not supported or blocked', 'error');
+                                                    }
                                                 }}
                                             >
                                                 {isCopied ? 'Copied!' : 'Copy'}
