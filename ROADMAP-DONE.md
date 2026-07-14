@@ -37,6 +37,12 @@ This file contains completed tasks.
 
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
+- [x] **Task 62: Browser Extension for Real-Time Traffic Capturing & Request Recording**
+  - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints and capturing client requests directly into the Swazz configuration profile. This can serve as a more optimal, zero-setup alternative to exporting/uploading HAR files.
+  - **Implementation Details:**
+    - Capture HTTP/HTTPS requests on specified domains in background service workers.
+    - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
+
 - [x] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
 
 - [x] **Task 6:** Investigate and implement GraphQL schema parsing and fuzzing support.
