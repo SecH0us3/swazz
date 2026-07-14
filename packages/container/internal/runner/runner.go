@@ -406,6 +406,14 @@ func (r *Runner) fuzzEndpoint(
 	r.progress.completedEndpoints.Store(int32(len(endpoints) + profileIdx*len(endpoints) + epIdx)) // #nosec G115
 	r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
+	if r.config.Settings.ActiveParameterFuzzing {
+		fields := collectTargetFields(&endpoint)
+		if len(fields) > 0 {
+			r.runActiveParameterFuzzing(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen, fields)
+			return
+		}
+	}
+
 	effectiveIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
 	maxPayload := calcMaxPayloadSize(profile, r.config.Settings)
 	enableDedup := profile == swagger.ProfileRandom
@@ -651,7 +659,14 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	// 2. Fuzz profiles.
 	for _, ep := range endpoints {
 		for _, p := range profiles {
-			total += int64(calcEffectiveIterations(p, settings, &ep))
+			baseIter := calcEffectiveIterations(p, settings, &ep)
+			if settings.ActiveParameterFuzzing {
+				fields := collectTargetFields(&ep)
+				if len(fields) > 0 {
+					baseIter *= len(fields)
+				}
+			}
+			total += int64(baseIter)
 		}
 	}
 

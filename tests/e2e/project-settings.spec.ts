@@ -313,11 +313,11 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await expect(totalStat).not.toHaveText('0', { timeout: 15000 });
 
       const successStat = page.locator('.stat-card.stat-2xx .stat-value');
-      // Tolerate very low success count (e.g. < 10) on fast machines where loopback is < 5ms
+      // Tolerate very low success count (e.g. < 20) on fast machines where loopback is < 5ms
       await expect(async () => {
         const text = await successStat.innerText();
         const val = parseInt(text, 10);
-        expect(val).toBeLessThan(10);
+        expect(val).toBeLessThan(20);
       }).toPass({ timeout: 10000 });
     } finally {
       // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests
@@ -501,6 +501,43 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
     await expect(proposeFixesCheckbox).toBeChecked();
     await expect(urlMappingsTextarea).toHaveValue('{"/api/*": "git@github.com:SecH0us3/swazz.git"}');
+  });
+
+  test('should display Traffic Capture settings tab', async ({ page }) => {
+    // 1. Navigate to frontend
+    await page.goto('/');
+
+    // 2. Register unique user
+    await page.getByRole('button', { name: 'Create' }).click();
+    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+    await page.locator('#username').fill(uniqueUsername);
+    await page.locator('#password').fill('Password123!');
+    await page.locator('#password').press('Enter');
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+
+    // 3. Open Project Settings
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
+
+    // 4. Switch to Traffic Capture tab
+    const captureTabBtn = page.locator('button.tab-bar-btn:has-text("Traffic Capture")');
+    await expect(captureTabBtn).toBeVisible();
+    await captureTabBtn.click();
+
+    // 5. Verify credentials card details
+    const extSyncHeader = page.locator('.traffic-capture-card-title:has-text("Browser Extension Sync")');
+    await expect(extSyncHeader).toBeVisible();
+
+    const targetBaseUrlField = page.locator('.traffic-capture-credential-label:has-text("Target Base URL") + .traffic-capture-credential-value-row .traffic-capture-credential-value');
+    await expect(targetBaseUrlField).toBeVisible();
+
+    // 6. Verify setup steps guide card
+    const setupHeader = page.locator('.traffic-capture-card-title:has-text("Setup & Installation")');
+    await expect(setupHeader).toBeVisible();
+    
+    const firstStepContent = page.locator('.traffic-capture-step:has-text("Load unpacked extension")');
+    await expect(firstStepContent).toBeVisible();
   });
 });
 

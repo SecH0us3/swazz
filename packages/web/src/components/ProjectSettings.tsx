@@ -15,6 +15,7 @@ import { KeysTab } from './ProjectSettings/KeysTab.js';
 import { ScheduleTab } from './ProjectSettings/ScheduleTab.js';
 import { AuditTrailTab } from './ProjectSettings/AuditTrailTab.js';
 import { WebhooksTab } from './ProjectSettings/WebhooksTab.js';
+import { TrafficCaptureTab } from './ProjectSettings/TrafficCaptureTab.js';
 
 interface Runner {
     connectionId: string | null;
@@ -27,7 +28,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'traffic_capture'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -131,6 +132,16 @@ export function ProjectSettings() {
                             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                         </svg>
                         API Specifications
+                    </button>
+                    <button
+                        className={`tab-bar-btn ${activeSubTab === 'traffic_capture' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('traffic_capture')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        Traffic Capture
                     </button>
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'performance' ? 'active' : ''}`}
@@ -276,6 +287,7 @@ export function ProjectSettings() {
                     {activeSubTab === 'general' && <GeneralTab />}
                     {activeSubTab === 'members' && <MembersRolesTab />}
                     {activeSubTab === 'api_specs' && <ApiSpecsTab />}
+                    {activeSubTab === 'traffic_capture' && <TrafficCaptureTab />}
                     {activeSubTab === 'performance' && <PerformanceTab />}
                     {activeSubTab === 'anomalies' && <AnomaliesTab />}
                     {activeSubTab === 'wordlists' && <WordlistsTab />}

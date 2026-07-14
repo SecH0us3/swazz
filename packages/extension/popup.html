@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Swazz Traffic Capturer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-container">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-title">Swazz</span>
+                <span class="logo-subtitle">Capturer</span>
+            </div>
+            <div class="status-indicator">
+                <span class="pulse-dot" id="recording-pulse"></span>
+                <span class="status-text" id="recording-status">Idle</span>
+            </div>
+        </header>
+
+        <!-- Recording Controls Area -->
+        <section class="control-panel">
+            <div class="panel-row">
+                <div class="toggle-desc">
+                    <h3>Traffic Recording</h3>
+                    <p id="toggle-desc-sub">Sniff API traffic on targeted domains</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-toggle-record">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </section>
+
+        <!-- Settings section (collapsible) -->
+        <section class="settings-panel">
+            <div class="settings-header" id="settings-toggle">
+                <span>⚙️ Connection & Scope Settings</span>
+                <svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            
+            <div class="settings-content hidden" id="settings-content">
+                <div class="form-group">
+                    <label>Swazz URL</label>
+                    <input type="text" id="input-swazz-url" placeholder="http://localhost:5173">
+                </div>
+                <div class="form-group">
+                    <label>API Auth Token</label>
+                    <input type="password" id="input-token" placeholder="Auto-synced or paste JWT token">
+                </div>
+                <div class="form-group">
+                    <label>Active Project</label>
+                    <select id="select-project">
+                        <option value="">-- No projects loaded --</option>
+                    </select>
+                    <button class="btn btn-ghost btn-sm" id="btn-refresh-projects">🔄 Refresh Projects</button>
+                </div>
+                <div class="form-group project-create-group">
+                    <label>Or Create New Project</label>
+                    <div class="input-action-row">
+                        <input type="text" id="input-new-project-name" placeholder="Project Name">
+                        <button class="btn btn-primary btn-sm" id="btn-create-project">➕ Create</button>
+                    </div>
+                    <div class="create-project-error" id="lbl-create-project-error"></div>
+                </div>
+                <div class="form-group">
+                    <label>Target Domains (comma separated)</label>
+                    <input type="text" id="input-domains" placeholder="e.g. localhost:8080, api.dev">
+                    <span class="helper-text" id="helper-current-tab">Suggest active tab: <strong>None</strong></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Current Target Connection Card -->
+        <div class="connection-card" id="connection-card">
+            <span class="card-icon">🔗</span>
+            <div class="card-details">
+                <span class="card-title">Target: <strong id="lbl-active-project">None</strong></span>
+                <span class="card-subtitle" id="lbl-active-domains">Scope: Empty</span>
+            </div>
+        </div>
+
+        <!-- Captured Endpoints List -->
+        <section class="endpoints-section">
+            <div class="section-header">
+                <h2>Captured Endpoints (<span id="lbl-endpoint-count">0</span>)</h2>
+                <button class="btn btn-ghost btn-sm" id="btn-clear-endpoints">Clear</button>
+            </div>
+            
+            <div class="endpoints-list-container">
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-icon">🕸️</div>
+                    <p>No endpoints recorded yet.</p>
+                    <p class="sub">Enable recording and browse your target application to capture API calls.</p>
+                </div>
+                <div class="endpoints-list" id="endpoints-list">
+                    <!-- Dynamic entries render here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer Actions -->
+        <footer class="footer">
+            <div class="cookie-sync-option">
+                <label>
+                    <input type="checkbox" id="chk-sync-cookies" checked>
+                    Sync active session cookies
+                </label>
+            </div>
+            <button class="btn btn-primary" id="btn-sync-swazz" disabled>
+                🚀 Sync to Swazz Dashboard
+            </button>
+            <div class="sync-status" id="sync-status"></div>
+        </footer>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -91,22 +91,39 @@ export function PerformanceTab() {
                 </div>
 
                 <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Fuzzing Intensity (Iterations per profile)</label>
+                    <label className="fuzz-setting-intensity-title">Fuzzing Intensity (Iterations per profile)</label>
                     <input 
                         type="number" 
-                        className="input" 
+                        className="input fuzz-setting-intensity-input" 
                         min="1"
                         value={config.settings.iterations_per_profile} 
                         onChange={(e) => updateSettings({ iterations_per_profile: Math.max(1, parseInt(e.target.value) || 10) })}
-                        style={{ width: '120px' }} 
                     />
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                    <span className="fuzz-setting-intensity-hint">
                         Controls the volume of payload variations tested on each endpoint. High values provide thorough code path exploration at the expense of scan execution time.
                     </span>
                 </div>
 
+                {/* Active Parameter Fuzzing */}
+                <div className="fuzz-setting-checkbox-group">
+                    <label className="premium-checkbox-label">
+                        <input
+                            type="checkbox"
+                            className="premium-checkbox"
+                            checked={config.settings.active_parameter_fuzzing ?? true}
+                            onChange={() => updateSettings({
+                                active_parameter_fuzzing: !(config.settings.active_parameter_fuzzing ?? true)
+                            })}
+                        />
+                        <strong style={{ fontSize: '13px' }}>Active Parameter Fuzzing (Field-by-Field)</strong>
+                    </label>
+                    <span className="fuzz-setting-checkbox-hint">
+                        Mutate one request parameter or body field at a time while leaving other fields at baseline values. Extremely useful for avoiding validation errors on non-targeted fields.
+                    </span>
+                </div>
+
                 {/* Rate Limit Detection */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
+                <div className="fuzz-setting-checkbox-group">
                     <label className="premium-checkbox-label">
                         <input
                             type="checkbox"
