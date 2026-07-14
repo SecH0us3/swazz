@@ -28,25 +28,28 @@ import (
 )
 
 type CliConfig struct {
-	SwaggerURLs      []string          `json:"swagger_urls"`
-	SwaggerURLsAlias []string          `json:"_swagger_urls"`
-	BaseURL          string            `json:"base_url"`
-	Headers          map[string]string `json:"headers"`
-	GlobalHeaders    map[string]string `json:"global_headers"`
-	Cookies          map[string]string `json:"cookies"`
-	WordlistFiles    map[string]string `json:"wordlist_files"`
-	Dictionaries     map[string][]any  `json:"dictionaries"`
-	Settings         swagger.Settings  `json:"settings"`
-	Endpoints        *struct {
+	SwaggerURLs         []string                `json:"swagger_urls"`
+	SwaggerURLsAlias    []string                `json:"_swagger_urls"`
+	BaseURL             string                  `json:"base_url"`
+	Headers             map[string]string       `json:"headers"`
+	GlobalHeaders       map[string]string       `json:"global_headers"`
+	Cookies             map[string]string       `json:"cookies"`
+	WordlistFiles       map[string]string       `json:"wordlist_files"`
+	Dictionaries        map[string][]any        `json:"dictionaries"`
+	Settings            swagger.Settings        `json:"settings"`
+	Endpoints           *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
-	DisabledEndpoints []string                        `json:"disabled_endpoints"`
-	Rules             *swagger.RulesConfig            `json:"rules"`
-	AuthSequence      []swagger.AuthStep              `json:"auth_sequence"`
-	AuthIdentities    map[string]swagger.AuthIdentity `json:"auth_identities,omitempty"`
-	Variables         map[string]any                  `json:"variables,omitempty"`
-	Security          swagger.SecurityConfig          `json:"security"`
+	// EndpointDefinitions holds pre-parsed endpoints (e.g. from browser extension HAR capture).
+	// When populated, swagger_url is not required — the runner uses these directly.
+	EndpointDefinitions []swagger.EndpointConfig         `json:"endpoint_definitions,omitempty"`
+	DisabledEndpoints   []string                         `json:"disabled_endpoints"`
+	Rules               *swagger.RulesConfig             `json:"rules"`
+	AuthSequence        []swagger.AuthStep               `json:"auth_sequence"`
+	AuthIdentities      map[string]swagger.AuthIdentity  `json:"auth_identities,omitempty"`
+	Variables           map[string]any                   `json:"variables,omitempty"`
+	Security            swagger.SecurityConfig           `json:"security"`
 }
 
 func (c *CliConfig) Validate() error {
@@ -55,6 +58,48 @@ func (c *CliConfig) Validate() error {
 	}
 	if err := swagger.ValidateBaseURL(c.BaseURL); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (c *CliConfig) UnmarshalJSON(data []byte) error {
+	type alias CliConfig
+	var aux struct {
+		*alias
+		Endpoints json.RawMessage `json:"endpoints"`
+	}
+	aux.alias = (*alias)(c)
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	if len(aux.Endpoints) > 0 {
+		trimmed := strings.TrimSpace(string(aux.Endpoints))
+		if strings.HasPrefix(trimmed, "[") {
+			// It's an array of endpoint definitions (e.g. browser extension HAR sync or imported config)
+			var defs []swagger.EndpointConfig
+			if err := json.Unmarshal(aux.Endpoints, &defs); err != nil {
+				return fmt.Errorf("failed to parse endpoints array: %w", err)
+			}
+			c.EndpointDefinitions = append(c.EndpointDefinitions, defs...)
+			c.Endpoints = nil
+		} else if strings.HasPrefix(trimmed, "{") {
+			// It's a standard include/exclude filter object
+			var filter struct {
+				Include []string `json:"include"`
+				Exclude []string `json:"exclude"`
+			}
+			if err := json.Unmarshal(aux.Endpoints, &filter); err != nil {
+				return fmt.Errorf("failed to parse endpoints object: %w", err)
+			}
+			c.Endpoints = &struct {
+				Include []string `json:"include"`
+				Exclude []string `json:"exclude"`
+			}{
+				Include: filter.Include,
+				Exclude: filter.Exclude,
+			}
+		}
 	}
 	return nil
 }
@@ -410,8 +455,8 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		return nil, fmt.Errorf("configuration validation failed: %v", err)
 	}
 
-	if len(cliCfg.SwaggerURLs) == 0 {
-		return nil, fmt.Errorf("config must specify at least one swagger_url")
+	if len(cliCfg.SwaggerURLs) == 0 && len(cliCfg.EndpointDefinitions) == 0 {
+		return nil, fmt.Errorf("config must specify at least one swagger_url or provide endpoint_definitions (e.g. via browser extension sync)")
 	}
 
 	if cliCfg.Settings.IterationsPerProfile <= 0 {
@@ -524,25 +569,138 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 	var allEndpoints []swagger.EndpointConfig
 	basePath := cliCfg.BaseURL
 
-	// Collect results in the order of SwaggerURLs to keep order deterministic
-	resultsMap := make(map[string]specResult)
-	for res := range resChan {
-		if res.err != nil {
-			return nil, res.err
+	// Fast path: if endpoint_definitions are already provided (e.g. from browser extension
+	// HAR capture synced via /api/parse), skip fetching/parsing swagger URLs entirely.
+	if len(cliCfg.EndpointDefinitions) > 0 && len(cliCfg.SwaggerURLs) == 0 {
+		logger.Debug("[Config] Using %d pre-parsed endpoint_definitions (browser extension mode)", len(cliCfg.EndpointDefinitions))
+		allEndpoints = cliCfg.EndpointDefinitions
+		if basePath == "" {
+			return nil, fmt.Errorf("no base_url found in config — required when using endpoint_definitions without swagger_url")
 		}
-		resultsMap[res.urlStr] = res
-	}
-
-	for _, urlStr := range cliCfg.SwaggerURLs {
-		res := resultsMap[urlStr]
-		if basePath == "" && res.basePath != "" {
-			basePath = res.basePath
+	} else {
+		// 2. Fetch and parse specs concurrently
+		type specResult struct {
+			urlStr    string
+			endpoints []swagger.EndpointConfig
+			basePath  string
+			err       error
 		}
-		allEndpoints = append(allEndpoints, res.endpoints...)
-	}
 
-	if basePath == "" {
-		return nil, fmt.Errorf("no base_url found in config or specs")
+		resChan := make(chan specResult, len(cliCfg.SwaggerURLs))
+		var wg sync.WaitGroup
+
+		for _, urlStr := range cliCfg.SwaggerURLs {
+			wg.Add(1)
+			go func(urlStr string) {
+				defer wg.Done()
+				logger.Debug("[Config] Fetching spec: %s", urlStr)
+				startFetch := time.Now()
+
+				headersCopy := make(map[string]string)
+				for k, v := range cliCfg.Headers {
+					headersCopy[k] = v
+				}
+				if len(cliCfg.Cookies) > 0 {
+					var cookieParts []string
+					for k, v := range cliCfg.Cookies {
+						cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+					}
+					headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
+				}
+
+				specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
+				if err != nil {
+					resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}
+					return
+				}
+
+				fetchDur := time.Since(startFetch)
+				logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
+
+				var parseOpts []swagger.ParserOption
+				if cliCfg.Settings.MaxNodesBudget > 0 {
+					parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
+				}
+				if cliCfg.Settings.MaxDepthLimit > 0 {
+					parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
+				}
+
+				parsed, err := swagger.ParseRawSpec(specRaw, parseOpts...)
+				if err != nil {
+					if swagger.IsHAR(specRaw) {
+						parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
+						if errHAR != nil {
+							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as HAR: %w", urlStr, errHAR)}
+							return
+						}
+						parsed = parsedHAR
+					} else if swagger.IsPostman(specRaw) {
+						parsedPostman, errPostman := postman.ParsePostman(specRaw)
+						if errPostman != nil {
+							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as Postman Collection: %w", urlStr, errPostman)}
+							return
+						}
+						parsed = parsedPostman
+					} else {
+						// Try GraphQL parser fallback
+						defaultPath := "/graphql"
+						if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+							if parsedURL.Path != "" && parsedURL.Path != "/" {
+								defaultPath = parsedURL.Path
+							}
+						}
+						parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+						if errGQL != nil {
+							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as OpenAPI (%w) or GraphQL (%w)", urlStr, err, errGQL)}
+							return
+						}
+						parsed = parsedGQL
+					}
+				}
+
+				bp := ""
+				if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
+					bp = parsedURL.Scheme + "://" + parsedURL.Host
+				} else {
+					bp = parsed.BasePath
+				}
+
+				logger.Debug("[Config] Parsed spec %s: %d endpoints found", urlStr, len(parsed.Endpoints))
+
+				resChan <- specResult{
+					urlStr:    urlStr,
+					endpoints: parsed.Endpoints,
+					basePath:  bp,
+				}
+			}(urlStr)
+		}
+
+		wg.Wait()
+		close(resChan)
+
+		// Collect results in the order of SwaggerURLs to keep order deterministic
+		resultsMap := make(map[string]specResult)
+		for res := range resChan {
+			if res.err != nil {
+				return nil, res.err
+			}
+			resultsMap[res.urlStr] = res
+		}
+
+		for _, urlStr := range cliCfg.SwaggerURLs {
+			res := resultsMap[urlStr]
+			if basePath == "" && res.basePath != "" {
+				basePath = res.basePath
+			}
+			allEndpoints = append(allEndpoints, res.endpoints...)
+		}
+
+		// Also merge any pre-parsed endpoint_definitions on top of spec endpoints
+		allEndpoints = append(allEndpoints, cliCfg.EndpointDefinitions...)
+
+		if basePath == "" {
+			return nil, fmt.Errorf("no base_url found in config or specs")
+		}
 	}
 
 	logger.Debug("[Config] Aggregated total endpoints: %d", len(allEndpoints))

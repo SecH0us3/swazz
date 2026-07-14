@@ -166,6 +166,9 @@ export function useRunner(proxyUrl: string) {
             let runId = '';
             try {
                 const configToSend = { ...config };
+                if (Array.isArray(config.endpoints)) {
+                    configToSend.endpoint_definitions = config.endpoints;
+                }
                 // Go backend expects endpoints to be an object with include/exclude, not an array of objects
                 if (Array.isArray(configToSend.endpoints)) {
                     const include = configToSend.endpoints.map((ep: any) => `${ep.method} ${ep.path}`);
