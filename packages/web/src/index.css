@@ -46,8 +46,8 @@
   --color-info-bg:    rgba(56,189,248,0.08);
 
   /* Method colors */
-  --method-get:    #22d3a0;
-  --method-post:   #38bdf8;
+  --method-get:    #10B981;
+  --method-post:   #0EA5E9;
   --method-put:    #f59e0b;
   --method-patch:  #c084fc;
   --method-delete: #f43f5e;
