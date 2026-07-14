@@ -261,3 +261,97 @@ func TestIsIgnored_GlobEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestIsIgnored_StatusMatching(t *testing.T) {
+	rules := []IgnoreRule{
+		{RuleID: "swazz/bad-request", Status: "400"},
+		{Status: "4xx"},
+		{Status: "5XX"},
+		{Status: "  201  "},
+	}
+
+	tests := []struct {
+		name    string
+		finding *Finding
+		want    bool
+	}{
+		{
+			name: "exact status match 400 with rule id",
+			finding: &Finding{
+				RuleID: "swazz/bad-request",
+				Status: 400,
+			},
+			want: true,
+		},
+		{
+			name: "exact status match 400 but different rule id",
+			finding: &Finding{
+				RuleID: "swazz/reflected-xss",
+				Status: 400,
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsIgnored(tt.finding, rules)
+			if got != tt.want {
+				t.Errorf("IsIgnored() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	// Test specific rule evaluations
+	t.Run("exact status match 400 only", func(t *testing.T) {
+		r := []IgnoreRule{{Status: "400"}}
+		if !IsIgnored(&Finding{Status: 400}, r) {
+			t.Error("expected status 400 to match rule 400")
+		}
+		if IsIgnored(&Finding{Status: 404}, r) {
+			t.Error("expected status 404 NOT to match rule 400")
+		}
+	})
+
+	t.Run("range status match 4xx", func(t *testing.T) {
+		r := []IgnoreRule{{Status: "4xx"}}
+		if !IsIgnored(&Finding{Status: 400}, r) {
+			t.Error("expected status 400 to match rule 4xx")
+		}
+		if !IsIgnored(&Finding{Status: 404}, r) {
+			t.Error("expected status 404 to match rule 4xx")
+		}
+		if !IsIgnored(&Finding{Status: 499}, r) {
+			t.Error("expected status 499 to match rule 4xx")
+		}
+		if IsIgnored(&Finding{Status: 200}, r) {
+			t.Error("expected status 200 NOT to match rule 4xx")
+		}
+		if IsIgnored(&Finding{Status: 500}, r) {
+			t.Error("expected status 500 NOT to match rule 4xx")
+		}
+	})
+
+	t.Run("case-insensitive range status match 5XX", func(t *testing.T) {
+		r := []IgnoreRule{{Status: "5XX"}}
+		if !IsIgnored(&Finding{Status: 500}, r) {
+			t.Error("expected status 500 to match rule 5XX")
+		}
+		if !IsIgnored(&Finding{Status: 503}, r) {
+			t.Error("expected status 503 to match rule 5XX")
+		}
+		if IsIgnored(&Finding{Status: 400}, r) {
+			t.Error("expected status 400 NOT to match rule 5XX")
+		}
+	})
+
+	t.Run("trimmed status match 201", func(t *testing.T) {
+		r := []IgnoreRule{{Status: "  201  "}}
+		if !IsIgnored(&Finding{Status: 201}, r) {
+			t.Error("expected status 201 to match rule '  201  '")
+		}
+		if IsIgnored(&Finding{Status: 200}, r) {
+			t.Error("expected status 200 NOT to match rule '  201  '")
+		}
+	})
+}

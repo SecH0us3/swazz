@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"swazz-engine/internal/swagger"
@@ -111,6 +112,13 @@ func ruleMatches(f *Finding, r *IgnoreRule) bool {
 		}
 	}
 
+	// 5. Status code match (e.g. 400, "400", "4xx")
+	if r.Status != "" {
+		if !statusCodeMatches(f.Status, r.Status) {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -139,4 +147,25 @@ func payloadMatches(payload any, r *IgnoreRule) bool {
 
 	// Fallback to substring
 	return strings.Contains(str, r.Payload)
+}
+
+func statusCodeMatches(findingStatus int, ruleStatus string) bool {
+	ruleStatus = strings.ToLower(strings.TrimSpace(ruleStatus))
+	if ruleStatus == "" {
+		return true
+	}
+
+	// Match ranges like "4xx", "5xx", etc.
+	if len(ruleStatus) == 3 && strings.HasSuffix(ruleStatus, "xx") {
+		prefix := ruleStatus[0]
+		findingPrefix := strconv.Itoa(findingStatus / 100)
+		if len(findingPrefix) == 1 && findingPrefix[0] == prefix {
+			return true
+		}
+		return false
+	}
+
+	// Match exact status codes
+	findingStr := strconv.Itoa(findingStatus)
+	return findingStr == ruleStatus
 }
