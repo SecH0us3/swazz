@@ -113,10 +113,11 @@ interface Props {
     runId: string | null;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
     liveCount?: number;
+    isRunning?: boolean;
     onSelectResult: (row: ResultSummary) => void;
 }
 
-export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult }: Props) {
+export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = false, onSelectResult }: Props) {
     const onSelectResultRef = useRef(onSelectResult);
     onSelectResultRef.current = onSelectResult;
 
