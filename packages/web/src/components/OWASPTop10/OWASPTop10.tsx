@@ -126,6 +126,9 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
     }, []);
 
     const [rows, setRows] = useState<ResultSummary[]>([]);
+    const rowsRef = useRef(rows);
+    rowsRef.current = rows;
+
     const [isLoading, setIsLoading] = useState(false);
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
     const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>({});
@@ -136,8 +139,8 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
             return;
         }
 
-        setIsLoading(true);
-        const timer = setTimeout(() => {
+        const fetchData = () => {
+            setIsLoading(prev => prev || rowsRef.current.length === 0);
             queryResults({
                 runId,
                 statusFilter: 'all',
@@ -153,10 +156,22 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                 .finally(() => {
                     setIsLoading(false);
                 });
-        }, 1000); // Debounce database queries by 1 second to prevent UI freezing during active runs
+        };
 
-        return () => clearTimeout(timer);
-    }, [runId, queryResults, liveCount]);
+        // Initial immediate fetch
+        fetchData();
+
+        let intervalId: NodeJS.Timeout | null = null;
+        if (isRunning) {
+            intervalId = setInterval(fetchData, 3000);
+        }
+
+        return () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+        };
+    }, [runId, queryResults, isRunning]);
 
     const groupedData = useMemo(() => {
         const groups: Record<string, { result: ResultSummary; finding?: AnalysisFinding }[]> = {};
