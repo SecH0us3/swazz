@@ -150,6 +150,7 @@ func startAgent(args []string) {
 	ctx := context.Background()
 
 	headers := make(http.Header)
+	headers.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
 	u, err := url.Parse(coordinatorURL)
 	if err != nil {
 		log.Fatalf("Failed to parse coordinator URL: %v", err)

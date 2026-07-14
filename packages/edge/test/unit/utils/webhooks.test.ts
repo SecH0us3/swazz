@@ -98,7 +98,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
     expect(firstSignature).toBe(expectedFirstSig);
 
     expect(firstCall[1].headers['Content-Type']).toBe('application/json');
-    expect(firstCall[1].headers['User-Agent']).toBe('Swazz-Webhook-Dispatcher/1.0');
+    expect(firstCall[1].headers['User-Agent']).toBe('Swazz/1.0 (+https://github.com/SecH0us3/swazz)');
     expect(firstCall[1].headers['X-Custom-Header']).toBe('value1');
 
     const parsedBody = JSON.parse(firstCall[1].body);
@@ -121,7 +121,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
     expect(secondSignature).toBe(expectedSecondSig);
 
     expect(secondCall[1].headers['Content-Type']).toBe('application/json');
-    expect(secondCall[1].headers['User-Agent']).toBe('Swazz-Webhook-Dispatcher/1.0');
+    expect(secondCall[1].headers['User-Agent']).toBe('Swazz/1.0 (+https://github.com/SecH0us3/swazz)');
 
     expect(logInfo).toHaveBeenCalledWith({ env: mockEnv, executionCtx: ctx }, 'Webhook', expect.stringContaining('Dispatching scan.completed webhook'));
   });
@@ -210,7 +210,7 @@ describe('Webhook Utility - dispatchWebhook', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch.mock.calls[0][1].headers).toEqual({
       'Content-Type': 'application/json',
-      'User-Agent': 'Swazz-Webhook-Dispatcher/1.0'
+      'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)'
     });
     expect(logError).toHaveBeenCalledWith(
       { env: mockEnv, executionCtx: undefined },

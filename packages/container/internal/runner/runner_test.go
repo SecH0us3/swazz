@@ -766,3 +766,74 @@ func TestRunner_MaxScanDurationTimeout(t *testing.T) {
 		t.Errorf("Expected runner to stop early under timeout, but executed all %d iterations", stats.TotalRequests)
 	}
 }
+
+func TestExecuteRequest_UserAgent(t *testing.T) {
+	var lastUserAgent string
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		lastUserAgent = r.Header.Get("User-Agent")
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	r := newTestRunner(&http.Client{Timeout: 5 * time.Second}, &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	})
+	defer r.Close()
+
+	// 1. Without User-Agent in generatedHeaders (should set default)
+	r.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "GET",
+		nil, nil, nil, swagger.ProfileRandom, nil, nil, "",
+	)
+
+	mu.Lock()
+	ua := lastUserAgent
+	mu.Unlock()
+	if ua != "Swazz/1.0 (+https://github.com/SecH0us3/swazz)" {
+		t.Errorf("Expected custom User-Agent, got %q", ua)
+	}
+
+	// 2. With User-Agent in generatedHeaders (should retain fuzzed payload value)
+	fuzzedUA := "FuzzedUserAgentPayload123"
+	genHeaders := map[string]string{
+		"User-Agent": fuzzedUA,
+	}
+	r.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "GET",
+		nil, nil, nil, swagger.ProfileRandom, nil, genHeaders, "",
+	)
+
+	mu.Lock()
+	ua = lastUserAgent
+	mu.Unlock()
+	if ua != fuzzedUA {
+		t.Errorf("Expected fuzzed User-Agent %q, got %q", fuzzedUA, ua)
+	}
+
+	// 3. With User-Agent in global headers (should retain global custom value)
+	globalUA := "GlobalUserAgentValue"
+	globalHeaders := map[string]string{
+		"User-Agent": globalUA,
+	}
+	r.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "GET",
+		globalHeaders, nil, nil, swagger.ProfileRandom, nil, nil, "",
+	)
+
+	mu.Lock()
+	ua = lastUserAgent
+	mu.Unlock()
+	if ua != globalUA {
+		t.Errorf("Expected global User-Agent %q, got %q", globalUA, ua)
+	}
+}
