@@ -197,6 +197,7 @@ export default function App() {
         endpoint: string;
         method: string;
         payload?: string;
+        statusCode?: number;
     } | null>(null);
     const [triageScope, setTriageScope] = useState<'finding' | 'endpoint' | 'all'>('finding');
 
@@ -360,6 +361,9 @@ export default function App() {
         if (triageScope === 'finding') {
             newRule.endpoint = triagePrompt.endpoint;
             newRule.method = triagePrompt.method;
+            if (triagePrompt.statusCode !== undefined && triagePrompt.statusCode > 0) {
+                newRule.status_code = triagePrompt.statusCode;
+            }
         } else if (triageScope === 'endpoint') {
             newRule.endpoint = triagePrompt.endpoint;
         } else if (triageScope === 'all') {
@@ -393,7 +397,8 @@ export default function App() {
             r.rule_id === newRule.rule_id && 
             r.endpoint === newRule.endpoint && 
             r.method === newRule.method && 
-            r.payload === newRule.payload
+            r.payload === newRule.payload &&
+            (r.status_code ?? r.status) === (newRule.status_code ?? newRule.status)
         );
 
         if (!exists) {
@@ -433,6 +438,7 @@ export default function App() {
                     endpoint: current.endpoint || '',
                     method: current.method || '',
                     payload: typeof current.payload === 'string' ? current.payload : (current.payload ? JSON.stringify(current.payload) : ''),
+                    statusCode: current.status,
                 });
                 setTriageScope('finding');
             } else {
@@ -826,7 +832,7 @@ export default function App() {
                                             <div>
                                                 <div>Only this finding</div>
                                                 <div className="ignore-modal-radio-desc">
-                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.method} {triagePrompt.endpoint}</strong>
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.method} {triagePrompt.endpoint}</strong>{triagePrompt.statusCode ? <> with status <strong>{triagePrompt.statusCode}</strong></> : null}
                                                 </div>
                                             </div>
                                         </label>
