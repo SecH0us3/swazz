@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"swazz-engine/internal/logger"
@@ -19,12 +20,20 @@ func (r *Runner) HandleOOBTrigger(uuid string) {
 
 	logger.Warn("Out-of-Band (OOB) Interaction detected for endpoint: %s", ctx.Endpoint)
 
+	// Parse method and path template from ctx.Endpoint (which has format "METHOD PATH")
+	method := "FUZZ"
+	endpointPath := ctx.Endpoint
+	if parts := strings.Split(ctx.Endpoint, " "); len(parts) >= 2 {
+		method = parts[0]
+		endpointPath = parts[1]
+	}
+
 	// Build a simulated FuzzResult with a high-severity finding!
 	res := &swagger.FuzzResult{
 		ID:           "oob-" + uuid,
-		Endpoint:     ctx.Endpoint,
-		ResolvedPath: ctx.Endpoint, // Fallback if resolved path isn't known
-		Method:       "FUZZ",       // Fallback
+		Endpoint:     endpointPath,
+		ResolvedPath: endpointPath, // Fallback if resolved path isn't known
+		Method:       method,
 		Profile:      swagger.ProfileMalicious,
 		Status:       0, // Indicates OOB callback triggered independently
 		Timestamp:    time.Now().UnixMilli(),

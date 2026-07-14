@@ -278,6 +278,15 @@ func (r *Runner) Start(ctx context.Context) error {
 	_ = r.bolaPhase(runCtx, candidates)
 	r.rateLimitPhase(runCtx)
 
+	// Wait a brief grace period for any late OOB network interactions to complete
+	if !r.stopped() && oob.GlobalStore.Size() > 0 {
+		logger.Info("Waiting a 5-second grace period for pending OOB interactions...")
+		select {
+		case <-runCtx.Done():
+		case <-time.After(5 * time.Second):
+		}
+	}
+
 	return nil
 }
 
@@ -730,6 +739,7 @@ func (r *Runner) finaliseRun() {
 	r.Broadcast(Event{Type: EventComplete, Data: final})
 
 	sstistore.GlobalStore.Clear()
+	oob.GlobalStore.Clear()
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────

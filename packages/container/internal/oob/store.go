@@ -53,5 +53,11 @@ func (s *Store) Clear() {
 	s.m = make(map[string]*OOBContext)
 }
 
+func (s *Store) Size() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.m)
+}
+
 // GlobalStore is a singleton for tracking OOB interactions across the application
 var GlobalStore = NewStore()

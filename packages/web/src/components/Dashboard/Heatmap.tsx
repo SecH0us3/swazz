@@ -107,14 +107,12 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
             {/* Label — takes all remaining space */}
             <div className="heatmap-label" title={epKey}>
                 <span className={`method method-${method.toLowerCase()}`}>{method}</span>
-                <span className="path" style={{ display: 'flex', alignItems: 'center' }}>
-                    {path}
-                    {isVulnerable && (
-                        <span className="heatmap-vuln-indicator" title="Vulnerability detected!" style={{ color: 'var(--color-error)', marginLeft: '8px', cursor: 'help' }}>
-                            ⚠️
-                        </span>
-                    )}
-                </span>
+                <span className="path">{path}</span>
+                {isVulnerable && (
+                    <span className="heatmap-vuln-indicator" title="Vulnerability detected!">
+                        ⚠️
+                    </span>
+                )}
             </div>
             {/* Cells — right side, fixed width */}
             {statusCodes.map((code, ci) => {
