@@ -154,10 +154,11 @@ export class AuthService implements IAuthService {
 
       return { status: 'ok', id, token: jwtToken, api_key: apiKey };
     } catch (err: any) {
+      console.error("REGISTER ERROR:", err);
       if (String(err?.message || err).includes('UNIQUE constraint failed')) {
         throw new Error('Username already exists|400');
       }
-      throw new Error('Registration failed due to an internal server error|500');
+      throw new Error(`Registration failed due to an internal server error: ${err.message}|500`);
     }
   }
 
@@ -689,14 +690,14 @@ export class AuthService implements IAuthService {
     try {
       const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Swazz-Edge-Coordinator' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)' },
         body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
       });
       const tokenData = (await tokenRes.json()) as { access_token?: string; error?: string };
       if (tokenData.error || !tokenData.access_token) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Failed to exchange code: ' + (tokenData.error || 'unknown'))}` };
 
       const userRes = await fetch('https://api.github.com/user', {
-        headers: { 'Authorization': `token ${tokenData.access_token}`, 'User-Agent': 'Swazz-Edge-Coordinator', 'Accept': 'application/json' },
+        headers: { 'Authorization': `token ${tokenData.access_token}`, 'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)', 'Accept': 'application/json' },
       });
       const userData = (await userRes.json()) as { id?: number; login?: string; email?: string | null };
       if (!userData.id || !userData.login) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Failed to fetch GitHub profile')}` };
@@ -704,7 +705,7 @@ export class AuthService implements IAuthService {
       let email = userData.email || null;
       if (!email) {
         const emailsRes = await fetch('https://api.github.com/user/emails', {
-          headers: { 'Authorization': `token ${tokenData.access_token}`, 'User-Agent': 'Swazz-Edge-Coordinator', 'Accept': 'application/json' },
+          headers: { 'Authorization': `token ${tokenData.access_token}`, 'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)', 'Accept': 'application/json' },
         });
         const emailsData = (await emailsRes.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
         if (Array.isArray(emailsData)) {

@@ -92,6 +92,11 @@ export async function dispatchWebhook(
       }
     }
 
+    const hasUA = Object.keys(headersObj).some(k => k.toLowerCase() === 'user-agent');
+    if (!hasUA) {
+      headersObj['User-Agent'] = 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)';
+    }
+
     try {
       logInfo({ env, executionCtx: ctx }, 'Webhook', `Dispatching ${eventType} webhook to ${webhook.url}`);
       const response = await fetch(webhook.url, {

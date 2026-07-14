@@ -20,9 +20,15 @@ export class MiscService implements IMiscService {
     if (!targetUrl) throw new Error('Missing target url|400');
 
     const startTime = Date.now();
+    const headers = { ...(payload.headers || {}) };
+    const hasUA = Object.keys(headers).some(k => k.toLowerCase() === 'user-agent');
+    if (!hasUA) {
+      headers['User-Agent'] = 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)';
+    }
+
     const fetchOpts: RequestInit = {
       method: payload.method || 'GET',
-      headers: payload.headers || {},
+      headers,
       body: ['GET', 'HEAD'].includes(payload.method || 'GET') ? undefined : payload.body,
       redirect: 'manual'
     };

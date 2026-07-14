@@ -306,6 +306,11 @@ export class ProjectService implements IProjectService {
       }
     }
 
+    const hasUA = Object.keys(headersObj).some(k => k.toLowerCase() === 'user-agent');
+    if (!hasUA) {
+      headersObj['User-Agent'] = 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)';
+    }
+
     try {
       const response = await fetch(webhook.url, {
         method: 'POST',

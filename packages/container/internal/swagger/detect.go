@@ -91,6 +91,16 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	hasUA := false
+	for k := range headers {
+		if strings.EqualFold(k, "User-Agent") {
+			hasUA = true
+			break
+		}
+	}
+	if !hasUA {
+		req.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
+	}
 
 	// codeql[go/request-forgery]
 	resp, err := client.Do(req)
@@ -129,6 +139,16 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	postReq.Header.Set("Accept", "application/json")
 	for k, v := range headers {
 		postReq.Header.Set(k, v)
+	}
+	hasUA = false
+	for k := range headers {
+		if strings.EqualFold(k, "User-Agent") {
+			hasUA = true
+			break
+		}
+	}
+	if !hasUA {
+		postReq.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
 	}
 
 	// codeql[go/request-forgery]
