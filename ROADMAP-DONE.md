@@ -1024,3 +1024,8 @@ This file contains completed tasks.
     - Add validation ensuring the username is between 3 and 20 characters, matching the project's standard criteria `^[a-zA-Z0-9_\-]{3,20}$`.
     - Ensure service accounts can be flagged as non-interactive (API-only) to restrict interactive UI login.
 
+- [x] **Task 128-SSTI: Dynamic SSTI Math Expressions**
+  - **Design Goal:** Reduce false positives in SSTI detection by replacing the static `7*7` mathematical evaluation check with dynamic multiplication or addition of random prime numbers less than 100.
+  - **Implementation Details:**
+    - Generate SSTI payloads dynamically with randomized math expressions (e.g. multiplying or adding two random prime numbers less than 100).
+    - Evaluate these expressions during analyzer checks dynamically instead of relying on a hardcoded string `49`.

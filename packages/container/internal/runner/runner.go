@@ -36,6 +36,7 @@ import (
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -689,6 +690,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	r.timeBaselines = &sync.Map{}
 
 	oob.GlobalStore.Clear()
+	sstistore.GlobalStore.Clear()
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	r.lifecycle.cancel = cancel
@@ -723,6 +725,8 @@ func (r *Runner) finaliseRun() {
 	final.Progress.CurrentProfile = ""
 	r.latestStats.Store(&final)
 	r.Broadcast(Event{Type: EventComplete, Data: final})
+
+	sstistore.GlobalStore.Clear()
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
