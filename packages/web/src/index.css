@@ -699,7 +699,7 @@ body.resizing .sidebar-resizer {
 
 .sidebar-section-header:hover {
   color: var(--text-secondary);
-  background: rgba(255,255,255,0.02);
+  background: rgba(255,255,255,0.05);
 }
 
 [data-theme="light"] .sidebar-section-header:hover {
