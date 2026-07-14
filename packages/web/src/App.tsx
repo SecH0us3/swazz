@@ -398,7 +398,7 @@ export default function App() {
             r.endpoint === newRule.endpoint && 
             r.method === newRule.method && 
             r.payload === newRule.payload &&
-            (r.status_code ?? r.status) === (newRule.status_code ?? newRule.status)
+            String(r.status_code ?? r.status ?? '') === String(newRule.status_code ?? newRule.status ?? '')
         );
 
         if (!exists) {

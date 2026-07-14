@@ -158,14 +158,16 @@ func statusCodeMatches(findingStatus int, ruleStatus string) bool {
 	// Match ranges like "4xx", "5xx", etc.
 	if len(ruleStatus) == 3 && strings.HasSuffix(ruleStatus, "xx") {
 		prefix := ruleStatus[0]
-		findingPrefix := strconv.Itoa(findingStatus / 100)
-		if len(findingPrefix) == 1 && findingPrefix[0] == prefix {
-			return true
+		if prefix >= '1' && prefix <= '9' {
+			return findingStatus/100 == int(prefix-'0')
 		}
 		return false
 	}
 
 	// Match exact status codes
-	findingStr := strconv.Itoa(findingStatus)
-	return findingStr == ruleStatus
+	if val, err := strconv.Atoi(ruleStatus); err == nil {
+		return findingStatus == val
+	}
+
+	return false
 }
