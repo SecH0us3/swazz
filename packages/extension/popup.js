@@ -344,16 +344,39 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusClass = req.status || 'needs_work';
             const statusLabel = statusClass === 'well_covered' ? 'Covered' : 'Needs variations';
 
-            item.innerHTML = `
-                <div class="item-row">
-                    <div class="item-meta">
-                        <span class="badge-method ${methodClass}">${req.method}</span>
-                        <span class="item-path" title="${req.exampleUrl}">${req.path}</span>
-                    </div>
-                    <span class="badge-status ${statusClass}">${statusLabel}</span>
-                </div>
-                ${req.recommendation ? `<div class="item-recommendation">${req.recommendation}</div>` : ''}
-            `;
+            const itemRow = document.createElement('div');
+            itemRow.className = 'item-row';
+
+            const itemMeta = document.createElement('div');
+            itemMeta.className = 'item-meta';
+
+            const methodBadge = document.createElement('span');
+            methodBadge.className = `badge-method ${methodClass}`;
+            methodBadge.textContent = req.method;
+
+            const pathSpan = document.createElement('span');
+            pathSpan.className = 'item-path';
+            pathSpan.title = req.exampleUrl;
+            pathSpan.textContent = req.path;
+
+            itemMeta.appendChild(methodBadge);
+            itemMeta.appendChild(pathSpan);
+
+            const statusBadge = document.createElement('span');
+            statusBadge.className = `badge-status ${statusClass}`;
+            statusBadge.textContent = statusLabel;
+
+            itemRow.appendChild(itemMeta);
+            itemRow.appendChild(statusBadge);
+            item.appendChild(itemRow);
+
+            if (req.recommendation) {
+                const rec = document.createElement('div');
+                rec.className = 'item-recommendation';
+                rec.textContent = req.recommendation;
+                item.appendChild(rec);
+            }
+
             endpointsList.appendChild(item);
         });
     }

@@ -23,7 +23,7 @@ window.addEventListener('message', (event) => {
 // Auto-sync token when visiting the Swazz Dashboard page
 function checkAndSyncDashboardToken() {
     const host = window.location.host;
-    if (host.includes('localhost:5173') || host.includes('swazz.secmy.app')) {
+    if (host === 'localhost:5173' || host === 'swazz.secmy.app' || host.endsWith('.swazz.secmy.app')) {
         try {
             // Check token in local storage
             const token = localStorage.getItem('swazz_token');
@@ -79,7 +79,8 @@ function isDomainTargeted(host, targetDomains) {
     return targetDomains.some(target => {
         const t = target.trim().toLowerCase();
         if (!t) return false;
-        return cleanHost === t || cleanHost.endsWith('.' + t) || cleanHost.includes(t);
+        // Only allow exact match or subdomain (not substring to prevent spoofing)
+        return cleanHost === t || cleanHost.endsWith('.' + t);
     });
 }
 

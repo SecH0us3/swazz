@@ -184,7 +184,8 @@
     // 4. Expose sync endpoint helper for dashboard auto-sync
     // If the dashboard wants to push authentication updates, it can dispatch a custom event
     window.addEventListener('swazz-handshake', (e) => {
-        if (e.detail && e.detail.token) {
+        // Only handle events from the same origin to avoid token leakage
+        if (e.detail && e.detail.token && typeof e.detail.token === 'string') {
             window.postMessage({
                 source: 'swazz-detector',
                 type: 'auth_sync',
@@ -192,7 +193,7 @@
                     token: e.detail.token,
                     userProfile: e.detail.userProfile || null
                 }
-            }, '*');
+            }, window.location.origin);
         }
     });
 })();

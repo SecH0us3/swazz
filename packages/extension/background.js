@@ -49,7 +49,8 @@ function isDomainTargeted(host, targetDomains) {
     return targetDomains.some(target => {
         const t = target.trim().toLowerCase();
         if (!t) return false;
-        return cleanHost === t || cleanHost.endsWith('.' + t) || cleanHost.includes(t);
+        // Only allow exact match or subdomain (not substring to prevent spoofing)
+        return cleanHost === t || cleanHost.endsWith('.' + t);
     });
 }
 
@@ -65,9 +66,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === 'request') {
-        // Handle captured request
+        // Handle captured request — read current state and immediately set back
+        // to avoid race conditions with concurrent handlers
         chrome.storage.local.get(['recording', 'targetDomains', 'capturedRequests'], (state) => {
             if (!state.recording) return;
+            // Clone to avoid mutation side effects from concurrent callbacks
+            const capturedRequests = Object.assign({}, state.capturedRequests);
 
             try {
                 const reqData = message.data;
@@ -83,7 +87,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 
                 // Key is Method + Normalized Path (for grouping)
                 const key = `${method}:${normalized}`;
-                const requests = state.capturedRequests || {};
 
                 // Get query parameters array
                 const queryParams = [];
@@ -165,9 +168,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 existing.recommendation = recommendation;
                 existing.status = status;
                 
-                // Write back to storage
-                requests[key] = existing;
-                chrome.storage.local.set({ capturedRequests: requests });
+                // Write back to storage using the cloned copy
+                capturedRequests[key] = existing;
+                chrome.storage.local.set({ capturedRequests });
             } catch (err) {
                 console.error("Failed to process captured request in background:", err);
             }
