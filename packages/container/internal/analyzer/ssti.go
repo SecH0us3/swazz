@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 )
 
@@ -36,11 +37,26 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			continue
 		}
 
+		// First, check dynamic store
+		if ctx, ok := sstistore.GlobalStore.Get(payloadStr); ok {
+			evalValBytes := []byte(ctx.Expected)
+			rawExprBytes := []byte(ctx.RawExpr)
+			if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:   "swazz/ssti-leak",
+					Level:    "error",
+					Message:  fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", ctx.RawExpr, ctx.Expected),
+					Evidence: fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, ctx.Expected),
+				})
+				break
+			}
+			continue
+		}
+
+		// Fallback for static/non-registered payloads
 		for rawExpr, rawExprBytes := range sstiRawExprBytes {
 			if strings.Contains(payloadStr, rawExpr) {
 				evalValBytes := sstiEvalValBytes[rawExpr]
-				// Match evaluated value as a standalone number (not adjacent to other digits)
-				// and ensure the raw expression itself was not simply reflected back.
 				if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 					evalVal := string(evalValBytes)
 					findings = append(findings, swagger.AnalysisFinding{
