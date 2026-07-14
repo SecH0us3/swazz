@@ -72,6 +72,30 @@ func TestIgnoreRule_UnmarshalJSON(t *testing.T) {
 			expectStatus: "",
 			expectErr:    true,
 		},
+		{
+			name:         "invalid status string format",
+			jsonInput:    `{"rule_id": "rule-1", "status": "4abc"}`,
+			expectStatus: "",
+			expectErr:    true,
+		},
+		{
+			name:         "invalid status wildcard pattern",
+			jsonInput:    `{"rule_id": "rule-1", "status": "4yy"}`,
+			expectStatus: "",
+			expectErr:    true,
+		},
+		{
+			name:         "invalid status too long",
+			jsonInput:    `{"rule_id": "rule-1", "status": 2000}`,
+			expectStatus: "",
+			expectErr:    true,
+		},
+		{
+			name:         "valid status 0",
+			jsonInput:    `{"rule_id": "rule-1", "status": 0}`,
+			expectStatus: "0",
+			expectErr:    false,
+		},
 	}
 
 	for _, tt := range tests {

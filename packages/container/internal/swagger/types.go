@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // FuzzingProfile represents the type of payload generation strategy.
@@ -108,6 +109,14 @@ func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
 			r.Status = v
 		default:
 			return fmt.Errorf("invalid type for status/status_code: %T", v)
+		}
+
+		trimmed := strings.ToLower(strings.TrimSpace(r.Status))
+		if trimmed != "" {
+			matched, _ := regexp.MatchString(`^(0|[1-9]\d{2}|[1-9]xx)$`, trimmed)
+			if !matched {
+				return fmt.Errorf("invalid status/status_code format %q: must be a 3-digit HTTP status code (e.g., 404, 0) or range (e.g., 4xx)", r.Status)
+			}
 		}
 	}
 	return nil
