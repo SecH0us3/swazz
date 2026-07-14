@@ -180,6 +180,8 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
         }
         groups['Unmapped / Other'] = [];
 
+        const seenKeys = new Set<string>();
+
         for (const row of rows) {
             let placed = false;
             if (row.analyzerFindings && row.analyzerFindings.length > 0) {
@@ -190,7 +192,11 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                             if (!groups[c]) {
                                 groups[c] = [];
                             }
-                            groups[c].push({ result: row, finding: f });
+                            const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:${f.ruleId || ''}`;
+                            if (!seenKeys.has(key)) {
+                                seenKeys.add(key);
+                                groups[c].push({ result: row, finding: f });
+                            }
                             placed = true;
                         }
                     }
@@ -204,14 +210,22 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                         if (!groups[c]) {
                             groups[c] = [];
                         }
-                        groups[c].push({ result: row });
+                        const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            groups[c].push({ result: row });
+                        }
                         placed = true;
                     }
                 }
             }
 
             if (!placed) {
-                groups['Unmapped / Other'].push({ result: row });
+                const key = `Unmapped / Other:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    groups['Unmapped / Other'].push({ result: row });
+                }
             }
         }
 

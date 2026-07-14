@@ -158,6 +158,159 @@ describe('OWASPTop10 Component', () => {
         expect(screen.queryByRole('button', { name: /Show More/i })).toBeNull();
     });
 
+    it('deduplicates findings within categories', async () => {
+        const duplicateFindings: ResultSummary[] = [
+            {
+                id: '1',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/users/{id}',
+                resolvedPath: '/users/123',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+            },
+            {
+                id: '2',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/users/{id}',
+                resolvedPath: '/users/123',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+            },
+            {
+                id: '3',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/users/123',
+                resolvedPath: '',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+            },
+            {
+                id: '4',
+                timestamp: Date.now(),
+                method: 'GET',
+                endpoint: '/users/{id}',
+                resolvedPath: '/users/123',
+                status: 400,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Bad Request',
+                responseSize: 100,
+                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+            },
+            {
+                id: '5',
+                timestamp: Date.now(),
+                method: 'POST',
+                endpoint: '/login',
+                resolvedPath: '/login',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 12,
+                payloadSize: 10,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: '',
+                responseSize: 50,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/bola-idor',
+                        level: 'error',
+                        message: 'BOLA vulnerability',
+                        owaspCategory: ['A01:2025 Broken Access Control'],
+                    }
+                ]
+            },
+            {
+                id: '6',
+                timestamp: Date.now(),
+                method: 'POST',
+                endpoint: '/login',
+                resolvedPath: '/login',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 12,
+                payloadSize: 10,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: '',
+                responseSize: 50,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/bola-idor',
+                        level: 'error',
+                        message: 'BOLA vulnerability',
+                        owaspCategory: ['A01:2025 Broken Access Control'],
+                    }
+                ]
+            },
+            {
+                id: '7',
+                timestamp: Date.now(),
+                method: 'POST',
+                endpoint: '/login',
+                resolvedPath: '/login',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 12,
+                payloadSize: 10,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: '',
+                responseSize: 50,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/xss',
+                        level: 'error',
+                        message: 'XSS vulnerability',
+                        owaspCategory: ['A01:2025 Broken Access Control', 'A02:2025 Cryptographic Failures'],
+                    }
+                ]
+            }
+        ];
+
+        mockQueryResults.mockResolvedValue({
+            rows: duplicateFindings,
+            total: duplicateFindings.length,
+        });
+
+        render(
+            <OWASPTop10
+                runId="run-123"
+                queryResults={mockQueryResults}
+                onSelectResult={() => {}}
+            />
+        );
+
+        expect(await screen.findByText(/5 Findings Detected/, {}, { timeout: 3000 })).toBeTruthy();
+    });
+
     describe('Polling Logic', () => {
         beforeEach(() => {
             vi.useFakeTimers();
