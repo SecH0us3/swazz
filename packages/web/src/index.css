@@ -30,9 +30,9 @@
   --text-disabled:  #404050;
 
   /* Accent — violet/indigo instead of plain blue */
-  --accent:         #7c3aed;
-  --accent-light:   #a78bfa;
-  --accent-glow:    rgba(124,58,237,0.25);
+  --accent:         #0284C7;
+  --accent-light:   #38BDF8;
+  --accent-glow:    rgba(2,132,199,0.25);
   --accent-subtle:  rgba(124,58,237,0.08);
 
   /* Status colors */
