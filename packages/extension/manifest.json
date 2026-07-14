@@ -5,7 +5,8 @@
   "description": "Capture HTTP traffic and sync it directly into the Swazz API Fuzzer.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "cookies"
   ],
   "host_permissions": [
     "<all_urls>"

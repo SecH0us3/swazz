@@ -52,7 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'token', 
             'swazzUrl', 
             'projectId',
-            'projectName'
+            'projectName',
+            'syncCookies'
         ], (state) => {
             isRecording = !!state.recording;
             targetDomains = state.targetDomains || [];
@@ -69,6 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
             inputSwazzUrl.value = activeSwazzUrl;
             inputToken.value = activeToken || '';
             inputDomains.value = targetDomains.join(', ');
+
+            // Sync syncCookies preference
+            const chkSyncCookies = document.getElementById('chk-sync-cookies');
+            if (chkSyncCookies) {
+                chkSyncCookies.checked = state.syncCookies !== false; // default to true
+            }
 
             // Sync connection card
             cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
@@ -482,6 +489,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            // Sync active cookies if selected
+            const chkSyncCookies = document.getElementById('chk-sync-cookies');
+            if (chkSyncCookies && chkSyncCookies.checked) {
+                showSyncStatus("Gathering active session cookies...", "info");
+                const cookieMap = {};
+                for (const domain of targetDomains) {
+                    try {
+                        const cookies = await getDomainCookies(domain);
+                        cookies.forEach(c => {
+                            cookieMap[c.name] = c.value;
+                        });
+                    } catch (e) {
+                        console.error("Failed to fetch cookies for domain:", domain, e);
+                    }
+                }
+                if (Object.keys(cookieMap).length > 0) {
+                    currentConfig.cookies = {
+                        ...(currentConfig.cookies || {}),
+                        ...cookieMap
+                    };
+                }
+            }
+
             // 5. Save updated configuration back to Swazz
             showSyncStatus("Saving scan configuration...", "info");
             const saveRes = await fetch(`${activeSwazzUrl}/api/projects/${activeProjectId}/config`, {
@@ -638,6 +668,27 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+
+    // Sync cookies checkbox listener
+    const chkSyncCookies = document.getElementById('chk-sync-cookies');
+    if (chkSyncCookies) {
+        chkSyncCookies.addEventListener('change', () => {
+            chrome.storage.local.set({ syncCookies: chkSyncCookies.checked });
+        });
+    }
+
+    function getDomainCookies(domain) {
+        const cleanDomain = domain.split(':')[0];
+        return new Promise((resolve) => {
+            if (!chrome.cookies) {
+                console.warn("chrome.cookies API not available");
+                return resolve([]);
+            }
+            chrome.cookies.getAll({ domain: cleanDomain }, (cookies) => {
+                resolve(cookies || []);
+            });
+        });
+    }
 
     // Initial load
     loadState();

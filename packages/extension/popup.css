@@ -624,3 +624,27 @@ input:checked + .slider:before {
     padding-top: 8px;
     margin-top: 4px;
 }
+
+.cookie-sync-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 6px 4px;
+}
+
+.cookie-sync-option label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.cookie-sync-option input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+}
