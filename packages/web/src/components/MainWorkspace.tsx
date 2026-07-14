@@ -123,22 +123,25 @@ export function MainWorkspace({
         }
 
         let active = true;
-        queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 5000 })
-            .then(res => {
-                if (active) {
-                    setFindingsCount(res.total);
-                    const vulnSet = new Set<string>();
-                    for (const r of res.rows) {
-                        const epKey = `${r.method.toUpperCase()} ${r.endpoint}`;
-                        vulnSet.add(epKey);
+        const timer = setTimeout(() => {
+            queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 5000 })
+                .then(res => {
+                    if (active) {
+                        setFindingsCount(res.total);
+                        const vulnSet = new Set<string>();
+                        for (const r of res.rows) {
+                            const epKey = `${r.method.toUpperCase()} ${r.endpoint}`;
+                            vulnSet.add(epKey);
+                        }
+                        setVulnerableEndpoints(vulnSet);
                     }
-                    setVulnerableEndpoints(vulnSet);
-                }
-            })
-            .catch(() => {});
+                })
+                .catch(() => {});
+        }, 1000);
 
         return () => {
             active = false;
+            clearTimeout(timer);
         };
     }, [inspectorRunId, liveCount, isAnalysisEnabled, queryResults]);
 

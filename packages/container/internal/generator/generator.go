@@ -365,8 +365,9 @@ func (g *Generator) generateString(format, propName string) any {
 					}
 					// Register with global store
 					oob.GlobalStore.RegisterUUID(u, &oob.OOBContext{
-						Endpoint: endpoint,
-						Payload:  strVal,
+						SessionID: g.RunID,
+						Endpoint:  endpoint,
+						Payload:   strVal,
 					})
 
 					strVal = strings.ReplaceAll(strVal, "{{OOB_URL}}", url)
@@ -527,8 +528,9 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 					endpoint = fmt.Sprintf("%s (Header: %s)", g.Endpoint, headerName)
 				}
 				oob.GlobalStore.RegisterUUID(u, &oob.OOBContext{
-					Endpoint: endpoint,
-					Payload:  val,
+					SessionID: g.RunID,
+					Endpoint:  endpoint,
+					Payload:   val,
 				})
 				val = strings.ReplaceAll(val, "{{OOB_URL}}", url)
 			}

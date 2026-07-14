@@ -739,7 +739,7 @@ func (r *Runner) finaliseRun() {
 	r.Broadcast(Event{Type: EventComplete, Data: final})
 
 	sstistore.GlobalStore.Clear()
-	oob.GlobalStore.Clear()
+	oob.GlobalStore.ClearSession(r.config.RunID)
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────

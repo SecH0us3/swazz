@@ -714,10 +714,13 @@ func inferOOBServerURL(coordinatorURL string) string {
 	if coordinatorURL == "" {
 		return ""
 	}
-	// Convert ws:// or wss:// to http:// or https://
+	// Convert ws:// or wss:// to http:// or https:// securely using prefix matching
 	u := coordinatorURL
-	u = strings.Replace(u, "wss://", "https://", 1)
-	u = strings.Replace(u, "ws://", "http://", 1)
+	if strings.HasPrefix(u, "wss://") {
+		u = "https://" + u[6:]
+	} else if strings.HasPrefix(u, "ws://") {
+		u = "http://" + u[5:]
+	}
 
 	// Strip known router endpoints if they were passed
 	if idx := strings.Index(u, "/api/runners/connect"); idx > -1 {
