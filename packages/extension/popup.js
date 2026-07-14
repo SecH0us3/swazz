@@ -491,65 +491,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
         keys.forEach(k => {
             const req = requestsMap[k];
-            const urlObj = new URL(req.exampleUrl);
+            try {
+                const urlObj = new URL(req.exampleUrl);
 
-            // Construct standard query string items
-            const queryParams = [];
-            urlObj.searchParams.forEach((value, name) => {
-                queryParams.push({ name, value });
-            });
+                // Construct standard query string items
+                const queryParams = [];
+                urlObj.searchParams.forEach((value, name) => {
+                    queryParams.push({ name, value });
+                });
 
-            // Map headers
-            const headerItems = [];
-            // Parse common content types
-            let mimeType = "application/json";
-            
-            // Generate entries for each unique body or query variation captured
-            // This tells the Go parser to look at all forms of the request!
-            const bodyList = req.bodyVariations.length > 0 ? req.bodyVariations : [""];
-            const queryList = req.queryVariations.length > 0 ? req.queryVariations : [urlObj.search];
+                // Map headers
+                const headerItems = [];
+                // Parse common content types
+                let mimeType = "application/json";
+                
+                // Generate entries for each unique body or query variation captured
+                // This tells the Go parser to look at all forms of the request!
+                const bodyList = req.bodyVariations.length > 0 ? req.bodyVariations : [""];
+                const queryList = req.queryVariations.length > 0 ? req.queryVariations : [urlObj.search];
 
-            queryList.forEach(q => {
-                bodyList.forEach(b => {
-                    const variantUrl = new URL(urlObj.origin + urlObj.pathname + q);
-                    const vQueryParams = [];
-                    variantUrl.searchParams.forEach((val, name) => {
-                        vQueryParams.push({ name, value: val });
-                    });
+                queryList.forEach(q => {
+                    bodyList.forEach(b => {
+                        const variantUrl = new URL(urlObj.origin + urlObj.pathname + q);
+                        const vQueryParams = [];
+                        variantUrl.searchParams.forEach((val, name) => {
+                            vQueryParams.push({ name, value: val });
+                        });
 
-                    entries.push({
-                        startedDateTime: new Date(req.lastCaptured).toISOString(),
-                        time: 10,
-                        request: {
-                            method: req.method,
-                            url: variantUrl.href,
-                            httpVersion: "HTTP/1.1",
-                            cookies: [],
-                            headers: headerItems,
-                            queryString: vQueryParams,
-                            postData: b ? {
-                                mimeType: mimeType,
-                                text: b
-                            } : undefined,
-                            headersSize: -1,
-                            bodySize: b ? b.length : -1
-                        },
-                        response: {
-                            status: 200,
-                            statusText: "OK",
-                            httpVersion: "HTTP/1.1",
-                            cookies: [],
-                            headers: [],
-                            content: { size: 0, mimeType: "application/json" },
-                            redirectURL: "",
-                            headersSize: -1,
-                            bodySize: -1
-                        },
-                        cache: {},
-                        timings: { send: 0, wait: 10, receive: 0 }
+                        entries.push({
+                            startedDateTime: new Date(req.lastCaptured).toISOString(),
+                            time: 10,
+                            request: {
+                                method: req.method,
+                                url: variantUrl.href,
+                                httpVersion: "HTTP/1.1",
+                                cookies: [],
+                                headers: headerItems,
+                                queryString: vQueryParams,
+                                postData: b ? {
+                                    mimeType: mimeType,
+                                    text: b
+                                } : undefined,
+                                headersSize: -1,
+                                bodySize: b ? b.length : -1
+                            },
+                            response: {
+                                status: 200,
+                                statusText: "OK",
+                                httpVersion: "HTTP/1.1",
+                                cookies: [],
+                                headers: [],
+                                content: { size: 0, mimeType: "application/json" },
+                                redirectURL: "",
+                                headersSize: -1,
+                                bodySize: -1
+                            },
+                            cache: {},
+                            timings: { send: 0, wait: 10, receive: 0 }
+                        });
                     });
                 });
-            });
+            } catch (e) {
+                console.error("Skipping malformed URL during HAR generation:", req.exampleUrl, e);
+            }
         });
 
         return {
@@ -571,8 +575,15 @@ document.addEventListener('DOMContentLoaded', () => {
             renderEndpoints();
             updateSyncButtonState();
         }
-        if (changes.token || changes.projectId || changes.targetDomains) {
+        if (changes.token || changes.swazzUrl) {
             loadState();
+        }
+        if (changes.projectId || changes.projectName) {
+            chrome.storage.local.get(['projectId', 'projectName'], (state) => {
+                activeProjectId = state.projectId || null;
+                cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
+                updateSyncButtonState();
+            });
         }
     });
 

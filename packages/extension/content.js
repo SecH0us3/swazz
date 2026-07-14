@@ -58,8 +58,12 @@ if (document.readyState === 'loading') {
     checkAndSyncDashboardToken();
 }
 
-// Periodically check in case of post-load logins
-setInterval(checkAndSyncDashboardToken, 3000);
+// Listen for storage changes to sync token reactively
+window.addEventListener('storage', (e) => {
+    if (e.key === 'swazz_token' || e.key === 'swazz:user_profile') {
+        checkAndSyncDashboardToken();
+    }
+});
 
 
 // ==========================================

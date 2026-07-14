@@ -34,7 +34,7 @@ export function TrafficCaptureTab() {
         if (token) {
             let parsedProfile = null;
             try {
-                const profileStr = localStorage.getItem('swazz:user_profile');
+                const profileStr = typeof localStorage !== 'undefined' ? localStorage.getItem('swazz:user_profile') : null;
                 parsedProfile = profileStr ? JSON.parse(profileStr) : null;
             } catch {}
 
