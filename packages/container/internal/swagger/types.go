@@ -1,8 +1,11 @@
 package swagger
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 )
 
 // FuzzingProfile represents the type of payload generation strategy.
@@ -74,6 +77,40 @@ type IgnoreRule struct {
 	Method    string         `json:"method,omitempty"`
 	Payload   string         `json:"payload,omitempty"`
 	PayloadRx *regexp.Regexp `json:"-"`
+	Status    string         `json:"status,omitempty"` // Status code/range constraint (e.g., 400, "400", "4xx")
+}
+
+func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
+	type Alias IgnoreRule
+	aux := &struct {
+		Status     any `json:"status,omitempty"`
+		StatusCode any `json:"status_code,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	var val any
+	if aux.Status != nil {
+		val = aux.Status
+	} else if aux.StatusCode != nil {
+		val = aux.StatusCode
+	}
+
+	if val != nil {
+		switch v := val.(type) {
+		case float64:
+			r.Status = strconv.Itoa(int(v))
+		case string:
+			r.Status = v
+		default:
+			return fmt.Errorf("invalid type for status/status_code: %T", v)
+		}
+	}
+	return nil
 }
 
 // AuthStep describes a request to be made before fuzzing to establish a session.
