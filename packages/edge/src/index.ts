@@ -49,6 +49,7 @@ app.use('/api/*', async (c, next) => {
     path.startsWith('/api/auth/') ||
     path.startsWith('/api/admin/') ||
     path === '/api/runners/connect' ||
+    path.startsWith('/api/oob/') ||
     (path.startsWith('/api/scans/') && path.endsWith('/upload'))
   ) {
     return await next();
@@ -243,6 +244,17 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
   return c.json({ service: 'swazz-edge', status: 'ok' });
 });
 app.get('/health', (c) => c.json({ service: 'swazz-edge', status: 'ok' }));
+
+app.all('/api/oob/:runId/:uuid', async (c) => {
+  const runId = c.req.param('runId');
+  const uuid = c.req.param('uuid');
+  const id = c.env.COORDINATOR_DO.idFromName('global-coordinator');
+  const stub = c.env.COORDINATOR_DO.get(id);
+  const url = new URL(c.req.url);
+  url.pathname = `/oob/${runId}/${uuid}`;
+  const req = new Request(url.toString(), c.req.raw);
+  return await stub.fetch(req);
+});
 
 app.get('/api/payload-catalog', (c) => {
   return c.json({

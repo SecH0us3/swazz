@@ -260,6 +260,8 @@ func (r *Runner) Start(ctx context.Context) error {
 			}
 			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			gen.RunID = r.config.RunID
+			safeGen.RunID = r.config.RunID
 			epStr := endpoint.Method + " " + endpoint.Path
 			gen.Endpoint = epStr
 			safeGen.Endpoint = epStr
@@ -275,6 +277,15 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	_ = r.bolaPhase(runCtx, candidates)
 	r.rateLimitPhase(runCtx)
+
+	// Wait a brief grace period for any late OOB network interactions to complete
+	if !r.stopped() && oob.GlobalStore.Size() > 0 {
+		logger.Info("Waiting a 5-second grace period for pending OOB interactions...")
+		select {
+		case <-runCtx.Done():
+		case <-time.After(5 * time.Second):
+		}
+	}
 
 	return nil
 }
@@ -342,6 +353,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			safeGen.RunID = r.config.RunID
 			safeGen.Endpoint = epKey
 
 			built := buildSafePayload(ep, safeGen)
@@ -727,6 +739,7 @@ func (r *Runner) finaliseRun() {
 	r.Broadcast(Event{Type: EventComplete, Data: final})
 
 	sstistore.GlobalStore.Clear()
+	oob.GlobalStore.ClearSession(r.config.RunID)
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────

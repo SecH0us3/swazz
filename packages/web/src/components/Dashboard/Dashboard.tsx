@@ -8,13 +8,14 @@ import { useAppStore } from '../../store/appStore.js';
 interface Props {
     stats: RunStats | null;
     endpointKeys: string[];
+    vulnerableEndpoints?: Set<string>;
     heatmapFilter: HeatmapFilter | null;
     onHeatmapFilter: (f: HeatmapFilter | null) => void;
     isRunning: boolean;
     onTryDemo?: () => void;
 }
 
-export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter, isRunning, onTryDemo }: Props) {
+export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFilter, onHeatmapFilter, isRunning, onTryDemo }: Props) {
     const [version, setVersion] = useState<string>('<TAG>');
 
     useEffect(() => {
@@ -171,6 +172,7 @@ export function Dashboard({ stats, endpointKeys, heatmapFilter, onHeatmapFilter,
             <Heatmap
                 stats={stats}
                 endpointKeys={endpointKeys}
+                vulnerableEndpoints={vulnerableEndpoints}
                 activeFilter={heatmapFilter}
                 onCellClick={onHeatmapFilter}
             />

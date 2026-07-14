@@ -1207,6 +1207,12 @@ body.resizing .sidebar-resizer {
 
 .heatmap-label-spacer { flex: 1; min-width: 0; }
 
+.heatmap-vuln-indicator {
+  color: var(--color-error);
+  margin-left: 8px;
+  cursor: help;
+}
+
 .heatmap-footer {
   display: flex;
   justify-content: space-between;

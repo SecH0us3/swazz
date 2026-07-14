@@ -34,6 +34,7 @@ func (r *Runner) rateLimitPhase(ctx context.Context) {
 		r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 		safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+		safeGen.RunID = r.config.RunID
 		safeGen.Endpoint = endpoint.Method + " " + endpoint.Path
 
 		var payload any

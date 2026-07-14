@@ -53,6 +53,7 @@ type Generator struct {
 
 	oobServerURL string
 	Endpoint     string
+	RunID        string
 }
 
 // New creates a new Generator.
@@ -364,8 +365,9 @@ func (g *Generator) generateString(format, propName string) any {
 					}
 					// Register with global store
 					oob.GlobalStore.RegisterUUID(u, &oob.OOBContext{
-						Endpoint: endpoint,
-						Payload:  strVal,
+						SessionID: g.RunID,
+						Endpoint:  endpoint,
+						Payload:   strVal,
 					})
 
 					strVal = strings.ReplaceAll(strVal, "{{OOB_URL}}", url)
@@ -526,8 +528,9 @@ func (g *Generator) GenerateSecurityHeaders() map[string]string {
 					endpoint = fmt.Sprintf("%s (Header: %s)", g.Endpoint, headerName)
 				}
 				oob.GlobalStore.RegisterUUID(u, &oob.OOBContext{
-					Endpoint: endpoint,
-					Payload:  val,
+					SessionID: g.RunID,
+					Endpoint:  endpoint,
+					Payload:   val,
 				})
 				val = strings.ReplaceAll(val, "{{OOB_URL}}", url)
 			}
@@ -571,6 +574,9 @@ func (g *Generator) BodyIterations() int {
 	}
 	if is(payloads.CatMaliciousXXE) {
 		maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
+	}
+	if is(payloads.CatOOBInteraction) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
 	}
 	bodyCount = len(maliciousBody)
 	if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
@@ -619,6 +625,9 @@ func (g *Generator) oobURL(uuidStr string) string {
 		if !strings.Contains(baseURL, "/api/oob") {
 			baseURL = strings.TrimRight(baseURL, "/") + "/api/oob"
 		}
+	}
+	if g.RunID != "" {
+		return fmt.Sprintf("%s/%s/%s", strings.TrimRight(baseURL, "/"), g.RunID, uuidStr)
 	}
 	return fmt.Sprintf("%s/%s", strings.TrimRight(baseURL, "/"), uuidStr)
 }

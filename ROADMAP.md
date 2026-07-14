@@ -35,6 +35,13 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
 
+- [ ] **Task 131: Manually verify OOB SSRF vulnerability detection on real targets**
+  - **Design Goal:** Verify the full end-to-end network flow of OOB triggers from a real target application back to the local runner via the coordinator.
+  - **Implementation Details:**
+    - Spin up the local fuzzer agent and connect it to a public coordinator instance.
+    - Launch a test scan against a known vulnerable target containing an SSRF / blind OOB command execution endpoint.
+    - Confirm the target's external callbacks successfully route back, generate `swazz/oob-interaction` findings, and mark the endpoint as vulnerable in the live heatmap.
+
 
 
 ## 🟡 Medium Complexity
