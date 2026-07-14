@@ -516,6 +516,7 @@ func (r *Runner) generateMissingCandidates(ctx context.Context, hasSuccessCandid
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 			epGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			epGen.RunID = r.config.RunID
 			if res := r.generateCandidateForEndpoint(ctx, ep, epGen); res != nil {
 				candMu.Lock()
 				candidates = append(candidates, res)

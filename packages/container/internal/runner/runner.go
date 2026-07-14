@@ -260,6 +260,8 @@ func (r *Runner) Start(ctx context.Context) error {
 			}
 			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			gen.RunID = r.config.RunID
+			safeGen.RunID = r.config.RunID
 			epStr := endpoint.Method + " " + endpoint.Path
 			gen.Endpoint = epStr
 			safeGen.Endpoint = epStr
@@ -342,6 +344,7 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 			r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()})
 
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
+			safeGen.RunID = r.config.RunID
 			safeGen.Endpoint = epKey
 
 			built := buildSafePayload(ep, safeGen)

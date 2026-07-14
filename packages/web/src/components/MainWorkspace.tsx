@@ -113,18 +113,26 @@ export function MainWorkspace({
     const hasActivity = !!inspectorRunId || config.endpoints.length > 0;
 
     const [findingsCount, setFindingsCount] = useState(0);
+    const [vulnerableEndpoints, setVulnerableEndpoints] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (!inspectorRunId || !isAnalysisEnabled) {
             setFindingsCount(0);
+            setVulnerableEndpoints(new Set());
             return;
         }
 
         let active = true;
-        queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 1 })
+        queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 5000 })
             .then(res => {
                 if (active) {
                     setFindingsCount(res.total);
+                    const vulnSet = new Set<string>();
+                    for (const r of res.rows) {
+                        const epKey = `${r.method.toUpperCase()} ${r.endpoint}`;
+                        vulnSet.add(epKey);
+                    }
+                    setVulnerableEndpoints(vulnSet);
                 }
             })
             .catch(() => {});
@@ -377,6 +385,7 @@ export function MainWorkspace({
                                 <Dashboard
                                     stats={currentStats}
                                     endpointKeys={endpointKeys}
+                                    vulnerableEndpoints={vulnerableEndpoints}
                                     heatmapFilter={heatmapFilter}
                                     onHeatmapFilter={(filter) => {
                                         useAppStore.setState({ heatmapFilter: filter });

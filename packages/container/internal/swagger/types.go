@@ -49,6 +49,7 @@ type SecurityConfig struct {
 
 // Config holds the full fuzzing configuration.
 type Config struct {
+	RunID          string                  `json:"run_id,omitempty"`
 	BaseURL        string                  `json:"base_url"`
 	GlobalHeaders  map[string]string       `json:"global_headers"`
 	Cookies        map[string]string       `json:"cookies"`

@@ -12,6 +12,7 @@ type StatusBucket = 'any' | '2xx' | '4xx' | '5xx';
 interface Props {
     stats: RunStats;
     endpointKeys: string[];
+    vulnerableEndpoints?: Set<string>;
     activeFilter: HeatmapFilter | null;
     onCellClick: (filter: HeatmapFilter | null) => void;
 }
@@ -81,6 +82,7 @@ interface HeatmapRowProps {
     endpointCounts: Record<number, number>;
     maxCount: number;
     activeFilter: HeatmapFilter | null;
+    isVulnerable?: boolean;
     onCellClick: (epKey: string, code: number, count: number) => void;
 }
 
@@ -90,6 +92,7 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
     endpointCounts,
     maxCount,
     activeFilter,
+    isVulnerable,
     onCellClick
 }) => {
     const [method, ...rest] = epKey.split(' ');
@@ -104,7 +107,14 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
             {/* Label — takes all remaining space */}
             <div className="heatmap-label" title={epKey}>
                 <span className={`method method-${method.toLowerCase()}`}>{method}</span>
-                <span className="path">{path}</span>
+                <span className="path" style={{ display: 'flex', alignItems: 'center' }}>
+                    {path}
+                    {isVulnerable && (
+                        <span className="heatmap-vuln-indicator" title="Vulnerability detected!" style={{ color: 'var(--color-error)', marginLeft: '8px', cursor: 'help' }}>
+                            ⚠️
+                        </span>
+                    )}
+                </span>
             </div>
             {/* Cells — right side, fixed width */}
             {statusCodes.map((code, ci) => {
@@ -128,6 +138,7 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
 }, (prevProps, nextProps) => {
     if (prevProps.epKey !== nextProps.epKey) return false;
     if (prevProps.maxCount !== nextProps.maxCount) return false;
+    if (prevProps.isVulnerable !== nextProps.isVulnerable) return false;
     
     if (prevProps.statusCodes.length !== nextProps.statusCodes.length) return false;
     for (let i = 0; i < prevProps.statusCodes.length; i++) {
@@ -153,7 +164,7 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
     return true;
 });
 
-export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Props) {
+export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter, onCellClick }: Props) {
     const [search, setSearch] = useState('');
     const [statusBucket, setStatusBucket] = useState<StatusBucket>('any');
 
@@ -330,6 +341,7 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
                                         endpointCounts={stats.endpointCounts[epKey] ?? {}}
                                         maxCount={maxCount}
                                         activeFilter={activeFilter}
+                                        isVulnerable={vulnerableEndpoints?.has(epKey)}
                                         onCellClick={handleCellClick}
                                     />
                                 ))}

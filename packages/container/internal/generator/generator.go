@@ -53,6 +53,7 @@ type Generator struct {
 
 	oobServerURL string
 	Endpoint     string
+	RunID        string
 }
 
 // New creates a new Generator.
@@ -572,6 +573,9 @@ func (g *Generator) BodyIterations() int {
 	if is(payloads.CatMaliciousXXE) {
 		maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
 	}
+	if is(payloads.CatOOBInteraction) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
+	}
 	bodyCount = len(maliciousBody)
 	if is(payloads.CatMaliciousNumbers) && len(payloads.MaliciousNumbers) > bodyCount {
 		bodyCount = len(payloads.MaliciousNumbers)
@@ -619,6 +623,9 @@ func (g *Generator) oobURL(uuidStr string) string {
 		if !strings.Contains(baseURL, "/api/oob") {
 			baseURL = strings.TrimRight(baseURL, "/") + "/api/oob"
 		}
+	}
+	if g.RunID != "" {
+		return fmt.Sprintf("%s/%s/%s", strings.TrimRight(baseURL, "/"), g.RunID, uuidStr)
 	}
 	return fmt.Sprintf("%s/%s", strings.TrimRight(baseURL, "/"), uuidStr)
 }

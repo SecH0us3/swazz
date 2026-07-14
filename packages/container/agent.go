@@ -320,6 +320,25 @@ func startAgent(args []string) {
 			time.Sleep(1 * time.Second)
 			os.Exit(0)
 
+		case "oob_trigger":
+			var trigger struct {
+				RunID string `json:"runId"`
+				UUID  string `json:"uuid"`
+			}
+			if err := json.Unmarshal(wsMsg.Payload, &trigger); err != nil {
+				logError("Failed to unmarshal oob_trigger: %v", err)
+				continue
+			}
+			activeRunnersMu.Lock()
+			r, exists := activeRunners[trigger.RunID]
+			activeRunnersMu.Unlock()
+			if exists {
+				logInfo("Received OOB trigger for runID %s, UUID %s", trigger.RunID, trigger.UUID)
+				r.HandleOOBTrigger(trigger.UUID)
+			} else {
+				logWarn("OOB trigger received but active runner not found for runID %s", trigger.RunID)
+			}
+
 		case "job_dispatch":
 			var dispatch JobDispatchPayload
 			if err := json.Unmarshal(wsMsg.Payload, &dispatch); err != nil {
@@ -334,6 +353,10 @@ func startAgent(args []string) {
 				logError("Failed to build runner config: %v", err)
 				sendWSError(dispatch.RunID, err.Error())
 				continue
+			}
+			runCfg.RunID = dispatch.RunID
+			if runCfg.Settings.OOBServerURL == "" {
+				runCfg.Settings.OOBServerURL = inferOOBServerURL(coordinatorURL)
 			}
 
 			client := safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
@@ -685,4 +708,22 @@ func logWarn(format string, v ...interface{}) {
 
 func logError(format string, v ...interface{}) {
 	logger.Error(format, v...)
+}
+
+func inferOOBServerURL(coordinatorURL string) string {
+	if coordinatorURL == "" {
+		return ""
+	}
+	// Convert ws:// or wss:// to http:// or https://
+	u := coordinatorURL
+	u = strings.Replace(u, "wss://", "https://", 1)
+	u = strings.Replace(u, "ws://", "http://", 1)
+
+	// Strip known router endpoints if they were passed
+	if idx := strings.Index(u, "/api/runners/connect"); idx > -1 {
+		u = u[:idx]
+	} else if idx := strings.Index(u, "/api/"); idx > -1 {
+		u = u[:idx]
+	}
+	return u
 }
