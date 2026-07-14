@@ -1,12 +1,18 @@
 package analyzer
 
 import (
+	"swazz-engine/internal/sstistore"
 	"swazz-engine/internal/swagger"
 	"testing"
 )
 
 func TestSSTIAnalyzer(t *testing.T) {
 	a := &SSTIAnalyzer{}
+
+	// Register some dynamic payloads in the store for test purposes
+	sstistore.GlobalStore.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
+	sstistore.GlobalStore.Register("{{23+37}}", sstistore.SSTIContext{RawExpr: "23+37", Expected: "60"})
+	sstistore.GlobalStore.Register("{{23+'37'}}", sstistore.SSTIContext{RawExpr: "23+'37'", Expected: "2337"})
 
 	tests := []struct {
 		name          string
@@ -16,6 +22,30 @@ func TestSSTIAnalyzer(t *testing.T) {
 		expectedCount int
 		expectedRule  string
 	}{
+		{
+			name:          "Dynamic SSTI multiplication 23*37 to 851",
+			payload:       "{{23*37}}",
+			response:      "Hello 851!",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "Dynamic SSTI addition 23+37 to 60",
+			payload:       "{{23+37}}",
+			response:      "Hello 60!",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
+		{
+			name:          "Dynamic SSTI concatenation 23+'37' to 2337",
+			payload:       "{{23+'37'}}",
+			response:      "Hello 2337!",
+			profile:       swagger.ProfileMalicious,
+			expectedCount: 1,
+			expectedRule:  "swazz/ssti-leak",
+		},
 		{
 			name:          "SSTI evaluation of 7*7 to 49",
 			payload:       "{{7*7}}",

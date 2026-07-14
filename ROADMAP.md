@@ -62,11 +62,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Build a recon module inside the Go runner to query the configured reconnaissance API.
     - Log discovered assets and append discovered HTTP/HTTPS endpoints to the runner's fuzz target list or output metadata.
 
-- [ ] **Task 128: Dynamic SSTI Math Expressions**
-  - **Design Goal:** Reduce false positives in SSTI detection by replacing the static `7*7` mathematical evaluation check with dynamic multiplication or addition of random prime numbers less than 100.
-  - **Implementation Details:**
-    - Generate SSTI payloads dynamically with randomized math expressions (e.g. multiplying or adding two random prime numbers less than 100).
-    - Evaluate these expressions during analyzer checks dynamically instead of relying on a hardcoded string `49`.
 
 - [ ] **Task 129: Optimize OWASP Top 10 Tab Performance**
   - **Design Goal:** Prevent the OWASP Top 10 tab from showing an infinite loading state during active scans, and implement category highlighting and direct deduplicated filtering upon card click.
