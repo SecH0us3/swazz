@@ -47,19 +47,14 @@ func (r *Runner) executeRequest(
 		mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 	}
 
-	hasUAInGen := false
-	for k := range generatedHeaders {
+	hasUA := false
+	for k := range mergedHeaders {
 		if strings.EqualFold(k, "user-agent") {
-			hasUAInGen = true
+			hasUA = true
 			break
 		}
 	}
-	if !hasUAInGen {
-		for k := range mergedHeaders {
-			if strings.EqualFold(k, "user-agent") {
-				delete(mergedHeaders, k)
-			}
-		}
+	if !hasUA {
 		mergedHeaders["User-Agent"] = "Swazz/1.0 (+https://github.com/SecH0us3/swazz)"
 	}
 

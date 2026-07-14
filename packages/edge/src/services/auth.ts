@@ -158,7 +158,7 @@ export class AuthService implements IAuthService {
       if (String(err?.message || err).includes('UNIQUE constraint failed')) {
         throw new Error('Username already exists|400');
       }
-      throw new Error(`Registration failed due to an internal server error: ${err.message}|500`);
+      throw new Error('Registration failed due to an internal server error|500');
     }
   }
 

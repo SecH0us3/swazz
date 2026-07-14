@@ -818,4 +818,22 @@ func TestExecuteRequest_UserAgent(t *testing.T) {
 	if ua != fuzzedUA {
 		t.Errorf("Expected fuzzed User-Agent %q, got %q", fuzzedUA, ua)
 	}
+
+	// 3. With User-Agent in global headers (should retain global custom value)
+	globalUA := "GlobalUserAgentValue"
+	globalHeaders := map[string]string{
+		"User-Agent": globalUA,
+	}
+	r.executeRequest(
+		context.Background(),
+		server.URL, "/test", "/test", "GET",
+		globalHeaders, nil, nil, swagger.ProfileRandom, nil, nil, "",
+	)
+
+	mu.Lock()
+	ua = lastUserAgent
+	mu.Unlock()
+	if ua != globalUA {
+		t.Errorf("Expected global User-Agent %q, got %q", globalUA, ua)
+	}
 }
