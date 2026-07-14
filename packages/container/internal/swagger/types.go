@@ -81,6 +81,8 @@ type IgnoreRule struct {
 	Status    string         `json:"status,omitempty"` // Status code/range constraint (e.g., 400, "400", "4xx")
 }
 
+var statusPatternRx = regexp.MustCompile(`^(0|[1-9]\d{2}|[1-9]xx)$`)
+
 func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
 	type Alias IgnoreRule
 	aux := &struct {
@@ -113,10 +115,10 @@ func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
 
 		trimmed := strings.ToLower(strings.TrimSpace(r.Status))
 		if trimmed != "" {
-			matched, _ := regexp.MatchString(`^(0|[1-9]\d{2}|[1-9]xx)$`, trimmed)
-			if !matched {
+			if !statusPatternRx.MatchString(trimmed) {
 				return fmt.Errorf("invalid status/status_code format %q: must be a 3-digit HTTP status code (e.g., 404, 0) or range (e.g., 4xx)", r.Status)
 			}
+			r.Status = trimmed
 		}
 	}
 	return nil
