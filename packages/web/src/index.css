@@ -9,11 +9,11 @@
 
 :root {
   /* Backgrounds */
-  --bg-app:        #080809;
-  --bg-sidebar:    #0d0d0f;
-  --bg-card:       #121214;
+  --bg-app:        #0F172A;
+  --bg-sidebar:    #1E293B;
+  --bg-card:       #1E293B;
   --bg-card-hover: #18181b;
-  --bg-elevated:   #1c1c20;
+  --bg-elevated:   #334155;
   --bg-surface:    #242428;
   --bg-input:      #131316;
 
