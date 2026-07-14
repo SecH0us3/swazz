@@ -48,7 +48,6 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 					Message:  fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", ctx.RawExpr, ctx.Expected),
 					Evidence: fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, ctx.Expected),
 				})
-				break
 			}
 			continue
 		}
