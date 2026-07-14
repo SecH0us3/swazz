@@ -349,7 +349,7 @@ body.resizing .sidebar-resizer {
 .header-logo-icon {
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, var(--accent), #6d28d9);
+  background: var(--accent);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -580,7 +580,7 @@ body.resizing .sidebar-resizer {
 
 /* Primary — violet gradient */
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), #6d28d9);
+  background: var(--accent);
   color: #fff;
   border-color: rgba(0,0,0,0.25);
   box-shadow: 0 1px 0 rgba(255,255,255,0.12) inset, 0 2px 8px rgba(124,58,237,0.3);
@@ -4917,7 +4917,7 @@ kbd {
 }
 
 .runner-setup-tab-btn.active {
-  background: linear-gradient(135deg, var(--accent), #6d28d9);
+  background: var(--accent);
   color: #ffffff;
 }
 
