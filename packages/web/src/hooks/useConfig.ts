@@ -131,6 +131,9 @@ export function validateConfig(config: any): void {
                 if (rule.payload !== undefined && typeof rule.payload !== 'string') {
                     throw new Error('ignore_rule payload must be a string');
                 }
+                if (rule.status !== undefined && typeof rule.status !== 'number' && typeof rule.status !== 'string') {
+                    throw new Error('ignore_rule status must be a number or a string');
+                }
                 if (rule.status_code !== undefined && typeof rule.status_code !== 'number' && typeof rule.status_code !== 'string') {
                     throw new Error('ignore_rule status_code must be a number or a string');
                 }

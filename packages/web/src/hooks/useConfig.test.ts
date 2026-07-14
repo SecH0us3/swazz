@@ -240,13 +240,17 @@ describe('useConfig', () => {
             expect(() => validateConfig({ rules: { ignore_rules: 'not an array' } })).toThrow('rules.ignore_rules must be an array');
         });
 
-        it('should validate ignore_rules status_code', () => {
+        it('should validate ignore_rules status and status_code', () => {
             // Valid cases
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: 200 }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: '4xx' }] } })).not.toThrow();
             expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: 200 }] } })).not.toThrow();
             expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: '4xx' }] } })).not.toThrow();
-            expect(() => validateConfig({ rules: { ignore_rules: [{ endpoint: '/api/v1/users', status_code: 404 }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ endpoint: '/api/v1/users', status: 404, status_code: 404 }] } })).not.toThrow();
 
             // Invalid cases
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: true }] } })).toThrow('ignore_rule status must be a number or a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: {} }] } })).toThrow('ignore_rule status must be a number or a string');
             expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: true }] } })).toThrow('ignore_rule status_code must be a number or a string');
             expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: {} }] } })).toThrow('ignore_rule status_code must be a number or a string');
         });

@@ -141,6 +141,7 @@ export interface IgnoreRule {
     endpoint?: string;
     method?: string;
     payload?: string;
+    status?: number | string;
     status_code?: number | string;
 }
 
