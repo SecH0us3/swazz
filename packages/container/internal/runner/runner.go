@@ -725,6 +725,8 @@ func (r *Runner) finaliseRun() {
 	final.Progress.CurrentProfile = ""
 	r.latestStats.Store(&final)
 	r.Broadcast(Event{Type: EventComplete, Data: final})
+
+	sstistore.GlobalStore.Clear()
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────

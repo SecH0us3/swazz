@@ -626,17 +626,17 @@ func (g *Generator) oobURL(uuidStr string) string {
 var sstiPrimes = []int{11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97}
 
 func (g *Generator) randomizeAndRegisterSSTI(s string) string {
-	p1 := sstiPrimes[rand.IntN(len(sstiPrimes))]
-	p2 := sstiPrimes[rand.IntN(len(sstiPrimes))]
+	p1 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
+	p2 := sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	for p1 == p2 {
-		p2 = sstiPrimes[rand.IntN(len(sstiPrimes))]
+		p2 = sstiPrimes[rand.IntN(len(sstiPrimes))] // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 	}
 
 	var rawExpr string
 	var expected string
 
 	if strings.Contains(s, "7*7") {
-		if rand.Float64() < 0.5 {
+		if rand.Float64() < 0.5 { // #nosec G404 -- fuzzer payload generation, crypto/rand not needed
 			rawExpr = fmt.Sprintf("%d*%d", p1, p2)
 			expected = fmt.Sprintf("%d", p1*p2)
 		} else {

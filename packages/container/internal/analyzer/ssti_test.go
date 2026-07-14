@@ -13,6 +13,7 @@ func TestSSTIAnalyzer(t *testing.T) {
 	sstistore.GlobalStore.Register("{{23*37}}", sstistore.SSTIContext{RawExpr: "23*37", Expected: "851"})
 	sstistore.GlobalStore.Register("{{23+37}}", sstistore.SSTIContext{RawExpr: "23+37", Expected: "60"})
 	sstistore.GlobalStore.Register("{{23+'37'}}", sstistore.SSTIContext{RawExpr: "23+'37'", Expected: "2337"})
+	defer sstistore.GlobalStore.Clear()
 
 	tests := []struct {
 		name          string
