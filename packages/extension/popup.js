@@ -456,8 +456,30 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             currentConfig.endpoints = mergedEndpoints;
-            if (parseData.basePath && !currentConfig.base_url) {
-                currentConfig.base_url = parseData.basePath;
+
+            // Auto-fill base_url and swagger_url from the captured traffic domain
+            // so the runner can start scanning without manual configuration
+            let capturedBaseUrl = parseData.basePath || null;
+            if (!capturedBaseUrl) {
+                // Fall back to the first target domain if parser didn't return basePath
+                try {
+                    const stored = await new Promise(r => chrome.storage.local.get(['targetDomains'], r));
+                    const domains = stored.targetDomains || [];
+                    if (domains.length > 0) capturedBaseUrl = `https://${domains[0]}`;
+                } catch {}
+            }
+
+            if (capturedBaseUrl) {
+                if (!currentConfig.base_url) {
+                    currentConfig.base_url = capturedBaseUrl;
+                }
+                // swagger_url is required by the runner to start a scan.
+                // If not already set, point it to the base URL so the runner
+                // has a valid target. The user can override it to an actual
+                // OpenAPI spec URL in project settings.
+                if (!currentConfig.swagger_url) {
+                    currentConfig.swagger_url = capturedBaseUrl;
+                }
             }
 
             // 5. Save updated configuration back to Swazz

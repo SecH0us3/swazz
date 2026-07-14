@@ -184,6 +184,9 @@ func startAgent(args []string) {
 		log.Fatalf("Failed to connect to coordinator: %v", err)
 	}
 
+	// Increase read limit to 50MB to support large HAR payloads from the browser extension
+	c.SetReadLimit(50 * 1024 * 1024)
+
 	// Add graceful shutdown handler to prevent abrupt WebSocket closures
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
