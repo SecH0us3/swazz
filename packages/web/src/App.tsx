@@ -361,7 +361,7 @@ export default function App() {
         if (triageScope === 'finding') {
             newRule.endpoint = triagePrompt.endpoint;
             newRule.method = triagePrompt.method;
-            if (triagePrompt.statusCode !== undefined && triagePrompt.statusCode > 0) {
+            if (triagePrompt.statusCode !== undefined && triagePrompt.statusCode >= 0) {
                 newRule.status_code = triagePrompt.statusCode;
             }
         } else if (triageScope === 'endpoint') {
@@ -832,7 +832,7 @@ export default function App() {
                                             <div>
                                                 <div>Only this finding</div>
                                                 <div className="ignore-modal-radio-desc">
-                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.method} {triagePrompt.endpoint}</strong>{triagePrompt.statusCode ? <> with status <strong>{triagePrompt.statusCode}</strong></> : null}
+                                                    Mute rule <strong>{triagePrompt.ruleId}</strong> on <strong>{triagePrompt.method} {triagePrompt.endpoint}</strong>{triagePrompt.statusCode !== undefined ? <> with status <strong>{triagePrompt.statusCode}</strong></> : null}
                                                 </div>
                                             </div>
                                         </label>

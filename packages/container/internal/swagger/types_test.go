@@ -91,6 +91,12 @@ func TestIgnoreRule_UnmarshalJSON(t *testing.T) {
 			expectErr:    true,
 		},
 		{
+			name:         "whitespace-only status is cleared",
+			jsonInput:    `{"rule_id": "rule-1", "status": "   "}`,
+			expectStatus: "",
+			expectErr:    false,
+		},
+		{
 			name:         "valid status 0",
 			jsonInput:    `{"rule_id": "rule-1", "status": 0}`,
 			expectStatus: "0",

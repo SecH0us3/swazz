@@ -118,8 +118,8 @@ func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
 			if !statusPatternRx.MatchString(trimmed) {
 				return fmt.Errorf("invalid status/status_code format %q: must be a 3-digit HTTP status code (e.g., 404, 0) or range (e.g., 4xx)", r.Status)
 			}
-			r.Status = trimmed
 		}
+		r.Status = trimmed
 	}
 	return nil
 }
