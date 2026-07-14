@@ -28,11 +28,11 @@ func TestLoadIgnoreRules(t *testing.T) {
 	validPath := filepath.Join(tempDir, "swazz.ignore.json")
 	validJSON := `[
 		// This is a line comment
-		{"rule_id": "swazz/reflected-xss", "endpoint": "/api/users/*"},
+		{"rule_id": "swazz/reflected-xss", "endpoint": "/api/users/*", "status": 400},
 		/*
 		  This is a block comment
 		*/
-		{"method": "POST", "payload": ".*select.*"}
+		{"method": "POST", "payload": ".*select.*", "status_code": "4xx"}
 	]`
 	if err := os.WriteFile(validPath, []byte(validJSON), 0600); err != nil {
 		t.Fatalf("failed to write valid json: %v", err)
@@ -45,10 +45,10 @@ func TestLoadIgnoreRules(t *testing.T) {
 	if len(rules) != 2 {
 		t.Fatalf("expected 2 rules, got %d", len(rules))
 	}
-	if rules[0].RuleID != "swazz/reflected-xss" || rules[0].Endpoint != "/api/users/*" {
+	if rules[0].RuleID != "swazz/reflected-xss" || rules[0].Endpoint != "/api/users/*" || rules[0].Status != "400" {
 		t.Errorf("rule 0 mismatch: %+v", rules[0])
 	}
-	if rules[1].Method != "POST" || rules[1].Payload != ".*select.*" {
+	if rules[1].Method != "POST" || rules[1].Payload != ".*select.*" || rules[1].Status != "4xx" {
 		t.Errorf("rule 1 mismatch: %+v", rules[1])
 	}
 
@@ -74,6 +74,8 @@ func TestIsIgnored(t *testing.T) {
 		{Payload: "ignore-me"},
 		{Payload: `^[0-9]{3}$`}, // Regex for exactly 3 digits
 		{Payload: `"testkey":"testval"`},
+		{RuleID: "swazz/sql-error-leak", Status: "400"},
+		{RuleID: "swazz/reflected-xss", Status: "4xx"},
 	}
 	for i := range rules {
 		if rules[i].Payload != "" {
@@ -157,6 +159,38 @@ func TestIsIgnored(t *testing.T) {
 				Payload: map[string]any{"testkey": "testval"},
 			},
 			expected: true,
+		},
+		{
+			name: "matches rule 5 exact status code",
+			finding: &Finding{
+				RuleID: "swazz/sql-error-leak",
+				Status: 400,
+			},
+			expected: true,
+		},
+		{
+			name: "rule 5 does not match wrong status code",
+			finding: &Finding{
+				RuleID: "swazz/sql-error-leak",
+				Status: 500,
+			},
+			expected: false,
+		},
+		{
+			name: "matches rule 6 status code range 4xx",
+			finding: &Finding{
+				RuleID: "swazz/reflected-xss",
+				Status: 404,
+			},
+			expected: true,
+		},
+		{
+			name: "rule 6 does not match status code outside 4xx",
+			finding: &Finding{
+				RuleID: "swazz/reflected-xss",
+				Status: 200,
+			},
+			expected: false,
 		},
 	}
 
@@ -263,20 +297,17 @@ func TestIsIgnored_GlobEndpoint(t *testing.T) {
 }
 
 func TestIsIgnored_StatusMatching(t *testing.T) {
-	rules := []IgnoreRule{
-		{RuleID: "swazz/bad-request", Status: "400"},
-		{Status: "4xx"},
-		{Status: "5XX"},
-		{Status: "  201  "},
-	}
-
 	tests := []struct {
 		name    string
+		rules   []IgnoreRule
 		finding *Finding
 		want    bool
 	}{
 		{
 			name: "exact status match 400 with rule id",
+			rules: []IgnoreRule{
+				{RuleID: "swazz/bad-request", Status: "400"},
+			},
 			finding: &Finding{
 				RuleID: "swazz/bad-request",
 				Status: 400,
@@ -284,7 +315,21 @@ func TestIsIgnored_StatusMatching(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "exact status match 400 but different rule id",
+			name: "exact status match 400 but different rule id (no match)",
+			rules: []IgnoreRule{
+				{RuleID: "swazz/bad-request", Status: "400"},
+			},
+			finding: &Finding{
+				RuleID: "swazz/reflected-xss",
+				Status: 400,
+			},
+			want: false,
+		},
+		{
+			name: "exact status match 400 matching wildcard range 4xx rule",
+			rules: []IgnoreRule{
+				{Status: "4xx"},
+			},
 			finding: &Finding{
 				RuleID: "swazz/reflected-xss",
 				Status: 400,
@@ -295,7 +340,7 @@ func TestIsIgnored_StatusMatching(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsIgnored(tt.finding, rules)
+			got := IsIgnored(tt.finding, tt.rules)
 			if got != tt.want {
 				t.Errorf("IsIgnored() = %v, want %v", got, tt.want)
 			}
