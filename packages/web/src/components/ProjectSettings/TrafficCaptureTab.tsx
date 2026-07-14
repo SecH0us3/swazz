@@ -129,11 +129,21 @@ export function TrafficCaptureTab() {
                         <div className="traffic-capture-step">
                             <div className="traffic-capture-step-number">2</div>
                             <div className="traffic-capture-step-content">
-                                <span className="traffic-capture-step-title">Select packages/extension folder</span>
+                                <span className="traffic-capture-step-title">Select extension folder or download package</span>
                                 <span className="traffic-capture-step-desc">
                                     Select the extension directory located at:
                                     <div className="traffic-capture-code-block">
                                         packages/extension
+                                    </div>
+                                    Or download and extract the pre-packaged extension:
+                                    <div className="traffic-capture-download-row">
+                                        <a 
+                                            href="/swazz-extension.zip" 
+                                            download="swazz-extension.zip"
+                                            className="traffic-capture-download-btn"
+                                        >
+                                            📥 Download Extension (.zip)
+                                        </a>
                                     </div>
                                 </span>
                             </div>

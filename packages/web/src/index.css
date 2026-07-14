@@ -8920,3 +8920,28 @@ kbd {
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.2);
 }
+
+.traffic-capture-download-row {
+  margin-top: 8px;
+  display: flex;
+}
+
+.traffic-capture-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  background-color: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  transition: all 0.2s ease;
+}
+
+.traffic-capture-download-btn:hover {
+  background-color: rgba(99, 102, 241, 0.2);
+  border-color: #6366f1;
+}
