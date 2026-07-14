@@ -77,7 +77,7 @@ jobs:
         # v6.4.0
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache-dependency-path: packages/container/go.sum
 
       - name: Run tests

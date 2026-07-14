@@ -1,8 +1,12 @@
 package swagger
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 // FuzzingProfile represents the type of payload generation strategy.
@@ -74,6 +78,50 @@ type IgnoreRule struct {
 	Method    string         `json:"method,omitempty"`
 	Payload   string         `json:"payload,omitempty"`
 	PayloadRx *regexp.Regexp `json:"-"`
+	Status    string         `json:"status,omitempty"` // Status code/range constraint (e.g., 400, "400", "4xx")
+}
+
+var statusPatternRx = regexp.MustCompile(`^(0|[1-9]\d{2}|[1-9]xx)$`)
+
+func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
+	type Alias IgnoreRule
+	aux := &struct {
+		Status     any `json:"status,omitempty"`
+		StatusCode any `json:"status_code,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	var val any
+	if aux.Status != nil {
+		val = aux.Status
+	} else if aux.StatusCode != nil {
+		val = aux.StatusCode
+	}
+
+	if val != nil {
+		switch v := val.(type) {
+		case float64:
+			r.Status = strconv.Itoa(int(v))
+		case string:
+			r.Status = v
+		default:
+			return fmt.Errorf("invalid type for status/status_code: %T", v)
+		}
+
+		trimmed := strings.ToLower(strings.TrimSpace(r.Status))
+		if trimmed != "" {
+			if !statusPatternRx.MatchString(trimmed) {
+				return fmt.Errorf("invalid status/status_code format %q: must be a 3-digit HTTP status code (e.g., 404, 0) or range (e.g., 4xx)", r.Status)
+			}
+		}
+		r.Status = trimmed
+	}
+	return nil
 }
 
 // AuthStep describes a request to be made before fuzzing to establish a session.

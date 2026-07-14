@@ -235,6 +235,35 @@ describe('useConfig', () => {
             expect(() => validateConfig({ security: 'not an object' })).toThrow('security must be an object');
             expect(() => validateConfig({ security: { allow_private_ips: 'yes' } })).toThrow('security.allow_private_ips must be a boolean');
         });
+
+        it('should throw when rules.ignore_rules is not an array', () => {
+            expect(() => validateConfig({ rules: { ignore_rules: 'not an array' } })).toThrow('rules.ignore_rules must be an array');
+        });
+
+        it('should validate ignore_rules status and status_code', () => {
+            // Valid cases
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: 200 }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: '4xx' }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: 200 }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: '4xx' }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ endpoint: '/api/v1/users', status: 404, status_code: 404 }] } })).not.toThrow();
+
+            // Format validation valid cases
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: '5XX' }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: '0' }] } })).not.toThrow();
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: '  302  ' }] } })).not.toThrow();
+
+            // Invalid cases
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: true }] } })).toThrow('ignore_rule status must be a number or a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: {} }] } })).toThrow('ignore_rule status must be a number or a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: true }] } })).toThrow('ignore_rule status_code must be a number or a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: {} }] } })).toThrow('ignore_rule status_code must be a number or a string');
+
+            // Format validation invalid cases
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: '4yy' }] } })).toThrow('ignore_rule status format is invalid');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status: 12 }] } })).toThrow('ignore_rule status format is invalid');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: '4000' }] } })).toThrow('ignore_rule status_code format is invalid');
+        });
     });
 
     it('should import valid config correctly', () => {

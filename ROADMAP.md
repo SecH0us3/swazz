@@ -39,6 +39,24 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🟡 Medium Complexity
 
+- [ ] **Task 140: Onboarding & Landing Page UX Redesign**
+  - **Design Goal:** Improve the conversion funnel and initial user experience by fixing major UX bottlenecks on the landing page and onboarding flow, decreasing time-to-value for new users.
+  - **Implementation Details:**
+    - **Hero & CTA Redesign:** Replace the static login screenshot with a dynamic demo/GIF of the product's actual OWASP findings. Add a clear primary CTA (e.g., "Run a live demo scan") and a secondary CTA ("Read the docs").
+    - **Frictionless Entry:** Remove the auto-opening login modal on the first visit. Simplify login options by prioritizing GitHub Auth as the primary method and "Try without signup" as a prominent secondary option.
+    - **Postpone Seed Phrase:** Remove the mandatory seed-phrase (E2EE key) generation step before the first scan. Offer it as an optional backup step later when the user actually has valuable findings to protect.
+    - **Fix Turnstile (P0):** Fix the Cloudflare Turnstile "Verification failed" bug on the auth gates that physically blocks registration.
+    - **Brand & Trust Consistency:** Align the landing page (dark/lime) with the product dashboard (light/purple) using a unified theme. Add social proof (GitHub stars, scan metrics, etc.) to the landing page.
+    - **Clear Positioning:** Resolve the contradictory messaging between "sign up for free" and "Closed Beta".
+
+- [ ] **Task 141: Dashboard & Reports UX Redesign**
+  - **Design Goal:** Improve the clarity, trust, and information architecture of the product's reporting dashboard (OWASP Coverage and Grouped Errors), ensuring security professionals can easily read and trust the results.
+  - **Implementation Details:**
+    - **Consistent Metrics (Trust Factor):** Fix the inconsistent finding counters across different tabs (e.g., 546 / 780 / 1029). Establish a single source of truth for metrics and clearly label exactly what each number represents (e.g., "Total Requests", "Raw Findings", "Grouped Vulnerabilities").
+    - **Separate Security vs. Infrastructure:** Redesign the "Grouped Errors" view to visually and structurally separate real security vulnerabilities (e.g., SQLi, CORS Misconfiguration) from infrastructure noise/errors (e.g., HTTP 520, Network Timeouts). 
+    - **Severity Sorting:** Ensure findings are prioritized and sorted by security severity, giving visual weight to critical vulnerabilities over generic errors.
+    - **OWASP Widget Polish:** Polish the OWASP API Top-10 mapping UI, as this is a strong value proposition. Ensure the severity bars and categories are easily scannable and export-friendly.
+
 
 - [ ] **Task 88: Password Change, Reset Flow, and Backup Codes**
   - **Design Goal:** Provide secure password management tools including dynamic password changes, email-based password recovery (forgot password flow), and 2FA backup codes.

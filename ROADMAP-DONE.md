@@ -703,6 +703,7 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Allow users to mark findings as `False Positive`, `Ignored`, or `Acknowledged` in the web dashboard.
     - Export a `swazz.ignore.json` configuration containing rules (such as matched endpoint, payload, or vulnerability type) to automatically suppress matching findings in subsequent CLI and Web runs.
+    - Support ignoring findings by HTTP status codes or status code ranges (e.g., `400` or `4xx`) on a per-rule basis, configurable in both `swazz.config.json` and `swazz.ignore.json`, and integrated into the frontend triage UI modal.
 
 - [x] **Task 55: Stateful API Fuzzing & Request Chaining**
   - **Design Goal:** Enable fuzzing of complex multi-step workflows by dynamically passing variables extracted from earlier HTTP responses into subsequent requests.

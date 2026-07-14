@@ -131,8 +131,22 @@ export function validateConfig(config: any): void {
                 if (rule.payload !== undefined && typeof rule.payload !== 'string') {
                     throw new Error('ignore_rule payload must be a string');
                 }
+                validateStatus(rule.status, 'status');
+                validateStatus(rule.status_code, 'status_code');
             }
         }
+    }
+}
+
+function validateStatus(val: any, fieldName: string): void {
+    if (val === undefined) return;
+    if (typeof val !== 'number' && typeof val !== 'string') {
+        throw new Error(`ignore_rule ${fieldName} must be a number or a string`);
+    }
+    const trimmed = String(val).trim().toLowerCase();
+    if (trimmed === '') return;
+    if (!/^(0|[1-9]\d{2}|[1-9]xx)$/.test(trimmed)) {
+        throw new Error(`ignore_rule ${fieldName} format is invalid: must be a 3-digit HTTP status code (e.g., 404, 0) or range (e.g., 4xx)`);
     }
 }
 
