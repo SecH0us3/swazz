@@ -287,8 +287,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Exclude chrome/extension settings pages
                 if (tabUrl.protocol.startsWith('http')) {
-                    helperCurrentTab.innerHTML = `Suggest active tab: <strong id="btn-add-host">${host}</strong>`;
-                    document.getElementById('btn-add-host').addEventListener('click', () => {
+                    helperCurrentTab.textContent = 'Suggest active tab: ';
+                    const strong = document.createElement('strong');
+                    strong.id = 'btn-add-host';
+                    strong.style.cursor = 'pointer';
+                    strong.style.textDecoration = 'underline';
+                    strong.textContent = host;
+                    helperCurrentTab.appendChild(strong);
+
+                    strong.addEventListener('click', () => {
                         if (!targetDomains.includes(host)) {
                             targetDomains.push(host);
                             inputDomains.value = targetDomains.join(', ');

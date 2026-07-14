@@ -35,7 +35,7 @@
                     headers: formatHeaders(headers),
                     body: body || ''
                 }
-            }, '*');
+            }, window.location.origin);
         } catch (e) {
             // Silently ignore URL parsing errors
         }
@@ -44,7 +44,7 @@
     // 1. Intercept Fetch API
     if (window.fetch) {
         const originalFetch = window.fetch;
-        window.fetch = async function(resource, config) {
+        window.fetch = function(resource, config) {
             let url = "";
             let method = "GET";
             let headers = {};
@@ -83,14 +83,17 @@
                     }
                 }
 
-                // If body is in the request object (not config)
+                // If body is in the request object (not config), read asynchronously
+                // without blocking the actual network call
                 if (!body && resource && typeof resource === 'object' && resource.body) {
-                    try {
-                        body = await resource.clone().text();
-                    } catch {}
+                    resource.clone().text().then(text => {
+                        sendRequestLog(url, method, headers, text);
+                    }).catch(() => {
+                        sendRequestLog(url, method, headers, '');
+                    });
+                } else {
+                    sendRequestLog(url, method, headers, body);
                 }
-
-                sendRequestLog(url, method, headers, body);
             } catch (e) {
                 // Interceptor safety fallback
             }

@@ -125,15 +125,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     }
                 });
 
-                // Track unique query string values
-                if (queryStringStr && !existing.queryVariations.includes(queryStringStr)) {
+                // Track unique query string values (max 20 variations)
+                if (queryStringStr && !existing.queryVariations.includes(queryStringStr) && existing.queryVariations.length < 20) {
                     existing.queryVariations.push(queryStringStr);
                 }
 
-                // Track unique body payloads
+                // Track unique body payloads (max 10 variations, max 10KB each)
                 const bodyStr = reqData.body ? reqData.body.trim() : "";
-                if (bodyStr && !existing.bodyVariations.includes(bodyStr)) {
-                    existing.bodyVariations.push(bodyStr);
+                if (bodyStr && bodyStr.length < 10000) {
+                    if (!existing.bodyVariations.includes(bodyStr) && existing.bodyVariations.length < 10) {
+                        existing.bodyVariations.push(bodyStr);
+                    }
                 }
 
                 // Generate recommendations based on coverage
