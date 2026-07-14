@@ -161,7 +161,7 @@ body::before {
     radial-gradient(ellipse 40% 30% at 0% 100%, var(--color-error-bg) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
-  animation: ambient-drift 20s ease-in-out infinite alternate;
+  display: none;
 }
 
 [data-theme="light"] body::before {
