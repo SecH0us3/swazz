@@ -85,6 +85,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 const path = parsedUrl.pathname;
                 const normalized = normalizePath(path);
                 
+                // Security check: validate that the sender tab's origin matches the host of the captured request.
+                // This prevents request injection/parameter pollution from malicious websites.
+                if (sender.tab && sender.tab.url) {
+                    try {
+                        const tabUrl = new URL(sender.tab.url);
+                        if (tabUrl.host !== host) {
+                            console.warn(`[Swazz Security] Origin mismatch: request to ${host} was sent from tab at ${tabUrl.host}. Dropping request.`);
+                            return;
+                        }
+                    } catch (e) {
+                        return;
+                    }
+                }
+
                 // Key is Method + Normalized Path (for grouping)
                 const key = `${method}:${normalized}`;
 
@@ -100,13 +114,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 const ignoredExtensions = ['js', 'css', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'woff', 'woff2', 'ttf', 'map'];
                 if (ignoredExtensions.includes(fileExtension)) return;
 
-                let existing = requests[key];
+                let existing = capturedRequests[key];
                 if (!existing) {
                     existing = {
                         key,
                         method,
                         path: normalized,
                         exampleUrl: reqData.url,
+                        headers: reqData.headers || {},
                         count: 0,
                         lastCaptured: Date.now(),
                         queryKeys: [],

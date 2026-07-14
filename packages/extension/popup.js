@@ -583,7 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 // Map headers
-                const headerItems = [];
+                const headerItems = Object.entries(req.headers || {}).map(([name, value]) => ({ name, value }));
                 // Parse common content types
                 let mimeType = "application/json";
                 

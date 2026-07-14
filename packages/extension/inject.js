@@ -123,29 +123,27 @@
         };
 
         XHR.send = function(postData) {
-            this.addEventListener('load', () => {
-                try {
-                    let body = "";
-                    if (postData) {
-                        if (typeof postData === 'string') {
-                            body = postData;
-                        } else if (postData instanceof URLSearchParams) {
-                            body = postData.toString();
-                        } else if (postData instanceof FormData) {
-                            const params = {};
-                            for (const [k, v] of postData.entries()) {
-                                if (typeof v === 'string') params[k] = v;
-                            }
-                            body = new URLSearchParams(params).toString();
-                        } else {
-                            try {
-                                body = JSON.stringify(postData);
-                            } catch {}
+            try {
+                let body = "";
+                if (postData) {
+                    if (typeof postData === 'string') {
+                        body = postData;
+                    } else if (postData instanceof URLSearchParams) {
+                        body = postData.toString();
+                    } else if (postData instanceof FormData) {
+                        const params = {};
+                        for (const [k, v] of postData.entries()) {
+                            if (typeof v === 'string') params[k] = v;
                         }
+                        body = new URLSearchParams(params).toString();
+                    } else {
+                        try {
+                            body = JSON.stringify(postData);
+                        } catch {}
                     }
-                    sendRequestLog(this._url, this._method, this._headers, body);
-                } catch (e) {}
-            });
+                }
+                sendRequestLog(this._url, this._method, this._headers, body);
+            } catch (e) {}
             return originalSend.apply(this, arguments);
         };
     }
@@ -191,7 +189,8 @@
                 type: 'auth_sync',
                 data: {
                     token: e.detail.token,
-                    userProfile: e.detail.userProfile || null
+                    userProfile: e.detail.userProfile || null,
+                    swazzUrl: window.location.origin
                 }
             }, window.location.origin);
         }
