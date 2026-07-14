@@ -122,6 +122,7 @@ type Settings struct {
 	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
 	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
 	MaxScanDurationMin            int                         `json:"max_scan_duration_min,omitempty"`
+	ActiveParameterFuzzing        bool                        `json:"active_parameter_fuzzing"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -145,6 +146,7 @@ func DefaultSettings() Settings {
 		MaxNodesBudget:                50000,
 		MaxDepthLimit:                 64,
 		MaxScanDurationMin:            0,
+		ActiveParameterFuzzing:        true,
 	}
 }
 

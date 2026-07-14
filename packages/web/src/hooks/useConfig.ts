@@ -77,6 +77,9 @@ export function validateConfig(config: any): void {
         if (s.data_retention !== undefined && typeof s.data_retention !== 'string') {
             throw new Error('settings.data_retention must be a string');
         }
+        if (s.active_parameter_fuzzing !== undefined && typeof s.active_parameter_fuzzing !== 'boolean') {
+            throw new Error('settings.active_parameter_fuzzing must be a boolean');
+        }
     }
     if (config.endpoints !== undefined && !Array.isArray(config.endpoints)) {
         throw new Error('endpoints must be an array');

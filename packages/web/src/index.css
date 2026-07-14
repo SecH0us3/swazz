@@ -8945,3 +8945,36 @@ kbd {
   background-color: rgba(99, 102, 241, 0.2);
   border-color: #6366f1;
 }
+
+.fuzz-setting-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 16px;
+}
+
+.fuzz-setting-checkbox-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 24px;
+  line-height: 1.4;
+}
+
+.fuzz-setting-intensity-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.fuzz-setting-intensity-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+.fuzz-setting-intensity-input {
+  width: 120px;
+}
