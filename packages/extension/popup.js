@@ -25,6 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnSyncSwazz = document.getElementById('btn-sync-swazz');
     const syncStatus = document.getElementById('sync-status');
+    const inputNewProjectName = document.getElementById('input-new-project-name');
+    const btnCreateProject = document.getElementById('btn-create-project');
+    const lblCreateProjectError = document.getElementById('lbl-create-project-error');
 
     let isRecording = false;
     let targetDomains = [];
@@ -158,6 +161,72 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refresh projects list
     btnRefreshProjects.addEventListener('click', () => {
         fetchProjects();
+    });
+
+    // Create new project
+    btnCreateProject.addEventListener('click', async () => {
+        lblCreateProjectError.textContent = '';
+        const projName = inputNewProjectName.value.trim();
+        if (!projName) {
+            lblCreateProjectError.textContent = 'Project name is required';
+            return;
+        }
+        if (!activeToken) {
+            lblCreateProjectError.textContent = 'API Auth Token is required to create projects';
+            return;
+        }
+
+        btnCreateProject.textContent = 'Creating...';
+        btnCreateProject.disabled = true;
+        inputNewProjectName.disabled = true;
+
+        try {
+            const res = await fetch(`${activeSwazzUrl}/api/projects`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${activeToken}`
+                },
+                body: JSON.stringify({
+                    name: projName,
+                    description: 'Created via Swazz Browser Extension'
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP ${res.status}`);
+            }
+
+            const data = await res.json();
+            const newProjectId = data.id;
+
+            // Clear input
+            inputNewProjectName.value = '';
+
+            // Reload projects and select the newly created one
+            await fetchProjects();
+            
+            // Set as active
+            activeProjectId = newProjectId;
+            selectProject.value = newProjectId;
+            
+            const updates = { 
+                projectId: newProjectId,
+                projectName: projName
+            };
+            cardActiveProject.textContent = projName;
+            chrome.storage.local.set(updates);
+            updateSyncButtonState();
+
+        } catch (err) {
+            console.error("Failed to create project", err);
+            lblCreateProjectError.textContent = err.message || 'Failed to create project';
+        } finally {
+            btnCreateProject.textContent = '➕ Create';
+            btnCreateProject.disabled = false;
+            inputNewProjectName.disabled = false;
+        }
     });
 
     // Fetch projects from Swazz backend

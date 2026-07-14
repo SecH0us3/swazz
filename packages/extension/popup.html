@@ -59,6 +59,14 @@
                     </select>
                     <button class="btn btn-ghost btn-sm" id="btn-refresh-projects">🔄 Refresh Projects</button>
                 </div>
+                <div class="form-group project-create-group">
+                    <label>Or Create New Project</label>
+                    <div class="input-action-row">
+                        <input type="text" id="input-new-project-name" placeholder="Project Name">
+                        <button class="btn btn-primary btn-sm" id="btn-create-project">➕ Create</button>
+                    </div>
+                    <div class="create-project-error" id="lbl-create-project-error"></div>
+                </div>
                 <div class="form-group">
                     <label>Target Domains (comma separated)</label>
                     <input type="text" id="input-domains" placeholder="e.g. localhost:8080, api.dev">

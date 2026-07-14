@@ -602,3 +602,25 @@ input:checked + .slider:before {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+.input-action-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.input-action-row input {
+    flex: 1;
+}
+
+.create-project-error {
+    font-size: 10px;
+    color: var(--color-error, #ef4444);
+    margin-top: 2px;
+}
+
+.project-create-group {
+    border-top: 1px dashed var(--border-default);
+    padding-top: 8px;
+    margin-top: 4px;
+}
