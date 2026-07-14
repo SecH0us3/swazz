@@ -416,6 +416,7 @@ export function MainWorkspace({
                                     runId={inspectorRunId}
                                     queryResults={queryResults}
                                     liveCount={liveCount}
+                                    isRunning={isRunning}
                                     onSelectResult={handleSelectResult}
                                 />
                             )}

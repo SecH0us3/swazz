@@ -182,6 +182,13 @@ This file contains completed tasks.
     - Automatically trigger states to collapse both the left sidebar and the right configuration panel.
     - Ensure the panels are restored or can be reopened when navigating away from the settings views.
 
+- [x] **Task 129: Optimize OWASP Top 10 Tab Performance**
+  - **Design Goal:** Prevent the OWASP Top 10 tab from showing an infinite loading state during active scans, and implement category highlighting and direct deduplicated filtering upon card click.
+  - **Implementation Details:**
+    - Replace the clearing/debouncing `setTimeout` in the `useEffect` hook in `packages/web/src/components/OWASPTop10/OWASPTop10.tsx` with a throttled query or a low-frequency polling mechanism during scans to ensure results load incrementally.
+    - Highlight categories with matching findings immediately.
+    - Implement category filtering upon clicking cards, deduplicating the list of results (removing duplicate findings).
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.

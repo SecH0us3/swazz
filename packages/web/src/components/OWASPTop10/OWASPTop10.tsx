@@ -113,10 +113,11 @@ interface Props {
     runId: string | null;
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
     liveCount?: number;
+    isRunning?: boolean;
     onSelectResult: (row: ResultSummary) => void;
 }
 
-export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult }: Props) {
+export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = false, onSelectResult }: Props) {
     const onSelectResultRef = useRef(onSelectResult);
     onSelectResultRef.current = onSelectResult;
 
@@ -125,6 +126,9 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
     }, []);
 
     const [rows, setRows] = useState<ResultSummary[]>([]);
+    const rowsRef = useRef(rows);
+    rowsRef.current = rows;
+
     const [isLoading, setIsLoading] = useState(false);
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
     const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>({});
@@ -135,8 +139,8 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
             return;
         }
 
-        setIsLoading(true);
-        const timer = setTimeout(() => {
+        const fetchData = () => {
+            setIsLoading(prev => prev || rowsRef.current.length === 0);
             queryResults({
                 runId,
                 statusFilter: 'all',
@@ -152,10 +156,22 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
                 .finally(() => {
                     setIsLoading(false);
                 });
-        }, 1000); // Debounce database queries by 1 second to prevent UI freezing during active runs
+        };
 
-        return () => clearTimeout(timer);
-    }, [runId, queryResults, liveCount]);
+        // Initial immediate fetch
+        fetchData();
+
+        let intervalId: NodeJS.Timeout | null = null;
+        if (isRunning) {
+            intervalId = setInterval(fetchData, 3000);
+        }
+
+        return () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+        };
+    }, [runId, queryResults, isRunning]);
 
     const groupedData = useMemo(() => {
         const groups: Record<string, { result: ResultSummary; finding?: AnalysisFinding }[]> = {};
@@ -163,6 +179,8 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
             groups[meta.title] = [];
         }
         groups['Unmapped / Other'] = [];
+
+        const seenKeys = new Set<string>();
 
         for (const row of rows) {
             let placed = false;
@@ -174,7 +192,11 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
                             if (!groups[c]) {
                                 groups[c] = [];
                             }
-                            groups[c].push({ result: row, finding: f });
+                            const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:${f.ruleId || ''}`;
+                            if (!seenKeys.has(key)) {
+                                seenKeys.add(key);
+                                groups[c].push({ result: row, finding: f });
+                            }
                             placed = true;
                         }
                     }
@@ -188,14 +210,22 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, onSelectResult 
                         if (!groups[c]) {
                             groups[c] = [];
                         }
-                        groups[c].push({ result: row });
+                        const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            groups[c].push({ result: row });
+                        }
                         placed = true;
                     }
                 }
             }
 
             if (!placed) {
-                groups['Unmapped / Other'].push({ result: row });
+                const key = `Unmapped / Other:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    groups['Unmapped / Other'].push({ result: row });
+                }
             }
         }
 
