@@ -30,12 +30,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `README.md` file in `/examples` describing the cookbook and linking to the recipe documentation.
     - Populate the examples directory with recipes covering configurations from basic HTTP requests and API scans to advanced multi-auth, chaining rules, and custom wordlist scans.
 
-- [/] **Task 130: Render Infinity (∞) for Timeout status code (HTTP 0)**
-  - **Design Goal:** Improve status code visibility in result lists and logs by displaying the infinity symbol (∞) instead of `0` when a request times out or encounters a network error.
-  - **Implementation Details:**
-    - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
-
-
 - [ ] **Task 132: Add external reference links to OWASP Top 10 page**
   - **Design Goal:** Provide direct educational links to the official OWASP Top 10 and category definitions, helping developers learn more about the security vulnerabilities found.
   - **Implementation Details:**
