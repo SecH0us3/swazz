@@ -21,7 +21,7 @@ function getCellColor(status: number, count: number, maxCount: number): string {
     if (count === 0) return 'var(--bg-elevated)';
     const intensity = Math.min(count / Math.max(maxCount, 1), 1);
     const lightness = 20 + intensity * 40;
-    if (status >= 500) return `hsl(350, 89%, ${lightness}%)`;
+    if (status >= 500 || status === 0) return `hsl(350, 89%, ${lightness}%)`;
     if (status >= 400) return `hsl(45, 96%, ${lightness}%)`;
     return `hsl(160, 84%, ${lightness}%)`;
 }
@@ -30,7 +30,7 @@ function matchesBucket(code: number, bucket: StatusBucket): boolean {
     if (bucket === 'any') return true;
     if (bucket === '2xx') return code >= 200 && code < 300;
     if (bucket === '4xx') return code >= 400 && code < 500;
-    if (bucket === '5xx') return code >= 500;
+    if (bucket === '5xx') return code >= 500 || code === 0;
     return true;
 }
 
@@ -68,7 +68,7 @@ const HeatmapCell: React.FC<HeatmapCellProps> = React.memo(({
         >
             {isHovered && count > 0 && (
                 <div className="tooltip">
-                    {code}: {count} req{count > 1 ? 's' : ''}<br />
+                    {code === 0 ? '∞' : code}: {count} req{count > 1 ? 's' : ''}<br />
                     <span style={{ opacity: 0.6, fontSize: 10 }}>click to filter</span>
                 </div>
             )}
@@ -260,7 +260,7 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
                             onClick={() => onCellClick(null)}
                             className="heatmap-active-chip"
                         >
-                            <span>{activeFilter.status}</span>
+                            <span>{activeFilter.status === 0 ? '∞' : activeFilter.status}</span>
                             <span style={{ opacity: 0.6 }}>·</span>
                             <span style={{ fontFamily: 'var(--font-mono)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 <span style={{ color: 'var(--text-disabled)', marginRight: 4 }}>{activeFilter.method}</span>
@@ -316,9 +316,9 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
                         {/* Spacer matches the label column */}
                         <div className="heatmap-label-spacer" />
                         {statusCodes.map((code) => {
-                            const bucketClass = code >= 500 ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
+                            const bucketClass = (code >= 500 || code === 0) ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
                             return (
-                                <div key={code} className={`heatmap-code-label ${bucketClass}`}>{code}</div>
+                                <div key={code} className={`heatmap-code-label ${bucketClass}`}>{code === 0 ? '∞' : code}</div>
                             );
                         })}
                     </div>

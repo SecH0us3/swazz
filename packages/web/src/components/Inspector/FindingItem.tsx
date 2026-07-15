@@ -47,7 +47,7 @@ export const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, group
                     {triageBadge}
                 </div>
                 <span className={getBadgeClass(item.result.status)}>
-                    {item.result.status || 'ERR'}
+                    {item.result.status === 0 ? '∞' : (item.result.status || 'ERR')}
                 </span>
             </div>
             {item.finding?.message && (
