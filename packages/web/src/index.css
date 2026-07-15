@@ -1976,6 +1976,15 @@ body.resizing .sidebar-resizer {
   line-height: 1.6;
 }
 
+.empty-state-small {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-4) var(--space-2);
+  font-style: italic;
+  line-height: 1.4;
+}
+
 .empty-state-welcome {
   max-width: 800px;
   margin: 0 auto;

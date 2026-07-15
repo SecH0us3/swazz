@@ -2,7 +2,7 @@
    Swazz Landing Page Stylesheet - "Future-Proof Security"
    ═══════════════════════════════════════════════════════════ */
 
-:root {
+.landing-page-container {
     --bg-obsidian: #0B0F1A;
     --bg-card: rgba(30, 41, 59, 0.5);
     --border-subtle: rgba(255, 255, 255, 0.08);

@@ -2,7 +2,7 @@
    Swazz Landing Page & Auth Portal Stylesheet (Stitch v2.0)
    ═══════════════════════════════════════════════════════════ */
 
-:root {
+.landing-page-container {
     --accent-neon: #0284C7;
     --accent-neon-glow: rgba(2, 132, 199, 0.4);
     --accent-neon-subtle: rgba(2, 132, 199, 0.15);
