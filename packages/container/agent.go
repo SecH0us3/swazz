@@ -329,8 +329,20 @@ func startAgent(args []string) {
 				RunID string `json:"runId"`
 				UUID  string `json:"uuid"`
 			}
-			if err := json.Unmarshal(wsMsg.Payload, &trigger); err != nil {
-				logError("Failed to unmarshal oob_trigger: %v", err)
+			if len(wsMsg.Payload) > 0 {
+				if err := json.Unmarshal(wsMsg.Payload, &trigger); err != nil {
+					logError("Failed to unmarshal oob_trigger payload: %v", err)
+					continue
+				}
+			}
+			if trigger.RunID == "" {
+				trigger.RunID = wsMsg.RunID
+			}
+			if trigger.UUID == "" {
+				trigger.UUID = wsMsg.UUID
+			}
+			if trigger.RunID == "" || trigger.UUID == "" {
+				logError("Failed to unmarshal oob_trigger: missing runId or uuid")
 				continue
 			}
 			activeRunnersMu.Lock()
@@ -652,6 +664,8 @@ type WSMessageIn struct {
 	Type    string          `json:"type"`
 	ReqID   string          `json:"reqId,omitempty"`
 	Payload json.RawMessage `json:"payload"`
+	RunID   string          `json:"runId,omitempty"`
+	UUID    string          `json:"uuid,omitempty"`
 }
 
 type JobDispatchPayload struct {

@@ -16,8 +16,10 @@ export class OobHandler implements RouteHandler {
       try {
         runnerWs.send(JSON.stringify({
           type: 'oob_trigger',
-          runId,
-          uuid
+          payload: {
+            runId,
+            uuid
+          }
         }));
       } catch (err) {
         console.error(`Failed to forward OOB trigger to runner:`, err);
