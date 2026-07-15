@@ -354,6 +354,13 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
                     }
                 } else {
                     if (!cancelled) {
+                        // Only auto-generate when we have a real project ID.
+                        // Without this guard, every page load would trigger an
+                        // expensive PBKDF2 derivation (2048 iterations) and
+                        // redundant IndexedDB writes for a throw-away global key.
+                        if (!projectId) {
+                            return;
+                        }
                         const mnemonicPhrase = await generateMnemonic();
                         const keys = await deriveKeyFromMnemonic(mnemonicPhrase);
                         await KeyStorage.saveKey(KEY_PRIVATE, keys.privateKey, projectId);

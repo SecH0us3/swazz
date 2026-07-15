@@ -50,6 +50,8 @@ export function KeysTab() {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Reset so the same file can be selected again after a failed import
+        e.target.value = '';
         setRestoreError(null);
         const reader = new FileReader();
         reader.onload = async (event) => {
