@@ -42,12 +42,24 @@ function normalizePath(path) {
     return segments.join('/');
 }
 
+function stripPort(hostOrTarget) {
+    if (!hostOrTarget) return '';
+    const s = hostOrTarget.trim().toLowerCase();
+    if (s.startsWith('[')) {
+        const closingBracketIndex = s.indexOf(']');
+        if (closingBracketIndex !== -1) {
+            return s.substring(0, closingBracketIndex + 1);
+        }
+    }
+    return s.split(':')[0];
+}
+
 // Function to match host against target domains list
 function isDomainTargeted(host, targetDomains) {
     if (!targetDomains || targetDomains.length === 0) return false;
-    const cleanHost = host.split(':')[0].trim().toLowerCase();
+    const cleanHost = stripPort(host);
     return targetDomains.some(target => {
-        const t = target.split(':')[0].trim().toLowerCase();
+        const t = stripPort(target);
         if (!t) return false;
         // Only allow exact match or subdomain (not substring to prevent spoofing)
         return cleanHost === t || cleanHost.endsWith('.' + t);

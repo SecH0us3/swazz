@@ -728,6 +728,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             btnCrawlTab.disabled = false;
                         } else if (response && response.success) {
                             showCrawlStatus("Crawling... Press Stop Crawl to finish early.", "info");
+                        } else {
+                            showCrawlStatus("Failed to start crawl. No response from tab.", "error");
+                            btnCrawlTab.disabled = false;
                         }
                     });
                 });

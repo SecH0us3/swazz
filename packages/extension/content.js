@@ -73,11 +73,23 @@ window.addEventListener('storage', (e) => {
 let mutationObserver = null;
 let injectedStyles = null;
 
+function stripPort(hostOrTarget) {
+    if (!hostOrTarget) return '';
+    const s = hostOrTarget.trim().toLowerCase();
+    if (s.startsWith('[')) {
+        const closingBracketIndex = s.indexOf(']');
+        if (closingBracketIndex !== -1) {
+            return s.substring(0, closingBracketIndex + 1);
+        }
+    }
+    return s.split(':')[0];
+}
+
 function isDomainTargeted(host, targetDomains) {
     if (!targetDomains || targetDomains.length === 0) return false;
-    const cleanHost = host.split(':')[0].trim().toLowerCase();
+    const cleanHost = stripPort(host);
     return targetDomains.some(target => {
-        const t = target.split(':')[0].trim().toLowerCase();
+        const t = stripPort(target);
         if (!t) return false;
         // Only allow exact match or subdomain (not substring to prevent spoofing)
         return cleanHost === t || cleanHost.endsWith('.' + t);
@@ -399,7 +411,7 @@ async function runCrawlStep() {
 
     for (const { form, signature } of formsToSubmit) {
         // Fill form fields
-        const inputs = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]), textarea, select');
+        const inputs = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select');
         inputs.forEach(input => {
             const type = input.getAttribute('type') || 'text';
             if (type === 'email') {
@@ -457,6 +469,11 @@ async function runCrawlStep() {
         } catch (e) {
             console.error("Button click failed:", e);
         }
+    }
+
+    if (buttonsToClick.length > 0 || formsToSubmit.length > 0) {
+        // Wait a bit to let network traffic settle from clicks/submissions
+        await new Promise(r => setTimeout(r, 2000));
     }
 
     // 4. Update state in storage
