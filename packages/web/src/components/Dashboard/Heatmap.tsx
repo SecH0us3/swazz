@@ -68,7 +68,7 @@ const HeatmapCell: React.FC<HeatmapCellProps> = React.memo(({
         >
             {isHovered && count > 0 && (
                 <div className="tooltip">
-                    {code === 0 ? '∞' : code}: {count} req{count > 1 ? 's' : ''}<br />
+                    {code === 0 ? 'Infinity (Timeout)' : code}: {count} req{count > 1 ? 's' : ''}<br />
                     <span style={{ opacity: 0.6, fontSize: 10 }}>click to filter</span>
                 </div>
             )}
@@ -260,7 +260,9 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
                             onClick={() => onCellClick(null)}
                             className="heatmap-active-chip"
                         >
-                            <span>{activeFilter.status === 0 ? '∞' : activeFilter.status}</span>
+                            <span title={activeFilter.status === 0 ? "Infinity (Timeout)" : undefined}>
+                                {activeFilter.status === 0 ? '∞' : activeFilter.status}
+                            </span>
                             <span style={{ opacity: 0.6 }}>·</span>
                             <span style={{ fontFamily: 'var(--font-mono)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 <span style={{ color: 'var(--text-disabled)', marginRight: 4 }}>{activeFilter.method}</span>
@@ -318,7 +320,7 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
                         {statusCodes.map((code) => {
                             const bucketClass = (code >= 500 || code === 0) ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
                             return (
-                                <div key={code} className={`heatmap-code-label ${bucketClass}`}>{code === 0 ? '∞' : code}</div>
+                                <div key={code} className={`heatmap-code-label ${bucketClass}`} title={code === 0 ? 'Infinity (Timeout)' : undefined}>{code === 0 ? '∞' : code}</div>
                             );
                         })}
                     </div>

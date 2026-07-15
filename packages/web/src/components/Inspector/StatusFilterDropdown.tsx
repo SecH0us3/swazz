@@ -80,7 +80,7 @@ export const StatusFilterDropdown: React.FC<StatusFilterDropdownProps> = ({
                     </div>
                     {availableStatuses.map(status => {
                         const isChecked = !excludedStatuses.has(status);
-                        const label = status === 0 ? '∞' : String(status);
+                        const label = status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : String(status);
                         return (
                             <label key={status} className="status-dropdown-item">
                                 <input
