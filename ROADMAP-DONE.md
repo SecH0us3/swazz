@@ -195,6 +195,11 @@ This file contains completed tasks.
     - Highlight categories with matching findings immediately.
     - Implement category filtering upon clicking cards, deduplicating the list of results (removing duplicate findings).
 
+- [x] **Task 130: Render Infinity (∞) for Timeout status code (HTTP 0)**
+  - **Design Goal:** Improve status code visibility in result lists and logs by displaying the infinity symbol (∞) instead of `0` when a request times out or encounters a network error.
+  - **Implementation Details:**
+    - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
