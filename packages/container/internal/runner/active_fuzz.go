@@ -170,6 +170,10 @@ func buildMutatedPayload(
 ) generatedPayload {
 	mutated := clonePayload(baseline)
 
+	if len(field.Path) == 0 && field.Location != "body" {
+		return mutated
+	}
+
 	var fieldName string
 	if len(field.Path) > 0 {
 		fieldName = field.Path[len(field.Path)-1]
