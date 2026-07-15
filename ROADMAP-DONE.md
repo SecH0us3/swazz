@@ -1045,3 +1045,12 @@ This file contains completed tasks.
     - Add a clear primary CTA (e.g., "Run a live demo scan").
     - Add social proof (GitHub stars, scan metrics, etc.).
     - Align the landing page visual style with the product dashboard.
+
+- [x] **Task 141: Login & Registration Flow Redesign**
+  - **Design Goal:** Provide a frictionless, bug-free entry into the application.
+  - **Implementation Details:**
+    - Remove the auto-opening login modal on the first visit.
+    - Prioritize GitHub Auth as the primary method and "Try without signup" as secondary.
+    - Postpone the mandatory E2EE key generation (seed phrase) until the user actually has findings to protect.
+    - Fix the Cloudflare Turnstile "Verification failed" P0 bug on auth gates.
+

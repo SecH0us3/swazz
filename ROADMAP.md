@@ -35,13 +35,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
 
 ## 🟡 Medium Complexity
 
-- [ ] **Task 141: Login & Registration Flow Redesign**
-  - **Design Goal:** Provide a frictionless, bug-free entry into the application.
-  - **Implementation Details:**
-    - Remove the auto-opening login modal on the first visit.
-    - Prioritize GitHub Auth as the primary method and "Try without signup" as secondary.
-    - Postpone the mandatory E2EE key generation (seed phrase) until the user actually has findings to protect.
-    - Fix the Cloudflare Turnstile "Verification failed" P0 bug on auth gates.
 
 - [ ] **Task 142: Application Dashboard UX Redesign**
   - **Design Goal:** Improve the clarity, trust, and architecture of the reporting dashboard (OWASP Coverage, Findings, Grouped Errors).
