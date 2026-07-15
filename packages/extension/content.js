@@ -75,9 +75,9 @@ let injectedStyles = null;
 
 function isDomainTargeted(host, targetDomains) {
     if (!targetDomains || targetDomains.length === 0) return false;
-    const cleanHost = host.trim().toLowerCase();
+    const cleanHost = host.split(':')[0].trim().toLowerCase();
     return targetDomains.some(target => {
-        const t = target.trim().toLowerCase();
+        const t = target.split(':')[0].trim().toLowerCase();
         if (!t) return false;
         // Only allow exact match or subdomain (not substring to prevent spoofing)
         return cleanHost === t || cleanHost.endsWith('.' + t);
@@ -291,3 +291,265 @@ chrome.storage.onChanged.addListener(() => {
         updateHighlightState(!!state.recording, state.targetDomains || []);
     });
 });
+
+// ==========================================
+// BROWSER EXTENSION-DRIVEN CRAWLER
+// ==========================================
+
+let lastProcessedUrl = null;
+
+function isCrawlTargetInScope(urlStr, targetDomains) {
+    try {
+        const u = new URL(urlStr, window.location.href);
+        // Only http/https
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+        
+        // Check host matches targeted domains
+        const host = u.host;
+        const inScope = isDomainTargeted(host, targetDomains);
+        if (!inScope) return false;
+        
+        // Exclude common static files/extensions
+        const path = u.pathname;
+        const fileExtension = path.split('.').pop().toLowerCase();
+        const ignoredExtensions = ['js', 'css', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'woff', 'woff2', 'ttf', 'map', 'zip', 'pdf', 'tar', 'gz'];
+        if (ignoredExtensions.includes(fileExtension)) return false;
+        
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function getFormSignature(form) {
+    try {
+        const action = form.getAttribute('action') || '';
+        const method = (form.getAttribute('method') || 'get').toLowerCase();
+        const inputs = Array.from(form.querySelectorAll('input[name], textarea[name], select[name]'))
+            .map(i => i.getAttribute('name'))
+            .filter(Boolean)
+            .sort()
+            .join(',');
+        return `${method}:${action}:${inputs}`;
+    } catch (e) {
+        return 'unknown';
+    }
+}
+
+async function runCrawlStep() {
+    const state = await new Promise(r => chrome.storage.local.get(['recording', 'targetDomains', 'crawlState'], r));
+    if (!state.recording || !state.crawlState || !state.crawlState.crawling) {
+        document.documentElement.setAttribute('data-swazz-crawling', 'false');
+        return;
+    }
+    document.documentElement.setAttribute('data-swazz-crawling', 'true');
+
+    const myTabResponse = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ source: 'swazz-detector', type: 'get_my_tab_id' }, resolve);
+    });
+    const myTabId = myTabResponse ? myTabResponse.tabId : null;
+    if (myTabId && state.crawlState.tabId !== myTabId) {
+        return; // Mismatch - ignore crawl execution on this tab
+    }
+
+    const crawlState = state.crawlState;
+    const targetDomains = state.targetDomains || [];
+    const currentUrl = window.location.href;
+
+    if (lastProcessedUrl === currentUrl) {
+        return; // Prevent duplicate step execution on same URL/state
+    }
+    lastProcessedUrl = currentUrl;
+
+    // 1. Mark current URL as visited
+    if (!crawlState.visited.includes(currentUrl)) {
+        crawlState.visited.push(currentUrl);
+        crawlState.stats.linksVisited++;
+    }
+
+    // 2. Scan for links on current page
+    const links = document.querySelectorAll('a[href]');
+    links.forEach(a => {
+        try {
+            const resolved = new URL(a.href, window.location.href).href;
+            if (isCrawlTargetInScope(resolved, targetDomains)) {
+                // If not visited and not in queue, add to queue
+                if (!crawlState.visited.includes(resolved) && !crawlState.queue.includes(resolved)) {
+                    if (crawlState.visited.length + crawlState.queue.length < crawlState.limit) {
+                        crawlState.queue.push(resolved);
+                    }
+                }
+            }
+        } catch (e) {}
+    });
+
+    // 3. Find and fill/submit forms on the page
+    const forms = document.querySelectorAll('form');
+    let formsToSubmit = [];
+    const submittedForms = crawlState.submittedForms || [];
+    
+    forms.forEach(form => {
+        const sig = getFormSignature(form);
+        const alreadySubmitted = submittedForms.includes(sig);
+        if (!form.dataset.swazzCrawled && !alreadySubmitted && crawlState.stats.formsSubmitted < crawlState.formLimit) {
+            form.dataset.swazzCrawled = 'true';
+            formsToSubmit.push({ form, signature: sig });
+        }
+    });
+
+    for (const { form, signature } of formsToSubmit) {
+        // Fill form fields
+        const inputs = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]), textarea, select');
+        inputs.forEach(input => {
+            const type = input.getAttribute('type') || 'text';
+            if (type === 'email') {
+                input.value = 'test@example.com';
+            } else if (type === 'number') {
+                input.value = '123';
+            } else {
+                input.value = 'test';
+            }
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        // Save progress to storage BEFORE submitting
+        crawlState.stats.formsSubmitted++;
+        if (!submittedForms.includes(signature)) {
+            submittedForms.push(signature);
+        }
+        crawlState.submittedForms = submittedForms;
+        await new Promise(r => chrome.storage.local.set({ crawlState }, r));
+
+        // Submit form
+        try {
+            const submitBtn = form.querySelector('input[type="submit"], button[type="submit"], button:not([type])');
+            if (submitBtn) {
+                submitBtn.click();
+            } else {
+                form.submit();
+            }
+            await new Promise(r => setTimeout(r, 800));
+        } catch (e) {
+            console.error("Form submission failed:", e);
+        }
+    }
+
+    // 3.5 Find and click clickable elements (buttons, tabs, interactive elements)
+    const clickables = document.querySelectorAll('button, [role="button"], input[type="button"]');
+    let buttonsToClick = [];
+    clickables.forEach(btn => {
+        if (!btn.dataset.swazzClicked) {
+            btn.dataset.swazzClicked = 'true';
+            
+            const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+            const isIgnored = /logout|log[ -]?out|sign[ -]?out|delete|remove|clear|cancel|exit/i.test(text);
+            if (!isIgnored) {
+                buttonsToClick.push(btn);
+            }
+        }
+    });
+
+    for (const btn of buttonsToClick) {
+        try {
+            btn.click();
+            await new Promise(r => setTimeout(r, 200));
+        } catch (e) {
+            console.error("Button click failed:", e);
+        }
+    }
+
+    // 4. Update state in storage
+    await new Promise(r => chrome.storage.local.set({ crawlState }, r));
+
+    // 5. Navigate to the next URL in the queue if any, otherwise finish
+    if (crawlState.stats.linksVisited >= crawlState.limit || crawlState.queue.length === 0) {
+        crawlState.crawling = false;
+        document.documentElement.setAttribute('data-swazz-crawling', 'false');
+        await new Promise(r => chrome.storage.local.set({ crawlState }, r));
+        chrome.runtime.sendMessage({ source: 'swazz-detector', type: 'crawl_complete', data: crawlState.stats });
+        return;
+    }
+
+    // Dequeue next URL
+    const nextUrl = crawlState.queue.shift();
+    await new Promise(r => chrome.storage.local.set({ crawlState }, r));
+
+    setTimeout(() => {
+        // Find link with href matching nextUrl
+        const allLinks = Array.from(document.querySelectorAll('a[href]'));
+        const targetLink = allLinks.find(a => {
+            try {
+                return new URL(a.href, window.location.href).href === nextUrl;
+            } catch (e) {
+                return false;
+            }
+        });
+
+        if (targetLink) {
+            targetLink.click();
+        } else {
+            // Fallback: hard navigate if the link is not present
+            window.location.href = nextUrl;
+        }
+
+        // Wait to see if page reloads. If not (SPA router transition), trigger next step
+        setTimeout(() => {
+            chrome.storage.local.get(['crawlState'], (res) => {
+                if (res.crawlState && res.crawlState.crawling) {
+                    runCrawlStep();
+                }
+            });
+        }, 1500);
+    }, 500);
+}
+
+// Listen for crawl commands from background/popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || message.source !== 'swazz-detector') return;
+
+    if (message.type === 'start_crawl') {
+        const startUrl = window.location.href;
+        lastProcessedUrl = null;
+        chrome.storage.local.get(['recording', 'targetDomains'], (state) => {
+            if (!state.recording) {
+                sendResponse({ error: 'Please start recording traffic first!' });
+                return;
+            }
+            const initialCrawlState = {
+                crawling: true,
+                tabId: message.tabId,
+                visited: [],
+                queue: [startUrl],
+                submittedForms: [],
+                stats: { linksVisited: 0, formsSubmitted: 0 },
+                limit: 50,
+                formLimit: 10
+            };
+            chrome.storage.local.set({ crawlState: initialCrawlState }, () => {
+                document.documentElement.setAttribute('data-swazz-crawling', 'true');
+                setTimeout(runCrawlStep, 300);
+                sendResponse({ success: true });
+            });
+        });
+        return true;
+    }
+});
+
+// Resume crawling automatically on page load
+chrome.storage.local.get(['crawlState'], (state) => {
+    if (state.crawlState && state.crawlState.crawling) {
+        chrome.runtime.sendMessage({ source: 'swazz-detector', type: 'get_my_tab_id' }, (response) => {
+            const myTabId = response ? response.tabId : null;
+            if (myTabId && state.crawlState.tabId === myTabId) {
+                document.documentElement.setAttribute('data-swazz-crawling', 'true');
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => setTimeout(runCrawlStep, 800));
+                } else {
+                    setTimeout(runCrawlStep, 800);
+                }
+            }
+        });
+    }
+});
+

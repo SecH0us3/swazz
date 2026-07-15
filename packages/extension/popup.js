@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputNewProjectName = document.getElementById('input-new-project-name');
     const btnCreateProject = document.getElementById('btn-create-project');
     const lblCreateProjectError = document.getElementById('lbl-create-project-error');
+    const btnCrawlTab = document.getElementById('btn-crawl-tab');
+    const crawlStatusMsg = document.getElementById('crawl-status-msg');
 
     let isRecording = false;
     let targetDomains = [];
@@ -53,11 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
             'swazzUrl', 
             'projectId',
             'projectName',
-            'syncCookies'
+            'syncCookies',
+            'crawlState'
         ], (state) => {
             isRecording = !!state.recording;
             targetDomains = state.targetDomains || [];
             capturedRequests = state.capturedRequests || {};
+            updateCrawlUI(state.crawlState);
             activeToken = state.token || null;
             activeSwazzUrl = state.swazzUrl || "http://localhost:5173";
             activeProjectId = state.projectId || null;
@@ -401,6 +405,15 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSyncSwazz.addEventListener('click', async () => {
         if (!activeProjectId || !activeToken) return;
 
+        const reqCount = Object.keys(capturedRequests).length;
+        if (reqCount > 5000) {
+            const proceed = confirm(`Warning: You have captured ${reqCount} requests. Exporting more than 5000 requests may result in slow parsing or timeouts. Do you want to proceed?`);
+            if (!proceed) {
+                showSyncStatus("Sync cancelled.", "info");
+                return;
+            }
+        }
+
         btnSyncSwazz.disabled = true;
         showSyncStatus("Generating HAR log...", "info");
 
@@ -667,7 +680,96 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateSyncButtonState();
             });
         }
+        if (changes.crawlState) {
+            updateCrawlUI(changes.crawlState.newValue);
+        }
     });
+
+    // Crawl Active Tab Action
+    if (btnCrawlTab) {
+        btnCrawlTab.addEventListener('click', () => {
+            chrome.storage.local.get(['crawlState'], (res) => {
+                const isCurrentlyCrawling = res.crawlState && res.crawlState.crawling;
+                
+                if (isCurrentlyCrawling) {
+                    // STOP CRAWL
+                    const crawlState = res.crawlState || {};
+                    crawlState.crawling = false;
+                    chrome.storage.local.set({ crawlState }, () => {
+                        showCrawlStatus("Crawl stopped by user.", "error");
+                    });
+                    return;
+                }
+
+                // START CRAWL
+                if (!isRecording) {
+                    showCrawlStatus("Please enable Traffic Recording first!", "error");
+                    return;
+                }
+
+                showCrawlStatus("Initiating crawl on active tab...", "info");
+                btnCrawlTab.disabled = true;
+
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                    if (!tabs || tabs.length === 0) {
+                        showCrawlStatus("No active tab found.", "error");
+                        btnCrawlTab.disabled = false;
+                        return;
+                    }
+                    const activeTab = tabs[0];
+                    chrome.tabs.sendMessage(activeTab.id, { source: 'swazz-detector', type: 'start_crawl', tabId: activeTab.id }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            showCrawlStatus("Could not communicate with tab. Make sure the page is fully loaded and refresh it.", "error");
+                            btnCrawlTab.disabled = false;
+                            return;
+                        }
+                        if (response && response.error) {
+                            showCrawlStatus(response.error, "error");
+                            btnCrawlTab.disabled = false;
+                        } else if (response && response.success) {
+                            showCrawlStatus("Crawling... Press Stop Crawl to finish early.", "info");
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    function showCrawlStatus(text, type = "info") {
+        if (!crawlStatusMsg) return;
+        crawlStatusMsg.textContent = text;
+        crawlStatusMsg.className = `crawl-status-message ${type}`;
+        crawlStatusMsg.classList.remove('hidden');
+    }
+
+    function updateCrawlUI(state) {
+        if (!state) {
+            if (btnCrawlTab) {
+                btnCrawlTab.disabled = false;
+                btnCrawlTab.textContent = "🕷 Crawl Tab";
+            }
+            if (crawlStatusMsg) crawlStatusMsg.classList.add('hidden');
+            return;
+        }
+
+        if (state.crawling) {
+            if (btnCrawlTab) {
+                btnCrawlTab.disabled = false;
+                btnCrawlTab.textContent = "🛑 Stop Crawl";
+            }
+            showCrawlStatus(`Crawling... Visited: ${state.stats.linksVisited}/${state.limit} links, Submitted: ${state.stats.formsSubmitted} forms`, "info");
+        } else {
+            if (btnCrawlTab) {
+                btnCrawlTab.disabled = false;
+                btnCrawlTab.textContent = "🕷 Crawl Tab";
+            }
+            if (state.stats && (state.stats.linksVisited > 0 || state.stats.formsSubmitted > 0)) {
+                showCrawlStatus(`Crawl complete! Visited ${state.stats.linksVisited} links, Submitted ${state.stats.formsSubmitted} forms.`, "success");
+            } else {
+                if (crawlStatusMsg) crawlStatusMsg.classList.add('hidden');
+            }
+        }
+    }
 
     // Sync cookies checkbox listener
     const chkSyncCookies = document.getElementById('chk-sync-cookies');

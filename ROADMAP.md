@@ -90,15 +90,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Spin up a headless browser to crawl target pages.
     - Intercept network request traffic (AJAX, fetch requests, form submissions) and convert them to internal API specifications for fuzzing.
 
-- [ ] **Task 144: Browser Extension-Driven Crawler & Interception**
-  - **Design Goal:** Enable target discovery by leveraging the Chrome browser extension to crawl SPAs/SSR sites under the user's active session, sniffing network requests, and syncing endpoints back to Swazz.
-  - **Implementation Details:**
-    - Add a "Crawl Target via Extension" option to the Scan configuration form.
-    - Build queue, scope-checking, and DOM traversal logic in the Chrome extension.
-    - Inject client-side traversal and programmatic click/form-submission scripts in the crawled tab.
-    - Export captured network requests in HAR format and POST to `/api/parse` to populate fuzzer configurations automatically.
-
-
 
 - [ ] **Task 122: Enterprise SAML Authentication & Organizations**
   - **Design Goal:** Support SAML SSO for enterprise customers by introducing an Organizations layer to group projects and configure IdP authentication details.
