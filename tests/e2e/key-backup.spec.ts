@@ -8,9 +8,9 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     d: 'dwdtCnMYpX08FsFyUbJmRd9ML4frwJkqsXf7pR25LCo'
   };
 
-  test('should support key generation, mnemonic recovery, and swazzkey file upload', async ({ page }) => {
-    // 1. Navigate to main page
-    await page.goto('/?no_bypass_e2e_gate=true');
+  test('should support background generation, backup download, and setting restore', async ({ page }) => {
+    // 1. Navigate to main page and sign in
+    await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Register a unique user
@@ -21,27 +21,21 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
-    // Wait for the app layout to load
+    // Wait for the app layout to load directly into fuzzer workspace
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.empty-state-title')).toBeVisible();
 
-    // 3. Project Key Initializer gate should be visible initially because Default Project has no keys
-    const setupTitle = page.locator('.e2ee-title');
-    await expect(setupTitle).toBeVisible();
-    await expect(setupTitle).toContainText('Project Key Setup: Default Project');
+    // 3. Confirm the E2EE Backup Banner is visible at the top of the workspace
+    const backupBanner = page.locator('.e2ee-backup-banner');
+    await expect(backupBanner).toBeVisible();
+    await expect(backupBanner).toContainText('Project scan reports are encrypted end-to-end');
 
-    // 4. Verify there is a guide link
-    const guideLink = page.locator('.e2ee-link', { hasText: 'Key Backup & Recovery guide' });
-    await expect(guideLink).toBeVisible();
-    await expect(guideLink).toHaveAttribute('href', '/docs/encryption_backup');
+    // 4. Click "Show Seed Phrase" to open the Mnemonic Modal
+    await page.getByRole('button', { name: 'Show Seed Phrase' }).click();
 
-    // 5. Generate a new keypair
-    const generateBtn = page.getByRole('button', { name: 'Generate Keys' });
-    await expect(generateBtn).toBeVisible();
-    await generateBtn.click();
+    const mnemonicModal = page.locator('.e2ee-modal-overlay');
+    await expect(mnemonicModal).toBeVisible();
 
-    // 6. Verify setup successful screen and the 12-word mnemonic is shown
-    await expect(page.locator('h3', { hasText: 'Setup Successful!' })).toBeVisible();
-    
     const wordBadges = page.locator('.mnemonic-word-badge');
     await expect(wordBadges).toHaveCount(12);
 
@@ -49,17 +43,24 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     const mnemonicWords: string[] = [];
     for (let i = 0; i < 12; i++) {
       const badgeText = await wordBadges.nth(i).innerText();
-      // badgeText looks like "1\nabandon" or "1 abandon" depending on layout. Let's clean it.
       const word = badgeText.replace(/^\d+[\s\n]*/, '').trim();
       mnemonicWords.push(word);
     }
     const derivedMnemonic = mnemonicWords.join(' ');
 
-    // 7. Click Continue to Workspace to unlock fuzzer views
-    await page.getByRole('button', { name: 'Continue to Workspace' }).click();
-    await expect(page.locator('.empty-state-title')).toBeVisible(); // Normal fuzzer workspace empty state
+    // Click "Done" to close the Mnemonic Modal
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(mnemonicModal).not.toBeVisible();
 
-    // 8. Go to Project Settings and verify keys management tab
+    // 5. Test downloading the backup
+    // Trigger download and verify banner disappears
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download Backup (.swazzkey)' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toContain('.swazzkey');
+    await expect(backupBanner).not.toBeVisible();
+
+    // 6. Go to Project Settings -> Encryption Keys tab
     const projectSelectorBtn = page.locator('.sidebar-project-selector button.btn-ghost');
     await projectSelectorBtn.click();
     await page.locator('button.dropdown-item', { hasText: 'Project Settings' }).click();
@@ -75,62 +76,41 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
     const pubKeyVal = await pubKeyInput.inputValue();
     expect(pubKeyVal.length).toBeGreaterThan(10);
 
-    // Reveal seed phrase
-    const revealBtn = page.getByRole('button', { name: 'Reveal 12-Word Seed Phrase' });
-    await revealBtn.click();
-
-    // Mnemonic in settings should match what was generated
-    const settingsWordBadges = page.locator('.mnemonic-word-badge');
-    await expect(settingsWordBadges).toHaveCount(12);
-
-    // 9. Test importing keys into a second project via mnemonic seed phrase
+    // 7. Create a second project to test key restore
     await page.locator('.header-logo').click();
     await projectSelectorBtn.click();
     const createProjectBtn = page.locator('button.dropdown-item', { hasText: 'Create New Project' });
     await expect(createProjectBtn).toBeVisible();
 
-    const secondProjName = 'Mnemonic Restore Project';
+    const secondProjName = 'Restore Test Project';
     page.once('dialog', async dialog => {
       await dialog.accept(secondProjName);
     });
     await createProjectBtn.click();
 
-    // Go back to main workspace to see the setup gate
+    // Go to project settings
     await page.locator('.header-logo').click();
-
-    // Verify it blocks on Setup Gate for the new project
-    await expect(page.locator('.e2ee-title')).toContainText(`Project Key Setup: ${secondProjName}`);
-
-    // Click Restore from Mnemonic
-    await page.getByRole('button', { name: 'Restore Mnemonic' }).click();
-
-    // Fill in the mnemonic and submit
-    await page.locator('.e2ee-textarea').fill(derivedMnemonic);
-    await page.getByRole('button', { name: 'Restore Key' }).click();
-
-    // Verify workspace is unlocked successfully
-    await expect(page.locator('.empty-state-title')).toBeVisible();
-
-    // 10. Test importing keys into a third project via .swazzkey file upload
     await projectSelectorBtn.click();
-    const thirdProjName = 'File Restore Project';
-    page.once('dialog', async dialog => {
-      await dialog.accept(thirdProjName);
-    });
-    await createProjectBtn.click();
+    await page.locator('button.dropdown-item', { hasText: 'Project Settings' }).click();
+    await keysTabBtn.click();
 
-    // Go back to main workspace to see the setup gate
-    await page.locator('.header-logo').click();
+    // Click "Restore from Backup / Mnemonic"
+    await page.getByRole('button', { name: 'Restore from Backup / Mnemonic' }).click();
 
-    // Verify Setup Gate for third project
-    await expect(page.locator('.e2ee-title')).toContainText(`Project Key Setup: ${thirdProjName}`);
+    // Fill mnemonic and restore
+    await page.locator('.textarea').fill(derivedMnemonic);
+    await page.getByRole('button', { name: 'Import' }).click();
 
-    // Click Upload .swazzkey File
-    await page.getByRole('button', { name: 'Upload .swazzkey File' }).click();
+    // The restore input should close, meaning restoration was successful
+    await expect(page.locator('.textarea')).not.toBeVisible();
+
+    // 8. Test file upload restore on the same project
+    await page.getByRole('button', { name: 'Restore from Backup / Mnemonic' }).click();
+    await page.getByRole('button', { name: 'Use Backup File' }).click();
 
     // Upload the mock JWK file in-memory
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.locator('.e2ee-file-drop').click();
+    await page.locator('.file-upload-label').click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles({
       name: 'backup.swazzkey',
@@ -138,7 +118,7 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
       buffer: Buffer.from(JSON.stringify(mockPrivateJwk, null, 2))
     });
 
-    // Verify workspace is unlocked successfully
-    await expect(page.locator('.empty-state-title')).toBeVisible();
+    // The modal restore input should close, meaning restoration was successful
+    await expect(page.locator('.file-upload-label')).not.toBeVisible();
   });
 });

@@ -30,11 +30,7 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // Handle ProjectKeyInitializer screen (new user always sees this)
-    const generateKeysBtn = page.getByRole('button', { name: 'Generate Keys' });
-    await expect(generateKeysBtn).toBeVisible({ timeout: 10000 });
-    await generateKeysBtn.click();
-    await page.getByRole('button', { name: 'Continue to Workspace' }).click();
+
 
     // Verify logged-in dashboard shows the beta status alert banner
     await expect(page.locator('.beta-status-alert')).toBeVisible({ timeout: 15000 });

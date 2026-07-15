@@ -190,7 +190,7 @@ describe('useEncryption', () => {
             );
         });
 
-        it('should detect X25519 support and start with no key pair', async () => {
+        it('should detect X25519 support and automatically generate a key pair', async () => {
             const { result } = renderHook(() => useEncryption('proj_123'));
 
             await waitFor(() => {
@@ -198,7 +198,9 @@ describe('useEncryption', () => {
             });
 
             expect(result.current.isSupported).toBe(true);
-            expect(result.current.hasKeyPair).toBe(false);
+            expect(result.current.hasKeyPair).toBe(true);
+            expect(result.current.mnemonic).toBeDefined();
+            expect(result.current.mnemonic?.split(' ').length).toBe(12);
             expect(result.current.error).toBeNull();
         });
 

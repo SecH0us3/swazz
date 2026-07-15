@@ -6,7 +6,6 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'jsdom',
-        execArgv: ['--no-webstorage'],
     },
     server: {
         port: 5173,

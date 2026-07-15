@@ -354,24 +354,15 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
                     }
                 } else {
                     if (!cancelled) {
-                        const isE2E = typeof navigator !== 'undefined' && navigator.webdriver;
-                        const isBypassed = typeof window !== 'undefined' && window.location.search.includes('no_bypass_e2e_gate');
+                        const mnemonicPhrase = await generateMnemonic();
+                        const keys = await deriveKeyFromMnemonic(mnemonicPhrase);
+                        await KeyStorage.saveKey(KEY_PRIVATE, keys.privateKey, projectId);
+                        await KeyStorage.saveKey(KEY_PUBLIC, keys.publicKey, projectId);
+                        await KeyStorage.saveMnemonic(mnemonicPhrase, projectId);
 
-                        if (isE2E && !isBypassed) {
-                            const mnemonicPhrase = await generateMnemonic();
-                            const keys = await deriveKeyFromMnemonic(mnemonicPhrase);
-                            await KeyStorage.saveKey(KEY_PRIVATE, keys.privateKey, projectId);
-                            await KeyStorage.saveKey(KEY_PUBLIC, keys.publicKey, projectId);
-                            await KeyStorage.saveMnemonic(mnemonicPhrase, projectId);
-
-                            keyPairRef.current = keys;
-                            setHasKeyPair(true);
-                            setMnemonic(mnemonicPhrase);
-                        } else {
-                            keyPairRef.current = null;
-                            setHasKeyPair(false);
-                            setMnemonic(null);
-                        }
+                        keyPairRef.current = keys;
+                        setHasKeyPair(true);
+                        setMnemonic(mnemonicPhrase);
                     }
                 }
             } catch (err) {

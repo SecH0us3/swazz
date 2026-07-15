@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { SwazzConfig, FuzzingProfile } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 import { useAppStore } from '../../store/appStore.js';
 import { PayloadSettingsModal } from './PayloadSettingsModal.js';
+import { useEncryption } from '../../hooks/useEncryption.js';
 
 interface Props {
     style?: React.CSSProperties;
@@ -32,6 +33,44 @@ export function ConfigSidebar({
 }: Props) {
     const activeProfiles = config.settings.profiles || [];
     const [showPayloadSettings, setShowPayloadSettings] = useState(false);
+
+    const activeProject = useAppStore(state => state.activeProject);
+    const encryption = useEncryption(activeProject?.id);
+    const { hasKeyPair, exportAsJwk } = encryption;
+
+    const [backupStatus, setBackupStatus] = useState<string | null>(() => {
+        if (!activeProject) return null;
+        return localStorage.getItem('swazz-key-backup-status:' + activeProject.id);
+    });
+
+    useEffect(() => {
+        if (activeProject) {
+            setBackupStatus(localStorage.getItem('swazz-key-backup-status:' + activeProject.id));
+        } else {
+            setBackupStatus(null);
+        }
+    }, [activeProject?.id]);
+
+    const handleDownloadBackup = async () => {
+        if (!activeProject) return;
+        try {
+            const jwk = await exportAsJwk();
+            if (!jwk) return;
+            const blob = new Blob([JSON.stringify(jwk, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${activeProject.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.swazzkey`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            localStorage.setItem('swazz-key-backup-status:' + activeProject.id, 'saved');
+            setBackupStatus('saved');
+        } catch (err) {
+            console.error('Failed to download backup:', err);
+        }
+    };
 
     const toggleProfile = (p: FuzzingProfile) => {
         const isActive = activeProfiles.includes(p);
@@ -214,10 +253,54 @@ export function ConfigSidebar({
                 )}
             </Section>
 
-            <div style={{ padding: '16px 0 0 0', borderTop: '1px solid var(--border-default)', marginTop: '16px', display: 'flex', flexDirection: 'column' }}>
+            {/* E2EE Key Backup Status */}
+            {hasKeyPair && activeProject && (
+                <Section title="Encryption (E2EE)">
+                    {backupStatus === 'saved' ? (
+                        <div className="e2ee-sidebar-status e2ee-sidebar-status--ok">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                <polyline points="9 12 11 14 15 10" />
+                            </svg>
+                            <span>Reports encrypted &amp; key backed up</span>
+                        </div>
+                    ) : (
+                        <div className="e2ee-sidebar-nudge">
+                            <div className="e2ee-sidebar-nudge-header">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="e2ee-sidebar-nudge-icon">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                                <strong>Backup your encryption key</strong>
+                            </div>
+                            <p className="e2ee-sidebar-nudge-desc">
+                                Scan reports are E2EE — only your browser can decrypt them. Save a backup to avoid losing access.
+                            </p>
+                            <button
+                                className="btn btn-primary e2ee-sidebar-nudge-btn"
+                                onClick={handleDownloadBackup}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                Download .swazzkey
+                            </button>
+                            <button
+                                className="btn btn-ghost e2ee-sidebar-nudge-more"
+                                onClick={() => useAppStore.setState({ activeTab: 'project_settings' })}
+                            >
+                                More key options →
+                            </button>
+                        </div>
+                    )}
+                </Section>
+            )}
+
+            <div className="config-sidebar-footer">
                 <button
                     className="btn btn-secondary"
-                    style={{ width: '100%', justifyContent: 'center', gap: '8px' }}
                     onClick={() => useAppStore.setState({ activeTab: 'project_settings' })}
                 >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
