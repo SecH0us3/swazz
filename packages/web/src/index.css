@@ -1872,6 +1872,12 @@ body.resizing .sidebar-resizer {
 .profile-toggle.boundary .dot { background: var(--color-warning); box-shadow: 0 0 6px var(--color-warning); }
 .profile-toggle.malicious .dot { background: var(--color-error);  box-shadow: 0 0 6px var(--color-error); }
 
+.payload-settings-trigger {
+  width: 100%;
+  margin-top: var(--space-3);
+  font-size: var(--font-size-xs);
+}
+
 /* ─── Key-Value Editor ───────────────────────────────────── */
 
 .kv-editor {
