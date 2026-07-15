@@ -47,6 +47,17 @@ func (r *Runner) executeRequest(
 		mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 	}
 
+	hasUA := false
+	for k := range mergedHeaders {
+		if strings.EqualFold(k, "user-agent") {
+			hasUA = true
+			break
+		}
+	}
+	if !hasUA {
+		mergedHeaders["User-Agent"] = "Swazz/1.0 (+https://github.com/SecH0us3/swazz)"
+	}
+
 	effectiveCT := contentType
 	if effectiveCT == "" {
 		effectiveCT = "application/json"

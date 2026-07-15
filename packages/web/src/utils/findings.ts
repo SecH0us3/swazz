@@ -105,6 +105,10 @@ export function categorizeFinding(f: AnalysisFinding, responsePreview?: string):
         color = 'var(--color-error)';
         title = 'XML External Entity (XXE)';
         key = 'xxe_leak';
+    } else if (f.ruleId === 'swazz/oob-interaction') {
+        color = 'var(--color-error)';
+        title = 'Out-of-Band Interaction (SSRF)';
+        key = 'oob_interaction';
     } else {
         title = f.message || 'Suspicious Anomaly';
         key = `other_${slugify(f.ruleId)}`;

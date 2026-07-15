@@ -359,7 +359,7 @@ export function RequestDetail({
                 <div className="modal-header">
                     <div className="request-detail-header-meta">
                         <div className={`detail-status ${statusClass}`}>
-                            {liveStatus || 'ERR'}
+                            {liveStatus === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (liveStatus || 'ERR')}
                         </div>
                         <div className="request-detail-header-info">
                             <div className="request-detail-endpoint-row">

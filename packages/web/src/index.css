@@ -1207,6 +1207,12 @@ body.resizing .sidebar-resizer {
 
 .heatmap-label-spacer { flex: 1; min-width: 0; }
 
+.heatmap-vuln-indicator {
+  color: var(--color-error);
+  margin-left: 8px;
+  cursor: help;
+}
+
 .heatmap-footer {
   display: flex;
   justify-content: space-between;
@@ -1865,6 +1871,12 @@ body.resizing .sidebar-resizer {
 .profile-toggle.random   .dot { background: var(--color-success); box-shadow: 0 0 6px var(--color-success); }
 .profile-toggle.boundary .dot { background: var(--color-warning); box-shadow: 0 0 6px var(--color-warning); }
 .profile-toggle.malicious .dot { background: var(--color-error);  box-shadow: 0 0 6px var(--color-error); }
+
+.payload-settings-trigger {
+  width: 100%;
+  margin-top: var(--space-3);
+  font-size: var(--font-size-xs);
+}
 
 /* ─── Key-Value Editor ───────────────────────────────────── */
 
@@ -8754,5 +8766,227 @@ kbd {
   color: var(--text-primary);
 }
 
+/* ─── Traffic Capture (Browser Extension Integration) ────── */
+.traffic-capture-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
 
+.traffic-capture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  align-items: start;
+}
 
+.traffic-capture-card {
+  background-color: var(--bg-elevated);
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+.traffic-capture-card-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 12px;
+}
+
+.traffic-capture-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.traffic-capture-credentials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.traffic-capture-credential-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.traffic-capture-credential-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.traffic-capture-credential-value-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.traffic-capture-credential-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.traffic-capture-copy-btn {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.traffic-capture-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.traffic-capture-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.traffic-capture-step-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--accent-subtle);
+  color: var(--accent-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.traffic-capture-step-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.traffic-capture-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.traffic-capture-step-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.traffic-capture-code-block {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(0,0,0,0.25);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
+.traffic-capture-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-default);
+  align-self: flex-start;
+}
+
+.traffic-capture-badge.connected {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.traffic-capture-badge.disconnected {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.traffic-capture-download-row {
+  margin-top: 8px;
+  display: flex;
+}
+
+.traffic-capture-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  background-color: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  transition: all 0.2s ease;
+}
+
+.traffic-capture-download-btn:hover {
+  background-color: rgba(99, 102, 241, 0.2);
+  border-color: #6366f1;
+}
+
+.fuzz-setting-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 16px;
+}
+
+.fuzz-setting-checkbox-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 24px;
+  line-height: 1.4;
+}
+
+.fuzz-setting-intensity-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.fuzz-setting-intensity-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+.fuzz-setting-intensity-input {
+  width: 120px;
+}

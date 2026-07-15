@@ -319,8 +319,8 @@ When specifying a `"rule_id"` in `swazz.ignore.json`, you can target any of the 
 * **`swazz/status-5xx`** (e.g. `swazz/status-500`, `swazz/status-502`): Triggers when the target returns a 5xx Server Error.
 * **`swazz/status-4xx`** (e.g. `swazz/status-400`, `swazz/status-422`): Triggers when a 4xx Client Error is returned outside of the standard ignored code list.
 * **`swazz/status-2xx`** (e.g. `swazz/status-200`): Triggers when a 2xx Success code is returned for an anomalous input profile.
-* **`swazz/timeout`**: Triggers when the HTTP request times out.
-* **`swazz/network-error`**: Triggers when connection resets, DNS resolution fails, or other socket-level errors occur.
+* **`swazz/timeout`**: Triggers when the HTTP request times out. In the dashboard's request logs, heatmap, and detail modals, these network-level timeouts (HTTP status `0`) are displayed using the infinity symbol (`∞`) for clearer visual representation.
+* **`swazz/network-error`**: Triggers when connection resets, DNS resolution fails, or other socket-level errors occur. In the dashboard, these are represented as status `∞` or `ERR`.
 
 #### 2. Specialized Security Analyzer Rules
 * **`swazz/reflected-xss`**: Reflected XSS input returned in the HTTP response.

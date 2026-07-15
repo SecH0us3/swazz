@@ -90,11 +90,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Spin up a headless browser to crawl target pages.
     - Intercept network request traffic (AJAX, fetch requests, form submissions) and convert them to internal API specifications for fuzzing.
 
-- [ ] **Task 62: Browser Extension for Real-Time Traffic Capturing & Request Recording**
-  - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints and capturing client requests directly into the Swazz configuration profile. This can serve as a more optimal, zero-setup alternative to exporting/uploading HAR files.
-  - **Implementation Details:**
-    - Capture HTTP/HTTPS requests on specified domains in background service workers.
-    - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
+
 - [ ] **Task 122: Enterprise SAML Authentication & Organizations**
   - **Design Goal:** Support SAML SSO for enterprise customers by introducing an Organizations layer to group projects and configure IdP authentication details.
   - **Implementation Details:**

@@ -120,6 +120,16 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				req.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
 			}
 		}
+		hasUA := false
+		for k := range req.Header {
+			if strings.EqualFold(k, "User-Agent") {
+				hasUA = true
+				break
+			}
+		}
+		if !hasUA {
+			req.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
+		}
 		r.configMu.RUnlock()
 
 		if cfg.Settings.Debug {
@@ -537,6 +547,17 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 	}
 	for k, v := range cookies {
 		req.AddCookie(&http.Cookie{Name: k, Value: v}) // #nosec G124
+	}
+
+	hasUA := false
+	for k := range req.Header {
+		if strings.EqualFold(k, "User-Agent") {
+			hasUA = true
+			break
+		}
+	}
+	if !hasUA {
+		req.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
 	}
 
 

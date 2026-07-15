@@ -70,6 +70,50 @@ describe('OWASPTop10 Component', () => {
         expect(screen.getAllByText(/Security Misconfiguration/)).toBeTruthy();
     });
 
+    it('renders official site and category learn more links correctly', async () => {
+        mockQueryResults.mockResolvedValue({
+            rows: mockFindings,
+            total: 2,
+        });
+
+        render(
+            <OWASPTop10
+                runId="run-123"
+                queryResults={mockQueryResults}
+                onSelectResult={() => {}}
+            />
+        );
+
+        // Verify Official Site link in the banner
+        const officialLink = await screen.findByRole('link', { name: /Official Site ↗/i });
+        expect(officialLink).toBeTruthy();
+        expect(officialLink.getAttribute('href')).toBe('https://owasp.org/Top10/2025/');
+        expect(officialLink.getAttribute('target')).toBe('_blank');
+        expect(officialLink.getAttribute('rel')).toBe('noopener noreferrer');
+
+        // Verify Learn More link on a category card (e.g., A01)
+        const learnMoreLinks = screen.getAllByRole('link', { name: /Learn More ↗/i });
+        const a01Link = learnMoreLinks.find(link => 
+            link.getAttribute('href')?.includes('A01_2025-Broken_Access_Control')
+        );
+        expect(a01Link).toBeTruthy();
+        expect(a01Link?.getAttribute('target')).toBe('_blank');
+        expect(a01Link?.getAttribute('rel')).toBe('noopener noreferrer');
+
+        // Click to expand A01 category accordion and check accordion link
+        const accordionHeader = await screen.findByText(/A01:2025 Broken Access Control \(1\)/, {}, { timeout: 3000 });
+        fireEvent.click(accordionHeader);
+
+        // The accordion header also contains a "Learn More ↗" link
+        const accordionLink = screen.getAllByRole('link', { name: /Learn More ↗/i }).find(link => 
+            link.className.includes('owasp-accordion-link')
+        );
+        expect(accordionLink).toBeTruthy();
+        expect(accordionLink?.getAttribute('href')).toBe('https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/');
+        expect(accordionLink?.getAttribute('target')).toBe('_blank');
+        expect(accordionLink?.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
     it('allows expanding a category and selecting a finding', async () => {
         mockQueryResults.mockResolvedValue({
             rows: mockFindings,

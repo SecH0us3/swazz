@@ -74,6 +74,16 @@ func Check(
 	for k, v := range headers {
 		mergedHeaders[k] = v
 	}
+	hasUA := false
+	for k := range mergedHeaders {
+		if strings.EqualFold(k, "User-Agent") {
+			hasUA = true
+			break
+		}
+	}
+	if !hasUA {
+		mergedHeaders["User-Agent"] = "Swazz/1.0 (+https://github.com/SecH0us3/swazz)"
+	}
 	hasContentType := false
 	for k := range mergedHeaders {
 		if strings.EqualFold(k, "content-type") {

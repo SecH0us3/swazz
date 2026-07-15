@@ -8,6 +8,7 @@ import { DispatchHandler, CommandHandler, StartRunHandler, ControlRunHandler } f
 import { ParseHandler } from './handlers/parse';
 import { RunnersHandler, RestartRunnerHandler, ConnectRunnerHandler } from './handlers/runners';
 import { ConnectClientHandler } from './handlers/connectClient';
+import { OobHandler } from './handlers/oob';
 
 export class RequestHandler {
   private routes: Map<string, RouteHandler>;
@@ -31,12 +32,17 @@ export class RequestHandler {
       ['/runners/restart', new RestartRunnerHandler()],
       ['/connect-runner', new ConnectRunnerHandler()],
       ['/connect-client', new ConnectClientHandler()],
+      ['/oob', new OobHandler()],
     ]);
   }
 
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const handler = this.routes.get(url.pathname);
+    let pathname = url.pathname;
+    if (pathname.startsWith('/oob/')) {
+      pathname = '/oob';
+    }
+    const handler = this.routes.get(pathname);
 
     if (handler) {
       return handler.handle(request, url, {

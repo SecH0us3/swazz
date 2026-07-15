@@ -12,6 +12,7 @@ type StatusBucket = 'any' | '2xx' | '4xx' | '5xx';
 interface Props {
     stats: RunStats;
     endpointKeys: string[];
+    vulnerableEndpoints?: Set<string>;
     activeFilter: HeatmapFilter | null;
     onCellClick: (filter: HeatmapFilter | null) => void;
 }
@@ -20,7 +21,7 @@ function getCellColor(status: number, count: number, maxCount: number): string {
     if (count === 0) return 'var(--bg-elevated)';
     const intensity = Math.min(count / Math.max(maxCount, 1), 1);
     const lightness = 20 + intensity * 40;
-    if (status >= 500) return `hsl(350, 89%, ${lightness}%)`;
+    if (status >= 500 || status === 0) return `hsl(350, 89%, ${lightness}%)`;
     if (status >= 400) return `hsl(45, 96%, ${lightness}%)`;
     return `hsl(160, 84%, ${lightness}%)`;
 }
@@ -29,7 +30,7 @@ function matchesBucket(code: number, bucket: StatusBucket): boolean {
     if (bucket === 'any') return true;
     if (bucket === '2xx') return code >= 200 && code < 300;
     if (bucket === '4xx') return code >= 400 && code < 500;
-    if (bucket === '5xx') return code >= 500;
+    if (bucket === '5xx') return code >= 500 || code === 0;
     return true;
 }
 
@@ -67,7 +68,7 @@ const HeatmapCell: React.FC<HeatmapCellProps> = React.memo(({
         >
             {isHovered && count > 0 && (
                 <div className="tooltip">
-                    {code}: {count} req{count > 1 ? 's' : ''}<br />
+                    {code === 0 ? 'Infinity (Timeout)' : code}: {count} req{count > 1 ? 's' : ''}<br />
                     <span style={{ opacity: 0.6, fontSize: 10 }}>click to filter</span>
                 </div>
             )}
@@ -81,6 +82,7 @@ interface HeatmapRowProps {
     endpointCounts: Record<number, number>;
     maxCount: number;
     activeFilter: HeatmapFilter | null;
+    isVulnerable?: boolean;
     onCellClick: (epKey: string, code: number, count: number) => void;
 }
 
@@ -90,6 +92,7 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
     endpointCounts,
     maxCount,
     activeFilter,
+    isVulnerable,
     onCellClick
 }) => {
     const [method, ...rest] = epKey.split(' ');
@@ -105,6 +108,11 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
             <div className="heatmap-label" title={epKey}>
                 <span className={`method method-${method.toLowerCase()}`}>{method}</span>
                 <span className="path">{path}</span>
+                {isVulnerable && (
+                    <span className="heatmap-vuln-indicator" title="Vulnerability detected!">
+                        ⚠️
+                    </span>
+                )}
             </div>
             {/* Cells — right side, fixed width */}
             {statusCodes.map((code, ci) => {
@@ -128,6 +136,7 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
 }, (prevProps, nextProps) => {
     if (prevProps.epKey !== nextProps.epKey) return false;
     if (prevProps.maxCount !== nextProps.maxCount) return false;
+    if (prevProps.isVulnerable !== nextProps.isVulnerable) return false;
     
     if (prevProps.statusCodes.length !== nextProps.statusCodes.length) return false;
     for (let i = 0; i < prevProps.statusCodes.length; i++) {
@@ -153,7 +162,7 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
     return true;
 });
 
-export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Props) {
+export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter, onCellClick }: Props) {
     const [search, setSearch] = useState('');
     const [statusBucket, setStatusBucket] = useState<StatusBucket>('any');
 
@@ -193,8 +202,8 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
             const countsA = stats.endpointCounts[a] ?? {};
             const countsB = stats.endpointCounts[b] ?? {};
 
-            const has5xxA = Object.entries(countsA).some(([code, count]) => count > 0 && Number(code) >= 500);
-            const has5xxB = Object.entries(countsB).some(([code, count]) => count > 0 && Number(code) >= 500);
+            const has5xxA = Object.entries(countsA).some(([code, count]) => count > 0 && (Number(code) >= 500 || Number(code) === 0));
+            const has5xxB = Object.entries(countsB).some(([code, count]) => count > 0 && (Number(code) >= 500 || Number(code) === 0));
             if (has5xxA && !has5xxB) return -1;
             if (!has5xxA && has5xxB) return 1;
 
@@ -251,7 +260,9 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
                             onClick={() => onCellClick(null)}
                             className="heatmap-active-chip"
                         >
-                            <span>{activeFilter.status}</span>
+                            <span title={activeFilter.status === 0 ? "Infinity (Timeout)" : undefined}>
+                                {activeFilter.status === 0 ? '∞' : activeFilter.status}
+                            </span>
                             <span style={{ opacity: 0.6 }}>·</span>
                             <span style={{ fontFamily: 'var(--font-mono)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 <span style={{ color: 'var(--text-disabled)', marginRight: 4 }}>{activeFilter.method}</span>
@@ -307,9 +318,9 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
                         {/* Spacer matches the label column */}
                         <div className="heatmap-label-spacer" />
                         {statusCodes.map((code) => {
-                            const bucketClass = code >= 500 ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
+                            const bucketClass = (code >= 500 || code === 0) ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
                             return (
-                                <div key={code} className={`heatmap-code-label ${bucketClass}`}>{code}</div>
+                                <div key={code} className={`heatmap-code-label ${bucketClass}`} title={code === 0 ? 'Infinity (Timeout)' : undefined}>{code === 0 ? '∞' : code}</div>
                             );
                         })}
                     </div>
@@ -330,6 +341,7 @@ export function Heatmap({ stats, endpointKeys, activeFilter, onCellClick }: Prop
                                         endpointCounts={stats.endpointCounts[epKey] ?? {}}
                                         maxCount={maxCount}
                                         activeFilter={activeFilter}
+                                        isVulnerable={vulnerableEndpoints?.has(epKey)}
                                         onCellClick={handleCellClick}
                                     />
                                 ))}

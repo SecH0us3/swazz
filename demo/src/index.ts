@@ -52,7 +52,7 @@ export default {
       }
 
       // 7. SSRF / Command Injection simulating an OOB callback
-      const oobRegex = /(http:\/\/[^\s"'<>]+api\/oob\/[a-zA-Z0-9-]+)/i;
+      const oobRegex = /(https?:\/\/[^\s"'<>]+api\/oob\/[^\s"'<>]+)/i;
       const match = strValue.match(oobRegex);
       if (match) {
         console.log("[DEMO API] DETECTED OOB URL:", match[1]);

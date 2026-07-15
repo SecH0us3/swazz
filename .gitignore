@@ -62,6 +62,7 @@ coverage.out
 packages/web/public/ai.txt
 packages/web/public/llms.txt
 packages/web/public/llms-full.txt
+packages/web/public/swazz-extension.zip
 .chrome-dev-profile/
 
 # Runner Keys

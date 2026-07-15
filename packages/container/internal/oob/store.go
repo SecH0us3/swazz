@@ -53,5 +53,21 @@ func (s *Store) Clear() {
 	s.m = make(map[string]*OOBContext)
 }
 
+func (s *Store) ClearSession(sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, v := range s.m {
+		if v.SessionID == sessionID {
+			delete(s.m, k)
+		}
+	}
+}
+
+func (s *Store) Size() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.m)
+}
+
 // GlobalStore is a singleton for tracking OOB interactions across the application
 var GlobalStore = NewStore()

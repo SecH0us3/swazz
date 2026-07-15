@@ -1,11 +1,11 @@
 export function getStatusClass(status: number): string {
-    if (status >= 500) return 'status-5xx';
+    if (status >= 500 || status === 0) return 'status-5xx';
     if (status >= 400) return 'status-4xx';
     return '';
 }
 
 export function getBadgeClass(status: number): string {
-    if (status >= 500) return 'badge badge-error';
+    if (status >= 500 || status === 0) return 'badge badge-error';
     if (status >= 400) return 'badge badge-warning';
     if (status >= 200 && status < 300) return 'badge badge-success';
     return 'badge';

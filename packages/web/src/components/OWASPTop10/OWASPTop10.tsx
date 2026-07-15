@@ -9,51 +9,61 @@ const OWASP_CATEGORIES_METADATA = [
         id: 'A01:2025',
         title: 'A01:2025 Broken Access Control',
         desc: 'Restriction on what authenticated users are allowed to do is not properly enforced, leading to unauthorized information disclosure, modification, or destruction.',
+        link: 'https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/',
     },
     {
         id: 'A02:2025',
         title: 'A02:2025 Security Misconfiguration',
         desc: 'Insecure default configurations, open ports, verbose error messages, or permissive CORS settings that leak system details or allow exploitation.',
+        link: 'https://owasp.org/Top10/2025/A02_2025-Security_Misconfiguration/',
     },
     {
         id: 'A03:2025',
         title: 'A03:2025 Software Supply Chain Failures',
         desc: 'Vulnerabilities arising from insecure third-party packages, dependencies, build/test environments, or compromised software components.',
+        link: 'https://owasp.org/Top10/2025/A03_2025-Software_Supply_Chain_Failures/',
     },
     {
         id: 'A04:2025',
         title: 'A04:2025 Cryptographic Failures',
         desc: 'Inadequate protection of sensitive data in transit or at rest, including weak encryption algorithms, poor key management, or insecure protocol usage.',
+        link: 'https://owasp.org/Top10/2025/A04_2025-Cryptographic_Failures/',
     },
     {
         id: 'A05:2025',
         title: 'A05:2025 Injection',
         desc: 'User-supplied data is sent to an interpreter as part of a command or query, resulting in unauthorized command execution or data modification (e.g. SQLi, CRLF, Reflected XSS).',
+        link: 'https://owasp.org/Top10/2025/A05_2025-Injection/',
     },
     {
         id: 'A06:2025',
         title: 'A06:2025 Insecure Design',
         desc: 'Flaws in the design, architecture, or business logic of the application, such as missing threat modeling or insecure resource consumption limits.',
+        link: 'https://owasp.org/Top10/2025/A06_2025-Insecure_Design/',
     },
     {
         id: 'A07:2025',
         title: 'A07:2025 Authentication Failures',
         desc: 'Weaknesses in identifying the user\'s identity, allowing attackers to compromise authentication tokens, session IDs, or exploit credential verification steps.',
+        link: 'https://owasp.org/Top10/2025/A07_2025-Authentication_Failures/',
     },
     {
         id: 'A08:2025',
         title: 'A08:2025 Software or Data Integrity Failures',
         desc: 'Applications trusting code, updates, or serialized data/objects from untrusted sources without verification (e.g. insecure deserialization, unsafe OOB interactions).',
+        link: 'https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures/',
     },
     {
         id: 'A09:2025',
         title: 'A09:2025 Security Logging & Alerting Failures',
         desc: 'Insufficient logging, monitoring, and active detection of suspicious activities, hindering incident response and visibility.',
+        link: 'https://owasp.org/Top10/2025/A09_2025-Security_Logging_and_Alerting_Failures/',
     },
     {
         id: 'A10:2025',
         title: 'A10:2025 Mishandling of Exceptional Conditions',
         desc: 'Failures in gracefully handling errors, exceptions, timeouts, or network drops, exposing detailed stack traces or database/network leaks.',
+        link: 'https://owasp.org/Top10/2025/A10_2025-Mishandling_of_Exceptional_Conditions/',
     }
 ];
 
@@ -258,7 +268,17 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
     return (
         <div className="owasp-container">
             <div className="owasp-summary-banner">
-                 <div className="owasp-summary-title">OWASP Top 10 (2025) Coverage</div>
+                 <div className="owasp-summary-title">
+                     OWASP Top 10 (2025) Coverage
+                     <a 
+                         href="https://owasp.org/Top10/2025/" 
+                         target="_blank" 
+                         rel="noopener noreferrer"
+                         className="owasp-external-link"
+                     >
+                         Official Site ↗
+                     </a>
+                 </div>
                 <div className="owasp-summary-count">
                     {totalFindingsCount} {totalFindingsCount === 1 ? 'Finding' : 'Findings'} Detected
                 </div>
@@ -290,6 +310,17 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                                     </div>
                                     <div className="owasp-card-title">{meta.title.split(' ').slice(1).join(' ')}</div>
                                     <div className="owasp-card-desc">{meta.desc}</div>
+                                    <div className="owasp-card-footer">
+                                        <a 
+                                            href={meta.link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="owasp-learn-more-link"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            Learn More ↗
+                                        </a>
+                                    </div>
                                 </div>
                             );
                         })}
@@ -301,6 +332,7 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                             .map(([title, items]) => {
                                 const isExpanded = expandedCategory === title;
                                 const elementId = `accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                                const meta = OWASP_CATEGORIES_METADATA.find(m => m.title === title);
 
                                 return (
                                     <div key={title} id={elementId} className="owasp-accordion">
@@ -310,6 +342,17 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                                         >
                                             <div className="owasp-accordion-title">
                                                 {title} ({items.length})
+                                                {meta?.link && (
+                                                    <a
+                                                        href={meta.link}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="owasp-accordion-link"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Learn More ↗
+                                                    </a>
+                                                )}
                                             </div>
                                             <svg
                                                 width="16"

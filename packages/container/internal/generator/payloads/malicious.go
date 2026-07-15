@@ -171,7 +171,7 @@ var maliciousXXE = []string{
 var AllMaliciousStrings []any
 
 func init() {
-	all := make([]any, 0, len(maliciousEncoding)+len(maliciousSQLi)+len(maliciousXSS)+len(maliciousPathTraversal)+len(maliciousCmdi)+len(maliciousSSTI)+len(maliciousXXE))
+	all := make([]any, 0, len(maliciousEncoding)+len(maliciousSQLi)+len(maliciousXSS)+len(maliciousPathTraversal)+len(maliciousCmdi)+len(maliciousSSTI)+len(maliciousXXE)+len(maliciousOOB))
 	for _, s := range maliciousEncoding {
 		all = append(all, s)
 	}
@@ -191,6 +191,9 @@ func init() {
 		all = append(all, s)
 	}
 	for _, s := range maliciousXXE {
+		all = append(all, s)
+	}
+	for _, s := range maliciousOOB {
 		all = append(all, s)
 	}
 	AllMaliciousStrings = all

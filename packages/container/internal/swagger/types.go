@@ -49,6 +49,7 @@ type SecurityConfig struct {
 
 // Config holds the full fuzzing configuration.
 type Config struct {
+	RunID          string                  `json:"run_id,omitempty"`
 	BaseURL        string                  `json:"base_url"`
 	GlobalHeaders  map[string]string       `json:"global_headers"`
 	Cookies        map[string]string       `json:"cookies"`
@@ -170,6 +171,7 @@ type Settings struct {
 	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
 	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
 	MaxScanDurationMin            int                         `json:"max_scan_duration_min,omitempty"`
+	ActiveParameterFuzzing        bool                        `json:"active_parameter_fuzzing"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.
@@ -193,6 +195,7 @@ func DefaultSettings() Settings {
 		MaxNodesBudget:                50000,
 		MaxDepthLimit:                 64,
 		MaxScanDurationMin:            0,
+		ActiveParameterFuzzing:        true,
 	}
 }
 

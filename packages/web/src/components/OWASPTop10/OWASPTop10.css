@@ -20,6 +20,10 @@
 }
 
 .owasp-summary-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-primary);
@@ -221,4 +225,54 @@
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+}
+
+.owasp-external-link {
+    font-size: var(--font-size-xs);
+    font-weight: normal;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--duration-fast) var(--ease-out);
+}
+
+.owasp-external-link:hover {
+    color: var(--accent-light);
+    text-decoration: underline;
+}
+
+.owasp-card-footer {
+    margin-top: auto;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.owasp-learn-more-link {
+    font-size: var(--font-size-2xs);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color var(--duration-fast) var(--ease-out);
+}
+
+.owasp-learn-more-link:hover {
+    color: var(--accent-light);
+    text-decoration: underline;
+}
+
+.owasp-accordion-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.owasp-accordion-link {
+    font-size: var(--font-size-2xs);
+    font-weight: normal;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color var(--duration-fast) var(--ease-out);
+}
+
+.owasp-accordion-link:hover {
+    color: var(--accent-light);
+    text-decoration: underline;
 }

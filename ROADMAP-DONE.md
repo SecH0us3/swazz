@@ -37,6 +37,12 @@ This file contains completed tasks.
 
 ## ⚙️ Core Engine & Fuzzing Capabilities
 
+- [x] **Task 62: Browser Extension for Real-Time Traffic Capturing & Request Recording**
+  - **Design Goal:** Build a browser extension (similar to Cobalt) that sniffs web traffic as the user interacts with the app, recording API endpoints and capturing client requests directly into the Swazz configuration profile. This can serve as a more optimal, zero-setup alternative to exporting/uploading HAR files.
+  - **Implementation Details:**
+    - Capture HTTP/HTTPS requests on specified domains in background service workers.
+    - Synchronize captured endpoints and authentication states in real-time with the local runner profile.
+
 - [x] **Task 5:** Implement dynamic custom wordlists loading from `.txt` files via `swazz.config.json` (and update the corresponding documentation).
 
 - [x] **Task 6:** Investigate and implement GraphQL schema parsing and fuzzing support.
@@ -188,6 +194,17 @@ This file contains completed tasks.
     - Replace the clearing/debouncing `setTimeout` in the `useEffect` hook in `packages/web/src/components/OWASPTop10/OWASPTop10.tsx` with a throttled query or a low-frequency polling mechanism during scans to ensure results load incrementally.
     - Highlight categories with matching findings immediately.
     - Implement category filtering upon clicking cards, deduplicating the list of results (removing duplicate findings).
+
+- [x] **Task 130: Render Infinity (∞) for Timeout status code (HTTP 0)**
+  - **Design Goal:** Improve status code visibility in result lists and logs by displaying the infinity symbol (∞) instead of `0` when a request times out or encounters a network error.
+  - **Implementation Details:**
+    - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
+
+- [x] **Task 132: Add external reference links to OWASP Top 10 page**
+  - **Design Goal:** Provide direct educational links to the official OWASP Top 10 and category definitions, helping developers learn more about the security vulnerabilities found.
+  - **Implementation Details:**
+    - On the OWASP Top 10 dashboard page, add a link to the main OWASP API Security Top 10 project.
+    - For each specific OWASP category (e.g. API1, API2), add a link pointing directly to its corresponding official OWASP definition page.
 
 ## 🛡 Internal Security & Infrastructure
 
@@ -390,7 +407,12 @@ This file contains completed tasks.
     - Extend the CLI with an analysis mode (e.g., `--analyze-repo <path>`) that clones/reads the target repository.
     - Build a fast pre-indexing system in the CLI to scan the files beforehand for quick symbol and path lookup.
     - Allow users to configure instructions (prompts) specifying what vulnerabilities to prioritize and where to look.
-    - Match endpoint routes from findings to file paths, retrieve relevant code context, and invoke the LLM to output remediation steps.
+- [x] **Task 131: Manually verify OOB SSRF vulnerability detection on real targets**
+  - **Design Goal:** Verify the full end-to-end network flow of OOB triggers from a real target application back to the local runner via the coordinator.
+  - **Implementation Details:**
+    - Spin up the local fuzzer agent and connect it to a public coordinator instance.
+    - Launch a test scan against a known vulnerable target containing an SSRF / blind OOB command execution endpoint.
+    - Confirm the target's external callbacks successfully route back, generate `swazz/oob-interaction` findings, and mark the endpoint as vulnerable in the live heatmap.
 
 ## 🔐 Authorization & Access Control Testing
 
