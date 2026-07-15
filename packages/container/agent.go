@@ -329,7 +329,7 @@ func startAgent(args []string) {
 				RunID string `json:"runId"`
 				UUID  string `json:"uuid"`
 			}
-			if len(wsMsg.Payload) > 0 && string(wsMsg.Payload) != "null" {
+			if len(wsMsg.Payload) > 0 {
 				if err := json.Unmarshal(wsMsg.Payload, &trigger); err != nil {
 					logError("Failed to unmarshal oob_trigger payload: %v", err)
 					continue
