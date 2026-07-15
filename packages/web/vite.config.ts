@@ -6,7 +6,7 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'jsdom',
-        execArgv: ['--no-webstorage'],
+        setupFiles: ['./src/vitest.setup.ts'],
     },
     server: {
         port: 5173,

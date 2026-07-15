@@ -2,7 +2,7 @@
    Swazz Landing Page Stylesheet - "Future-Proof Security"
    ═══════════════════════════════════════════════════════════ */
 
-:root {
+.landing-page-container {
     --bg-obsidian: #0B0F1A;
     --bg-card: rgba(30, 41, 59, 0.5);
     --border-subtle: rgba(255, 255, 255, 0.08);
@@ -213,7 +213,7 @@
     justify-content: center;
 }
 
-.btn-primary {
+.btn-landing-primary {
     padding: 0.875rem 2rem;
     background-color: var(--primary-blue);
     color: #ffffff;
@@ -226,13 +226,13 @@
     transition: var(--transition-smooth);
 }
 
-.btn-primary:hover {
+.btn-landing-primary:hover {
     transform: translateY(-2px);
     background-color: var(--primary-blue-hover);
     box-shadow: 0 8px 24px rgba(0, 102, 255, 0.4);
 }
 
-.btn-secondary {
+.btn-landing-secondary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -248,7 +248,7 @@
     transition: var(--transition-smooth);
 }
 
-.btn-secondary:hover {
+.btn-landing-secondary:hover {
     background-color: rgba(255, 255, 255, 0.05);
     border-color: var(--border-hover);
     transform: translateY(-2px);

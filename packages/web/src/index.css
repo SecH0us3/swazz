@@ -26,7 +26,7 @@
   /* Text */
   --text-primary:   #F8FAFC;
   --text-secondary: #CBD5E1;
-  --text-muted:     #606070;
+  --text-muted:     #94A3B8;
   --text-disabled:  #404050;
 
   /* Accent — True Blue */
@@ -339,31 +339,28 @@ body.resizing .sidebar-resizer {
 .header-logo {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  gap: 0.75rem;
   flex-shrink: 0;
   user-select: none;
 }
 
 .header-logo-icon {
-  width: 28px;
-  height: 28px;
-  background: var(--accent);
-  border-radius: var(--radius-md);
+  width: 32px;
+  height: 32px;
+  background: #0284C7;
+  color: #ffffff;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  box-shadow: 0 0 12px rgba(2,132,199,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
 }
 
 .header-logo-text {
-  background: linear-gradient(135deg, #38BDF8, #0284C7);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .header-github-link {
@@ -757,7 +754,7 @@ body.resizing .sidebar-resizer {
 }
 
 .header-target-input:focus { color: var(--text-primary); }
-.header-target-input::placeholder { color: var(--text-disabled); }
+.header-target-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
 .input {
   width: 100%;
@@ -781,7 +778,7 @@ body.resizing .sidebar-resizer {
   background: var(--bg-elevated);
 }
 
-.input::placeholder { color: var(--text-disabled); }
+.input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
 .select-input {
   appearance: none;
@@ -818,6 +815,7 @@ body.resizing .sidebar-resizer {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-subtle);
 }
+.textarea::placeholder { color: var(--text-muted); opacity: 0.6; }
 
 /* ─── Method Pills ───────────────────────────────────────── */
 
@@ -1974,6 +1972,15 @@ body.resizing .sidebar-resizer {
   font-size: var(--font-size-sm);
   max-width: 300px;
   line-height: 1.6;
+}
+
+.empty-state-small {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-4) var(--space-2);
+  font-style: italic;
+  line-height: 1.4;
 }
 
 .empty-state-welcome {
@@ -4310,7 +4317,7 @@ kbd {
   display: block;
   margin-bottom: 6px;
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .settings-input-w-full {
@@ -8989,4 +8996,294 @@ kbd {
 
 .fuzz-setting-intensity-input {
   width: 120px;
+}
+
+/* ─── E2EE Backup Banner & Modal Styles ────────────────── */
+
+.e2ee-backup-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-md);
+  gap: var(--space-6);
+  animation: slide-up var(--duration-base) var(--ease-out);
+}
+
+.e2ee-backup-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.e2ee-backup-banner-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.e2ee-backup-banner-icon {
+  font-size: var(--font-size-md);
+}
+
+.e2ee-backup-banner-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.e2ee-backup-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.e2ee-backup-banner-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast);
+}
+
+.e2ee-backup-banner-close:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* Modal Overlay & Dialog */
+.e2ee-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fade-in var(--duration-base) var(--ease-out);
+}
+
+.e2ee-modal-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 500px;
+  padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: slide-up var(--duration-base) var(--ease-out);
+}
+
+.e2ee-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.e2ee-modal-header h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.e2ee-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast);
+}
+
+.e2ee-modal-close:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.e2ee-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.e2ee-modal-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.e2ee-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+@media (max-width: 768px) {
+  .e2ee-backup-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .e2ee-backup-banner-actions {
+    justify-content: flex-end;
+  }
+}
+
+.e2ee-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.e2ee-tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all var(--duration-fast);
+}
+
+.e2ee-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.e2ee-tab-btn.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--primary-color, #3b82f6);
+}
+
+.file-upload-container {
+  border: 2px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--duration-fast);
+}
+
+.file-upload-container:hover {
+  border-color: var(--primary-color, #3b82f6);
+}
+
+.file-upload-input {
+  display: none;
+}
+
+.file-upload-label {
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* ─── E2EE Sidebar Nudge (Right Config Panel) ────────── */
+
+.config-sidebar-footer {
+  padding: 16px 0 0 0;
+  border-top: 1px solid var(--border-default);
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-sidebar-footer .btn-secondary {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Compact "backed up" status pill */
+.e2ee-sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.e2ee-sidebar-status--ok {
+  background: rgba(34, 197, 94, 0.08);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* "Backup needed" nudge block */
+.e2ee-sidebar-nudge {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: var(--radius-md);
+}
+
+.e2ee-sidebar-nudge-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+}
+
+.e2ee-sidebar-nudge-icon {
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.e2ee-sidebar-nudge-desc {
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.e2ee-sidebar-nudge-btn {
+  width: 100%;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  padding: var(--space-2) var(--space-3);
+}
+
+.e2ee-sidebar-nudge-more {
+  width: 100%;
+  justify-content: center;
+  font-size: var(--font-size-2xs);
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-muted);
+}
+
+.e2ee-sidebar-nudge-more:hover {
+  color: var(--text-primary);
 }

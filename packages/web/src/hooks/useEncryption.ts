@@ -354,24 +354,22 @@ export function useEncryption(projectId?: string): UseEncryptionReturn {
                     }
                 } else {
                     if (!cancelled) {
-                        const isE2E = typeof navigator !== 'undefined' && navigator.webdriver;
-                        const isBypassed = typeof window !== 'undefined' && window.location.search.includes('no_bypass_e2e_gate');
-
-                        if (isE2E && !isBypassed) {
-                            const mnemonicPhrase = await generateMnemonic();
-                            const keys = await deriveKeyFromMnemonic(mnemonicPhrase);
-                            await KeyStorage.saveKey(KEY_PRIVATE, keys.privateKey, projectId);
-                            await KeyStorage.saveKey(KEY_PUBLIC, keys.publicKey, projectId);
-                            await KeyStorage.saveMnemonic(mnemonicPhrase, projectId);
-
-                            keyPairRef.current = keys;
-                            setHasKeyPair(true);
-                            setMnemonic(mnemonicPhrase);
-                        } else {
-                            keyPairRef.current = null;
-                            setHasKeyPair(false);
-                            setMnemonic(null);
+                        // Only auto-generate when we have a real project ID.
+                        // Without this guard, every page load would trigger an
+                        // expensive PBKDF2 derivation (2048 iterations) and
+                        // redundant IndexedDB writes for a throw-away global key.
+                        if (!projectId) {
+                            return;
                         }
+                        const mnemonicPhrase = await generateMnemonic();
+                        const keys = await deriveKeyFromMnemonic(mnemonicPhrase);
+                        await KeyStorage.saveKey(KEY_PRIVATE, keys.privateKey, projectId);
+                        await KeyStorage.saveKey(KEY_PUBLIC, keys.publicKey, projectId);
+                        await KeyStorage.saveMnemonic(mnemonicPhrase, projectId);
+
+                        keyPairRef.current = keys;
+                        setHasKeyPair(true);
+                        setMnemonic(mnemonicPhrase);
                     }
                 }
             } catch (err) {

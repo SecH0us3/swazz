@@ -90,12 +90,12 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 </p>
                 <div className="landing-hero-ctas">
                     {onActionClick && (
-                        <button type="button" onClick={onActionClick} className="btn-primary">
+                        <button type="button" onClick={onActionClick} className="btn-landing-primary">
                             Run a live demo scan
                         </button>
                     )}
-                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="btn-secondary">
-                        Read the docs
+                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="btn-landing-secondary">
+                         Read the docs
                     </a>
                 </div>
             </section>

@@ -9,11 +9,19 @@ export function KeysTab() {
         getPublicKeyBase64,
         exportAsJwk,
         mnemonic,
-        hasKeyPair
+        hasKeyPair,
+        importFromMnemonic,
+        importFromJwk
     } = useEncryption(activeProject?.id);
 
     const [publicKeyBase64, setPublicKeyBase64] = useState<string | null>(null);
     const [revealMnemonic, setRevealMnemonic] = useState(false);
+    
+    const [isRestoring, setIsRestoring] = useState(false);
+    const [restoreMode, setRestoreMode] = useState<'mnemonic' | 'file'>('mnemonic');
+    const [restoreMnemonicPhrase, setRestoreMnemonicPhrase] = useState('');
+    const [restoreError, setRestoreError] = useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         if (hasKeyPair) {
@@ -22,6 +30,42 @@ export function KeysTab() {
             setPublicKeyBase64(null);
         }
     }, [hasKeyPair, getPublicKeyBase64]);
+
+    const handleRestoreMnemonic = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setRestoreError(null);
+        setIsProcessing(true);
+        try {
+            await importFromMnemonic(restoreMnemonicPhrase);
+            setIsRestoring(false);
+            setRestoreMnemonicPhrase('');
+        } catch (err: any) {
+            setRestoreError(err.message || 'Failed to restore key pair from mnemonic.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Reset so the same file can be selected again after a failed import
+        e.target.value = '';
+        setRestoreError(null);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const text = event.target?.result as string;
+                const jwk = JSON.parse(text);
+                await importFromJwk(jwk);
+                setIsRestoring(false);
+            } catch (err: any) {
+                setRestoreError(err.message || 'Failed to parse or import backup file. Ensure it is a valid .swazzkey file.');
+            }
+        };
+        reader.readAsText(file);
+    };
 
     const handleDownloadBackup = async () => {
         if (!activeProject) return;
@@ -115,6 +159,79 @@ export function KeysTab() {
                     <button className="btn btn-ghost e2ee-margin-top-md" onClick={handleDownloadBackup}>
                         Download .swazzkey File
                     </button>
+                </div>
+
+                <div className="e2ee-sub-section">
+                    <h3>Restore / Import Key</h3>
+                    <p className="e2ee-description e2ee-margin-top-sm">
+                        Need to restore your private key on this device? Import a 12-word seed phrase or upload a <code>.swazzkey</code> backup file to replace the current project key pair.
+                    </p>
+                    {isRestoring ? (
+                        <div className="e2ee-margin-top-md">
+                            <div className="e2ee-tabs">
+                                <button 
+                                    className={`e2ee-tab-btn ${restoreMode === 'mnemonic' ? 'active' : ''}`}
+                                    onClick={() => setRestoreMode('mnemonic')}
+                                >
+                                    Use Mnemonic
+                                </button>
+                                <button 
+                                    className={`e2ee-tab-btn ${restoreMode === 'file' ? 'active' : ''}`}
+                                    onClick={() => setRestoreMode('file')}
+                                >
+                                    Use Backup File
+                                </button>
+                            </div>
+                            
+                            {restoreMode === 'mnemonic' ? (
+                                <form onSubmit={handleRestoreMnemonic} className="e2ee-margin-top-md">
+                                    <textarea
+                                        className="textarea"
+                                        placeholder="Enter your 12-word mnemonic seed phrase, separated by spaces..."
+                                        value={restoreMnemonicPhrase}
+                                        onChange={(e) => setRestoreMnemonicPhrase(e.target.value)}
+                                        rows={3}
+                                    />
+                                    {restoreError && <div className="alert alert-danger e2ee-margin-top-sm">{restoreError}</div>}
+                                    <div className="e2ee-margin-top-md e2ee-flex-row" style={{ display: 'flex', gap: '8px' }}>
+                                        <button type="submit" className="btn btn-primary" disabled={isProcessing}>
+                                            {isProcessing ? 'Importing...' : 'Import'}
+                                        </button>
+                                        <button type="button" className="btn btn-ghost" onClick={() => setIsRestoring(false)}>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className="e2ee-margin-top-md">
+                                    <div className="file-upload-container">
+                                        <input 
+                                            type="file" 
+                                            accept=".swazzkey,application/json" 
+                                            onChange={handleRestoreFile}
+                                            id="swazzkey-upload-input"
+                                            className="file-upload-input"
+                                        />
+                                        <label htmlFor="swazzkey-upload-input" className="file-upload-label">
+                                            <span>📁 Choose .swazzkey file</span>
+                                        </label>
+                                    </div>
+                                    {restoreError && <div className="alert alert-danger e2ee-margin-top-sm">{restoreError}</div>}
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-ghost e2ee-margin-top-md" 
+                                        onClick={() => setIsRestoring(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <button className="btn btn-ghost e2ee-margin-top-md" onClick={() => setIsRestoring(true)}>
+                            Restore from Backup / Mnemonic
+                        </button>
+                    )}
                 </div>
 
                 <div className="e2ee-sub-section e2ee-text-center">
