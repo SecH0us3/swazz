@@ -38,14 +38,21 @@ export function ConfigSidebar({
     const encryption = useEncryption(activeProject?.id);
     const { hasKeyPair, exportAsJwk } = encryption;
 
+    const safeGetItem = (key: string): string | null => {
+        try { return localStorage.getItem(key); } catch { return null; }
+    };
+    const safeSetItem = (key: string, value: string): void => {
+        try { localStorage.setItem(key, value); } catch { /* no-op in test/SSR environments */ }
+    };
+
     const [backupStatus, setBackupStatus] = useState<string | null>(() => {
         if (!activeProject) return null;
-        return localStorage.getItem('swazz-key-backup-status:' + activeProject.id);
+        return safeGetItem('swazz-key-backup-status:' + activeProject.id);
     });
 
     useEffect(() => {
         if (activeProject) {
-            setBackupStatus(localStorage.getItem('swazz-key-backup-status:' + activeProject.id));
+            setBackupStatus(safeGetItem('swazz-key-backup-status:' + activeProject.id));
         } else {
             setBackupStatus(null);
         }
@@ -65,7 +72,7 @@ export function ConfigSidebar({
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            localStorage.setItem('swazz-key-backup-status:' + activeProject.id, 'saved');
+            safeSetItem('swazz-key-backup-status:' + activeProject.id, 'saved');
             setBackupStatus('saved');
         } catch (err) {
             console.error('Failed to download backup:', err);
