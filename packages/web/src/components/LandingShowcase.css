@@ -233,6 +233,10 @@
 }
 
 .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
     padding: 0.875rem 2rem;
     background-color: transparent;
     color: var(--text-main);

@@ -187,15 +187,10 @@ export async function verifyTurnstile(token: string, secret: string, remoteip?: 
       body: formData.toString(),
     });
     const result = (await res.json()) as { success: boolean };
-    
-    // If the API explicitly rejects, we fail. Otherwise, we assume success.
-    // This provides a graceful fallback if the response format is unexpected.
-    return result.success !== false;
+    return result && result.success === true;
   } catch (err) {
-    console.error('Turnstile verification network/timeout error, failing open:', err);
-    // Graceful fallback: If Turnstile API is unreachable (e.g. timeout, network block)
-    // we fail open so legitimate users aren't locked out.
-    return true;
+    console.error('Turnstile verification error:', err);
+    return false;
   }
 }
 

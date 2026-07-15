@@ -94,7 +94,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             Run a live demo scan
                         </button>
                     )}
-                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="btn-secondary">
                         Read the docs
                     </a>
                 </div>
@@ -385,7 +385,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 <div className="feature-modal-backdrop" onClick={() => setSelectedFeature(null)}>
                     <div className="feature-modal-split" onClick={(e) => e.stopPropagation()}>
                         <div className="feature-modal-left">
-                            <button type="button" className="auth-modal-close" onClick={() => setSelectedFeature(null)} aria-label="Close modal" style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                            <button type="button" className="auth-modal-close" onClick={() => setSelectedFeature(null)} aria-label="Close modal">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <line x1="18" y1="6" x2="6" y2="18"></line>
                                     <line x1="6" y1="6" x2="18" y2="18"></line>

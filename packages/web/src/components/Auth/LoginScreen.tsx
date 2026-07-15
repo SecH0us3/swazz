@@ -429,6 +429,15 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                     )}
                                 </div>
 
+                                {isRegistering && betaModeEnabled && (
+                                    <div className={`beta-status-banner ${betaLimitReached ? 'filled' : 'normal'}`}>
+                                        {betaLimitReached
+                                            ? 'Closed Beta · Invite code required'
+                                            : 'Closed Beta · Limited availability'
+                                        }
+                                    </div>
+                                )}
+
                                 {(githubAuthEnabled || !isRegistering) && (
                                     <div className="social-auth-container">
                                         {githubAuthEnabled && (
@@ -641,7 +650,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
                                         {onGuest && (
                                             <div className="guest-action-wrapper">
-                                                <button type="button" onClick={handleGuestClick} className="guest-btn ghost-btn" disabled={isLoading}>
+                                                <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
                                                     Try as guest →
                                                 </button>
                                             </div>

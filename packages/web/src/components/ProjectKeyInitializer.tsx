@@ -162,11 +162,11 @@ export function ProjectKeyInitializer({ projectName, onSuccess, onSkip, encrypti
                     </div>
 
                     {onSkip && (
-                        <div style={{ marginTop: 'var(--space-6)', textAlign: 'center' }}>
+                        <div className="e2ee-text-center e2ee-margin-top-lg">
                             <button className="btn btn-ghost" onClick={onSkip}>
                                 Skip for now
                             </button>
-                            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
+                            <p className="e2ee-guideline e2ee-text-center e2ee-margin-top-sm">
                                 You can set this up later when you need to encrypt findings.
                             </p>
                         </div>
