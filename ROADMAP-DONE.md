@@ -108,6 +108,14 @@ This file contains completed tasks.
     - Display the secret key in the Project Settings webhooks configuration UI so that users can configure it on their target servers.
     - Sign the JSON payload using Web Crypto's HMAC-SHA256 and attach the signature along with a timestamp in a custom header (e.g. `X-Swazz-Signature: t=1720000000,v1=signature_hex`) to prevent replay attacks.
 
+- [x] **Task 144: Browser Extension-Driven Crawler & Interception**
+  - **Design Goal:** Enable target discovery by leveraging the Chrome browser extension to crawl SPAs/SSR sites under the user's active session, sniffing network requests, and syncing endpoints back to Swazz.
+  - **Implementation Details:**
+    - Add a "Crawl Target via Extension" option to the Scan configuration form.
+    - Build queue, scope-checking, and DOM traversal logic in the Chrome extension.
+    - Inject client-side traversal and programmatic click/form-submission scripts in the crawled tab.
+    - Export captured network requests in HAR format and POST to `/api/parse` to populate fuzzer configurations automatically.
+
 ## 🎨 Web Dashboard Enhancements
 
 - [x] **Task 8:** Add export functionality in the Web UI to download the HTML/JSON report directly from the browser.

@@ -42,12 +42,24 @@ function normalizePath(path) {
     return segments.join('/');
 }
 
+function stripPort(hostOrTarget) {
+    if (!hostOrTarget) return '';
+    const s = hostOrTarget.trim().toLowerCase();
+    if (s.startsWith('[')) {
+        const closingBracketIndex = s.indexOf(']');
+        if (closingBracketIndex !== -1) {
+            return s.substring(0, closingBracketIndex + 1);
+        }
+    }
+    return s.split(':')[0];
+}
+
 // Function to match host against target domains list
 function isDomainTargeted(host, targetDomains) {
     if (!targetDomains || targetDomains.length === 0) return false;
-    const cleanHost = host.trim().toLowerCase();
+    const cleanHost = stripPort(host);
     return targetDomains.some(target => {
-        const t = target.trim().toLowerCase();
+        const t = stripPort(target);
         if (!t) return false;
         // Only allow exact match or subdomain (not substring to prevent spoofing)
         return cleanHost === t || cleanHost.endsWith('.' + t);
@@ -62,6 +74,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Auto-synchronize credentials from Dashboard tab
         const { token, userProfile, swazzUrl } = message.data;
         chrome.storage.local.set({ token, userProfile, swazzUrl });
+        return;
+    }
+
+    if (message.type === 'get_my_tab_id') {
+        sendResponse({ tabId: sender.tab ? sender.tab.id : null });
         return;
     }
 

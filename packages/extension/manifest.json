@@ -6,7 +6,9 @@
   "permissions": [
     "storage",
     "activeTab",
-    "cookies"
+    "cookies",
+    "scripting",
+    "webNavigation"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -24,6 +26,12 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["main_world.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "background": {
