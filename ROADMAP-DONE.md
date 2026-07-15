@@ -396,7 +396,12 @@ This file contains completed tasks.
     - Extend the CLI with an analysis mode (e.g., `--analyze-repo <path>`) that clones/reads the target repository.
     - Build a fast pre-indexing system in the CLI to scan the files beforehand for quick symbol and path lookup.
     - Allow users to configure instructions (prompts) specifying what vulnerabilities to prioritize and where to look.
-    - Match endpoint routes from findings to file paths, retrieve relevant code context, and invoke the LLM to output remediation steps.
+- [x] **Task 131: Manually verify OOB SSRF vulnerability detection on real targets**
+  - **Design Goal:** Verify the full end-to-end network flow of OOB triggers from a real target application back to the local runner via the coordinator.
+  - **Implementation Details:**
+    - Spin up the local fuzzer agent and connect it to a public coordinator instance.
+    - Launch a test scan against a known vulnerable target containing an SSRF / blind OOB command execution endpoint.
+    - Confirm the target's external callbacks successfully route back, generate `swazz/oob-interaction` findings, and mark the endpoint as vulnerable in the live heatmap.
 
 ## 🔐 Authorization & Access Control Testing
 
