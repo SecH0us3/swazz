@@ -754,7 +754,7 @@ body.resizing .sidebar-resizer {
 }
 
 .header-target-input:focus { color: var(--text-primary); }
-.header-target-input::placeholder { color: var(--text-disabled); }
+.header-target-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
 .input {
   width: 100%;
@@ -778,7 +778,7 @@ body.resizing .sidebar-resizer {
   background: var(--bg-elevated);
 }
 
-.input::placeholder { color: var(--text-disabled); }
+.input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
 .select-input {
   appearance: none;
@@ -815,6 +815,7 @@ body.resizing .sidebar-resizer {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-subtle);
 }
+.textarea::placeholder { color: var(--text-muted); opacity: 0.6; }
 
 /* ─── Method Pills ───────────────────────────────────────── */
 
