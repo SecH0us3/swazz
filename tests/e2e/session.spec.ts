@@ -4,9 +4,10 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
   test('should redirect to login screen when session token becomes invalid or expired (401)', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
@@ -37,9 +38,10 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
   test('should enforce custom project session timeout and redirect to login screen', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Register a unique user (using registration username limit rules 3 to 20 chars)
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-5)}_${Math.floor(Math.random() * 100)}`;
     await page.locator('#username').fill(uniqueUsername);

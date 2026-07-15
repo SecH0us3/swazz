@@ -8,9 +8,10 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
 
     // 1. Navigate to the frontend
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create' });
-    const enterWorkspaceBtn = page.getByRole('button', { name: 'Enter' });
+    const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
+    const enterWorkspaceBtn = page.getByRole('button', { name: 'Log In' });
     await expect(createAccountBtn).toBeVisible();
     await expect(enterWorkspaceBtn).toBeVisible();
 

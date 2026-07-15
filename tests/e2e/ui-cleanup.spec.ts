@@ -4,7 +4,8 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
   test('Verify streamlined ConfigSidebar and moved controls', async ({ page }) => {
     // 1. Register and sign in a new user
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

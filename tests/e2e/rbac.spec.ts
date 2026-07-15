@@ -4,8 +4,9 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
   test('should create custom roles, validate inputs, invite a user, and accept invitation', async ({ page, context }) => {
     // 1. Navigate to the frontend dev server and register User A (Owner)
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create' });
+    const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createAccountBtn).toBeVisible();
 
     const usernameA = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
@@ -122,6 +123,7 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
 
     // 9. Navigate to the invitation URL (using the token query parameter) to trigger invitation acceptance
     await page.goto(`/?token=${inviteToken}`);
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // Wait for toast notification confirming invitation acceptance
     await expect(page.locator('.toast:has-text("Invitation accepted successfully")')).toBeVisible({ timeout: 10000 });

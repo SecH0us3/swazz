@@ -27,9 +27,10 @@ test.describe('Admin Logs Viewer E2E Tests', () => {
 
     // 1. Navigate to the frontend
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user
-    const createBtn = page.getByRole('button', { name: 'Create' });
+    const createBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createBtn).toBeVisible();
     await createBtn.click();
 

@@ -4,9 +4,10 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
   test('should run multiple scans, select them in History, compare them, and verify comparison data', async ({ page }) => {
     // 1. Navigate to frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Registration
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

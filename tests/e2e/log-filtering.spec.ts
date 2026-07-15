@@ -4,9 +4,10 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
   test('should correctly filter fuzzer request logs by status and path', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

@@ -35,10 +35,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
     const [activeTab, setActiveTab] = useState<'cloud' | 'docker' | 'worker'>('cloud');
     const [selectedFeature, setSelectedFeature] = useState<{ title: string; details: string; goal: string; benefit: string; image?: string } | null>(null);
     const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
-    const [showModal, setShowModal] = useState(() => {
-        // Auto-open modal for E2E tests to keep them compatible
-        return typeof window !== 'undefined' && (window.navigator?.webdriver || window.location.search.includes('e2e'));
-    });
+    const [showModal, setShowModal] = useState(false);
 
     // Automatically pick up project invitation token from URL and open registration
     useEffect(() => {
@@ -88,6 +85,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     
                     widgetId = (window as any).turnstile.render('#cf-turnstile-container', {
                         sitekey: turnstileSiteKey,
+                        theme: 'dark',
                         callback: (token: string) => {
                             setTurnstileResponse(token);
                         },
@@ -318,23 +316,29 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                     <nav className="landing-nav-links">
                         <a href="#features" className="nav-link">Features</a>
                         <a href="#solutions" className="nav-link">Solutions</a>
+                        <a href="#pricing" className="nav-link">Pricing</a>
+                        <div className="nav-divider"></div>
                         <a href="https://sech0us3.github.io/swazz/" className="nav-link" target="_blank" rel="noopener noreferrer">Docs</a>
                         <a href="https://yoursec.substack.com/" className="nav-link" target="_blank" rel="noopener noreferrer">Blog</a>
                         <a href="https://github.com/SecH0us3/swazz" className="nav-link" target="_blank" rel="noopener noreferrer">GitHub</a>
-                        <a href="#pricing" className="nav-link">Pricing</a>
                     </nav>
                 </div>
                 <div className="landing-nav-right">
-                    <button type="button" onClick={() => authEnabled ? openAuthModal(false) : onGuest?.()} className="btn-nav-accent">
-                        {authEnabled ? "Let's go" : "Launch App"}
+                    {authEnabled && (
+                        <button type="button" onClick={() => openAuthModal(false)} className="btn-nav-ghost">
+                            Sign In
+                        </button>
+                    )}
+                    <button type="button" onClick={() => authEnabled ? openAuthModal(true) : onGuest?.()} className="btn-nav-accent">
+                        {authEnabled ? "Start for free" : "Launch App"}
                     </button>
                 </div>
             </header>
 
             <LandingShowcase 
                 showPricing={true} 
+                onActionClick={() => authEnabled ? openAuthModal(false) : onGuest?.()}
             />
-
 
 
             {/* Auth Modal Popup Overlay */}
@@ -388,7 +392,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                         />
                                     </div>
                                     <div className="login-actions">
-                                        <button type="submit" disabled={isLoading} className="login-btn">
+                                        <button type="submit" disabled={isLoading} className="login-btn primary-submit-btn">
                                             {isLoading ? <span className="spinner"></span> : 'Verify'}
                                         </button>
                                         <button 
@@ -397,7 +401,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                 setTwoFactorRequired(false);
                                                 setError('');
                                             }} 
-                                            className="register-btn"
+                                            className="guest-btn ghost-btn"
                                         >
                                             Cancel
                                         </button>
@@ -407,42 +411,128 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                         ) : (
                             <>
                                 <div className="login-header">
-                                    <h2>{isRegistering ? 'Create Account' : 'Welcome to Swazz'}</h2>
-                                    {!isRegistering ? (
-                                        <p className="login-subtitle">
-                                            Enter your credentials to access your workspace. <br />
-                                            New user? Click <strong>Create</strong> to sign up.
-                                        </p>
+                                    {isRegistering ? (
+                                        <>
+                                            {betaModeEnabled && (
+                                                <div className="beta-eyebrow">
+                                                    <span className="beta-badge">Closed Beta</span>
+                                                </div>
+                                            )}
+                                            <h2>Join the Beta</h2>
+                                            <p className="login-subtitle">Claim your spot. Start fuzzing APIs</p>
+                                        </>
                                     ) : (
-                                        <p>Register to start fuzzing</p>
+                                        <>
+                                            <h2>Welcome back</h2>
+                                            <p className="login-subtitle">Your findings are waiting</p>
+                                        </>
                                     )}
                                 </div>
 
-                                {isRegistering && betaModeEnabled && (
-                                    <div className={`beta-status-banner ${betaLimitReached ? 'filled' : 'normal'}`}>
-                                        {betaLimitReached
-                                            ? 'Closed Beta · Invite code required'
-                                            : 'Closed Beta · Limited availability'
-                                        }
+                                {(githubAuthEnabled || !isRegistering) && (
+                                    <div className="social-auth-container">
+                                        {githubAuthEnabled && (
+                                            <button 
+                                                type="button" 
+                                                onClick={handleGithubLogin} 
+                                                disabled={isLoading} 
+                                                className="primary-social-btn github-social-btn"
+                                            >
+                                                <svg className="github-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                                                </svg>
+                                                Continue with GitHub
+                                            </button>
+                                        )}
+
+                                        {!isRegistering && (
+                                            <button 
+                                                type="button" 
+                                                onClick={handlePasskeyLogin} 
+                                                disabled={isLoading} 
+                                                className="primary-social-btn passkey-social-btn"
+                                            >
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
+                                                    <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
+                                                    <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
+                                                    <path d="M2 12a10 10 0 0 1 18-6" />
+                                                    <path d="M2 16h.01" />
+                                                    <path d="M21.8 16c.2-2 .131-5.354 0-6" />
+                                                    <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" />
+                                                    <path d="M8.65 22c.21-.66.45-1.32.57-2" />
+                                                    <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
+                                                </svg>
+                                                Sign in with Passkey
+                                            </button>
+                                        )}
                                     </div>
                                 )}
+
+                                {(githubAuthEnabled || !isRegistering) && (
+                                    <div className="oauth-divider">
+                                        <span className="oauth-divider-text">or continue with credentials</span>
+                                    </div>
+                                )}
+
+
 
                                 {error && (
                                     <div className="login-error">
                                         <div className="error-content">
                                             <span className="error-text">{error}</span>
-                                            {error === 'Invalid credentials' && (
-                                                <div className="login-error-tip">
-                                                    New user? Click <strong>Create</strong> to sign up.
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 )}
 
                                 <form className="login-form" onSubmit={handleSubmit}>
+                                        {isRegistering && betaModeEnabled && (
+                                            <>
+                                                {betaLimitReached ? (
+                                                    <div className="form-group">
+                                                        <label htmlFor="inviteCode">Invite Code <span className="required-star">*</span></label>
+                                                        <input
+                                                            type="text"
+                                                            id="inviteCode"
+                                                            name="inviteCode"
+                                                            value={inviteCode}
+                                                            onChange={(e) => setInviteCode(e.target.value)}
+                                                            placeholder="XXXX-XXXX-XXXX"
+                                                            data-1p-ignore
+                                                            required
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="form-group invite-code-group">
+                                                        {!hasInviteCode ? (
+                                                            <button
+                                                                type="button"
+                                                                className="text-btn invite-code-toggle-btn"
+                                                                onClick={() => setHasInviteCode(true)}
+                                                            >
+                                                                Have an invite code?
+                                                            </button>
+                                                        ) : (
+                                                            <>
+                                                                <label htmlFor="inviteCode">Invite Code (Optional)</label>
+                                                                <input
+                                                                    type="text"
+                                                                    id="inviteCode"
+                                                                    name="inviteCode"
+                                                                    value={inviteCode}
+                                                                    onChange={(e) => setInviteCode(e.target.value)}
+                                                                    placeholder="XXXX-XXXX-XXXX"
+                                                                    data-1p-ignore
+                                                                />
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+
                                         <div className="form-group">
-                                            <label htmlFor="username">Username</label>
+                                            <label htmlFor="username">Username{isRegistering && <span className="required-star"> *</span>}</label>
                                             <input
                                                 key={isRegistering ? "signup-username" : "signin-username"}
                                                 type="text"
@@ -455,28 +545,11 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                 required
                                                 pattern="^[a-zA-Z0-9_\-]{3,20}$"
                                                 title="3 to 20 characters, alphanumeric, including hyphen or underscore"
-                                                autoFocus
                                             />
-                                            <span id="username-hint" className="field-hint">3-20 characters (letters, numbers, _ or -)</span>
                                         </div>
 
-                                        {isRegistering && (
-                                            <div className="form-group">
-                                                <label htmlFor="email">Email Address (Optional)</label>
-                                                <input
-                                                    type="email"
-                                                    id="email"
-                                                    name="email"
-                                                    value={email}
-                                                    onChange={(e) => setEmail(e.target.value)}
-                                                    placeholder="you@example.com"
-                                                    autoComplete="email"
-                                                />
-                                            </div>
-                                        )}
-
                                         <div className="form-group">
-                                            <label htmlFor="password">Password</label>
+                                            <label htmlFor="password">Password{isRegistering && <span className="required-star"> *</span>}</label>
                                             <div className="password-input-wrapper">
                                                 <input
                                                     key={isRegistering ? "signup-password" : "signin-password"}
@@ -485,7 +558,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                     name="password"
                                                     value={password}
                                                     onChange={(e) => setPassword(e.target.value)}
-                                                    placeholder="••••••••••••"
+                                                    placeholder={isRegistering ? "Min 12 characters" : "••••••••••••"}
                                                     autoComplete={isRegistering ? "new-password" : "current-password"}
                                                     required
                                                     minLength={12}
@@ -509,7 +582,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                                     )}
                                                 </button>
                                             </div>
-                                            {isRegistering && (
+                                            {isRegistering && password.length > 0 && (
                                                 <div className="password-strength-container">
                                                     <div className="password-strength-row">
                                                         <span className="password-strength-label">Strength:</span>
@@ -539,137 +612,38 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                                             )}
                                         </div>
 
-                                        {isRegistering && betaModeEnabled && (
-                                            <>
-                                                {betaLimitReached && (
-                                                    <div className="form-group">
-                                                        <label htmlFor="inviteCode">
-                                                            Invite Code <span style={{ color: '#f43f5e' }}>*</span>
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            id="inviteCode"
-                                                            name="inviteCode"
-                                                            value={inviteCode}
-                                                            onChange={(e) => setInviteCode(e.target.value)}
-                                                            placeholder="Required (Beta limit reached)"
-                                                            data-1p-ignore
-                                                            required
-                                                        />
-                                                    </div>
-                                                )}
 
-                                                {!betaLimitReached && (
-                                                    <div className="form-group invite-code-group">
-                                                        {!hasInviteCode ? (
-                                                            <button
-                                                                type="button"
-                                                                className="invite-code-toggle-btn"
-                                                                onClick={() => setHasInviteCode(true)}
-                                                            >
-                                                                I have an invite code
-                                                            </button>
-                                                        ) : (
-                                                            <>
-                                                                <label htmlFor="inviteCode">Invite Code (Optional)</label>
-                                                                <input
-                                                                    type="text"
-                                                                    id="inviteCode"
-                                                                    name="inviteCode"
-                                                                    value={inviteCode}
-                                                                    onChange={(e) => setInviteCode(e.target.value)}
-                                                                    placeholder="XXXX-XXXX-XXXX"
-                                                                    data-1p-ignore
-                                                                />
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
+
 
                                         <div className="login-actions">
-                                            <button type="submit" disabled={isLoading} className="login-btn">
+                                            <button type="submit" disabled={isLoading} className="login-btn primary-submit-btn">
                                                 {isLoading ? (
                                                     <span className="spinner"></span>
                                                 ) : (
-                                                    isRegistering ? 'Get Started' : 'Enter'
+                                                    isRegistering ? 'Create Account' : 'Sign In'
                                                 )}
                                             </button>
-                                            {!isRegistering && (
-                                                <button type="button" onClick={handleRegisterClick} disabled={isLoading} className="register-btn">
-                                                    {isLoading && isRegistering ? (
-                                                        <span className="spinner"></span>
-                                                    ) : (
-                                                        'Create'
-                                                    )}
-                                                </button>
-                                            )}
-                                            {isRegistering && (
-                                                <button type="button" onClick={() => { setIsRegistering(false); setError(''); setInviteCode(''); setHasInviteCode(false); }} disabled={isLoading} className="register-btn">
-                                                    Back to Login
-                                                </button>
+                                        </div>
+
+                                        <div className="auth-toggle-link">
+                                            {isRegistering ? (
+                                                <p>Already have an account? <button type="button" onClick={() => {setIsRegistering(false); setError('');}} className="text-btn">Log in</button></p>
+                                            ) : (
+                                                <p>New user? <button type="button" onClick={() => {setIsRegistering(true); setError('');}} className="text-btn">Create an account</button></p>
                                             )}
                                         </div>
 
-                                        {githubAuthEnabled && !isRegistering && (
-                                            <div className="github-login-container">
-                                                <div className="oauth-divider">
-                                                    <span className="oauth-divider-text">or connect with</span>
-                                                </div>
-
-                                                <button 
-                                                    type="button" 
-                                                    onClick={handleGithubLogin} 
-                                                    disabled={isLoading} 
-                                                    className="github-login-btn"
-                                                >
-                                                    <svg className="github-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-                                                    </svg>
-                                                    Sign in with GitHub
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {!isRegistering && (
-                                            <div className="passkey-login-container">
-                                                <button type="button" onClick={handlePasskeyLogin} disabled={isLoading} className="register-btn passkey-login-btn">
-                                                    {isLoading ? <span className="spinner"></span> : (
-                                                        <>
-                                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
-                                                                <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" />
-                                                                <path d="M14 13.12c0 2.38 0 6.38-1 8.88" />
-                                                                <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" />
-                                                                <path d="M2 12a10 10 0 0 1 18-6" />
-                                                                <path d="M2 16h.01" />
-                                                                <path d="M21.8 16c.2-2 .131-5.354 0-6" />
-                                                                <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" />
-                                                                <path d="M8.65 22c.21-.66.45-1.32.57-2" />
-                                                                <path d="M9 6.8a6 6 0 0 1 9 5.2v2" />
-                                                            </svg>
-                                                            Sign in with Passkey
-                                                        </>
-                                                    )}
-                                                </button>
+                                        {turnstileSiteKey && (
+                                            <div className="turnstile-wrapper">
+                                                <div id="cf-turnstile-container" className="cf-turnstile"></div>
                                             </div>
                                         )}
 
                                         {onGuest && (
                                             <div className="guest-action-wrapper">
-                                                <span className="guest-divider">or</span>
-                                                <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
-                                                    Continue as Guest
+                                                <button type="button" onClick={handleGuestClick} className="guest-btn ghost-btn" disabled={isLoading}>
+                                                    Try as guest →
                                                 </button>
-                                                <p className="guest-warning">
-                                                    * Temporary account. All guest data will be permanently deleted after 24 hours.
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {turnstileSiteKey && (
-                                            <div style={{ margin: 'var(--space-4) 0', display: 'flex', justifyContent: 'center' }}>
-                                                <div id="cf-turnstile-container" className="cf-turnstile"></div>
                                             </div>
                                         )}
                                     </form>

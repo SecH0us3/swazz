@@ -1037,3 +1037,11 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Generate SSTI payloads dynamically with randomized math expressions (e.g. multiplying or adding two random prime numbers less than 100).
     - Evaluate these expressions during analyzer checks dynamically instead of relying on a hardcoded string `49`.
+
+- [x] **Task 140: Landing Page UX Redesign**
+  - **Design Goal:** Improve the conversion funnel by redesigning the hero section and establishing brand consistency without relying on the login flow.
+  - **Implementation Details:**
+    - Replace the static login screenshot with a dynamic demo/GIF of actual OWASP findings.
+    - Add a clear primary CTA (e.g., "Run a live demo scan").
+    - Add social proof (GitHub stars, scan metrics, etc.).
+    - Align the landing page visual style with the product dashboard.

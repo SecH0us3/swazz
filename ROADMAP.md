@@ -14,8 +14,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Create a public route (`GET /api/feed.xml` or `/feed.rss`) serving well-formatted RSS XML content.
     - Render posts, updates, or public releases with proper XML namespaces, publishing dates, and author credits.
 
-
-
 - [ ] **Task 99: Secondary Product Blog**
   - **Design Goal:** Design and mount a realistic secondary blog section/layout to publish technical articles, vulnerability writeups, and security research related to Swazz fuzzer findings.
   - **Implementation Details:**
@@ -35,17 +33,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
   - **Implementation Details:**
     - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
 
-
-
 ## 🟡 Medium Complexity
-
-- [ ] **Task 140: Landing Page UX Redesign**
-  - **Design Goal:** Improve the conversion funnel by redesigning the hero section and establishing brand consistency without relying on the login flow.
-  - **Implementation Details:**
-    - Replace the static login screenshot with a dynamic demo/GIF of actual OWASP findings.
-    - Add a clear primary CTA (e.g., "Run a live demo scan").
-    - Add social proof (GitHub stars, scan metrics, etc.).
-    - Align the landing page visual style with the product dashboard.
 
 - [ ] **Task 141: Login & Registration Flow Redesign**
   - **Design Goal:** Provide a frictionless, bug-free entry into the application.
@@ -122,8 +110,6 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Implement a domain-based login redirect checking user email domains to route employees to their mapped SAML IdP.
     - Implement a lightweight SAML Assertion Consumer Service (ACS) endpoint verifying XML signatures against IdP certificates using the Workers Web Crypto API.
     - Build UI settings tabs in the dashboard for managing organization details, team memberships, and SAML configurations.
-
-
 
 
 

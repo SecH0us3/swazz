@@ -11,9 +11,10 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
   test('should support key generation, mnemonic recovery, and swazzkey file upload', async ({ page }) => {
     // 1. Navigate to main page
     await page.goto('/?no_bypass_e2e_gate=true');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Register a unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

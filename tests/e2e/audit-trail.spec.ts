@@ -3,9 +3,10 @@ import { test, expect, Download } from '@playwright/test';
 test.describe('Audit Trail E2E', () => {
   test('should record action and display in audit trail tab', async ({ page }) => {
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // Register unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
@@ -65,7 +66,8 @@ test.describe('Audit Trail E2E', () => {
 
   test('should filter audit logs by source', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
@@ -99,7 +101,8 @@ test.describe('Audit Trail E2E', () => {
 
   test('should search audit logs', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
@@ -138,7 +141,8 @@ test.describe('Audit Trail E2E', () => {
 
   test('should export CSV from audit trail', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
