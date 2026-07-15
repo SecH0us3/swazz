@@ -85,10 +85,19 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Feed discovered URLs and form inputs into the fuzzing execution pipeline.
 
 - [ ] **Task 59: Headless Browser Crawler & Interception Sniffer**
-  - **Design Goal:** Enable target discovery by crawling web applications using a browser engine, capturing and sniffing all background API requests to automatically populate the fuzzer path list.
+  - **Design Goal:** Enable target discovery by crawling web applications using a browser engine, capturing and sniffing all background API requests to automatically populate the fuzzer path list. *(Note: Only for private agent nodes; requires building a separate runner container image with Chromium installed).*
   - **Implementation Details:**
     - Spin up a headless browser to crawl target pages.
     - Intercept network request traffic (AJAX, fetch requests, form submissions) and convert them to internal API specifications for fuzzing.
+
+- [ ] **Task 144: Browser Extension-Driven Crawler & Interception**
+  - **Design Goal:** Enable target discovery by leveraging the Chrome browser extension to crawl SPAs/SSR sites under the user's active session, sniffing network requests, and syncing endpoints back to Swazz.
+  - **Implementation Details:**
+    - Add a "Crawl Target via Extension" option to the Scan configuration form.
+    - Build queue, scope-checking, and DOM traversal logic in the Chrome extension.
+    - Inject client-side traversal and programmatic click/form-submission scripts in the crawled tab.
+    - Export captured network requests in HAR format and POST to `/api/parse` to populate fuzzer configurations automatically.
+
 
 
 - [ ] **Task 122: Enterprise SAML Authentication & Organizations**

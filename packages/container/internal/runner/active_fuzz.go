@@ -170,7 +170,15 @@ func buildMutatedPayload(
 ) generatedPayload {
 	mutated := clonePayload(baseline)
 
-	fuzzedVal := gen.Generate(field.Path[len(field.Path)-1], field.Schema)
+	if len(field.Path) == 0 && field.Location != "body" {
+		return mutated
+	}
+
+	var fieldName string
+	if len(field.Path) > 0 {
+		fieldName = field.Path[len(field.Path)-1]
+	}
+	fuzzedVal := gen.Generate(fieldName, field.Schema)
 
 	switch field.Location {
 	case "body":
