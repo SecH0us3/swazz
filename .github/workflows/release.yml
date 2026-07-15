@@ -107,7 +107,7 @@ jobs:
   docker-release:
     name: Build and Push Docker Image
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       REPO_LC: ""
@@ -132,8 +132,10 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "master" ]; then
             echo "DOCKER_TAG=sha-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+            echo "DATE_TAG=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           else
             echo "DOCKER_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "DATE_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
           fi
 
       - name: Login to GitHub Container Registry
@@ -168,6 +170,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ env.DOCKER_TAG }}
+            type=raw,value=${{ env.DATE_TAG }},enable=${{ github.ref == 'refs/heads/master' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
 
       - name: Extract metadata (CLI)
@@ -180,6 +183,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ env.DOCKER_TAG }}
+            type=raw,value=${{ env.DATE_TAG }},enable=${{ github.ref == 'refs/heads/master' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build and export Server to Docker
