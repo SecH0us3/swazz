@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { SwazzConfig, FuzzingProfile } from '../../types.js';
 import { Section, KVEditor } from './Shared.js';
 import { useAppStore } from '../../store/appStore.js';
+import { PayloadSettingsModal } from './PayloadSettingsModal.js';
 
 interface Props {
     style?: React.CSSProperties;
@@ -29,6 +31,7 @@ export function ConfigSidebar({
     className,
 }: Props) {
     const activeProfiles = config.settings.profiles || [];
+    const [showPayloadSettings, setShowPayloadSettings] = useState(false);
 
     const toggleProfile = (p: FuzzingProfile) => {
         const isActive = activeProfiles.includes(p);
@@ -67,6 +70,15 @@ export function ConfigSidebar({
                         );
                     })}
                 </div>
+                <button
+                    className="btn btn-ghost payload-settings-trigger"
+                    onClick={() => setShowPayloadSettings(true)}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                    </svg>
+                    Customize Payloads
+                </button>
             </Section>
 
             {/* Headers */}
@@ -215,6 +227,9 @@ export function ConfigSidebar({
                     More Project Settings
                 </button>
             </div>
+            {showPayloadSettings && (
+                <PayloadSettingsModal onClose={() => setShowPayloadSettings(false)} />
+            )}
         </aside>
     );
 }
