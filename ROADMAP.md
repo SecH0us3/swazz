@@ -30,7 +30,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `README.md` file in `/examples` describing the cookbook and linking to the recipe documentation.
     - Populate the examples directory with recipes covering configurations from basic HTTP requests and API scans to advanced multi-auth, chaining rules, and custom wordlist scans.
 
-- [ ] **Task 132: Add external reference links to OWASP Top 10 page**
+- [/] **Task 132: Add external reference links to OWASP Top 10 page**
   - **Design Goal:** Provide direct educational links to the official OWASP Top 10 and category definitions, helping developers learn more about the security vulnerabilities found.
   - **Implementation Details:**
     - On the OWASP Top 10 dashboard page, add a link to the main OWASP API Security Top 10 project.
