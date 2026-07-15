@@ -42,6 +42,12 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Launch a test scan against a known vulnerable target containing an SSRF / blind OOB command execution endpoint.
     - Confirm the target's external callbacks successfully route back, generate `swazz/oob-interaction` findings, and mark the endpoint as vulnerable in the live heatmap.
 
+- [ ] **Task 132: Add external reference links to OWASP Top 10 page**
+  - **Design Goal:** Provide direct educational links to the official OWASP Top 10 and category definitions, helping developers learn more about the security vulnerabilities found.
+  - **Implementation Details:**
+    - On the OWASP Top 10 dashboard page, add a link to the main OWASP API Security Top 10 project.
+    - For each specific OWASP category (e.g. API1, API2), add a link pointing directly to its corresponding official OWASP definition page.
+
 
 
 ## 🟡 Medium Complexity
