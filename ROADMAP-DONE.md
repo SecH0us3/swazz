@@ -200,6 +200,12 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
 
+- [x] **Task 132: Add external reference links to OWASP Top 10 page**
+  - **Design Goal:** Provide direct educational links to the official OWASP Top 10 and category definitions, helping developers learn more about the security vulnerabilities found.
+  - **Implementation Details:**
+    - On the OWASP Top 10 dashboard page, add a link to the main OWASP API Security Top 10 project.
+    - For each specific OWASP category (e.g. API1, API2), add a link pointing directly to its corresponding official OWASP definition page.
+
 ## 🛡 Internal Security & Infrastructure
 
 - [x] **Task 13:** Harden the Dockerfile (multi-stage build, distroless base, non-root user) and integrate Trivy image vulnerability scanning into GitHub Actions.
