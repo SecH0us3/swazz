@@ -1043,3 +1043,8 @@ This file contains completed tasks.
   - **Implementation Details:**
     - Generate SSTI payloads dynamically with randomized math expressions (e.g. multiplying or adding two random prime numbers less than 100).
     - Evaluate these expressions during analyzer checks dynamically instead of relying on a hardcoded string `49`.
+
+- [x] **Task 130: Render Infinity (∞) for Timeout status code (HTTP 0)**
+  - **Design Goal:** Improve status code visibility in result lists and logs by displaying the infinity symbol (∞) instead of `0` when a request times out or encounters a network error.
+  - **Implementation Details:**
+    - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
