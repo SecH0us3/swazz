@@ -190,8 +190,9 @@ export async function verifyTurnstile(token: string, secret: string, remoteip?: 
       body: formData.toString(),
     });
     const result = (await res.json()) as { success: boolean };
-    return result.success === true;
-  } catch {
+    return result && result.success === true;
+  } catch (err) {
+    console.error('Turnstile verification error:', err);
     return false;
   }
 }

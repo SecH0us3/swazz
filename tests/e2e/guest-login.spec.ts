@@ -14,9 +14,10 @@ test.describe('Guest Login E2E Test', () => {
 
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
-    // 2. Click "Continue as Guest"
-    const guestBtn = page.getByRole('button', { name: 'Continue as Guest' });
+    // 2. Click "Try as guest →"
+    const guestBtn = page.getByRole('button', { name: 'Try as guest →' });
     await expect(guestBtn).toBeVisible();
     await guestBtn.click();
 
@@ -68,6 +69,7 @@ test.describe('Guest Login E2E Test', () => {
     await signUpBtn.click();
 
     // 11. Verify we are back on the login screen
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(guestBtn).toBeVisible();
   });
 });

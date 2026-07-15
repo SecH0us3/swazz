@@ -4,8 +4,9 @@ test.describe('Login History E2E Tests', () => {
   test('should display login history audit logs for project members', async ({ page }) => {
     // 1. Navigate to the frontend dev server and register User A (Owner)
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create' });
+    const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createAccountBtn).toBeVisible();
 
     const usernameA = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;

@@ -17,8 +17,9 @@ test.describe('Passkeys E2E Tests', () => {
 
     // 2. Navigate to the frontend and register a new user
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create' });
+    const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createAccountBtn).toBeVisible();
 
     // Perform direct registration

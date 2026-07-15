@@ -4,9 +4,10 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
   test('should import a HAR file, extract endpoints, and successfully run fuzzing', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     // Username limit is 3-20 characters
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
@@ -79,9 +80,10 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
   test('should display toast error message when attempting to load an invalid HAR/spec URL', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

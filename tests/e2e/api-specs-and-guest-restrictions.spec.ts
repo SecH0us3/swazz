@@ -5,7 +5,8 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
   test('Guest Mode should restrict Member/Role modifications but allow viewing settings', async ({ page }) => {
     // 1. Navigate and log in as Guest
     await page.goto('/');
-    const guestBtn = page.getByRole('button', { name: 'Continue as Guest' });
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    const guestBtn = page.getByRole('button', { name: 'Try as guest →' });
     await expect(guestBtn).toBeVisible();
     await guestBtn.click();
 
@@ -42,7 +43,8 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
   test('Owner should be able to view, edit, upload, and add API Specifications', async ({ page }) => {
     // 1. Navigate and register standard user
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);

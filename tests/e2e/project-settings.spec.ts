@@ -16,9 +16,10 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   test('should configure project settings, verify raw config, and toggle payload settings', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user (under 20 characters)
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
@@ -138,9 +139,10 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   test('should verify settings have actual effect on fuzzer and cover General, Chaining, and Wordlists tabs', async ({ page }) => {
     // 1. Navigate to the frontend dev server
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
@@ -350,9 +352,10 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   test('should support editing raw JSON config with comments (JSONC)', async ({ page }) => {
     // 1. Navigate to frontend
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Register unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
@@ -421,9 +424,10 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   test('should configure AI Remediation settings and select rules', async ({ page }) => {
     // 1. Navigate to frontend
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Register unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');

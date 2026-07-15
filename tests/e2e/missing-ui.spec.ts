@@ -6,7 +6,8 @@ test.describe('Additional UI Coverage E2E Tests', () => {
   // Helper to register and log in before each test case
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     // Use a unique username complying with length constraints (3 to 20 chars)
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;

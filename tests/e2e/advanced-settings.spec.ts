@@ -8,7 +8,8 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
     page.on("requestfailed", req => console.log(`BROWSER REQUEST FAILED: ${req.url()} - ${req.failure()?.errorText}`));
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     // Use a unique username complying with length constraints (3 to 20 chars)
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;

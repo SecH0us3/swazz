@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test';
 test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
   test('should display beta slots banner and handle regular registration when under limit', async ({ page }) => {
     await page.goto('/?no_bypass_e2e_gate=true');
-    await page.getByRole('button', { name: "Create" }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     // Verify slots banner is visible
     const banner = page.locator('.beta-status-banner');
@@ -72,7 +73,8 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     });
 
     await page.goto('/?no_bypass_e2e_gate=true');
-    await page.getByRole('button', { name: "Create" }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
 
     await expect(page.locator('.beta-status-banner.filled')).toBeVisible();
     await expect(page.locator('.beta-status-banner.filled')).toContainText('Closed Beta · Invite code required');

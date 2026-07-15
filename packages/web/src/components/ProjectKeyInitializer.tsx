@@ -4,10 +4,11 @@ import { UseEncryptionReturn } from '../hooks/useEncryption.js';
 interface ProjectKeyInitializerProps {
     projectName: string;
     onSuccess: () => void;
+    onSkip?: () => void;
     encryption: UseEncryptionReturn;
 }
 
-export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: ProjectKeyInitializerProps) {
+export function ProjectKeyInitializer({ projectName, onSuccess, onSkip, encryption }: ProjectKeyInitializerProps) {
     const {
         generateKeyPair,
         importFromMnemonic,
@@ -159,6 +160,17 @@ export function ProjectKeyInitializer({ projectName, onSuccess, encryption }: Pr
                     <div className="e2ee-guideline e2ee-text-center e2ee-margin-top-sm">
                         Read the <a href="/docs/encryption_backup" target="_blank" className="e2ee-link">Key Backup & Recovery guide</a> to learn more.
                     </div>
+
+                    {onSkip && (
+                        <div className="e2ee-text-center e2ee-margin-top-lg">
+                            <button className="btn btn-ghost" onClick={onSkip}>
+                                Skip for now
+                            </button>
+                            <p className="e2ee-guideline e2ee-text-center e2ee-margin-top-sm">
+                                You can set this up later when you need to encrypt findings.
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -179,6 +179,7 @@ export function MainWorkspace({
                 <ProjectKeyInitializer
                     projectName={activeProject.name}
                     onSuccess={() => setNeedsKeySetup(false)}
+                    onSkip={() => setNeedsKeySetup(false)}
                     encryption={encryption}
                 />
             ) : (

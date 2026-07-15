@@ -40,9 +40,10 @@ test.describe('Analytics Dashboard E2E Tests', () => {
 
     // 1. Navigate to home
     await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // 2. Register unique user
-    const createBtn = page.getByRole('button', { name: 'Create' });
+    const createBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createBtn).toBeVisible();
     await createBtn.click();
 
