@@ -26,7 +26,7 @@
   /* Text */
   --text-primary:   #F8FAFC;
   --text-secondary: #CBD5E1;
-  --text-muted:     #606070;
+  --text-muted:     #94A3B8;
   --text-disabled:  #404050;
 
   /* Accent — True Blue */
@@ -4316,7 +4316,7 @@ kbd {
   display: block;
   margin-bottom: 6px;
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .settings-input-w-full {
