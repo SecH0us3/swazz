@@ -299,7 +299,7 @@ export function Inspector({
         }
     }, [liveCount, loadResults]);
 
-    const count5xx = rows.filter(r => r.status >= 500).length;
+    const count5xx = rows.filter(r => r.status >= 500 || r.status === 0).length;
 
     const tabs: { key: StatusFilter; label: string }[] = [
         { key: 'all', label: 'All' },

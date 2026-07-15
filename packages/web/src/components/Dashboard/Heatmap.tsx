@@ -202,8 +202,8 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
             const countsA = stats.endpointCounts[a] ?? {};
             const countsB = stats.endpointCounts[b] ?? {};
 
-            const has5xxA = Object.entries(countsA).some(([code, count]) => count > 0 && Number(code) >= 500);
-            const has5xxB = Object.entries(countsB).some(([code, count]) => count > 0 && Number(code) >= 500);
+            const has5xxA = Object.entries(countsA).some(([code, count]) => count > 0 && (Number(code) >= 500 || Number(code) === 0));
+            const has5xxB = Object.entries(countsB).some(([code, count]) => count > 0 && (Number(code) >= 500 || Number(code) === 0));
             if (has5xxA && !has5xxB) return -1;
             if (!has5xxA && has5xxB) return 1;
 
