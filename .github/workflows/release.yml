@@ -132,7 +132,7 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "master" ]; then
             echo "DOCKER_TAG=sha-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-            echo "DATE_TAG=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+            echo "DATE_TAG=$(date +'%Y-%m-%d')-${{ github.run_number }}" >> $GITHUB_ENV
           else
             echo "DOCKER_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
             echo "DATE_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
