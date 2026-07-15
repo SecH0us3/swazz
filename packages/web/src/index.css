@@ -1874,10 +1874,8 @@ body.resizing .sidebar-resizer {
 
 .payload-settings-trigger {
   width: 100%;
-  margin-top: 12px;
-  justify-content: center;
-  font-size: 12px;
-  gap: 6px;
+  margin-top: var(--space-3);
+  font-size: var(--font-size-xs);
 }
 
 /* ─── Key-Value Editor ───────────────────────────────────── */
