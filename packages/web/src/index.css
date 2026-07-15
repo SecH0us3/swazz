@@ -339,31 +339,28 @@ body.resizing .sidebar-resizer {
 .header-logo {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  gap: 0.75rem;
   flex-shrink: 0;
   user-select: none;
 }
 
 .header-logo-icon {
-  width: 28px;
-  height: 28px;
-  background: var(--accent);
-  border-radius: var(--radius-md);
+  width: 32px;
+  height: 32px;
+  background: #0284C7;
+  color: #ffffff;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  box-shadow: 0 0 12px rgba(2,132,199,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
 }
 
 .header-logo-text {
-  background: linear-gradient(135deg, #38BDF8, #0284C7);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .header-github-link {
