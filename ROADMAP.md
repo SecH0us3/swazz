@@ -85,6 +85,11 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Ensure zero tracking of IP addresses, user accounts, or target URLs (fully compliance-safe and anonymous).
     - Expose a public endpoint `GET /api/telemetry/scans/count` returning the total aggregated scans.
 
+- [ ] **Task 147: Display Global Scan Count on Landing Page**
+  - **Design Goal:** Fetch and display the actual number of completed scans on the public landing page / trust bar dynamically to enhance credibility.
+  - **Implementation Details:**
+    - Query the anonymous telemetry count endpoint `/api/telemetry/scans/count` from the landing page.
+    - Format and render the returned total scan count inside the trust bar or hero statistics section with smooth number counting animations.
 
 
 ## 🔴 High Complexity
