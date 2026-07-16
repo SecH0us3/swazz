@@ -353,6 +353,22 @@ The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. Th
 
 During beta, registrations may be capped (default 50 users) to ensure stability. Once the limit is reached, new users can only register using a `BETA_BYPASS_CODE` provided by the administrator.
 
+## Anonymous Global Scan Counter Telemetry 📊
+
+Swazz includes a completely anonymous telemetry system to track the total number of scans executed globally. This aggregated data helps substantiate the statistics shown in the trust bar. 
+
+### Telemetry Properties
+- **Full Privacy Compliance**: No IP addresses, user accounts, target URLs, or scan details are ever logged or tracked.
+- **Monthly Ingestion**: Telemetry is categorized globally and monthly using key format `YYMM`.
+- **Fault-tolerant**: Telemetry requests are performed asynchronously with a strict **1-second timeout** and fail silently without blocking runner agent execution.
+
+### Disabling Telemetry
+If you prefer not to report anonymous telemetry, you can disable it entirely:
+- **Command-line flag**: Add `--disable-telemetry` when starting the CLI or runner agent.
+- **Environment variable**: Set `SWAZZ_DISABLE_TELEMETRY=true` in your shell environment.
+
+---
+
 ## 🔒 Privacy & Account Deletion (Right to be Forgotten)
 
 Swazz values user privacy and complies with GDPR requirements. If you wish to delete your account and all associated data, you can do so immediately from the dashboard settings page:

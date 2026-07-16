@@ -10,6 +10,8 @@ export interface IMiscService {
     ip: string,
     isWebRequest: boolean
   ): Promise<{ status: number; bodyText: string }>;
+  incrementGlobalScanCount(yyMm: string): Promise<void>;
+  getGlobalScanCount(): Promise<{ total: number; monthly: Record<string, number> }>;
 }
 
 export class MiscService implements IMiscService {
@@ -94,5 +96,13 @@ export class MiscService implements IMiscService {
       status: res.status,
       bodyText: resText
     };
+  }
+
+  async incrementGlobalScanCount(yyMm: string): Promise<void> {
+    await this.miscRepo.incrementGlobalScanCount(yyMm);
+  }
+
+  async getGlobalScanCount(): Promise<{ total: number; monthly: Record<string, number> }> {
+    return await this.miscRepo.getGlobalScanCount();
   }
 }

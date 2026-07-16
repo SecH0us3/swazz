@@ -120,10 +120,16 @@ func runCLI(args []string) {
 	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")
 	qFlag := flags.Bool("q", false, "Silence all progress output (alias of -quiet)")
 	progressOnChangeFlag := flags.Bool("progress-on-change", false, "Only print progress when the active endpoint changes")
+	disableTelemetry := flags.Bool("disable-telemetry", false, "Disable reporting anonymous global scan count telemetry")
 
 	if err := flags.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	disableTelemetryVal := *disableTelemetry
+	if os.Getenv("SWAZZ_DISABLE_TELEMETRY") == "true" {
+		disableTelemetryVal = true
 	}
 
 	allowPrivateExplicit := false
@@ -294,6 +300,12 @@ func runCLI(args []string) {
 			}
 		}()
 	}
+
+	telemetryURL := "https://swazz.secmy.app/api/telemetry/scans/increment"
+	if envURL := os.Getenv("SWAZZ_TELEMETRY_URL"); envURL != "" {
+		telemetryURL = envURL
+	}
+	incrementGlobalScanTelemetry(telemetryURL, disableTelemetryVal)
 
 	logger.Info("Starting fuzz run on %d endpoints across %d profiles...", len(runCfg.Endpoints), len(runCfg.Settings.Profiles))
 	if err := r.Start(ctx); err != nil {
