@@ -1,0 +1,29 @@
+# Exclude version control and IDE files
+.git
+.github
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Exclude local build artifacts and state
+node_modules
+**/node_modules
+.wrangler
+**/.wrangler
+dist
+**/dist
+packages/container/swazz-engine
+packages/container/agent.log
+*.log
+test-results
+test.html
+
+# Exclude secrets
+.env
+.dev.vars
+**/swazz_runner.key
+**/swazz_runner.pub
