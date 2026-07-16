@@ -199,8 +199,12 @@ export function RequestDetail({
     const [editedBody, setEditedBody] = useState(initialBody);
 
     useEffect(() => {
+        setEditedUrl(joinUrl(baseUrl, result.resolvedPath || result.endpoint));
         setEditedBody(formatValue(result.payload));
-    }, [result.payload]);
+        setLiveStatus(result.status);
+        setLiveResponse(result.responseBody);
+        setLiveHeaders(result.responseHeaders || {});
+    }, [result, baseUrl]);
 
     const matchingEndpoint = config?.endpoints.find(
         (ep) => ep.path === result.endpoint && ep.method.toUpperCase() === result.method.toUpperCase()
