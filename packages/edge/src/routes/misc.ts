@@ -45,8 +45,9 @@ export function registerMiscRoutes(
     let yyMm: string | undefined;
     try {
       const body = await c.req.json();
-      if (body && typeof body.yyMm === 'string') {
-        if (/^\d{4}$/.test(body.yyMm)) {
+      if (body && typeof body.yyMm === 'string' && /^\d{4}$/.test(body.yyMm)) {
+        const mm = parseInt(body.yyMm.slice(2), 10);
+        if (mm >= 1 && mm <= 12) {
           yyMm = body.yyMm;
         }
       }

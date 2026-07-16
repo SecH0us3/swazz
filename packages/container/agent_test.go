@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,23 +76,34 @@ func TestDeriveTelemetryURL(t *testing.T) {
 }
 
 func TestIncrementGlobalScanTelemetry(t *testing.T) {
-	var callCount int32
+	calledChan := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&callCount, 1)
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 		assert.Equal(t, "Swazz/1.0 (+https://github.com/SecH0us3/swazz)", r.Header.Get("User-Agent"))
 		w.WriteHeader(http.StatusOK)
+		select {
+		case calledChan <- struct{}{}:
+		default:
+		}
 	}))
 	defer server.Close()
 
 	// Test case 1: disableTelemetry = true
 	incrementGlobalScanTelemetry(server.URL, true)
-	time.Sleep(50 * time.Millisecond) // wait for goroutine
-	assert.Equal(t, int32(0), atomic.LoadInt32(&callCount))
+	select {
+	case <-calledChan:
+		t.Fatal("telemetry should have been disabled")
+	case <-time.After(50 * time.Millisecond):
+		// Expected: no call
+	}
 
 	// Test case 2: disableTelemetry = false
 	incrementGlobalScanTelemetry(server.URL, false)
-	time.Sleep(150 * time.Millisecond) // wait for goroutine
-	assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
+	select {
+	case <-calledChan:
+		// Expected: call received
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for telemetry increment call")
+	}
 }

@@ -3738,6 +3738,21 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({ yyMm: "26123" })
       }), testEnv);
       expect(incResInvalidFormat2.status).toBe(200);
+
+      // Invalid month in custom yyMm (month 13 or 00)
+      const incResInvalidMonth = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "2613" })
+      }), testEnv);
+      expect(incResInvalidMonth.status).toBe(200);
+
+      const incResInvalidMonth2 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "2600" })
+      }), testEnv);
+      expect(incResInvalidMonth2.status).toBe(200);
     });
   });
 });
