@@ -793,8 +793,7 @@ func incrementGlobalScanTelemetry(telemetryURL string, disableTelemetry bool) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
 
-		client := &http.Client{}
-		resp, err := client.Do(req) // #nosec G704
+		resp, err := http.DefaultClient.Do(req) // #nosec G704
 		if err != nil {
 			logWarn("Warning: Failed to report telemetry scan count: %v. You can disable telemetry using --disable-telemetry or SWAZZ_DISABLE_TELEMETRY=true.", err)
 			return

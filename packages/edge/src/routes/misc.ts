@@ -43,15 +43,28 @@ export function registerMiscRoutes(
   app.post('/api/telemetry/scans/increment', async (c) => {
     const services = miscServicesFactory(c.env);
     let yyMm: string | undefined;
+    let body: any;
     try {
-      const body = await c.req.json();
-      if (body && typeof body.yyMm === 'string' && /^\d{4}$/.test(body.yyMm)) {
+      body = await c.req.json();
+    } catch {}
+
+    if (body && body.yyMm !== undefined) {
+      if (typeof body.yyMm !== "string") {
+        return c.json({ error: "yyMm must be a string" }, 400);
+      }
+      if (/^\d{4}$/.test(body.yyMm)) {
+        const yy = parseInt(body.yyMm.slice(0, 2), 10);
         const mm = parseInt(body.yyMm.slice(2), 10);
         if (mm >= 1 && mm <= 12) {
-          yyMm = body.yyMm;
+          const now = new Date();
+          const currentYy = now.getUTCFullYear() % 100;
+          const currentMm = now.getUTCMonth() + 1;
+          if (yy < currentYy || (yy === currentYy && mm <= currentMm)) {
+            yyMm = body.yyMm;
+          }
         }
       }
-    } catch {}
+    }
 
     if (!yyMm) {
       const now = new Date();

@@ -3682,11 +3682,11 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       const expectedCurrentYyMm = `${yy}${mm}`;
       expect(body2.monthly[expectedCurrentYyMm]).toBe(1);
 
-      // 4. Increment with custom yyMm (e.g. 2612)
+      // 4. Increment with custom yyMm (e.g. 2512)
       const incRes2 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yyMm: "2612" })
+        body: JSON.stringify({ yyMm: "2512" })
       }), testEnv);
       expect(incRes2.status).toBe(200);
 
@@ -3695,7 +3695,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(countRes3.status).toBe(200);
       const body3 = await countRes3.json();
       expect(body3.total).toBe(2);
-      expect(body3.monthly["2612"]).toBe(1);
+      expect(body3.monthly["2512"]).toBe(1);
       expect(body3.monthly[expectedCurrentYyMm]).toBe(1);
     });
 
@@ -3753,6 +3753,22 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({ yyMm: "2600" })
       }), testEnv);
       expect(incResInvalidMonth2.status).toBe(200);
+
+      // Future month/year (e.g. 9912) falls back to current month/year
+      const incResFuture = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "9912" })
+      }), testEnv);
+      expect(incResFuture.status).toBe(200);
+
+      // Non-string custom yyMm throws TypeError (400)
+      const incResTypeError = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: 1234 })
+      }), testEnv);
+      expect(incResTypeError.status).toBe(400);
     });
   });
 });
