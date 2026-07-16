@@ -290,6 +290,12 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
                     resolve({ rows, total: totalCount });
                     return;
                 }
+
+                // If filters are present, we can abort once we find the (limit + 1)-th match to prove there is a next page.
+                if (rows.length >= limit && matchedCount > offset + limit) {
+                    resolve({ rows, total: totalCount });
+                    return;
+                }
             }
 
             cursor.continue();
