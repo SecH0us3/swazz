@@ -78,7 +78,7 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Build a recon module inside the Go runner to query the configured reconnaissance API.
     - Log discovered assets and append discovered HTTP/HTTPS endpoints to the runner's fuzz target list or output metadata.
 
-- [ ] **Task 146: Anonymous Global Scan Counter Telemetry API**
+- [/] **Task 146: Anonymous Global Scan Counter Telemetry API**
   - **Design Goal:** Add an anonymous telemetry system to dynamically track total scans run across all runner agents globally to substantiate trust bar stats.
   - **Implementation Details:**
     - Create a completely anonymous telemetry ingestion endpoint on the edge coordinator (e.g., `POST /api/telemetry/scans/increment`).

@@ -34,12 +34,15 @@ func startAgent(args []string) {
 	var coordinatorURL, token, name, keyPathOrHex, logLevelStr, logFilterStr string
 	var dangerousNoContainer bool
 	var hasQuiet, hasLogLevel bool
+	var disableTelemetry bool
 
 	// Simple arg parsing
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--dangerous-no-container":
 			dangerousNoContainer = true
+		case "--disable-telemetry":
+			disableTelemetry = true
 		case "--log-level", "-log-level":
 			if i+1 < len(args) {
 				logLevelStr = args[i+1]
@@ -78,6 +81,10 @@ func startAgent(args []string) {
 			printHelp()
 			os.Exit(0)
 		}
+	}
+
+	if os.Getenv("SWAZZ_DISABLE_TELEMETRY") == "true" {
+		disableTelemetry = true
 	}
 
 	var finalLevel string
@@ -487,6 +494,8 @@ func startAgent(args []string) {
 					"message":   fmt.Sprintf("Starting fuzz runner for runID: %s", runID),
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
+				tURL := deriveTelemetryURL(coordinatorURL)
+				incrementGlobalScanTelemetry(tURL, disableTelemetry)
 				if err := r.Start(ctx); err != nil {
 					logError("Runner failed: %v", err)
 					sendWSError(runID, err.Error())
@@ -747,4 +756,53 @@ func inferOOBServerURL(coordinatorURL string) string {
 		u = u[:idx]
 	}
 	return u
+}
+
+func deriveTelemetryURL(coordURL string) string {
+	if coordURL == "" {
+		return "https://swazz.secmy.app/api/telemetry/scans/increment"
+	}
+	u, err := url.Parse(coordURL)
+	if err != nil || u.Host == "" {
+		return "https://swazz.secmy.app/api/telemetry/scans/increment"
+	}
+	if u.Scheme == "ws" {
+		u.Scheme = "http"
+	} else if u.Scheme == "wss" {
+		u.Scheme = "https"
+	}
+	u.Path = "/api/telemetry/scans/increment"
+	u.RawQuery = ""
+	return u.String()
+}
+
+func incrementGlobalScanTelemetry(telemetryURL string, disableTelemetry bool) {
+	if disableTelemetry {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", telemetryURL, strings.NewReader("{}")) // #nosec G704
+		if err != nil {
+			logWarn("Warning: Failed to report telemetry scan count: %v. You can disable telemetry using --disable-telemetry or SWAZZ_DISABLE_TELEMETRY=true.", err)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
+
+		client := &http.Client{}
+		resp, err := client.Do(req) // #nosec G704
+		if err != nil {
+			logWarn("Warning: Failed to report telemetry scan count: %v. You can disable telemetry using --disable-telemetry or SWAZZ_DISABLE_TELEMETRY=true.", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			logWarn("Warning: Failed to report telemetry scan count: HTTP status %d. You can disable telemetry using --disable-telemetry or SWAZZ_DISABLE_TELEMETRY=true.", resp.StatusCode)
+		}
+	}()
 }
