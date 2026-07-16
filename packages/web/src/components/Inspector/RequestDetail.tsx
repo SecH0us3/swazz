@@ -385,7 +385,7 @@ export function RequestDetail({
                                         </span>
                                     </>
                                 )}
-                                { (result.payload === undefined && result.responseBody === undefined) && (
+                                { ((result.payload === undefined && result.payloadSize > 0) || (result.responseBody === undefined && result.responseSize > 0)) && (
                                     <span style={{ color:'var(--accent-light)', marginLeft:2 }}>· Loading full data...</span>
                                 )}
                             </div>

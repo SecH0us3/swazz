@@ -661,8 +661,8 @@ export default function App() {
     const handleSelectResult = (row: ResultSummary) => {
         useAppStore.setState({ selectedResult: {
             ...row,
-            payload: row.payloadPreview || undefined,
-            responseBody: row.responsePreview || undefined,
+            payload: row.payloadPreview ?? undefined,
+            responseBody: row.responsePreview ?? undefined,
         } as FuzzResult });
     };
 
