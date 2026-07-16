@@ -50,6 +50,7 @@ app.use('/api/*', async (c, next) => {
     path.startsWith('/api/admin/') ||
     path === '/api/runners/connect' ||
     path.startsWith('/api/oob/') ||
+    path.startsWith('/api/telemetry/') ||
     (path.startsWith('/api/scans/') && path.endsWith('/upload'))
   ) {
     return await next();

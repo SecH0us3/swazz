@@ -3651,6 +3651,127 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       expect(getBody.webhooks).toEqual([]);
     });
   });
+
+  describe("Telemetry API", () => {
+    it("manages global and monthly telemetry scan counts", async () => {
+      // 1. Initial count check
+      const countRes1 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/count"), testEnv);
+      expect(countRes1.status).toBe(200);
+      const body1 = await countRes1.json();
+      expect(body1.total).toBe(0);
+      expect(body1.monthly).toEqual({});
+
+      // 2. Increment default (current month/year)
+      const incRes1 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      }), testEnv);
+      expect(incRes1.status).toBe(200);
+      const incBody1 = await incRes1.json();
+      expect(incBody1.success).toBe(true);
+
+      // 3. Verify increment
+      const countRes2 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/count"), testEnv);
+      expect(countRes2.status).toBe(200);
+      const body2 = await countRes2.json();
+      expect(body2.total).toBe(1);
+      
+      const now = new Date();
+      const yy = String(now.getUTCFullYear()).slice(-2);
+      const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const expectedCurrentYyMm = `${yy}${mm}`;
+      expect(body2.monthly[expectedCurrentYyMm]).toBe(1);
+
+      // 4. Increment with custom yyMm (e.g. 2512)
+      const incRes2 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "2512" })
+      }), testEnv);
+      expect(incRes2.status).toBe(200);
+
+      // 5. Verify custom increment
+      const countRes3 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/count"), testEnv);
+      expect(countRes3.status).toBe(200);
+      const body3 = await countRes3.json();
+      expect(body3.total).toBe(2);
+      expect(body3.monthly["2512"]).toBe(1);
+      expect(body3.monthly[expectedCurrentYyMm]).toBe(1);
+    });
+
+    it("bypasses authentication checks when AUTH_ENABLED is true", async () => {
+      const authTestEnv = {
+        ...testEnv,
+        AUTH_ENABLED: "true"
+      };
+
+      const res = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/count"), authTestEnv);
+      expect(res.status).toBe(200);
+
+      const incRes = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      }), authTestEnv);
+      expect(incRes.status).toBe(200);
+    });
+
+    it("handles invalid or malformed custom yyMm bodies by falling back to current date", async () => {
+      // Malformed JSON body
+      const incResMalformed = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{invalid-json}"
+      }), testEnv);
+      expect(incResMalformed.status).toBe(200);
+
+      // Invalid format custom yyMm (not 4 digits)
+      const incResInvalidFormat = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "abc" })
+      }), testEnv);
+      expect(incResInvalidFormat.status).toBe(200);
+      
+      const incResInvalidFormat2 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "26123" })
+      }), testEnv);
+      expect(incResInvalidFormat2.status).toBe(200);
+
+      // Invalid month in custom yyMm (month 13 or 00)
+      const incResInvalidMonth = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "2613" })
+      }), testEnv);
+      expect(incResInvalidMonth.status).toBe(200);
+
+      const incResInvalidMonth2 = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "2600" })
+      }), testEnv);
+      expect(incResInvalidMonth2.status).toBe(200);
+
+      // Future month/year (e.g. 9912) falls back to current month/year
+      const incResFuture = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: "9912" })
+      }), testEnv);
+      expect(incResFuture.status).toBe(200);
+
+      // Non-string custom yyMm throws TypeError (400)
+      const incResTypeError = await appFetchWrapper(new Request("http://localhost/api/telemetry/scans/increment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yyMm: 1234 })
+      }), testEnv);
+      expect(incResTypeError.status).toBe(400);
+    });
+  });
 });
+
 
 
