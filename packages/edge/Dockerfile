@@ -5,6 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 COPY packages/edge/package.json packages/edge/
+COPY packages/common/package.json packages/common/
+COPY packages/web/package.json packages/web/
 
 # Install dependencies including wrangler
 RUN npm ci
@@ -18,4 +20,4 @@ WORKDIR /app/packages/edge
 
 EXPOSE 8080
 
-ENTRYPOINT ["./start.sh"]
+ENTRYPOINT ["sh", "./start.sh"]
