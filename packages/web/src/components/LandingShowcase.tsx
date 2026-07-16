@@ -55,7 +55,7 @@ interface LandingShowcaseProps {
 export function LandingShowcase({ onActionClick, actionText, showPricing = true }: LandingShowcaseProps) {
     const [selectedFeature, setSelectedFeature] = useState<any>(null);
     const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
-    const [activeDeploymentTab, setActiveDeploymentTab] = useState<'cloud'|'docker'|'worker'>('cloud');
+    const [activeDeploymentTab, setActiveDeploymentTab] = useState<'cloud'|'docker'|'local'|'worker'>('cloud');
     const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
 
     const handleCopy = (text: string, id: string) => {
@@ -235,7 +235,14 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             className={`deploy-tab-btn ${activeDeploymentTab === 'docker' ? 'active' : ''}`}
                             onClick={() => setActiveDeploymentTab('docker')}
                         >
-                            Docker & Local
+                            Docker (Compose & CLI)
+                        </button>
+                        <button 
+                            type="button" 
+                            className={`deploy-tab-btn ${activeDeploymentTab === 'local' ? 'active' : ''}`}
+                            onClick={() => setActiveDeploymentTab('local')}
+                        >
+                            Local (No Docker)
                         </button>
                         <button 
                             type="button" 
@@ -267,16 +274,50 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         )}
                         {activeDeploymentTab === 'docker' && (
                             <div style={{ position: 'relative' }}>
-                                <div className="code-header">Run the Coordinator locally
+                                <div className="code-header">Option A: Run Standalone Scanner (CLI)
                                     <button 
                                         className="deploy-copy-btn" 
-                                        onClick={() => handleCopy(`docker pull sech0us3/swazz-coordinator\ndocker run -p 8787:8787 -e JWT_SECRET="your-secret" sech0us3/swazz-coordinator`, 'docker')}
+                                        onClick={() => handleCopy(`docker pull ghcr.io/sech0us3/swazz-cli:latest\ndocker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json`, 'docker-cli')}
                                     >
-                                        {copiedStates['docker'] ? 'Copied!' : 'Copy'}
+                                        {copiedStates['docker-cli'] ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
                                 <pre className="code-terminal">
-                                    <code>{`docker pull sech0us3/swazz-coordinator\ndocker run -p 8787:8787 -e JWT_SECRET="your-secret" sech0us3/swazz-coordinator`}</code>
+                                    <code>{`docker pull ghcr.io/sech0us3/swazz-cli:latest\ndocker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json`}</code>
+                                </pre>
+
+                                <div className="code-header code-header-spaced">Option B: Run Full Local Stack (Compose)
+                                    <button 
+                                        className="deploy-copy-btn" 
+                                        onClick={() => handleCopy(`git clone https://github.com/SecH0us3/swazz.git\ncd swazz && docker compose up --build`, 'docker-compose')}
+                                    >
+                                        {copiedStates['docker-compose'] ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                                <pre className="code-terminal">
+                                    <code>{`# Clone the repository and start all services (Dashboard, Coordinator, and Runner Agent)
+git clone https://github.com/SecH0us3/swazz.git
+cd swazz && docker compose up --build`}</code>
+                                </pre>
+                            </div>
+                        )}
+                        {activeDeploymentTab === 'local' && (
+                            <div style={{ position: 'relative' }}>
+                                <div className="code-header">Run the Full Stack Locally (Without Docker)
+                                    <button 
+                                        className="deploy-copy-btn" 
+                                        onClick={() => handleCopy(`git clone https://github.com/SecH0us3/swazz.git\ncd swazz && ./start-dev.sh`, 'local-nodocker')}
+                                    >
+                                        {copiedStates['local-nodocker'] ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                                <pre className="code-terminal">
+                                    <code>{`# Clone the repository
+git clone https://github.com/SecH0us3/swazz.git
+cd swazz
+
+# Install dependencies and start all dev servers + Go Runner Agent
+./start-dev.sh`}</code>
                                 </pre>
                             </div>
                         )}

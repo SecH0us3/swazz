@@ -26,7 +26,7 @@ RUN npm run build --workspace=packages/web
 FROM nginx:alpine@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
 
 # Copy built application
-COPY --from=builder /app/packages/container/web/dist /usr/share/nginx/html
+COPY --from=builder /app/packages/web/dist /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf

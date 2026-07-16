@@ -45,21 +45,11 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 ### Download Binary
 You can download the pre-compiled CLI binary from the [Releases](https://github.com/SecH0us3/swazz/releases) page for Linux, macOS, and Windows.
 
-### Docker & Cloudflare
-We publish two Docker images to the GitHub Container Registry:
-- **API Server & Web Dashboard**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)
-- **Headless CLI Fuzzer**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
+### Docker & Compose
+We package and run the Swazz application components via Docker and Docker Compose. We publish the following container image:
+- **Headless CLI Fuzzer / Scanner**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 
-For detailed information about specialized CI and AI Auto-Fix images, please see the [Docker Deployment Guide](docs/docker_images.md).
-
-For security reasons and to guarantee reproducibility, we **never use the `latest` tag**. Always use a specific commit SHA (replace `<COMMIT_SHA>` with the actual hash from our [Releases](https://github.com/SecH0us3/swazz/releases)).
-
-#### Running the API Server (Web Dashboard)
-```bash
-docker pull ghcr.io/sech0us3/swazz:<COMMIT_SHA>
-# The image exposes the backend service on container port 8080. Choose any host port you prefer:
-docker run -p 8080:8080 ghcr.io/sech0us3/swazz:<COMMIT_SHA>
-```
+For detailed instructions on running the entire Web UI, coordinator, and runner agent locally, please see the [Docker Deployment Guide](DOCKER.md).
 
 #### Running the Headless CLI
 ```bash
@@ -68,7 +58,11 @@ docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
 docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config /app/swazz.config.json
 ```
 
-If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
+If you use this repository's Compose setup, you can launch the complete dashboard, Cloudflare coordinator, and runner agent stack with a single command:
+```bash
+docker compose up --build
+```
+See [DOCKER.md](DOCKER.md) for configuration details.
 
 #### Cloudflare Pages Frontend & External Backend (GCP / Cloud)
 If you run the backend container on a cloud platform like GCP (Google Cloud Platform), you can host the client dashboard on Cloudflare Pages and proxy API requests to the cloud container.
@@ -140,11 +134,8 @@ To run Playwright tests locally:
 # Apply migrations for local D1 coordinator DB
 npx --workspace=packages/edge wrangler d1 migrations apply swazz_db --local
 
-# Start services (run each in background or separate shell session)
-npm run dev --prefix demo -- --port 8788
-npm run dev:backend
-npm run dev:frontend
-cd packages/container && go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --dangerous-no-container
+# Start all services (Dashboard, Coordinator, Demo API, and Runner Agent)
+./start-dev.sh
 
 # Run the test suite
 npx playwright install chromium
