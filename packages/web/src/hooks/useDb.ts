@@ -27,6 +27,8 @@ export interface ScanRun {
     projectId?: string;
 }
 
+import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
+
 export interface QueryOptions {
     runId: string;
     statusFilter?: 'all' | '2xx' | '4xx' | '5xx';
@@ -37,6 +39,7 @@ export interface QueryOptions {
     offset?: number;
     findingsOnly?: boolean;
     identityFilter?: string;
+    heatmapFilter?: HeatmapFilter | null;
 }
 
 // ─── DB open ─────────────────────────────────────────────────
@@ -192,6 +195,15 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
             );
         }
 
+        // Filter by heatmapFilter
+        if (opts.heatmapFilter) {
+            list = list.filter(r =>
+                r.method.toUpperCase() === opts.heatmapFilter!.method.toUpperCase() &&
+                r.endpoint === opts.heatmapFilter!.path &&
+                r.status === opts.heatmapFilter!.status
+            );
+        }
+
         // Search
         if (search) {
             const q = search.toLowerCase();
@@ -216,7 +228,7 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
 
     const rows: ResultSummary[] = [];
     let matchedCount = 0;
-    const hasFilters = search || statusFilter !== 'all' || identityFilter !== 'all' || opts.findingsOnly;
+    const hasFilters = search || statusFilter !== 'all' || identityFilter !== 'all' || opts.findingsOnly || !!opts.heatmapFilter;
 
     return new Promise((resolve, reject) => {
         const req = index.openCursor(range, direction);
@@ -254,6 +266,12 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
                     (r.status === 0 && r.error) ||
                     (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
                 );
+            }
+
+            if (matches && opts.heatmapFilter) {
+                matches = r.method.toUpperCase() === opts.heatmapFilter.method.toUpperCase() &&
+                          r.endpoint === opts.heatmapFilter.path &&
+                          r.status === opts.heatmapFilter.status;
             }
 
             if (matches && search) {
