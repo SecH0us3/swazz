@@ -289,7 +289,6 @@ This file contains completed tasks.
     - Refactored index entrypoints, Hono routes, and the coordinator Durable Object to query D1 exclusively via the `getDB` wrapper.
     - Documented the architecture design decisions and routing options in `docs/sharding.md`.
     - Added and enabled integration tests in `db.test.ts` to verify multi-shard routing.
-
 - [x] **Task 114: Slow Query Monitoring**
   - **Design Goal:** Detect and surface D1 queries that exceed acceptable latency thresholds so that performance regressions are caught before they affect end users.
   - **Implementation Details:**
@@ -298,6 +297,12 @@ This file contains completed tasks.
     - Exposes an aggregated slow-query counter as a Cloudflare Analytics Engine data point.
     - Added a `GET /api/admin/slow-queries` endpoint (admin-only) returning recent slow-query records stored in KV (TTL: 24h) for quick inspection without opening the Cloudflare console.
 
+- [x] **Task 146: Anonymous Global Scan Counter Telemetry API**
+  - **Design Goal:** Add an anonymous telemetry system to dynamically track total scans run across all runner agents globally to substantiate trust bar stats.
+  - **Implementation Details:**
+    - Create a completely anonymous telemetry ingestion endpoint on the edge coordinator (e.g., `POST /api/telemetry/scans/increment`).
+    - Ensure zero tracking of IP addresses, user accounts, or target URLs (fully compliance-safe and anonymous).
+    - Expose a public endpoint `GET /api/telemetry/scans/count` returning the total aggregated scans.
 
 ## 🔍 Detection & Analysis
 
