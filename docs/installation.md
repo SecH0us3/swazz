@@ -60,7 +60,7 @@ npm run dev
 We package and run the Swazz application components via Docker and Docker Compose. We publish the following container image:
 - **Headless CLI Fuzzer / Scanner**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 
-For detailed instructions on running the entire Web UI, coordinator, and runner agent locally, please see the [Docker Deployment Guide](../DOCKER.md).
+For detailed instructions on running the entire Web UI, coordinator, and runner agent locally, please see the [Docker Deployment Guide](https://github.com/SecH0us3/swazz/blob/master/DOCKER.md).
 
 #### Running the Headless CLI
 ```bash
@@ -73,7 +73,7 @@ If you use this repository's Compose setup, you can launch the complete dashboar
 ```bash
 docker compose up --build
 ```
-See [DOCKER.md](../DOCKER.md) for configuration details.
+See [DOCKER.md](https://github.com/SecH0us3/swazz/blob/master/DOCKER.md) for configuration details.
 
 ### CLI Mode (Backend Only)
 
