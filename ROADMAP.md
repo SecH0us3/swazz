@@ -28,10 +28,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add a `README.md` file in `/examples` describing the cookbook and linking to the recipe documentation.
     - Populate the examples directory with recipes covering configurations from basic HTTP requests and API scans to advanced multi-auth, chaining rules, and custom wordlist scans.
 
-- [ ] **Task 130: Render Infinity (∞) for Timeout status code (HTTP 0)**
-  - **Design Goal:** Improve status code visibility in result lists and logs by displaying the infinity symbol (∞) instead of `0` when a request times out or encounters a network error.
+- [ ] **Task 145: Landing Page Showcase Updates**
+  - **Design Goal:** Align landing page showcase, pricing tiers, and trust assets with DAST regulations and the browser extension.
   - **Implementation Details:**
-    - Update components rendering request status badges (e.g. `Inspector.tsx`, result lists) to check if status is `0` and display `∞` or `ERR` clearly instead of the number `0`.
+    - Rename "Enterprise Cloud" to "Support us" in the pricing section.
+    - Move "Private Dedicated Runners" features to the "Community Edition" pricing tier description.
+    - Remove "SOC 2 Type II" from the trust bar and replace it with regulations/standards requiring DAST (e.g., PCI-DSS, OWASP).
+    - Add the browser extension feature to the bento showcase tiles.
+
 
 ## 🟡 Medium Complexity
 
@@ -73,6 +77,14 @@ This roadmap tracks planned features, documentation improvements, and architectu
     - Add reconnaissance toggles and parameters (including a configurable API endpoint defaulting to https://recon1.secmy.app/) to runner settings.
     - Build a recon module inside the Go runner to query the configured reconnaissance API.
     - Log discovered assets and append discovered HTTP/HTTPS endpoints to the runner's fuzz target list or output metadata.
+
+- [ ] **Task 146: Anonymous Global Scan Counter Telemetry API**
+  - **Design Goal:** Add an anonymous telemetry system to dynamically track total scans run across all runner agents globally to substantiate trust bar stats.
+  - **Implementation Details:**
+    - Create a completely anonymous telemetry ingestion endpoint on the edge coordinator (e.g., `POST /api/telemetry/scans/increment`).
+    - Ensure zero tracking of IP addresses, user accounts, or target URLs (fully compliance-safe and anonymous).
+    - Expose a public endpoint `GET /api/telemetry/scans/count` returning the total aggregated scans.
+
 
 
 ## 🔴 High Complexity
