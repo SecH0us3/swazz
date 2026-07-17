@@ -81,10 +81,7 @@ export default {
     try {
       // MCP GET SSE transport endpoint
       if (method === "GET" && path === "/mcp/sse") {
-        const { readable, writable } = new TransformStream();
-        const writer = writable.getWriter();
         const encoder = new TextEncoder();
-
         const responseHeaders = {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
@@ -93,41 +90,42 @@ export default {
         };
 
         const epURL = "/mcp/message";
-
-        const controllerObj = {
-          send: async (msg: string) => {
-            try {
-              await writer.write(encoder.encode(`event: message\ndata: ${msg}\n\n`));
-            } catch (e) {
-              const g = globalThis as any;
-              g.mcpSSEControllers?.delete(controllerObj);
-            }
-          },
-          close: () => {
-            try {
-              writer.close();
-            } catch (e) {}
-            const g = globalThis as any;
-            g.mcpSSEControllers?.delete(controllerObj);
-          }
-        };
-
         const g = globalThis as any;
         g.mcpSSEControllers = g.mcpSSEControllers || new Set();
-        g.mcpSSEControllers.add(controllerObj);
 
-        request.signal.addEventListener("abort", () => {
-          controllerObj.close();
+        const stream = new ReadableStream({
+          start(controller) {
+            // Write the endpoint event immediately during stream creation
+            controller.enqueue(encoder.encode(`event: endpoint\ndata: ${epURL}\n\n`));
+
+            const controllerObj = {
+              send: async (msg: string) => {
+                try {
+                  controller.enqueue(encoder.encode(`event: message\ndata: ${msg}\n\n`));
+                } catch (e) {
+                  g.mcpSSEControllers?.delete(controllerObj);
+                }
+              },
+              close: () => {
+                try {
+                  controller.close();
+                } catch (e) {}
+                g.mcpSSEControllers?.delete(controllerObj);
+              }
+            };
+
+            g.mcpSSEControllers.add(controllerObj);
+
+            request.signal.addEventListener("abort", () => {
+              controllerObj.close();
+            });
+          },
+          cancel() {
+            // Stream was canceled by client
+          }
         });
 
-        // Write endpoint message asynchronously in background to avoid blocking the runtime before returning response
-        (async () => {
-          try {
-            await writer.write(encoder.encode(`event: endpoint\ndata: ${epURL}\n\n`));
-          } catch (e) {}
-        })();
-
-        return new Response(readable, { headers: responseHeaders });
+        return new Response(stream, { headers: responseHeaders });
       }
 
       // MCP POST message endpoint
