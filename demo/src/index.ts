@@ -92,7 +92,6 @@ export default {
         };
 
         const epURL = `${url.origin}/mcp/message`;
-        await writer.write(encoder.encode(`event: endpoint\ndata: ${epURL}\n\n`));
 
         const controllerObj = {
           send: async (msg: string) => {
@@ -119,6 +118,13 @@ export default {
         request.signal.addEventListener("abort", () => {
           controllerObj.close();
         });
+
+        // Write endpoint message asynchronously in background to avoid blocking the runtime before returning response
+        (async () => {
+          try {
+            await writer.write(encoder.encode(`event: endpoint\ndata: ${epURL}\n\n`));
+          } catch (e) {}
+        })();
 
         return new Response(readable, { headers: responseHeaders });
       }
@@ -217,13 +223,18 @@ export default {
           };
         }
 
-        // Broadcast JSON-RPC response to all active SSE listeners
+        // Broadcast JSON-RPC response to all active SSE listeners in the background
         const g = globalThis as any;
-        if (g.mcpSSEControllers) {
+        if (g.mcpSSEControllers && g.mcpSSEControllers.size > 0) {
           const msgStr = JSON.stringify(response);
-          for (const ctrl of g.mcpSSEControllers) {
-            await ctrl.send(msgStr);
-          }
+          const controllers = Array.from(g.mcpSSEControllers) as any[];
+          (async () => {
+            for (const ctrl of controllers) {
+              try {
+                await ctrl.send(msgStr);
+              } catch (e) {}
+            }
+          })();
         }
 
         return new Response(null, { status: 202, headers: corsHeaders });
