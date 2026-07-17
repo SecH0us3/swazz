@@ -51,7 +51,15 @@ describe('ScansRepository Unit Tests', () => {
     await repo.createScan('s-1', 'p-1', 'https://target.com', 'profile-1', 'queued', 'u-1');
 
     expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO scans'));
-    expect(mockBind).toHaveBeenCalledWith('s-1', 'p-1', 'https://target.com', 'profile-1', 'queued', 'u-1');
+    expect(mockBind).toHaveBeenCalledWith('s-1', 'p-1', 'https://target.com', 'profile-1', 'queued', 'u-1', 'manual');
+  });
+
+  it('createScan inserts scan row with custom trigger type', async () => {
+    const repo = new ScansRepository(mockEnv);
+    await repo.createScan('s-1', 'p-1', 'https://target.com', 'profile-1', 'queued', 'u-1', 'scheduled');
+
+    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO scans'));
+    expect(mockBind).toHaveBeenCalledWith('s-1', 'p-1', 'https://target.com', 'profile-1', 'queued', 'u-1', 'scheduled');
   });
 
   it('getUserPublicKey queries user public key', async () => {
