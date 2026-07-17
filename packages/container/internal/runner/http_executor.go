@@ -34,6 +34,10 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	if strings.HasPrefix(originalPath, "mcp://tool/") {
+		return r.executeMCPRequest(ctx, originalPath, payload, profile)
+	}
+
 	// Merge headers: generatedHeaders < global headers
 	isBody := !isNoBodyMethod(method)
 	mergedHeaders := make(map[string]string)
@@ -474,4 +478,115 @@ func (r *Runner) extractChainingVariables(endpoint string, resp *http.Response, 
 			r.stateMu.Unlock()
 		}
 	}
+}
+
+func (r *Runner) executeMCPRequest(
+	ctx context.Context,
+	originalPath string,
+	payload any,
+	profile swagger.FuzzingProfile,
+) *swagger.FuzzResult {
+	toolName := strings.TrimPrefix(originalPath, "mcp://tool/")
+	var args map[string]any
+	if payload != nil {
+		if m, ok := payload.(map[string]any); ok {
+			args = m
+		} else {
+			if b, err := json.Marshal(payload); err == nil {
+				_ = json.Unmarshal(b, &args)
+			}
+		}
+	}
+
+	payloadSize := 0
+	if b, err := json.Marshal(args); err == nil {
+		payloadSize = len(b)
+	}
+
+	timeoutMs := 10000
+	r.configMu.RLock()
+	if r.config.Settings.TimeoutMs > 0 {
+		timeoutMs = r.config.Settings.TimeoutMs
+	}
+	r.configMu.RUnlock()
+
+	reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer reqCancel()
+
+	startTime := time.Now()
+	res, stderr, err := r.mcpClient.CallTool(reqCtx, toolName, args)
+	duration := time.Since(startTime)
+
+	result := &swagger.FuzzResult{
+		ID:           uuid.New().String(),
+		Endpoint:     originalPath,
+		ResolvedPath: originalPath,
+		Method:       "CALL",
+		Profile:      profile,
+		Payload:      args,
+		PayloadSize:  payloadSize,
+		Duration:     duration.Milliseconds(),
+		Timestamp:    time.Now().UnixMilli(),
+	}
+
+	if err != nil {
+		result.Status = 500
+		result.Error = fmt.Sprintf("MCP Call failed: %v", err)
+		if stderr != "" {
+			result.ResponseBody = fmt.Sprintf("Error: %v\nStderr: %s", err, stderr)
+		} else {
+			result.ResponseBody = fmt.Sprintf("Error: %v", err)
+		}
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "exit status") || strings.Contains(errMsg, "process terminated") || strings.Contains(errMsg, "channel closed") || strings.Contains(errMsg, "broken pipe") {
+			result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
+				RuleID:   "mcp-server-crash",
+				Level:    "error",
+				Message:  fmt.Sprintf("The MCP server crashed during the tool invocation. Error: %s", err.Error()),
+				Evidence: fmt.Sprintf("Tool: %s\nPayload: %+v\nError: %s\nStderr: %s", toolName, args, err.Error(), stderr),
+			})
+		}
+		return result
+	}
+
+	result.Status = 200
+	var resBytes []byte
+	if res != nil {
+		resBytes, _ = json.Marshal(res)
+	}
+	result.ResponseBody = string(resBytes)
+	result.ResponseSize = int64(len(resBytes))
+
+	if r.config.Settings.AnalyzeResponseBody {
+		input := &analyzer.AnalysisInput{
+			SentPayload:     result.Payload,
+			ResponseBody:    resBytes,
+			Duration:        duration.Milliseconds(),
+			Profile:         profile,
+			Endpoint:        originalPath,
+			Method:          "CALL",
+			ResponseSize:    result.ResponseSize,
+			BaselineSize:    0,
+			SizeMultiplier:  5.0,
+			BaselineTimeMs:  0,
+			TimeThresholdMs: 0,
+		}
+		result.AnalyzerFindings = r.analyzer.Analyze(input)
+
+		for _, content := range res.Content {
+			if content.Type == "text" {
+				textLower := strings.ToLower(content.Text)
+				if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "sql syntax") {
+					result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
+						RuleID:   "mcp-tool-error-reflection",
+						Level:    "error",
+						Message:  fmt.Sprintf("The tool returned an error or exception signature in its content: %s", content.Text),
+						Evidence: fmt.Sprintf("Tool: %s\nText: %s", toolName, content.Text),
+					})
+				}
+			}
+		}
+	}
+
+	return result
 }
