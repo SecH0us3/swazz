@@ -66,7 +66,7 @@ export class ScansService implements IScansService {
     const id = ulid();
     const status = 'queued';
 
-    await this.scansRepo.createScan(id, body.project_id, body.target_url, body.profile, status, userId);
+    await this.scansRepo.createScan(id, body.project_id, body.target_url, body.profile, status, userId, body.trigger_type || 'manual');
 
     let userPublicKey = "";
     if (userId) {

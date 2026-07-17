@@ -4,7 +4,7 @@ import { dispatchWebhook } from '../utils/webhooks';
 import { logError } from '../../../common/logging/logger';
 
 export interface IScansRepository {
-  createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null): Promise<void>;
+  createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType?: string): Promise<void>;
   getUserPublicKey(userId: string): Promise<string | null>;
   getUserDetails(userId: string): Promise<{ username: string } | null>;
   getProjectMemberRole(projectId: string, userId: string): Promise<string | null>;
@@ -49,12 +49,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
     super(env);
   }
 
-  async createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null): Promise<void> {
+  async createScan(id: string, projectId: string, targetUrl: string, profile: string, status: string, userId?: string | null, triggerType: string = 'manual'): Promise<void> {
     await this.db.prepare(
-      `INSERT INTO scans (id, project_id, target_url, profile, status, user_id)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO scans (id, project_id, target_url, profile, status, user_id, trigger_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, projectId, targetUrl, profile, status, userId ?? null)
+      .bind(id, projectId, targetUrl, profile, status, userId ?? null, triggerType)
       .run();
   }
 
@@ -229,8 +229,8 @@ export class ScansRepository extends BaseService implements IScansRepository {
   async triggerScheduledScan(runId: string, projectId: string, targetUrl: string, profile: string, status: string, userId: string, configId: string, nowIso: string): Promise<void> {
     await this.db.batch([
       this.db.prepare(
-        `INSERT INTO scans (id, project_id, target_url, profile, status, user_id)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO scans (id, project_id, target_url, profile, status, user_id, trigger_type)
+         VALUES (?, ?, ?, ?, ?, ?, 'scheduled')`
       ).bind(runId, projectId, targetUrl, profile, status, userId),
       this.db.prepare(
         "UPDATE scan_configs SET last_run_at = ? WHERE id = ?"
