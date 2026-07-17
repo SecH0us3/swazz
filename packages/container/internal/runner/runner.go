@@ -34,6 +34,7 @@ import (
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/sstistore"
@@ -134,6 +135,9 @@ type Runner struct {
 	limiter       *ConcurrencyLimiter
 
 	analyzer *analyzer.AnalyzerRegistry
+
+	mcpClient mcp.Client
+	mcpMutex  sync.Mutex
 }
 
 // New creates a new Runner with sensible defaults.
@@ -189,6 +193,13 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		timeBaselines: &sync.Map{},
 		state:         make(map[string]string),
 		regexCache:    make(map[string]*regexp.Regexp),
+	}
+	if config.MCPServer != nil {
+		if config.MCPServer.Type == "stdio" {
+			r.mcpClient = mcp.NewStdioClient(config.MCPServer.Command, config.MCPServer.Args)
+		} else if config.MCPServer.Type == "sse" {
+			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL)
+		}
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
 	r.pause.cond = sync.NewCond(&r.pause.mu)
@@ -722,6 +733,39 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	r.lifecycle.cancel = cancel
 
+	// Connect to MCP Server if configured
+	if r.mcpClient != nil {
+		logger.Info("[Runner] Connecting to MCP Server...")
+		if err := r.mcpClient.Connect(ctx); err != nil {
+			logger.Error("[Runner] Failed to connect to MCP server: %v", err)
+			cancel()
+			r.lifecycle.isRunning.Store(false)
+			return nil, fmt.Errorf("failed to connect to MCP server: %w", err)
+		}
+
+		logger.Info("[Runner] Listing MCP Tools...")
+		tools, err := r.mcpClient.ListTools(ctx)
+		if err != nil {
+			logger.Error("[Runner] Failed to list MCP tools: %v", err)
+			_ = r.mcpClient.Close()
+			cancel()
+			r.lifecycle.isRunning.Store(false)
+			return nil, fmt.Errorf("failed to list MCP tools: %w", err)
+		}
+
+		logger.Info("[Runner] Found %d MCP Tools", len(tools))
+		for _, tool := range tools {
+			logger.Info("[Runner] Mapping MCP tool: %s", tool.Name)
+			ep := swagger.EndpointConfig{
+				Path:        "mcp://tool/" + tool.Name,
+				Method:      "CALL",
+				Schema:      tool.InputSchema,
+				ContentType: "application/json",
+			}
+			r.config.Endpoints = append(r.config.Endpoints, ep)
+		}
+	}
+
 	go r.statsAggregator()
 
 	r.resultsMu.Lock()
@@ -753,6 +797,9 @@ func (r *Runner) finaliseRun() {
 	r.latestStats.Store(&final)
 	r.Broadcast(Event{Type: EventComplete, Data: final})
 
+	if r.mcpClient != nil {
+		_ = r.mcpClient.Close()
+	}
 	sstistore.GlobalStore.Clear()
 	oob.GlobalStore.ClearSession(r.config.RunID)
 }
