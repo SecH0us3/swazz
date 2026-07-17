@@ -4,7 +4,7 @@ import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
 import type { ResultSummary } from './hooks/useRunner.js';
-import { useDb } from './hooks/useDb.js';
+import { useDb, type ScanRun } from './hooks/useDb.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar/Sidebar.js';
 import { RequestDetail } from './components/Inspector/RequestDetail.js';
@@ -287,6 +287,29 @@ export default function App() {
                 if (res.ok && active) {
                     const data = await res.json();
                     const scans = data.scans || [];
+
+                    // Sync all scans to local IndexedDB to catch background/scheduled runs
+                    for (const s of scans) {
+                        const localRun = runs.find((r: any) => r.id === s.id);
+                        const isCompletedOnServer = s.status === 'completed' || s.status === 'failed';
+                        const serverCompletedAt = s.completed_at ? new Date(s.completed_at).getTime() : 0;
+
+                        if (!localRun || (localRun.completedAt === 0 && isCompletedOnServer)) {
+                            const stats = s.summary_stats ? JSON.parse(s.summary_stats) : null;
+                            const startedAt = s.created_at ? new Date(s.created_at).getTime() : Date.now();
+                            const scanRun: ScanRun = {
+                                id: s.id,
+                                startedAt,
+                                completedAt: isCompletedOnServer ? (serverCompletedAt || Date.now()) : 0,
+                                baseUrl: s.target_url || '',
+                                stats,
+                                projectId: s.project_id,
+                                triggerType: s.trigger_type || 'manual'
+                            };
+                            await saveRun(scanRun);
+                        }
+                    }
+
                     const activeScan = scans.find(
                         (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running'
                     );
@@ -294,7 +317,7 @@ export default function App() {
                     if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
                         attemptedReconnections.current.add(activeScan.id);
                         const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
-                        await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url);
+                        await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url, activeScan.trigger_type);
                     }
                 }
             } catch (err) {
@@ -310,7 +333,7 @@ export default function App() {
             active = false;
             clearInterval(timer);
         };
-    }, [activeProject, handleConnectToExisting]);
+    }, [activeProject, handleConnectToExisting, runs, saveRun]);
 
     const handleImportConfig = useCallback((jsonString: string) => {
         let parsed: any;

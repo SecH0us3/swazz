@@ -227,7 +227,7 @@ export function useFuzzSession({
     };
 
     const handleConnectToExisting = useCallback(
-        async (runId: string, startedAt: number, baseUrl: string) => {
+        async (runId: string, startedAt: number, baseUrl: string, triggerType?: 'manual' | 'scheduled') => {
             const activeProject = useAppStore.getState().activeProject;
             const runRec: ScanRun = {
                 id: runId,
@@ -236,6 +236,7 @@ export function useFuzzSession({
                 baseUrl: baseUrl,
                 stats: null as any,
                 projectId: activeProject ? activeProject.id : undefined,
+                triggerType: triggerType || 'manual',
             };
 
             await saveRun(runRec);

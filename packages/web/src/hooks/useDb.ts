@@ -25,6 +25,7 @@ export interface ScanRun {
     baseUrl: string;
     stats: RunStats;
     projectId?: string;
+    triggerType?: 'manual' | 'scheduled';
 }
 
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
