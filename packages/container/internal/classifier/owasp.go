@@ -26,8 +26,10 @@ func OWASPCategories(ruleID string) []string {
 		"swazz/time-based-sqli", "swazz/time-based-cmdi":
 		return []string{"A05:2025 Injection"}
 	case "swazz/stack-trace-leak", "swazz/null-pointer-exception", "swazz/sql-error-leak",
-		"swazz/timeout", "swazz/network-error":
+		"swazz/timeout", "swazz/network-error", "swazz/mcp-server-crash":
 		return []string{"A10:2025 Mishandling of Exceptional Conditions"}
+	case "swazz/mcp-tool-error-reflection":
+		return []string{"A05:2025 Injection"}
 	default:
 		if strings.HasPrefix(ruleID, "swazz/status-5") {
 			return []string{"A10:2025 Mishandling of Exceptional Conditions"}

@@ -538,11 +538,11 @@ func (r *Runner) executeMCPRequest(
 			result.ResponseBody = fmt.Sprintf("Error: %v", err)
 		}
 		errMsg := strings.ToLower(err.Error())
-		if strings.Contains(errMsg, "exit status") || strings.Contains(errMsg, "process terminated") || strings.Contains(errMsg, "channel closed") || strings.Contains(errMsg, "broken pipe") {
+		if strings.Contains(errMsg, "status 500") || strings.Contains(errMsg, "exit status") || strings.Contains(errMsg, "process terminated") || strings.Contains(errMsg, "channel closed") || strings.Contains(errMsg, "broken pipe") {
 			result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
-				RuleID:   "mcp-server-crash",
+				RuleID:   "swazz/mcp-server-crash",
 				Level:    "error",
-				Message:  fmt.Sprintf("The MCP server crashed during the tool invocation. Error: %s", err.Error()),
+				Message:  fmt.Sprintf("The MCP server crashed or returned a server error during the tool invocation. Error: %s", err.Error()),
 				Evidence: fmt.Sprintf("Tool: %s\nPayload: %+v\nError: %s\nStderr: %s", toolName, args, err.Error(), stderr),
 			})
 		}
@@ -578,7 +578,7 @@ func (r *Runner) executeMCPRequest(
 				textLower := strings.ToLower(content.Text)
 				if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "sql syntax") {
 					result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
-						RuleID:   "mcp-tool-error-reflection",
+						RuleID:   "swazz/mcp-tool-error-reflection",
 						Level:    "error",
 						Message:  fmt.Sprintf("The tool returned an error or exception signature in its content: %s", content.Text),
 						Evidence: fmt.Sprintf("Tool: %s\nText: %s", toolName, content.Text),
