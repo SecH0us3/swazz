@@ -27,6 +27,8 @@ export interface ScanRun {
     projectId?: string;
 }
 
+import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
+
 export interface QueryOptions {
     runId: string;
     statusFilter?: 'all' | '2xx' | '4xx' | '5xx';
@@ -37,6 +39,7 @@ export interface QueryOptions {
     offset?: number;
     findingsOnly?: boolean;
     identityFilter?: string;
+    heatmapFilter?: HeatmapFilter | null;
 }
 
 // ─── DB open ─────────────────────────────────────────────────
@@ -151,56 +154,166 @@ async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSumma
  * Returns a page of ResultSummary — does NOT load everything into memory.
  */
 export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promise<{ rows: ResultSummary[]; total: number }> {
-    const { runId, statusFilter = 'all', search = '', sortKey = 'timestamp', sortDir = 'desc', limit = 200, offset = 0, identityFilter = 'all' } = opts;
+    const {
+        runId,
+        statusFilter = 'all',
+        search = '',
+        sortKey = 'timestamp',
+        sortDir = 'desc',
+        limit = 200,
+        offset = 0,
+        identityFilter = 'all',
+        findingsOnly = false,
+        heatmapFilter = null,
+    } = opts;
 
     const tx = db.transaction('results', 'readonly');
-    const index = tx.objectStore('results').index('runId');
-    const all = await promisify<(ResultSummary & { runId: string })[]>(
-        index.getAll(runId) as IDBRequest<(ResultSummary & { runId: string })[]>
-    );
+    const store = tx.objectStore('results');
+    const runIdIndex = store.index('runId');
+    const totalCount = await promisify<number>(runIdIndex.count(runId));
 
-    let list: ResultSummary[] = all.map(({ runId: _rid, ...r }) => r as ResultSummary);
+    // Fall back to in-memory sorting/filtering for small runs or duration sorting (no index)
+    const useInMemory = sortKey !== 'timestamp' || totalCount < 2000;
 
-    // Filter by identity
-    if (identityFilter && identityFilter !== 'all') {
-        list = list.filter(r => {
-            if (identityFilter === 'User A') {
-                return !r.identity || r.identity.toLowerCase() === 'user a';
-            }
-            return r.identity?.toLowerCase() === identityFilter.toLowerCase();
-        });
-    }
-
-    // Filter by status class
-    if (statusFilter === '5xx') list = list.filter(r => r.status >= 500);
-    else if (statusFilter === '4xx') list = list.filter(r => r.status >= 400 && r.status < 500);
-    else if (statusFilter === '2xx') list = list.filter(r => r.status >= 200 && r.status < 300);
-
-    // Filter by findings
-    if (opts.findingsOnly) {
-        list = list.filter(r => 
-            (r.analyzerFindings && r.analyzerFindings.length > 0) || 
-            r.status >= 500 || 
-            (r.status === 0 && r.error) ||
-            (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
+    if (useInMemory) {
+        const all = await promisify<(ResultSummary & { runId: string })[]>(
+            runIdIndex.getAll(runId) as IDBRequest<(ResultSummary & { runId: string })[]>
         );
+        let list: ResultSummary[] = all.map(({ runId: _rid, ...r }) => r as ResultSummary);
+
+        // Filter by identity
+        if (identityFilter && identityFilter !== 'all') {
+            list = list.filter(r => {
+                if (identityFilter === 'User A') {
+                    return !r.identity || r.identity.toLowerCase() === 'user a';
+                }
+                return r.identity?.toLowerCase() === identityFilter.toLowerCase();
+            });
+        }
+
+        // Filter by status class
+        if (statusFilter === '5xx') list = list.filter(r => r.status >= 500 || r.status === 0);
+        else if (statusFilter === '4xx') list = list.filter(r => r.status >= 400 && r.status < 500);
+        else if (statusFilter === '2xx') list = list.filter(r => r.status >= 200 && r.status < 300);
+
+        // Filter by findings
+        if (findingsOnly) {
+            list = list.filter(r => 
+                (r.analyzerFindings && r.analyzerFindings.length > 0) || 
+                r.status >= 500 || 
+                (r.status === 0 && r.error) ||
+                (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
+            );
+        }
+
+        // Filter by heatmapFilter
+        if (heatmapFilter) {
+            list = list.filter(r =>
+                r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                r.endpoint === heatmapFilter.path &&
+                r.status === heatmapFilter.status
+            );
+        }
+
+        // Search
+        if (search) {
+            const q = search.toLowerCase();
+            list = list.filter(r => r.endpoint.toLowerCase().includes(q) || r.profile.toLowerCase().includes(q));
+        }
+
+        // Sort
+        list.sort((a, b) => {
+            const va = sortKey === 'timestamp' ? a.timestamp : a.duration;
+            const vb = sortKey === 'timestamp' ? b.timestamp : b.duration;
+            return sortDir === 'asc' ? va - vb : vb - va;
+        });
+
+        const total = list.length;
+        return { rows: list.slice(offset, offset + limit), total };
     }
 
-    // Search
-    if (search) {
-        const q = search.toLowerCase();
-        list = list.filter(r => r.endpoint.toLowerCase().includes(q) || r.profile.toLowerCase().includes(q));
-    }
+    // Cursor-based iteration for large runs sorted by timestamp
+    const index = store.index('runId_timestamp');
+    const range = IDBKeyRange.bound([runId, 0], [runId, Infinity]);
+    const direction: IDBCursorDirection = sortDir === 'desc' ? 'prev' : 'next';
 
-    // Sort
-    list.sort((a, b) => {
-        const va = sortKey === 'timestamp' ? a.timestamp : a.duration;
-        const vb = sortKey === 'timestamp' ? b.timestamp : b.duration;
-        return sortDir === 'asc' ? va - vb : vb - va;
+    const rows: ResultSummary[] = [];
+    let matchedCount = 0;
+    const hasFilters = search || statusFilter !== 'all' || identityFilter !== 'all' || findingsOnly || !!heatmapFilter;
+
+    return new Promise((resolve, reject) => {
+        const req = index.openCursor(range, direction);
+
+        req.onsuccess = (e) => {
+            const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+            if (!cursor) {
+                resolve({ rows, total: matchedCount });
+                return;
+            }
+
+            const r = cursor.value as ResultSummary;
+
+            // Apply filters
+            let matches = true;
+
+            if (identityFilter && identityFilter !== 'all') {
+                if (identityFilter === 'User A') {
+                    matches = !r.identity || r.identity.toLowerCase() === 'user a';
+                } else {
+                    matches = r.identity?.toLowerCase() === identityFilter.toLowerCase();
+                }
+            }
+
+            if (matches && statusFilter !== 'all') {
+                if (statusFilter === '5xx') matches = r.status >= 500 || r.status === 0;
+                else if (statusFilter === '4xx') matches = r.status >= 400 && r.status < 500;
+                else if (statusFilter === '2xx') matches = r.status >= 200 && r.status < 300;
+            }
+
+            if (matches && findingsOnly) {
+                matches = !!(
+                    (r.analyzerFindings && r.analyzerFindings.length > 0) || 
+                    r.status >= 500 || 
+                    (r.status === 0 && r.error) ||
+                    (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
+                );
+            }
+
+            if (matches && heatmapFilter) {
+                matches = r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                          r.endpoint === heatmapFilter.path &&
+                          r.status === heatmapFilter.status;
+            }
+
+            if (matches && search) {
+                const q = search.toLowerCase();
+                matches = r.endpoint.toLowerCase().includes(q) || r.profile.toLowerCase().includes(q);
+            }
+
+            if (matches) {
+                matchedCount++;
+                if (matchedCount > offset && rows.length < limit) {
+                    rows.push(r);
+                }
+
+                // If no filters are present, we can abort the cursor immediately when limit is satisfied.
+                if (!hasFilters && rows.length >= limit) {
+                    resolve({ rows, total: totalCount });
+                    return;
+                }
+
+                // If filters are present, we can abort once we find the (limit + 1)-th match to prove there is a next page.
+                if (rows.length >= limit && matchedCount > offset + limit) {
+                    resolve({ rows, total: totalCount });
+                    return;
+                }
+            }
+
+            cursor.continue();
+        };
+
+        req.onerror = () => reject(req.error);
     });
-
-    const total = list.length;
-    return { rows: list.slice(offset, offset + limit), total };
 }
 
 export async function dbGetRunResults(db: IDBDatabase, runId: string): Promise<ResultSummary[]> {

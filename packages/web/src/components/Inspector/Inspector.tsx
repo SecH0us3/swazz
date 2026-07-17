@@ -267,6 +267,7 @@ export function Inspector({
             limit: findingsOnly ? 100000 : limit,
             findingsOnly,
             identityFilter,
+            heatmapFilter,
         });
 
         // Apply heatmap filter client-side (small subset)
@@ -282,7 +283,7 @@ export function Inspector({
 
         if (token === reloadRef.current) {
             setRows(displayed);
-            setTotal(heatmapFilter ? displayed.length : newTotal);
+            setTotal(newTotal);
             setIsLoading(false);
         }
     }, [runId, filter, debouncedSearch, sortConfig, heatmapFilter, queryResults, findingsOnly, limit, identityFilter]);

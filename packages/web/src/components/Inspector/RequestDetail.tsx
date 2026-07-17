@@ -195,12 +195,21 @@ export function RequestDetail({
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = formatValue(result.payload);
 
+    const [liveStatus, setLiveStatus] = useState<number>(result.status);
+    const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
+    const [liveHeaders, setLiveHeaders] = useState<Record<string, string[]>>(result.responseHeaders || {});
+    const [isReplaying, setIsReplaying] = useState(false);
+
     const [editedUrl, setEditedUrl] = useState(initialUrl);
     const [editedBody, setEditedBody] = useState(initialBody);
 
     useEffect(() => {
+        setEditedUrl(joinUrl(baseUrl, result.resolvedPath || result.endpoint));
         setEditedBody(formatValue(result.payload));
-    }, [result.payload]);
+        setLiveStatus(result.status);
+        setLiveResponse(result.responseBody);
+        setLiveHeaders(result.responseHeaders || {});
+    }, [result, baseUrl]);
 
     const matchingEndpoint = config?.endpoints.find(
         (ep) => ep.path === result.endpoint && ep.method.toUpperCase() === result.method.toUpperCase()
@@ -271,11 +280,6 @@ export function RequestDetail({
             setSubTab('headers');
         }
     }, [result, hasQueryDiff]);
-
-    const [liveStatus, setLiveStatus] = useState<number>(result.status);
-    const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
-    const [liveHeaders, setLiveHeaders] = useState<Record<string, string[]>>(result.responseHeaders || {});
-    const [isReplaying, setIsReplaying] = useState(false);
 
     const copy = (text: string, label: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -381,7 +385,7 @@ export function RequestDetail({
                                         </span>
                                     </>
                                 )}
-                                { (result.payload === undefined && result.responseBody === undefined) && (
+                                { ((result.payload === undefined && result.payloadSize > 0) || (result.responseBody === undefined && (result.responseSize ?? 0) > 0)) && (
                                     <span style={{ color:'var(--accent-light)', marginLeft:2 }}>· Loading full data...</span>
                                 )}
                             </div>
