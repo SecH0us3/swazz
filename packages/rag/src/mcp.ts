@@ -1,5 +1,9 @@
 import * as readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 import { initDb, searchChunks } from './db.js';
 import { createEmbeddingClient } from './embedding.js';
 
@@ -183,6 +187,33 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
               }
             }
           }
+        },
+        {
+          name: 'swazz_list_github_tasks',
+          description: 'Lists all available GitHub tasks from the project roadmap, returning their titles, IDs, and detailed checklists. Useful to know what to work on next.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              status: {
+                type: 'string',
+                description: 'Filter by status (e.g. "Todo", "In Progress", "Done"). Defaults to "Todo".'
+              }
+            }
+          }
+        },
+        {
+          name: 'swazz_update_task_status',
+          description: 'Moves a GitHub Project item to "Done" status. Use this automatically upon completing a task.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              item_id: {
+                type: 'string',
+                description: 'The exact ID of the GitHub project item (e.g., PVTI_lAHOAFg2Ls4BdsI...)'
+              }
+            },
+            required: ['item_id']
+          }
         }
       ];
 
@@ -216,7 +247,7 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
         return;
       }
 
-      const localToolNames = ['swazz_search_code', 'swazz_get_file_context', 'swazz_list_files'];
+      const localToolNames = ['swazz_search_code', 'swazz_get_file_context', 'swazz_list_files', 'swazz_list_github_tasks', 'swazz_update_task_status'];
       if (!localToolNames.includes(name)) {
         // Forward call to coordinator!
         const apiUrl = process.env.SWAZZ_API_URL;
@@ -386,6 +417,68 @@ async function handleRequest(request: JsonRpcRequest, db: DatabaseSync, embedder
         } catch (err: any) {
           console.error('[Swazz MCP] List files failed:', err);
           sendError(id, -32603, `List files failed: ${err.message}`);
+        }
+      } else if (name === 'swazz_list_github_tasks') {
+        const targetStatus = args?.status || 'Todo';
+        console.error(`[Swazz MCP] Fetching tasks from GitHub Project (Status: ${targetStatus})...`);
+        try {
+          const { stdout } = await execAsync('rtk gh project item-list 7 --owner SecH0us3 --format json --limit 200');
+          const data = JSON.parse(stdout);
+          
+          if (!data.items || data.items.length === 0) {
+            sendResponse(id, {
+              content: [{ type: 'text', text: 'No tasks found on the project board.' }]
+            });
+            return;
+          }
+
+          const filteredItems = data.items.filter((item: any) => item.status === targetStatus);
+
+          if (filteredItems.length === 0) {
+            sendResponse(id, {
+              content: [{ type: 'text', text: `No tasks found with status: ${targetStatus}` }]
+            });
+            return;
+          }
+
+          const tasks = filteredItems.map((item: any) => {
+            const content = item.content || {};
+            const title = content.title || 'Untitled';
+            const body = content.body || '';
+            const statusField = item.status || 'Todo';
+            const item_id = item.id;
+            return `### Task: ${title}\n**ID:** ${item_id}\n**Status:** ${statusField}\n\n**Details:**\n${body}`;
+          }).join('\n\n---\n\n');
+
+          sendResponse(id, {
+            content: [{ type: 'text', text: tasks }]
+          });
+        } catch (err: any) {
+          console.error('[Swazz MCP] Fetching GitHub tasks failed:', err);
+          sendError(id, -32603, `Failed to retrieve tasks from GitHub: ${err.message}`);
+        }
+      } else if (name === 'swazz_update_task_status') {
+        const item_id = args?.item_id;
+        if (!item_id) {
+          sendError(id, -32602, 'Missing item_id parameter');
+          return;
+        }
+
+        console.error(`[Swazz MCP] Marking GitHub Project item ${item_id} as Done...`);
+        try {
+          // Hardcoded project and field IDs from documentation
+          const projectId = 'PVT_kwHOAFg2Ls4BdsI1';
+          const fieldId = 'PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0';
+          const doneOptionId = '98236657';
+          
+          await execAsync(`rtk gh project item-edit --id ${item_id} --project-id ${projectId} --field-id ${fieldId} --single-select-option-id ${doneOptionId}`);
+          
+          sendResponse(id, {
+            content: [{ type: 'text', text: `Successfully marked item ${item_id} as Done.` }]
+          });
+        } catch (err: any) {
+          console.error('[Swazz MCP] Updating GitHub task status failed:', err);
+          sendError(id, -32603, `Failed to update task status: ${err.message}`);
         }
       } else {
         sendError(id, -32601, `Method not found: ${name}`);
