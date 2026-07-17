@@ -226,6 +226,7 @@ export default {
 
         // Broadcast JSON-RPC response to all active SSE listeners synchronously before returning response
         const g = globalThis as any;
+        console.log("[DEMO API] Broadcasting to controllers count:", g.mcpSSEControllers?.size || 0);
         if (g.mcpSSEControllers && g.mcpSSEControllers.size > 0) {
           const msgStr = JSON.stringify(response);
           const controllers = Array.from(g.mcpSSEControllers) as any[];
