@@ -3,6 +3,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    console.log(`[DEMO API] INCOMING REQUEST: [${method}] ${path}`);
 
     // Helper to simulate various vulnerability errors based on inputs
     const checkAllVulnerabilities = async (input: any) => {
