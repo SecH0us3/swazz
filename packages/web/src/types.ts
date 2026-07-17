@@ -147,6 +147,13 @@ export interface IgnoreRule {
     status_code?: number | string;
 }
 
+export interface MCPServerConfig {
+    type: 'stdio' | 'sse';
+    command?: string;
+    args?: string[];
+    url?: string;
+}
+
 export interface SwazzConfig {
     base_url: string;
     global_headers: Record<string, string>;
@@ -171,6 +178,7 @@ export interface SwazzConfig {
     };
     /** Project this scan belongs to. Stripped before sending to the Go agent. */
     projectId?: string;
+    mcp_server?: MCPServerConfig;
 }
 
 // ─── Results ────────────────────────────────────────────

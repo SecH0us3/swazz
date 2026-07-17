@@ -50,6 +50,7 @@ type CliConfig struct {
 	AuthIdentities      map[string]swagger.AuthIdentity  `json:"auth_identities,omitempty"`
 	Variables           map[string]any                   `json:"variables,omitempty"`
 	Security            swagger.SecurityConfig           `json:"security"`
+	MCPServer           *swagger.MCPServerConfig         `json:"mcp_server,omitempty"`
 }
 
 func (c *CliConfig) Validate() error {
@@ -467,8 +468,27 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		return nil, fmt.Errorf("configuration validation failed: %v", err)
 	}
 
-	if len(cliCfg.SwaggerURLs) == 0 && len(cliCfg.EndpointDefinitions) == 0 {
-		return nil, fmt.Errorf("config must specify at least one swagger_url or provide endpoint_definitions (e.g. via browser extension sync)")
+	if cliCfg.MCPServer != nil {
+		if cliCfg.MCPServer.Type != "stdio" && cliCfg.MCPServer.Type != "sse" {
+			return nil, fmt.Errorf("invalid mcp_server type: must be 'stdio' or 'sse'")
+		}
+		if cliCfg.MCPServer.Type == "stdio" {
+			if cliCfg.MCPServer.Command == "" {
+				return nil, fmt.Errorf("mcp_server command cannot be empty for stdio type")
+			}
+		}
+		if cliCfg.MCPServer.Type == "sse" {
+			if cliCfg.MCPServer.URL == "" {
+				return nil, fmt.Errorf("mcp_server url cannot be empty for sse type")
+			}
+			if !strings.HasPrefix(cliCfg.MCPServer.URL, "http://") && !strings.HasPrefix(cliCfg.MCPServer.URL, "https://") {
+				return nil, fmt.Errorf("mcp_server url must start with http:// or https://")
+			}
+		}
+	}
+
+	if len(cliCfg.SwaggerURLs) == 0 && len(cliCfg.EndpointDefinitions) == 0 && cliCfg.MCPServer == nil {
+		return nil, fmt.Errorf("config must specify at least one swagger_url, provide endpoint_definitions (e.g. via browser extension sync), or configure mcp_server")
 	}
 
 	if cliCfg.Settings.IterationsPerProfile <= 0 {
@@ -586,7 +606,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 	if len(cliCfg.EndpointDefinitions) > 0 && len(cliCfg.SwaggerURLs) == 0 {
 		logger.Debug("[Config] Using %d pre-parsed endpoint_definitions (browser extension mode)", len(cliCfg.EndpointDefinitions))
 		allEndpoints = cliCfg.EndpointDefinitions
-		if basePath == "" {
+		if basePath == "" && cliCfg.MCPServer == nil {
 			return nil, fmt.Errorf("no base_url found in config — required when using endpoint_definitions without swagger_url")
 		}
 	} else {
@@ -710,7 +730,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		// Also merge any pre-parsed endpoint_definitions on top of spec endpoints
 		allEndpoints = append(allEndpoints, cliCfg.EndpointDefinitions...)
 
-		if basePath == "" {
+		if basePath == "" && cliCfg.MCPServer == nil {
 			return nil, fmt.Errorf("no base_url found in config or specs")
 		}
 	}
@@ -741,7 +761,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		logger.Debug("[Config] Endpoints after filtering: %d", len(allEndpoints))
 	}
 
-	if len(allEndpoints) == 0 {
+	if len(allEndpoints) == 0 && cliCfg.MCPServer == nil {
 		return nil, fmt.Errorf("no endpoints remaining after filtering")
 	}
 
@@ -758,6 +778,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		AuthIdentities: cliCfg.AuthIdentities,
 		Variables:      cliCfg.Variables,
 		Security:       cliCfg.Security,
+		MCPServer:      cliCfg.MCPServer,
 	}
 
 	if err := swagger.LoadWordlists(runCfg); err != nil {
