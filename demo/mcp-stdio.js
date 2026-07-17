@@ -111,10 +111,19 @@ rl.on('line', (line) => {
             ]
           };
         } catch (err) {
-          // Send error response as JSON-RPC error mapping to swazz/mcp-tool-error-reflection
-          response.error = {
-            code: -32603,
-            message: `Internal error: ${err.message}`
+          if (err.message.includes("SQL syntax")) {
+            // Crash the server on SQL injection payloads to simulate A10:2025 crash
+            console.error(`Database panic: ${err.message}`);
+            process.exit(1);
+          }
+          // Return exception text on other payloads to simulate A05:2025 exception reflection
+          response.result = {
+            content: [
+              {
+                type: "text",
+                text: `Unhandled exception in database: ${err.message}`
+              }
+            ]
           };
         }
       } else {
