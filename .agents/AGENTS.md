@@ -17,6 +17,10 @@
 ## Code Search & Exploration
 - **Prefer custom RAG tools**: For searching code or retrieving file structures/outlines, always prefer the custom MCP tools `swazz_search_code` and `swazz_get_file_context` over generic grep, find, or complete file views where possible.
 
+## Task Discovery
+- **Finding available tasks**: When the user asks what tasks are available, what to work on next, or requests a list of tasks — always fetch the GitHub Project board: https://github.com/users/SecH0us3/projects/7/views/2
+  Use `rtk gh project item-list 7 --owner SecH0us3 --format json` to get the full task list with statuses, then present tasks that are in **"Todo"** status as the available ones.
+
 ## Roadmap Management
 - **Roadmap updates on task completion**: When a task from the GitHub Project board (Project #7, owner `SecH0us3`) is completed/implemented, always update its status to "Done" (option ID `98236657` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`) using the `rtk gh project item-edit` command.
 
