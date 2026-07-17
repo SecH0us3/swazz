@@ -25,14 +25,18 @@ When handling a Task N, delegate to specialized subagents:
 
 **Universal Workflow:**
 1. Create a git branch `feature/task-N`.
-2. Generate `implementation_plan.md`. CRITICAL: Read the ENTIRE task description in ROADMAP.md (including parentheses) and explicitly include Documentation updates in the plan. Wait for user approval.
+2. Generate `implementation_plan.md`. CRITICAL: Read the ENTIRE task description from the GitHub Project board (Project #7, owner `SecH0us3`, using `rtk gh project item-list 7 --owner SecH0us3 --format json`) and explicitly include Documentation updates in the plan. Wait for user approval.
 3. Write code, sandboxed unit tests, and Playwright E2E integration tests (in `tests/e2e/`). Run `scripts/test-backend.sh` and `bash tests/e2e/run-e2e.sh` to validate functionality and fix any reported SAST/linter warnings or E2E failures.
 4. TEST AUDIT: Invoke the `test_auditor` subagent to review the PR/changes. DO NOT proceed until `test_auditor` confirms that all new logic is adequately covered by unit/integration tests.
 5. UI QA EVALUATION: If the task involved significant frontend changes, evaluate if visual verification is necessary. If yes, invoke `qa_tester` to use built-in browser tools. Do not run UI tests blindly for minor UI tweaks.
 6. INTEGRATION CHECK: Verify that new backend features are actually invoked by the main execution pipeline (`main.go` and `api/handlers.go`). Ensure frontend UI completely aligns with backend security constraints.
 7. Update `README.md` or files in `docs/` to reflect any new configurations or features.
-8. Mark task as `[/]` in ROADMAP.md, generate `walkthrough.md`, wait for review.
-9. Only check off `[x]` upon explicit human consent.
+8. Update the task status to "In Progress" (option ID `47fc9ee4` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`) on the project board:
+   `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 47fc9ee4`
+   Generate a `walkthrough.md` artifact summarizing changes. **STOP** and wait for final human review.
+9. Only update the task status to "Done" (option ID `98236657`):
+   `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`
+   upon explicit human consent.
 10. SELF-CRITICAL REVIEW: Before final review, invoke the `self-critical-review` skill to systematically check for dead code, unused CSS styles, UTC timezone compliance, resource/memory leaks, and rule integrations.
 
 ## 📋 Code Quality & PR Constraints (AGENTS.md rules)

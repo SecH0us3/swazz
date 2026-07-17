@@ -18,7 +18,7 @@
 - **Prefer custom RAG tools**: For searching code or retrieving file structures/outlines, always prefer the custom MCP tools `swazz_search_code` and `swazz_get_file_context` over generic grep, find, or complete file views where possible.
 
 ## Roadmap Management
-- **Roadmap updates on task completion**: When a task from [ROADMAP.md](file:///Users/alex/src/swazz/ROADMAP.md) is completed/implemented, always move it to [ROADMAP-DONE.md](file:///Users/alex/src/swazz/ROADMAP-DONE.md) marked as completed (`[x]`).
+- **Roadmap updates on task completion**: When a task from the GitHub Project board (Project #7, owner `SecH0us3`) is completed/implemented, always update its status to "Done" (option ID `98236657` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`) using the `gh project item-edit` command.
 
 ## Branch Verification & Metadata Scripts
 - **Running complete test suite**: Before finishing or reviewing any branch, verify compilation, unit/integration tests, and frontend build. Do NOT run the full E2E test suite automatically. Instead, ask the user before running full E2E tests, or run only targeted tests covering the changed functionality (e.g., `bash tests/e2e/run-e2e.sh tests/e2e/<targeted>.spec.ts`).
