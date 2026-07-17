@@ -16,6 +16,7 @@ import (
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/har"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
@@ -530,6 +531,29 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 
 			specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
 			if err != nil {
+				// fallback to MCP HTTP probe
+				mcpClient := mcp.NewHTTPClient(urlStr)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if mcpErr := mcpClient.Connect(ctx); mcpErr == nil {
+					// It is an MCP HTTP server!
+					tools, _ := mcpClient.ListTools(ctx)
+					var eps []swagger.EndpointConfig
+					for _, t := range tools {
+						eps = append(eps, swagger.EndpointConfig{
+							Method: "MCP",
+							Path:   t.Name,
+							Schema: t.InputSchema,
+						})
+					}
+					logger.Debug("[Config] Parsed MCP server %s: %d tools found", urlStr, len(eps))
+					resChan <- specResult{
+						urlStr:    urlStr,
+						endpoints: eps,
+						basePath:  urlStr,
+					}
+					return
+				}
 				resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}
 				return
 			}
