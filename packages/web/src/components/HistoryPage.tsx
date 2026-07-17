@@ -255,6 +255,11 @@ export function HistoryPage({
                                                 </td>
                                                 <td style={{ padding: '16px', fontWeight: 500 }}>
                                                     <span>{formatDate(r.startedAt)}</span>
+                                                    {r.triggerType === 'scheduled' && (
+                                                        <span className="badge badge-scheduled">
+                                                            Scheduled
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td style={{ padding: '16px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {r.baseUrl ? r.baseUrl.replace(/^https?:\/\//i, '') : '(no url)'}
