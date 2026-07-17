@@ -152,4 +152,12 @@ This document lists candidate E2E test scenarios to be added to the Swazz suite 
   3. Verify that the findings are correctly aggregated under `A03:2021-Injection` and `A01:2021-Broken Access Control` (for BOLA).
   4. Expand a category card to verify it lists the correct finding instances.
 
+## 18. Interactive Application Security Testing (IAST) Integration
+* **Objective**: Verify that the fuzzer supports interactive runtime analysis to track data flows, verify execution context, and detect code-level vulnerability sinks in real-time.
+* **Test Steps**:
+  1. Instrument the target application with a dynamic agent (e.g., node agent or JVM agent).
+  2. Perform a fuzzer scan run against the instrumented endpoints.
+  3. Verify that the runner agent collects telemetry, taint analysis data, and runtime vulnerability warnings via direct process hooks.
+  4. Ensure that the findings dashboard displays enriched IAST stack traces and verifies precise code locations of vulnerability sinks.
+
 
