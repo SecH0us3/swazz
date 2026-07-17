@@ -57,4 +57,15 @@ describe('UserSettings Component', () => {
         expect(screen.getByText(/Claude Desktop Setup/i)).toBeTruthy();
         expect(screen.getAllByText(/Google Antigravity/i).length).toBeGreaterThan(0);
     });
+
+    it('can switch to Traffic Capture subtab and show extension sync options', () => {
+        render(<UserSettings />);
+
+        // Switch to Traffic Capture subtab
+        const trafficTabBtn = screen.getByRole('button', { name: /Traffic Capture/i });
+        fireEvent.click(trafficTabBtn);
+
+        expect(screen.getByText('Browser Extension Sync')).toBeTruthy();
+        expect(screen.getByText(/Connect the Swazz Traffic Capturer/i)).toBeTruthy();
+    });
 });

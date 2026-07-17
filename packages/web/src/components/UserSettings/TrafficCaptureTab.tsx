@@ -12,7 +12,7 @@ export function TrafficCaptureTab() {
 
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('swazz_token') : null;
     const projectId = activeProject?.id || '';
-    const targetUrl = config?.base_url || 'http://localhost:8080';
+    const targetUrl = projectId ? (config?.base_url || 'http://localhost:8080') : '';
 
     const handleCopyToken = () => {
         if (token) {
@@ -66,17 +66,22 @@ export function TrafficCaptureTab() {
                         <div className="traffic-capture-credential-item">
                             <span className="traffic-capture-credential-label">Target Base URL</span>
                             <div className="traffic-capture-credential-value-row">
-                                <span className="traffic-capture-credential-value">{targetUrl}</span>
+                                <span className="traffic-capture-credential-value">
+                                    {projectId ? targetUrl : <span className="text-muted">No active project selected</span>}
+                                </span>
                             </div>
                         </div>
 
                         <div className="traffic-capture-credential-item">
                             <span className="traffic-capture-credential-label">Active Project ID</span>
                             <div className="traffic-capture-credential-value-row">
-                                <span className="traffic-capture-credential-value">{projectId}</span>
+                                <span className="traffic-capture-credential-value">
+                                    {projectId ? projectId : <span className="text-muted">No active project selected</span>}
+                                </span>
                                 <button 
                                     className="btn btn-ghost traffic-capture-copy-btn" 
                                     onClick={handleCopyProjectId}
+                                    disabled={!projectId}
                                 >
                                     {copiedId ? 'Copied!' : 'Copy'}
                                 </button>
