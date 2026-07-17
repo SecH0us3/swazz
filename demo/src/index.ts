@@ -130,7 +130,7 @@ export default {
       }
 
       // MCP POST message endpoint
-      if (method === "POST" && path === "/mcp/message") {
+      if (method === "POST" && (path === "/mcp/message" || path === "/mcp/sse/message")) {
         let reqBody: any;
         try {
           reqBody = await request.json();
