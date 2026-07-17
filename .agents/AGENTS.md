@@ -25,6 +25,7 @@
 
 ## Branch Verification & Metadata Scripts
 - **Running complete test suite**: Before finishing or reviewing any branch, verify compilation, unit/integration tests, and frontend build. Do NOT run the full E2E test suite automatically. Instead, ask the user before running full E2E tests, or run only targeted tests covering the changed functionality (e.g., `bash tests/e2e/run-e2e.sh tests/e2e/<targeted>.spec.ts`).
+- **Running frontend unit tests**: When running `vitest` unit tests for the frontend (`packages/web`), always run the test command with the working directory set to `packages/web/` (e.g. command `rtk npx vitest run src/components/UserSettings.test.tsx` with Cwd `packages/web`). Running from the root directory will cause JSDOM environment errors (like `window is not defined`).
 - **Checking branch metadata**: To get current branch status, default branch, merge base, and changed files in JSON format, run `bash scripts/git-meta.sh`.
 ## Git and Tracking
 - **Never track docs/superpowers/**: The `docs/superpowers/` folder contains plan and design files that are gitignored. Do NOT run `git add -f` or track any files under `docs/superpowers/` in Git. Keep them local and untracked.
