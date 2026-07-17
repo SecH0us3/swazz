@@ -1,5 +1,6 @@
 import { ChangeEvent, useState, useRef } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig } from '../../types.js';
+import { detectMcpServer } from '../../services/swaggerService.js';
 
 import type { ScanRun } from '../../hooks/useDb.js';
 
@@ -55,9 +56,26 @@ export function Sidebar({
         return cleanUrl;
     };
 
-    const addUrl = () => {
+    const addUrl = async () => {
         const trimmed = normalizeUrl(urlInput);
         if (!trimmed) return;
+
+        try {
+            onToast(`Checking target type for ${trimmed}...`, 'info');
+            const mcpType = await detectMcpServer(trimmed);
+            if (mcpType) {
+                onUpdateConfig({
+                    mcp_server: {
+                        type: mcpType,
+                        url: trimmed
+                    }
+                });
+                setUrlInput('');
+                onToast(`✓ Detected MCP Server (${mcpType.toUpperCase()}) at ${trimmed}. Enabled MCP Fuzzing!`, 'success');
+                return;
+            }
+        } catch {}
+
         if (swaggerUrls.includes(trimmed)) {
             onToast('This URL is already in the list', 'error');
             return;

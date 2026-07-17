@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useToast } from '../../hooks/useToast.js';
-import { loadSwaggerUrl, parseRawSpec } from '../../services/swaggerService.js';
+import { loadSwaggerUrl, parseRawSpec, detectMcpServer } from '../../services/swaggerService.js';
 
 export function ApiSpecsTab() {
     const { config, updateConfig } = useConfig();
@@ -56,13 +56,30 @@ export function ApiSpecsTab() {
     const addUrl = async () => {
         const trimmed = normalizeUrl(urlInput);
         if (!trimmed) return;
-        if (swaggerUrls.includes(trimmed)) {
-            showToast('This URL is already in the list', 'error');
-            return;
-        }
+
         const newUrls = [...swaggerUrls, trimmed];
         setIsLoading(true);
         try {
+            showToast(`Checking target type for ${trimmed}...`, 'info');
+            const mcpType = await detectMcpServer(trimmed);
+            if (mcpType) {
+                updateConfig({
+                    mcp_server: {
+                        type: mcpType,
+                        url: trimmed
+                    }
+                });
+                setUrlInput('');
+                showToast(`✓ Detected MCP Server (${mcpType.toUpperCase()}) at ${trimmed}. Enabled MCP Fuzzing!`, 'success');
+                setIsLoading(false);
+                return;
+            }
+
+            if (swaggerUrls.includes(trimmed)) {
+                showToast('This URL is already in the list', 'error');
+                setIsLoading(false);
+                return;
+            }
             showToast(`Loading endpoints from ${trimmed}...`, 'info');
             const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
                 trimmed,

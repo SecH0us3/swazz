@@ -74,3 +74,43 @@ export async function parseRawSpec(
     };
 }
 
+export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | null> {
+    try {
+        // 1. Try SSE check: Send GET request with Accept header
+        const resGet = await fetch(urlStr, {
+            method: 'GET',
+            headers: { 'Accept': 'text/event-stream' }
+        });
+        const contentType = resGet.headers.get('Content-Type') || '';
+        if (resGet.ok && contentType.includes('event-stream')) {
+            return 'sse';
+        }
+    } catch {}
+
+    try {
+        // 2. Try HTTP JSON-RPC check: Send POST initialize request
+        const resPost = await fetch(urlStr, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'initialize',
+                id: 1,
+                params: {
+                    protocolVersion: '2024-11-05',
+                    capabilities: {},
+                    clientInfo: { name: 'swazz-detector', version: '1.0.0' }
+                }
+            })
+        });
+        if (resPost.ok) {
+            const data = await resPost.json();
+            if (data && data.jsonrpc === '2.0' && (data.result?.protocolVersion || data.error)) {
+                return 'http';
+            }
+        }
+    } catch {}
+
+    return null;
+}
+

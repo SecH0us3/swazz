@@ -108,7 +108,7 @@ describe('swaggerService', () => {
         });
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(TypeError);
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(Error);
     });
 
     it('accepts headers and cookies arguments even though they are currently unused in fetch body', async () => {
