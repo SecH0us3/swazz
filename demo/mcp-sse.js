@@ -148,7 +148,7 @@ const server = http.createServer((req, res) => {
                 // Respond with HTTP 500 to simulate a server crash or exit
                 res.writeHead(500, { "Content-Type": "application/json" });
                 res.end(JSON.stringify({ error: err.message }));
-                process.exit(1);
+                return;
               }
               // Return exception text on other payloads to simulate A05:2025 exception reflection
               response.result = {
