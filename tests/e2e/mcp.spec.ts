@@ -113,8 +113,9 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     // Merge MCP Server config
     config.mcp_server = {
-      type: "sse",
-      url: "http://127.0.0.1:8788/mcp/sse"
+      type: "stdio",
+      command: "node",
+      args: ["demo/mcp-stdio.js"]
     };
     // Keep intensity low
     config.settings.profiles = ["RANDOM"];
