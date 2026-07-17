@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"swazz-engine/internal/swagger"
@@ -769,5 +770,147 @@ func (c *SSEClient) Close() error {
 	}
 	c.pendingMu.Unlock()
 
+	return nil
+}
+
+// HTTPClient implements the Client interface using simple HTTP POST JSON-RPC.
+type HTTPClient struct {
+	url        string
+	httpClient *http.Client
+	nextID     uint64
+}
+
+// NewHTTPClient initializes a new HTTPClient.
+func NewHTTPClient(urlStr string) *HTTPClient {
+	return &HTTPClient{
+		url:        urlStr,
+		httpClient: &http.Client{},
+	}
+}
+
+// Connect performs the initialize handshake.
+func (c *HTTPClient) Connect(ctx context.Context) error {
+	// Perform initialize handshake
+	if err := c.initializeHandshake(ctx); err != nil {
+		return fmt.Errorf("handshake failed: %w", err)
+	}
+	return nil
+}
+
+func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json.RawMessage) (*Response, error) {
+	id := atomic.AddUint64(&c.nextID, 1)
+	reqObj := Request{
+		JSONRPC: "2.0",
+		Method:  method,
+		Params:  params,
+		ID:      id,
+	}
+
+	reqBytes, err := json.Marshal(reqObj)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.url, bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP request failed with status %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var respObj Response
+	if err := json.Unmarshal(respBytes, &respObj); err != nil {
+		return nil, err
+	}
+
+	return &respObj, nil
+}
+
+func (c *HTTPClient) initializeHandshake(ctx context.Context) error {
+	initParams := map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo": map[string]any{
+			"name":    "swazz-client",
+			"version": "1.0.0",
+		},
+	}
+	paramsBytes, err := json.Marshal(initParams)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.sendRequest(ctx, "initialize", paramsBytes)
+	if err != nil {
+		return err
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("initialize error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+	return nil
+}
+
+// ListTools retrieves the list of tools from the HTTP JSON-RPC server.
+func (c *HTTPClient) ListTools(ctx context.Context) ([]Tool, error) {
+	resp, err := c.sendRequest(ctx, "tools/list", nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("tools/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Tools []Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal tools/list result: %w", err)
+	}
+	return result.Tools, nil
+}
+
+// CallTool invokes a tool on the HTTP JSON-RPC server.
+func (c *HTTPClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResult, string, error) {
+	params := map[string]any{
+		"name":      name,
+		"arguments": arguments,
+	}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.Error != nil {
+		return nil, "", fmt.Errorf("tools/call error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result CallToolResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal tools/call result: %w", err)
+	}
+	return &result, "", nil
+}
+
+// Close is a no-op for HTTPClient.
+func (c *HTTPClient) Close() error {
 	return nil
 }

@@ -370,9 +370,106 @@ func TestSSEClient_FallbackWriteURL(t *testing.T) {
 	}()
 
 	assert.Equal(t, ts.URL+"/sse/message", client.writeURL)
-
+	
 	tools, err := client.ListTools(ctx)
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
 	assert.Equal(t, "sse_tool", tools[0].Name)
+}
+
+func TestHTTPClient_Success(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var req Request
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var response Response
+		response.JSONRPC = "2.0"
+		response.ID = req.ID
+
+		switch req.Method {
+		case "initialize":
+			initResult := map[string]any{
+				"protocolVersion": "2024-11-05",
+				"capabilities":    map[string]any{},
+				"serverInfo": map[string]any{
+					"name":    "mock-http-server",
+					"version": "1.0.0",
+				},
+			}
+			resBytes, _ := json.Marshal(initResult)
+			response.Result = resBytes
+
+		case "tools/list":
+			tools := []Tool{
+				{
+					Name:        "http_tool",
+					Description: "HTTP tool",
+					InputSchema: swagger.SchemaProperty{
+						Type: "object",
+					},
+				},
+			}
+			result := map[string]any{
+				"tools": tools,
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "tools/call":
+			result := CallToolResult{
+				Content: []Content{
+					{
+						Type: "text",
+						Text: "HTTP Success",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+		}
+
+		respBytes, _ := json.Marshal(response)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(respBytes)
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	client := NewHTTPClient(ts.URL + "/mcp")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := client.Connect(ctx)
+	require.NoError(t, err)
+
+	tools, err := client.ListTools(ctx)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	assert.Equal(t, "http_tool", tools[0].Name)
+
+	res, stderr, err := client.CallTool(ctx, "http_tool", map[string]any{"x": "y"})
+	require.NoError(t, err)
+	assert.Empty(t, stderr)
+	require.Len(t, res.Content, 1)
+	assert.Equal(t, "HTTP Success", res.Content[0].Text)
+
+	err = client.Close()
+	require.NoError(t, err)
 }

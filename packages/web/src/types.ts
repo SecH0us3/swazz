@@ -148,7 +148,7 @@ export interface IgnoreRule {
 }
 
 export interface MCPServerConfig {
-    type: 'stdio' | 'sse';
+    type: 'stdio' | 'sse' | 'http';
     command?: string;
     args?: string[];
     url?: string;

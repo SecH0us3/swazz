@@ -469,17 +469,17 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 	}
 
 	if cliCfg.MCPServer != nil {
-		if cliCfg.MCPServer.Type != "stdio" && cliCfg.MCPServer.Type != "sse" {
-			return nil, fmt.Errorf("invalid mcp_server type: must be 'stdio' or 'sse'")
+		if cliCfg.MCPServer.Type != "stdio" && cliCfg.MCPServer.Type != "sse" && cliCfg.MCPServer.Type != "http" {
+			return nil, fmt.Errorf("invalid mcp_server type: must be 'stdio', 'sse', or 'http'")
 		}
 		if cliCfg.MCPServer.Type == "stdio" {
 			if cliCfg.MCPServer.Command == "" {
 				return nil, fmt.Errorf("mcp_server command cannot be empty for stdio type")
 			}
 		}
-		if cliCfg.MCPServer.Type == "sse" {
+		if cliCfg.MCPServer.Type == "sse" || cliCfg.MCPServer.Type == "http" {
 			if cliCfg.MCPServer.URL == "" {
-				return nil, fmt.Errorf("mcp_server url cannot be empty for sse type")
+				return nil, fmt.Errorf("mcp_server url cannot be empty for %s type", cliCfg.MCPServer.Type)
 			}
 			if !strings.HasPrefix(cliCfg.MCPServer.URL, "http://") && !strings.HasPrefix(cliCfg.MCPServer.URL, "https://") {
 				return nil, fmt.Errorf("mcp_server url must start with http:// or https://")

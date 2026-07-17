@@ -21,6 +21,11 @@ const DEFAULT_CONFIG: SwazzConfig = {
     _swagger_urls: [],
     security: { allow_private_ips: false },
     rules: { ignore: [] },
+    mcp_server: {
+        type: 'stdio',
+        command: 'node',
+        args: ['demo/mcp-stdio.js']
+    },
 };
 
 export function validateConfig(config: any): void {

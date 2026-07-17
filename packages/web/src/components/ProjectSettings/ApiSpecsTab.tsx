@@ -417,11 +417,12 @@ export function ApiSpecsTab() {
                                 <select
                                     className="input settings-field-input"
                                     value={mcpType}
-                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse')}
+                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse' | 'http')}
                                     style={{ width: '100%' }}
                                 >
                                     <option value="stdio">Stdio (Local Process / Command)</option>
                                     <option value="sse">SSE (HTTP Server-Sent Events)</option>
+                                    <option value="http">HTTP (Pure POST JSON-RPC)</option>
                                 </select>
                             </div>
 
@@ -452,11 +453,13 @@ export function ApiSpecsTab() {
                                 </>
                             ) : (
                                 <div className="settings-field-group">
-                                    <label className="settings-field-label">SSE Server URL</label>
+                                    <label className="settings-field-label">
+                                        {mcpType === 'sse' ? 'SSE Server URL' : 'HTTP JSON-RPC URL'}
+                                    </label>
                                     <input
                                         type="text"
                                         className="input settings-field-input"
-                                        placeholder="e.g. http://localhost:8788/mcp/sse"
+                                        placeholder={mcpType === 'sse' ? 'e.g. http://localhost:8788/mcp/sse' : 'e.g. http://localhost:8788/mcp'}
                                         value={mcpUrl}
                                         onChange={(e) => handleUpdateMcpField('url', e.target.value)}
                                         style={{ width: '100%' }}
