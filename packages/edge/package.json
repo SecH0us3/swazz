@@ -18,7 +18,7 @@
     "miniflare": "^4.20260714.0",
     "pretty-format": "^30.4.1",
     "vitest": "^4.1.9",
-    "workerd": "1.20260710.1"
+    "workerd": "1.20260717.1"
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
