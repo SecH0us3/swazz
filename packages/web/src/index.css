@@ -857,6 +857,7 @@ body.resizing .sidebar-resizer {
 .badge-warning { color: var(--color-warning); background: var(--color-warning-bg); }
 .badge-error   { color: var(--color-error);   background: var(--color-error-bg); }
 .badge-info    { color: var(--color-info);    background: var(--color-info-bg); }
+.badge-scheduled { color: var(--color-info); background: var(--color-info-bg); margin-left: 8px; }
 .badge.active-filter { color: #fff !important; background: var(--color-info) !important; border-color: rgba(56,189,248,0.4) !important; }
 
 .method-filter {

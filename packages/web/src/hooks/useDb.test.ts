@@ -200,4 +200,30 @@ describe('useDb hook', () => {
         });
         expect(triagedList).toHaveLength(0);
     });
+
+    it('saves a run with triggerType and retrieves it', async () => {
+        const { result } = renderHook(() => useDb());
+
+        await waitFor(() => {
+            expect(result.current.db).not.toBeNull();
+        });
+
+        const mockRun = {
+            id: 'run_scheduled_123',
+            startedAt: 1000,
+            completedAt: 2000,
+            baseUrl: 'http://test.com',
+            stats: {} as any,
+            triggerType: 'scheduled' as const
+        };
+
+        await act(async () => {
+            await result.current.saveRun(mockRun);
+        });
+
+        await waitFor(() => {
+            expect(result.current.runs).toHaveLength(1);
+        });
+        expect(result.current.runs[0].triggerType).toBe('scheduled');
+    });
 });

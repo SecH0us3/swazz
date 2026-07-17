@@ -73,8 +73,27 @@ describe('ScansService Unit Tests', () => {
       );
 
       expect(res.status).toBe('queued');
+      expect(mockScansRepo.createScan).toHaveBeenCalledWith(expect.any(String), 'p1', 'u', 'p', 'queued', 'u1', 'manual');
       expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
       expect(waitUntil).toHaveBeenCalled();
+    });
+
+    it('creates scheduled scan successfully', async () => {
+      mockScansRepo.getUserPublicKey.mockResolvedValueOnce('pubkey');
+      mockScansRepo.getUserDetails.mockResolvedValueOnce({ username: 'test' });
+      const waitUntil = vi.fn();
+      
+      const res = await scansService.createScan(
+        { project_id: 'p1', target_url: 'u', profile: 'p', trigger_type: 'scheduled' },
+        'u1',
+        'Bearer swazz_live_abc',
+        '1.1.1.1',
+        waitUntil
+      );
+
+      expect(res.status).toBe('queued');
+      expect(mockScansRepo.createScan).toHaveBeenCalledWith(expect.any(String), 'p1', 'u', 'p', 'queued', 'u1', 'scheduled');
+      expect(mockEnv.SCAN_QUEUE.send).toHaveBeenCalled();
     });
 
     it('covers audit logic without waituntil and handles user details db error', async () => {
