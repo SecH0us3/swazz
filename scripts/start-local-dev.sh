@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
+cleanup() {
+  local exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    echo "Error occurred. Cleaning up background processes..."
+    kill $(jobs -p) 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
@@ -32,6 +41,14 @@ npm run dev:frontend > web.log 2>&1 &
 
 echo "→ Compiling Go Runner Agent..."
 (cd packages/container && go build -o swazz-engine)
+
+echo "→ Waiting for Edge Coordinator to start on port 8787..."
+for i in {1..30}; do
+  if (echo > /dev/tcp/127.0.0.1/8787) >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
 
 echo "→ Starting Go Runner Agent..."
 ./packages/container/swazz-engine run-agent \
