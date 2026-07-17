@@ -117,7 +117,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
       url: "http://127.0.0.1:8788/mcp/sse"
     };
     // Keep intensity low
-    config.settings.profiles = ["random"];
+    config.settings.profiles = ["RANDOM"];
     config.settings.intensity = 1;
 
     await textarea.fill(JSON.stringify(config, null, 2));
@@ -133,19 +133,6 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     const backBtn = page.locator('button:has-text("Back to Dashboard")');
     await expect(backBtn).toBeVisible();
     await backBtn.click();
-
-    // Disable boundary and malicious profile checkboxes from the sidebar to be double sure we only fuzz random/minimal
-    const profilesSection = page.locator('.sidebar-section:has-text("Profiles")');
-    await expect(profilesSection).toBeVisible();
-
-    const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
-    if (await boundaryToggle.getAttribute('class').then(c => c?.includes('active'))) {
-      await boundaryToggle.click();
-    }
-    const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
-    if (await maliciousToggle.getAttribute('class').then(c => c?.includes('active'))) {
-      await maliciousToggle.click();
-    }
 
     // Since our mcp_server config automatically generates virtual endpoints, we don't need a Swagger URL.
     // However, the UI requires some input to start or we must ensure there are endpoints.
