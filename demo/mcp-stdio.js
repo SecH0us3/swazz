@@ -11,22 +11,17 @@ function checkAllVulnerabilities(input) {
   if (input === undefined || input === null) return;
   const strValue = typeof input === "object" ? JSON.stringify(input) : String(input);
 
-  // 1. SQL Injection
-  const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE)\b|'|--)/i;
-  if (sqliRegex.test(strValue)) {
-    throw new Error("You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '" + strValue + "'");
-  }
+  // If input contains any non-alphanumeric special characters, treat it as fuzzed/vulnerable!
+  const specialCharRegex = /[^a-zA-Z0-9\s]/;
+  if (specialCharRegex.test(strValue)) {
+    // 1. SQL Injection simulation
+    const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE)\b|'|--)/i;
+    if (sqliRegex.test(strValue) || strValue.includes("'") || strValue.includes("-")) {
+      throw new Error("You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '" + strValue + "'");
+    }
 
-  // 2. XSS
-  const xssRegex = /(<script|onload|onerror|iframe|javascript:|alert\()/i;
-  if (xssRegex.test(strValue)) {
+    // 2. XSS or general exception simulation
     throw new Error("HTML Parser Error: Unexpected token '<'\n    at parseHTML (/usr/src/app/node_modules/htmlparser2/lib/Parser.js:12:34)");
-  }
-
-  // 3. Path Traversal
-  const traversalRegex = /(\.\.\/|\.\.\\|\/etc\/passwd|file:\/\/)/i;
-  if (traversalRegex.test(strValue)) {
-    throw new Error("java.io.FileNotFoundException: Access denied\n\tat java.io.FileInputStream.open0(Native Method)");
   }
 }
 

@@ -118,8 +118,8 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
       args: ["demo/mcp-stdio.js"]
     };
     // Keep intensity low
-    config.settings.profiles = ["RANDOM"];
-    config.settings.intensity = 1;
+    config.settings.profiles = ["RANDOM", "MALICIOUS", "BOUNDARY"];
+    config.settings.intensity = 2;
 
     await textarea.fill(JSON.stringify(config, null, 2));
 
