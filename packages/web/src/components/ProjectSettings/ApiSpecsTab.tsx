@@ -434,12 +434,11 @@ export function ApiSpecsTab() {
                                 <select
                                     className="input settings-field-input"
                                     value={mcpType}
-                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse' | 'http')}
+                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse')}
                                     style={{ width: '100%' }}
                                 >
                                     <option value="stdio">Stdio (Local Process / Command)</option>
                                     <option value="sse">SSE (HTTP Server-Sent Events)</option>
-                                    <option value="http">HTTP (Pure POST JSON-RPC)</option>
                                 </select>
                             </div>
 
@@ -471,12 +470,12 @@ export function ApiSpecsTab() {
                             ) : (
                                 <div className="settings-field-group">
                                     <label className="settings-field-label">
-                                        {mcpType === 'sse' ? 'SSE Server URL' : 'HTTP JSON-RPC URL'}
+                                        SSE Server URL
                                     </label>
                                     <input
                                         type="text"
                                         className="input settings-field-input"
-                                        placeholder={mcpType === 'sse' ? 'e.g. http://localhost:8788/mcp/sse' : 'e.g. http://localhost:8788/mcp'}
+                                        placeholder="e.g. http://localhost:8788/mcp/sse"
                                         value={mcpUrl}
                                         onChange={(e) => handleUpdateMcpField('url', e.target.value)}
                                         style={{ width: '100%' }}
