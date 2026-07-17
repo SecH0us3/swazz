@@ -7,7 +7,15 @@ description: Core workflows and command instructions for the swazz project.
 This skill defines how to work with the `swazz` project.
 
 ## 🛠 Deterministic Helper Scripts
-- Run `npm run dev` to spin up the local dev environment (Vite frontend + Cloudflare edge coordinator).
+- **Full local dev stack**: Run `bash scripts/start-local-dev.sh` to spin up the entire environment in one command:
+  - Writes test secrets to `packages/edge/.dev.vars`
+  - Applies D1 database migrations and seeds a CI user
+  - Starts **Vulnerable Demo API** on `:8788` (background)
+  - Starts **Edge Coordinator** (Wrangler) on `:8787` (background)
+  - Starts **React frontend** (Vite) on `:5173` (background)
+  - Compiles and starts **Go Runner Agent** with `--dangerous-no-container`
+  - Logs: `demo.log`, `edge.log`, `web.log`, `packages/container/agent.log`
+  - To stop: `pkill -f wrangler; pkill -f vite; pkill -f swazz-engine`
 - Run `scripts/test-backend.sh` to execute the Go backend unit tests, compiler checks (`go vet`), and SAST security scans (`gosec`).
 
 ## 🔍 Code Navigation & RAG Search
