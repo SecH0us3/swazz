@@ -47,8 +47,8 @@ wait_for_port() {
   exit 1
 }
 
-# Pre-cleanup: kill any processes on ports 8788, 8787, 5173
-lsof -ti :8788,8787,5173 | xargs kill -9 2>/dev/null || true
+# Pre-cleanup: kill any processes on ports 8788, 8787, 8789, 5173
+lsof -ti :8788,8787,8789,5173 | xargs kill -9 2>/dev/null || true
 pkill -f "swazz-engine" || true
 sleep 1
 
@@ -57,6 +57,12 @@ echo "→ Starting Vulnerable Demo API (wrangler dev on port 8788)..."
 NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo --log-level error > demo.log 2>&1 &
 PIDS+=($!)
 wait_for_port 8788 "Vulnerable Demo API"
+
+# 1.1 Start Mock SSE MCP Server (Port 8789)
+echo "→ Starting Mock SSE MCP Server (node on port 8789)..."
+node demo/mcp-sse.js > mcp-sse.log 2>&1 &
+PIDS+=($!)
+wait_for_port 8789 "Mock SSE MCP Server"
 
 # 2. Start Edge Coordinator (Port 8787)
 echo "→ Applying local database migrations..."
@@ -89,6 +95,7 @@ echo "  Swazz Interactive Environment is fully online!"
 echo "  - Web UI: http://localhost:5173"
 echo "  - Edge Coordinator: http://localhost:8787"
 echo "  - Vulnerable Demo API: http://localhost:8788"
+echo "  - Mock SSE MCP Server: http://localhost:8789/mcp/sse"
 echo "========================================================="
 echo "Press Ctrl+C to shut down all services."
 
