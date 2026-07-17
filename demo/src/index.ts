@@ -92,7 +92,7 @@ export default {
           ...corsHeaders
         };
 
-        const epURL = `${url.origin}/mcp/message`;
+        const epURL = "/mcp/message";
 
         const controllerObj = {
           send: async (msg: string) => {
