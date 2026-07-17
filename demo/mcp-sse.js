@@ -56,7 +56,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === "POST" && path === "/mcp/message") {
+  if (req.method === "POST" && (path === "/mcp" || path === "/mcp/message")) {
     let body = "";
     req.on("data", chunk => {
       body += chunk;
@@ -84,7 +84,6 @@ const server = http.createServer((req, res) => {
             }
           };
         } else if (methodRPC === "notifications/initialized") {
-          // Just respond HTTP 200
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "ok" }));
           return;
@@ -172,6 +171,12 @@ const server = http.createServer((req, res) => {
             code: -32601,
             message: `Method not found: ${methodRPC}`
           };
+        }
+
+        if (path === "/mcp") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(response));
+          return;
         }
 
         // Send HTTP response to the POST request

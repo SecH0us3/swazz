@@ -129,7 +129,7 @@ export default {
       }
 
       // MCP POST message endpoint
-      if (method === "POST" && (path === "/mcp/message" || path === "/mcp/sse/message")) {
+      if (method === "POST" && (path === "/mcp" || path === "/mcp/message" || path === "/mcp/sse/message")) {
         let reqBody: any;
         try {
           reqBody = await request.json();
@@ -156,6 +156,12 @@ export default {
             }
           };
         } else if (methodType === "notifications/initialized") {
+          if (path === "/mcp") {
+            return new Response(JSON.stringify({ status: "ok" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+          }
           return new Response(null, { status: 202, headers: corsHeaders });
         } else if (methodType === "tools/list") {
           response.result = {
@@ -198,17 +204,34 @@ export default {
               ]
             };
           } else if (toolName === "query_db") {
-            // Check for vulnerabilities inside the argument query
-            await checkAllVulnerabilities(args.query);
-
-            response.result = {
-              content: [
-                {
-                  type: "text",
-                  text: `Query success: records found for ${args.query}`
-                }
-              ]
-            };
+            try {
+              await checkAllVulnerabilities(args.query);
+              response.result = {
+                content: [
+                  {
+                    type: "text",
+                    text: `Query success: records found for ${args.query}`
+                  }
+                ]
+              };
+            } catch (err: any) {
+              if (err.message.includes("SQL syntax")) {
+                // Return HTTP 500 to simulate a server crash or exit
+                return new Response(JSON.stringify({ error: "Internal Server Error", detail: err.message }), {
+                  status: 500,
+                  headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+              }
+              // Return exception text on other payloads to simulate A05:2025 exception reflection
+              response.result = {
+                content: [
+                  {
+                    type: "text",
+                    text: `Unhandled exception in database: ${err.message}`
+                  }
+                ]
+              };
+            }
           } else {
             response.error = {
               code: -32601,
@@ -233,6 +256,16 @@ export default {
               await ctrl.send(msgStr);
             } catch (e) {}
           }
+        }
+
+        if (path === "/mcp") {
+          return new Response(JSON.stringify(response), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
         }
 
         return new Response(null, { status: 202, headers: corsHeaders });
