@@ -78,6 +78,157 @@ export default {
     }
 
     try {
+      // MCP GET SSE transport endpoint
+      if (method === "GET" && path === "/mcp/sse") {
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const encoder = new TextEncoder();
+
+        const responseHeaders = {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          ...corsHeaders
+        };
+
+        const epURL = `${url.origin}/mcp/message`;
+        await writer.write(encoder.encode(`event: endpoint\ndata: ${epURL}\n\n`));
+
+        const controllerObj = {
+          send: async (msg: string) => {
+            try {
+              await writer.write(encoder.encode(`event: message\ndata: ${msg}\n\n`));
+            } catch (e) {
+              const g = globalThis as any;
+              g.mcpSSEControllers?.delete(controllerObj);
+            }
+          },
+          close: () => {
+            try {
+              writer.close();
+            } catch (e) {}
+            const g = globalThis as any;
+            g.mcpSSEControllers?.delete(controllerObj);
+          }
+        };
+
+        const g = globalThis as any;
+        g.mcpSSEControllers = g.mcpSSEControllers || new Set();
+        g.mcpSSEControllers.add(controllerObj);
+
+        request.signal.addEventListener("abort", () => {
+          controllerObj.close();
+        });
+
+        return new Response(readable, { headers: responseHeaders });
+      }
+
+      // MCP POST message endpoint
+      if (method === "POST" && path === "/mcp/message") {
+        let reqBody: any;
+        try {
+          reqBody = await request.json();
+        } catch (e) {
+          return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+        }
+
+        const id = reqBody.id;
+        const methodType = reqBody.method;
+        const params = reqBody.params;
+
+        let response: any = {
+          jsonrpc: "2.0",
+          id: id
+        };
+
+        if (methodType === "initialize") {
+          response.result = {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            serverInfo: {
+              name: "demo-mcp-server",
+              version: "1.0.0"
+            }
+          };
+        } else if (methodType === "notifications/initialized") {
+          return new Response(null, { status: 202, headers: corsHeaders });
+        } else if (methodType === "tools/list") {
+          response.result = {
+            tools: [
+              {
+                name: "get_info",
+                description: "Returns a welcome message",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" }
+                  },
+                  required: ["name"]
+                }
+              },
+              {
+                name: "query_db",
+                description: "Queries the database with a SQL query",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string" }
+                  },
+                  required: ["query"]
+                }
+              }
+            ]
+          };
+        } else if (methodType === "tools/call") {
+          const toolName = params?.name;
+          const args = params?.arguments || {};
+
+          if (toolName === "get_info") {
+            response.result = {
+              content: [
+                {
+                  type: "text",
+                  text: `Hello ${args.name || "Guest"}`
+                }
+              ]
+            };
+          } else if (toolName === "query_db") {
+            // Check for vulnerabilities inside the argument query
+            await checkAllVulnerabilities(args.query);
+
+            response.result = {
+              content: [
+                {
+                  type: "text",
+                  text: `Query success: records found for ${args.query}`
+                }
+              ]
+            };
+          } else {
+            response.error = {
+              code: -32601,
+              message: `Method not found: ${toolName}`
+            };
+          }
+        } else {
+          response.error = {
+            code: -32601,
+            message: `Method not found: ${methodType}`
+          };
+        }
+
+        // Broadcast JSON-RPC response to all active SSE listeners
+        const g = globalThis as any;
+        if (g.mcpSSEControllers) {
+          const msgStr = JSON.stringify(response);
+          for (const ctrl of g.mcpSSEControllers) {
+            await ctrl.send(msgStr);
+          }
+        }
+
+        return new Response(null, { status: 202, headers: corsHeaders });
+      }
+
       if (method === "GET" && path === "/demo.har") {
         const harData = {
           log: {
