@@ -31,6 +31,9 @@ export async function loadSwaggerUrl(
     }
 
     const data = await res.json();
+    if (!data || !data.endpoints || !Array.isArray(data.endpoints)) {
+        throw new Error(data?.error || "Invalid spec format: no endpoints array found in parser response");
+    }
     return {
         basePath: data.basePath,
         endpointCount: data.endpoints.length,
