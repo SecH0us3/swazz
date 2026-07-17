@@ -195,6 +195,11 @@ export function RequestDetail({
     const initialUrl = joinUrl(baseUrl, result.resolvedPath || result.endpoint);
     const initialBody = formatValue(result.payload);
 
+    const [liveStatus, setLiveStatus] = useState<number>(result.status);
+    const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
+    const [liveHeaders, setLiveHeaders] = useState<Record<string, string[]>>(result.responseHeaders || {});
+    const [isReplaying, setIsReplaying] = useState(false);
+
     const [editedUrl, setEditedUrl] = useState(initialUrl);
     const [editedBody, setEditedBody] = useState(initialBody);
 
@@ -275,11 +280,6 @@ export function RequestDetail({
             setSubTab('headers');
         }
     }, [result, hasQueryDiff]);
-
-    const [liveStatus, setLiveStatus] = useState<number>(result.status);
-    const [liveResponse, setLiveResponse] = useState<any>(result.responseBody);
-    const [liveHeaders, setLiveHeaders] = useState<Record<string, string[]>>(result.responseHeaders || {});
-    const [isReplaying, setIsReplaying] = useState(false);
 
     const copy = (text: string, label: string) => {
         navigator.clipboard.writeText(text).then(() => {

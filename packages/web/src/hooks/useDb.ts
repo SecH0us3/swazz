@@ -154,7 +154,18 @@ async function dbAppendResults(db: IDBDatabase, runId: string, rows: ResultSumma
  * Returns a page of ResultSummary — does NOT load everything into memory.
  */
 export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promise<{ rows: ResultSummary[]; total: number }> {
-    const { runId, statusFilter = 'all', search = '', sortKey = 'timestamp', sortDir = 'desc', limit = 200, offset = 0, identityFilter = 'all' } = opts;
+    const {
+        runId,
+        statusFilter = 'all',
+        search = '',
+        sortKey = 'timestamp',
+        sortDir = 'desc',
+        limit = 200,
+        offset = 0,
+        identityFilter = 'all',
+        findingsOnly = false,
+        heatmapFilter = null,
+    } = opts;
 
     const tx = db.transaction('results', 'readonly');
     const store = tx.objectStore('results');
@@ -181,12 +192,12 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
         }
 
         // Filter by status class
-        if (statusFilter === '5xx') list = list.filter(r => r.status >= 500);
+        if (statusFilter === '5xx') list = list.filter(r => r.status >= 500 || r.status === 0);
         else if (statusFilter === '4xx') list = list.filter(r => r.status >= 400 && r.status < 500);
         else if (statusFilter === '2xx') list = list.filter(r => r.status >= 200 && r.status < 300);
 
         // Filter by findings
-        if (opts.findingsOnly) {
+        if (findingsOnly) {
             list = list.filter(r => 
                 (r.analyzerFindings && r.analyzerFindings.length > 0) || 
                 r.status >= 500 || 
@@ -196,11 +207,11 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
         }
 
         // Filter by heatmapFilter
-        if (opts.heatmapFilter) {
+        if (heatmapFilter) {
             list = list.filter(r =>
-                r.method.toUpperCase() === opts.heatmapFilter!.method.toUpperCase() &&
-                r.endpoint === opts.heatmapFilter!.path &&
-                r.status === opts.heatmapFilter!.status
+                r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                r.endpoint === heatmapFilter.path &&
+                r.status === heatmapFilter.status
             );
         }
 
@@ -228,7 +239,7 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
 
     const rows: ResultSummary[] = [];
     let matchedCount = 0;
-    const hasFilters = search || statusFilter !== 'all' || identityFilter !== 'all' || opts.findingsOnly || !!opts.heatmapFilter;
+    const hasFilters = search || statusFilter !== 'all' || identityFilter !== 'all' || findingsOnly || !!heatmapFilter;
 
     return new Promise((resolve, reject) => {
         const req = index.openCursor(range, direction);
@@ -254,12 +265,12 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
             }
 
             if (matches && statusFilter !== 'all') {
-                if (statusFilter === '5xx') matches = r.status >= 500;
+                if (statusFilter === '5xx') matches = r.status >= 500 || r.status === 0;
                 else if (statusFilter === '4xx') matches = r.status >= 400 && r.status < 500;
                 else if (statusFilter === '2xx') matches = r.status >= 200 && r.status < 300;
             }
 
-            if (matches && opts.findingsOnly) {
+            if (matches && findingsOnly) {
                 matches = !!(
                     (r.analyzerFindings && r.analyzerFindings.length > 0) || 
                     r.status >= 500 || 
@@ -268,10 +279,10 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
                 );
             }
 
-            if (matches && opts.heatmapFilter) {
-                matches = r.method.toUpperCase() === opts.heatmapFilter.method.toUpperCase() &&
-                          r.endpoint === opts.heatmapFilter.path &&
-                          r.status === opts.heatmapFilter.status;
+            if (matches && heatmapFilter) {
+                matches = r.method.toUpperCase() === heatmapFilter.method.toUpperCase() &&
+                          r.endpoint === heatmapFilter.path &&
+                          r.status === heatmapFilter.status;
             }
 
             if (matches && search) {
