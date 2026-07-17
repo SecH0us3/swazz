@@ -18,6 +18,7 @@ import (
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
@@ -594,6 +595,30 @@ func startAgent(args []string) {
 								if parseErr != nil {
 									parseErr = originalErr
 								}
+							}
+						}
+
+						if parseErr != nil && reqPayload.URL != "" {
+							// fallback to MCP HTTP probe
+							mcpClient := mcp.NewHTTPClient(reqPayload.URL)
+							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+							defer cancel()
+							if mcpErr := mcpClient.Connect(ctx); mcpErr == nil {
+								// It is an MCP HTTP server!
+								tools, _ := mcpClient.ListTools(ctx)
+								var eps []swagger.EndpointConfig
+								for _, t := range tools {
+									eps = append(eps, swagger.EndpointConfig{
+										Method:      "MCP",
+										Path:        t.Name,
+										Schema:      t.InputSchema,
+									})
+								}
+								parseResult = &swagger.ParseResult{
+									BasePath:  reqPayload.URL,
+									Endpoints: eps,
+								}
+								parseErr = nil // override original parse error
 							}
 						}
 
