@@ -616,7 +616,7 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 		c.pendingMu.Lock()
 		delete(c.pending, key)
 		c.pendingMu.Unlock()
-		return nil, fmt.Errorf("POST request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("POST request to %s failed with status %d: %s (req body: %s)", c.writeURL, resp.StatusCode, string(bodyBytes), string(data))
 	}
 
 	select {
