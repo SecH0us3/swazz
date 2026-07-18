@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadSwaggerUrl, parseRawSpec } from './swaggerService.js';
+import { loadSwaggerUrl, parseRawSpec, ParsingError } from './swaggerService.js';
 
 describe('swaggerService', () => {
     let originalFetch: typeof globalThis.fetch;
@@ -45,7 +45,7 @@ describe('swaggerService', () => {
         });
     });
 
-    it('throws error when response is not ok and contains json error', async () => {
+    it('throws ParsingError when response is not ok and contains json error', async () => {
         const mockErrorData = { error: 'Invalid URL provided' };
 
         const mockResponse = new Response(JSON.stringify(mockErrorData), {
@@ -56,10 +56,10 @@ describe('swaggerService', () => {
 
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-        await expect(loadSwaggerUrl('http://invalid-url')).rejects.toThrow('Invalid URL provided');
+        await expect(loadSwaggerUrl('http://invalid-url')).rejects.toThrow(ParsingError);
     });
 
-    it('throws error using statusText when response is not ok and json parsing fails', async () => {
+    it('throws ParsingError using statusText when response is not ok and json parsing fails', async () => {
         // A response that is not ok and not valid JSON
         const mockResponse = new Response('Server Down', {
             status: 500,
@@ -68,10 +68,10 @@ describe('swaggerService', () => {
 
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-        await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Internal Server Error');
+        await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow(ParsingError);
     });
 
-    it('throws error with status code if statusText is missing and json parsing fails', async () => {
+    it('throws ParsingError with status code if statusText is missing and json parsing fails', async () => {
         // A response with empty status text
         const mockResponse = new Response('Bad Gateway', {
             status: 502,
@@ -80,27 +80,20 @@ describe('swaggerService', () => {
 
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-        await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to parse swagger: 502');
+        await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow(ParsingError);
     });
 
-    it('propagates network errors from fetch', async () => {
-        const networkError = new TypeError('Failed to fetch');
-        vi.mocked(globalThis.fetch).mockRejectedValueOnce(networkError);
-
-        await expect(loadSwaggerUrl('http://example.com')).rejects.toThrow('Failed to fetch');
-    });
-
-    it('throws error when successful response contains invalid json', async () => {
+    it('throws ParsingError when successful response contains invalid json', async () => {
         const mockResponse = new Response('Invalid JSON', {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
         });
 
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
-        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(SyntaxError);
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(ParsingError);
     });
 
-    it('handles missing endpoints in response gracefully (throws TypeError or similar)', async () => {
+    it('handles missing endpoints in response gracefully (throws TypeError or similar or ParsingError)', async () => {
         const mockResponseData = { basePath: '/v1' };
         const mockResponse = new Response(JSON.stringify(mockResponseData), {
             status: 200,
@@ -108,7 +101,7 @@ describe('swaggerService', () => {
         });
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(Error);
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(ParsingError);
     });
 
     it('accepts headers and cookies arguments even though they are currently unused in fetch body', async () => {
@@ -126,6 +119,13 @@ describe('swaggerService', () => {
             endpointCount: 0,
             endpoints: []
         });
+    });
+
+    it('propagates network errors from fetch as ParsingError', async () => {
+        const networkError = new TypeError('Failed to fetch');
+        vi.mocked(globalThis.fetch).mockRejectedValueOnce(networkError);
+
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(ParsingError);
     });
 
     describe('parseRawSpec', () => {
@@ -155,7 +155,7 @@ describe('swaggerService', () => {
             });
         });
 
-        it('throws error when parse fails', async () => {
+        it('throws ParsingError when parse fails', async () => {
             const mockErrorData = { error: 'Failed to parse spec' };
             const mockResponse = new Response(JSON.stringify(mockErrorData), {
                 status: 400,
@@ -163,8 +163,7 @@ describe('swaggerService', () => {
             });
             vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-            await expect(parseRawSpec('invalid spec')).rejects.toThrow('Failed to parse spec');
+            await expect(parseRawSpec('invalid spec')).rejects.toThrow(ParsingError);
         });
     });
 });
-

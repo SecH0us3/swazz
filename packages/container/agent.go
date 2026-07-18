@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"bytes"
 	"io"
 	"log"
 	"net/http"
@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
@@ -24,7 +25,6 @@ import (
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"sync"
-	"syscall"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -312,6 +312,8 @@ func startAgent(args []string) {
 		}
 	}
 
+
+
 	// Agent loop
 	for {
 		var wsMsg WSMessageIn
@@ -437,7 +439,7 @@ func startAgent(args []string) {
 									description = fmt.Sprintf("HTTP %d", res.Status)
 								}
 							}
-							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
+							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s", 
 								runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 							ev.Data = runner.ToSSE(res)
 						} else {
@@ -547,26 +549,25 @@ func startAgent(args []string) {
 			}
 			reqID := wsMsg.ReqID
 
-			logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v, Headers count: %d", reqPayload.URL, reqPayload.RawSpec != "", len(reqPayload.Headers))
+			logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v", reqPayload.URL, reqPayload.RawSpec != "")
 			go func() {
 				var result interface{}
 				var data []byte
-				var fetchErr error
+				var err error
+				var resp *http.Response
 
 				if reqPayload.RawSpec != "" {
 					data = []byte(reqPayload.RawSpec)
 				} else if reqPayload.URL != "" {
 					client := safenet.NewSafeHTTPClient(15 * time.Second)
-
+					
 					req, reqErr := http.NewRequest("GET", reqPayload.URL, nil)
 					if reqErr != nil {
-						fetchErr = reqErr
+						err = reqErr
 					} else {
-						// Set headers
 						for k, v := range reqPayload.Headers {
 							req.Header.Set(k, v)
 						}
-						// Format and set cookies
 						if len(reqPayload.Cookies) > 0 {
 							var cookieParts []string
 							for k, v := range reqPayload.Cookies {
@@ -575,39 +576,85 @@ func startAgent(args []string) {
 							req.Header.Set("Cookie", strings.Join(cookieParts, "; "))
 						}
 
-						resp, errFetch := client.Do(req)
+						var errFetch error
+						resp, errFetch = client.Do(req)
 						if errFetch != nil {
 							logError("[Parser] Failed to fetch spec: %v", errFetch)
-							fetchErr = errFetch
+							err = errFetch
 						} else {
 							defer resp.Body.Close()
 							if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 								limitReader := io.LimitReader(resp.Body, 4096)
 								bodyBytes, _ := io.ReadAll(limitReader)
-								fetchErr = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
+								err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
+								data = bodyBytes
 							} else {
 								limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
-								var readErr error
-								data, readErr = io.ReadAll(limitReader)
-								if readErr == nil && len(data) > 10*1024*1024 {
-									fetchErr = fmt.Errorf("specification file exceeds the 10MB limit")
-								} else {
-									fetchErr = readErr
+								data, err = io.ReadAll(limitReader)
+								if err == nil && len(data) > 10*1024*1024 {
+									err = fmt.Errorf("specification file exceeds the 10MB limit")
 								}
+							}
+							if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+								err = fmt.Errorf("server returned status code: %s", resp.Status)
 							}
 						}
 					}
 				} else {
-					fetchErr = fmt.Errorf("missing url or rawSpec")
+					err = fmt.Errorf("missing url or rawSpec")
 				}
 
-				var parseResult *swagger.ParseResult
-				var parseErr error
-
-				if fetchErr == nil {
+				if err != nil {
+					errMap := map[string]interface{}{
+						"error": err.Error(),
+					}
+					if resp != nil {
+						respHeaders := make(map[string]string)
+						for k, v := range resp.Header {
+							if len(v) > 0 {
+								respHeaders[k] = v[0]
+							}
+						}
+						bodySnippet := ""
+						if data != nil {
+							if len(data) > 2048 {
+								bodySnippet = string(data[:2048]) + "... (truncated)"
+							} else {
+								bodySnippet = string(data)
+							}
+						}
+						errMap["response"] = map[string]interface{}{
+							"status":     resp.StatusCode,
+							"statusText": resp.Status,
+							"headers":    respHeaders,
+							"body":       bodySnippet,
+						}
+					}
+					if reqPayload.URL != "" {
+						errMap["request"] = map[string]interface{}{
+							"url":    reqPayload.URL,
+							"method": "GET",
+							"headers": map[string]string{
+								"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+							},
+						}
+					} else {
+						errMap["request"] = map[string]interface{}{
+							"url":    "File Upload",
+							"method": "POST",
+							"headers": map[string]string{
+								"Content-Type": "application/octet-stream",
+							},
+						}
+					}
+					result = errMap
+				} else {
+					var parseResult *swagger.ParseResult
+					var parseErr error
+					var originalErr error
 					parseResult, parseErr = swagger.ParseRawSpec(data)
 					if parseErr != nil {
-						originalErr := parseErr
+						originalErr = parseErr
 						if swagger.IsHAR(data) {
 							parseResult, parseErr = har.ParseHAR(data, "")
 						} else if swagger.IsPostman(data) {
@@ -625,10 +672,91 @@ func startAgent(args []string) {
 							}
 						}
 					}
+
+					if parseErr != nil {
+						logError("[Parser] Failed to parse spec: %v", parseErr)
+						errMap := map[string]interface{}{
+							"error": parseErr.Error(),
+						}
+						parserName := "swagger"
+						if swagger.IsHAR(data) {
+							parserName = "har"
+						} else if swagger.IsPostman(data) {
+							parserName = "postman"
+						} else if originalErr != nil && parseErr == originalErr {
+							parserName = "swagger"
+						} else {
+							parserName = "graphql"
+						}
+						errMap["parserDetails"] = map[string]interface{}{
+							"parser": parserName,
+						}
+						if reqPayload.URL != "" {
+							errMap["request"] = map[string]interface{}{
+								"url":    reqPayload.URL,
+								"method": "GET",
+								"headers": map[string]string{
+									"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+								},
+							}
+							if resp != nil {
+								respHeaders := make(map[string]string)
+								for k, v := range resp.Header {
+									if len(v) > 0 {
+										respHeaders[k] = v[0]
+									}
+								}
+								errMap["response"] = map[string]interface{}{
+									"status":     resp.StatusCode,
+									"statusText": resp.Status,
+									"headers":    respHeaders,
+									"body":       "...(parsed data)...",
+								}
+							}
+						} else {
+							errMap["request"] = map[string]interface{}{
+								"url":    "File Upload",
+								"method": "POST",
+								"headers": map[string]string{
+									"Content-Type": "application/octet-stream",
+								},
+							}
+						}
+						result = errMap
+					} else {
+						// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
+						for i := range parseResult.Endpoints {
+							pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
+							for k := range parseResult.Endpoints[i].PathParams {
+								pruneSchema(parseResult.Endpoints[i].PathParams[k], 0, 3)
+							}
+							for k := range parseResult.Endpoints[i].QueryParams {
+								pruneSchema(parseResult.Endpoints[i].QueryParams[k], 0, 3)
+							}
+							for k := range parseResult.Endpoints[i].HeaderParams {
+								pruneSchema(parseResult.Endpoints[i].HeaderParams[k], 0, 3)
+							}
+						}
+						logInfo("[Parser] Parsed spec successfully: %s (%d endpoints)", parseResult.BasePath, len(parseResult.Endpoints))
+						result = map[string]interface{}{
+							"basePath":  parseResult.BasePath,
+							"endpoints": parseResult.Endpoints,
+							"rawSpec":   string(data),
+						}
+					}
 				}
 
-				// Trigger MCP probe if fetching failed OR parsing failed
-				if (fetchErr != nil || parseErr != nil) && reqPayload.URL != "" {
+				// Trigger MCP probe if we have a URL and there was any kind of error (fetch or parse)
+				hasError := err != nil
+				if !hasError {
+					if resultMap, ok := result.(map[string]interface{}); ok {
+						if _, hasErrKey := resultMap["error"]; hasErrKey {
+							hasError = true
+						}
+					}
+				}
+
+				if hasError && reqPayload.URL != "" {
 					mcpHeaders := make(map[string]string)
 					for k, v := range reqPayload.Headers {
 						mcpHeaders[k] = v
@@ -656,43 +784,20 @@ func startAgent(args []string) {
 								Schema: t.InputSchema,
 							})
 						}
-						parseResult = &swagger.ParseResult{
-							BasePath:  reqPayload.URL,
-							Endpoints: eps,
+						
+						for i := range eps {
+							pruneSchema(&eps[i].Schema, 0, 3)
 						}
-						fetchErr = nil
-						parseErr = nil
+						
+						logInfo("[Parser] Fallback to MCP successful for %s (%d tools)", reqPayload.URL, len(eps))
+						result = map[string]interface{}{
+							"basePath":  reqPayload.URL,
+							"endpoints": eps,
+							"rawSpec":   "",
+						}
 					} else {
 						mcpCancel()
-						fetchErr = fmt.Errorf("%v | MCP fallback: %v", fetchErr, mcpErr)
-					}
-				}
-
-				if fetchErr != nil {
-					logError("[Parser] Failed to fetch spec: %v", fetchErr)
-					result = map[string]string{"error": fetchErr.Error()}
-				} else if parseErr != nil {
-					logError("[Parser] Failed to parse spec: %v", parseErr)
-					result = map[string]string{"error": parseErr.Error()}
-				} else {
-					// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
-					for i := range parseResult.Endpoints {
-						pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
-						for k := range parseResult.Endpoints[i].PathParams {
-							pruneSchema(parseResult.Endpoints[i].PathParams[k], 0, 3)
-						}
-						for k := range parseResult.Endpoints[i].QueryParams {
-							pruneSchema(parseResult.Endpoints[i].QueryParams[k], 0, 3)
-						}
-						for k := range parseResult.Endpoints[i].HeaderParams {
-							pruneSchema(parseResult.Endpoints[i].HeaderParams[k], 0, 3)
-						}
-					}
-					logInfo("[Parser] Parsed spec successfully: %s (%d endpoints)", parseResult.BasePath, len(parseResult.Endpoints))
-					result = map[string]interface{}{
-						"basePath":  parseResult.BasePath,
-						"endpoints": parseResult.Endpoints,
-						"rawSpec":   string(data),
+						logWarn("[Parser] MCP fallback failed: %v", mcpErr)
 					}
 				}
 

@@ -3,6 +3,39 @@ import { useAppStore } from '../store/appStore.js';
 // In dev, proxy goes to local wrangler via Vite proxy; in prod, use deployed Worker URL
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
+export interface ParsingErrorDetails {
+    request: {
+        url: string;
+        method: string;
+        headers: Record<string, string>;
+        body?: string;
+    };
+    response?: {
+        status: number;
+        statusText: string;
+        headers: Record<string, string>;
+        body?: string;
+    };
+    error: {
+        message: string;
+        stack?: string;
+        parserDetails?: Record<string, any>;
+    };
+}
+
+export class ParsingError extends Error {
+    details: ParsingErrorDetails;
+
+    constructor(message: string, details: ParsingErrorDetails) {
+        super(message);
+        this.name = 'ParsingError';
+        this.details = details;
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, ParsingError);
+        }
+    }
+}
+
 export async function loadSwaggerUrl(
     url: string,
     headers?: Record<string, string>,
@@ -18,21 +51,73 @@ export async function loadSwaggerUrl(
     if (csrfToken) {
         requestHeaders['X-CSRF-Token'] = csrfToken;
     }
+    const requestBody = JSON.stringify({ url, headers, cookies, forceRebuild });
+    const reqUrl = `${PROXY_URL}/api/parse`;
 
-    const res = await fetch(`${PROXY_URL}/api/parse`, {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify({ url, headers, cookies, forceRebuild }),
+    let res: Response;
+    try {
+        res = await fetch(reqUrl, {
+            method: 'POST',
+            headers: requestHeaders,
+            body: requestBody,
+        });
+    } catch (fetchErr: any) {
+        throw new ParsingError(fetchErr.message || 'Network request failed', {
+            request: { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            error: { message: fetchErr.message || String(fetchErr), stack: fetchErr.stack }
+        });
+    }
+
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((val, key) => {
+        responseHeaders[key] = val;
     });
 
     if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `Failed to parse swagger: ${res.status}`);
+        const responseBody = await res.text().catch(() => '');
+        let parsedErr: any = {};
+        try {
+            const parsed = JSON.parse(responseBody);
+            if (parsed && typeof parsed === 'object') {
+                parsedErr = parsed;
+            }
+        } catch {}
+        
+        throw new ParsingError(parsedErr.error || `Failed to parse swagger: ${res.status}`, {
+            request: { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: { message: parsedErr.error || `Failed to parse swagger: ${res.status}` }
+        });
     }
 
-    const data = await res.json();
+    const responseBody = await res.text();
+    let data: any;
+    try {
+        data = JSON.parse(responseBody);
+    } catch (jsonErr: any) {
+        throw new ParsingError('Invalid JSON response from parser', {
+            request: { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: { message: 'Invalid JSON response from parser', stack: jsonErr.stack }
+        });
+    }
+
+    if (data.error) {
+        throw new ParsingError(data.error, {
+            request: data.request || { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: data.response || { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: {
+                message: data.error,
+                parserDetails: data.parserDetails
+            }
+        });
+    }
     if (!data || !data.endpoints || !Array.isArray(data.endpoints)) {
-        throw new Error(data?.error || "Invalid spec format: no endpoints array found in parser response");
+        throw new ParsingError(data?.error || "Invalid spec format: no endpoints array found in parser response", {
+            request: data.request || { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: data.response || { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: { message: "Invalid spec format: no endpoints array found in parser response" }
+        });
     }
     return {
         basePath: data.basePath,
@@ -55,18 +140,68 @@ export async function parseRawSpec(
         requestHeaders['X-CSRF-Token'] = csrfToken;
     }
 
-    const res = await fetch(`${PROXY_URL}/api/parse`, {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify({ rawSpec }),
+    const requestBody = JSON.stringify({ rawSpec });
+    const reqUrl = `${PROXY_URL}/api/parse`;
+
+    let res: Response;
+    try {
+        res = await fetch(reqUrl, {
+            method: 'POST',
+            headers: requestHeaders,
+            body: requestBody,
+        });
+    } catch (fetchErr: any) {
+        throw new ParsingError(fetchErr.message || 'Network request failed', {
+            request: { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            error: { message: fetchErr.message || String(fetchErr), stack: fetchErr.stack }
+        });
+    }
+
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((val, key) => {
+        responseHeaders[key] = val;
     });
 
     if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `Failed to parse spec: ${res.status}`);
+        const responseBody = await res.text().catch(() => '');
+        let parsedErr: any = {};
+        try {
+            const parsed = JSON.parse(responseBody);
+            if (parsed && typeof parsed === 'object') {
+                parsedErr = parsed;
+            }
+        } catch {}
+        
+        throw new ParsingError(parsedErr.error || `Failed to parse spec: ${res.status}`, {
+            request: { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: { message: parsedErr.error || `Failed to parse spec: ${res.status}` }
+        });
     }
 
-    const data = await res.json();
+    const responseBody = await res.text();
+    let data: any;
+    try {
+        data = JSON.parse(responseBody);
+    } catch (jsonErr: any) {
+        throw new ParsingError('Invalid JSON response from parser', {
+            request: { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: { message: 'Invalid JSON response from parser', stack: jsonErr.stack }
+        });
+    }
+
+    if (data.error) {
+        throw new ParsingError(data.error, {
+            request: data.request || { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: data.response || { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: {
+                message: data.error,
+                parserDetails: data.parserDetails
+            }
+        });
+    }
+
     return {
         basePath: data.basePath,
         endpointCount: data.endpoints.length,
@@ -103,14 +238,11 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
                 }
             })
         });
-        if (resPost.ok) {
-            const data = await resPost.json();
-            if (data && data.jsonrpc === '2.0' && (data.result?.protocolVersion || data.error)) {
-                return 'http';
-            }
+        
+        if (resPost.ok || resPost.status === 401 || resPost.status === 403) {
+            return 'http';
         }
     } catch {}
 
     return null;
 }
-
