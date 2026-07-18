@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useToast } from '../../hooks/useToast.js';
-import { loadSwaggerUrl, parseRawSpec } from '../../services/swaggerService.js';
+import { loadSwaggerUrl, parseRawSpec, ParsingError } from '../../services/swaggerService.js';
+import { useAppStore } from '../../store/appStore.js';
 
 export function ApiSpecsTab() {
     const { config, updateConfig } = useConfig();
@@ -76,7 +77,16 @@ export function ApiSpecsTab() {
                 _swagger_urls: newUrls,
                 _swagger_metadata: updatedMetadata
             });
-            showToast(`✗ Failed to load: ${err.message || String(err)}`, 'error');
+            if (err instanceof ParsingError) {
+                useAppStore.setState({ parsingError: err.details });
+            } else {
+                useAppStore.setState({
+                    parsingError: {
+                        error: { message: err.message || String(err), stack: err.stack },
+                        request: { url: trimmed, method: 'GET', headers: {} }
+                    }
+                });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -140,7 +150,16 @@ export function ApiSpecsTab() {
             updateConfig({
                 _swagger_metadata: updatedMetadata
             });
-            showToast(`✗ Refresh failed: ${err.message || String(err)}`, 'error');
+            if (err instanceof ParsingError) {
+                useAppStore.setState({ parsingError: err.details });
+            } else {
+                useAppStore.setState({
+                    parsingError: {
+                        error: { message: err.message || String(err), stack: err.stack },
+                        request: { url, method: 'GET', headers: {} }
+                    }
+                });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -175,7 +194,16 @@ export function ApiSpecsTab() {
                         status: 'error' as const,
                         lastRefreshed: new Date().toISOString()
                     };
-                    showToast(`✗ Failed to refresh ${url}: ${err.message || String(err)}`, 'error');
+                    if (err instanceof ParsingError) {
+                        useAppStore.setState({ parsingError: err.details });
+                    } else {
+                        useAppStore.setState({
+                            parsingError: {
+                                error: { message: err.message || String(err), stack: err.stack },
+                                request: { url, method: 'GET', headers: {} }
+                            }
+                        });
+                    }
                 }
             }
 
@@ -227,7 +255,16 @@ export function ApiSpecsTab() {
                 });
                 showToast(`✓ Successfully imported ${endpointCount} endpoints from ${file.name}`, 'success');
             } catch (err: any) {
-                showToast(`✗ Failed to import file: ${err.message || String(err)}`, 'error');
+                if (err instanceof ParsingError) {
+                    useAppStore.setState({ parsingError: err.details });
+                } else {
+                    useAppStore.setState({
+                        parsingError: {
+                            error: { message: err.message || String(err), stack: err.stack },
+                            request: { url: 'File Upload', method: 'POST', headers: {} }
+                        }
+                    });
+                }
             } finally {
                 setIsLoading(false);
                 e.target.value = '';
