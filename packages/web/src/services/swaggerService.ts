@@ -214,7 +214,8 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
         // 1. Try SSE check: Send GET request with Accept header
         const resGet = await fetch(urlStr, {
             method: 'GET',
-            headers: { 'Accept': 'text/event-stream' }
+            headers: { 'Accept': 'text/event-stream' },
+            signal: AbortSignal.timeout(3000)
         });
         const contentType = resGet.headers.get('Content-Type') || '';
         if (resGet.ok && contentType.includes('event-stream')) {
@@ -227,6 +228,7 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
         const resPost = await fetch(urlStr, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(3000),
             body: JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'initialize',
@@ -239,8 +241,13 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
             })
         });
         
+        const postContentType = resPost.headers.get('Content-Type') || '';
+        if (resPost.ok && postContentType.includes('event-stream')) {
+            return 'sse';
+        }
+
         if (resPost.ok || resPost.status === 401 || resPost.status === 403) {
-            return 'http';
+            return 'sse'; // We only support SSE for remote MCP servers in UI right now
         }
     } catch {}
 
