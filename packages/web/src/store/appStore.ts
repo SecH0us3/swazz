@@ -2,6 +2,7 @@ import { create, StateCreator } from 'zustand';
 import type { FuzzResult, RunStats, Project, SwazzConfig } from '../types.js';
 import { DEFAULT_SETTINGS } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
+import type { ParsingErrorDetails } from '../services/swaggerService.js';
 
 export interface UISlice {
     activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'settings' | 'project_settings' | 'history' | 'compare' | 'about' | 'analytics' | 'runner_logs';
@@ -11,9 +12,11 @@ export interface UISlice {
     isConfigHiddenDesktop: boolean;
     isHotkeysHelpOpen: boolean;
     isUserProfileOpen: boolean;
+    parsingError: ParsingErrorDetails | null;
+    setParsingError: (err: ParsingErrorDetails | null) => void;
 }
 
-const createUISlice: StateCreator<AppState, [], [], UISlice> = () => ({
+const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => ({
     activeTab: 'heatmap',
     isSidebarOpen: false,
     isConfigOpen: false,
@@ -21,6 +24,8 @@ const createUISlice: StateCreator<AppState, [], [], UISlice> = () => ({
     isConfigHiddenDesktop: false,
     isHotkeysHelpOpen: false,
     isUserProfileOpen: false,
+    parsingError: null,
+    setParsingError: (err) => set({ parsingError: err }),
 });
 
 export interface FuzzingSlice {
