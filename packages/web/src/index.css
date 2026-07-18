@@ -9548,3 +9548,120 @@ kbd {
     font-size: 0.9rem;
     padding: 4px 0;
 }
+
+/* ─── Dashboard UX Redesign Styles ───────────────────────── */
+
+/* Separated Inspector Sections */
+.inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.inspector-section:last-child {
+  margin-bottom: 0;
+}
+
+.inspector-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inspector-section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.inspector-section-icon {
+  flex-shrink: 0;
+}
+
+.inspector-section-icon.security-shield {
+  color: var(--color-error);
+  filter: drop-shadow(0 0 6px rgba(244,63,94,0.3));
+}
+
+.inspector-section-icon.server-icon {
+  color: var(--text-muted);
+}
+
+.inspector-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Critical Vulnerability Highlighting */
+.findings-group-critical {
+  border: 1px solid rgba(244,63,94,0.3) !important;
+  box-shadow: 0 0 12px rgba(244,63,94,0.06);
+}
+
+.findings-group-critical .findings-group-header {
+  background: rgba(244,63,94,0.03) !important;
+}
+
+.findings-group-critical:hover {
+  border-color: rgba(244,63,94,0.5) !important;
+  box-shadow: 0 0 16px rgba(244,63,94,0.12);
+}
+
+.badge-critical-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: var(--color-error);
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  margin-right: var(--space-2);
+  animation: pulse-critical-glow 2s infinite;
+}
+
+@keyframes pulse-critical-glow {
+  0% { opacity: 0.9; }
+  50% { opacity: 1; box-shadow: 0 0 8px rgba(244,63,94,0.4); }
+  100% { opacity: 0.9; }
+}
+
+/* Button & Action Bar Polish */
+.inspector-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.inspector-actions-btn-group {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.btn-action-small {
+  padding: 2px 6px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  font-size: 11px !important;
+  color: var(--text-secondary) !important;
+}
+
+.btn-load-more-findings {
+  width: 100%;
+  margin-top: var(--space-2) !important;
+  margin-bottom: var(--space-2) !important;
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+}

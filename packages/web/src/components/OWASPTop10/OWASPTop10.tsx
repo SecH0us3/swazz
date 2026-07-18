@@ -125,9 +125,10 @@ interface Props {
     liveCount?: number;
     isRunning?: boolean;
     onSelectResult: (row: ResultSummary) => void;
+    onUpdateCount?: (count: number) => void;
 }
 
-export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = false, onSelectResult }: Props) {
+export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = false, onSelectResult, onUpdateCount }: Props) {
     const onSelectResultRef = useRef(onSelectResult);
     onSelectResultRef.current = onSelectResult;
 
@@ -246,6 +247,45 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
         return Object.values(groupedData).reduce((sum, list) => sum + list.length, 0);
     }, [groupedData]);
 
+    useEffect(() => {
+        if (onUpdateCount) {
+            onUpdateCount(totalFindingsCount);
+        }
+    }, [totalFindingsCount, onUpdateCount]);
+
+    const handleExportOwaspReport = () => {
+        const reportData = {
+            runId,
+            timestamp: new Date().toISOString(),
+            totalFindings: totalFindingsCount,
+            categories: Object.entries(groupedData)
+                .filter(([_, items]) => items.length > 0)
+                .map(([category, items]) => ({
+                    category,
+                    count: items.length,
+                    findings: items.map(item => ({
+                        method: item.result.method,
+                        endpoint: item.result.endpoint,
+                        resolvedPath: item.result.resolvedPath,
+                        status: item.result.status,
+                        identity: item.result.identity,
+                        message: item.finding?.message || `HTTP ${item.result.status} Status Code Error`,
+                        severity: item.finding?.level || (item.result.status >= 500 ? 'error' : 'warning')
+                    }))
+                }))
+        };
+
+        const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `swazz-owasp-report-${runId || 'live'}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     const methodColors: Record<string, string> = {
         GET: 'var(--method-get)',
         POST: 'var(--method-post)',
@@ -279,8 +319,20 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                          Official Site ↗
                      </a>
                  </div>
-                <div className="owasp-summary-count">
-                    {totalFindingsCount} {totalFindingsCount === 1 ? 'Finding' : 'Findings'} Detected
+                <div className="owasp-summary-actions">
+                    <div className="owasp-summary-count">
+                        {totalFindingsCount} {totalFindingsCount === 1 ? 'Finding' : 'Findings'} Detected
+                    </div>
+                    <button
+                        onClick={handleExportOwaspReport}
+                        className="btn btn-ghost btn-sm btn-owasp-export"
+                        disabled={totalFindingsCount === 0}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="export-icon">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export Report
+                    </button>
                 </div>
             </div>
 

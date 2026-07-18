@@ -16,6 +16,90 @@ import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
 import type { ResultSummary } from '../hooks/useRunner.js';
+import { categorizeFinding } from '../utils/findings.js';
+import { extractErrorSubtype } from '../utils/errors.js';
+
+// Helper to compute deduplicated count for Grouped Errors
+function getGroupedFindingsCount(rows: ResultSummary[]): number {
+    const groups: Record<string, Set<string>> = {};
+    for (const row of rows) {
+        let placed = false;
+        if (row.analyzerFindings && row.analyzerFindings.length > 0) {
+            for (const f of row.analyzerFindings) {
+                placed = true;
+                const { key: groupKey } = categorizeFinding(f, row.responsePreview);
+                if (!groups[groupKey]) groups[groupKey] = new Set();
+                const dedupeKey = `${row.method} ${row.endpoint}::${f.ruleId}::${f.message}`;
+                groups[groupKey].add(dedupeKey);
+            }
+        }
+        if (!placed) {
+            const isErrorStatus = row.status >= 500 || 
+                                 (row.status === 0 && row.error) ||
+                                 (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status));
+            if (isErrorStatus) {
+                let groupKey = `status_${row.status}`;
+                if (row.status === 0) {
+                    groupKey = 'status_0';
+                } else {
+                    const subType = extractErrorSubtype(row.responsePreview);
+                    if (subType) {
+                        groupKey = `status_${row.status}_${subType.key}`;
+                    }
+                }
+                if (!groups[groupKey]) groups[groupKey] = new Set();
+                const dedupeKey = `${row.method} ${row.endpoint}::${row.status}::${row.error || ''}`;
+                groups[groupKey].add(dedupeKey);
+            }
+        }
+    }
+    return Object.values(groups).reduce((sum, set) => sum + set.size, 0);
+}
+
+// Helper to compute deduplicated count for OWASP Top 10
+function getOwaspFindingsCount(rows: ResultSummary[]): number {
+    const seenKeys = new Set<string>();
+    let count = 0;
+    for (const row of rows) {
+        let placed = false;
+        if (row.analyzerFindings && row.analyzerFindings.length > 0) {
+            for (const f of row.analyzerFindings) {
+                const cats = f.owaspCategory || [];
+                if (cats.length > 0) {
+                    for (const c of cats) {
+                        const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:${f.ruleId || ''}`;
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            count++;
+                        }
+                        placed = true;
+                    }
+                }
+            }
+        }
+        if (!placed) {
+            const cats = row.owaspCategory || [];
+            if (cats.length > 0) {
+                for (const c of cats) {
+                    const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
+                        count++;
+                    }
+                    placed = true;
+                }
+            }
+        }
+        if (!placed) {
+            const key = `Unmapped / Other:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;
+            if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                count++;
+            }
+        }
+    }
+    return count;
+}
 
 interface MainWorkspaceProps {
     config: any;
@@ -101,12 +185,14 @@ export function MainWorkspace({
 
     const hasActivity = !!inspectorRunId || config.endpoints.length > 0;
 
-    const [findingsCount, setFindingsCount] = useState(0);
+    const [groupedFindingsCount, setGroupedFindingsCount] = useState(0);
+    const [owaspFindingsCount, setOwaspFindingsCount] = useState(0);
     const [vulnerableEndpoints, setVulnerableEndpoints] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (!inspectorRunId || !isAnalysisEnabled) {
-            setFindingsCount(0);
+            setGroupedFindingsCount(0);
+            setOwaspFindingsCount(0);
             setVulnerableEndpoints(new Set());
             return;
         }
@@ -116,7 +202,21 @@ export function MainWorkspace({
             queryResults({ runId: inspectorRunId, findingsOnly: true, limit: 5000 })
                 .then(res => {
                     if (active) {
-                        setFindingsCount(res.total);
+                        let excl = new Set<number>();
+                        try {
+                            const saved = localStorage.getItem('swazz_excluded_statuses');
+                            if (saved) {
+                                const parsed = JSON.parse(saved);
+                                if (Array.isArray(parsed)) {
+                                    excl = new Set(parsed.map(Number));
+                                }
+                            }
+                        } catch {}
+
+                        const filteredRows = res.rows.filter(r => !excl.has(r.status));
+                        setGroupedFindingsCount(getGroupedFindingsCount(filteredRows));
+                        setOwaspFindingsCount(getOwaspFindingsCount(res.rows));
+
                         const vulnSet = new Set<string>();
                         for (const r of res.rows) {
                             const epKey = `${r.method.toUpperCase()} ${r.endpoint}`;
@@ -210,8 +310,8 @@ export function MainWorkspace({
                                     <line x1="12" y1="17" x2="12.01" y2="17" />
                                 </svg>
                                 Grouped Errors
-                                {findingsCount > 0 && (
-                                    <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
+                                {groupedFindingsCount > 0 && (
+                                    <span className="tab-bar-count">{groupedFindingsCount.toLocaleString()}</span>
                                 )}
                             </button>
                         )}
@@ -224,8 +324,8 @@ export function MainWorkspace({
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                                 </svg>
                                 OWASP Top 10
-                                {findingsCount > 0 && (
-                                    <span className="tab-bar-count">{findingsCount.toLocaleString()}</span>
+                                {owaspFindingsCount > 0 && (
+                                    <span className="tab-bar-count">{owaspFindingsCount.toLocaleString()}</span>
                                 )}
                             </button>
                         )}
@@ -407,6 +507,7 @@ export function MainWorkspace({
                                     onExport={() => handleExport(inspectorRunId, config.base_url)}
                                     findingsOnly={true}
                                     config={config}
+                                    onUpdateCount={setGroupedFindingsCount}
                                 />
                             )}
                             {isAnalysisEnabled && activeTab === 'owasp' && (
@@ -416,6 +517,7 @@ export function MainWorkspace({
                                     liveCount={liveCount}
                                     isRunning={isRunning}
                                     onSelectResult={handleSelectResult}
+                                    onUpdateCount={setOwaspFindingsCount}
                                 />
                             )}
                             {activeTab === 'compare' && (
