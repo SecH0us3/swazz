@@ -9500,3 +9500,62 @@ kbd {
     color: #6b7280;
     font-style: italic;
 }
+
+/* Headers Table styling */
+.parsing-error-headers-table-container {
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--bg-card);
+}
+
+.parsing-error-headers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+.parsing-error-headers-table th {
+    background: var(--bg-hover);
+    color: var(--text-dim);
+    font-weight: 600;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.parsing-error-headers-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-hover);
+    word-break: break-all;
+}
+
+.parsing-error-headers-table tr:last-child td {
+    border-bottom: none;
+}
+
+.parsing-error-header-name {
+    color: var(--text-dim);
+    font-weight: 600;
+    width: 30%;
+    user-select: text;
+}
+
+.parsing-error-header-value {
+    color: var(--text-main);
+    font-family: var(--font-mono, monospace);
+    width: 70%;
+    user-select: text;
+}
+
+.parsing-error-no-headers {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.9rem;
+    padding: 4px 0;
+}

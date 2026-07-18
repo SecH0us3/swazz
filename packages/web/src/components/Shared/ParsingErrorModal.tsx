@@ -30,6 +30,32 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
             .join('\n');
     };
 
+    const renderHeadersTable = (headers?: Record<string, string>) => {
+        if (!headers || Object.keys(headers).length === 0) {
+            return <div className="parsing-error-no-headers">None</div>;
+        }
+        return (
+            <div className="parsing-error-headers-table-container">
+                <table className="parsing-error-headers-table">
+                    <thead>
+                        <tr>
+                            <th>Header</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {Object.entries(headers).map(([k, v]) => (
+                            <tr key={k}>
+                                <td className="parsing-error-header-name">{k}</td>
+                                <td className="parsing-error-header-value">{v}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
+
     const copyToClipboard = () => {
         let text = '';
         if (activeTab === 'error') {
@@ -119,9 +145,7 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
                             </div>
                             <div className="parsing-error-field">
                                 <label className="parsing-error-label">Request Headers</label>
-                                <pre className="parsing-error-pre">
-                                    <code>{formatHeaders(error.request.headers)}</code>
-                                </pre>
+                                {renderHeadersTable(error.request.headers)}
                             </div>
                             {error.request.body && (
                                 <div className="parsing-error-field">
@@ -151,9 +175,7 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
                             </div>
                             <div className="parsing-error-field">
                                 <label className="parsing-error-label">Response Headers</label>
-                                <pre className="parsing-error-pre">
-                                    <code>{formatHeaders(error.response.headers)}</code>
-                                </pre>
+                                {renderHeadersTable(error.response.headers)}
                             </div>
                             <div className="parsing-error-field">
                                 <label className="parsing-error-label">Response Body Snippet</label>
