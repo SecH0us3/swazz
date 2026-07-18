@@ -37,12 +37,6 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
         return (
             <div className="parsing-error-headers-table-container">
                 <table className="parsing-error-headers-table">
-                    <thead>
-                        <tr>
-                            <th>Header</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
                     <tbody>
                         {Object.entries(headers).map(([k, v]) => (
                             <tr key={k}>

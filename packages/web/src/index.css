@@ -9518,17 +9518,6 @@ kbd {
     text-align: left;
 }
 
-.parsing-error-headers-table th {
-    background: var(--bg-hover);
-    color: var(--text-dim);
-    font-weight: 600;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border-default);
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
 .parsing-error-headers-table td {
     padding: 8px 12px;
     border-bottom: 1px solid var(--border-hover);
