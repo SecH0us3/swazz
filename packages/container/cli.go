@@ -543,9 +543,63 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 					headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
 				}
 
-				specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
-				if err != nil {
-					// fallback to MCP HTTP probe
+				specRaw, fetchErr := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
+				
+				var parsed *swagger.ParseResult
+				var parseErr error
+
+				if fetchErr == nil {
+					fetchDur := time.Since(startFetch)
+					logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
+
+					var parseOpts []swagger.ParserOption
+					if cliCfg.Settings.MaxNodesBudget > 0 {
+						parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
+					}
+					if cliCfg.Settings.MaxDepthLimit > 0 {
+						parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
+					}
+
+					parsed, parseErr = swagger.ParseRawSpec(specRaw, parseOpts...)
+					if parseErr != nil {
+						originalErr := parseErr
+						if swagger.IsHAR(specRaw) {
+							parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
+							if errHAR != nil {
+								parseErr = fmt.Errorf("failed to parse as HAR: %w", errHAR)
+							} else {
+								parsed = parsedHAR
+								parseErr = nil
+							}
+						} else if swagger.IsPostman(specRaw) {
+							parsedPostman, errPostman := postman.ParsePostman(specRaw)
+							if errPostman != nil {
+								parseErr = fmt.Errorf("failed to parse as Postman Collection: %w", errPostman)
+							} else {
+								parsed = parsedPostman
+								parseErr = nil
+							}
+						} else {
+							// Try GraphQL parser fallback
+							defaultPath := "/graphql"
+							if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+								if parsedURL.Path != "" && parsedURL.Path != "/" {
+									defaultPath = parsedURL.Path
+								}
+							}
+							parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+							if errGQL != nil {
+								parseErr = fmt.Errorf("failed to parse spec as OpenAPI (%w) or GraphQL (%w)", originalErr, errGQL)
+							} else {
+								parsed = parsedGQL
+								parseErr = nil
+							}
+						}
+					}
+				}
+
+				// Trigger MCP probe if fetching failed OR parsing failed
+				if fetchErr != nil || parseErr != nil {
 					mcpClient := mcp.NewHTTPClient(urlStr, cliCfg.Security.AllowPrivateIPs)
 					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
 					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
@@ -571,52 +625,14 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 						mcpCancel()
 						logger.Debug("[Config] MCP fallback failed for %s: %v", urlStr, mcpErr)
 					}
-					resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}
-					return
-				}
 
-				fetchDur := time.Since(startFetch)
-				logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
-
-				var parseOpts []swagger.ParserOption
-				if cliCfg.Settings.MaxNodesBudget > 0 {
-					parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
-				}
-				if cliCfg.Settings.MaxDepthLimit > 0 {
-					parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
-				}
-
-				parsed, err := swagger.ParseRawSpec(specRaw, parseOpts...)
-				if err != nil {
-					if swagger.IsHAR(specRaw) {
-						parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
-						if errHAR != nil {
-							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as HAR: %w", urlStr, errHAR)}
-							return
-						}
-						parsed = parsedHAR
-					} else if swagger.IsPostman(specRaw) {
-						parsedPostman, errPostman := postman.ParsePostman(specRaw)
-						if errPostman != nil {
-							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as Postman Collection: %w", urlStr, errPostman)}
-							return
-						}
-						parsed = parsedPostman
+					// Return original fetch or parse error
+					if fetchErr != nil {
+						resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, fetchErr)}
 					} else {
-						// Try GraphQL parser fallback
-						defaultPath := "/graphql"
-						if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-							if parsedURL.Path != "" && parsedURL.Path != "/" {
-								defaultPath = parsedURL.Path
-							}
-						}
-						parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-						if errGQL != nil {
-							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as OpenAPI (%w) or GraphQL (%w)", urlStr, err, errGQL)}
-							return
-						}
-						parsed = parsedGQL
+						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s: %w", urlStr, parseErr)}
 					}
+					return
 				}
 
 				bp := ""

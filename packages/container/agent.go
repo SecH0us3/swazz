@@ -550,7 +550,7 @@ func startAgent(args []string) {
 			go func() {
 				var result interface{}
 				var data []byte
-				var err error
+				var fetchErr error
 
 				if reqPayload.RawSpec != "" {
 					data = []byte(reqPayload.RawSpec)
@@ -559,75 +559,83 @@ func startAgent(args []string) {
 					resp, errFetch := client.Get(reqPayload.URL)
 					if errFetch != nil {
 						logError("[Parser] Failed to fetch spec: %v", errFetch)
-						err = errFetch
+						fetchErr = errFetch
 					} else {
 						defer resp.Body.Close()
 						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
-						data, err = io.ReadAll(limitReader)
-						if err == nil && len(data) > 10*1024*1024 {
-							err = fmt.Errorf("specification file exceeds the 10MB limit")
+						var readErr error
+						data, readErr = io.ReadAll(limitReader)
+						if readErr == nil && len(data) > 10*1024*1024 {
+							fetchErr = fmt.Errorf("specification file exceeds the 10MB limit")
+						} else {
+							fetchErr = readErr
 						}
 					}
 				} else {
-					err = fmt.Errorf("missing url or rawSpec")
+					fetchErr = fmt.Errorf("missing url or rawSpec")
 				}
 
-				if err != nil {
-					result = map[string]string{"error": err.Error()}
-				} else {
-					var parseResult *swagger.ParseResult
-					var parseErr error
+				var parseResult *swagger.ParseResult
+				var parseErr error
+
+				if fetchErr == nil {
 					parseResult, parseErr = swagger.ParseRawSpec(data)
-						if parseErr != nil {
-							originalErr := parseErr
-							if swagger.IsHAR(data) {
-								parseResult, parseErr = har.ParseHAR(data, "")
-							} else if swagger.IsPostman(data) {
-								parseResult, parseErr = postman.ParsePostman(data)
-							} else {
-								defaultPath := "/graphql"
-								if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
-									if parsedURL.Path != "" && parsedURL.Path != "/" {
-										defaultPath = parsedURL.Path
-									}
-								}
-								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
-								if parseErr != nil {
-									parseErr = originalErr
-								}
-							}
-						}
-
-						if parseErr != nil && reqPayload.URL != "" {
-							// fallback to MCP HTTP probe
-							mcpClient := mcp.NewHTTPClient(reqPayload.URL, false)
-							mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
-							if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
-								// It is an MCP HTTP server!
-								tools, _ := mcpClient.ListTools(mcpCtx)
-								mcpCancel()
-								var eps []swagger.EndpointConfig
-								for _, t := range tools {
-									eps = append(eps, swagger.EndpointConfig{
-										Method:      "MCP",
-										Path:        t.Name,
-										Schema:      t.InputSchema,
-									})
-								}
-								parseResult = &swagger.ParseResult{
-									BasePath:  reqPayload.URL,
-									Endpoints: eps,
-								}
-								parseErr = nil // override original parse error
-							} else {
-								mcpCancel()
-							}
-						}
-
-						if parseErr != nil {
-							logError("[Parser] Failed to parse spec: %v", parseErr)
-							result = map[string]string{"error": parseErr.Error()}
+					if parseErr != nil {
+						originalErr := parseErr
+						if swagger.IsHAR(data) {
+							parseResult, parseErr = har.ParseHAR(data, "")
+						} else if swagger.IsPostman(data) {
+							parseResult, parseErr = postman.ParsePostman(data)
 						} else {
+							defaultPath := "/graphql"
+							if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
+								if parsedURL.Path != "" && parsedURL.Path != "/" {
+									defaultPath = parsedURL.Path
+								}
+							}
+							parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+							if parseErr != nil {
+								parseErr = originalErr
+							}
+						}
+					}
+				}
+
+				// Trigger MCP probe if fetching failed OR parsing failed
+				if (fetchErr != nil || parseErr != nil) && reqPayload.URL != "" {
+					// fallback to MCP HTTP probe
+					mcpClient := mcp.NewHTTPClient(reqPayload.URL, false)
+					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
+						// It is an MCP HTTP server!
+						tools, _ := mcpClient.ListTools(mcpCtx)
+						mcpCancel()
+						var eps []swagger.EndpointConfig
+						for _, t := range tools {
+							eps = append(eps, swagger.EndpointConfig{
+								Method: "MCP",
+								Path:   t.Name,
+								Schema: t.InputSchema,
+							})
+						}
+						parseResult = &swagger.ParseResult{
+							BasePath:  reqPayload.URL,
+							Endpoints: eps,
+						}
+						fetchErr = nil
+						parseErr = nil
+					} else {
+						mcpCancel()
+					}
+				}
+
+				if fetchErr != nil {
+					logError("[Parser] Failed to fetch spec: %v", fetchErr)
+					result = map[string]string{"error": fetchErr.Error()}
+				} else if parseErr != nil {
+					logError("[Parser] Failed to parse spec: %v", parseErr)
+					result = map[string]string{"error": parseErr.Error()}
+				} else {
 							// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
 							for i := range parseResult.Endpoints {
 								pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
@@ -648,7 +656,6 @@ func startAgent(args []string) {
 								"rawSpec":   string(data),
 							}
 						}
-					}
 
 				msgPayload := map[string]interface{}{
 					"type":    "parse_result",
