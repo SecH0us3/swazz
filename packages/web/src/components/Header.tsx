@@ -5,12 +5,6 @@ import { UserMenu } from './UserMenu.js';
 import { useToast } from '../hooks/useToast.js';
 
 interface Props {
-    baseUrl: string;
-    onChangeBaseUrl?: (url: string) => void;
-    onStart: (cleanUrl?: string) => void;
-    onStop: () => void;
-    onPause: () => void;
-    onResume: () => void;
     onToggleSidebar?: () => void;
     onToggleConfig?: () => void;
     theme: 'dark' | 'light';
@@ -22,12 +16,6 @@ interface Props {
 }
 
 export function Header({
-    baseUrl,
-    onChangeBaseUrl,
-    onStart,
-    onStop,
-    onPause,
-    onResume,
     onToggleSidebar,
     onToggleConfig,
     theme,
@@ -52,7 +40,6 @@ export function Header({
 
     const { showToast } = useToast();
 
-    const [localUrl, setLocalUrl] = useState(baseUrl);
     const [invitations, setInvitations] = useState<any[]>([]);
 
     useEffect(() => {
@@ -122,46 +109,7 @@ export function Header({
         }
     };
 
-    useEffect(() => {
-        setLocalUrl(baseUrl);
-    }, [baseUrl]);
 
-    const handleUrlCommit = (val: string) => {
-        let cleanUrl = val.trim();
-        if (!cleanUrl) {
-            if (onChangeBaseUrl) onChangeBaseUrl('');
-            setLocalUrl('');
-            return;
-        }
-        
-        try {
-            const u = new URL(cleanUrl);
-            cleanUrl = u.origin;
-        } catch {
-            // Not a full URL, leave as is
-        }
-
-        setLocalUrl(cleanUrl);
-        if (onChangeBaseUrl && cleanUrl !== baseUrl) {
-            onChangeBaseUrl(cleanUrl);
-        }
-    };
-
-    const handleStartClick = () => {
-        let cleanUrl = localUrl.trim();
-        if (cleanUrl) {
-            try {
-                const u = new URL(cleanUrl);
-                cleanUrl = u.origin;
-            } catch {
-                // Not a full URL, leave as is
-            }
-        }
-        if (onChangeBaseUrl) {
-            onChangeBaseUrl(cleanUrl);
-        }
-        onStart(cleanUrl);
-    };
 
     return (
         <header className="header">
@@ -220,79 +168,9 @@ export function Header({
                 )}
             </div>
 
-            {/* Middle Section: URL Bar (Centered if screen width allows) */}
-            {baseUrl !== undefined && (
-                <div className="header-url-bar">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="2" y1="12" x2="22" y2="12"/>
-                        <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-                    </svg>
-                    <input
-                        className="header-target-input"
-                        value={localUrl}
-                        aria-label="Target API URL"
-                        onChange={(e) => setLocalUrl(e.target.value)}
-                        onBlur={() => handleUrlCommit(localUrl)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                handleUrlCommit(localUrl);
-                                e.currentTarget.blur();
-                            }
-                        }}
-                        placeholder="https://api.example.com"
-                        readOnly={!onChangeBaseUrl}
-                    />
-                    {isBusy && !isLoadingSpecs && (
-                        <span
-                            className="header-status-indicator"
-                        />
-                    )}
-                </div>
-            )}
 
-            {/* Right Section: Actions, Toggles */}
+
             <div className="header-right">
-
-
-                {/* Actions */}
-                <div className="header-actions">
-                    {!isBusy ? (
-                        <button className="btn btn-primary" id="btn-start" onClick={handleStartClick}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                <polygon points="5,3 19,12 5,21"/>
-                            </svg>
-                            <span>Run</span>
-                        </button>
-                    ) : (
-                        <>
-                            {!isLoadingSpecs && (
-                                isPaused ? (
-                                    <button className="btn btn-success" onClick={onResume} title="Resume">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                            <polygon points="5,3 19,12 5,21"/>
-                                        </svg>
-                                        <span className="desktop-only">Resume</span>
-                                    </button>
-                                ) : (
-                                    <button className="btn btn-ghost" onClick={onPause} title="Pause">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                            <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                                        </svg>
-                                        <span className="desktop-only">Pause</span>
-                                    </button>
-                                )
-                            )}
-                            <button className="btn btn-danger" onClick={onStop} title="Stop">
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                </svg>
-                                <span className="desktop-only">Stop</span>
-                            </button>
-                        </>
-                    )}
-                </div>
-
                 {/* Theme Toggle */}
                 <button className="btn btn-ghost btn-icon" onClick={onToggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} aria-label="Toggle Theme">
                     {theme === 'dark' ? (

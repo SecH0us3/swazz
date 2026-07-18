@@ -113,6 +113,12 @@ interface MainWorkspaceProps {
     queryResults: (opts: QueryOptions) => Promise<{ rows: ResultSummary[]; total: number }>;
     runs: any[];
     onImportRun: (data: any) => Promise<{ runId: string; run: any } | undefined>;
+    baseUrl: string;
+    onChangeBaseUrl?: (url: string) => void;
+    onStart: (cleanUrl?: string) => void;
+    onStop: () => void;
+    onPause: () => void;
+    onResume: () => void;
 }
 
 export function MainWorkspace({
@@ -127,6 +133,12 @@ export function MainWorkspace({
     queryResults,
     runs,
     onImportRun,
+    baseUrl,
+    onChangeBaseUrl,
+    onStart,
+    onStop,
+    onPause,
+    onResume,
 }: MainWorkspaceProps) {
     const {
         activeRunId,
@@ -137,6 +149,9 @@ export function MainWorkspace({
         activeTab,
         heatmapFilter,
         isRunning,
+        isPaused,
+        isLoadingSpecs,
+        isQueued,
         compareRunIdA,
         compareRunIdB,
         activeProject
@@ -149,15 +164,61 @@ export function MainWorkspace({
         activeTab: state.activeTab,
         heatmapFilter: state.heatmapFilter,
         isRunning: state.isRunning,
+        isPaused: state.isPaused,
+        isLoadingSpecs: state.isLoadingSpecs,
+        isQueued: state.isQueued,
         compareRunIdA: state.compareRunIdA,
         compareRunIdB: state.compareRunIdB,
         activeProject: state.activeProject
     })));
 
+    const isBusy = isRunning || isLoadingSpecs || isQueued;
+
     const betaModeEnabled = useAppStore((state) => state.betaModeEnabled);
 
-
+    const [localUrl, setLocalUrl] = useState(baseUrl);
     const [isExportHovered, setIsExportHovered] = useState(false);
+
+    useEffect(() => {
+        setLocalUrl(baseUrl);
+    }, [baseUrl]);
+
+    const handleUrlCommit = (val: string) => {
+        let cleanUrl = val.trim();
+        if (!cleanUrl) {
+            if (onChangeBaseUrl) onChangeBaseUrl('');
+            setLocalUrl('');
+            return;
+        }
+
+        try {
+            const u = new URL(cleanUrl);
+            cleanUrl = u.origin;
+        } catch {
+            // Not a full URL, leave as is
+        }
+
+        setLocalUrl(cleanUrl);
+        if (onChangeBaseUrl && cleanUrl !== baseUrl) {
+            onChangeBaseUrl(cleanUrl);
+        }
+    };
+
+    const handleStartClick = () => {
+        let cleanUrl = localUrl.trim();
+        if (cleanUrl) {
+            try {
+                const u = new URL(cleanUrl);
+                cleanUrl = u.origin;
+            } catch {
+                // Not a full URL, leave as is
+            }
+        }
+        if (onChangeBaseUrl) {
+            onChangeBaseUrl(cleanUrl);
+        }
+        onStart(cleanUrl);
+    };
 
     // Endpoint keys for heatmap — derive from stats or config
     const endpointKeys = useMemo(() => {
@@ -266,6 +327,73 @@ export function MainWorkspace({
                 <AboutPage />
             ) : (
                 <div className="workspace-main-layout">
+                    {loadedRunId === null && (
+                        <div className="workspace-control-bar">
+                            <div className="workspace-url-section">
+                                <svg className="url-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="2" y1="12" x2="22" y2="12"/>
+                                    <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+                                </svg>
+                                <input
+                                    className="workspace-target-input header-target-input"
+                                    value={localUrl}
+                                    aria-label="Target API URL"
+                                    onChange={(e) => setLocalUrl(e.target.value)}
+                                    onBlur={() => handleUrlCommit(localUrl)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleUrlCommit(localUrl);
+                                            e.currentTarget.blur();
+                                        }
+                                    }}
+                                    placeholder="Enter target API URL (e.g. https://api.example.com)"
+                                    readOnly={!onChangeBaseUrl}
+                                />
+                                {isBusy && !isLoadingSpecs && (
+                                    <span className="workspace-status-indicator" />
+                                )}
+                            </div>
+
+                            <div className="workspace-action-section">
+                                {!isBusy ? (
+                                    <button className="btn btn-primary btn-run" id="btn-start" onClick={handleStartClick}>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                            <polygon points="5,3 19,12 5,21"/>
+                                        </svg>
+                                        <span>Run Scan</span>
+                                    </button>
+                                ) : (
+                                    <div className="action-button-group">
+                                        {!isLoadingSpecs && (
+                                            isPaused ? (
+                                                <button className="btn btn-success" onClick={onResume} title="Resume">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                                        <polygon points="5,3 19,12 5,21"/>
+                                                    </svg>
+                                                    <span>Resume</span>
+                                                </button>
+                                            ) : (
+                                                <button className="btn btn-ghost" onClick={onPause} title="Pause">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                                        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                                                    </svg>
+                                                    <span>Pause</span>
+                                                </button>
+                                            )
+                                        )}
+                                        <button className="btn btn-danger" onClick={onStop} title="Stop">
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                            </svg>
+                                            <span>Stop</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {betaModeEnabled && (
                         <div className="beta-status-alert">
                             <span className="beta-alert-dot" />

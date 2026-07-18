@@ -9695,3 +9695,92 @@ kbd {
   border-color: rgba(14, 165, 233, 0.2);
   color: var(--accent-light);
 }
+
+/* ─── Workspace Control Bar ────────────────────────────── */
+
+.workspace-control-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  flex-shrink: 0;
+}
+
+.workspace-url-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-4);
+  height: 40px;
+  position: relative;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.workspace-url-section:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+}
+
+.workspace-url-section .url-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.workspace-target-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  outline: none;
+  height: 100%;
+  width: 100%;
+}
+
+.workspace-target-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.workspace-action-section {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.action-button-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.btn-run {
+  height: 40px;
+  padding: 0 var(--space-5);
+  font-weight: 600;
+  gap: var(--space-2);
+}
+
+.workspace-status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  animation: pulse-glow 1.5s infinite ease-in-out;
+  position: absolute;
+  right: var(--space-4);
+}
+
+@keyframes pulse-glow {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 8px var(--color-success); }
+  100% { transform: scale(0.9); opacity: 0.6; }
+}
