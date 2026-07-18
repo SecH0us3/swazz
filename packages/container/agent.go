@@ -537,8 +537,10 @@ func startAgent(args []string) {
 
 		case "parse_request":
 			var reqPayload struct {
-				URL     string `json:"url"`
-				RawSpec string `json:"rawSpec"`
+				URL     string            `json:"url"`
+				RawSpec string            `json:"rawSpec"`
+				Headers map[string]string `json:"headers"`
+				Cookies map[string]string `json:"cookies"`
 			}
 			if err := json.Unmarshal(wsMsg.Payload, &reqPayload); err != nil {
 				logError("Failed to unmarshal parse_request payload: %v", err)
@@ -556,19 +558,42 @@ func startAgent(args []string) {
 					data = []byte(reqPayload.RawSpec)
 				} else if reqPayload.URL != "" {
 					client := safenet.NewSafeHTTPClient(15 * time.Second)
-					resp, errFetch := client.Get(reqPayload.URL)
-					if errFetch != nil {
-						logError("[Parser] Failed to fetch spec: %v", errFetch)
-						fetchErr = errFetch
+					
+					req, reqErr := http.NewRequest("GET", reqPayload.URL, nil)
+					if reqErr != nil {
+						fetchErr = reqErr
 					} else {
-						defer resp.Body.Close()
-						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
-						var readErr error
-						data, readErr = io.ReadAll(limitReader)
-						if readErr == nil && len(data) > 10*1024*1024 {
-							fetchErr = fmt.Errorf("specification file exceeds the 10MB limit")
+						// Set headers
+						for k, v := range reqPayload.Headers {
+							req.Header.Set(k, v)
+						}
+						// Format and set cookies
+						if len(reqPayload.Cookies) > 0 {
+							var cookieParts []string
+							for k, v := range reqPayload.Cookies {
+								cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+							}
+							req.Header.Set("Cookie", strings.Join(cookieParts, "; "))
+						}
+
+						resp, errFetch := client.Do(req)
+						if errFetch != nil {
+							logError("[Parser] Failed to fetch spec: %v", errFetch)
+							fetchErr = errFetch
 						} else {
-							fetchErr = readErr
+							defer resp.Body.Close()
+							if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+								fetchErr = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel", resp.StatusCode)
+							} else {
+								limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
+								var readErr error
+								data, readErr = io.ReadAll(limitReader)
+								if readErr == nil && len(data) > 10*1024*1024 {
+									fetchErr = fmt.Errorf("specification file exceeds the 10MB limit")
+								} else {
+									fetchErr = readErr
+								}
+							}
 						}
 					}
 				} else {
@@ -603,8 +628,20 @@ func startAgent(args []string) {
 
 				// Trigger MCP probe if fetching failed OR parsing failed
 				if (fetchErr != nil || parseErr != nil) && reqPayload.URL != "" {
+					mcpHeaders := make(map[string]string)
+					for k, v := range reqPayload.Headers {
+						mcpHeaders[k] = v
+					}
+					if len(reqPayload.Cookies) > 0 {
+						var cookieParts []string
+						for k, v := range reqPayload.Cookies {
+							cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+						}
+						mcpHeaders["Cookie"] = strings.Join(cookieParts, "; ")
+					}
+
 					// fallback to MCP HTTP probe
-					mcpClient := mcp.NewHTTPClient(reqPayload.URL, false)
+					mcpClient := mcp.NewHTTPClient(reqPayload.URL, false, mcpHeaders)
 					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
 					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
 						// It is an MCP HTTP server!

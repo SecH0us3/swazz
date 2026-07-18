@@ -105,8 +105,10 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	// codeql[go/request-forgery]
 	resp, err := client.Do(req)
 	var body []byte
+	var lastStatus int
 	if err == nil {
 		defer resp.Body.Close()
+		lastStatus = resp.StatusCode
 		if resp.StatusCode == http.StatusOK {
 			body, err = io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
 			if err == nil {
@@ -157,10 +159,14 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 		if body != nil {
 			return body, nil
 		}
+		if lastStatus == http.StatusUnauthorized || lastStatus == http.StatusForbidden {
+			return nil, fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel: %w", lastStatus, err)
+		}
 		return nil, fmt.Errorf("failed to fetch via GET and POST: %w", err)
 	}
 	defer postResp.Body.Close()
 
+	lastStatus = postResp.StatusCode
 	if postResp.StatusCode == http.StatusOK {
 		postBody, err := io.ReadAll(io.LimitReader(postResp.Body, 10*1024*1024)) // 10MB limit
 		if err == nil {
@@ -172,6 +178,9 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 
 	if body != nil {
 		return body, nil
+	}
+	if lastStatus == http.StatusUnauthorized || lastStatus == http.StatusForbidden {
+		return nil, fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel", lastStatus)
 	}
 	return nil, fmt.Errorf("spec server returned status %d on POST introspection request", postResp.StatusCode)
 }

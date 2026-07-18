@@ -436,15 +436,17 @@ type SSEClient struct {
 	endpointChan chan string
 	sseResponse  *http.Response
 	isClosed     bool
+	headers      map[string]string
 }
 
 // NewSSEClient initializes a new SSEClient.
-func NewSSEClient(urlStr string, allowPrivateIPs bool) *SSEClient {
+func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string) *SSEClient {
 	return &SSEClient{
 		url:          urlStr,
 		httpClient:   security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
 		pending:      make(map[string]chan *Response),
 		endpointChan: make(chan string, 1),
+		headers:      headers,
 	}
 }
 
@@ -460,6 +462,9 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Connection", "keep-alive")
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -563,6 +568,9 @@ func (c *SSEClient) initializeHandshake(ctx context.Context) error {
 		return err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	for k, v := range c.headers {
+		httpReq.Header.Set(k, v)
+	}
 
 	postResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -608,6 +616,9 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	for k, v := range c.headers {
+		httpReq.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -784,13 +795,15 @@ type HTTPClient struct {
 	url        string
 	httpClient *http.Client
 	nextID     uint64
+	headers    map[string]string
 }
 
 // NewHTTPClient initializes a new HTTPClient.
-func NewHTTPClient(urlStr string, allowPrivateIPs bool) *HTTPClient {
+func NewHTTPClient(urlStr string, allowPrivateIPs bool, headers map[string]string) *HTTPClient {
 	return &HTTPClient{
 		url:        urlStr,
 		httpClient: security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
+		headers:    headers,
 	}
 }
 
@@ -823,6 +836,9 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

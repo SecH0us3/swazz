@@ -22,7 +22,7 @@ export async function loadSwaggerUrl(
     const res = await fetch(`${PROXY_URL}/api/parse`, {
         method: 'POST',
         headers: requestHeaders,
-        body: JSON.stringify({ url, forceRebuild }), // we can pass headers/cookies if the Go backend supports it eventually
+        body: JSON.stringify({ url, headers, cookies, forceRebuild }),
     });
 
     if (!res.ok) {

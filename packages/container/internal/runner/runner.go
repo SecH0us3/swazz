@@ -195,12 +195,24 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		regexCache:    make(map[string]*regexp.Regexp),
 	}
 	if config.MCPServer != nil {
+		mcpHeaders := make(map[string]string)
+		for k, v := range config.GlobalHeaders {
+			mcpHeaders[k] = v
+		}
+		if len(config.Cookies) > 0 {
+			var cookieParts []string
+			for k, v := range config.Cookies {
+				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+			}
+			mcpHeaders["Cookie"] = strings.Join(cookieParts, "; ")
+		}
+
 		if config.MCPServer.Type == "stdio" {
 			r.mcpClient = mcp.NewStdioClient(config.MCPServer.Command, config.MCPServer.Args)
 		} else if config.MCPServer.Type == "sse" {
-			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL, config.Security.AllowPrivateIPs)
+			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders)
 		} else if config.MCPServer.Type == "http" {
-			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL, config.Security.AllowPrivateIPs)
+			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders)
 		}
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)

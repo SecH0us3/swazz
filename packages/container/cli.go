@@ -600,7 +600,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 
 				// Trigger MCP probe if fetching failed OR parsing failed
 				if fetchErr != nil || parseErr != nil {
-					mcpClient := mcp.NewHTTPClient(urlStr, cliCfg.Security.AllowPrivateIPs)
+					mcpClient := mcp.NewHTTPClient(urlStr, cliCfg.Security.AllowPrivateIPs, headersCopy)
 					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
 					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
 						// It is an MCP HTTP server!
