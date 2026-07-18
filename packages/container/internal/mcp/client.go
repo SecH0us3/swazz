@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
 )
 
@@ -288,12 +289,12 @@ func (c *StdioClient) getExitError() error {
 }
 
 func (c *StdioClient) readStdoutLoop() {
-	scanner := bufio.NewScanner(c.stdout)
-	for scanner.Scan() {
-		line := scanner.Bytes()
+	decoder := json.NewDecoder(c.stdout)
+	for {
 		var resp Response
-		if err := json.Unmarshal(line, &resp); err != nil {
-			continue
+		if err := decoder.Decode(&resp); err != nil {
+			// EOF or broken pipe: process exited
+			break
 		}
 
 		key := idToKey(resp.ID)
@@ -308,9 +309,6 @@ func (c *StdioClient) readStdoutLoop() {
 			ch <- &resp
 		}
 	}
-
-
-
 }
 
 func (c *StdioClient) readStderrLoop(stderr io.Reader) {
@@ -441,10 +439,10 @@ type SSEClient struct {
 }
 
 // NewSSEClient initializes a new SSEClient.
-func NewSSEClient(urlStr string) *SSEClient {
+func NewSSEClient(urlStr string, allowPrivateIPs bool) *SSEClient {
 	return &SSEClient{
 		url:          urlStr,
-		httpClient:   &http.Client{},
+		httpClient:   security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
 		pending:      make(map[string]chan *Response),
 		endpointChan: make(chan string, 1),
 	}
@@ -492,7 +490,15 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 		epURL, err := url.Parse(ep)
 		if err == nil {
 			if epURL.IsAbs() {
-				c.writeURL = ep
+				// Security: only allow redirects to the same host as the original SSE URL
+				// to prevent a compromised server from redirecting to internal metadata services.
+				baseURL, baseErr := url.Parse(c.url)
+				if baseErr == nil && epURL.Host == baseURL.Host {
+					c.writeURL = ep
+				} else {
+					// Reject cross-host redirect; fall back to derived default
+					c.writeURL = defaultWriteURL
+				}
 			} else {
 				base, err := url.Parse(c.url)
 				if err == nil {
@@ -502,7 +508,7 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 				}
 			}
 		} else {
-			c.writeURL = ep
+			c.writeURL = defaultWriteURL
 		}
 	case <-ctx.Done():
 		_ = c.Close()
@@ -781,10 +787,10 @@ type HTTPClient struct {
 }
 
 // NewHTTPClient initializes a new HTTPClient.
-func NewHTTPClient(urlStr string) *HTTPClient {
+func NewHTTPClient(urlStr string, allowPrivateIPs bool) *HTTPClient {
 	return &HTTPClient{
 		url:        urlStr,
-		httpClient: &http.Client{},
+		httpClient: security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
 	}
 }
 

@@ -546,12 +546,12 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 				specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
 				if err != nil {
 					// fallback to MCP HTTP probe
-					mcpClient := mcp.NewHTTPClient(urlStr)
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					if mcpErr := mcpClient.Connect(ctx); mcpErr == nil {
+					mcpClient := mcp.NewHTTPClient(urlStr, cliCfg.Security.AllowPrivateIPs)
+					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
 						// It is an MCP HTTP server!
-						tools, _ := mcpClient.ListTools(ctx)
+						tools, _ := mcpClient.ListTools(mcpCtx)
+						mcpCancel()
 						var eps []swagger.EndpointConfig
 						for _, t := range tools {
 							eps = append(eps, swagger.EndpointConfig{
@@ -568,6 +568,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 						}
 						return
 					} else {
+						mcpCancel()
 						logger.Debug("[Config] MCP fallback failed for %s: %v", urlStr, mcpErr)
 					}
 					resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}

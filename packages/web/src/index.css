@@ -6992,6 +6992,44 @@ kbd {
   padding-top: 16px;
 }
 
+.specs-mcp-section {
+  padding-top: 24px;
+  margin-top: 24px;
+}
+
+.specs-mcp-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.specs-mcp-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.specs-mcp-label-text {
+  font-size: 13px;
+}
+
+.specs-mcp-config-box {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 8px;
+}
+
+.settings-field-full {
+  width: 100%;
+}
+
 .specs-url-list {
   display: flex;
   flex-direction: column;

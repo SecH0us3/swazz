@@ -198,9 +198,9 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		if config.MCPServer.Type == "stdio" {
 			r.mcpClient = mcp.NewStdioClient(config.MCPServer.Command, config.MCPServer.Args)
 		} else if config.MCPServer.Type == "sse" {
-			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL)
+			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL, config.Security.AllowPrivateIPs)
 		} else if config.MCPServer.Type == "http" {
-			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL)
+			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL, config.Security.AllowPrivateIPs)
 		}
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)

@@ -412,30 +412,29 @@ export function ApiSpecsTab() {
             </div>
 
             {/* MCP Fuzzing Section */}
-            <div className="specs-urls-section" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '24px', marginTop: '24px' }}>
+            <div className="specs-urls-section specs-mcp-section">
                 <h3 className="specs-section-title">Model Context Protocol (MCP) Fuzzing</h3>
                 <p className="specs-section-desc">Expose and fuzz an MCP server's tools dynamically during the scan run.</p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
-                    <label className="premium-checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <div className="specs-mcp-controls">
+                    <label className="premium-checkbox-label specs-mcp-checkbox-label">
                         <input
                             type="checkbox"
                             className="premium-checkbox"
                             checked={isMcpEnabled}
                             onChange={(e) => handleToggleMcp(e.target.checked)}
                         />
-                        <strong style={{ fontSize: '13px' }}>Enable MCP Server Fuzzing</strong>
+                        <strong className="specs-mcp-label-text">Enable MCP Server Fuzzing</strong>
                     </label>
 
                     {isMcpEnabled && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.05)', marginTop: '8px' }}>
+                        <div className="specs-mcp-config-box">
                             <div className="settings-field-group">
                                 <label className="settings-field-label">Transport Type</label>
                                 <select
-                                    className="input settings-field-input"
+                                    className="input settings-field-input settings-field-full"
                                     value={mcpType}
                                     onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse')}
-                                    style={{ width: '100%' }}
                                 >
                                     <option value="stdio">Stdio (Local Process / Command)</option>
                                     <option value="sse">SSE (HTTP Server-Sent Events)</option>
@@ -448,22 +447,20 @@ export function ApiSpecsTab() {
                                         <label className="settings-field-label">Command</label>
                                         <input
                                             type="text"
-                                            className="input settings-field-input"
+                                            className="input settings-field-input settings-field-full"
                                             placeholder="e.g. node"
                                             value={mcpCommand}
                                             onChange={(e) => handleUpdateMcpField('command', e.target.value)}
-                                            style={{ width: '100%' }}
                                         />
                                     </div>
                                     <div className="settings-field-group">
                                         <label className="settings-field-label">Arguments (space-separated)</label>
                                         <input
                                             type="text"
-                                            className="input settings-field-input"
+                                            className="input settings-field-input settings-field-full"
                                             placeholder="e.g. demo/mcp-stdio.js"
                                             value={mcpArgs}
                                             onChange={(e) => handleUpdateMcpField('args', e.target.value.split(' ').filter(Boolean))}
-                                            style={{ width: '100%' }}
                                         />
                                     </div>
                                 </>
@@ -474,11 +471,10 @@ export function ApiSpecsTab() {
                                     </label>
                                     <input
                                         type="text"
-                                        className="input settings-field-input"
+                                        className="input settings-field-input settings-field-full"
                                         placeholder="e.g. http://localhost:8788/mcp/sse"
                                         value={mcpUrl}
                                         onChange={(e) => handleUpdateMcpField('url', e.target.value)}
-                                        style={{ width: '100%' }}
                                     />
                                 </div>
                             )}

@@ -600,12 +600,12 @@ func startAgent(args []string) {
 
 						if parseErr != nil && reqPayload.URL != "" {
 							// fallback to MCP HTTP probe
-							mcpClient := mcp.NewHTTPClient(reqPayload.URL)
-							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-							defer cancel()
-							if mcpErr := mcpClient.Connect(ctx); mcpErr == nil {
+							mcpClient := mcp.NewHTTPClient(reqPayload.URL, false)
+							mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+							if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
 								// It is an MCP HTTP server!
-								tools, _ := mcpClient.ListTools(ctx)
+								tools, _ := mcpClient.ListTools(mcpCtx)
+								mcpCancel()
 								var eps []swagger.EndpointConfig
 								for _, t := range tools {
 									eps = append(eps, swagger.EndpointConfig{
@@ -619,6 +619,8 @@ func startAgent(args []string) {
 									Endpoints: eps,
 								}
 								parseErr = nil // override original parse error
+							} else {
+								mcpCancel()
 							}
 						}
 
