@@ -550,12 +550,14 @@ func startAgent(args []string) {
 				var result interface{}
 				var data []byte
 				var err error
+				var resp *http.Response
 
 				if reqPayload.RawSpec != "" {
 					data = []byte(reqPayload.RawSpec)
 				} else if reqPayload.URL != "" {
 					client := safenet.NewSafeHTTPClient(15 * time.Second)
-					resp, errFetch := client.Get(reqPayload.URL)
+					var errFetch error
+					resp, errFetch = client.Get(reqPayload.URL)
 					if errFetch != nil {
 						logError("[Parser] Failed to fetch spec: %v", errFetch)
 						err = errFetch
@@ -566,62 +568,152 @@ func startAgent(args []string) {
 						if err == nil && len(data) > 10*1024*1024 {
 							err = fmt.Errorf("specification file exceeds the 10MB limit")
 						}
+						if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+							err = fmt.Errorf("server returned status code: %d %s", resp.StatusCode, resp.Status)
+						}
 					}
 				} else {
 					err = fmt.Errorf("missing url or rawSpec")
 				}
 
 				if err != nil {
-					result = map[string]string{"error": err.Error()}
+					errMap := map[string]interface{}{
+						"error": err.Error(),
+					}
+					if resp != nil {
+						respHeaders := make(map[string]string)
+						for k, v := range resp.Header {
+							if len(v) > 0 {
+								respHeaders[k] = v[0]
+							}
+						}
+						bodySnippet := ""
+						if data != nil {
+							if len(data) > 2048 {
+								bodySnippet = string(data[:2048]) + "... (truncated)"
+							} else {
+								bodySnippet = string(data)
+							}
+						}
+						errMap["response"] = map[string]interface{}{
+							"status":     resp.StatusCode,
+							"statusText": resp.Status,
+							"headers":    respHeaders,
+							"body":       bodySnippet,
+						}
+					}
+					if reqPayload.URL != "" {
+						errMap["request"] = map[string]interface{}{
+							"url":    reqPayload.URL,
+							"method": "GET",
+							"headers": map[string]string{
+								"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+							},
+						}
+					} else {
+						errMap["request"] = map[string]interface{}{
+							"url":    "File Upload",
+							"method": "POST",
+							"headers": map[string]string{
+								"Content-Type": "application/octet-stream",
+							},
+						}
+					}
+					result = errMap
 				} else {
 					var parseResult *swagger.ParseResult
 					var parseErr error
 					parseResult, parseErr = swagger.ParseRawSpec(data)
-						if parseErr != nil {
-							originalErr := parseErr
-							if swagger.IsHAR(data) {
-								parseResult, parseErr = har.ParseHAR(data, "")
-							} else if swagger.IsPostman(data) {
-								parseResult, parseErr = postman.ParsePostman(data)
-							} else {
-								defaultPath := "/graphql"
-								if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
-									if parsedURL.Path != "" && parsedURL.Path != "/" {
-										defaultPath = parsedURL.Path
-									}
-								}
-								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
-								if parseErr != nil {
-									parseErr = originalErr
-								}
-							}
-						}
-
-						if parseErr != nil {
-							logError("[Parser] Failed to parse spec: %v", parseErr)
-							result = map[string]string{"error": parseErr.Error()}
+					if parseErr != nil {
+						originalErr := parseErr
+						if swagger.IsHAR(data) {
+							parseResult, parseErr = har.ParseHAR(data, "")
+						} else if swagger.IsPostman(data) {
+							parseResult, parseErr = postman.ParsePostman(data)
 						} else {
-							// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
-							for i := range parseResult.Endpoints {
-								pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
-								for k := range parseResult.Endpoints[i].PathParams {
-									pruneSchema(parseResult.Endpoints[i].PathParams[k], 0, 3)
-								}
-								for k := range parseResult.Endpoints[i].QueryParams {
-									pruneSchema(parseResult.Endpoints[i].QueryParams[k], 0, 3)
-								}
-								for k := range parseResult.Endpoints[i].HeaderParams {
-									pruneSchema(parseResult.Endpoints[i].HeaderParams[k], 0, 3)
+							defaultPath := "/graphql"
+							if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
+								if parsedURL.Path != "" && parsedURL.Path != "/" {
+									defaultPath = parsedURL.Path
 								}
 							}
-							logInfo("[Parser] Parsed spec successfully: %s (%d endpoints)", parseResult.BasePath, len(parseResult.Endpoints))
-							result = map[string]interface{}{
-								"basePath":  parseResult.BasePath,
-								"endpoints": parseResult.Endpoints,
-								"rawSpec":   string(data),
+							parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+							if parseErr != nil {
+								parseErr = originalErr
 							}
 						}
 					}
+
+					if parseErr != nil {
+						logError("[Parser] Failed to parse spec: %v", parseErr)
+						errMap := map[string]interface{}{
+							"error": parseErr.Error(),
+						}
+						parserName := "swagger"
+						if swagger.IsHAR(data) {
+							parserName = "har"
+						} else if swagger.IsPostman(data) {
+							parserName = "postman"
+						} else {
+							parserName = "graphql"
+						}
+						errMap["parserDetails"] = map[string]interface{}{
+							"parser": parserName,
+						}
+						if reqPayload.URL != "" {
+							errMap["request"] = map[string]interface{}{
+								"url":    reqPayload.URL,
+								"method": "GET",
+								"headers": map[string]string{
+									"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+								},
+							}
+							if resp != nil {
+								respHeaders := make(map[string]string)
+								for k, v := range resp.Header {
+									if len(v) > 0 {
+										respHeaders[k] = v[0]
+									}
+								}
+								errMap["response"] = map[string]interface{}{
+									"status":     resp.StatusCode,
+									"statusText": resp.Status,
+									"headers":    respHeaders,
+									"body":       "...(parsed data)...",
+								}
+							}
+						} else {
+							errMap["request"] = map[string]interface{}{
+								"url":    "File Upload",
+								"method": "POST",
+								"headers": map[string]string{
+									"Content-Type": "application/octet-stream",
+								},
+							}
+						}
+						result = errMap
+					} else {
+						// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
+						for i := range parseResult.Endpoints {
+							pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
+							for k := range parseResult.Endpoints[i].PathParams {
+								pruneSchema(parseResult.Endpoints[i].PathParams[k], 0, 3)
+							}
+							for k := range parseResult.Endpoints[i].QueryParams {
+								pruneSchema(parseResult.Endpoints[i].QueryParams[k], 0, 3)
+							}
+							for k := range parseResult.Endpoints[i].HeaderParams {
+								pruneSchema(parseResult.Endpoints[i].HeaderParams[k], 0, 3)
+							}
+						}
+						logInfo("[Parser] Parsed spec successfully: %s (%d endpoints)", parseResult.BasePath, len(parseResult.Endpoints))
+						result = map[string]interface{}{
+							"basePath":  parseResult.BasePath,
+							"endpoints": parseResult.Endpoints,
+							"rawSpec":   string(data),
+						}
+					}
+				}
 
 				msgPayload := map[string]interface{}{
 					"type":    "parse_result",
