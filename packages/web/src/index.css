@@ -9310,10 +9310,8 @@ kbd {
     border: 1px solid var(--border-hover);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-lg), 0 0 60px rgba(239, 68, 68, 0.1);
-    width: 650px;
-    max-width: 90vw;
-    height: 550px;
-    max-height: 85vh;
+    width: 90vw;
+    height: 90vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -9430,7 +9428,7 @@ kbd {
     font-family: var(--font-mono, monospace);
     font-size: 0.85rem;
     color: var(--text-main);
-    max-height: 200px;
+    max-height: 50vh;
     line-height: 1.4;
 }
 
