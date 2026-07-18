@@ -847,7 +847,8 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP request failed with status %d", resp.StatusCode)
+		respBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(bytes.TrimSpace(respBytes)))
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)

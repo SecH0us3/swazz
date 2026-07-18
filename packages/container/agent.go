@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -13,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
@@ -24,6 +24,7 @@ import (
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"sync"
+	"syscall"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -311,8 +312,6 @@ func startAgent(args []string) {
 		}
 	}
 
-
-
 	// Agent loop
 	for {
 		var wsMsg WSMessageIn
@@ -438,7 +437,7 @@ func startAgent(args []string) {
 									description = fmt.Sprintf("HTTP %d", res.Status)
 								}
 							}
-							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s", 
+							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
 								runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 							ev.Data = runner.ToSSE(res)
 						} else {
@@ -548,7 +547,7 @@ func startAgent(args []string) {
 			}
 			reqID := wsMsg.ReqID
 
-			logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v", reqPayload.URL, reqPayload.RawSpec != "")
+			logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v, Headers count: %d", reqPayload.URL, reqPayload.RawSpec != "", len(reqPayload.Headers))
 			go func() {
 				var result interface{}
 				var data []byte
@@ -558,7 +557,7 @@ func startAgent(args []string) {
 					data = []byte(reqPayload.RawSpec)
 				} else if reqPayload.URL != "" {
 					client := safenet.NewSafeHTTPClient(15 * time.Second)
-					
+
 					req, reqErr := http.NewRequest("GET", reqPayload.URL, nil)
 					if reqErr != nil {
 						fetchErr = reqErr
@@ -583,7 +582,9 @@ func startAgent(args []string) {
 						} else {
 							defer resp.Body.Close()
 							if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-								fetchErr = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel", resp.StatusCode)
+								limitReader := io.LimitReader(resp.Body, 4096)
+								bodyBytes, _ := io.ReadAll(limitReader)
+								fetchErr = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
 							} else {
 								limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
 								var readErr error
@@ -663,6 +664,7 @@ func startAgent(args []string) {
 						parseErr = nil
 					} else {
 						mcpCancel()
+						fetchErr = fmt.Errorf("%v | MCP fallback: %v", fetchErr, mcpErr)
 					}
 				}
 
@@ -673,26 +675,26 @@ func startAgent(args []string) {
 					logError("[Parser] Failed to parse spec: %v", parseErr)
 					result = map[string]string{"error": parseErr.Error()}
 				} else {
-							// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
-							for i := range parseResult.Endpoints {
-								pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
-								for k := range parseResult.Endpoints[i].PathParams {
-									pruneSchema(parseResult.Endpoints[i].PathParams[k], 0, 3)
-								}
-								for k := range parseResult.Endpoints[i].QueryParams {
-									pruneSchema(parseResult.Endpoints[i].QueryParams[k], 0, 3)
-								}
-								for k := range parseResult.Endpoints[i].HeaderParams {
-									pruneSchema(parseResult.Endpoints[i].HeaderParams[k], 0, 3)
-								}
-							}
-							logInfo("[Parser] Parsed spec successfully: %s (%d endpoints)", parseResult.BasePath, len(parseResult.Endpoints))
-							result = map[string]interface{}{
-								"basePath":  parseResult.BasePath,
-								"endpoints": parseResult.Endpoints,
-								"rawSpec":   string(data),
-							}
+					// Prune schemas to avoid sending megabyte-sized JSON over WS (max 32MB WebSocket limit, 1MB in prod CF)
+					for i := range parseResult.Endpoints {
+						pruneSchema(&parseResult.Endpoints[i].Schema, 0, 3)
+						for k := range parseResult.Endpoints[i].PathParams {
+							pruneSchema(parseResult.Endpoints[i].PathParams[k], 0, 3)
 						}
+						for k := range parseResult.Endpoints[i].QueryParams {
+							pruneSchema(parseResult.Endpoints[i].QueryParams[k], 0, 3)
+						}
+						for k := range parseResult.Endpoints[i].HeaderParams {
+							pruneSchema(parseResult.Endpoints[i].HeaderParams[k], 0, 3)
+						}
+					}
+					logInfo("[Parser] Parsed spec successfully: %s (%d endpoints)", parseResult.BasePath, len(parseResult.Endpoints))
+					result = map[string]interface{}{
+						"basePath":  parseResult.BasePath,
+						"endpoints": parseResult.Endpoints,
+						"rawSpec":   string(data),
+					}
+				}
 
 				msgPayload := map[string]interface{}{
 					"type":    "parse_result",
