@@ -512,7 +512,8 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.goto('/');
 
     // 2. Register unique user
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');

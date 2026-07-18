@@ -37,14 +37,18 @@ export function Header({
     isGuest = false,
     onLogout,
 }: Props) {
-    const { isRunning, isPaused, isLoadingSpecs, isQueued } = useAppStore(useShallow(state => ({
+    const { isRunning, isPaused, isLoadingSpecs, isQueued, isConfigOpen, isConfigHiddenDesktop, activeTab } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
         isQueued: state.isQueued,
+        isConfigOpen: state.isConfigOpen,
+        isConfigHiddenDesktop: state.isConfigHiddenDesktop,
+        activeTab: state.activeTab,
     })));
 
     const isBusy = isRunning || isLoadingSpecs || isQueued;
+    const isConfigVisible = typeof window !== 'undefined' ? (window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop) : false;
 
     const { showToast } = useToast();
 
@@ -335,12 +339,20 @@ export function Header({
                     </>
                 )}
 
-                {/* Right Toggle (Mobile) */}
-                <button className="header-mobile-toggle" onClick={onToggleConfig} title="Settings" aria-label="Toggle Settings">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-                    </svg>
-                </button>
+                {/* Right Configuration Sidebar Toggle (Layout Sidebar Icon) */}
+                {onToggleConfig && (
+                    <button 
+                        className={`header-config-toggle ${isConfigVisible ? 'active' : ''}`}
+                        onClick={onToggleConfig} 
+                        title="Toggle Run Configuration" 
+                        aria-label="Toggle Run Configuration"
+                    >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="15" y1="3" x2="15" y2="21"/>
+                        </svg>
+                    </button>
+                )}
             </div>
 
             {isBusy && !isLoadingSpecs && (

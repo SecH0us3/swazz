@@ -9212,7 +9212,7 @@ kbd {
 /* ─── E2EE Sidebar Nudge (Right Config Panel) ────────── */
 
 .config-sidebar-footer {
-  padding: 16px 0 0 0;
+  padding: 16px var(--space-4);
   border-top: 1px solid var(--border-default);
   margin-top: 16px;
   display: flex;
@@ -9668,4 +9668,30 @@ kbd {
   display: flex;
   justify-content: center;
   padding: var(--space-4);
+}
+
+/* Header Config Toggle button */
+.header-config-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast);
+}
+
+.header-config-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.header-config-toggle.active {
+  background: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.2);
+  color: var(--accent-light);
 }
