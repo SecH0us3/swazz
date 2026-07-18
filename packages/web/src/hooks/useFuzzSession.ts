@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { RunStats, SwazzConfig } from '../types.js';
 import { toSummary } from './useRunner.js';
-import { loadSwaggerUrl } from '../services/swaggerService.js';
+import { loadSwaggerUrl, ParsingError } from '../services/swaggerService.js';
 import { dbStreamResult } from './useDb.js';
 import type { ScanRun } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
@@ -35,9 +35,10 @@ export function useFuzzSession({
         let allEndpoints: any[] = [];
         let detectedBaseUrl = config.base_url;
 
+        let firstError: any = null;
         for (const url of urls) {
+            const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
             try {
-                const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
                 const { basePath, endpoints, endpointCount, cachedAt } = await loadSwaggerUrl(
                     urlToLoad,
                     config.global_headers,
@@ -72,9 +73,22 @@ export function useFuzzSession({
                 useAppStore.setState({ specCacheDates: cacheState });
 
                 showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}${cachedAt ? ' (from cache)' : ''}`, 'success');
-            } catch (err) {
-                showToast(`✗ Failed: ${url} — ${err instanceof Error ? err.message : String(err)}`, 'error');
+            } catch (err: any) {
+                if (!firstError) {
+                    if (err instanceof ParsingError) {
+                        firstError = err.details;
+                    } else {
+                        firstError = {
+                            error: { message: err.message || String(err), stack: err.stack },
+                            request: { url: urlToLoad, method: 'GET', headers: {} }
+                        };
+                    }
+                }
             }
+        }
+
+        if (firstError) {
+            useAppStore.setState({ parsingError: firstError });
         }
 
         useAppStore.setState({ isLoadingSpecs: false });

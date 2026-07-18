@@ -32,8 +32,15 @@ test.describe('Input Validation & Error Handling (Broken Specs) E2E Test', () =>
     await expect(addBtn).toBeVisible();
     await addBtn.click();
 
-    // 5. Verify that a friendly validation error toast is displayed and the page does not crash
-    const toast = page.locator('.toast', { hasText: 'Failed' });
-    await expect(toast).toBeVisible({ timeout: 10000 });
+    // 5. Verify that the detailed parsing error modal is displayed and the page does not crash
+    const modal = page.locator('.parsing-error-dialog');
+    await expect(modal).toBeVisible({ timeout: 10000 });
+    await expect(modal.locator('h3')).toHaveText('Specification Parsing Failure');
+
+    // 6. Click the dismiss button to close it
+    const dismissBtn = modal.locator('button.btn-primary:has-text("Dismiss")');
+    await expect(dismissBtn).toBeVisible();
+    await dismissBtn.click();
+    await expect(modal).not.toBeVisible();
   });
 });

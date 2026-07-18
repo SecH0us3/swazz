@@ -9288,3 +9288,263 @@ kbd {
 .e2ee-sidebar-nudge-more:hover {
   color: var(--text-primary);
 }
+
+/* ─── Parsing Error Modal ───────────────────────────────── */
+.parsing-error-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.parsing-error-dialog {
+    background: var(--bg-app);
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg), 0 0 60px rgba(239, 68, 68, 0.1);
+    width: 90vw;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.parsing-error-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.parsing-error-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #ef4444; /* Alert color */
+}
+
+.parsing-error-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.parsing-error-close:hover {
+    color: var(--text-main);
+    background: var(--bg-hover);
+}
+
+.parsing-error-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--bg-card);
+    padding: 0 16px;
+}
+
+.parsing-error-tab {
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.parsing-error-tab:hover {
+    color: var(--text-main);
+}
+
+.parsing-error-tab.active {
+    color: #ef4444;
+    border-bottom-color: #ef4444;
+}
+
+.parsing-error-tab:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.parsing-error-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    user-select: text;
+}
+
+.parsing-error-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.parsing-error-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.parsing-error-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.parsing-error-msg {
+    color: var(--text-main);
+    font-weight: 500;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.parsing-error-pre {
+    background: var(--bg-app);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin: 0;
+    overflow-x: auto;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85rem;
+    color: var(--text-main);
+    max-height: 50vh;
+    line-height: 1.4;
+}
+
+.parsing-error-request-line, .parsing-error-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-card);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+}
+
+.parsing-error-method {
+    background: var(--bg-hover);
+    color: var(--text-main);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.parsing-error-url {
+    color: var(--text-main);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+
+.parsing-error-status {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.parsing-error-statustext {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.parsing-error-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-default);
+    background: var(--bg-card);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* JSON Syntax Highlighting */
+.json-key {
+    color: #ec4899;
+    font-weight: 600;
+}
+.json-string {
+    color: #10b981;
+}
+.json-number {
+    color: #f59e0b;
+}
+.json-boolean {
+    color: #3b82f6;
+    font-weight: 600;
+}
+.json-null {
+    color: #6b7280;
+    font-style: italic;
+}
+
+/* Headers Table styling */
+.parsing-error-headers-table-container {
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--bg-card);
+}
+
+.parsing-error-headers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+.parsing-error-headers-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-hover);
+    word-break: break-all;
+}
+
+.parsing-error-headers-table tr:last-child td {
+    border-bottom: none;
+}
+
+.parsing-error-header-name {
+    color: var(--text-dim);
+    font-weight: 600;
+    width: 30%;
+    user-select: text;
+}
+
+.parsing-error-header-value {
+    color: var(--text-main);
+    font-family: var(--font-mono, monospace);
+    width: 70%;
+    user-select: text;
+}
+
+.parsing-error-no-headers {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.9rem;
+    padding: 4px 0;
+}

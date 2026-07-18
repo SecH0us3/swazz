@@ -103,8 +103,15 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     const addBtn = page.locator('button.btn-primary:has-text("Add")');
     await addBtn.click();
 
-    // 4. Verify toast error container is shown with failure text
-    const toastError = page.locator('.toast', { hasText: 'Failed' });
-    await expect(toastError).toBeVisible({ timeout: 10000 });
+    // 4. Verify that the detailed parsing error modal is displayed and the page does not crash
+    const modal = page.locator('.parsing-error-dialog');
+    await expect(modal).toBeVisible({ timeout: 10000 });
+    await expect(modal.locator('h3')).toHaveText('Specification Parsing Failure');
+
+    // 5. Click the dismiss button to close it
+    const dismissBtn = modal.locator('button.btn-primary:has-text("Dismiss")');
+    await expect(dismissBtn).toBeVisible();
+    await dismissBtn.click();
+    await expect(modal).not.toBeVisible();
   });
 });

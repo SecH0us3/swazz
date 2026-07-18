@@ -23,6 +23,7 @@ import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 import { fetchProjects } from './services/projectService.js';
+import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -31,6 +32,8 @@ export default function App() {
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
     const userProfile = useAppStore(state => state.userProfile);
+    const parsingError = useAppStore(state => state.parsingError);
+    const setParsingError = useAppStore(state => state.setParsingError);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -907,6 +910,13 @@ export default function App() {
                 />
             )}
 
+
+            {parsingError && (
+                <ParsingErrorModal
+                    error={parsingError}
+                    onClose={() => setParsingError(null)}
+                />
+            )}
 
             <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
                 {toasts.map((t) => (
