@@ -66,7 +66,7 @@ func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				RuleID:   "swazz/sql-error-leak",
 				Level:    "error",
 				Message:  fmt.Sprintf("Database error signature (%s) leaked in the response body.", sig.name),
-				Evidence: fmt.Sprintf("Match: '%s' | Context: ...%s...", matchText, contextSnippet),
+				Evidence: fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 			})
 			// Limit to one SQL error finding per response to avoid duplicate noise
 			break

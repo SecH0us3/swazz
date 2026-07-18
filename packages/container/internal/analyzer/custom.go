@@ -87,7 +87,7 @@ func (a *CustomAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 				RuleID:   cr.rule.RuleID,
 				Level:    cr.rule.Level,
 				Message:  cr.rule.Message,
-				Evidence: fmt.Sprintf("Match: '%s' | Snippet: ...%s...", matchText, contextSnippet),
+				Evidence: fmt.Sprintf("Match: %q | Snippet: ...%s...", matchText, contextSnippet),
 			})
 		}
 	}
