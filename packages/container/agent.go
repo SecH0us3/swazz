@@ -631,12 +631,23 @@ func startAgent(args []string) {
 						}
 					}
 					if reqPayload.URL != "" {
+						reqHeadersOut := map[string]string{
+							"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+						}
+						for k, v := range reqPayload.Headers {
+							reqHeadersOut[k] = v
+						}
+						if len(reqPayload.Cookies) > 0 {
+							var cookieParts []string
+							for k, v := range reqPayload.Cookies {
+								cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+							}
+							reqHeadersOut["Cookie"] = strings.Join(cookieParts, "; ")
+						}
 						errMap["request"] = map[string]interface{}{
-							"url":    reqPayload.URL,
-							"method": "GET",
-							"headers": map[string]string{
-								"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
-							},
+							"url":     reqPayload.URL,
+							"method":  "GET",
+							"headers": reqHeadersOut,
 						}
 					} else {
 						errMap["request"] = map[string]interface{}{
@@ -692,12 +703,23 @@ func startAgent(args []string) {
 							"parser": parserName,
 						}
 						if reqPayload.URL != "" {
+							reqHeadersOut := map[string]string{
+								"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+							}
+							for k, v := range reqPayload.Headers {
+								reqHeadersOut[k] = v
+							}
+							if len(reqPayload.Cookies) > 0 {
+								var cookieParts []string
+								for k, v := range reqPayload.Cookies {
+									cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+								}
+								reqHeadersOut["Cookie"] = strings.Join(cookieParts, "; ")
+							}
 							errMap["request"] = map[string]interface{}{
-								"url":    reqPayload.URL,
-								"method": "GET",
-								"headers": map[string]string{
-									"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
-								},
+								"url":     reqPayload.URL,
+								"method":  "GET",
+								"headers": reqHeadersOut,
 							}
 							if resp != nil {
 								respHeaders := make(map[string]string)
