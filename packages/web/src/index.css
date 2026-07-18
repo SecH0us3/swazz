@@ -9480,3 +9480,23 @@ kbd {
     justify-content: flex-end;
     gap: 12px;
 }
+
+/* JSON Syntax Highlighting */
+.json-key {
+    color: #ec4899;
+    font-weight: 600;
+}
+.json-string {
+    color: #10b981;
+}
+.json-number {
+    color: #f59e0b;
+}
+.json-boolean {
+    color: #3b82f6;
+    font-weight: 600;
+}
+.json-null {
+    color: #6b7280;
+    font-style: italic;
+}

@@ -126,9 +126,15 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
                             {error.request.body && (
                                 <div className="parsing-error-field">
                                     <label className="parsing-error-label">Request Body</label>
-                                    <pre className="parsing-error-pre">
-                                        <code>{error.request.body}</code>
-                                    </pre>
+                                    {isJson(error.request.body) ? (
+                                        <pre className="parsing-error-pre">
+                                            <code dangerouslySetInnerHTML={{ __html: syntaxHighlightJson(error.request.body || '') }} />
+                                        </pre>
+                                    ) : (
+                                        <pre className="parsing-error-pre">
+                                            <code>{error.request.body}</code>
+                                        </pre>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -151,9 +157,15 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
                             </div>
                             <div className="parsing-error-field">
                                 <label className="parsing-error-label">Response Body Snippet</label>
-                                <pre className="parsing-error-pre">
-                                    <code>{error.response.body || 'Empty body'}</code>
-                                </pre>
+                                {isJson(error.response.body) ? (
+                                    <pre className="parsing-error-pre">
+                                        <code dangerouslySetInnerHTML={{ __html: syntaxHighlightJson(error.response.body || '') }} />
+                                    </pre>
+                                ) : (
+                                    <pre className="parsing-error-pre">
+                                        <code>{error.response.body || 'Empty body'}</code>
+                                    </pre>
+                                )}
                             </div>
                         </div>
                     )}
@@ -172,5 +184,51 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
                 </div>
             </div>
         </div>
+    );
+}
+
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function isJson(str?: string): boolean {
+    if (!str) return false;
+    try {
+        const parsed = JSON.parse(str);
+        return parsed && typeof parsed === 'object';
+    } catch {
+        return false;
+    }
+}
+
+function syntaxHighlightJson(jsonStr: string): string {
+    try {
+        const obj = JSON.parse(jsonStr);
+        jsonStr = JSON.stringify(obj, null, 2);
+    } catch {}
+
+    const escaped = escapeHtml(jsonStr);
+    return escaped.replace(
+        /(&quot;(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\&quot;])*&quot;(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        (match) => {
+            let cls = 'json-number';
+            if (/^&quot;/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                } else {
+                    cls = 'json-string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-null';
+            }
+            return `<span class="${cls}">${match}</span>`;
+        }
     );
 }
