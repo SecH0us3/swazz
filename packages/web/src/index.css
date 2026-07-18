@@ -3372,6 +3372,10 @@ button:focus-visible {
   color: var(--text-muted);
 }
 
+.findings-group-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
 .findings-group-title {
   font-weight: 600;
   color: var(--text-primary);

@@ -415,10 +415,7 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                                                 strokeWidth="2"
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
-                                                style={{
-                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                                                    transition: 'transform 0.2s ease',
-                                                }}
+                                                className={`owasp-accordion-chevron ${isExpanded ? 'expanded' : ''}`}
                                             >
                                                 <polyline points="6 9 12 15 18 9" />
                                             </svg>

@@ -146,6 +146,18 @@
     background: var(--bg-surface);
 }
 
+.owasp-accordion-chevron {
+    transition: transform var(--duration-base) var(--ease-out);
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-disabled);
+    transform: rotate(-90deg);
+}
+
+.owasp-accordion-chevron.expanded {
+    transform: none;
+}
+
 .owasp-accordion-title {
     font-size: var(--font-size-sm);
     font-weight: 600;
