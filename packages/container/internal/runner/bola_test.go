@@ -186,15 +186,17 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 	}
 
 	res := bolaResults[0]
-	if len(res.AnalyzerFindings) != 1 {
-		t.Fatalf("Expected 1 analyzer finding, got %d", len(res.AnalyzerFindings))
+	var idorFindings []swagger.AnalysisFinding
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/bola-idor" {
+			idorFindings = append(idorFindings, f)
+		}
+	}
+	if len(idorFindings) != 1 {
+		t.Fatalf("Expected 1 BOLA vulnerability finding, got %d", len(idorFindings))
 	}
 
-	finding := res.AnalyzerFindings[0]
-	if finding.RuleID != "swazz/bola-idor" {
-		t.Errorf("Expected rule ID 'swazz/bola-idor', got '%s'", finding.RuleID)
-	}
-
+	finding := idorFindings[0]
 	if finding.Level != "error" {
 		t.Errorf("Expected finding level 'error', got '%s'", finding.Level)
 	}
@@ -267,14 +269,17 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 	}
 
 	res := bolaResults[0]
-	if len(res.AnalyzerFindings) != 1 {
-		t.Fatalf("Expected 1 analyzer finding, got %d", len(res.AnalyzerFindings))
+	var anonFindings []swagger.AnalysisFinding
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/unauthorized-access" {
+			anonFindings = append(anonFindings, f)
+		}
+	}
+	if len(anonFindings) != 1 {
+		t.Fatalf("Expected 1 anonymous vulnerability finding, got %d", len(anonFindings))
 	}
 
-	finding := res.AnalyzerFindings[0]
-	if finding.RuleID != "swazz/unauthorized-access" {
-		t.Errorf("Expected rule ID 'swazz/unauthorized-access', got '%s'", finding.RuleID)
-	}
+	_ = anonFindings[0]
 }
 
 func TestBOLA_SimilarityFiltering(t *testing.T) {

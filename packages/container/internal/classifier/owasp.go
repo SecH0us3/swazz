@@ -20,7 +20,11 @@ func OWASPCategories(ruleID string) []string {
 		return []string{"A06:2025 Insecure Design"}
 	case "swazz/oob-interaction":
 		return []string{"A08:2025 Software or Data Integrity Failures"}
-	case "swazz/cors-misconfig", "swazz/csp-missing", "swazz/csp-unsafe-directive":
+	case "swazz/cors-misconfig", "swazz/csp-missing", "swazz/csp-unsafe-directive",
+		"swazz/hsts-missing", "swazz/hsts-insecure",
+		"swazz/x-frame-options-missing", "swazz/x-frame-options-insecure",
+		"swazz/x-content-type-options-missing", "swazz/x-content-type-options-insecure",
+		"swazz/server-header-leak", "swazz/x-powered-by-leak", "swazz/x-aspnet-version-leak":
 		return []string{"A02:2025 Security Misconfiguration"}
 	case "swazz/crlf-injection", "swazz/header-injection", "swazz/reflected-xss", "swazz/rce-leak",
 		"swazz/time-based-sqli", "swazz/time-based-cmdi":

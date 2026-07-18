@@ -266,8 +266,14 @@ func cweForRule(ruleID string) string {
 		return "918"
 	case "swazz/cors-misconfig":
 		return "942"
-	case "swazz/csp-missing", "swazz/csp-unsafe-directive", "swazz/network-error":
+	case "swazz/csp-missing", "swazz/csp-unsafe-directive", "swazz/network-error",
+		"swazz/x-frame-options-missing", "swazz/x-frame-options-insecure",
+		"swazz/x-content-type-options-missing", "swazz/x-content-type-options-insecure":
 		return "693"
+	case "swazz/hsts-missing", "swazz/hsts-insecure":
+		return "523"
+	case "swazz/server-header-leak", "swazz/x-powered-by-leak", "swazz/x-aspnet-version-leak":
+		return "200"
 	case "swazz/crlf-injection", "swazz/header-injection":
 		return "113"
 	case "swazz/reflected-xss":

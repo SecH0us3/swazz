@@ -18,6 +18,7 @@ func NewRegistry() *AnalyzerRegistry {
 			NewCRLFAnalyzer(),
 			&CORSAnalyzer{},
 			&CSPAnalyzer{},
+			&SecurityHeadersAnalyzer{},
 			&SizeAnalyzer{},
 			NewCustomAnalyzer(),
 			&TimingAnalyzer{},
