@@ -173,6 +173,7 @@ export function ApiSpecsTab() {
             const updatedMetadata = { ...(config._swagger_metadata || {}) };
             const allNewEndpoints: any[] = [];
 
+            let firstError: any = null;
             for (const url of swaggerUrls) {
                 try {
                     const { endpoints, endpointCount } = await loadSwaggerUrl(
@@ -194,17 +195,21 @@ export function ApiSpecsTab() {
                         status: 'error' as const,
                         lastRefreshed: new Date().toISOString()
                     };
-                    if (err instanceof ParsingError) {
-                        useAppStore.setState({ parsingError: err.details });
-                    } else {
-                        useAppStore.setState({
-                            parsingError: {
+                    if (!firstError) {
+                        if (err instanceof ParsingError) {
+                            firstError = err.details;
+                        } else {
+                            firstError = {
                                 error: { message: err.message || String(err), stack: err.stack },
                                 request: { url, method: 'GET', headers: {} }
-                            }
-                        });
+                            };
+                        }
                     }
                 }
+            }
+
+            if (firstError) {
+                useAppStore.setState({ parsingError: firstError });
             }
 
             const combinedEndpoints = [...(config.endpoints || []), ...allNewEndpoints];

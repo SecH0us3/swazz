@@ -35,6 +35,7 @@ export function useFuzzSession({
         let allEndpoints: any[] = [];
         let detectedBaseUrl = config.base_url;
 
+        let firstError: any = null;
         for (const url of urls) {
             const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
             try {
@@ -73,17 +74,21 @@ export function useFuzzSession({
 
                 showToast(`✓ ${endpointCount} endpoints from ${new URL(urlToLoad).hostname}${cachedAt ? ' (from cache)' : ''}`, 'success');
             } catch (err: any) {
-                if (err instanceof ParsingError) {
-                    useAppStore.setState({ parsingError: err.details });
-                } else {
-                    useAppStore.setState({
-                        parsingError: {
+                if (!firstError) {
+                    if (err instanceof ParsingError) {
+                        firstError = err.details;
+                    } else {
+                        firstError = {
                             error: { message: err.message || String(err), stack: err.stack },
                             request: { url: urlToLoad, method: 'GET', headers: {} }
-                        }
-                    });
+                        };
+                    }
                 }
             }
+        }
+
+        if (firstError) {
+            useAppStore.setState({ parsingError: firstError });
         }
 
         useAppStore.setState({ isLoadingSpecs: false });

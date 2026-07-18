@@ -78,7 +78,10 @@ export async function loadSwaggerUrl(
         const responseBody = await res.text().catch(() => '');
         let parsedErr: any = {};
         try {
-            parsedErr = JSON.parse(responseBody);
+            const parsed = JSON.parse(responseBody);
+            if (parsed && typeof parsed === 'object') {
+                parsedErr = parsed;
+            }
         } catch {}
         
         throw new ParsingError(parsedErr.error || `Failed to parse swagger: ${res.status}`, {
@@ -158,7 +161,10 @@ export async function parseRawSpec(
         const responseBody = await res.text().catch(() => '');
         let parsedErr: any = {};
         try {
-            parsedErr = JSON.parse(responseBody);
+            const parsed = JSON.parse(responseBody);
+            if (parsed && typeof parsed === 'object') {
+                parsedErr = parsed;
+            }
         } catch {}
         
         throw new ParsingError(parsedErr.error || `Failed to parse spec: ${res.status}`, {

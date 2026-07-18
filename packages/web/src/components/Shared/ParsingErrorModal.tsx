@@ -15,15 +15,16 @@ export function ParsingErrorModal({ error, onClose }: ParsingErrorModalProps) {
             if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', handleEsc);
+        const originalOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
         return () => {
             window.removeEventListener('keydown', handleEsc);
-            document.body.style.overflow = 'auto';
+            document.body.style.overflow = originalOverflow;
         };
     }, [onClose]);
 
     const formatHeaders = (headers?: Record<string, string>) => {
-        if (!headers) return 'None';
+        if (!headers || Object.keys(headers).length === 0) return 'None';
         return Object.entries(headers)
             .map(([k, v]) => `${k}: ${v}`)
             .join('\n');

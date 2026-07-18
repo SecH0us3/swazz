@@ -623,9 +623,10 @@ func startAgent(args []string) {
 				} else {
 					var parseResult *swagger.ParseResult
 					var parseErr error
+					var originalErr error
 					parseResult, parseErr = swagger.ParseRawSpec(data)
 					if parseErr != nil {
-						originalErr := parseErr
+						originalErr = parseErr
 						if swagger.IsHAR(data) {
 							parseResult, parseErr = har.ParseHAR(data, "")
 						} else if swagger.IsPostman(data) {
@@ -654,6 +655,8 @@ func startAgent(args []string) {
 							parserName = "har"
 						} else if swagger.IsPostman(data) {
 							parserName = "postman"
+						} else if originalErr != nil && parseErr == originalErr {
+							parserName = "swagger"
 						} else {
 							parserName = "graphql"
 						}

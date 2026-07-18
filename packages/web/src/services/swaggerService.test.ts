@@ -122,6 +122,13 @@ describe('swaggerService', () => {
         });
     });
 
+    it('propagates network errors from fetch as ParsingError', async () => {
+        const networkError = new TypeError('Failed to fetch');
+        vi.mocked(globalThis.fetch).mockRejectedValueOnce(networkError);
+
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(ParsingError);
+    });
+
     describe('parseRawSpec', () => {
         it('successfully parses raw spec', async () => {
             const mockResponseData = {
