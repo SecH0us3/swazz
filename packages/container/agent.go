@@ -569,7 +569,7 @@ func startAgent(args []string) {
 							err = fmt.Errorf("specification file exceeds the 10MB limit")
 						}
 						if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-							err = fmt.Errorf("server returned status code: %d %s", resp.StatusCode, resp.Status)
+							err = fmt.Errorf("server returned status code: %s", resp.Status)
 						}
 					}
 				} else {
