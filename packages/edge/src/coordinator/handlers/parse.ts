@@ -5,7 +5,14 @@ import { ulid } from 'ulidx';
 
 export class ParseHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
-    let body: { url?: string; rawSpec?: string; forceRebuild?: boolean; userPublicKey?: string } | null = null;
+    let body: {
+      url?: string;
+      rawSpec?: string;
+      forceRebuild?: boolean;
+      userPublicKey?: string;
+      headers?: Record<string, string>;
+      cookies?: Record<string, string>;
+    } | null = null;
     try {
       const bodyText = await request.text();
       body = JSON.parse(bodyText);
@@ -84,7 +91,9 @@ export class ParseHandler implements RouteHandler {
         reqId,
         payload: {
           url: body.url || '',
-          rawSpec: body.rawSpec || ''
+          rawSpec: body.rawSpec || '',
+          headers: body.headers || {},
+          cookies: body.cookies || {}
         }
       }));
     } catch (err) {
