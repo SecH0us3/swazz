@@ -40,11 +40,12 @@ When handling a Task N, delegate to specialized subagents:
 5. UI QA EVALUATION: If the task involved significant frontend changes, evaluate if visual verification is necessary. If yes, invoke `qa_tester` to use built-in browser tools. Do not run UI tests blindly for minor UI tweaks.
 6. INTEGRATION CHECK: Verify that new backend features are actually invoked by the main execution pipeline (`main.go` and `api/handlers.go`). Ensure frontend UI completely aligns with backend security constraints.
 7. Update `README.md` or files in `docs/` to reflect any new configurations or features.
-8. Generate a `walkthrough.md` artifact summarizing changes. **STOP** and wait for final human review.
-9. Only update the task status to "Done" (option ID `98236657`):
+8. VIBE CODE REVIEW: Run the automated code review script: `rtk ./scripts/vibe-review.sh < /dev/null` (ensure `MISTRAL_API_KEY` is configured in `.env`). Read the generated report in `docs/reviews/vibe-review.md` and address any code quality or styling violations before proceeding.
+9. Generate a `walkthrough.md` artifact summarizing changes and referencing the Vibe review results. **STOP** and wait for final human review.
+10. Only update the task status to "Done" (option ID `98236657`):
    `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`
    upon explicit human consent.
-10. SELF-CRITICAL REVIEW: Before final review, invoke the `self-critical-review` skill to systematically check for dead code, unused CSS styles, UTC timezone compliance, resource/memory leaks, and rule integrations.
+11. SELF-CRITICAL REVIEW: Before final review, invoke the `self-critical-review` skill to systematically check for dead code, unused CSS styles, UTC timezone compliance, resource/memory leaks, and rule integrations.
 
 ## 📋 Code Quality & PR Constraints (AGENTS.md rules)
 * **PR Merges**: NEVER merge a PR without explicit user approval. Do NOT run `gh pr merge` or use the `--auto` flag. Report the PR URL and wait.

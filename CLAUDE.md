@@ -161,7 +161,7 @@ When the user asks to "Do Task N" (e.g., "Сделай задачу 5") referenc
    Create a new git branch (e.g., `feature/task-N`).
 2. **Plan**: Research the codebase and generate an `implementation_plan.md` artifact. **STOP** and wait for the user's explicit approval.
 3. **Execute & Verify**: Write the code. Run unit tests (`scripts/test-backend.sh`). Ensure E2E validation against the Vulnerable Demo API (once Task 12 is complete).
-4. **Review**: Generate a `walkthrough.md` artifact summarizing changes. **STOP** and request final human review.
+4. **Review**: Run the automated Vibe code review script: `rtk ./scripts/vibe-review.sh < /dev/null`. Address any style/code violations in `docs/reviews/vibe-review.md`. Then generate a `walkthrough.md` artifact summarizing changes. **STOP** and request final human review.
 5. **Complete**: After the user approves the walkthrough, set the task status to "Done" (option ID `98236657`):
    `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`
    and merge/commit changes.
