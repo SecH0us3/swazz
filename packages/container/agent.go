@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"bytes"
 	"io"
 	"log"
 	"net/http"
@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
@@ -25,6 +24,7 @@ import (
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"sync"
+	"syscall"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -177,6 +177,10 @@ func startAgent(args []string) {
 	if useSignatureAuth {
 		headers.Set("X-Runner-Public-Key", pubKeyHex)
 	} else {
+		// Validate token to prevent security issues
+		if strings.Contains(token, ";") || strings.Contains(token, "&") || strings.Contains(token, "|") {
+			log.Fatalf("Token contains suspicious characters")
+		}
 		headers.Set("Authorization", "Bearer "+token)
 	}
 
@@ -312,8 +316,6 @@ func startAgent(args []string) {
 		}
 	}
 
-
-
 	// Agent loop
 	for {
 		var wsMsg WSMessageIn
@@ -439,7 +441,7 @@ func startAgent(args []string) {
 									description = fmt.Sprintf("HTTP %d", res.Status)
 								}
 							}
-							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s", 
+							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
 								runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 							ev.Data = runner.ToSSE(res)
 						} else {
@@ -557,10 +559,15 @@ func startAgent(args []string) {
 				var resp *http.Response
 
 				if reqPayload.RawSpec != "" {
-					data = []byte(reqPayload.RawSpec)
+					// Validate rawSpec to prevent injection attacks
+					if strings.Contains(reqPayload.RawSpec, "{{{)") || strings.Contains(reqPayload.RawSpec, "}}}") {
+						err = fmt.Errorf("rawSpec contains suspicious patterns")
+					} else {
+						data = []byte(reqPayload.RawSpec)
+					}
 				} else if reqPayload.URL != "" {
 					client := safenet.NewSafeHTTPClient(15 * time.Second)
-					
+
 					req, reqErr := http.NewRequest("GET", reqPayload.URL, nil)
 					if reqErr != nil {
 						err = reqErr
@@ -795,19 +802,17 @@ func startAgent(args []string) {
 					var mcpClient mcp.Client
 					mcpClient = mcp.NewHTTPClient(reqPayload.URL, false, mcpHeaders)
 					mcpCtxHTTP, cancelHTTP := context.WithTimeout(context.Background(), 10*time.Second)
-					
+					defer cancelHTTP()
+
 					var mcpErr error
 					if mcpErr = mcpClient.Connect(mcpCtxHTTP); mcpErr != nil {
 						logWarn("[Parser] MCP HTTP connect failed: %v, falling back to SSE", mcpErr)
 						mcpClient.Close()
-						cancelHTTP()
-						
+
 						mcpClient = mcp.NewSSEClient(reqPayload.URL, false, mcpHeaders)
 						mcpCtxSSE, cancelSSE := context.WithTimeout(context.Background(), 10*time.Second)
+						defer cancelSSE()
 						mcpErr = mcpClient.Connect(mcpCtxSSE)
-						if mcpErr != nil {
-							cancelSSE()
-						}
 					} else {
 						// HTTP succeeded
 					}
@@ -825,11 +830,11 @@ func startAgent(args []string) {
 								Schema: t.InputSchema,
 							})
 						}
-						
+
 						for i := range eps {
 							pruneSchema(&eps[i].Schema, 0, 3)
 						}
-						
+
 						mcpClient.Close()
 						logInfo("[Parser] Fallback to MCP successful for %s (%d tools)", reqPayload.URL, len(eps))
 						result = map[string]interface{}{
@@ -864,6 +869,29 @@ func startAgent(args []string) {
 			}()
 		}
 	}
+}
+
+func filterSensitiveData(rawSpec string) string {
+	// Filter sensitive data from rawSpec
+	// This is a basic example; you may need to extend it based on your requirements
+	sensitivePatterns := []string{
+		"password",
+		"secret",
+		"token",
+		"api_key",
+		"access_key",
+		"jwt",
+		"bearer",
+		"aws",
+		"private_key",
+	}
+
+	filteredSpec := rawSpec
+	for _, pattern := range sensitivePatterns {
+		filteredSpec = strings.ReplaceAll(filteredSpec, pattern, "[FILTERED]")
+	}
+
+	return filteredSpec
 }
 
 func pruneSchema(s *swagger.SchemaProperty, currentDepth, maxDepth int) {

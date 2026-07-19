@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -134,6 +135,15 @@ func (c *StdioClient) Connect(ctx context.Context) error {
 	}
 	if len(c.args) == 0 {
 		return fmt.Errorf("args cannot be empty")
+	}
+	// Validate command to prevent command injection
+	if strings.Contains(c.command, ";") || strings.Contains(c.command, "&") || strings.Contains(c.command, "|") {
+		return fmt.Errorf("command contains suspicious characters")
+	}
+	for _, arg := range c.args {
+		if strings.Contains(arg, ";") || strings.Contains(arg, "&") || strings.Contains(arg, "|") {
+			return fmt.Errorf("args contain suspicious characters")
+		}
 	}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.cmd = exec.CommandContext(c.ctx, c.command, c.args...)
@@ -707,6 +717,10 @@ func (c *SSEClient) readSSELoop(body io.ReadCloser) {
 				currentEvent.Data += "\n" + dataVal
 			}
 		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("SSE scanner error: %v", err)
 	}
 
 	c.pendingMu.Lock()
