@@ -22,20 +22,26 @@ if ! git show-ref --verify --quiet refs/heads/master; then
 fi
 
 # Load environment variables from local .env files if present
-if [ -f "$ROOT_DIR/.env" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    if [[ ! "$line" =~ ^# ]] && [[ ! -z "$line" ]]; then
-      export "$line"
-    fi
-  done < "$ROOT_DIR/.env"
-fi
+for env_file in "$ROOT_DIR/.env" "$ROOT_DIR/.env.local"; do
+  if [ -f "$env_file" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      line="${line//$'\r'/}"
+      if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+        key="${BASH_REMATCH[1]}"
+        val="${BASH_REMATCH[2]}"
+        val="${val%"${val##*[![:space:]]}"}"
+        if [[ "$val" =~ ^\"(.*)\"$ ]] || [[ "$val" =~ ^\'(.*)\'$ ]]; then
+          val="${BASH_REMATCH[1]}"
+        fi
+        export "$key=$val"
+      fi
+    done < "$env_file"
+  fi
+done
 
-if [ -f "$ROOT_DIR/.env.local" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    if [[ ! "$line" =~ ^# ]] && [[ ! -z "$line" ]]; then
-      export "$line"
-    fi
-  done < "$ROOT_DIR/.env.local"
+if [ -z "$MISTRAL_API_KEY" ]; then
+  echo "❌ MISTRAL_API_KEY is not set. Please set it in your environment or .env file."
+  exit 1
 fi
 
 CURRENT_BRANCH=$(git branch --show-current)
