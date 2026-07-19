@@ -24,7 +24,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
     return (
         <div className="dropdown-container" ref={dropdownRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <button 
-                className="user-menu-btn" 
+                className="btn btn-secondary user-menu-btn" 
                 onClick={() => setIsOpen(!isOpen)}
                 title="Account"
             >

@@ -184,6 +184,14 @@ export function MainWorkspace({
 
     const betaModeEnabled = useAppStore((state) => state.betaModeEnabled);
 
+    const handleConfigureTarget = () => {
+        const input = document.querySelector('.workspace-target-input') as HTMLInputElement | null;
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    };
+
     const [localUrl, setLocalUrl] = useState(baseUrl);
     const [isExportHovered, setIsExportHovered] = useState(false);
 
@@ -304,22 +312,15 @@ export function MainWorkspace({
     }, [inspectorRunId, liveCount, isAnalysisEnabled, queryResults]);
 
     return (
-        <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', minWidth: 0, overflow: 'hidden', height: '100%', flex: 1 }}>
+        <div className="workspace-container">
             {loadedRunId && activeTab !== 'settings' && (
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '10px 16px',
-                    background: 'rgba(124,58,237,0.06)',
-                    border: '1px solid rgba(124,58,237,0.25)',
-                    borderRadius: 'var(--radius-md)',
-                    flexShrink: 0,
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <div className="workspace-history-banner">
+                    <div className="workspace-history-banner-info">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2" strokeLinecap="round">
                             <path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="10" />
                         </svg>
-                        <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--accent-light)', fontWeight: 500 }}>Viewing History</span>
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                        <span className="workspace-history-banner-title">Viewing History</span>
+                        <span className="workspace-history-banner-time">
                             · {new Date(historyStats?.startTime || Date.now()).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                         </span>
                     </div>
@@ -525,13 +526,12 @@ export function MainWorkspace({
                             </button>
                         )}
                         <div 
-                            style={{ position: 'relative', display: 'inline-block' }}
+                            className="workspace-export-dropdown-container"
                             onMouseEnter={() => setIsExportHovered(true)}
                             onMouseLeave={() => setIsExportHovered(false)}
                         >
                             <button
-                                className="tab-bar-btn"
-                                style={{ color: 'var(--accent-light)' }}
+                                className="tab-bar-btn workspace-export-btn"
                                 title="Download Reports"
                             >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -541,24 +541,9 @@ export function MainWorkspace({
                             </button>
                             
                             {isExportHovered && (
-                                <div style={{
-                                    position: 'absolute',
-                                    top: '100%',
-                                    right: 0,
-                                    marginTop: '4px',
-                                    backgroundColor: 'var(--bg-elevated)',
-                                    minWidth: '150px',
-                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                                    zIndex: 50,
-                                    borderRadius: 'var(--radius-md)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    padding: '4px',
-                                    border: '1px solid var(--border-default)'
-                                }}>
+                                <div className="workspace-export-dropdown-menu">
                                     <button
-                                        className="tab-bar-btn"
-                                        style={{ justifyContent: 'flex-start', width: '100%', border: 'none', background: 'transparent', margin: 0, padding: '8px 12px' }}
+                                        className="tab-bar-btn workspace-export-dropdown-item"
                                         onClick={() => handleExportHTML(inspectorRunId)}
                                         title="Generate and download a visual HTML report"
                                     >
@@ -568,8 +553,7 @@ export function MainWorkspace({
                                         HTML Report
                                     </button>
                                     <button
-                                        className="tab-bar-btn"
-                                        style={{ justifyContent: 'flex-start', width: '100%', border: 'none', background: 'transparent', margin: 0, padding: '8px 12px' }}
+                                        className="tab-bar-btn workspace-export-dropdown-item"
                                         onClick={() => handleExportMD(inspectorRunId)}
                                         title="Generate and download a Markdown report"
                                     >
@@ -631,13 +615,15 @@ export function MainWorkspace({
                                         <p className="mode-desc">
                                             Quickly explore the fuzzer features using a pre-configured target. The scanner will automatically load the API schema, discover endpoints, and trigger a sample fuzz scan.
                                         </p>
-                                        <button
-                                            className="btn btn-primary mode-action-btn"
-                                            onClick={() => handleStart(['https://bbad.secmy.app/swagger.json'])}
-                                        >
-                                            Try Vulnerable Demo
-                                        </button>
-                                        <span className="mode-details-text">Target: https://bbad.secmy.app</span>
+                                        <div className="mode-card-footer">
+                                            <button
+                                                className="btn btn-primary mode-action-btn"
+                                                onClick={() => handleStart(['https://bbad.secmy.app/swagger.json'])}
+                                            >
+                                                Try Vulnerable Demo
+                                            </button>
+                                            <span className="mode-details-text">Target: https://bbad.secmy.app</span>
+                                        </div>
                                     </div>
 
                                     {/* Mode 2: Custom Scan */}
@@ -659,29 +645,37 @@ export function MainWorkspace({
                                             </svg>
                                             Scan Custom API
                                         </h3>
-                                        <p className="mode-desc">
-                                            Configure and run a security scan targeting your own API endpoints.
-                                        </p>
-                                        <ul className="mode-steps-list">
-                                            <li>
-                                                <span className="mode-step-number">1</span>
-                                                <span className="mode-step-text">
-                                                    <strong>Specify Target URL:</strong> Enter your API base URL in the top address bar (e.g. <code>https://api.example.com</code>).
-                                                </span>
-                                            </li>
-                                            <li>
-                                                <span className="mode-step-number">2</span>
-                                                <span className="mode-step-text">
-                                                    <strong>Import Endpoints (Optional):</strong> Paste your Swagger/OpenAPI spec URL in the left sidebar to automatically parse and discover all endpoints.
-                                                </span>
-                                            </li>
-                                            <li>
-                                                <span className="mode-step-number">3</span>
-                                                <span className="mode-step-text">
-                                                    <strong>Customize & Run:</strong> Tweak profiles or headers in the sidebar, then hit <strong>Run Scan</strong>.
-                                                </span>
-                                            </li>
-                                        </ul>
+                                        <div className="mode-card-content">
+                                            <ul className="mode-steps-list">
+                                                <li>
+                                                    <span className="mode-step-number">1</span>
+                                                    <span className="mode-step-text">
+                                                        <strong>Specify Target URL:</strong> Enter your API base URL in the top address bar (e.g. <code>https://api.example.com</code>).
+                                                    </span>
+                                                </li>
+                                                <li>
+                                                    <span className="mode-step-number">2</span>
+                                                    <span className="mode-step-text">
+                                                        <strong>Import Endpoints (Optional):</strong> Paste your Swagger/OpenAPI spec URL in the left sidebar to automatically parse and discover all endpoints.
+                                                    </span>
+                                                </li>
+                                                <li>
+                                                    <span className="mode-step-number">3</span>
+                                                    <span className="mode-step-text">
+                                                        <strong>Customize & Run:</strong> Tweak profiles or headers in the sidebar, then hit <strong>Run Scan</strong>.
+                                                    </span>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <div className="mode-card-footer">
+                                            <button
+                                                className="btn btn-secondary mode-action-btn"
+                                                onClick={handleConfigureTarget}
+                                            >
+                                                Configure Target API
+                                            </button>
+                                            <span className="mode-details-text">Specify base URL & specs</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

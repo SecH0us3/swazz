@@ -2445,7 +2445,57 @@ body.resizing .sidebar-resizer {
 }
 
 /* ─── Responsive Adaptation ────────────────────────────────── */
-.workspace-container { padding: var(--space-6); }
+.workspace-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+  overflow-y: auto;
+  height: 100%;
+  flex: 1;
+  padding: var(--space-6);
+  box-sizing: border-box;
+}
+
+/* History Banner in Workspace */
+.workspace-history-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.workspace-history-banner-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workspace-history-banner-title {
+  font-size: var(--font-size-sm);
+  color: var(--accent-light);
+  font-weight: 500;
+}
+
+.workspace-history-banner-time {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+/* Header Action Buttons Sizing */
+.header-right .btn {
+  height: 32px;
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
 
 @media (max-width: 1024px) {
   .stats-bar {
@@ -3847,33 +3897,14 @@ kbd {
   margin-left: 4px;
 }
 
-/* User Menu Button Trigger */
+/* User Menu Button Trigger Extensions */
 .user-menu-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1.5) var(--space-3.5);
-  height: 32px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-  font-weight: 600;
-  font-size: var(--font-size-xs);
-  outline: none;
   margin-left: 8px;
-}
-
-.user-menu-btn:hover {
-  border-color: rgba(139, 92, 246, 0.3);
-  background: rgba(139, 92, 246, 0.05);
-  color: var(--text-primary);
 }
 
 .user-menu-avatar-icon {
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .user-menu-btn:hover .user-menu-avatar-icon {
@@ -3890,6 +3921,7 @@ kbd {
 .user-menu-chevron {
   color: var(--text-muted);
   transition: transform var(--duration-fast);
+  flex-shrink: 0;
 }
 
 .user-menu-chevron.open {
@@ -9949,11 +9981,11 @@ kbd {
 }
 
 .welcome-workspace-container {
-  max-width: 840px;
+  max-width: 1000px;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-7);
 }
 
 .welcome-workspace-header {
@@ -9964,15 +9996,15 @@ kbd {
 }
 
 .welcome-logo-container {
-  width: 96px;
-  height: 96px;
-  border-radius: var(--radius-2xl);
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-xl);
   background: radial-gradient(100% 100% at 50% 0%, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.02) 100%);
   border: 1px solid rgba(139, 92, 246, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
   box-shadow: 0 8px 32px rgba(139, 92, 246, 0.05);
 }
 
@@ -9981,7 +10013,7 @@ kbd {
 }
 
 .welcome-workspace-title {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-xl);
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.02em;
@@ -9992,9 +10024,9 @@ kbd {
 }
 
 .welcome-workspace-subtitle {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
-  margin-top: var(--space-2);
+  margin-top: var(--space-1.5);
   margin-bottom: 0;
 }
 
@@ -10002,11 +10034,11 @@ kbd {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-6);
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .welcome-modes-grid {
     grid-template-columns: 1fr;
   }
@@ -10015,13 +10047,13 @@ kbd {
 .welcome-mode-card {
   display: flex;
   flex-direction: column;
-  padding: var(--space-7) var(--space-8);
+  padding: var(--space-6);
   border-radius: var(--radius-lg);
-  background: rgba(30, 41, 59, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  background: var(--bg-card, rgba(30, 41, 59, 0.4));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   transition: all var(--duration-medium) cubic-bezier(0.23, 1, 0.32, 1);
   position: relative;
   overflow: hidden;
@@ -10048,12 +10080,12 @@ kbd {
 
 .welcome-mode-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), 0 0 20px rgba(139, 92, 246, 0.05);
 }
 
 .demo-mode-card {
-  background: radial-gradient(circle at top right, rgba(139, 92, 246, 0.08) 0%, rgba(30, 41, 59, 0.2) 50%);
+  background: radial-gradient(circle at top right, rgba(139, 92, 246, 0.08) 0%, rgba(30, 41, 59, 0.4) 50%);
 }
 
 .mode-badge-wrapper {
@@ -10098,12 +10130,19 @@ kbd {
   color: var(--text-muted);
 }
 
-.mode-desc {
+.mode-desc, .mode-card-content {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   line-height: 1.6;
   margin: 0 0 var(--space-6) 0;
   flex: 1;
+}
+
+.mode-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: auto;
 }
 
 .mode-action-btn {
@@ -10112,7 +10151,7 @@ kbd {
   font-weight: 600;
   width: 100%;
   justify-content: center;
-  margin-bottom: var(--space-3);
+  margin: 0;
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
   border-radius: var(--radius-md);
 }
@@ -10140,6 +10179,7 @@ kbd {
 .mode-steps-list li {
   display: flex;
   gap: var(--space-3);
+  align-items: flex-start;
 }
 
 .mode-step-number {
@@ -10158,4 +10198,47 @@ kbd {
 
 .mode-step-text {
   flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.mode-step-text code {
+  word-break: break-all;
+  white-space: normal;
+}
+
+/* Export Report Dropdown Styles */
+.workspace-export-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.workspace-export-btn {
+  color: var(--accent-light) !important;
+}
+
+.workspace-export-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background-color: var(--bg-elevated);
+  min-width: 150px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  z-index: 50;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+}
+
+.workspace-export-dropdown-item {
+  justify-content: flex-start !important;
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 8px 12px !important;
 }
