@@ -18,6 +18,8 @@ type statsMsg struct {
 	result           *swagger.FuzzResult
 	currentIteration int
 	totalIterations  int
+	endpoint         string
+	profile          string
 }
 
 // GetStats returns an immutable snapshot of current stats (lock-free).
@@ -46,10 +48,14 @@ func (r *Runner) statsAggregator() {
 
 	stats := newEmptyStats()
 	stats.IsRunning = true
-	stats.TotalRequests = r.progress.totalRequests.Load()
 	var latestIteration, latestTotalIterations int
 	dirty := false
-	lastCheckpointRequests := stats.TotalRequests
+	var lastCheckpointRequests int64
+	var initializedTotalRequests bool
+
+	// Track completed iterations per endpoint to safely compute the contiguous watermark
+	completedIters := make(map[int]bool)
+	var activeEp, activePr string
 
 	for {
 		select {
@@ -59,10 +65,32 @@ func (r *Runner) statsAggregator() {
 				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
 				return
 			}
-			accumulateResult(&stats, msg.result)
-			if msg.currentIteration > latestIteration {
-				latestIteration = msg.currentIteration
+			if !initializedTotalRequests {
+				stats.TotalRequests = r.progress.totalRequests.Load()
+				lastCheckpointRequests = stats.TotalRequests
+				initializedTotalRequests = true
 			}
+			accumulateResult(&stats, msg.result)
+
+			// If we switched to a new endpoint/profile, reset the completed iterations tracking
+			if msg.endpoint != activeEp || msg.profile != activePr {
+				activeEp = msg.endpoint
+				activePr = msg.profile
+				clear(completedIters)
+			}
+			completedIters[msg.currentIteration] = true
+
+			// Compute the contiguous watermark (highest iteration N where 1..N are all complete)
+			watermark := 0
+			for i := 1; i <= msg.totalIterations; i++ {
+				if completedIters[i] {
+					watermark = i
+				} else {
+					break
+				}
+			}
+
+			latestIteration = watermark
 			if msg.totalIterations > latestTotalIterations {
 				latestTotalIterations = msg.totalIterations
 			}
@@ -73,14 +101,15 @@ func (r *Runner) statsAggregator() {
 				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
 				dirty = false
 
-				if stats.TotalRequests-lastCheckpointRequests >= 100 {
+				currentPr := ""
+				if pr, ok := r.progress.currentProfile.Load().(string); ok {
+					currentPr = pr
+				}
+
+				if currentPr != "BASELINE" && currentPr != "" && stats.TotalRequests-lastCheckpointRequests >= 100 {
 					currentEp := ""
 					if ep, ok := r.progress.currentEndpoint.Load().(string); ok {
 						currentEp = ep
-					}
-					currentPr := ""
-					if pr, ok := r.progress.currentProfile.Load().(string); ok {
-						currentPr = pr
 					}
 					r.Broadcast(Event{
 						Type: EventCheckpoint,

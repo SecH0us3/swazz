@@ -913,3 +913,75 @@ func TestCheckpointResuming(t *testing.T) {
 		t.Errorf("Expected stats.TotalRequests to report 30 (including skipped), got %d", stats.TotalRequests)
 	}
 }
+
+func TestCheckpointWatermark(t *testing.T) {
+	r := &Runner{
+		statsChan:  make(chan statsMsg, 100),
+		statsDone:  make(chan struct{}),
+		doneCh:     make(chan struct{}),
+		subs:       make(map[chan Event]struct{}),
+		eventQueue: NewMPSCQueue(),
+		limiter:    NewConcurrencyLimiter(1),
+	}
+	r.progress.totalRequests.Store(0)
+	
+	// Start the stats aggregator
+	go r.statsAggregator()
+	
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 3,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 1,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 2,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	
+	time.Sleep(200 * time.Millisecond)
+	stats := r.GetStats()
+	if stats.Progress.CurrentIteration != 3 {
+		t.Errorf("Expected watermark iteration to be 3, got %d", stats.Progress.CurrentIteration)
+	}
+
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 5,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	time.Sleep(200 * time.Millisecond)
+	stats = r.GetStats()
+	if stats.Progress.CurrentIteration != 3 {
+		t.Errorf("Expected watermark iteration to remain 3 because 4 is missing, got %d", stats.Progress.CurrentIteration)
+	}
+
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 4,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	time.Sleep(200 * time.Millisecond)
+	stats = r.GetStats()
+	if stats.Progress.CurrentIteration != 5 {
+		t.Errorf("Expected watermark iteration to jump to 5 once 4 completed, got %d", stats.Progress.CurrentIteration)
+	}
+
+	close(r.statsChan)
+	<-r.statsDone
+}

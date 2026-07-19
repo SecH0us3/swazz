@@ -281,11 +281,32 @@ func (r *Runner) Start(ctx context.Context) error {
 	resuming := false
 
 	if r.config.Settings.Checkpoint != nil {
-		resumeProfile = r.config.Settings.Checkpoint.Profile
-		resumeEndpoint = r.config.Settings.Checkpoint.Endpoint
-		resumeIteration = r.config.Settings.Checkpoint.Iteration
-		resuming = true
-		r.lifecycle.isPaused.Store(r.config.Settings.Checkpoint.Paused)
+		// Defensively validate that the checkpoint's profile and endpoint exist in current config
+		profileExists := false
+		for _, p := range profiles {
+			if string(p) == r.config.Settings.Checkpoint.Profile {
+				profileExists = true
+				break
+			}
+		}
+		endpointExists := false
+		for _, ep := range r.config.Endpoints {
+			epKey := ep.Method + " " + ep.Path
+			if epKey == r.config.Settings.Checkpoint.Endpoint {
+				endpointExists = true
+				break
+			}
+		}
+
+		if profileExists && endpointExists {
+			resumeProfile = r.config.Settings.Checkpoint.Profile
+			resumeEndpoint = r.config.Settings.Checkpoint.Endpoint
+			resumeIteration = r.config.Settings.Checkpoint.Iteration
+			resuming = true
+			r.lifecycle.isPaused.Store(r.config.Settings.Checkpoint.Paused)
+		} else {
+			r.logDebug("Checkpoint profile or endpoint not found in current configuration. Starting from beginning. Checkpoint: %+v", r.config.Settings.Checkpoint)
+		}
 	}
 
 	var skippedRequests int64 = 0
@@ -293,14 +314,14 @@ func (r *Runner) Start(ctx context.Context) error {
 		for _, profile := range profiles {
 			if string(profile) != resumeProfile {
 				for _, endpoint := range r.config.Endpoints {
-					skippedRequests += int64(calcEffectiveIterations(profile, r.config.Settings, &endpoint))
+					skippedRequests += int64(endpointRequests(profile, r.config.Settings, &endpoint))
 				}
 				continue
 			}
 			for _, endpoint := range r.config.Endpoints {
 				epKey := endpoint.Method + " " + endpoint.Path
 				if epKey != resumeEndpoint {
-					skippedRequests += int64(calcEffectiveIterations(profile, r.config.Settings, &endpoint))
+					skippedRequests += int64(endpointRequests(profile, r.config.Settings, &endpoint))
 					continue
 				}
 				skippedRequests += int64(resumeIteration)
@@ -468,7 +489,13 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 				r.recordTimeBaseline(ep.Method, ep.Path, result.Duration)
 			}
 
-			r.statsChan <- statsMsg{result: result, currentIteration: 1, totalIterations: 1}
+			r.statsChan <- statsMsg{
+				result:           result,
+				currentIteration: 1,
+				totalIterations:  1,
+				endpoint:         epKey,
+				profile:          "BASELINE",
+			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
 			r.progress.completedEndpoints.Add(1)
@@ -500,7 +527,7 @@ func (r *Runner) fuzzEndpoint(
 	if r.config.Settings.ActiveParameterFuzzing {
 		fields := collectTargetFields(&endpoint)
 		if len(fields) > 0 {
-			r.runActiveParameterFuzzing(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen, fields)
+			r.runActiveParameterFuzzing(ctx, profileIdx, profile, epIdx, endpoint, gen, safeGen, fields, iterToSkip)
 			return
 		}
 	}
@@ -577,6 +604,8 @@ func (r *Runner) fuzzEndpoint(
 				result:           result,
 				currentIteration: it + 1,
 				totalIterations:  effectiveIter,
+				endpoint:         epKey,
+				profile:          string(profile),
 			}
 			r.Broadcast(Event{Type: EventResult, Data: result})
 
@@ -740,6 +769,17 @@ func calcMaxPayloadSize(profile swagger.FuzzingProfile, settings swagger.Setting
 	return limit
 }
 
+func endpointRequests(profile swagger.FuzzingProfile, settings swagger.Settings, ep *swagger.EndpointConfig) int {
+	baseIter := calcEffectiveIterations(profile, settings, ep)
+	if settings.ActiveParameterFuzzing {
+		fields := collectTargetFields(ep)
+		if len(fields) > 0 {
+			return len(fields) * baseIter
+		}
+	}
+	return baseIter
+}
+
 // calculateTotalPlanned pre-computes the total number of requests that will be
 // sent during the run and stores it for progress reporting.
 func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
@@ -753,14 +793,7 @@ func (r *Runner) calculateTotalPlanned(profiles []swagger.FuzzingProfile) {
 	// 2. Fuzz profiles.
 	for _, ep := range endpoints {
 		for _, p := range profiles {
-			baseIter := calcEffectiveIterations(p, settings, &ep)
-			if settings.ActiveParameterFuzzing {
-				fields := collectTargetFields(&ep)
-				if len(fields) > 0 {
-					baseIter *= len(fields)
-				}
-			}
-			total += int64(baseIter)
+			total += int64(endpointRequests(p, settings, &ep))
 		}
 	}
 

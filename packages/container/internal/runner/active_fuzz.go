@@ -247,6 +247,7 @@ func (r *Runner) runActiveParameterFuzzing(
 	gen *generator.Generator,
 	safeGen *generator.Generator,
 	fields []targetField,
+	iterToSkip int,
 ) {
 	endpoints := r.config.Endpoints
 	baseIter := calcEffectiveIterations(profile, r.config.Settings, &endpoint)
@@ -262,6 +263,10 @@ func (r *Runner) runActiveParameterFuzzing(
 
 	for _, field := range fields {
 		for i := range baseIter {
+			if globalIterIdx < iterToSkip {
+				globalIterIdx++
+				continue
+			}
 			if r.stopped() {
 				break
 			}
@@ -322,6 +327,8 @@ func (r *Runner) runActiveParameterFuzzing(
 					result:           result,
 					currentIteration: it + 1,
 					totalIterations:  totalPlanned,
+					endpoint:         endpoint.Method + " " + endpoint.Path,
+					profile:          string(profile),
 				}
 				r.Broadcast(Event{Type: EventResult, Data: result})
 
