@@ -809,7 +809,7 @@ func startAgent(args []string) {
 						logWarn("[Parser] MCP HTTP connect failed: %v, falling back to SSE", mcpErr)
 						mcpClient.Close()
 
-						mcpClient = mcp.NewSSEClient(reqPayload.URL, false, mcpHeaders)
+						mcpClient = mcp.NewSSEClient(reqPayload.URL, false, mcpHeaders, nil)
 						mcpCtxSSE, cancelSSE := context.WithTimeout(context.Background(), 10*time.Second)
 						defer cancelSSE()
 						mcpErr = mcpClient.Connect(mcpCtxSSE)

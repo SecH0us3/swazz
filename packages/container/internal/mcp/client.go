@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,10 @@ import (
 
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
+)
+
+const (
+	mcpProtocolVersion = "2024-11-05"
 )
 
 // Client interface defines the contract for MCP transport clients.
@@ -137,11 +142,13 @@ func (c *StdioClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("args cannot be empty")
 	}
 	// Validate command to prevent command injection
-	if strings.Contains(c.command, ";") || strings.Contains(c.command, "&") || strings.Contains(c.command, "|") {
+	if strings.Contains(c.command, ";") || strings.Contains(c.command, "&") || strings.Contains(c.command, "|") ||
+		strings.Contains(c.command, "`") || strings.Contains(c.command, "$") {
 		return fmt.Errorf("command contains suspicious characters")
 	}
 	for _, arg := range c.args {
-		if strings.Contains(arg, ";") || strings.Contains(arg, "&") || strings.Contains(arg, "|") {
+		if strings.Contains(arg, ";") || strings.Contains(arg, "&") || strings.Contains(arg, "|") ||
+			strings.Contains(arg, "`") || strings.Contains(arg, "$") {
 			return fmt.Errorf("args contain suspicious characters")
 		}
 	}
@@ -188,7 +195,7 @@ func (c *StdioClient) Connect(ctx context.Context) error {
 
 func (c *StdioClient) initializeHandshake(ctx context.Context) error {
 	initParams := map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": mcpProtocolVersion,
 		"capabilities":    map[string]any{},
 		"clientInfo": map[string]any{
 			"name":    "swazz-client",
@@ -462,14 +469,23 @@ type SSEClient struct {
 }
 
 // NewSSEClient initializes a new SSEClient.
-func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string) *SSEClient {
-	return &SSEClient{
+// If tlsConfig is nil, the default system certificate pool is used.
+func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string, tlsConfig *tls.Config) *SSEClient {
+	client := &SSEClient{
 		url:          urlStr,
 		httpClient:   security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
 		pending:      make(map[string]chan *Response),
 		endpointChan: make(chan string, 1),
 		headers:      headers,
 	}
+
+	if tlsConfig != nil {
+		if transport, ok := client.httpClient.Transport.(*http.Transport); ok {
+			transport.TLSClientConfig = tlsConfig.Clone()
+		}
+	}
+
+	return client
 }
 
 // Connect establishes the SSE GET connection and resolves the write endpoint.

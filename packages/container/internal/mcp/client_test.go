@@ -13,9 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"swazz-engine/internal/swagger"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"swazz-engine/internal/swagger"
 )
 
 // TestHelperProcess is a mock helper process that executes in a subprocess to simulate a stdio MCP server.
@@ -318,7 +319,7 @@ func TestSSEClient_Success(t *testing.T) {
 	ts := httptest.NewServer(server)
 	defer ts.Close()
 
-	client := NewSSEClient(ts.URL, true, nil)
+	client := NewSSEClient(ts.URL, true, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -359,7 +360,7 @@ func TestSSEClient_FallbackWriteURL(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	client := NewSSEClient(ts.URL+"/sse", true, nil)
+	client := NewSSEClient(ts.URL+"/sse", true, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -370,7 +371,7 @@ func TestSSEClient_FallbackWriteURL(t *testing.T) {
 	}()
 
 	assert.Equal(t, ts.URL+"/sse/message", client.writeURL)
-	
+
 	tools, err := client.ListTools(ctx)
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
