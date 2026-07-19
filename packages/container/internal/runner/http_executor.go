@@ -486,6 +486,21 @@ func (r *Runner) executeMCPRequest(
 	payload any,
 	profile swagger.FuzzingProfile,
 ) *swagger.FuzzResult {
+	if r.mcpClient == nil {
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: originalPath,
+			Method:       "CALL",
+			Profile:      profile,
+			Payload:      payload,
+			Status:       500,
+			Error:        "MCP client is not initialized",
+			ResponseBody: "Error: MCP client is not initialized",
+			Timestamp:    time.Now().UnixMilli(),
+		}
+	}
+
 	toolName := strings.TrimPrefix(originalPath, "mcp://tool/")
 	var args map[string]any
 	if payload != nil {

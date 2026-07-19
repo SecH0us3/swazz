@@ -160,7 +160,7 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 			return body, nil
 		}
 		if lastStatus == http.StatusUnauthorized || lastStatus == http.StatusForbidden {
-			return nil, fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel: %w", lastStatus, err)
+			return nil, fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel", lastStatus)
 		}
 		return nil, fmt.Errorf("failed to fetch via GET and POST: %w", err)
 	}

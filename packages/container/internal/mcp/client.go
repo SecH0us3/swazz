@@ -204,11 +204,14 @@ func (c *StdioClient) initializeHandshake(ctx context.Context) error {
 	}
 	notifBytes = append(notifBytes, '\n')
 
-	c.stdinMu.Lock()
-	defer c.stdinMu.Unlock()
-	if c.isClosed {
+	c.pendingMu.Lock()
+	closed := c.isClosed
+	c.pendingMu.Unlock()
+	if closed {
 		return io.ErrClosedPipe
 	}
+	c.stdinMu.Lock()
+	defer c.stdinMu.Unlock()
 	_, err = c.stdin.Write(notifBytes)
 	return err
 }
@@ -242,14 +245,17 @@ func (c *StdioClient) sendRequest(ctx context.Context, method string, params jso
 	}
 	data = append(data, '\n')
 
-	c.stdinMu.Lock()
-	if c.isClosed {
-		c.stdinMu.Unlock()
+	c.pendingMu.Lock()
+	closed := c.isClosed
+	c.pendingMu.Unlock()
+	if closed {
 		c.pendingMu.Lock()
 		delete(c.pending, key)
 		c.pendingMu.Unlock()
 		return nil, io.ErrClosedPipe
 	}
+
+	c.stdinMu.Lock()
 	_, err = c.stdin.Write(data)
 	c.stdinMu.Unlock()
 
@@ -666,16 +672,11 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 
 func (c *SSEClient) readSSELoop(body io.ReadCloser) {
 	defer body.Close()
-	reader := bufio.NewReader(body)
+	scanner := bufio.NewScanner(body)
 	var currentEvent SSEEvent
 
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			break
-		}
-		line = strings.TrimSuffix(line, "\n")
-		line = strings.TrimSuffix(line, "\r")
+	for scanner.Scan() {
+		line := scanner.Text()
 
 		if line == "" {
 			if currentEvent.Event != "" || currentEvent.Data != "" {

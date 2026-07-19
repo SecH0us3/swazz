@@ -213,12 +213,16 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
     try {
         // 1. Try SSE check: Send GET request with Accept: text/event-stream header.
         // A true SSE MCP server will keep the connection open and stream events.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
         const resGet = await fetch(urlStr, {
             method: 'GET',
             headers: { 'Accept': 'text/event-stream' },
-            signal: AbortSignal.timeout(3000)
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
         const contentType = resGet.headers.get('Content-Type') || '';
+        controller.abort();
         if (resGet.ok && contentType.includes('event-stream')) {
             return 'sse';
         }
