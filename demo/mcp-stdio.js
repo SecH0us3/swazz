@@ -28,6 +28,10 @@ function checkAllVulnerabilities(input) {
 rl.on('line', (line) => {
   if (!line.trim()) return;
   try {
+    // Basic size limit to prevent DoS
+    if (line.length > 10000) {
+      throw new Error("Request too large");
+    }
     const reqBody = JSON.parse(line);
     const id = reqBody.id;
     const methodRPC = reqBody.method;
@@ -130,7 +134,7 @@ rl.on('line', (line) => {
     } else {
       response.error = {
         code: -32601,
-        message: `Method not found: ${methodRPC}`
+        message: `Method not found`
       };
     }
 

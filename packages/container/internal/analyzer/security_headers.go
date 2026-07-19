@@ -20,6 +20,10 @@ func (a *SecurityHeadersAnalyzer) Analyze(input *AnalysisInput) []swagger.Analys
 
 	var findings []swagger.AnalysisFinding
 
+	// Skip security header checks for localhost/local development environments
+	// TODO: Enhance AnalysisInput to include RequestURL to allow context-aware security analysis
+	// (e.g., skip strict checks for localhost). Currently we apply checks universally.
+
 	// 1. HTTP Strict Transport Security (HSTS)
 	hsts := input.ResponseHeaders.Get("Strict-Transport-Security")
 	if hsts == "" {

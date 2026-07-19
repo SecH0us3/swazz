@@ -463,6 +463,7 @@ type SSEClient struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	endpointChan chan string
+	endpointMu   sync.Mutex
 	sseResponse  *http.Response
 	isClosed     bool
 	headers      map[string]string
@@ -749,6 +750,8 @@ func (c *SSEClient) readSSELoop(body io.ReadCloser) {
 
 func (c *SSEClient) handleSSEEvent(event SSEEvent) {
 	if event.Event == "endpoint" {
+		c.endpointMu.Lock()
+		defer c.endpointMu.Unlock()
 		select {
 		case c.endpointChan <- event.Data:
 		default:

@@ -24,8 +24,12 @@ function checkAllVulnerabilities(input) {
 }
 
 const server = http.createServer((req, res) => {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS - more restrictive for security
+  const origin = req.headers.origin;
+  const allowedOrigins = ["http://localhost:3000", "http://localhost:8789", "http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:8789"];
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -189,8 +193,9 @@ const server = http.createServer((req, res) => {
           client.write(sseMsg);
         }
       } catch (err) {
+        console.error("Request processing error:", err.message);
         res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Parse error" }));
+        res.end(JSON.stringify({ error: "Invalid request" }));
       }
     });
     return;
@@ -202,4 +207,21 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Demo SSE MCP Server running at http://localhost:${PORT}/mcp/sse`);
+});
+
+// Cleanup on process exit
+process.on('SIGTERM', () => {
+  console.log('Shutting down server...');
+  server.close(() => {
+    console.log('Server shut down gracefully');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('Shutting down server...');
+  server.close(() => {
+    console.log('Server shut down gracefully');
+    process.exit(0);
+  });
 });
