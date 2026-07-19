@@ -31,6 +31,31 @@ interface Props {
     config?: SwazzConfig;
 }
 
+function getCleanDedupeKey(method: string, endpoint: string, status: number, errorMsg?: string): string {
+    let cleanErr = errorMsg || '';
+    
+    // 1. Remove Cloudflare Ray IDs
+    cleanErr = cleanErr.replace(/Ray ID:?\s*[a-z0-9]+/gi, 'Ray ID: [REDACTED]');
+    cleanErr = cleanErr.replace(/Ray ID\s*<strong[^>]*>[a-z0-9]+<\/strong>/gi, 'Ray ID: [REDACTED]');
+    
+    // 2. Remove UUIDs
+    cleanErr = cleanErr.replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '[UUID]');
+    
+    // 3. Remove common dynamic parts like timestamps or session IDs
+    cleanErr = cleanErr.replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/gi, '[TIMESTAMP]');
+    cleanErr = cleanErr.replace(/\d{10,13}/g, '[TIMESTAMP_MS]');
+    
+    // 4. Limit length or keep only first line if it's a huge HTML error page
+    if (cleanErr.includes('<!DOCTYPE html>') || cleanErr.includes('<html')) {
+        cleanErr = 'HTML Error Page';
+    } else {
+        // Just take the first 150 characters to avoid noise from different stack traces/IDs
+        cleanErr = cleanErr.slice(0, 150);
+    }
+    
+    return `${method} ${endpoint}::${status}::${cleanErr}`;
+}
+
 const PAGE_SIZE = 1000;
 
 export function Inspector({
@@ -165,13 +190,16 @@ export function Inspector({
             }
 
             if (!placed) {
+                const isMcpErr = row.method === 'CALL' || row.method === 'MCP' || (row.endpoint && row.endpoint.startsWith('mcp://tool/'));
                 const isErrorStatus = row.status >= 500 || 
                                      (row.status === 0 && row.error) ||
-                                     (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status));
+                                     (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status)) ||
+                                     isMcpErr;
                 if (isErrorStatus) {
-                    let categoryTitle = `HTTP ${row.status} Error`;
-                    let groupKey = `status_${row.status}`;
-                    let color = row.status >= 500 ? 'var(--color-error)' : 'var(--color-warning)';
+                    const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
+                    let categoryTitle = `HTTP ${displayStatus} Error`;
+                    let groupKey = `status_${displayStatus}`;
+                    let color = displayStatus >= 500 ? 'var(--color-error)' : 'var(--color-warning)';
 
                     if (row.status === 0) {
                         categoryTitle = 'Network Timeout / Error';
@@ -180,15 +208,20 @@ export function Inspector({
                     } else {
                         const subType = extractErrorSubtype(row.responsePreview);
                         if (subType) {
-                            categoryTitle = `${row.status} - ${subType.title}`;
-                            groupKey = `status_${row.status}_${subType.key}`;
+                            if (subType.key.startsWith('mcp_')) {
+                                categoryTitle = subType.title;
+                                groupKey = subType.key;
+                            } else {
+                                categoryTitle = `${displayStatus} - ${subType.title}`;
+                                groupKey = `status_${displayStatus}_${subType.key}`;
+                            }
                         }
                     }
 
                     if (!groups[groupKey]) {
                         groups[groupKey] = { title: categoryTitle, color, items: [], seen: new Set() };
                     }
-                    const dedupeKey = `${row.method} ${row.endpoint}::${row.status}::${row.error || ''}`;
+                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error);
                     if (!groups[groupKey].seen.has(dedupeKey)) {
                         groups[groupKey].seen.add(dedupeKey);
                         groups[groupKey].items.push({ result: row });
@@ -560,48 +593,54 @@ export function Inspector({
                                     setLimit(prev => prev + 1000);
                                 }
                             }}
-                            itemContent={(_index, r) => (
-                                <div
-                                    key={r.id}
-                                    className={`log-row ${getStatusClass(r.status)}`}
-                                    onClick={() => onSelectResult(r)}
-                                    style={{
-                                        opacity: r.triage === 'ignored' || r.triage === 'false_positive' ? 0.6 : 1
-                                    }}
-                                >
-                                    <span className="log-timestamp">{formatTime(r.timestamp)}</span>
-                                    <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
-                                    <span className="log-path">
-                                        {r.endpoint}
-                                        {r.triage && r.triage !== 'none' && (
-                                            <span 
-                                                className={`badge ${
-                                                    r.triage === 'acknowledged' 
-                                                        ? 'badge-success' 
-                                                        : r.triage === 'false_positive' 
-                                                        ? 'badge-error' 
-                                                        : 'badge-warning'
-                                                }`} 
-                                                style={{ marginLeft: '8px' }}
-                                            >
-                                                {r.triage}
-                                            </span>
-                                        )}
-                                    </span>
-                                    <span className="log-payload" title={r.payloadPreview}>
-                                        {r.payloadPreview?.replace(/\s+/g, ' ')}
-                                    </span>
-                                    <span className={getBadgeClass(r.status)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        {(r.status >= 500 || r.status === 0) && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>}
-                                        {r.status >= 400 && r.status < 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>}
-                                        {r.status >= 200 && r.status < 300 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>}
-                                        {r.status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (r.status || 'ERR')}
-                                    </span>
-                                    <span className="badge-profile">{r.profile}</span>
+                            itemContent={(_index, r) => {
+                                const isMcpErr = r.method === 'CALL' || r.method === 'MCP' || (r.endpoint && r.endpoint.startsWith('mcp://tool/'));
+                                const displayStatus = isMcpErr ? (r.status === 200 ? 400 : r.status) : r.status;
+                                const rowClass = isMcpErr ? (displayStatus >= 500 ? 'status-5xx' : 'status-4xx') : getStatusClass(r.status);
+                                const badgeClass = isMcpErr ? (displayStatus >= 500 ? 'badge badge-error' : 'badge badge-warning') : getBadgeClass(r.status);
+                                
+                                return (
+                                    <div
+                                        key={r.id}
+                                        className={`log-row ${rowClass}`}
+                                        onClick={() => onSelectResult(r)}
+                                        style={{
+                                            opacity: r.triage === 'ignored' || r.triage === 'false_positive' ? 0.6 : 1
+                                        }}
+                                    >
+                                        <span className="log-timestamp">{formatTime(r.timestamp)}</span>
+                                        <span className={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
+                                        <span className="log-path">
+                                            {r.endpoint}
+                                            {r.triage && r.triage !== 'none' && (
+                                                <span 
+                                                    className={`badge ${
+                                                        r.triage === 'acknowledged' 
+                                                            ? 'badge-success' 
+                                                            : r.triage === 'false_positive' 
+                                                            ? 'badge-error' 
+                                                            : 'badge-warning'
+                                                    }`} 
+                                                    style={{ marginLeft: '8px' }}
+                                                >
+                                                    {r.triage}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="log-payload" title={r.payloadPreview}>
+                                            {r.payloadPreview?.replace(/\s+/g, ' ')}
+                                        </span>
+                                        <span className={badgeClass} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            {displayStatus >= 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>}
+                                            {displayStatus >= 400 && displayStatus < 500 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>}
+                                            {!isMcpErr && r.status >= 200 && r.status < 300 && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>}
+                                            {r.status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (isMcpErr ? `-${displayStatus}` : r.status || 'ERR')}
+                                        </span>
+                                        <span className="badge-profile">{r.profile}</span>
                                     <span className="log-size">{formatBytes(r.payloadSize)}</span>
                                     <span className="log-duration">{r.duration}ms</span>
                                 </div>
-                            )}
+                            ); }}
                         />
                     </>
                 )}

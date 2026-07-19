@@ -22,7 +22,7 @@ export type Dictionary = Record<string, any[]>;
 
 export interface EndpointConfig {
     path: string;
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'MCP' | 'CALL';
     schema: SchemaProperty;
     /** Schemas for {param} placeholders in the path (e.g. /users/{id}) */
     pathParams?: Record<string, SchemaProperty>;

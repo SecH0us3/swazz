@@ -549,7 +549,24 @@ func (r *Runner) executeMCPRequest(
 		return result
 	}
 
-	result.Status = 200
+	if res != nil && res.IsError {
+		result.Status = 400
+		hasCrash := false
+		for _, content := range res.Content {
+			if content.Type == "text" {
+				textLower := strings.ToLower(content.Text)
+				if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "crash") || strings.Contains(textLower, "panic") {
+					hasCrash = true
+					break
+				}
+			}
+		}
+		if hasCrash {
+			result.Status = 500
+		}
+	} else {
+		result.Status = 200
+	}
 	var resBytes []byte
 	if res != nil {
 		resBytes, _ = json.Marshal(res)

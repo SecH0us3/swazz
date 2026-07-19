@@ -80,6 +80,13 @@ export class ParseHandler implements RouteHandler {
       runnerWs = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
     }
 
+    // If still no runner, fall back to any available runner.
+    // This handles cases where all connected runners are private (keyed) but the
+    // userPublicKey lookup failed (e.g. user hasn't saved their public key yet).
+    if (!runnerWs) {
+      runnerWs = activeRunners[0] || null;
+    }
+
     if (!runnerWs) {
       context.stateManager.pendingParseUrls.delete(reqId);
       return new Response(JSON.stringify({ error: "No compatible runner connected to Coordinator" }), { status: 503, headers: { 'Content-Type': 'application/json' } });

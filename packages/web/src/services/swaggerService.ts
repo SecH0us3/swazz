@@ -211,7 +211,8 @@ export async function parseRawSpec(
 
 export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | null> {
     try {
-        // 1. Try SSE check: Send GET request with Accept header
+        // 1. Try SSE check: Send GET request with Accept: text/event-stream header.
+        // A true SSE MCP server will keep the connection open and stream events.
         const resGet = await fetch(urlStr, {
             method: 'GET',
             headers: { 'Accept': 'text/event-stream' },
@@ -224,7 +225,9 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
     } catch {}
 
     try {
-        // 2. Try HTTP JSON-RPC check: Send POST initialize request
+        // 2. Try HTTP JSON-RPC check: Send POST initialize request.
+        // Some servers respond with SSE-wrapped JSON (non-standard), others with plain JSON.
+        // Both are handled by HTTPClient in the Go engine.
         const resPost = await fetch(urlStr, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -240,14 +243,11 @@ export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | 
                 }
             })
         });
-        
-        const postContentType = resPost.headers.get('Content-Type') || '';
-        if (resPost.ok && postContentType.includes('event-stream')) {
-            return 'sse';
-        }
 
+        // Server responded to POST — it's a HTTP JSON-RPC MCP server regardless of content-type
+        // (some wrap JSON in SSE streams, Go engine handles both cases in HTTPClient)
         if (resPost.ok || resPost.status === 401 || resPost.status === 403) {
-            return 'sse'; // We only support SSE for remote MCP servers in UI right now
+            return 'http';
         }
     } catch {}
 

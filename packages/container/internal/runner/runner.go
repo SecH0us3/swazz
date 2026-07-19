@@ -767,16 +767,36 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 			return nil, fmt.Errorf("failed to list MCP tools: %w", err)
 		}
 
+		onlyUpgrade := len(r.config.Endpoints) > 0
 		logger.Info("[Runner] Found %d MCP Tools", len(tools))
 		for _, tool := range tools {
-			logger.Info("[Runner] Mapping MCP tool: %s", tool.Name)
-			ep := swagger.EndpointConfig{
-				Path:        "mcp://tool/" + tool.Name,
-				Method:      "CALL",
-				Schema:      tool.InputSchema,
-				ContentType: "application/json",
+			toolPath := "mcp://tool/" + tool.Name
+			
+			// Check if this tool is already in r.config.Endpoints (either with mcp://tool/ prefix or raw name)
+			foundIndex := -1
+			for i, ep := range r.config.Endpoints {
+				if ep.Path == toolPath || ep.Path == tool.Name {
+					foundIndex = i
+					break
+				}
 			}
-			r.config.Endpoints = append(r.config.Endpoints, ep)
+
+			if foundIndex != -1 {
+				logger.Info("[Runner] Upgrading MCP tool in-place: %s", tool.Name)
+				r.config.Endpoints[foundIndex].Path = toolPath
+				r.config.Endpoints[foundIndex].Method = "CALL"
+				r.config.Endpoints[foundIndex].Schema = tool.InputSchema
+				r.config.Endpoints[foundIndex].ContentType = "application/json"
+			} else if !onlyUpgrade {
+				logger.Info("[Runner] Mapping new MCP tool: %s", tool.Name)
+				ep := swagger.EndpointConfig{
+					Path:        toolPath,
+					Method:      "CALL",
+					Schema:      tool.InputSchema,
+					ContentType: "application/json",
+				}
+				r.config.Endpoints = append(r.config.Endpoints, ep)
+			}
 		}
 	}
 

@@ -2,6 +2,78 @@ import { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 
+function tryParseEmbeddedJson(val: any): any {
+    if (val === null || val === undefined) return val;
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+                const parsed = JSON.parse(val);
+                return tryParseEmbeddedJson(parsed);
+            } catch {
+                const startArray = trimmed.indexOf('[');
+                const startObject = trimmed.indexOf('{');
+                let startIdx = -1;
+                if (startArray !== -1 && startObject !== -1) {
+                    startIdx = Math.min(startArray, startObject);
+                } else if (startArray !== -1) {
+                    startIdx = startArray;
+                } else if (startObject !== -1) {
+                    startIdx = startObject;
+                }
+
+                if (startIdx !== -1) {
+                    const prefix = trimmed.substring(0, startIdx).trim();
+                    const jsonPart = trimmed.substring(startIdx);
+                    try {
+                        const parsed = JSON.parse(jsonPart);
+                        return {
+                            message: prefix,
+                            details: tryParseEmbeddedJson(parsed)
+                        };
+                    } catch {}
+                }
+            }
+        } else {
+            const startArray = trimmed.indexOf('[');
+            const startObject = trimmed.indexOf('{');
+            let startIdx = -1;
+            if (startArray !== -1 && startObject !== -1) {
+                startIdx = Math.min(startArray, startObject);
+            } else if (startArray !== -1) {
+                startIdx = startArray;
+            } else if (startObject !== -1) {
+                startIdx = startObject;
+            }
+
+            if (startIdx !== -1) {
+                const prefix = trimmed.substring(0, startIdx).trim();
+                const jsonPart = trimmed.substring(startIdx);
+                try {
+                    const parsed = JSON.parse(jsonPart);
+                    return {
+                        message: prefix,
+                        details: tryParseEmbeddedJson(parsed)
+                    };
+                } catch {}
+            }
+        }
+        return val;
+    }
+    if (Array.isArray(val)) {
+        return val.map(item => tryParseEmbeddedJson(item));
+    }
+    if (typeof val === 'object') {
+        const res: Record<string, any> = {};
+        for (const [k, v] of Object.entries(val)) {
+            res[k] = tryParseEmbeddedJson(v);
+        }
+        return res;
+    }
+    return val;
+}
+
 interface Props {
     result: FuzzResult;
     baseUrl: string;
@@ -339,19 +411,40 @@ export function RequestDetail({
 
     let responseBodyJson = '';
     if (liveResponse !== undefined) {
+        let parsed = liveResponse;
         if (typeof liveResponse === 'string') {
             try {
-                const parsed = JSON.parse(liveResponse);
-                responseBodyJson = JSON.stringify(parsed, null, 2);
+                parsed = JSON.parse(liveResponse);
             } catch {
-                responseBodyJson = liveResponse;
+                parsed = liveResponse;
             }
+        }
+        
+        parsed = tryParseEmbeddedJson(parsed);
+
+        if (typeof parsed === 'string') {
+            responseBodyJson = parsed;
         } else {
-            responseBodyJson = JSON.stringify(liveResponse, null, 2);
+            responseBodyJson = JSON.stringify(parsed, null, 2);
         }
     }
 
+    let isMcpError = false;
+    if ((result.method === 'CALL' || result.method === 'MCP') && liveResponse !== undefined) {
+        let parsed = liveResponse;
+        if (typeof liveResponse === 'string') {
+            try {
+                parsed = JSON.parse(liveResponse);
+            } catch {}
+        }
+        if (parsed && typeof parsed === 'object' && parsed.isError === true) {
+            isMcpError = true;
+        }
+    }
+
+    const displayStatus = isMcpError ? (liveStatus === 200 ? 400 : liveStatus) : liveStatus;
     const statusClass =
+        isMcpError ? (displayStatus >= 500 ? 'status-5xx' : 'status-4xx') :
         liveStatus >= 500 ? 'status-5xx' :
         liveStatus >= 400 ? 'status-4xx' :
         liveStatus > 0 ? 'status-2xx' : 'status-5xx';
@@ -363,7 +456,7 @@ export function RequestDetail({
                 <div className="modal-header">
                     <div className="request-detail-header-meta">
                         <div className={`detail-status ${statusClass}`}>
-                            {liveStatus === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (liveStatus || 'ERR')}
+                            {liveStatus === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (isMcpError ? `-${displayStatus}` : liveStatus || 'ERR')}
                         </div>
                         <div className="request-detail-header-info">
                             <div className="request-detail-endpoint-row">

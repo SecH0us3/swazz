@@ -70,9 +70,8 @@ export function Sidebar({
                         url: trimmed
                     }
                 });
-                setUrlInput('');
-                onToast(`✓ Detected MCP Server (${mcpType.toUpperCase()}) at ${trimmed}. Enabled MCP Fuzzing!`, 'success');
-                return;
+                onToast(`✓ Detected MCP Server (${mcpType.toUpperCase()}) at ${trimmed}. Enabled MCP Fuzzing! Fetching tools...`, 'success');
+                // We do not return here! We want it to be added to swaggerUrls so it gets parsed
             }
         } catch {}
 

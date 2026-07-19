@@ -102,4 +102,30 @@ describe('EndpointTree Component', () => {
         fireEvent.click(usersCheckbox);
         expect(onUpdateDisabled).toHaveBeenCalledWith([]);
     });
+
+    it('groups MCP tools by prefix when they contain underscores and have mcp://tool/ prefix', () => {
+        const onUpdateDisabled = vi.fn();
+        const mcpEndpoints: EndpointConfig[] = [
+            { path: 'mcp://tool/pubmed_search_articles', method: 'CALL', schema: {} },
+            { path: 'mcp://tool/pubmed_fetch_articles', method: 'CALL', schema: {} },
+            { path: 'mcp://tool/arxiv_search', method: 'CALL', schema: {} }
+        ];
+
+        render(
+            <EndpointTree
+                endpoints={mcpEndpoints}
+                disabledEndpoints={[]}
+                onUpdateDisabled={onUpdateDisabled}
+            />
+        );
+
+        // Verify prefixes are rendered as folders
+        expect(screen.getByText('/pubmed/')).toBeTruthy();
+        expect(screen.getByText('/arxiv/')).toBeTruthy();
+
+        // Verify tool names without prefix are rendered as leaves
+        expect(screen.getByText('search_articles')).toBeTruthy();
+        expect(screen.getByText('fetch_articles')).toBeTruthy();
+        expect(screen.getByText('search')).toBeTruthy();
+    });
 });

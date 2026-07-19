@@ -791,18 +791,37 @@ func startAgent(args []string) {
 						mcpHeaders["Cookie"] = strings.Join(cookieParts, "; ")
 					}
 
-					// fallback to MCP HTTP probe
-					mcpClient := mcp.NewHTTPClient(reqPayload.URL, false, mcpHeaders)
-					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
-					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
-						// It is an MCP HTTP server!
-						tools, _ := mcpClient.ListTools(mcpCtx)
-						mcpCancel()
+					// fallback to MCP probe (try HTTP first, then SSE)
+					var mcpClient mcp.Client
+					mcpClient = mcp.NewHTTPClient(reqPayload.URL, false, mcpHeaders)
+					mcpCtxHTTP, cancelHTTP := context.WithTimeout(context.Background(), 10*time.Second)
+					
+					var mcpErr error
+					if mcpErr = mcpClient.Connect(mcpCtxHTTP); mcpErr != nil {
+						logWarn("[Parser] MCP HTTP connect failed: %v, falling back to SSE", mcpErr)
+						mcpClient.Close()
+						cancelHTTP()
+						
+						mcpClient = mcp.NewSSEClient(reqPayload.URL, false, mcpHeaders)
+						mcpCtxSSE, cancelSSE := context.WithTimeout(context.Background(), 10*time.Second)
+						mcpErr = mcpClient.Connect(mcpCtxSSE)
+						if mcpErr != nil {
+							cancelSSE()
+						}
+					} else {
+						// HTTP succeeded
+					}
+
+					if mcpErr == nil {
+						// It is an MCP server!
+						mcpCtxTools, toolsCancel := context.WithTimeout(context.Background(), 10*time.Second)
+						tools, _ := mcpClient.ListTools(mcpCtxTools)
+						toolsCancel()
 						var eps []swagger.EndpointConfig
 						for _, t := range tools {
 							eps = append(eps, swagger.EndpointConfig{
-								Method: "MCP",
-								Path:   t.Name,
+								Method: "CALL",
+								Path:   "mcp://tool/" + t.Name,
 								Schema: t.InputSchema,
 							})
 						}
@@ -811,6 +830,7 @@ func startAgent(args []string) {
 							pruneSchema(&eps[i].Schema, 0, 3)
 						}
 						
+						mcpClient.Close()
 						logInfo("[Parser] Fallback to MCP successful for %s (%d tools)", reqPayload.URL, len(eps))
 						result = map[string]interface{}{
 							"basePath":  reqPayload.URL,
@@ -818,7 +838,6 @@ func startAgent(args []string) {
 							"rawSpec":   "",
 						}
 					} else {
-						mcpCancel()
 						logWarn("[Parser] MCP fallback failed: %v", mcpErr)
 					}
 				}

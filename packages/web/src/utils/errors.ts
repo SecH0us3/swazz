@@ -89,8 +89,47 @@ export function extractErrorSubtype(responsePreview: string | undefined): { titl
     if (!responsePreview) return null;
     
     try {
-        const body = JSON.parse(responsePreview);
+        let body = JSON.parse(responsePreview);
+        while (typeof body === 'string') {
+            try {
+                body = JSON.parse(body);
+            } catch {
+                break;
+            }
+        }
+
         if (body && typeof body === 'object') {
+            // Check for MCP Error
+            if (body.isError === true && body.content && Array.isArray(body.content)) {
+                const txt = body.content.find((c: any) => c.type === 'text');
+                if (txt) {
+                    let textStr = '';
+                    if (typeof txt.text === 'object') {
+                        textStr = txt.text.message || JSON.stringify(txt.text);
+                    } else if (typeof txt.text === 'string') {
+                        textStr = txt.text;
+                    }
+                    
+                    if (textStr) {
+                        const mcpCodeMatch = textStr.match(/MCP error (-?\d+):?\s*(.*)/i);
+                        if (mcpCodeMatch) {
+                            const codeNum = mcpCodeMatch[1];
+                            const codeMsg = cleanErrorMessage(mcpCodeMatch[2]);
+                            return {
+                                title: `MCP Error ${codeNum}: ${codeMsg}`,
+                                key: `mcp_error_${codeNum}_${slugify(codeMsg)}`,
+                            };
+                        }
+                        
+                        const cleanMsg = cleanErrorMessage(textStr);
+                        return {
+                            title: `MCP Tool Error: ${cleanMsg}`,
+                            key: `mcp_tool_error_${slugify(cleanMsg)}`,
+                        };
+                    }
+                }
+            }
+
             // Check for NPE in any top-level string values first to prevent false positives in raw text
             const hasNPE = Object.values(body).some(v => typeof v === 'string' && isNullPointerException(v));
             if (hasNPE) {
@@ -148,15 +187,39 @@ export function extractErrorSubtype(responsePreview: string | undefined): { titl
                     key: `title_${slugify(titleText)}`,
                 };
             }
+        } else if (typeof body === 'string') {
+            const mcpCodeMatch = body.match(/MCP error (-?\d+):?\s*(.*)/i);
+            if (mcpCodeMatch) {
+                const codeNum = mcpCodeMatch[1];
+                const codeMsg = cleanErrorMessage(mcpCodeMatch[2]);
+                return {
+                    title: `MCP Error ${codeNum}: ${codeMsg}`,
+                    key: `mcp_error_${codeNum}_${slugify(codeMsg)}`,
+                };
+            }
         }
     } catch {
-        // Not a JSON response, fall back to checking the raw text
-        if (isNullPointerException(responsePreview)) {
+        // Ignore JSON parsing errors and fall back to raw string checks
+    }
+
+    if (responsePreview) {
+        const mcpCodeMatch = responsePreview.match(/MCP error (-?\d+):?\s*(.*)/i);
+        if (mcpCodeMatch) {
+            const codeNum = mcpCodeMatch[1];
+            const codeMsg = cleanErrorMessage(mcpCodeMatch[2]);
             return {
-                title: 'Null Reference Exception',
-                key: 'null_reference_exception',
+                title: `MCP Error ${codeNum}: ${codeMsg}`,
+                key: `mcp_error_${codeNum}_${slugify(codeMsg)}`,
             };
         }
     }
+
+    if (isNullPointerException(responsePreview)) {
+        return {
+            title: 'Null Reference Exception',
+            key: 'null_reference_exception',
+        };
+    }
+
     return null;
 }

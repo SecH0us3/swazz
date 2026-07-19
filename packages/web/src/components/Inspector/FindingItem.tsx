@@ -31,6 +31,13 @@ export const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, group
 
     const isIgnoredOrFp = item.result.triage === 'ignored' || item.result.triage === 'false_positive';
 
+    const isMcpErr = (item.result.method === 'CALL' || item.result.method === 'MCP' || item.result.endpoint?.startsWith('mcp://tool/')) && 
+                     item.result.responsePreview && 
+                     (/"isError"\s*:\s*true/i.test(item.result.responsePreview.replace(/\\"/g, '"')));
+
+    const displayStatus = isMcpErr ? (item.result.status === 200 ? 400 : item.result.status) : item.result.status;
+    const badgeClass = isMcpErr ? (displayStatus >= 500 ? 'badge badge-error' : 'badge badge-warning') : getBadgeClass(item.result.status);
+
     return (
         <div 
             className="finding-item" 
@@ -46,8 +53,8 @@ export const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, group
                     <span className="finding-item-path">{item.result.endpoint}</span>
                     {triageBadge}
                 </div>
-                <span className={getBadgeClass(item.result.status)}>
-                    {item.result.status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (item.result.status || 'ERR')}
+                <span className={badgeClass}>
+                    {item.result.status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (isMcpErr ? `-${displayStatus}` : item.result.status || 'ERR')}
                 </span>
             </div>
             {item.finding?.message && (
@@ -55,9 +62,35 @@ export const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, group
                     {item.finding.message}
                 </div>
             )}
-            {item.result.status >= 500 && !item.finding && (
+            {isMcpErr && !item.finding && (() => {
+                let errMsg = '';
+                try {
+                    let parsed = JSON.parse(item.result.responsePreview);
+                    while (typeof parsed === 'string') {
+                        parsed = JSON.parse(parsed);
+                    }
+                    if (parsed && parsed.content && Array.isArray(parsed.content)) {
+                        const txtContent = parsed.content.find((c: any) => c.type === 'text');
+                        if (txtContent && txtContent.text) {
+                            if (typeof txtContent.text === 'object') {
+                                errMsg = txtContent.text.message || JSON.stringify(txtContent.text);
+                            } else {
+                                errMsg = txtContent.text;
+                            }
+                        }
+                    }
+                } catch {
+                    errMsg = item.result.responsePreview || 'MCP tool invocation failed';
+                }
+                return (
+                    <div className="finding-item-message">
+                        <strong>MCP Error:</strong> {errMsg}
+                    </div>
+                );
+            })()}
+            {!isMcpErr && displayStatus >= 400 && !item.finding && (
                 <div className="finding-item-message">
-                    Server returned unhandled error status {item.result.status}
+                    Server returned error status {displayStatus}
                 </div>
             )}
             {item.finding?.evidence && (

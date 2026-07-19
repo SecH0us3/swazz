@@ -199,12 +199,14 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
 
         // Filter by findings
         if (findingsOnly) {
-            list = list.filter(r => 
-                (r.analyzerFindings && r.analyzerFindings.length > 0) || 
-                r.status >= 500 || 
-                (r.status === 0 && r.error) ||
-                (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
-            );
+            list = list.filter(r => {
+                const isMcpErr = r.method === 'CALL' || r.method === 'MCP' || (r.endpoint && r.endpoint.startsWith('mcp://tool/'));
+                return (r.analyzerFindings && r.analyzerFindings.length > 0) || 
+                    r.status >= 500 || 
+                    (r.status === 0 && r.error) ||
+                    (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status)) ||
+                    isMcpErr;
+            });
         }
 
         // Filter by heatmapFilter
@@ -272,11 +274,13 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
             }
 
             if (matches && findingsOnly) {
+                const isMcpErr = r.method === 'CALL' || r.method === 'MCP' || (r.endpoint && r.endpoint.startsWith('mcp://tool/'));
                 matches = !!(
                     (r.analyzerFindings && r.analyzerFindings.length > 0) || 
                     r.status >= 500 || 
                     (r.status === 0 && r.error) ||
-                    (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status))
+                    (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status)) ||
+                    isMcpErr
                 );
             }
 

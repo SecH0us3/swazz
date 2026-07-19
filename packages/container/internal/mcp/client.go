@@ -466,7 +466,20 @@ func (c *SSEClient) Connect(ctx context.Context) error {
 		req.Header.Set(k, v)
 	}
 
+	// Enforce the connection timeout context during the dial/handshake phase.
+	// Since c.ctx does not have a timeout (it manages client lifecycle), we monitor
+	// the passed-in timeout context ctx and cancel c.ctx if it expires.
+	connectDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			c.cancel() // Aborts Do(req)
+		case <-connectDone:
+		}
+	}()
+
 	resp, err := c.httpClient.Do(req)
+	close(connectDone)
 	if err != nil {
 		c.cancel()
 		return err
@@ -852,10 +865,28 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 		return nil, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(bytes.TrimSpace(respBytes)))
 	}
 
+	contentType := resp.Header.Get("Content-Type")
+	
 	limitReader := io.LimitReader(resp.Body, 10*1024*1024)
 	respBytes, err := io.ReadAll(limitReader)
 	if err != nil {
 		return nil, err
+	}
+
+	// Some non-standard MCP servers respond to POST with an SSE stream containing the JSON-RPC response.
+	if strings.Contains(contentType, "text/event-stream") {
+		// Extract the 'data: ' payload
+		lines := strings.Split(string(respBytes), "\n")
+		var dataPayload []string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "data:") {
+				dataPayload = append(dataPayload, strings.TrimSpace(line[5:]))
+			}
+		}
+		if len(dataPayload) > 0 {
+			respBytes = []byte(strings.Join(dataPayload, "\n"))
+		}
 	}
 
 	var respObj Response
