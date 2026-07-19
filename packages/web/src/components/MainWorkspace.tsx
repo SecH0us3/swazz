@@ -597,23 +597,64 @@ export function MainWorkspace({
                             onExportMD={handleExportMD}
                         />
                     ) : !hasActivity ? (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div className="empty-state">
-                                <div className="empty-state-icon">⚡</div>
-                                <div className="empty-state-title">Ready to fuzz</div>
-                                <div className="empty-state-text">
-                                    Add a Swagger URL in the left sidebar to auto-load endpoints, then hit <strong style={{ color: 'var(--accent-light)' }}>Run</strong>.
+                        <div className="welcome-workspace-wrapper">
+                            <div className="welcome-workspace-container">
+                                <div className="welcome-workspace-header">
+                                    <div className="welcome-logo-container">
+                                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="welcome-fuzzer-logo">
+                                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="url(#shield-grad)" stroke="var(--accent)"/>
+                                            <path d="m13 7-5 6h4v4l5-6h-4V7z" fill="var(--accent-light)"/>
+                                            <defs>
+                                                <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                    <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3"/>
+                                                    <stop offset="100%" stopColor="var(--accent-light)" stopOpacity="0.05"/>
+                                                </linearGradient>
+                                            </defs>
+                                        </svg>
+                                    </div>
+                                    <h2 className="welcome-workspace-title">Ready to fuzz</h2>
+                                    <p className="welcome-workspace-subtitle">Choose a scan mode below to begin discovering vulnerabilities</p>
                                 </div>
-                                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                    <button
-                                        className="btn btn-primary"
-                                        style={{ padding: '8px 16px', fontSize: '14px' }}
-                                        onClick={() => handleStart(['https://bbad.secmy.app/swagger.json'])}
-                                    >
-                                        Try Vulnerable Demo
-                                    </button>
-                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>
-                                        Automatically loads endpoints and runs a quick fuzz test
+
+                                <div className="welcome-modes-grid">
+                                    {/* Mode 1: Try Demo */}
+                                    <div className="welcome-mode-card demo-mode-card">
+                                        <div className="mode-badge-wrapper">
+                                            <span className="mode-badge">Automated</span>
+                                        </div>
+                                        <h3 className="mode-title">1-Click Vulnerable Demo</h3>
+                                        <p className="mode-desc">
+                                            Quickly explore the fuzzer features using a pre-configured target. The scanner will automatically load the API schema, discover endpoints, and trigger a sample fuzz scan.
+                                        </p>
+                                        <button
+                                            className="btn btn-primary mode-action-btn"
+                                            onClick={() => handleStart(['https://bbad.secmy.app/swagger.json'])}
+                                        >
+                                            Try Vulnerable Demo
+                                        </button>
+                                        <span className="mode-details-text">Target: https://bbad.secmy.app</span>
+                                    </div>
+
+                                    {/* Mode 2: Custom Scan */}
+                                    <div className="welcome-mode-card custom-mode-card">
+                                        <div className="mode-badge-wrapper">
+                                            <span className="mode-badge secondary">Manual Config</span>
+                                        </div>
+                                        <h3 className="mode-title">Scan Custom API</h3>
+                                        <p className="mode-desc">
+                                            Configure and run a security scan targeting your own API endpoints.
+                                        </p>
+                                        <ol className="mode-steps-list">
+                                            <li>
+                                                <strong>Specify Target URL:</strong> Enter your API base URL in the top address bar (e.g. <code>https://api.example.com</code>).
+                                            </li>
+                                            <li>
+                                                <strong>Import Endpoints (Optional):</strong> Paste your Swagger/OpenAPI spec URL in the left sidebar to automatically parse and discover all endpoints.
+                                            </li>
+                                            <li>
+                                                <strong>Customize & Run:</strong> Tweak profiles or headers in the sidebar, then hit <strong>Run Scan</strong>.
+                                            </li>
+                                        </ol>
                                     </div>
                                 </div>
                             </div>
