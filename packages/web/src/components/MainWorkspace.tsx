@@ -622,7 +622,12 @@ export function MainWorkspace({
                                         <div className="mode-badge-wrapper">
                                             <span className="mode-badge">Automated</span>
                                         </div>
-                                        <h3 className="mode-title">1-Click Vulnerable Demo</h3>
+                                        <h3 className="mode-title">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="mode-title-icon">
+                                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                            </svg>
+                                            1-Click Vulnerable Demo
+                                        </h3>
                                         <p className="mode-desc">
                                             Quickly explore the fuzzer features using a pre-configured target. The scanner will automatically load the API schema, discover endpoints, and trigger a sample fuzz scan.
                                         </p>
@@ -640,21 +645,43 @@ export function MainWorkspace({
                                         <div className="mode-badge-wrapper">
                                             <span className="mode-badge secondary">Manual Config</span>
                                         </div>
-                                        <h3 className="mode-title">Scan Custom API</h3>
+                                        <h3 className="mode-title">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="mode-title-icon">
+                                                <line x1="4" y1="21" x2="4" y2="14"></line>
+                                                <line x1="4" y1="10" x2="4" y2="3"></line>
+                                                <line x1="12" y1="21" x2="12" y2="12"></line>
+                                                <line x1="12" y1="8" x2="12" y2="3"></line>
+                                                <line x1="20" y1="21" x2="20" y2="16"></line>
+                                                <line x1="20" y1="12" x2="20" y2="3"></line>
+                                                <line x1="1" y1="14" x2="7" y2="14"></line>
+                                                <line x1="9" y1="8" x2="15" y2="8"></line>
+                                                <line x1="17" y1="16" x2="23" y2="16"></line>
+                                            </svg>
+                                            Scan Custom API
+                                        </h3>
                                         <p className="mode-desc">
                                             Configure and run a security scan targeting your own API endpoints.
                                         </p>
-                                        <ol className="mode-steps-list">
+                                        <ul className="mode-steps-list">
                                             <li>
-                                                <strong>Specify Target URL:</strong> Enter your API base URL in the top address bar (e.g. <code>https://api.example.com</code>).
+                                                <span className="mode-step-number">1</span>
+                                                <span className="mode-step-text">
+                                                    <strong>Specify Target URL:</strong> Enter your API base URL in the top address bar (e.g. <code>https://api.example.com</code>).
+                                                </span>
                                             </li>
                                             <li>
-                                                <strong>Import Endpoints (Optional):</strong> Paste your Swagger/OpenAPI spec URL in the left sidebar to automatically parse and discover all endpoints.
+                                                <span className="mode-step-number">2</span>
+                                                <span className="mode-step-text">
+                                                    <strong>Import Endpoints (Optional):</strong> Paste your Swagger/OpenAPI spec URL in the left sidebar to automatically parse and discover all endpoints.
+                                                </span>
                                             </li>
                                             <li>
-                                                <strong>Customize & Run:</strong> Tweak profiles or headers in the sidebar, then hit <strong>Run Scan</strong>.
+                                                <span className="mode-step-number">3</span>
+                                                <span className="mode-step-text">
+                                                    <strong>Customize & Run:</strong> Tweak profiles or headers in the sidebar, then hit <strong>Run Scan</strong>.
+                                                </span>
                                             </li>
-                                        </ol>
+                                        </ul>
                                     </div>
                                 </div>
                             </div>
