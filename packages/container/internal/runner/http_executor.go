@@ -605,16 +605,18 @@ func (r *Runner) executeMCPRequest(
 		}
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
 
-		for _, content := range res.Content {
-			if content.Type == "text" {
-				textLower := strings.ToLower(content.Text)
-				if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "sql syntax") {
-					result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
-						RuleID:   "swazz/mcp-tool-error-reflection",
-						Level:    "error",
-						Message:  fmt.Sprintf("The tool returned an error or exception signature in its content: %s", content.Text),
-						Evidence: fmt.Sprintf("Tool: %s\nText: %s", toolName, content.Text),
-					})
+		if res != nil {
+			for _, content := range res.Content {
+				if content.Type == "text" {
+					textLower := strings.ToLower(content.Text)
+					if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "sql syntax") {
+						result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
+							RuleID:   "swazz/mcp-tool-error-reflection",
+							Level:    "error",
+							Message:  fmt.Sprintf("The tool returned an error or exception signature in its content: %s", content.Text),
+							Evidence: fmt.Sprintf("Tool: %s\nText: %s", toolName, content.Text),
+						})
+					}
 				}
 			}
 		}

@@ -673,6 +673,11 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 func (c *SSEClient) readSSELoop(body io.ReadCloser) {
 	defer body.Close()
 	scanner := bufio.NewScanner(body)
+	// Support token sizes up to 10MB to accommodate large schemas/responses safely
+	const maxTokenSize = 10 * 1024 * 1024
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, maxTokenSize)
+
 	var currentEvent SSEEvent
 
 	for scanner.Scan() {
