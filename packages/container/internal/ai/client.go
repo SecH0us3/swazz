@@ -49,6 +49,7 @@ func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt 
 
 	// #nosec G204 -- The command array is intentionally constructed from user configuration in a controlled runner environment
 	cmd := exec.Command(cmdName, args...)
+	cmd.Stdin = strings.NewReader(fullPrompt)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), fmt.Errorf("command execution failed: %w", err)

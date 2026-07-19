@@ -40,3 +40,21 @@ func TestCLIAnalyzer_Analyze(t *testing.T) {
 		t.Errorf("expected output to contain prompt, got:\n%s", out)
 	}
 }
+
+func TestCLIAnalyzer_AnalyzeStdin(t *testing.T) {
+	// "cat" reads from stdin on Unix-like systems (Mac OS) when no file arguments are passed
+	analyzer := NewCLIAnalyzer("cat")
+	
+	findingMessage := "SQL Injection found"
+	contextCode := "SELECT * FROM users"
+	prompt := "Analyze this finding:"
+
+	out, err := analyzer.Analyze(findingMessage, contextCode, prompt)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if !strings.Contains(out, findingMessage) {
+		t.Errorf("expected output to contain findingMessage, got:\n%s", out)
+	}
+}
