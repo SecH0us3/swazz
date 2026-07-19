@@ -31,7 +31,27 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
         }
     }, [stats]);
 
-    if (!stats) {
+    const displayStats = stats || ((isRunning || endpointKeys.length > 0) ? {
+        totalRequests: 0,
+        totalPlanned: 0,
+        requestsPerSecond: 0,
+        statusCounts: {},
+        profileCounts: {},
+        endpointCounts: {},
+        startTime: Date.now(),
+        isRunning: isRunning,
+        totalResponseBytes: 0,
+        maxResponseSize: 0,
+        totalDurationMs: 0,
+        progress: {
+            completedEndpoints: 0,
+            totalEndpoints: endpointKeys.length,
+            currentEndpoint: '',
+            currentProfile: '',
+        }
+    } as any : null);
+
+    if (!displayStats) {
         return (
             <div className="dashboard">
                 <div className="empty-state empty-state-welcome">
@@ -168,9 +188,9 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
 
     return (
         <div className="dashboard">
-            <StatsBar stats={stats} isRunning={isRunning} />
+            <StatsBar stats={displayStats} isRunning={isRunning} />
             <Heatmap
-                stats={stats}
+                stats={displayStats}
                 endpointKeys={endpointKeys}
                 vulnerableEndpoints={vulnerableEndpoints}
                 activeFilter={heatmapFilter}
