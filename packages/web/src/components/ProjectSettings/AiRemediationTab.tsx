@@ -392,7 +392,7 @@ export function AiRemediationTab() {
                 </div>
 
                 <div className="settings-field-group" style={{ marginTop: 'var(--space-4)' }}>
-                    <label className="settings-label" htmlFor="preferred-ai-tool" style={{ margin: 0 }}>Preferred AI Tool:</label>
+                    <label className="settings-label" htmlFor="preferred-ai-tool">Preferred AI Tool:</label>
                     <select 
                         id="preferred-ai-tool"
                         className="input settings-tool-select" 
