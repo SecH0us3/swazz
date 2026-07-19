@@ -154,7 +154,7 @@ func runCLI(args []string) {
 
 	cliCfg := CliConfig{
 		Security: swagger.SecurityConfig{
-			AllowPrivateIPs: true,
+			AllowPrivateIPs: false,
 		},
 	}
 	if err := json.Unmarshal(configData, &cliCfg); err != nil {

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,39 +20,11 @@ import (
 	"time"
 
 	"swazz-engine/internal/security"
-	"swazz-engine/internal/swagger"
 )
 
 const (
 	mcpProtocolVersion = "2024-11-05"
 )
-
-// Client interface defines the contract for MCP transport clients.
-type Client interface {
-	Connect(ctx context.Context) error
-	ListTools(ctx context.Context) ([]Tool, error)
-	CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResult, string, error) // Returns result, stderr logs, and error
-	Close() error
-}
-
-// Tool represents a tool configuration exposed by the MCP server.
-type Tool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
-	InputSchema swagger.SchemaProperty `json:"inputSchema"`
-}
-
-// CallToolResult represents the outcome of invoking an MCP tool.
-type CallToolResult struct {
-	Content []Content `json:"content"`
-	IsError bool      `json:"isError,omitempty"`
-}
-
-// Content defines a single item in the CallToolResult content array.
-type Content struct {
-	Type string `json:"type"` // "text", "image", "resource"
-	Text string `json:"text,omitempty"`
-}
 
 // Request is the JSON-RPC 2.0 request wrapper.
 type Request struct {
@@ -141,18 +114,28 @@ func (c *StdioClient) Connect(ctx context.Context) error {
 	if len(c.args) == 0 {
 		return fmt.Errorf("args cannot be empty")
 	}
-	// Validate command to prevent command injection
-	if strings.Contains(c.command, ";") || strings.Contains(c.command, "&") || strings.Contains(c.command, "|") ||
-		strings.Contains(c.command, "`") || strings.Contains(c.command, "$") {
-		return fmt.Errorf("command contains suspicious characters")
+	// Validate command path to prevent command injection
+	absPath, err := filepath.Abs(c.command)
+	if err != nil {
+		return fmt.Errorf("invalid command path: %w", err)
 	}
+	if !filepath.IsAbs(absPath) {
+		return fmt.Errorf("command must be an absolute path")
+	}
+	// Prevent directory traversal
+	if filepath.Base(absPath) != filepath.Base(c.command) {
+		return fmt.Errorf("invalid command path: possible directory traversal")
+	}
+	// Check for suspicious characters in individual args
 	for _, arg := range c.args {
 		if strings.Contains(arg, ";") || strings.Contains(arg, "&") || strings.Contains(arg, "|") ||
-			strings.Contains(arg, "`") || strings.Contains(arg, "$") {
+			strings.Contains(arg, "`") || strings.Contains(arg, "$") ||
+			strings.Contains(arg, "'") || strings.Contains(arg, "\"") ||
+			strings.Contains(arg, "<") || strings.Contains(arg, ">") {
 			return fmt.Errorf("args contain suspicious characters")
 		}
 	}
-	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.ctx, c.cancel = context.WithCancel(ctx)
 	c.cmd = exec.CommandContext(c.ctx, c.command, c.args...)
 
 	stdin, err := c.cmd.StdinPipe()
@@ -309,8 +292,9 @@ func (c *StdioClient) getExitError() error {
 	c.stderrMu.Lock()
 	defer c.stderrMu.Unlock()
 	if c.exitErr != nil {
-		if c.stderrBuf.Len() > 0 {
-			return fmt.Errorf("%w (stderr: %s)", c.exitErr, c.stderrBuf.String())
+		stderrContent := c.stderrBuf.String()
+		if stderrContent != "" {
+			return fmt.Errorf("%w (stderr: %s)", c.exitErr, stderrContent)
 		}
 		return c.exitErr
 	}
@@ -442,8 +426,13 @@ func (c *StdioClient) Close() error {
 	}
 	c.stdinMu.Unlock()
 
-	<-c.processDone
-	return nil
+	// Wait for process to finish with timeout to prevent deadlock
+	select {
+	case <-c.processDone:
+		return nil
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("timeout waiting for process termination")
+	}
 }
 
 // SSEEvent represents a standard server-sent event.
@@ -470,7 +459,7 @@ type SSEClient struct {
 }
 
 // NewSSEClient initializes a new SSEClient.
-// If tlsConfig is nil, the default system certificate pool is used.
+// If tlsConfig is nil, uses system certificate pool with certificate validation enabled.
 func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string, tlsConfig *tls.Config) *SSEClient {
 	client := &SSEClient{
 		url:          urlStr,
@@ -480,9 +469,20 @@ func NewSSEClient(urlStr string, allowPrivateIPs bool, headers map[string]string
 		headers:      headers,
 	}
 
-	if tlsConfig != nil {
-		if transport, ok := client.httpClient.Transport.(*http.Transport); ok {
+	// Always enable certificate validation by default
+	if transport, ok := client.httpClient.Transport.(*http.Transport); ok {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: false,
+				MinVersion:         tls.VersionTLS12,
+			}
+		}
+		if tlsConfig != nil {
 			transport.TLSClientConfig = tlsConfig.Clone()
+			// Ensure InsecureSkipVerify is false unless explicitly set in tlsConfig
+			if !tlsConfig.InsecureSkipVerify {
+				transport.TLSClientConfig.InsecureSkipVerify = false
+			}
 		}
 	}
 
@@ -706,8 +706,8 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 func (c *SSEClient) readSSELoop(body io.ReadCloser) {
 	defer body.Close()
 	scanner := bufio.NewScanner(body)
-	// Support token sizes up to 10MB to accommodate large schemas/responses safely
-	const maxTokenSize = 10 * 1024 * 1024
+	// Support token sizes up to 1MB to prevent DoS attacks
+	const maxTokenSize = 1 * 1024 * 1024
 	buf := make([]byte, 64*1024)
 	scanner.Buffer(buf, maxTokenSize)
 
@@ -858,9 +858,21 @@ type HTTPClient struct {
 
 // NewHTTPClient initializes a new HTTPClient.
 func NewHTTPClient(urlStr string, allowPrivateIPs bool, headers map[string]string) *HTTPClient {
+	client := security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs)
+	
+	// Always enable certificate validation by default
+	if transport, ok := client.Transport.(*http.Transport); ok {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: false,
+				MinVersion:         tls.VersionTLS12,
+			}
+		}
+	}
+	
 	return &HTTPClient{
 		url:        urlStr,
-		httpClient: security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs),
+		httpClient: client,
 		headers:    headers,
 	}
 }

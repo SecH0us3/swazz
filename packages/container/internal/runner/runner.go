@@ -135,8 +135,9 @@ type Runner struct {
 
 	analyzer *analyzer.AnalyzerRegistry
 
-	mcpClient mcp.Client
-	mcpMutex  sync.Mutex
+	mcpClient     mcp.Client
+	mcpMutex      sync.Mutex
+	mcpRateLimiter *mcp.RateLimiter
 }
 
 // New creates a new Runner with sensible defaults.
