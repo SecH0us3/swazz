@@ -170,9 +170,13 @@ export function Header({
                     onClick={onLogout} 
                     title="Temporary guest account. Data is automatically deleted after 24 hours."
                 >
-                    <span className="header-guest-alert-dot" />
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="header-guest-icon">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
                     <span className="header-guest-banner-text">
-                        🛡️ <strong>Guest Mode:</strong> Scans are temporary. <strong>Sign up</strong> to save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up Now →</span>
+                        <strong>Guest Mode:</strong> Scans are temporary. <strong>Sign up</strong> to save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up Now →</span>
                     </span>
                 </div>
             )}
