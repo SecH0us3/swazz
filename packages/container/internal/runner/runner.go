@@ -767,7 +767,14 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 			return nil, fmt.Errorf("failed to list MCP tools: %w", err)
 		}
 
-		onlyUpgrade := len(r.config.Endpoints) > 0
+		hasAnyMcpInConfig := false
+		for _, ep := range r.config.Endpoints {
+			if ep.Method == "CALL" || ep.Method == "MCP" || strings.HasPrefix(ep.Path, "mcp://tool/") {
+				hasAnyMcpInConfig = true
+				break
+			}
+		}
+
 		logger.Info("[Runner] Found %d MCP Tools", len(tools))
 		for _, tool := range tools {
 			toolPath := "mcp://tool/" + tool.Name
@@ -787,7 +794,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 				r.config.Endpoints[foundIndex].Method = "CALL"
 				r.config.Endpoints[foundIndex].Schema = tool.InputSchema
 				r.config.Endpoints[foundIndex].ContentType = "application/json"
-			} else if !onlyUpgrade {
+			} else if !hasAnyMcpInConfig {
 				logger.Info("[Runner] Mapping new MCP tool: %s", tool.Name)
 				ep := swagger.EndpointConfig{
 					Path:        toolPath,
