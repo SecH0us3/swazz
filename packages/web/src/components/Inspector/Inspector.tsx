@@ -29,6 +29,7 @@ interface Props {
     onExport: () => void;
     findingsOnly?: boolean;
     config?: SwazzConfig;
+    onUpdateCount?: (count: number) => void;
 }
 
 function getCleanDedupeKey(method: string, endpoint: string, status: number, errorMsg?: string): string {
@@ -68,6 +69,7 @@ export function Inspector({
     onExport,
     findingsOnly = false,
     config,
+    onUpdateCount,
 }: Props) {
     const onSelectResultRef = useRef(onSelectResult);
     onSelectResultRef.current = onSelectResult;
@@ -156,10 +158,20 @@ export function Inspector({
         setLimit(PAGE_SIZE);
     }, [runId]);
 
-    const groupedFindings = useMemo(() => {
-        if (!findingsOnly) return [];
+    const { securityVulnerabilities, infrastructureErrors } = useMemo(() => {
+        if (!findingsOnly) return { securityVulnerabilities: [], infrastructureErrors: [] };
 
-        const groups: Record<
+        const securityGroups: Record<
+            string,
+            {
+                title: string;
+                color: string;
+                items: { result: ResultSummary; finding?: AnalysisFinding }[];
+                seen: Set<string>;
+            }
+        > = {};
+
+        const infraGroups: Record<
             string,
             {
                 title: string;
@@ -178,13 +190,13 @@ export function Inspector({
                     placed = true;
                     const { title, color, key: groupKey } = categorizeFinding(f, row.responsePreview);
 
-                    if (!groups[groupKey]) {
-                        groups[groupKey] = { title, color, items: [], seen: new Set() };
+                    if (!securityGroups[groupKey]) {
+                        securityGroups[groupKey] = { title, color, items: [], seen: new Set() };
                     }
                     const dedupeKey = `${row.method} ${row.endpoint}::${f.ruleId}::${f.message}`;
-                    if (!groups[groupKey].seen.has(dedupeKey)) {
-                        groups[groupKey].seen.add(dedupeKey);
-                        groups[groupKey].items.push({ result: row, finding: f });
+                    if (!securityGroups[groupKey].seen.has(dedupeKey)) {
+                        securityGroups[groupKey].seen.add(dedupeKey);
+                        securityGroups[groupKey].items.push({ result: row, finding: f });
                     }
                 }
             }
@@ -218,13 +230,13 @@ export function Inspector({
                         }
                     }
 
-                    if (!groups[groupKey]) {
-                        groups[groupKey] = { title: categoryTitle, color, items: [], seen: new Set() };
+                    if (!infraGroups[groupKey]) {
+                        infraGroups[groupKey] = { title: categoryTitle, color, items: [], seen: new Set() };
                     }
                     const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error);
-                    if (!groups[groupKey].seen.has(dedupeKey)) {
-                        groups[groupKey].seen.add(dedupeKey);
-                        groups[groupKey].items.push({ result: row });
+                    if (!infraGroups[groupKey].seen.has(dedupeKey)) {
+                        infraGroups[groupKey].seen.add(dedupeKey);
+                        infraGroups[groupKey].items.push({ result: row });
                     }
                 }
             }
@@ -236,7 +248,7 @@ export function Inspector({
             'var(--color-info)': 3,
         };
 
-        return Object.entries(groups)
+        const securityList = Object.entries(securityGroups)
             .filter(([_, group]) => group.items.length > 0)
             .map(([key, group]) => ({ key, ...group }))
             .sort((a, b) => {
@@ -245,12 +257,31 @@ export function Inspector({
                 if (prioA !== prioB) return prioA - prioB;
                 return a.title.localeCompare(b.title);
             });
+
+        const infraList = Object.entries(infraGroups)
+            .filter(([_, group]) => group.items.length > 0)
+            .map(([key, group]) => ({ key, ...group }))
+            .sort((a, b) => {
+                const prioA = colorPriority[a.color] || 99;
+                const prioB = colorPriority[b.color] || 99;
+                if (prioA !== prioB) return prioA - prioB;
+                return a.title.localeCompare(b.title);
+            });
+
+        return { securityVulnerabilities: securityList, infrastructureErrors: infraList };
     }, [rows, findingsOnly, excludedStatuses]);
 
     const filteredFindingsCount = useMemo(() => {
         if (!findingsOnly) return total;
-        return groupedFindings.reduce((sum, g) => sum + g.items.length, 0);
-    }, [groupedFindings, findingsOnly, total]);
+        return securityVulnerabilities.reduce((sum, g) => sum + g.items.length, 0) +
+               infrastructureErrors.reduce((sum, g) => sum + g.items.length, 0);
+    }, [securityVulnerabilities, infrastructureErrors, findingsOnly, total]);
+
+    useEffect(() => {
+        if (findingsOnly && onUpdateCount) {
+            onUpdateCount(filteredFindingsCount);
+        }
+    }, [filteredFindingsCount, findingsOnly, onUpdateCount]);
 
     const toggleGroup = (key: string) => {
         setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -258,7 +289,7 @@ export function Inspector({
 
     const handleExpandAll = () => {
         const newExpanded: Record<string, boolean> = {};
-        for (const g of groupedFindings) {
+        for (const g of [...securityVulnerabilities, ...infrastructureErrors]) {
             newExpanded[g.key] = true;
         }
         setExpandedGroups(newExpanded);
@@ -378,20 +409,18 @@ export function Inspector({
                         </button>
                     </div>
                 ) : findingsOnly ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                        {groupedFindings.length > 0 && (
-                            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                    <div className="inspector-actions-row">
+                        {(securityVulnerabilities.length > 0 || infrastructureErrors.length > 0) && (
+                            <div className="inspector-actions-btn-group">
                                 <button
                                     onClick={handleExpandAll}
-                                    className="btn btn-ghost btn-sm"
-                                    style={{ padding: '2px 6px', height: 'auto', minHeight: 0, fontSize: '11px', color: 'var(--text-secondary)' }}
+                                    className="btn btn-ghost btn-sm btn-action-small"
                                 >
                                     Expand All
                                 </button>
                                 <button
                                     onClick={handleCollapseAll}
-                                    className="btn btn-ghost btn-sm"
-                                    style={{ padding: '2px 6px', height: 'auto', minHeight: 0, fontSize: '11px', color: 'var(--text-secondary)' }}
+                                    className="btn btn-ghost btn-sm btn-action-small"
                                 >
                                     Collapse All
                                 </button>
@@ -515,53 +544,130 @@ export function Inspector({
                     </div>
                 ) : findingsOnly ? (
                     <div className="findings-group-container">
-                        {groupedFindings.map((group) => (
-                            <div key={group.key} className="findings-group">
-                                <div 
-                                    className="findings-group-header" 
-                                    onClick={() => toggleGroup(group.key)}
-                                >
-                                    <div className="findings-group-title-row">
-                                        <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
-                                        <span className="findings-group-count" style={{ background: group.color }}>
-                                            {group.items.length}
-                                        </span>
-                                        <span className="findings-group-title">{group.title}</span>
-                                    </div>
+                        {securityVulnerabilities.length > 0 && (
+                            <div className="inspector-section">
+                                <div className="inspector-section-header">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inspector-section-icon security-shield">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    </svg>
+                                    <h3 className="inspector-section-title">Security Vulnerabilities ({securityVulnerabilities.reduce((sum, g) => sum + g.items.length, 0)})</h3>
                                 </div>
-                                {expandedGroups[group.key] && (() => {
-                                     const groupLimit = groupLimits[group.key] || 50;
-                                     const visibleItems = group.items.slice(0, groupLimit);
-                                     return (
-                                         <div className="findings-group-items">
-                                             {visibleItems.map((item, idx) => (
-                                                 <FindingItem
-                                                     key={item.result.id || idx}
-                                                     item={item}
-                                                     groupColor={group.color}
-                                                     onSelect={handleSelectResultStable}
-                                                 />
-                                             ))}
-                                             {group.items.length > groupLimit && (
-                                                 <button
-                                                     className="btn btn-ghost btn-sm load-more-findings"
-                                                     style={{ width: '100%', margin: 'var(--space-2) 0' }}
-                                                     onClick={(e) => {
-                                                         e.stopPropagation();
-                                                         setGroupLimits(prev => ({
-                                                             ...prev,
-                                                             [group.key]: groupLimit + 50
-                                                         }));
-                                                     }}
-                                                 >
-                                                     Show More (+{Math.min(50, group.items.length - groupLimit)})
-                                                 </button>
-                                             )}
-                                         </div>
-                                     );
-                                 })()}
+                                <div className="inspector-section-list">
+                                    {securityVulnerabilities.map((group) => {
+                                        const isCritical = group.color === 'var(--color-error)';
+                                        return (
+                                            <div key={group.key} className={`findings-group ${isCritical ? 'findings-group-critical' : ''}`}>
+                                                <div 
+                                                    className="findings-group-header" 
+                                                    onClick={() => toggleGroup(group.key)}
+                                                >
+                                                    <div className="findings-group-title-row">
+                                                        <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
+                                                        <span className="findings-group-count" style={{ backgroundColor: group.color }}>
+                                                            {group.items.length}
+                                                        </span>
+                                                        {isCritical && <span className="badge-critical-indicator">CRITICAL</span>}
+                                                        <span className="findings-group-title">{group.title}</span>
+                                                    </div>
+                                                </div>
+                                                {expandedGroups[group.key] && (() => {
+                                                     const groupLimit = groupLimits[group.key] || 50;
+                                                     const visibleItems = group.items.slice(0, groupLimit);
+                                                     return (
+                                                         <div className="findings-group-items">
+                                                             {visibleItems.map((item, idx) => (
+                                                                 <FindingItem
+                                                                     key={item.result.id || idx}
+                                                                     item={item}
+                                                                     groupColor={group.color}
+                                                                     onSelect={handleSelectResultStable}
+                                                                 />
+                                                             ))}
+                                                             {group.items.length > groupLimit && (
+                                                                 <button
+                                                                     className="btn btn-ghost btn-sm btn-load-more-findings"
+                                                                     onClick={(e) => {
+                                                                         e.stopPropagation();
+                                                                         setGroupLimits(prev => ({
+                                                                             ...prev,
+                                                                             [group.key]: groupLimit + 50
+                                                                         }));
+                                                                     }}
+                                                                 >
+                                                                     Show More (+{Math.min(50, group.items.length - groupLimit)})
+                                                                 </button>
+                                                             )}
+                                                         </div>
+                                                     );
+                                                 })()}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        ))}
+                        )}
+
+                        {infrastructureErrors.length > 0 && (
+                            <div className="inspector-section">
+                                <div className="inspector-section-header">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inspector-section-icon server-icon">
+                                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                                    </svg>
+                                    <h3 className="inspector-section-title">Infrastructure &amp; Runtime Errors ({infrastructureErrors.reduce((sum, g) => sum + g.items.length, 0)})</h3>
+                                </div>
+                                <div className="inspector-section-list">
+                                    {infrastructureErrors.map((group) => (
+                                        <div key={group.key} className="findings-group">
+                                            <div 
+                                                className="findings-group-header" 
+                                                onClick={() => toggleGroup(group.key)}
+                                            >
+                                                <div className="findings-group-title-row">
+                                                    <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
+                                                    <span className="findings-group-count" style={{ backgroundColor: group.color }}>
+                                                        {group.items.length}
+                                                    </span>
+                                                    <span className="findings-group-title">{group.title}</span>
+                                                </div>
+                                            </div>
+                                            {expandedGroups[group.key] && (() => {
+                                                 const groupLimit = groupLimits[group.key] || 50;
+                                                 const visibleItems = group.items.slice(0, groupLimit);
+                                                 return (
+                                                     <div className="findings-group-items">
+                                                         {visibleItems.map((item, idx) => (
+                                                             <FindingItem
+                                                                 key={item.result.id || idx}
+                                                                 item={item}
+                                                                 groupColor={group.color}
+                                                                 onSelect={handleSelectResultStable}
+                                                             />
+                                                         ))}
+                                                         {group.items.length > groupLimit && (
+                                                             <button
+                                                                 className="btn btn-ghost btn-sm btn-load-more-findings"
+                                                                 onClick={(e) => {
+                                                                     e.stopPropagation();
+                                                                     setGroupLimits(prev => ({
+                                                                         ...prev,
+                                                                         [group.key]: groupLimit + 50
+                                                                     }));
+                                                                 }}
+                                                             >
+                                                                 Show More (+{Math.min(50, group.items.length - groupLimit)})
+                                                             </button>
+                                                         )}
+                                                     </div>
+                                                 );
+                                             })()}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         {!findingsOnly && total > rows.length && (
                             <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-4)' }}>
                                 <button
