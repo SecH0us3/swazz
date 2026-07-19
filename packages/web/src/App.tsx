@@ -223,6 +223,14 @@ export default function App() {
         },
     });
 
+    const handleToggleConfig = () => {
+        if (window.innerWidth <= 768) {
+            useAppStore.setState({ isConfigOpen: !useAppStore.getState().isConfigOpen });
+        } else {
+            useAppStore.setState({ isConfigHiddenDesktop: !useAppStore.getState().isConfigHiddenDesktop });
+        }
+    };
+
     const { loadEndpoints, handleStart, handleConnectToExisting } = useFuzzSession({
         config: config as any,
         updateConfig,
@@ -723,40 +731,9 @@ export default function App() {
     return (
         <div className="app-layout" style={{ gridTemplateColumns: `${isSidebarHiddenDesktop ? 0 : sidebarWidth}px 1fr` }}>
             <Header
-                baseUrl={displayUrl}
-                onChangeBaseUrl={(url) => {
-                    const trimmed = url.trim();
-                    if (trimmed.endsWith('swagger.json')) {
-                        try {
-                            const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
-                            const parsed = new URL(inputUrl);
-                            const origin = parsed.origin;
-                            const currentUrls = config._swagger_urls || [];
-                            if (!currentUrls.includes(inputUrl)) {
-                                const newUrls = [...currentUrls, inputUrl];
-                                updateConfig({ base_url: origin, _swagger_urls: newUrls });
-                                loadEndpoints(newUrls);
-                            } else {
-                                updateConfig({ base_url: origin });
-                            }
-                        } catch {
-                            updateConfig({ base_url: trimmed });
-                        }
-                    } else {
-                        updateConfig({ base_url: trimmed });
-                    }
-                }}
-                onStart={(cleanUrl) => handleStart(undefined, cleanUrl)}
-                onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
-                onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
-                onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}
                 onToggleSidebar={() => {
                     if (window.innerWidth <= 768) useAppStore.setState({ isSidebarOpen: !isSidebarOpen });
                     else useAppStore.setState({ isSidebarHiddenDesktop: !isSidebarHiddenDesktop });
-                }}
-                onToggleConfig={() => {
-                    if (window.innerWidth <= 768) useAppStore.setState({ isConfigOpen: !isConfigOpen });
-                    else useAppStore.setState({ isConfigHiddenDesktop: !isConfigHiddenDesktop });
                 }}
                 theme={theme}
                 onToggleTheme={toggleTheme}
@@ -805,6 +782,34 @@ export default function App() {
                     queryResults={queryResults}
                     runs={runs}
                     onImportRun={importCliReport}
+                    baseUrl={displayUrl}
+                    onChangeBaseUrl={(url) => {
+                        const trimmed = url.trim();
+                        if (trimmed.endsWith('swagger.json')) {
+                            try {
+                                const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+                                const parsed = new URL(inputUrl);
+                                const origin = parsed.origin;
+                                const currentUrls = config._swagger_urls || [];
+                                if (!currentUrls.includes(inputUrl)) {
+                                    const newUrls = [...currentUrls, inputUrl];
+                                    updateConfig({ base_url: origin, _swagger_urls: newUrls });
+                                    loadEndpoints(newUrls);
+                                } else {
+                                    updateConfig({ base_url: origin });
+                                }
+                            } catch {
+                                updateConfig({ base_url: trimmed });
+                            }
+                        } else {
+                            updateConfig({ base_url: trimmed });
+                        }
+                    }}
+                    onStart={(cleanUrl) => handleStart(undefined, cleanUrl)}
+                    onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
+                    onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
+                    onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}
+                    onToggleConfig={handleToggleConfig}
                 />
 
                 <ConfigSidebar
@@ -814,6 +819,7 @@ export default function App() {
                     onUpdateCookies={updateCookies}
                     onUpdateProfiles={updateProfiles}
                     onUpdateConfig={updateConfig}
+                    onClose={handleToggleConfig}
                 />
             </main>
 
