@@ -21,7 +21,7 @@ RUN apk update && apk add --no-cache \
 USER swazz:swazz
 
 # Install Antigravity CLI (agy)
-RUN pipx install antigravity-cli
+RUN pipx install antigravity-cli && pipx install mistral-vibe
 
 # Install Claude CLI (community Node.js package as example)
 RUN npm config set prefix '~/.npm-global'

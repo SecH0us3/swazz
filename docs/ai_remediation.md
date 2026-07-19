@@ -15,7 +15,7 @@ Because Swazz operates on a Zero-Liability security model, Git credentials and A
    Ensure your local Git is authenticated via SSH or configured credential helpers, as the runner will clone and push branches using local Git worktrees.
 
 3. **AI Agent CLI**:
-   Ensure your custom AI Agent CLI (e.g. `claude` or `agy`) is installed and authenticated if you use the Custom CLI execution feature.
+   Ensure your custom AI Agent CLI (e.g. `claude`, `agy`, or `vibe`) is installed and authenticated if you use the Custom CLI execution feature.
 
 ## Configuration in UI
 
@@ -35,8 +35,9 @@ In the **Project Settings -> AI Remediation Config** tab:
    You can provide custom JSON or text for your prompts to instruct the AI how to behave during triage (Pass 1) and remediation (Pass 2).
 
 3. **Custom CLI Command**:
-   If you rely on external AI tools, provide the execution template. The runner replaces <code v-pre>{{prompt_file}}</code> with the path to the secure temporary prompt file.
-   Example: <code v-pre>agy -p {{prompt_file}}</code>
+   If you rely on external AI tools, provide the execution template. 
+   - For tools using prompt files: The runner replaces <code v-pre>{{prompt_file}}</code> with the path to the secure temporary prompt file. Example: <code v-pre>agy -p {{prompt_file}}</code>
+   - For Mistral Vibe: Set the command to `vibe -p - --auto-approve --trust`. The runner will automatically pipe the prompt content into standard input.
 
 4. **Rules to Auto-Fix**:
    Specify a JSON array of vulnerability IDs that you trust the AI to automatically patch.

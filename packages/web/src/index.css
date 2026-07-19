@@ -6008,6 +6008,10 @@ kbd {
     gap: 8px;
 }
 
+.settings-field-group .settings-label {
+    margin: 0;
+}
+
 .settings-tool-select {
     width: 250px;
     padding: 6px 12px;
