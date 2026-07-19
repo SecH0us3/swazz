@@ -129,6 +129,12 @@ func NewStdioClient(command string, args []string) *StdioClient {
 
 // Connect starts the subprocess and prepares communication channels.
 func (c *StdioClient) Connect(ctx context.Context) error {
+	if c.command == "" {
+		return fmt.Errorf("command cannot be empty")
+	}
+	if len(c.args) == 0 {
+		return fmt.Errorf("args cannot be empty")
+	}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.cmd = exec.CommandContext(c.ctx, c.command, c.args...)
 
@@ -872,7 +878,7 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	
+
 	limitReader := io.LimitReader(resp.Body, 10*1024*1024)
 	respBytes, err := io.ReadAll(limitReader)
 	if err != nil {

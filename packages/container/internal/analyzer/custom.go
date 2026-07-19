@@ -61,7 +61,7 @@ func NewCustomAnalyzer() *CustomAnalyzer {
 }
 
 func (a *CustomAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	if len(input.ResponseBody) == 0 {
+	if input == nil || len(input.ResponseBody) == 0 {
 		return nil
 	}
 

@@ -49,8 +49,8 @@ const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
 
-	defaultMaxPayloadBytes  = 1 << 20  // 1 MiB
-	boundaryMaxPayloadBytes = 1 << 29  // 512 MiB
+	defaultMaxPayloadBytes  = 1 << 20 // 1 MiB
+	boundaryMaxPayloadBytes = 1 << 29 // 512 MiB
 )
 
 // ─── embedded sub-structs ────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ type runnerLifecycle struct {
 	isPaused   atomic.Bool
 	shouldStop atomic.Bool
 
-	mu     sync.Mutex       // guards cancel only
+	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc
 }
 
@@ -124,7 +124,6 @@ type Runner struct {
 	activeCSRFToken string
 	lastProbeTime   time.Time
 
-
 	// Per-run baselines, results, and concurrency control.
 	sizeBaselines *sync.Map
 	timeBaselines *sync.Map
@@ -142,6 +141,9 @@ type Runner struct {
 
 // New creates a new Runner with sensible defaults.
 func New(config *swagger.Config, client *http.Client) *Runner {
+	if config == nil {
+		return nil
+	}
 	if client == nil {
 		client = &http.Client{
 			Timeout: 30 * time.Second,
@@ -778,7 +780,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 		logger.Info("[Runner] Found %d MCP Tools", len(tools))
 		for _, tool := range tools {
 			toolPath := "mcp://tool/" + tool.Name
-			
+
 			// Check if this tool is already in r.config.Endpoints (either with mcp://tool/ prefix or raw name)
 			foundIndex := -1
 			for i, ep := range r.config.Endpoints {
