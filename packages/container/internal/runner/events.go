@@ -14,10 +14,11 @@ import (
 
 // Event types for SSE streaming.
 const (
-	EventResult   = "result"
-	EventProgress = "progress"
-	EventComplete = "complete"
-	EventError    = "error"
+	EventResult     = "result"
+	EventProgress    = "progress"
+	EventComplete    = "complete"
+	EventError       = "error"
+	EventCheckpoint  = "checkpoint"
 )
 
 // Event represents a streaming event sent to subscribers.
@@ -104,7 +105,7 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 				continue
 			}
 
-			if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError {
+			if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError || evt.Type == EventCheckpoint {
 				// Critical events MUST be delivered, but with a timeout to prevent OOM
 				// if a client stalls indefinitely.
 				if !safeSend(ch, evt, 5*time.Second) {

@@ -322,13 +322,13 @@ export default function App() {
                     }
 
                     const activeScan = scans.find(
-                        (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running'
+                        (s: any) => s.status === 'queued' || s.status === 'dispatched' || s.status === 'running' || s.status === 'paused'
                     );
                     const state = useAppStore.getState();
                     if (activeScan && !state.isRunning && activeScan.id !== state.liveRunId && !attemptedReconnections.current.has(activeScan.id)) {
                         attemptedReconnections.current.add(activeScan.id);
                         const startedAt = activeScan.created_at ? new Date(activeScan.created_at).getTime() : Date.now();
-                        await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url, activeScan.trigger_type);
+                        await handleConnectToExisting(activeScan.id, startedAt, activeScan.target_url, activeScan.trigger_type, activeScan.status);
                     }
                 }
             } catch (err) {

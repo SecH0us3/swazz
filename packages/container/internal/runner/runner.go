@@ -75,6 +75,7 @@ type runnerProgress struct {
 	completedEndpoints atomic.Int32
 	totalEndpoints     atomic.Int32
 	totalPlanned       atomic.Int64
+	totalRequests      atomic.Int64
 }
 
 // runnerPause groups the pause/resume condvar, intentionally separate from
@@ -274,18 +275,73 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	r.limiter.SetTarget(r.config.Settings.Concurrency)
 
-	r.baselinePhase(runCtx)
+	resumeProfile := ""
+	resumeEndpoint := ""
+	resumeIteration := 0
+	resuming := false
+
+	if r.config.Settings.Checkpoint != nil {
+		resumeProfile = r.config.Settings.Checkpoint.Profile
+		resumeEndpoint = r.config.Settings.Checkpoint.Endpoint
+		resumeIteration = r.config.Settings.Checkpoint.Iteration
+		resuming = true
+		r.lifecycle.isPaused.Store(r.config.Settings.Checkpoint.Paused)
+	}
+
+	var skippedRequests int64 = 0
+	if resuming {
+		for _, profile := range profiles {
+			if string(profile) != resumeProfile {
+				for _, endpoint := range r.config.Endpoints {
+					skippedRequests += int64(calcEffectiveIterations(profile, r.config.Settings, &endpoint))
+				}
+				continue
+			}
+			for _, endpoint := range r.config.Endpoints {
+				epKey := endpoint.Method + " " + endpoint.Path
+				if epKey != resumeEndpoint {
+					skippedRequests += int64(calcEffectiveIterations(profile, r.config.Settings, &endpoint))
+					continue
+				}
+				skippedRequests += int64(resumeIteration)
+				break
+			}
+			break
+		}
+		r.progress.totalRequests.Store(skippedRequests)
+	}
+
+	if !resuming {
+		r.baselinePhase(runCtx)
+	} else {
+		r.progress.completedEndpoints.Store(int32(len(r.config.Endpoints)))
+	}
 
 	for profileIdx, profile := range profiles {
 		if r.stopped() {
 			break
 		}
+
+		if resuming && string(profile) != resumeProfile {
+			r.progress.completedEndpoints.Add(int32(len(r.config.Endpoints)))
+			continue
+		}
+
 		r.progress.currentProfile.Store(string(profile))
 
 		for epIdx, endpoint := range r.config.Endpoints {
 			if r.stopped() {
 				break
 			}
+
+			if resuming {
+				epKey := endpoint.Method + " " + endpoint.Path
+				if epKey != resumeEndpoint {
+					r.progress.completedEndpoints.Add(1)
+					continue
+				}
+			}
+
 			gen := generator.New(r.config.Dictionaries, profile, r.config.Settings)
 			safeGen := generator.New(r.config.Dictionaries, swagger.ProfileRandom, r.config.Settings)
 			gen.RunID = r.config.RunID
@@ -294,7 +350,13 @@ func (r *Runner) Start(ctx context.Context) error {
 			gen.Endpoint = epStr
 			safeGen.Endpoint = epStr
 
-			r.fuzzEndpoint(runCtx, profileIdx, profile, epIdx, endpoint, gen, safeGen)
+			iterToSkip := 0
+			if resuming {
+				iterToSkip = resumeIteration
+				resuming = false
+			}
+
+			r.fuzzEndpoint(runCtx, profileIdx, profile, epIdx, endpoint, gen, safeGen, iterToSkip)
 		}
 	}
 
@@ -426,6 +488,7 @@ func (r *Runner) fuzzEndpoint(
 	endpoint swagger.EndpointConfig,
 	gen *generator.Generator,
 	safeGen *generator.Generator,
+	iterToSkip int,
 ) {
 	endpoints := r.config.Endpoints
 	epKey := fmt.Sprintf("%s %s", endpoint.Method, endpoint.Path)
@@ -451,6 +514,9 @@ func (r *Runner) fuzzEndpoint(
 	delay := time.Duration(r.config.Settings.DelayBetweenRequestMs) * time.Millisecond
 
 	for i := range effectiveIter {
+		if i < iterToSkip {
+			continue
+		}
 		if r.stopped() {
 			break
 		}

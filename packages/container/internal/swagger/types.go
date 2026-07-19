@@ -181,6 +181,14 @@ type Settings struct {
 	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
 	MaxScanDurationMin            int                         `json:"max_scan_duration_min,omitempty"`
 	ActiveParameterFuzzing        bool                        `json:"active_parameter_fuzzing"`
+	Checkpoint                    *Checkpoint                 `json:"checkpoint,omitempty"`
+}
+
+type Checkpoint struct {
+	Profile   string `json:"profile"`
+	Endpoint  string `json:"endpoint"`
+	Iteration int    `json:"iteration"`
+	Paused    bool   `json:"paused,omitempty"`
 }
 
 // DefaultSettings returns sensible defaults matching the original TS implementation.

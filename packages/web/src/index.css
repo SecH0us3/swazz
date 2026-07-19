@@ -66,8 +66,10 @@
 
   /* Spacing */
   --space-1: 4px;
+  --space-1-5: 6px;
   --space-2: 8px;
   --space-3: 12px;
+  --space-3-5: 14px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
@@ -10059,7 +10061,7 @@ kbd {
 .welcome-workspace-subtitle {
   font-size: var(--font-size-xs);
   color: var(--text-muted);
-  margin-top: var(--space-1.5);
+  margin-top: var(--space-1-5);
   margin-bottom: 0;
 }
 
@@ -10203,7 +10205,7 @@ kbd {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3.5);
+  gap: var(--space-3-5);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   line-height: 1.5;

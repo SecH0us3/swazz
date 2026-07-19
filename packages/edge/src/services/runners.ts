@@ -2,6 +2,7 @@ import { Env } from '../env';
 import { IRunnersRepository } from '../repositories/runners';
 import { IRbacRepository } from '../repositories/rbac';
 import { hashApiKey } from '../utils/auth';
+import { ScansRepository } from '../repositories/scans';
 
 export interface IRunnersService {
   connect(
@@ -263,6 +264,10 @@ export class RunnersService implements IRunnersService {
       body: JSON.stringify({ runId, command: 'pause' }),
     });
     await stub.fetch(doReq);
+
+    const scansRepo = new ScansRepository(this.env);
+    await scansRepo.updateScanStatus(runId, 'paused');
+
     return { status: 'paused' };
   }
 
@@ -281,6 +286,10 @@ export class RunnersService implements IRunnersService {
       body: JSON.stringify({ runId, command: 'resume' }),
     });
     await stub.fetch(doReq);
+
+    const scansRepo = new ScansRepository(this.env);
+    await scansRepo.updateScanStatus(runId, 'dispatched');
+
     return { status: 'resumed' };
   }
 

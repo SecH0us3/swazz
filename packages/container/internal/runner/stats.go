@@ -29,6 +29,12 @@ func (r *Runner) GetStats() swagger.RunStats {
 	return *p
 }
 
+type CheckpointData struct {
+	Profile   string `json:"profile"`
+	Endpoint  string `json:"endpoint"`
+	Iteration int    `json:"iteration"`
+}
+
 // statsAggregator runs as a single background goroutine that owns all
 // mutable stats data. It consumes results from statsChan, accumulates
 // them without any locks, and publishes snapshots at a fixed interval.
@@ -40,8 +46,10 @@ func (r *Runner) statsAggregator() {
 
 	stats := newEmptyStats()
 	stats.IsRunning = true
+	stats.TotalRequests = r.progress.totalRequests.Load()
 	var latestIteration, latestTotalIterations int
 	dirty := false
+	lastCheckpointRequests := stats.TotalRequests
 
 	for {
 		select {
@@ -64,6 +72,26 @@ func (r *Runner) statsAggregator() {
 			if dirty {
 				r.publishSnapshot(&stats, latestIteration, latestTotalIterations)
 				dirty = false
+
+				if stats.TotalRequests-lastCheckpointRequests >= 100 {
+					currentEp := ""
+					if ep, ok := r.progress.currentEndpoint.Load().(string); ok {
+						currentEp = ep
+					}
+					currentPr := ""
+					if pr, ok := r.progress.currentProfile.Load().(string); ok {
+						currentPr = pr
+					}
+					r.Broadcast(Event{
+						Type: EventCheckpoint,
+						Data: CheckpointData{
+							Profile:   currentPr,
+							Endpoint:  currentEp,
+							Iteration: latestIteration,
+						},
+					})
+					lastCheckpointRequests = stats.TotalRequests
+				}
 			}
 		}
 	}
