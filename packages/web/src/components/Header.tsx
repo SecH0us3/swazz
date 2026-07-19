@@ -176,7 +176,7 @@ export function Header({
                         <line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
                     <span className="header-guest-banner-text">
-                        <strong>Guest Mode:</strong> Scans are temporary. <strong>Sign up</strong> to save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up Now →</span>
+                        <strong>Guest Mode:</strong> Scans are temporary. Save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up →</span>
                     </span>
                 </div>
             )}
