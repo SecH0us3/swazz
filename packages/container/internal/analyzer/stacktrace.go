@@ -93,7 +93,7 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				RuleID:   "swazz/null-pointer-exception",
 				Level:    "error",
 				Message:  fmt.Sprintf("Null Reference / Pointer Exception (%s) detected in the response body.", sig.language),
-				Evidence: fmt.Sprintf("Match: '%s' | Snippet: ...%s...", matchText, contextSnippet),
+				Evidence: fmt.Sprintf("Match: %q | Snippet: ...%s...", matchText, contextSnippet),
 			})
 			return findings // Return immediately so it is classified as Null Pointer Exception instead of generic stack trace
 		}
@@ -123,7 +123,7 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 				RuleID:   "swazz/stack-trace-leak",
 				Level:    "warning",
 				Message:  fmt.Sprintf("Server stack trace traceback (%s) leaked in the response body.", sig.language),
-				Evidence: fmt.Sprintf("Match: '%s' | Traceback snippet: ...%s...", matchText, contextSnippet),
+				Evidence: fmt.Sprintf("Match: %q | Traceback snippet: ...%s...", matchText, contextSnippet),
 			})
 			break
 		}

@@ -22,7 +22,7 @@ export type Dictionary = Record<string, any[]>;
 
 export interface EndpointConfig {
     path: string;
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'MCP' | 'CALL';
     schema: SchemaProperty;
     /** Schemas for {param} placeholders in the path (e.g. /users/{id}) */
     pathParams?: Record<string, SchemaProperty>;
@@ -147,6 +147,13 @@ export interface IgnoreRule {
     status_code?: number | string;
 }
 
+export interface MCPServerConfig {
+    type: 'stdio' | 'sse' | 'http';
+    command?: string;
+    args?: string[];
+    url?: string;
+}
+
 export interface SwazzConfig {
     base_url: string;
     global_headers: Record<string, string>;
@@ -171,6 +178,7 @@ export interface SwazzConfig {
     };
     /** Project this scan belongs to. Stripped before sending to the Go agent. */
     projectId?: string;
+    mcp_server?: MCPServerConfig;
 }
 
 // ─── Results ────────────────────────────────────────────

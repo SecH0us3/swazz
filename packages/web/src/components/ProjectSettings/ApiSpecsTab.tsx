@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useToast } from '../../hooks/useToast.js';
-import { loadSwaggerUrl, parseRawSpec, ParsingError } from '../../services/swaggerService.js';
+import { loadSwaggerUrl, parseRawSpec, detectMcpServer, ParsingError } from '../../services/swaggerService.js';
 import { useAppStore } from '../../store/appStore.js';
 
 export function ApiSpecsTab() {
@@ -10,6 +10,40 @@ export function ApiSpecsTab() {
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+
+    const mcpServer = config.mcp_server;
+    const isMcpEnabled = !!mcpServer;
+    const mcpType = mcpServer?.type || 'stdio';
+    const mcpCommand = mcpServer?.command || '';
+    const mcpArgs = Array.isArray(mcpServer?.args) ? mcpServer.args.join(' ') : (mcpServer?.args || '');
+    const mcpUrl = mcpServer?.url || '';
+
+    const handleToggleMcp = (enabled: boolean) => {
+        if (enabled) {
+            updateConfig({
+                mcp_server: {
+                    type: 'stdio',
+                    command: 'node',
+                    args: ['demo/mcp-stdio.js']
+                }
+            });
+        } else {
+            const updated = { ...config };
+            delete updated.mcp_server;
+            updateConfig(updated);
+        }
+    };
+
+    const handleUpdateMcpField = (key: string, value: any) => {
+        if (!config.mcp_server) return;
+        const updatedMcp = {
+            ...config.mcp_server,
+            [key]: value
+        };
+        updateConfig({
+            mcp_server: updatedMcp
+        });
+    };
 
     const normalizeUrl = (url: string) => {
         let cleanUrl = url.trim();
@@ -23,13 +57,30 @@ export function ApiSpecsTab() {
     const addUrl = async () => {
         const trimmed = normalizeUrl(urlInput);
         if (!trimmed) return;
-        if (swaggerUrls.includes(trimmed)) {
-            showToast('This URL is already in the list', 'error');
-            return;
-        }
+
         const newUrls = [...swaggerUrls, trimmed];
         setIsLoading(true);
         try {
+            showToast(`Checking target type for ${trimmed}...`, 'info');
+            const mcpType = await detectMcpServer(trimmed);
+            if (mcpType) {
+                updateConfig({
+                    mcp_server: {
+                        type: mcpType,
+                        url: trimmed
+                    }
+                });
+                setUrlInput('');
+                showToast(`✓ Detected MCP Server (${mcpType.toUpperCase()}) at ${trimmed}. Enabled MCP Fuzzing!`, 'success');
+                setIsLoading(false);
+                return;
+            }
+
+            if (swaggerUrls.includes(trimmed)) {
+                showToast('This URL is already in the list', 'error');
+                setIsLoading(false);
+                return;
+            }
             showToast(`Loading endpoints from ${trimmed}...`, 'info');
             const { basePath, endpoints, endpointCount } = await loadSwaggerUrl(
                 trimmed,
@@ -399,6 +450,78 @@ export function ApiSpecsTab() {
                     >
                         Add URL
                     </button>
+                </div>
+            </div>
+
+            {/* MCP Fuzzing Section */}
+            <div className="specs-urls-section specs-mcp-section">
+                <h3 className="specs-section-title">Model Context Protocol (MCP) Fuzzing</h3>
+                <p className="specs-section-desc">Expose and fuzz an MCP server's tools dynamically during the scan run.</p>
+
+                <div className="specs-mcp-controls">
+                    <label className="premium-checkbox-label specs-mcp-checkbox-label">
+                        <input
+                            type="checkbox"
+                            className="premium-checkbox"
+                            checked={isMcpEnabled}
+                            onChange={(e) => handleToggleMcp(e.target.checked)}
+                        />
+                        <strong className="specs-mcp-label-text">Enable MCP Server Fuzzing</strong>
+                    </label>
+
+                    {isMcpEnabled && (
+                        <div className="specs-mcp-config-box">
+                            <div className="settings-field-group">
+                                <label className="settings-field-label">Transport Type</label>
+                                <select
+                                    className="input settings-field-input settings-field-full"
+                                    value={mcpType}
+                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse')}
+                                >
+                                    <option value="stdio">Stdio (Local Process / Command)</option>
+                                    <option value="sse">SSE (HTTP Server-Sent Events)</option>
+                                </select>
+                            </div>
+
+                            {mcpType === 'stdio' ? (
+                                <>
+                                    <div className="settings-field-group">
+                                        <label className="settings-field-label">Command</label>
+                                        <input
+                                            type="text"
+                                            className="input settings-field-input settings-field-full"
+                                            placeholder="e.g. node"
+                                            value={mcpCommand}
+                                            onChange={(e) => handleUpdateMcpField('command', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="settings-field-group">
+                                        <label className="settings-field-label">Arguments (space-separated)</label>
+                                        <input
+                                            type="text"
+                                            className="input settings-field-input settings-field-full"
+                                            placeholder="e.g. demo/mcp-stdio.js"
+                                            value={mcpArgs}
+                                            onChange={(e) => handleUpdateMcpField('args', e.target.value.split(' ').filter(Boolean))}
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="settings-field-group">
+                                    <label className="settings-field-label">
+                                        SSE Server URL
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="input settings-field-input settings-field-full"
+                                        placeholder="e.g. http://localhost:8788/mcp/sse"
+                                        value={mcpUrl}
+                                        onChange={(e) => handleUpdateMcpField('url', e.target.value)}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

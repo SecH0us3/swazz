@@ -152,7 +152,7 @@ export function useFuzzSession({
             ep => !matchesPattern(ep.method, ep.path, config.disabled_endpoints || [])
         );
 
-        if (activeEndpoints.length === 0) {
+        if (activeEndpoints.length === 0 && !config.mcp_server) {
             showToast('No active endpoints to fuzz', 'error');
             return;
         }

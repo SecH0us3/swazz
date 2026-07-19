@@ -77,7 +77,7 @@ if check_port 8788; then
   echo "✓ Vulnerable Demo API is already running on port 8788."
 else
   echo "→ Starting Vulnerable Demo API..."
-  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo --log-level error > demo.log 2>&1 &
+  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo --log-level info > demo.log 2>&1 &
   PIDS+=($!)
   wait_for_port 8788 "Vulnerable Demo API"
 fi

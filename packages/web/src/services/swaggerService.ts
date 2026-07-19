@@ -51,8 +51,7 @@ export async function loadSwaggerUrl(
     if (csrfToken) {
         requestHeaders['X-CSRF-Token'] = csrfToken;
     }
-
-    const requestBody = JSON.stringify({ url, forceRebuild });
+    const requestBody = JSON.stringify({ url, headers, cookies, forceRebuild });
     const reqUrl = `${PROXY_URL}/api/parse`;
 
     let res: Response;
@@ -113,7 +112,13 @@ export async function loadSwaggerUrl(
             }
         });
     }
-
+    if (!data || !data.endpoints || !Array.isArray(data.endpoints)) {
+        throw new ParsingError(data?.error || "Invalid spec format: no endpoints array found in parser response", {
+            request: data.request || { url: reqUrl, method: 'POST', headers: requestHeaders, body: requestBody },
+            response: data.response || { status: res.status, statusText: res.statusText, headers: responseHeaders, body: responseBody },
+            error: { message: "Invalid spec format: no endpoints array found in parser response" }
+        });
+    }
     return {
         basePath: data.basePath,
         endpointCount: data.endpoints.length,
@@ -202,4 +207,53 @@ export async function parseRawSpec(
         endpointCount: data.endpoints.length,
         endpoints: data.endpoints,
     };
+}
+
+export async function detectMcpServer(urlStr: string): Promise<'sse' | 'http' | null> {
+    try {
+        // 1. Try SSE check: Send GET request with Accept: text/event-stream header.
+        // A true SSE MCP server will keep the connection open and stream events.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const resGet = await fetch(urlStr, {
+            method: 'GET',
+            headers: { 'Accept': 'text/event-stream' },
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        const contentType = resGet.headers.get('Content-Type') || '';
+        controller.abort();
+        if (resGet.ok && contentType.includes('event-stream')) {
+            return 'sse';
+        }
+    } catch {}
+
+    try {
+        // 2. Try HTTP JSON-RPC check: Send POST initialize request.
+        // Some servers respond with SSE-wrapped JSON (non-standard), others with plain JSON.
+        // Both are handled by HTTPClient in the Go engine.
+        const resPost = await fetch(urlStr, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(3000),
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'initialize',
+                id: 1,
+                params: {
+                    protocolVersion: '2024-11-05',
+                    capabilities: {},
+                    clientInfo: { name: 'swazz-detector', version: '1.0.0' }
+                }
+            })
+        });
+
+        // Server responded to POST — it's a HTTP JSON-RPC MCP server regardless of content-type
+        // (some wrap JSON in SSE streams, Go engine handles both cases in HTTPClient)
+        if (resPost.ok || resPost.status === 401 || resPost.status === 403) {
+            return 'http';
+        }
+    } catch {}
+
+    return null;
 }

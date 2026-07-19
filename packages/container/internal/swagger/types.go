@@ -47,6 +47,14 @@ type SecurityConfig struct {
 	AllowPrivateIPs bool `json:"allow_private_ips"`
 }
 
+// MCPServerConfig defines configuration for target MCP servers.
+type MCPServerConfig struct {
+	Type    string   `json:"type"`              // "stdio", "sse", or "http"
+	Command string   `json:"command,omitempty"`  // Executable name (for stdio type)
+	Args    []string `json:"args,omitempty"`     // Arguments passed to command (for stdio type)
+	URL     string   `json:"url,omitempty"`      // SSE or HTTP endpoint URL
+}
+
 // Config holds the full fuzzing configuration.
 type Config struct {
 	RunID          string                  `json:"run_id,omitempty"`
@@ -62,6 +70,7 @@ type Config struct {
 	AuthIdentities map[string]AuthIdentity `json:"auth_identities,omitempty"`
 	Variables      map[string]any          `json:"variables,omitempty"`
 	Security       SecurityConfig          `json:"security,omitempty"`
+	MCPServer      *MCPServerConfig        `json:"mcp_server,omitempty"`
 }
 
 // RulesConfig configures how results are classified.

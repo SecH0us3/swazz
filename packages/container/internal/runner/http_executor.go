@@ -10,19 +10,53 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
 	"time"
-	"regexp"
 	tidwallgjson "github.com/tidwall/gjson"
 
 	"github.com/google/uuid"
 )
+
+// sensitiveKeyPatterns contains patterns for keys that may contain sensitive data
+var sensitiveKeyPatterns = []string{
+	"password", "passwd", "pwd", "secret", "token", "api_key", "apikey",
+	"api-key", "auth", "authorization", "bearer", "credential", "private",
+	"access", "key", "session", "cookie", "csrf", "xsrf",
+}
+
+// maskSensitiveArgs masks potentially sensitive values in arguments map
+func maskSensitiveArgs(args map[string]any) map[string]any {
+	if args == nil {
+		return nil
+	}
+	masked := make(map[string]any, len(args))
+	for k, v := range args {
+		keyLower := strings.ToLower(k)
+		isSensitive := false
+		for _, pattern := range sensitiveKeyPatterns {
+			if strings.Contains(keyLower, pattern) {
+				isSensitive = true
+				break
+			}
+		}
+		if isSensitive {
+			masked[k] = "[REDACTED]"
+		} else if m, ok := v.(map[string]any); ok {
+			masked[k] = maskSensitiveArgs(m)
+		} else {
+			masked[k] = v
+		}
+	}
+	return masked
+}
 
 func (r *Runner) executeRequest(
 	ctx context.Context,
@@ -34,6 +68,10 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
+	if strings.HasPrefix(originalPath, "mcp://tool/") {
+		return r.executeMCPRequest(ctx, originalPath, payload, profile)
+	}
+
 	// Merge headers: generatedHeaders < global headers
 	isBody := !isNoBodyMethod(method)
 	mergedHeaders := make(map[string]string)
@@ -474,4 +512,170 @@ func (r *Runner) extractChainingVariables(endpoint string, resp *http.Response, 
 			r.stateMu.Unlock()
 		}
 	}
+}
+
+func (r *Runner) executeMCPRequest(
+	ctx context.Context,
+	originalPath string,
+	payload any,
+	profile swagger.FuzzingProfile,
+) *swagger.FuzzResult {
+	if r.mcpClient == nil {
+		return &swagger.FuzzResult{
+			ID:           uuid.New().String(),
+			Endpoint:     originalPath,
+			ResolvedPath: originalPath,
+			Method:       "CALL",
+			Profile:      profile,
+			Payload:      payload,
+			Status:       500,
+			Error:        "MCP client is not initialized",
+			ResponseBody: "Error: MCP client is not initialized",
+			Timestamp:    time.Now().UnixMilli(),
+		}
+	}
+
+	toolName := strings.TrimPrefix(originalPath, "mcp://tool/")
+	var args map[string]any
+	if payload != nil {
+		if m, ok := payload.(map[string]any); ok {
+			args = m
+		} else {
+			if b, err := json.Marshal(payload); err == nil {
+				_ = json.Unmarshal(b, &args)
+			}
+		}
+	}
+
+	payloadSize := 0
+	if b, err := json.Marshal(args); err == nil {
+		payloadSize = len(b)
+	}
+
+	timeoutMs := 10000
+	r.configMu.RLock()
+	if r.config.Settings.TimeoutMs > 0 {
+		timeoutMs = r.config.Settings.TimeoutMs
+	}
+	r.configMu.RUnlock()
+
+	reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer reqCancel()
+
+	// Initialize result early for potential early returns
+	result := &swagger.FuzzResult{
+		ID:           uuid.New().String(),
+		Endpoint:     originalPath,
+		ResolvedPath: originalPath,
+		Method:       "CALL",
+		Profile:      profile,
+		Payload:      args,
+		PayloadSize:  payloadSize,
+		Timestamp:    time.Now().UnixMilli(),
+	}
+
+	// Apply rate limiting to prevent DoS
+	// Use a separate rate limiter per runner to allow configurable limits
+	if r.mcpRateLimiter == nil {
+		// Import mcp package for rate limiter
+		r.mcpRateLimiter = mcp.NewRateLimiter(100, 50) // 100 req/sec, max 50 waiting
+	}
+	if !r.mcpRateLimiter.Allow(reqCtx) {
+		result.Error = "Rate limit exceeded for MCP calls"
+		result.Status = 429
+		result.ResponseBody = "Error: Too many concurrent MCP requests"
+		return result
+	}
+
+	startTime := time.Now()
+	res, stderr, err := r.mcpClient.CallTool(reqCtx, toolName, args)
+	duration := time.Since(startTime)
+
+	// Update result with call details
+	result.Duration = duration.Milliseconds()
+
+	if err != nil {
+		result.Status = 500
+		result.Error = fmt.Sprintf("MCP Call failed: %v", err)
+		if stderr != "" {
+			result.ResponseBody = fmt.Sprintf("Error: %v\nStderr: %s", err, stderr)
+		} else {
+			result.ResponseBody = fmt.Sprintf("Error: %v", err)
+		}
+		errMsg := strings.ToLower(err.Error())
+		// Check for server crash indicators more precisely
+		isCrash := strings.Contains(errMsg, "exit status") || strings.Contains(errMsg, "process terminated") || 
+			strings.Contains(errMsg, "channel closed") || strings.Contains(errMsg, "broken pipe") ||
+			strings.Contains(errMsg, "signal") || strings.Contains(errMsg, "killed")
+		if isCrash {
+			// Mask sensitive data in evidence - args not included to prevent sensitive info leak
+			result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
+				RuleID:   "swazz/mcp-server-crash",
+				Level:    "error",
+				Message:  "The MCP server crashed or returned a server error during the tool invocation.",
+				Evidence: fmt.Sprintf("Tool: %s\nError: %s\nStderr: %s", toolName, err.Error(), stderr),
+			})
+		}
+		return result
+	}
+
+	if res != nil && res.IsError {
+		result.Status = 400
+		hasCrash := false
+		for _, content := range res.Content {
+			if content.Type == "text" {
+				textLower := strings.ToLower(content.Text)
+				if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "crash") || strings.Contains(textLower, "panic") {
+					hasCrash = true
+					break
+				}
+			}
+		}
+		if hasCrash {
+			result.Status = 500
+		}
+	} else {
+		result.Status = 200
+	}
+	var resBytes []byte
+	if res != nil {
+		resBytes, _ = json.Marshal(res)
+	}
+	result.ResponseBody = string(resBytes)
+	result.ResponseSize = int64(len(resBytes))
+
+	if r.config.Settings.AnalyzeResponseBody {
+		input := &analyzer.AnalysisInput{
+			SentPayload:     result.Payload,
+			ResponseBody:    resBytes,
+			Duration:        duration.Milliseconds(),
+			Profile:         profile,
+			Endpoint:        originalPath,
+			Method:          "CALL",
+			ResponseSize:    result.ResponseSize,
+			BaselineSize:    0,
+			SizeMultiplier:  5.0,
+			BaselineTimeMs:  0,
+			TimeThresholdMs: 0,
+		}
+		result.AnalyzerFindings = r.analyzer.Analyze(input)
+
+		if res != nil {
+			for _, content := range res.Content {
+				if content.Type == "text" {
+					textLower := strings.ToLower(content.Text)
+					if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "sql syntax") {
+						result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
+							RuleID:   "swazz/mcp-tool-error-reflection",
+							Level:    "error",
+							Message:  fmt.Sprintf("The tool returned an error or exception signature in its content: %s", content.Text),
+							Evidence: fmt.Sprintf("Tool: %s\nText: %s", toolName, content.Text),
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return result
 }

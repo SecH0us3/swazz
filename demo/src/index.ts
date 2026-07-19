@@ -3,6 +3,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    console.log(`[DEMO API] INCOMING REQUEST: [${method}] ${path}`);
 
     // Helper to simulate various vulnerability errors based on inputs
     const checkAllVulnerabilities = async (input: any) => {
@@ -78,6 +79,198 @@ export default {
     }
 
     try {
+      // MCP GET SSE transport endpoint
+      if (method === "GET" && path === "/mcp/sse") {
+        const encoder = new TextEncoder();
+        const responseHeaders = {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          ...corsHeaders
+        };
+
+        const epURL = "/mcp/message";
+        const g = globalThis as any;
+        g.mcpSSEControllers = g.mcpSSEControllers || new Set();
+
+        const stream = new ReadableStream({
+          start(controller) {
+            // Write the endpoint event immediately during stream creation
+            controller.enqueue(encoder.encode(`event: endpoint\ndata: ${epURL}\n\n`));
+
+            const controllerObj = {
+              send: async (msg: string) => {
+                try {
+                  controller.enqueue(encoder.encode(`event: message\ndata: ${msg}\n\n`));
+                } catch (e) {
+                  g.mcpSSEControllers?.delete(controllerObj);
+                }
+              },
+              close: () => {
+                try {
+                  controller.close();
+                } catch (e) {}
+                g.mcpSSEControllers?.delete(controllerObj);
+              }
+            };
+
+            g.mcpSSEControllers.add(controllerObj);
+
+            request.signal.addEventListener("abort", () => {
+              controllerObj.close();
+            });
+          },
+          cancel() {
+            // Stream was canceled by client
+          }
+        });
+
+        return new Response(stream, { headers: responseHeaders });
+      }
+
+      // MCP POST message endpoint
+      if (method === "POST" && (path === "/mcp" || path === "/mcp/message" || path === "/mcp/sse/message")) {
+        let reqBody: any;
+        try {
+          reqBody = await request.json();
+        } catch (e) {
+          return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+        }
+
+        const id = reqBody.id;
+        const methodType = reqBody.method;
+        const params = reqBody.params;
+
+        let response: any = {
+          jsonrpc: "2.0",
+          id: id
+        };
+
+        if (methodType === "initialize") {
+          response.result = {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            serverInfo: {
+              name: "demo-mcp-server",
+              version: "1.0.0"
+            }
+          };
+        } else if (methodType === "notifications/initialized") {
+          if (path === "/mcp") {
+            return new Response(JSON.stringify({ status: "ok" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+          }
+          return new Response(null, { status: 202, headers: corsHeaders });
+        } else if (methodType === "tools/list") {
+          response.result = {
+            tools: [
+              {
+                name: "get_info",
+                description: "Returns a welcome message",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" }
+                  },
+                  required: ["name"]
+                }
+              },
+              {
+                name: "query_db",
+                description: "Queries the database with a SQL query",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string" }
+                  },
+                  required: ["query"]
+                }
+              }
+            ]
+          };
+        } else if (methodType === "tools/call") {
+          const toolName = params?.name;
+          const args = params?.arguments || {};
+
+          if (toolName === "get_info") {
+            response.result = {
+              content: [
+                {
+                  type: "text",
+                  text: `Hello ${args.name || "Guest"}`
+                }
+              ]
+            };
+          } else if (toolName === "query_db") {
+            try {
+              await checkAllVulnerabilities(args.query);
+              response.result = {
+                content: [
+                  {
+                    type: "text",
+                    text: `Query success: records found for ${args.query}`
+                  }
+                ]
+              };
+            } catch (err: any) {
+              if (err.message.includes("SQL syntax")) {
+                // Return HTTP 500 to simulate a server crash or exit
+                return new Response(JSON.stringify({ error: "Internal Server Error", detail: err.message }), {
+                  status: 500,
+                  headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+              }
+              // Return exception text on other payloads to simulate A05:2025 exception reflection
+              response.result = {
+                content: [
+                  {
+                    type: "text",
+                    text: `Unhandled exception in database: ${err.message}`
+                  }
+                ]
+              };
+            }
+          } else {
+            response.error = {
+              code: -32601,
+              message: `Method not found: ${toolName}`
+            };
+          }
+        } else {
+          response.error = {
+            code: -32601,
+            message: `Method not found: ${methodType}`
+          };
+        }
+
+        // Broadcast JSON-RPC response to all active SSE listeners synchronously before returning response
+        const g = globalThis as any;
+        console.log("[DEMO API] Broadcasting to controllers count:", g.mcpSSEControllers?.size || 0);
+        if (g.mcpSSEControllers && g.mcpSSEControllers.size > 0) {
+          const msgStr = JSON.stringify(response);
+          const controllers = Array.from(g.mcpSSEControllers) as any[];
+          for (const ctrl of controllers) {
+            try {
+              await ctrl.send(msgStr);
+            } catch (e) {}
+          }
+        }
+
+        if (path === "/mcp") {
+          return new Response(JSON.stringify(response), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+        }
+
+        return new Response(null, { status: 202, headers: corsHeaders });
+      }
+
       if (method === "GET" && path === "/demo.har") {
         const harData = {
           log: {

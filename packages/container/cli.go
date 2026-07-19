@@ -16,6 +16,7 @@ import (
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/har"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
@@ -50,6 +51,7 @@ type CliConfig struct {
 	AuthIdentities      map[string]swagger.AuthIdentity  `json:"auth_identities,omitempty"`
 	Variables           map[string]any                   `json:"variables,omitempty"`
 	Security            swagger.SecurityConfig           `json:"security"`
+	MCPServer           *swagger.MCPServerConfig         `json:"mcp_server,omitempty"`
 }
 
 func (c *CliConfig) Validate() error {
@@ -152,7 +154,7 @@ func runCLI(args []string) {
 
 	cliCfg := CliConfig{
 		Security: swagger.SecurityConfig{
-			AllowPrivateIPs: true,
+			AllowPrivateIPs: false,
 		},
 	}
 	if err := json.Unmarshal(configData, &cliCfg); err != nil {
@@ -467,8 +469,27 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		return nil, fmt.Errorf("configuration validation failed: %v", err)
 	}
 
-	if len(cliCfg.SwaggerURLs) == 0 && len(cliCfg.EndpointDefinitions) == 0 {
-		return nil, fmt.Errorf("config must specify at least one swagger_url or provide endpoint_definitions (e.g. via browser extension sync)")
+	if cliCfg.MCPServer != nil {
+		if cliCfg.MCPServer.Type != "stdio" && cliCfg.MCPServer.Type != "sse" && cliCfg.MCPServer.Type != "http" {
+			return nil, fmt.Errorf("invalid mcp_server type: must be 'stdio', 'sse', or 'http'")
+		}
+		if cliCfg.MCPServer.Type == "stdio" {
+			if cliCfg.MCPServer.Command == "" {
+				return nil, fmt.Errorf("mcp_server command cannot be empty for stdio type")
+			}
+		}
+		if cliCfg.MCPServer.Type == "sse" || cliCfg.MCPServer.Type == "http" {
+			if cliCfg.MCPServer.URL == "" {
+				return nil, fmt.Errorf("mcp_server url cannot be empty for %s type", cliCfg.MCPServer.Type)
+			}
+			if !strings.HasPrefix(cliCfg.MCPServer.URL, "http://") && !strings.HasPrefix(cliCfg.MCPServer.URL, "https://") {
+				return nil, fmt.Errorf("mcp_server url must start with http:// or https://")
+			}
+		}
+	}
+
+	if len(cliCfg.SwaggerURLs) == 0 && len(cliCfg.EndpointDefinitions) == 0 && cliCfg.MCPServer == nil {
+		return nil, fmt.Errorf("config must specify at least one swagger_url, provide endpoint_definitions (e.g. via browser extension sync), or configure mcp_server")
 	}
 
 	if cliCfg.Settings.IterationsPerProfile <= 0 {
@@ -478,105 +499,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
-	// 2. Fetch and parse specs concurrently
-	type specResult struct {
-		urlStr    string
-		endpoints []swagger.EndpointConfig
-		basePath  string
-		err       error
-	}
 
-	resChan := make(chan specResult, len(cliCfg.SwaggerURLs))
-	var wg sync.WaitGroup
-
-	for _, urlStr := range cliCfg.SwaggerURLs {
-		wg.Add(1)
-		go func(urlStr string) {
-			defer wg.Done()
-			logger.Debug("[Config] Fetching spec: %s", urlStr)
-			startFetch := time.Now()
-
-			headersCopy := make(map[string]string)
-			for k, v := range cliCfg.Headers {
-				headersCopy[k] = v
-			}
-			if len(cliCfg.Cookies) > 0 {
-				var cookieParts []string
-				for k, v := range cliCfg.Cookies {
-					cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
-				}
-				headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
-			}
-
-			specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
-			if err != nil {
-				resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}
-				return
-			}
-
-			fetchDur := time.Since(startFetch)
-			logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
-
-			var parseOpts []swagger.ParserOption
-			if cliCfg.Settings.MaxNodesBudget > 0 {
-				parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
-			}
-			if cliCfg.Settings.MaxDepthLimit > 0 {
-				parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
-			}
-
-			parsed, err := swagger.ParseRawSpec(specRaw, parseOpts...)
-			if err != nil {
-				if swagger.IsHAR(specRaw) {
-					parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
-					if errHAR != nil {
-						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as HAR: %w", urlStr, errHAR)}
-						return
-					}
-					parsed = parsedHAR
-				} else if swagger.IsPostman(specRaw) {
-					parsedPostman, errPostman := postman.ParsePostman(specRaw)
-					if errPostman != nil {
-						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as Postman Collection: %w", urlStr, errPostman)}
-						return
-					}
-					parsed = parsedPostman
-				} else {
-					// Try GraphQL parser fallback
-					defaultPath := "/graphql"
-					if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-						if parsedURL.Path != "" && parsedURL.Path != "/" {
-							defaultPath = parsedURL.Path
-						}
-					}
-					parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-					if errGQL != nil {
-						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as OpenAPI (%w) or GraphQL (%w)", urlStr, err, errGQL)}
-						return
-					}
-					parsed = parsedGQL
-				}
-			}
-
-			bp := ""
-			if parsedURL, errURL := url.Parse(urlStr); errURL == nil && parsedURL.Host != "" {
-				bp = parsedURL.Scheme + "://" + parsedURL.Host
-			} else {
-				bp = parsed.BasePath
-			}
-
-			logger.Debug("[Config] Parsed spec %s: %d endpoints found", urlStr, len(parsed.Endpoints))
-
-			resChan <- specResult{
-				urlStr:    urlStr,
-				endpoints: parsed.Endpoints,
-				basePath:  bp,
-			}
-		}(urlStr)
-	}
-
-	wg.Wait()
-	close(resChan)
 
 	var allEndpoints []swagger.EndpointConfig
 	basePath := cliCfg.BaseURL
@@ -586,7 +509,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 	if len(cliCfg.EndpointDefinitions) > 0 && len(cliCfg.SwaggerURLs) == 0 {
 		logger.Debug("[Config] Using %d pre-parsed endpoint_definitions (browser extension mode)", len(cliCfg.EndpointDefinitions))
 		allEndpoints = cliCfg.EndpointDefinitions
-		if basePath == "" {
+		if basePath == "" && cliCfg.MCPServer == nil {
 			return nil, fmt.Errorf("no base_url found in config — required when using endpoint_definitions without swagger_url")
 		}
 	} else {
@@ -620,54 +543,96 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 					headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
 				}
 
-				specRaw, err := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
-				if err != nil {
-					resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, err)}
-					return
-				}
+				specRaw, fetchErr := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
+				
+				var parsed *swagger.ParseResult
+				var parseErr error
 
-				fetchDur := time.Since(startFetch)
-				logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
+				if fetchErr == nil {
+					fetchDur := time.Since(startFetch)
+					logger.Debug("[Config] Fetched spec %s (size: %d bytes, took: %v)", urlStr, len(specRaw), fetchDur)
 
-				var parseOpts []swagger.ParserOption
-				if cliCfg.Settings.MaxNodesBudget > 0 {
-					parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
-				}
-				if cliCfg.Settings.MaxDepthLimit > 0 {
-					parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
-				}
+					var parseOpts []swagger.ParserOption
+					if cliCfg.Settings.MaxNodesBudget > 0 {
+						parseOpts = append(parseOpts, swagger.WithMaxNodes(cliCfg.Settings.MaxNodesBudget))
+					}
+					if cliCfg.Settings.MaxDepthLimit > 0 {
+						parseOpts = append(parseOpts, swagger.WithMaxDepth(cliCfg.Settings.MaxDepthLimit))
+					}
 
-				parsed, err := swagger.ParseRawSpec(specRaw, parseOpts...)
-				if err != nil {
-					if swagger.IsHAR(specRaw) {
-						parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
-						if errHAR != nil {
-							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as HAR: %w", urlStr, errHAR)}
-							return
-						}
-						parsed = parsedHAR
-					} else if swagger.IsPostman(specRaw) {
-						parsedPostman, errPostman := postman.ParsePostman(specRaw)
-						if errPostman != nil {
-							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as Postman Collection: %w", urlStr, errPostman)}
-							return
-						}
-						parsed = parsedPostman
-					} else {
-						// Try GraphQL parser fallback
-						defaultPath := "/graphql"
-						if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
-							if parsedURL.Path != "" && parsedURL.Path != "/" {
-								defaultPath = parsedURL.Path
+					parsed, parseErr = swagger.ParseRawSpec(specRaw, parseOpts...)
+					if parseErr != nil {
+						originalErr := parseErr
+						if swagger.IsHAR(specRaw) {
+							parsedHAR, errHAR := har.ParseHAR(specRaw, cliCfg.Settings.HarDomainFilter)
+							if errHAR != nil {
+								parseErr = fmt.Errorf("failed to parse as HAR: %w", errHAR)
+							} else {
+								parsed = parsedHAR
+								parseErr = nil
+							}
+						} else if swagger.IsPostman(specRaw) {
+							parsedPostman, errPostman := postman.ParsePostman(specRaw)
+							if errPostman != nil {
+								parseErr = fmt.Errorf("failed to parse as Postman Collection: %w", errPostman)
+							} else {
+								parsed = parsedPostman
+								parseErr = nil
+							}
+						} else {
+							// Try GraphQL parser fallback
+							defaultPath := "/graphql"
+							if parsedURL, errURL := url.Parse(urlStr); errURL == nil {
+								if parsedURL.Path != "" && parsedURL.Path != "/" {
+									defaultPath = parsedURL.Path
+								}
+							}
+							parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
+							if errGQL != nil {
+								parseErr = fmt.Errorf("failed to parse spec as OpenAPI (%w) or GraphQL (%w)", originalErr, errGQL)
+							} else {
+								parsed = parsedGQL
+								parseErr = nil
 							}
 						}
-						parsedGQL, errGQL := graphql.ParseGraphQLIntrospection(specRaw, defaultPath)
-						if errGQL != nil {
-							resChan <- specResult{err: fmt.Errorf("failed to parse spec %s as OpenAPI (%w) or GraphQL (%w)", urlStr, err, errGQL)}
-							return
-						}
-						parsed = parsedGQL
 					}
+				}
+
+				// Trigger MCP probe if fetching failed OR parsing failed
+				if fetchErr != nil || parseErr != nil {
+					mcpClient := mcp.NewHTTPClient(urlStr, cliCfg.Security.AllowPrivateIPs, headersCopy)
+					mcpCtx, mcpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					if mcpErr := mcpClient.Connect(mcpCtx); mcpErr == nil {
+						// It is an MCP HTTP server!
+						tools, _ := mcpClient.ListTools(mcpCtx)
+						mcpCancel()
+						var eps []swagger.EndpointConfig
+						for _, t := range tools {
+							eps = append(eps, swagger.EndpointConfig{
+								Method: "MCP",
+								Path:   t.Name,
+								Schema: t.InputSchema,
+							})
+						}
+						logger.Debug("[Config] Parsed MCP server %s: %d tools found", urlStr, len(eps))
+						resChan <- specResult{
+							urlStr:    urlStr,
+							endpoints: eps,
+							basePath:  urlStr,
+						}
+						return
+					} else {
+						mcpCancel()
+						logger.Debug("[Config] MCP fallback failed for %s: %v", urlStr, mcpErr)
+					}
+
+					// Return original fetch or parse error
+					if fetchErr != nil {
+						resChan <- specResult{err: fmt.Errorf("failed to fetch spec %s: %w", urlStr, fetchErr)}
+					} else {
+						resChan <- specResult{err: fmt.Errorf("failed to parse spec %s: %w", urlStr, parseErr)}
+					}
+					return
 				}
 
 				bp := ""
@@ -710,7 +675,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		// Also merge any pre-parsed endpoint_definitions on top of spec endpoints
 		allEndpoints = append(allEndpoints, cliCfg.EndpointDefinitions...)
 
-		if basePath == "" {
+		if basePath == "" && cliCfg.MCPServer == nil {
 			return nil, fmt.Errorf("no base_url found in config or specs")
 		}
 	}
@@ -741,7 +706,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		logger.Debug("[Config] Endpoints after filtering: %d", len(allEndpoints))
 	}
 
-	if len(allEndpoints) == 0 {
+	if len(allEndpoints) == 0 && cliCfg.MCPServer == nil {
 		return nil, fmt.Errorf("no endpoints remaining after filtering")
 	}
 
@@ -758,6 +723,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		AuthIdentities: cliCfg.AuthIdentities,
 		Variables:      cliCfg.Variables,
 		Security:       cliCfg.Security,
+		MCPServer:      cliCfg.MCPServer,
 	}
 
 	if err := swagger.LoadWordlists(runCfg); err != nil {

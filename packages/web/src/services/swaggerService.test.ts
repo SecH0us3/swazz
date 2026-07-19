@@ -101,8 +101,7 @@ describe('swaggerService', () => {
         });
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse);
 
-        // Since it has no error property but lacks endpoints, mapping will fail and throw TypeError or ParsingError
-        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow();
+        await expect(loadSwaggerUrl('http://example.com/swagger.json')).rejects.toThrow(ParsingError);
     });
 
     it('accepts headers and cookies arguments even though they are currently unused in fetch body', async () => {

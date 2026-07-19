@@ -23,7 +23,17 @@ type TreeNode = {
 };
 
 function processPath(path: string): string[] {
-    const parts = path.split('/').filter(Boolean);
+    let cleanPath = path;
+    if (path.startsWith('mcp://tool/')) {
+        cleanPath = path.substring('mcp://tool/'.length);
+    }
+    if (!cleanPath.includes('/') && cleanPath.includes('_')) {
+        const firstUnderscore = cleanPath.indexOf('_');
+        const prefix = cleanPath.substring(0, firstUnderscore);
+        const rest = cleanPath.substring(firstUnderscore + 1);
+        return [`/${prefix}`, rest];
+    }
+    const parts = cleanPath.split('/').filter(Boolean);
     if (parts.length === 0) return ['/'];
     const res = [`/${parts[0]}`];
     if (parts.length > 1) res.push(parts[1]);

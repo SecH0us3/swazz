@@ -34,6 +34,7 @@ import (
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/sstistore"
@@ -48,8 +49,8 @@ const (
 	maxRetriesOn429  = 3
 	defaultBackoffMs = 2000
 
-	defaultMaxPayloadBytes  = 1 << 20  // 1 MiB
-	boundaryMaxPayloadBytes = 1 << 29  // 512 MiB
+	defaultMaxPayloadBytes  = 1 << 20 // 1 MiB
+	boundaryMaxPayloadBytes = 1 << 29 // 512 MiB
 )
 
 // ─── embedded sub-structs ────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ type runnerLifecycle struct {
 	isPaused   atomic.Bool
 	shouldStop atomic.Bool
 
-	mu     sync.Mutex       // guards cancel only
+	mu     sync.Mutex // guards cancel only
 	cancel context.CancelFunc
 }
 
@@ -123,7 +124,6 @@ type Runner struct {
 	activeCSRFToken string
 	lastProbeTime   time.Time
 
-
 	// Per-run baselines, results, and concurrency control.
 	sizeBaselines *sync.Map
 	timeBaselines *sync.Map
@@ -134,10 +134,17 @@ type Runner struct {
 	limiter       *ConcurrencyLimiter
 
 	analyzer *analyzer.AnalyzerRegistry
+
+	mcpClient     mcp.Client
+	mcpMutex      sync.Mutex
+	mcpRateLimiter *mcp.RateLimiter
 }
 
 // New creates a new Runner with sensible defaults.
 func New(config *swagger.Config, client *http.Client) *Runner {
+	if config == nil {
+		return nil
+	}
 	if client == nil {
 		client = &http.Client{
 			Timeout: 30 * time.Second,
@@ -189,6 +196,27 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 		timeBaselines: &sync.Map{},
 		state:         make(map[string]string),
 		regexCache:    make(map[string]*regexp.Regexp),
+	}
+	if config.MCPServer != nil {
+		mcpHeaders := make(map[string]string)
+		for k, v := range config.GlobalHeaders {
+			mcpHeaders[k] = v
+		}
+		if len(config.Cookies) > 0 {
+			var cookieParts []string
+			for k, v := range config.Cookies {
+				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+			}
+			mcpHeaders["Cookie"] = strings.Join(cookieParts, "; ")
+		}
+
+		if config.MCPServer.Type == "stdio" {
+			r.mcpClient = mcp.NewStdioClient(config.MCPServer.Command, config.MCPServer.Args)
+		} else if config.MCPServer.Type == "sse" {
+			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders, nil)
+		} else if config.MCPServer.Type == "http" {
+			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders)
+		}
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
 	r.pause.cond = sync.NewCond(&r.pause.mu)
@@ -722,6 +750,66 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	r.lifecycle.cancel = cancel
 
+	// Connect to MCP Server if configured
+	if r.mcpClient != nil {
+		logger.Info("[Runner] Connecting to MCP Server...")
+		if err := r.mcpClient.Connect(ctx); err != nil {
+			logger.Error("[Runner] Failed to connect to MCP server: %v", err)
+			cancel()
+			r.lifecycle.isRunning.Store(false)
+			return nil, fmt.Errorf("failed to connect to MCP server: %w", err)
+		}
+
+		logger.Info("[Runner] Listing MCP Tools...")
+		tools, err := r.mcpClient.ListTools(ctx)
+		if err != nil {
+			logger.Error("[Runner] Failed to list MCP tools: %v", err)
+			_ = r.mcpClient.Close()
+			cancel()
+			r.lifecycle.isRunning.Store(false)
+			return nil, fmt.Errorf("failed to list MCP tools: %w", err)
+		}
+
+		hasAnyMcpInConfig := false
+		for _, ep := range r.config.Endpoints {
+			if ep.Method == "CALL" || ep.Method == "MCP" || strings.HasPrefix(ep.Path, "mcp://tool/") {
+				hasAnyMcpInConfig = true
+				break
+			}
+		}
+
+		logger.Info("[Runner] Found %d MCP Tools", len(tools))
+		for _, tool := range tools {
+			toolPath := "mcp://tool/" + tool.Name
+
+			// Check if this tool is already in r.config.Endpoints (either with mcp://tool/ prefix or raw name)
+			foundIndex := -1
+			for i, ep := range r.config.Endpoints {
+				if ep.Path == toolPath || ep.Path == tool.Name {
+					foundIndex = i
+					break
+				}
+			}
+
+			if foundIndex != -1 {
+				logger.Info("[Runner] Upgrading MCP tool in-place: %s", tool.Name)
+				r.config.Endpoints[foundIndex].Path = toolPath
+				r.config.Endpoints[foundIndex].Method = "CALL"
+				r.config.Endpoints[foundIndex].Schema = tool.InputSchema
+				r.config.Endpoints[foundIndex].ContentType = "application/json"
+			} else if !hasAnyMcpInConfig {
+				logger.Info("[Runner] Mapping new MCP tool: %s", tool.Name)
+				ep := swagger.EndpointConfig{
+					Path:        toolPath,
+					Method:      "CALL",
+					Schema:      tool.InputSchema,
+					ContentType: "application/json",
+				}
+				r.config.Endpoints = append(r.config.Endpoints, ep)
+			}
+		}
+	}
+
 	go r.statsAggregator()
 
 	r.resultsMu.Lock()
@@ -753,6 +841,9 @@ func (r *Runner) finaliseRun() {
 	r.latestStats.Store(&final)
 	r.Broadcast(Event{Type: EventComplete, Data: final})
 
+	if r.mcpClient != nil {
+		_ = r.mcpClient.Close()
+	}
 	sstistore.GlobalStore.Clear()
 	oob.GlobalStore.ClearSession(r.config.RunID)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -13,16 +14,17 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/postman"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"sync"
+	"syscall"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -175,6 +177,10 @@ func startAgent(args []string) {
 	if useSignatureAuth {
 		headers.Set("X-Runner-Public-Key", pubKeyHex)
 	} else {
+		// Validate token to prevent security issues
+		if strings.Contains(token, ";") || strings.Contains(token, "&") || strings.Contains(token, "|") {
+			log.Fatalf("Token contains suspicious characters")
+		}
 		headers.Set("Authorization", "Bearer "+token)
 	}
 
@@ -310,8 +316,6 @@ func startAgent(args []string) {
 		}
 	}
 
-
-
 	// Agent loop
 	for {
 		var wsMsg WSMessageIn
@@ -437,7 +441,7 @@ func startAgent(args []string) {
 									description = fmt.Sprintf("HTTP %d", res.Status)
 								}
 							}
-							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s", 
+							logInfo("[Fuzz Result] Run %s: %s %s -> %d (Severity: %s) - %s",
 								runID, res.Method, res.ResolvedPath, res.Status, severity, description)
 							ev.Data = runner.ToSSE(res)
 						} else {
@@ -536,8 +540,10 @@ func startAgent(args []string) {
 
 		case "parse_request":
 			var reqPayload struct {
-				URL     string `json:"url"`
-				RawSpec string `json:"rawSpec"`
+				URL     string            `json:"url"`
+				RawSpec string            `json:"rawSpec"`
+				Headers map[string]string `json:"headers"`
+				Cookies map[string]string `json:"cookies"`
 			}
 			if err := json.Unmarshal(wsMsg.Payload, &reqPayload); err != nil {
 				logError("Failed to unmarshal parse_request payload: %v", err)
@@ -553,23 +559,52 @@ func startAgent(args []string) {
 				var resp *http.Response
 
 				if reqPayload.RawSpec != "" {
-					data = []byte(reqPayload.RawSpec)
+					// Validate rawSpec to prevent injection attacks
+					if strings.Contains(reqPayload.RawSpec, "{{{)") || strings.Contains(reqPayload.RawSpec, "}}}") {
+						err = fmt.Errorf("rawSpec contains suspicious patterns")
+					} else {
+						data = []byte(reqPayload.RawSpec)
+					}
 				} else if reqPayload.URL != "" {
 					client := safenet.NewSafeHTTPClient(15 * time.Second)
-					var errFetch error
-					resp, errFetch = client.Get(reqPayload.URL)
-					if errFetch != nil {
-						logError("[Parser] Failed to fetch spec: %v", errFetch)
-						err = errFetch
+
+					req, reqErr := http.NewRequest("GET", reqPayload.URL, nil)
+					if reqErr != nil {
+						err = reqErr
 					} else {
-						defer resp.Body.Close()
-						limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
-						data, err = io.ReadAll(limitReader)
-						if err == nil && len(data) > 10*1024*1024 {
-							err = fmt.Errorf("specification file exceeds the 10MB limit")
+						for k, v := range reqPayload.Headers {
+							req.Header.Set(k, v)
 						}
-						if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-							err = fmt.Errorf("server returned status code: %s", resp.Status)
+						if len(reqPayload.Cookies) > 0 {
+							var cookieParts []string
+							for k, v := range reqPayload.Cookies {
+								cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+							}
+							req.Header.Set("Cookie", strings.Join(cookieParts, "; "))
+						}
+
+						var errFetch error
+						resp, errFetch = client.Do(req)
+						if errFetch != nil {
+							logError("[Parser] Failed to fetch spec: %v", errFetch)
+							err = errFetch
+						} else {
+							defer resp.Body.Close()
+							if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+								limitReader := io.LimitReader(resp.Body, 4096)
+								bodyBytes, _ := io.ReadAll(limitReader)
+								err = fmt.Errorf("authentication required (HTTP %d). Please configure custom headers or cookies in the right panel. %s", resp.StatusCode, string(bytes.TrimSpace(bodyBytes)))
+								data = bodyBytes
+							} else {
+								limitReader := io.LimitReader(resp.Body, 10*1024*1024+1)
+								data, err = io.ReadAll(limitReader)
+								if err == nil && len(data) > 10*1024*1024 {
+									err = fmt.Errorf("specification file exceeds the 10MB limit")
+								}
+							}
+							if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+								err = fmt.Errorf("server returned status code: %s", resp.Status)
+							}
 						}
 					}
 				} else {
@@ -603,12 +638,23 @@ func startAgent(args []string) {
 						}
 					}
 					if reqPayload.URL != "" {
+						reqHeadersOut := map[string]string{
+							"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+						}
+						for k, v := range reqPayload.Headers {
+							reqHeadersOut[k] = v
+						}
+						if len(reqPayload.Cookies) > 0 {
+							var cookieParts []string
+							for k, v := range reqPayload.Cookies {
+								cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+							}
+							reqHeadersOut["Cookie"] = strings.Join(cookieParts, "; ")
+						}
 						errMap["request"] = map[string]interface{}{
-							"url":    reqPayload.URL,
-							"method": "GET",
-							"headers": map[string]string{
-								"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
-							},
+							"url":     reqPayload.URL,
+							"method":  "GET",
+							"headers": reqHeadersOut,
 						}
 					} else {
 						errMap["request"] = map[string]interface{}{
@@ -664,12 +710,23 @@ func startAgent(args []string) {
 							"parser": parserName,
 						}
 						if reqPayload.URL != "" {
+							reqHeadersOut := map[string]string{
+								"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
+							}
+							for k, v := range reqPayload.Headers {
+								reqHeadersOut[k] = v
+							}
+							if len(reqPayload.Cookies) > 0 {
+								var cookieParts []string
+								for k, v := range reqPayload.Cookies {
+									cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+								}
+								reqHeadersOut["Cookie"] = strings.Join(cookieParts, "; ")
+							}
 							errMap["request"] = map[string]interface{}{
-								"url":    reqPayload.URL,
-								"method": "GET",
-								"headers": map[string]string{
-									"User-Agent": "Swazz/1.0 (+https://github.com/SecH0us3/swazz)",
-								},
+								"url":     reqPayload.URL,
+								"method":  "GET",
+								"headers": reqHeadersOut,
 							}
 							if resp != nil {
 								respHeaders := make(map[string]string)
@@ -718,6 +775,78 @@ func startAgent(args []string) {
 					}
 				}
 
+				// Trigger MCP probe if we have a URL and there was any kind of error (fetch or parse)
+				hasError := err != nil
+				if !hasError {
+					if resultMap, ok := result.(map[string]interface{}); ok {
+						if _, hasErrKey := resultMap["error"]; hasErrKey {
+							hasError = true
+						}
+					}
+				}
+
+				if hasError && reqPayload.URL != "" {
+					mcpHeaders := make(map[string]string)
+					for k, v := range reqPayload.Headers {
+						mcpHeaders[k] = v
+					}
+					if len(reqPayload.Cookies) > 0 {
+						var cookieParts []string
+						for k, v := range reqPayload.Cookies {
+							cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+						}
+						mcpHeaders["Cookie"] = strings.Join(cookieParts, "; ")
+					}
+
+					// fallback to MCP probe (try HTTP first, then SSE)
+					var mcpClient mcp.Client
+					mcpClient = mcp.NewHTTPClient(reqPayload.URL, false, mcpHeaders)
+					mcpCtxHTTP, cancelHTTP := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancelHTTP()
+
+					var mcpErr error
+					if mcpErr = mcpClient.Connect(mcpCtxHTTP); mcpErr != nil {
+						logWarn("[Parser] MCP HTTP connect failed: %v, falling back to SSE", mcpErr)
+						mcpClient.Close()
+
+						mcpClient = mcp.NewSSEClient(reqPayload.URL, false, mcpHeaders, nil)
+						mcpCtxSSE, cancelSSE := context.WithTimeout(context.Background(), 10*time.Second)
+						defer cancelSSE()
+						mcpErr = mcpClient.Connect(mcpCtxSSE)
+					} else {
+						// HTTP succeeded
+					}
+
+					if mcpErr == nil {
+						// It is an MCP server!
+						mcpCtxTools, toolsCancel := context.WithTimeout(context.Background(), 10*time.Second)
+						tools, _ := mcpClient.ListTools(mcpCtxTools)
+						toolsCancel()
+						var eps []swagger.EndpointConfig
+						for _, t := range tools {
+							eps = append(eps, swagger.EndpointConfig{
+								Method: "CALL",
+								Path:   "mcp://tool/" + t.Name,
+								Schema: t.InputSchema,
+							})
+						}
+
+						for i := range eps {
+							pruneSchema(&eps[i].Schema, 0, 3)
+						}
+
+						mcpClient.Close()
+						logInfo("[Parser] Fallback to MCP successful for %s (%d tools)", reqPayload.URL, len(eps))
+						result = map[string]interface{}{
+							"basePath":  reqPayload.URL,
+							"endpoints": eps,
+							"rawSpec":   "",
+						}
+					} else {
+						logWarn("[Parser] MCP fallback failed: %v", mcpErr)
+					}
+				}
+
 				msgPayload := map[string]interface{}{
 					"type":    "parse_result",
 					"reqId":   reqID,
@@ -740,6 +869,29 @@ func startAgent(args []string) {
 			}()
 		}
 	}
+}
+
+func filterSensitiveData(rawSpec string) string {
+	// Filter sensitive data from rawSpec
+	// This is a basic example; you may need to extend it based on your requirements
+	sensitivePatterns := []string{
+		"password",
+		"secret",
+		"token",
+		"api_key",
+		"access_key",
+		"jwt",
+		"bearer",
+		"aws",
+		"private_key",
+	}
+
+	filteredSpec := rawSpec
+	for _, pattern := range sensitivePatterns {
+		filteredSpec = strings.ReplaceAll(filteredSpec, pattern, "[FILTERED]")
+	}
+
+	return filteredSpec
 }
 
 func pruneSchema(s *swagger.SchemaProperty, currentDepth, maxDepth int) {

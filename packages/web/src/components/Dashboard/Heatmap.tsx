@@ -17,30 +17,34 @@ interface Props {
     onCellClick: (filter: HeatmapFilter | null) => void;
 }
 
-function getCellColor(status: number, count: number, maxCount: number): string {
+function getCellColor(code: string, count: number, maxCount: number): string {
     if (count === 0) return 'var(--bg-elevated)';
     const intensity = Math.min(count / Math.max(maxCount, 1), 1);
     const lightness = 20 + intensity * 40;
-    if (status >= 500 || status === 0) return `hsl(350, 89%, ${lightness}%)`;
-    if (status >= 400) return `hsl(45, 96%, ${lightness}%)`;
+    const isM = code.startsWith('M');
+    const numericCode = Number(isM ? code.substring(1) : code);
+    if (numericCode >= 500 || numericCode === 0) return `hsl(350, 89%, ${lightness}%)`;
+    if (numericCode >= 400) return `hsl(45, 96%, ${lightness}%)`;
     return `hsl(160, 84%, ${lightness}%)`;
 }
 
-function matchesBucket(code: number, bucket: StatusBucket): boolean {
+function matchesBucket(code: string, bucket: StatusBucket): boolean {
     if (bucket === 'any') return true;
-    if (bucket === '2xx') return code >= 200 && code < 300;
-    if (bucket === '4xx') return code >= 400 && code < 500;
-    if (bucket === '5xx') return code >= 500 || code === 0;
+    const isM = code.startsWith('M');
+    const numericCode = Number(isM ? code.substring(1) : code);
+    if (bucket === '2xx') return numericCode >= 200 && numericCode < 300;
+    if (bucket === '4xx') return numericCode >= 400 && numericCode < 500;
+    if (bucket === '5xx') return numericCode >= 500 || numericCode === 0;
     return true;
 }
 
 interface HeatmapCellProps {
-    code: number;
+    code: string;
     count: number;
     maxCount: number;
     isActive: boolean;
     animationDelay: string;
-    onClick: (code: number, count: number) => void;
+    onClick: (code: string, count: number) => void;
 }
 
 const HeatmapCell: React.FC<HeatmapCellProps> = React.memo(({
@@ -68,7 +72,7 @@ const HeatmapCell: React.FC<HeatmapCellProps> = React.memo(({
         >
             {isHovered && count > 0 && (
                 <div className="tooltip">
-                    {code === 0 ? 'Infinity (Timeout)' : code}: {count} req{count > 1 ? 's' : ''}<br />
+                    {code.startsWith('M') && code.substring(1) === '0' ? 'Infinity (Timeout)' : code}: {count} req{count > 1 ? 's' : ''}<br />
                     <span style={{ opacity: 0.6, fontSize: 10 }}>click to filter</span>
                 </div>
             )}
@@ -78,12 +82,12 @@ const HeatmapCell: React.FC<HeatmapCellProps> = React.memo(({
 
 interface HeatmapRowProps {
     epKey: string;
-    statusCodes: number[];
+    statusCodes: string[];
     endpointCounts: Record<number, number>;
     maxCount: number;
     activeFilter: HeatmapFilter | null;
     isVulnerable?: boolean;
-    onCellClick: (epKey: string, code: number, count: number) => void;
+    onCellClick: (epKey: string, code: string, count: number) => void;
 }
 
 const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
@@ -97,8 +101,9 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
 }) => {
     const [method, ...rest] = epKey.split(' ');
     const path = rest.join(' ');
+    const isMcp = method === 'CALL' || method === 'MCP' || path.startsWith('mcp://tool/');
 
-    const handleCellClick = useCallback((code: number, count: number) => {
+    const handleCellClick = useCallback((code: string, count: number) => {
         onCellClick(epKey, code, count);
     }, [epKey, onCellClick]);
 
@@ -116,8 +121,14 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
             </div>
             {/* Cells — right side, fixed width */}
             {statusCodes.map((code, ci) => {
-                const count = endpointCounts[code] || 0;
-                const isActive = activeFilter?.method === method && activeFilter?.path === path && activeFilter?.status === code;
+                const isCodeM = code.startsWith('M');
+                let count = 0;
+                let numericCode = 0;
+                if (isMcp === isCodeM) {
+                    numericCode = Number(isCodeM ? code.substring(1) : code);
+                    count = endpointCounts[numericCode] || 0;
+                }
+                const isActive = activeFilter?.method === method && activeFilter?.path === path && activeFilter?.status === numericCode && isCodeM === isMcp;
 
                 return (
                     <HeatmapCell
@@ -146,7 +157,9 @@ const HeatmapRow: React.FC<HeatmapRowProps> = React.memo(({
     const prevCounts = prevProps.endpointCounts || {};
     const nextCounts = nextProps.endpointCounts || {};
     for (const code of nextProps.statusCodes) {
-        if ((prevCounts[code] || 0) !== (nextCounts[code] || 0)) return false;
+        const isM = code.startsWith('M');
+        const numericCode = Number(isM ? code.substring(1) : code);
+        if ((prevCounts[numericCode] || 0) !== (nextCounts[numericCode] || 0)) return false;
     }
     
     const [method, ...rest] = prevProps.epKey.split(' ');
@@ -168,11 +181,24 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
 
     // All status codes that appeared
     const allStatusCodes = useMemo(() => {
-        const codes = new Set<number>();
-        for (const epCounts of Object.values(stats.endpointCounts)) {
-            for (const code of Object.keys(epCounts)) codes.add(Number(code));
+        const codes = new Set<string>();
+        for (const [epKey, epCounts] of Object.entries(stats.endpointCounts)) {
+            const isMcp = epKey.startsWith('CALL ') || epKey.startsWith('MCP ') || epKey.includes('mcp://tool/');
+            for (const code of Object.keys(epCounts)) {
+                const prefix = isMcp ? 'M' : '';
+                codes.add(prefix + code);
+            }
         }
-        return [...codes].sort((a, b) => a - b);
+        return [...codes].sort((a, b) => {
+            const isMA = a.startsWith('M');
+            const isMB = b.startsWith('M');
+            if (isMA && !isMB) return 1;
+            if (!isMA && isMB) return -1;
+            
+            const numA = Number(isMA ? a.substring(1) : a);
+            const numB = Number(isMB ? b.substring(1) : b);
+            return numA - numB;
+        });
     }, [stats]);
 
     // Status codes filtered by bucket
@@ -188,8 +214,12 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
         // Hide endpoints with no hits for the selected status bucket
         list = list.filter((epKey) => {
             const counts = stats.endpointCounts[epKey] ?? {};
+            const isMcp = epKey.startsWith('CALL ') || epKey.startsWith('MCP ') || epKey.includes('mcp://tool/');
             return Object.entries(counts).some(
-                ([code, count]) => count > 0 && matchesBucket(Number(code), statusBucket),
+                ([code, count]) => {
+                    const prefix = isMcp ? 'M' : '';
+                    return count > 0 && matchesBucket(prefix + code, statusBucket);
+                }
             );
         });
 
@@ -227,16 +257,22 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
     const onCellClickRef = useRef(onCellClick);
     onCellClickRef.current = onCellClick;
 
-    const handleCellClick = useCallback((epKey: string, code: number, count: number) => {
+    const handleCellClick = useCallback((epKey: string, code: string, count: number) => {
         if (count === 0) return;
         const [method, ...rest] = epKey.split(' ');
         const path = rest.join(' ');
 
+        const isCodeM = code.startsWith('M');
+        const numericCode = Number(isCodeM ? code.substring(1) : code);
+
         const active = activeFilterRef.current;
-        if (active?.method === method && active?.path === path && active?.status === code) {
+        const isActiveM = active && (active.method === 'CALL' || active.method === 'MCP' || active.path.startsWith('mcp://tool/'));
+        const isMcp = method === 'CALL' || method === 'MCP' || path.startsWith('mcp://tool/');
+
+        if (active?.method === method && active?.path === path && active?.status === numericCode && !!isActiveM === isMcp) {
             onCellClickRef.current(null);
         } else {
-            onCellClickRef.current({ method, path, status: code });
+            onCellClickRef.current({ method, path, status: numericCode });
         }
     }, []);
 
@@ -261,7 +297,11 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
                             className="heatmap-active-chip"
                         >
                             <span title={activeFilter.status === 0 ? "Infinity (Timeout)" : undefined}>
-                                {activeFilter.status === 0 ? '∞' : activeFilter.status}
+                                {activeFilter.status === 0 ? '∞' : (
+                                    (activeFilter.method === 'CALL' || activeFilter.method === 'MCP' || activeFilter.path.startsWith('mcp://tool/')) 
+                                    ? `M${activeFilter.status}` 
+                                    : activeFilter.status
+                                )}
                             </span>
                             <span style={{ opacity: 0.6 }}>·</span>
                             <span style={{ fontFamily: 'var(--font-mono)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -318,9 +358,13 @@ export function Heatmap({ stats, endpointKeys, vulnerableEndpoints, activeFilter
                         {/* Spacer matches the label column */}
                         <div className="heatmap-label-spacer" />
                         {statusCodes.map((code) => {
-                            const bucketClass = (code >= 500 || code === 0) ? 'code-5xx' : code >= 400 ? 'code-4xx' : 'code-2xx';
+                            const isM = code.startsWith('M');
+                            const numericCode = Number(isM ? code.substring(1) : code);
+                            const bucketClass = (numericCode >= 500 || numericCode === 0) ? 'code-5xx' : numericCode >= 400 ? 'code-4xx' : 'code-2xx';
                             return (
-                                <div key={code} className={`heatmap-code-label ${bucketClass}`} title={code === 0 ? 'Infinity (Timeout)' : undefined}>{code === 0 ? '∞' : code}</div>
+                                <div key={code} className={`heatmap-code-label ${bucketClass}`} title={numericCode === 0 ? 'Infinity (Timeout)' : undefined}>
+                                    {numericCode === 0 ? '∞' : code}
+                                </div>
                             );
                         })}
                     </div>

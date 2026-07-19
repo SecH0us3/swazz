@@ -315,3 +315,96 @@ func TestParsePprofAddr(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildRunnerConfigMCPServer(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  CliConfig
+		wantErr bool
+	}{
+		{
+			name: "valid stdio mcp server",
+			config: CliConfig{
+				MCPServer: &swagger.MCPServerConfig{
+					Type:    "stdio",
+					Command: "node",
+					Args:    []string{"index.js"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid sse mcp server",
+			config: CliConfig{
+				MCPServer: &swagger.MCPServerConfig{
+					Type: "sse",
+					URL:  "https://localhost:8080/sse",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid mcp type",
+			config: CliConfig{
+				MCPServer: &swagger.MCPServerConfig{
+					Type: "invalid",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing command for stdio",
+			config: CliConfig{
+				MCPServer: &swagger.MCPServerConfig{
+					Type:    "stdio",
+					Command: "",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing url for sse",
+			config: CliConfig{
+				MCPServer: &swagger.MCPServerConfig{
+					Type: "sse",
+					URL:  "",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid url prefix for sse",
+			config: CliConfig{
+				MCPServer: &swagger.MCPServerConfig{
+					Type: "sse",
+					URL:  "ftp://localhost:8080",
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := BuildRunnerConfig(&tt.config)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("BuildRunnerConfig() error = %v, wantErr = %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && cfg == nil {
+				t.Error("BuildRunnerConfig() returned nil config but no error")
+				return
+			}
+			if !tt.wantErr {
+				if cfg.MCPServer == nil {
+					t.Error("Expected MCPServer in generated run config, got nil")
+					return
+				}
+				if cfg.MCPServer.Type != tt.config.MCPServer.Type {
+					t.Errorf("Expected MCPServer.Type %q, got %q", tt.config.MCPServer.Type, cfg.MCPServer.Type)
+				}
+			}
+		})
+	}
+}
+

@@ -6,9 +6,10 @@ import { ulid } from 'ulidx';
 export class RunnersHandler implements RouteHandler {
   async handle(request: Request, url: URL, context: HandlerContext): Promise<Response> {
     const runnerList = [];
-    for (const ws of context.stateManager.runners) {
+    const allWebSockets = new Set([...context.stateManager.runners, ...context.stateManager.pendingChallenges.keys()]);
+    for (const ws of allWebSockets) {
       const tags = context.state.getTags(ws);
-      const isPending = tags.includes('runner-pending');
+      const isPending = tags.includes('runner-pending') && !context.stateManager.runners.has(ws);
       const pubKey = getPublicKeyFromTags(tags) || null;
       const nameTag = tags.find(t => t.startsWith('name:'));
       const name = nameTag ? nameTag.substring(5) : 'Unnamed Runner';
