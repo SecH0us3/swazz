@@ -172,7 +172,7 @@ export function Header({
                 >
                     <span className="header-guest-alert-dot" />
                     <span className="header-guest-banner-text">
-                        🛡️ <strong>Guest Mode:</strong> Results are temporary. <strong>Register a free account</strong> to save history, download PDF reports & add webhooks. <span className="header-guest-register-link">Register Now →</span>
+                        🛡️ <strong>Guest Mode:</strong> Scans are temporary. <strong>Sign up</strong> to save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up Now →</span>
                     </span>
                 </div>
             )}
@@ -215,7 +215,7 @@ export function Header({
                                 <button className="btn btn-secondary header-decline-btn" onClick={() => handleDeclineInvite(invitations[0].token)}>Decline</button>
                             </div>
                         )}
-                        <UserMenu onLogout={onLogout || (() => {})} />
+                        <UserMenu onLogout={onLogout || (() => {})} isGuest={isGuest} />
                     </div>
                 )}
             </div>

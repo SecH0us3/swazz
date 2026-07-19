@@ -3,13 +3,14 @@ import { useAppStore } from '../store/appStore.js';
 
 interface UserMenuProps {
     onLogout: () => void;
+    isGuest?: boolean;
 }
 
-export function UserMenu({ onLogout }: UserMenuProps) {
+export function UserMenu({ onLogout, isGuest: isGuestProp }: UserMenuProps) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const userProfile = useAppStore(state => state.userProfile);
-    const isGuest = !!userProfile?.isGuest;
+    const isGuest = isGuestProp || !!userProfile?.isGuest;
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
