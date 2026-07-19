@@ -22,7 +22,10 @@ func NewCLIAnalyzer(commandTemplate string) *CLIAnalyzer {
 }
 
 func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt string) (string, error) {
-	fields := strings.Fields(c.CommandTemplate)
+	fields, err := splitCommand(c.CommandTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse command template: %w", err)
+	}
 	if len(fields) == 0 {
 		return "", fmt.Errorf("empty command template")
 	}
@@ -68,4 +71,73 @@ func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt 
 	}
 
 	return string(out), nil
+}
+
+// splitCommand splits a command string into words, respecting single and double quotes, and backslash escapes.
+func splitCommand(template string) ([]string, error) {
+	var parts []string
+	var current strings.Builder
+	inDoubleQuotes := false
+	inSingleQuotes := false
+	escaped := false
+
+	for i := 0; i < len(template); i++ {
+		r := template[i]
+
+		if escaped {
+			current.WriteByte(r)
+			escaped = false
+			continue
+		}
+
+		if r == '\\' {
+			if inSingleQuotes {
+				current.WriteByte(r)
+			} else {
+				escaped = true
+			}
+			continue
+		}
+
+		if r == '"' {
+			if inSingleQuotes {
+				current.WriteByte(r)
+			} else {
+				inDoubleQuotes = !inDoubleQuotes
+			}
+			continue
+		}
+
+		if r == '\'' {
+			if inDoubleQuotes {
+				current.WriteByte(r)
+			} else {
+				inSingleQuotes = !inSingleQuotes
+			}
+			continue
+		}
+
+		if (r == ' ' || r == '\t' || r == '\n' || r == '\r') && !inDoubleQuotes && !inSingleQuotes {
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+			continue
+		}
+
+		current.WriteByte(r)
+	}
+
+	if inDoubleQuotes || inSingleQuotes {
+		return nil, fmt.Errorf("unclosed quotes in command template")
+	}
+	if escaped {
+		return nil, fmt.Errorf("trailing backslash escape in command template")
+	}
+
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	return parts, nil
 }
