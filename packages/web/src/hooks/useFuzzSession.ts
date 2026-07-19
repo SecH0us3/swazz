@@ -241,7 +241,7 @@ export function useFuzzSession({
     };
 
     const handleConnectToExisting = useCallback(
-        async (runId: string, startedAt: number, baseUrl: string, triggerType?: 'manual' | 'scheduled') => {
+        async (runId: string, startedAt: number, baseUrl: string, triggerType?: 'manual' | 'scheduled', status?: string) => {
             const activeProject = useAppStore.getState().activeProject;
             const runRec: ScanRun = {
                 id: runId,
@@ -263,6 +263,7 @@ export function useFuzzSession({
                 loadedRunId: null,
                 activeTab: 'heatmap',
                 stats: null,
+                isPaused: status === 'paused',
             });
 
             let liveCount = 0;

@@ -837,3 +837,151 @@ func TestExecuteRequest_UserAgent(t *testing.T) {
 		t.Errorf("Expected global User-Agent %q, got %q", globalUA, ua)
 	}
 }
+
+func TestCheckpointResuming(t *testing.T) {
+	var requestCount int
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	checkpoint := &swagger.Checkpoint{
+		Profile:   "RANDOM",
+		Endpoint:  "GET /test2",
+		Iteration: 5,
+	}
+
+	config := &swagger.Config{
+		BaseURL: server.URL,
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/test1",
+				Method: "GET",
+				QueryParams: map[string]*swagger.SchemaProperty{
+					"x": {Type: "string"},
+				},
+			},
+			{
+				Path:   "/test2",
+				Method: "GET",
+				QueryParams: map[string]*swagger.SchemaProperty{
+					"x": {Type: "string"},
+				},
+			},
+			{
+				Path:   "/test3",
+				Method: "GET",
+				QueryParams: map[string]*swagger.SchemaProperty{
+					"x": {Type: "string"},
+				},
+			},
+		},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 10,
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+			Checkpoint:           checkpoint,
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	r := newTestRunner(&http.Client{Timeout: 5 * time.Second}, config)
+	defer r.Close()
+
+	err := r.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	mu.Lock()
+	count := requestCount
+	mu.Unlock()
+
+	if count != 15 {
+		t.Errorf("Expected exactly 15 requests run on resuming, got %d", count)
+	}
+
+	stats := r.GetStats()
+	if stats.TotalRequests != 30 {
+		t.Errorf("Expected stats.TotalRequests to report 30 (including skipped), got %d", stats.TotalRequests)
+	}
+}
+
+func TestCheckpointWatermark(t *testing.T) {
+	r := &Runner{
+		statsChan:  make(chan statsMsg, 100),
+		statsDone:  make(chan struct{}),
+		doneCh:     make(chan struct{}),
+		subs:       make(map[chan Event]struct{}),
+		eventQueue: NewMPSCQueue(),
+		limiter:    NewConcurrencyLimiter(1),
+	}
+	r.progress.totalRequests.Store(0)
+	
+	// Start the stats aggregator
+	go r.statsAggregator()
+	
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 3,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 1,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 2,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	
+	time.Sleep(200 * time.Millisecond)
+	stats := r.GetStats()
+	if stats.Progress.CurrentIteration != 3 {
+		t.Errorf("Expected watermark iteration to be 3, got %d", stats.Progress.CurrentIteration)
+	}
+
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 5,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	time.Sleep(200 * time.Millisecond)
+	stats = r.GetStats()
+	if stats.Progress.CurrentIteration != 3 {
+		t.Errorf("Expected watermark iteration to remain 3 because 4 is missing, got %d", stats.Progress.CurrentIteration)
+	}
+
+	r.statsChan <- statsMsg{
+		result:           &swagger.FuzzResult{},
+		currentIteration: 4,
+		totalIterations:  10,
+		endpoint:         "GET /test",
+		profile:          "RANDOM",
+	}
+	time.Sleep(200 * time.Millisecond)
+	stats = r.GetStats()
+	if stats.Progress.CurrentIteration != 5 {
+		t.Errorf("Expected watermark iteration to jump to 5 once 4 completed, got %d", stats.Progress.CurrentIteration)
+	}
+
+	close(r.statsChan)
+	<-r.statsDone
+}

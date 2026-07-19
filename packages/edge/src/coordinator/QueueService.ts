@@ -22,19 +22,24 @@ export class QueueService {
       ) || null;
 
       const scansRepo = new ScansRepository(this.env);
-      const queuedScans = await scansRepo.getQueuedScans();
+      const activeScans = await scansRepo.getActiveScans();
 
-      if (!queuedScans || queuedScans.length === 0) {
+      if (!activeScans || activeScans.length === 0) {
         return;
       }
 
-      const keys = queuedScans.flatMap(scan => [
+      const keys = activeScans.flatMap(scan => [
         `config:${scan.id}`,
         `user_public_key:${scan.id}`
       ]);
       const storedData = await this.state.storage.get<any>(keys);
 
-      for (const scan of queuedScans) {
+      for (const scan of activeScans) {
+        // If the job is already active in memory, skip it
+        if ((scan.status === 'dispatched' || scan.status === 'paused') && this.stateManager.jobs.has(scan.id)) {
+          continue;
+        }
+
         const scanUserPubKey = storedData.get(`user_public_key:${scan.id}`) || scan.userPublicKey || "";
         let config = storedData.get(`config:${scan.id}`);
         
@@ -75,6 +80,21 @@ export class QueueService {
           if (!activeJobs.includes(runId)) {
             activeJobs.push(runId);
             ws.serializeAttachment({ ...attachment, activeJobs });
+          }
+
+          let checkpoint = null;
+          if (scan.last_checkpoint) {
+            try {
+              checkpoint = JSON.parse(scan.last_checkpoint);
+            } catch {}
+          }
+
+          if (checkpoint) {
+            config.settings = config.settings || {};
+            config.settings.checkpoint = {
+              ...checkpoint,
+              paused: scan.status === 'paused'
+            };
           }
 
           const dispatchMsg = JSON.stringify({

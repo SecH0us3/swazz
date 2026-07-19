@@ -40,6 +40,7 @@ export interface IScansRepository {
   upsertSwaggerCache(url: string, basePath: string, endpointsHash: string, endpointsR2Key: string | undefined, rawSpecR2Key: string | undefined): Promise<void>;
   updateScanStatus(scanId: string, status: string, summaryStats?: string): Promise<void>;
   getQueuedScans(): Promise<any[]>;
+  getActiveScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
   processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void>;
 }
@@ -309,6 +310,17 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return results || [];
   }
 
+  async getActiveScans(): Promise<any[]> {
+    const { results } = await this.db.prepare(`
+      SELECT scans.*, users.public_key AS userPublicKey
+      FROM scans
+      LEFT JOIN users ON scans.user_id = users.id
+      WHERE scans.status IN ('queued', 'dispatched', 'paused')
+      ORDER BY scans.created_at ASC
+    `).all<any>();
+    return results || [];
+  }
+
   async getScanConfigByProject(projectId: string, profileName: string): Promise<string | null> {
     const row = await this.db.prepare("SELECT config_json FROM scan_configs WHERE project_id = ? AND name = ?").bind(projectId, profileName).first<{config_json: string}>();
     return row ? row.config_json : null;
@@ -370,6 +382,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
             }
           });
         }
+      } else if (payload && payload.type === 'checkpoint') {
+        const checkpointData = JSON.stringify(payload.data);
+        statements.push(
+          this.db.prepare(
+            `UPDATE scans SET last_checkpoint = ? WHERE id = ?`
+          ).bind(checkpointData, scanId)
+        );
       } else if (type === 'error' || (payload && payload.type === 'error')) {
         statements.push(
           this.db.prepare(
