@@ -136,7 +136,7 @@ export function AiRemediationTab() {
 
     const [expandedPrompt, setExpandedPrompt] = useState<'pass1_prompt' | 'pass2_prompt' | null>(null);
     const [showRulesModal, setShowRulesModal] = useState(false);
-    const [selectedTool, setSelectedTool] = useState<'claude' | 'agy' | 'custom'>('claude');
+    const [selectedTool, setSelectedTool] = useState<'claude' | 'agy' | 'vibe' | 'custom'>('claude');
 
     useEffect(() => {
         if (activeProject) {
@@ -159,6 +159,8 @@ export function AiRemediationTab() {
                         setSelectedTool('agy');
                     } else if (p1.startsWith('claude')) {
                         setSelectedTool('claude');
+                    } else if (p1.startsWith('vibe')) {
+                        setSelectedTool('vibe');
                     } else {
                         setSelectedTool('custom');
                     }
@@ -333,10 +335,13 @@ export function AiRemediationTab() {
         if (selectedTool === 'agy') {
             return pass === 1 ? 'agy -m gemini-3.5-flash "{{prompt_file}}"' : 'agy -m gemini-3.1-pro "{{prompt_file}}"';
         }
+        if (selectedTool === 'vibe') {
+            return 'vibe -p - --auto-approve --trust';
+        }
         return 'your-cli-command "{{prompt_file}}"';
     };
 
-    const handleToolChange = (tool: 'claude' | 'agy' | 'custom') => {
+    const handleToolChange = (tool: 'claude' | 'agy' | 'vibe' | 'custom') => {
         setSelectedTool(tool);
         if (tool === 'claude') {
             setAiPrompts(prev => ({
@@ -349,6 +354,12 @@ export function AiRemediationTab() {
                 ...prev,
                 pass1_cmd: 'agy -m gemini-3.5-flash "{{prompt_file}}"',
                 pass2_cmd: 'agy -m gemini-3.1-pro "{{prompt_file}}"'
+            }));
+        } else if (tool === 'vibe') {
+            setAiPrompts(prev => ({
+                ...prev,
+                pass1_cmd: 'vibe -p - --auto-approve --trust',
+                pass2_cmd: 'vibe -p - --auto-approve --trust'
             }));
         } else if (tool === 'custom') {
             setAiPrompts(prev => ({
@@ -381,14 +392,16 @@ export function AiRemediationTab() {
                 </div>
 
                 <div className="settings-field-group" style={{ marginTop: 'var(--space-4)' }}>
-                    <label className="settings-label" style={{ margin: 0 }}>Preferred AI Tool:</label>
+                    <label className="settings-label" htmlFor="preferred-ai-tool" style={{ margin: 0 }}>Preferred AI Tool:</label>
                     <select 
+                        id="preferred-ai-tool"
                         className="input settings-tool-select" 
                         value={selectedTool} 
                         onChange={(e) => handleToolChange(e.target.value as any)}
                     >
                         <option value="claude">Anthropic Claude CLI</option>
                         <option value="agy">Google Antigravity CLI (agy)</option>
+                        <option value="vibe">Mistral Vibe CLI</option>
                         <option value="custom">Custom CLI</option>
                     </select>
                 </div>

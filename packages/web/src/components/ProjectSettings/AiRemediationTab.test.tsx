@@ -93,4 +93,19 @@ describe('AiRemediationTab Component', () => {
         expect(triageTextarea.value).toContain('=== Rule: swazz/bola-idor ===');
         expect(triageTextarea.value).toContain('Implement strict ownership and authorization checks');
     });
+
+    it('supports Mistral Vibe CLI option and defaults its commands', () => {
+        render(<AiRemediationTab />);
+
+        const toolSelect = screen.getByLabelText('Preferred AI Tool:') as HTMLSelectElement;
+        fireEvent.change(toolSelect, { target: { value: 'vibe' } });
+
+        const vibeInputs = screen.getAllByPlaceholderText('vibe -p - --auto-approve --trust') as HTMLInputElement[];
+        expect(vibeInputs).toHaveLength(2);
+        const pass1Input = vibeInputs[0];
+        const pass2Input = vibeInputs[1];
+
+        expect(pass1Input.value).toBe('vibe -p - --auto-approve --trust');
+        expect(pass2Input.value).toBe('vibe -p - --auto-approve --trust');
+    });
 });
