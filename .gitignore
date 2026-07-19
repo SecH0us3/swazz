@@ -90,7 +90,6 @@ e2e_result.txt
 inline_comments.json
 pr_reviews.json
 thread_ids.json
-docs/reviews/
 
 # Local auto-generated wordlists for development and E2E tests
 wordlists/
