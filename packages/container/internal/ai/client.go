@@ -31,6 +31,7 @@ func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt 
 
 	cmdName := fields[0]
 	var args []string
+	var stdin *strings.Reader
 
 	// If command contains "{{prompt_file}}", we use the temp file approach and do NOT pipe to stdin.
 	// Otherwise, we pipe the prompt directly to stdin and avoid creating a temporary file.
@@ -50,24 +51,17 @@ func (c *CLIAnalyzer) Analyze(findingMessage string, contextCode string, prompt 
 		for _, arg := range fields[1:] {
 			args = append(args, strings.ReplaceAll(arg, "{{prompt_file}}", tmpFile.Name()))
 		}
-
-		// #nosec G204 -- The command array is intentionally constructed from user configuration in a controlled runner environment
-		cmd := exec.Command(cmdName, args...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return string(out), fmt.Errorf("command execution failed: %w", err)
-		}
-		return string(out), nil
-	}
-
-	// Stdin-based command execution (e.g. vibe)
-	for _, arg := range fields[1:] {
-		args = append(args, arg)
+	} else {
+		// Stdin-based command execution (e.g. vibe)
+		args = fields[1:]
+		stdin = strings.NewReader(fullPrompt)
 	}
 
 	// #nosec G204 -- The command array is intentionally constructed from user configuration in a controlled runner environment
 	cmd := exec.Command(cmdName, args...)
-	cmd.Stdin = strings.NewReader(fullPrompt)
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), fmt.Errorf("command execution failed: %w", err)
