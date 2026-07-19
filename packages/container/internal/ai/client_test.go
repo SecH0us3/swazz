@@ -58,3 +58,24 @@ func TestCLIAnalyzer_AnalyzeStdin(t *testing.T) {
 		t.Errorf("expected output to contain findingMessage, got:\n%s", out)
 	}
 }
+
+func TestCLIAnalyzer_AnalyzeStdinWithHyphen(t *testing.T) {
+	// "cat -" reads from stdin on Unix-like systems (Mac OS) when "-" is passed
+	analyzer := NewCLIAnalyzer("cat -")
+	
+	findingMessage := "CRLF Injection found"
+	contextCode := "resp.Header.Add(\"Location\", input)"
+	prompt := "Check this out:"
+
+	out, err := analyzer.Analyze(findingMessage, contextCode, prompt)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if !strings.Contains(out, findingMessage) {
+		t.Errorf("expected output to contain findingMessage, got:\n%s", out)
+	}
+	if !strings.Contains(out, contextCode) {
+		t.Errorf("expected output to contain contextCode, got:\n%s", out)
+	}
+}
