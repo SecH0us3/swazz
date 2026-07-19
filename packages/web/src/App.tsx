@@ -223,6 +223,14 @@ export default function App() {
         },
     });
 
+    const handleToggleConfig = () => {
+        if (window.innerWidth <= 768) {
+            useAppStore.setState({ isConfigOpen: !useAppStore.getState().isConfigOpen });
+        } else {
+            useAppStore.setState({ isConfigHiddenDesktop: !useAppStore.getState().isConfigHiddenDesktop });
+        }
+    };
+
     const { loadEndpoints, handleStart, handleConnectToExisting } = useFuzzSession({
         config: config as any,
         updateConfig,
@@ -727,10 +735,6 @@ export default function App() {
                     if (window.innerWidth <= 768) useAppStore.setState({ isSidebarOpen: !isSidebarOpen });
                     else useAppStore.setState({ isSidebarHiddenDesktop: !isSidebarHiddenDesktop });
                 }}
-                onToggleConfig={() => {
-                    if (window.innerWidth <= 768) useAppStore.setState({ isConfigOpen: !isConfigOpen });
-                    else useAppStore.setState({ isConfigHiddenDesktop: !isConfigHiddenDesktop });
-                }}
                 theme={theme}
                 onToggleTheme={toggleTheme}
                 authEnabled={authEnabled}
@@ -805,6 +809,7 @@ export default function App() {
                     onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
                     onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
                     onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}
+                    onToggleConfig={handleToggleConfig}
                 />
 
                 <ConfigSidebar
@@ -814,6 +819,7 @@ export default function App() {
                     onUpdateCookies={updateCookies}
                     onUpdateProfiles={updateProfiles}
                     onUpdateConfig={updateConfig}
+                    onClose={handleToggleConfig}
                 />
             </main>
 

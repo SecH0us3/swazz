@@ -13,6 +13,7 @@ interface Props {
     onUpdateProfiles: (p: FuzzingProfile[]) => void;
     onUpdateConfig: (partial: Partial<SwazzConfig>) => void;
     className?: string;
+    onClose?: () => void;
 }
 
 const ALL_PROFILES: FuzzingProfile[] = ['RANDOM', 'BOUNDARY', 'MALICIOUS'];
@@ -30,6 +31,7 @@ export function ConfigSidebar({
     onUpdateProfiles,
     onUpdateConfig,
     className,
+    onClose,
 }: Props) {
     const activeProfiles = config.settings.profiles || [];
     const [showPayloadSettings, setShowPayloadSettings] = useState(false);
@@ -87,6 +89,17 @@ export function ConfigSidebar({
 
     return (
         <aside className={`config-sidebar ${className || ''}`} style={{ gridArea: 'unset', borderLeft: '1px solid var(--border-subtle)', borderRight: 'none', ...style }}>
+            <div className="config-sidebar-header">
+                <span className="config-sidebar-title">Run Settings</span>
+                {onClose && (
+                    <button className="config-sidebar-close" onClick={onClose} title="Hide Settings" aria-label="Hide Settings">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                )}
+            </div>
+
             {/* Profiles */}
             <Section title="Profiles">
                 <div className="profile-toggles">

@@ -6,7 +6,6 @@ import { useToast } from '../hooks/useToast.js';
 
 interface Props {
     onToggleSidebar?: () => void;
-    onToggleConfig?: () => void;
     theme: 'dark' | 'light';
     onToggleTheme: () => void;
     authEnabled?: boolean;
@@ -17,7 +16,6 @@ interface Props {
 
 export function Header({
     onToggleSidebar,
-    onToggleConfig,
     theme,
     onToggleTheme,
     authEnabled = false,
@@ -25,18 +23,15 @@ export function Header({
     isGuest = false,
     onLogout,
 }: Props) {
-    const { isRunning, isPaused, isLoadingSpecs, isQueued, isConfigOpen, isConfigHiddenDesktop, activeTab } = useAppStore(useShallow(state => ({
+    const { isRunning, isPaused, isLoadingSpecs, isQueued, activeTab } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
         isQueued: state.isQueued,
-        isConfigOpen: state.isConfigOpen,
-        isConfigHiddenDesktop: state.isConfigHiddenDesktop,
         activeTab: state.activeTab,
     })));
 
     const isBusy = isRunning || isLoadingSpecs || isQueued;
-    const isConfigVisible = typeof window !== 'undefined' ? (window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop) : false;
 
     const { showToast } = useToast();
 
@@ -217,20 +212,7 @@ export function Header({
                     </>
                 )}
 
-                {/* Right Configuration Sidebar Toggle (Layout Sidebar Icon) */}
-                {onToggleConfig && (
-                    <button 
-                        className={`header-config-toggle ${isConfigVisible ? 'active' : ''}`}
-                        onClick={onToggleConfig} 
-                        title="Toggle Run Configuration" 
-                        aria-label="Toggle Run Configuration"
-                    >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="15" y1="3" x2="15" y2="21"/>
-                        </svg>
-                    </button>
-                )}
+
             </div>
 
             {isBusy && !isLoadingSpecs && (
