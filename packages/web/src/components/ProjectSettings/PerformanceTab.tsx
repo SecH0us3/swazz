@@ -167,6 +167,55 @@ export function PerformanceTab() {
                     )}
                 </div>
 
+                {/* WAF Evasion & Proxies */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
+                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>WAF Evasion & Proxies</h3>
+                    
+                    <div>
+                        <label htmlFor="proxyList" style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Proxy List (one per line, HTTP/SOCKS5)</label>
+                        <textarea
+                            id="proxyList"
+                            className="input"
+                            value={(config.settings.proxyList || []).join('\n')}
+                            onChange={(e) => {
+                                const lines = e.target.value.split('\n').map(l => l.trim()).filter(Boolean);
+                                updateSettings({ proxyList: lines });
+                            }}
+                            placeholder="http://1.2.3.4:8080"
+                            style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }}
+                        />
+                    </div>
+
+                    <div className="fuzz-setting-checkbox-group" style={{ borderTop: 'none', paddingTop: 0 }}>
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                aria-label="Randomize User-Agent"
+                                checked={config.settings.randomizeUserAgent ?? false}
+                                onChange={(e) => updateSettings({ randomizeUserAgent: e.target.checked })}
+                            />
+                            <strong style={{ fontSize: '13px' }}>Randomize User-Agent per request</strong>
+                        </label>
+                    </div>
+
+                    <div className="fuzz-setting-checkbox-group" style={{ borderTop: 'none', paddingTop: 0 }}>
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                aria-label="Enable Adaptive Rate Limiting"
+                                checked={config.settings.enableAdaptiveRateLimit ?? false}
+                                onChange={(e) => updateSettings({ enableAdaptiveRateLimit: e.target.checked })}
+                            />
+                            <strong style={{ fontSize: '13px' }}>Enable Adaptive Rate Limiting</strong>
+                        </label>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '24px', lineHeight: '1.4' }}>
+                            Automatically pauses requests when a 429 Too Many Requests response is detected, backing off based on the Retry-After header.
+                        </span>
+                    </div>
+                </div>
+
                 {/* HAR Domain Filter */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
                     <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>HAR Domain Filter</label>
