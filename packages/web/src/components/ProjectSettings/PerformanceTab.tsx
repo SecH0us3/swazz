@@ -172,14 +172,14 @@ export function PerformanceTab() {
                     <h3 className="fuzz-setting-section-title">WAF Evasion & Proxies</h3>
                     
                     <div>
-                        <label htmlFor="proxyList" className="fuzz-setting-input-label">Proxy List (one per line, HTTP/SOCKS5)</label>
+                        <label htmlFor="proxy_list" className="fuzz-setting-input-label">Proxy List (one per line, HTTP/SOCKS5)</label>
                         <textarea
-                            id="proxyList"
+                            id="proxy_list"
                             className="input fuzz-setting-textarea-monospace"
-                            value={(config.settings.proxyList || []).join('\n')}
+                            value={(config.settings.proxy_list || []).join('\n')}
                             onChange={(e) => {
                                 const lines = e.target.value.split('\n').map(l => l.trim()).filter(Boolean);
-                                updateSettings({ proxyList: lines });
+                                updateSettings({ proxy_list: lines });
                             }}
                             placeholder="http://1.2.3.4:8080"
                         />
@@ -191,8 +191,8 @@ export function PerformanceTab() {
                                 type="checkbox"
                                 className="premium-checkbox"
                                 aria-label="Randomize User-Agent"
-                                checked={config.settings.randomizeUserAgent ?? false}
-                                onChange={(e) => updateSettings({ randomizeUserAgent: e.target.checked })}
+                                checked={config.settings.randomize_user_agent ?? false}
+                                onChange={(e) => updateSettings({ randomize_user_agent: e.target.checked })}
                             />
                             <strong className="fuzz-setting-label-bold">Randomize User-Agent per request</strong>
                         </label>
@@ -207,8 +207,8 @@ export function PerformanceTab() {
                                 type="checkbox"
                                 className="premium-checkbox"
                                 aria-label="Enable Adaptive Rate Limiting"
-                                checked={config.settings.enableAdaptiveRateLimit ?? false}
-                                onChange={(e) => updateSettings({ enableAdaptiveRateLimit: e.target.checked })}
+                                checked={config.settings.enable_adaptive_rate_limit ?? false}
+                                onChange={(e) => updateSettings({ enable_adaptive_rate_limit: e.target.checked })}
                             />
                             <strong className="fuzz-setting-label-bold">Enable Adaptive Rate Limiting</strong>
                         </label>

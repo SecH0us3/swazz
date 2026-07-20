@@ -319,10 +319,21 @@ func (r *Runner) executeRequest(
 
 		var clientToUse = r.client
 		proxyStr := getNextProxy(proxyList)
+		var customTransport *http.Transport
 		if proxyStr != "" {
 			if proxyURL, err := url.Parse(proxyStr); err == nil {
-				if t, ok := r.client.Transport.(*http.Transport); ok {
-					customTransport := t.Clone()
+				var baseTransport *http.Transport
+				if r.client.Transport != nil {
+					if t, ok := r.client.Transport.(*http.Transport); ok {
+						baseTransport = t
+					}
+				} else {
+					if t, ok := http.DefaultTransport.(*http.Transport); ok {
+						baseTransport = t
+					}
+				}
+				if baseTransport != nil {
+					customTransport = baseTransport.Clone()
 					customTransport.Proxy = http.ProxyURL(proxyURL)
 					clientToUse = &http.Client{
 						Transport:     customTransport,
@@ -331,6 +342,9 @@ func (r *Runner) executeRequest(
 					}
 				}
 			}
+		}
+		if customTransport != nil {
+			defer customTransport.CloseIdleConnections()
 		}
 
 		start := time.Now()
@@ -370,6 +384,10 @@ func (r *Runner) executeRequest(
 						backoff = time.Duration(seconds) * time.Second
 					} else if httpDate, err := http.ParseTime(retryAfter); err == nil {
 						backoff = time.Until(httpDate)
+					}
+					const maxBackoff = 30 * time.Second
+					if backoff > maxBackoff {
+						backoff = maxBackoff
 					}
 				}
 			}

@@ -85,9 +85,9 @@ export interface SwazzSettings {
     disable_shared_runners?: boolean;
     max_scan_duration_min?: number;
     active_parameter_fuzzing?: boolean;
-    proxyList?: string[];
-    randomizeUserAgent?: boolean;
-    enableAdaptiveRateLimit?: boolean;
+    proxy_list?: string[];
+    randomize_user_agent?: boolean;
+    enable_adaptive_rate_limit?: boolean;
 }
 
 export interface AuthStep {
@@ -137,9 +137,9 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     disable_shared_runners: false,
     max_scan_duration_min: 0,
     active_parameter_fuzzing: true,
-    proxyList: [],
-    randomizeUserAgent: false,
-    enableAdaptiveRateLimit: false,
+    proxy_list: [],
+    randomize_user_agent: false,
+    enable_adaptive_rate_limit: false,
 };
 
 // ─── Full Config ────────────────────────────────────────

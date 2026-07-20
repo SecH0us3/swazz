@@ -182,9 +182,9 @@ type Settings struct {
 	MaxScanDurationMin            int                         `json:"max_scan_duration_min,omitempty"`
 	ActiveParameterFuzzing        bool                        `json:"active_parameter_fuzzing"`
 	Checkpoint                    *Checkpoint                 `json:"checkpoint,omitempty"`
-	ProxyList                     []string                    `json:"proxyList"`
-	RandomizeUserAgent            bool                        `json:"randomizeUserAgent"`
-	EnableAdaptiveRateLimit       bool                        `json:"enableAdaptiveRateLimit"`
+	ProxyList                     []string                    `json:"proxy_list,omitempty"`
+	RandomizeUserAgent            bool                        `json:"randomize_user_agent,omitempty"`
+	EnableAdaptiveRateLimit       bool                        `json:"enable_adaptive_rate_limit,omitempty"`
 }
 
 type Checkpoint struct {
