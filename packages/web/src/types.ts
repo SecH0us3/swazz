@@ -92,10 +92,10 @@ export interface SwazzSettings {
 
 export interface AuthStep {
     type?: string;
-    method: string;
-    url: string;
-    headers: Record<string, string>;
-    body: any;
+    method?: string;
+    url?: string;
+    headers?: Record<string, string>;
+    body?: any;
     extract_cookies?: string[];
     extract_json?: Record<string, string>;
     extract_variables?: Record<string, string>;

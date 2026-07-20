@@ -381,24 +381,34 @@ func TestAuthSequenceTOTP(t *testing.T) {
 
 func TestAuthSequenceTOTPErrors(t *testing.T) {
 	tests := []struct {
-		name       string
-		totpSecret string
-		wantErrMsg string
+		name         string
+		totpSecret   string
+		totpVariable string
+		wantErrMsg   string
 	}{
 		{
-			name:       "InvalidURL",
-			totpSecret: "otpauth://host:invalidport",
-			wantErrMsg: "failed to parse otpauth URL",
+			name:         "InvalidURL",
+			totpSecret:   "otpauth://host:invalidport",
+			totpVariable: "otpCode",
+			wantErrMsg:   "failed to parse otpauth URL",
 		},
 		{
-			name:       "MissingSecret",
-			totpSecret: "otpauth://totp/Example?issuer=Example",
-			wantErrMsg: "otpauth URL missing secret parameter",
+			name:         "MissingSecret",
+			totpSecret:   "otpauth://totp/Example?issuer=Example",
+			totpVariable: "otpCode",
+			wantErrMsg:   "otpauth URL missing secret parameter",
 		},
 		{
-			name:       "InvalidBase32",
-			totpSecret: "INVALID_BASE32_#1", // Invalid characters like # and 1 for base32
-			wantErrMsg: "failed to generate TOTP code",
+			name:         "InvalidBase32",
+			totpSecret:   "INVALID_BASE32_#1", // Invalid characters like # and 1 for base32
+			totpVariable: "otpCode",
+			wantErrMsg:   "failed to generate TOTP code",
+		},
+		{
+			name:         "MissingVariable",
+			totpSecret:   "JBSWY3DPEHPK3PXP",
+			totpVariable: "",
+			wantErrMsg:   "totp_variable is required",
 		},
 	}
 
@@ -410,7 +420,7 @@ func TestAuthSequenceTOTPErrors(t *testing.T) {
 					{
 						Type:         "totp",
 						TOTPSecret:   tc.totpSecret,
-						TOTPVariable: "otpCode",
+						TOTPVariable: tc.totpVariable,
 					},
 				},
 			}
