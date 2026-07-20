@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
@@ -58,6 +61,28 @@ func maskSensitiveArgs(args map[string]any) map[string]any {
 	return masked
 }
 
+var (
+	proxyCounter uint32
+	userAgents   = []string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5.2 Safari/605.1.15",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1",
+	}
+)
+
+func getRandomUserAgent() string {
+	return userAgents[rand.Intn(len(userAgents))]
+}
+
+func getNextProxy(proxies []string) string {
+	if len(proxies) == 0 {
+		return ""
+	}
+	idx := atomic.AddUint32(&proxyCounter, 1)
+	return proxies[idx%uint32(len(proxies))]
+}
+
 func (r *Runner) executeRequest(
 	ctx context.Context,
 	baseURL, resolvedPath, originalPath, method string,
@@ -92,8 +117,17 @@ func (r *Runner) executeRequest(
 			break
 		}
 	}
+	
+	randomizeUA := r.config.Settings.RandomizeUserAgent
+	proxyList := r.config.Settings.ProxyList
+	enableAdaptiveRateLimit := r.config.Settings.EnableAdaptiveRateLimit
+
 	if !hasUA {
-		mergedHeaders["User-Agent"] = "Swazz/1.0 (+https://github.com/SecH0us3/swazz)"
+		if randomizeUA {
+			mergedHeaders["User-Agent"] = getRandomUserAgent()
+		} else {
+			mergedHeaders["User-Agent"] = "Swazz/1.0 (+https://github.com/SecH0us3/swazz)"
+		}
 	}
 
 	effectiveCT := contentType
@@ -112,7 +146,13 @@ func (r *Runner) executeRequest(
 		mergedHeaders["Content-Type"] = effectiveCT
 	}
 
-	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
+	base, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	var rawURL string
+	if err == nil {
+		rawURL = base.JoinPath(resolvedPath).String()
+	} else {
+		rawURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(resolvedPath, "/")
+	}
 	rawURL = r.subStateVars(r.subVarsLocked(rawURL))
 
 	if len(queryParams) > 0 {
@@ -277,9 +317,39 @@ func (r *Runner) executeRequest(
 			}
 		}
 
+		var clientToUse = r.client
+		proxyStr := getNextProxy(proxyList)
+		var customTransport *http.Transport
+		if proxyStr != "" {
+			if proxyURL, err := url.Parse(proxyStr); err == nil {
+				var baseTransport *http.Transport
+				if r.client.Transport != nil {
+					if t, ok := r.client.Transport.(*http.Transport); ok {
+						baseTransport = t
+					}
+				} else {
+					if t, ok := http.DefaultTransport.(*http.Transport); ok {
+						baseTransport = t
+					}
+				}
+				if baseTransport != nil {
+					customTransport = baseTransport.Clone()
+					customTransport.Proxy = http.ProxyURL(proxyURL)
+					clientToUse = &http.Client{
+						Transport:     customTransport,
+						CheckRedirect: r.client.CheckRedirect,
+						Timeout:       r.client.Timeout,
+					}
+				}
+			}
+		}
+		if customTransport != nil {
+			defer customTransport.CloseIdleConnections()
+		}
+
 		start := time.Now()
 		// codeql[go/request-forgery] false positive: fuzzer needs to request arbitrary user URLs
-		resp, err := r.client.Do(req)
+		resp, err := clientToUse.Do(req)
 		duration := time.Since(start).Milliseconds()
 
 		if err == nil && (logger.IsDebugEnabled() || r.config.Settings.Debug) {
@@ -305,7 +375,27 @@ func (r *Runner) executeRequest(
 		if resp.StatusCode == 429 && attempt < maxRetriesOn429 {
 			resp.Body.Close() // #nosec G104 -- error from Body.Close irrelevant after 429 backoff
 			reqCancel()
-			backoff := time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
+
+			var backoff time.Duration
+			if enableAdaptiveRateLimit {
+				retryAfter := resp.Header.Get("Retry-After")
+				if retryAfter != "" {
+					if seconds, err := strconv.Atoi(retryAfter); err == nil {
+						backoff = time.Duration(seconds) * time.Second
+					} else if httpDate, err := http.ParseTime(retryAfter); err == nil {
+						backoff = time.Until(httpDate)
+					}
+					const maxBackoff = 30 * time.Second
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+				}
+			}
+
+			if backoff <= 0 {
+				backoff = time.Duration(defaultBackoffMs*(attempt+1)) * time.Millisecond
+			}
+
 			jitter := time.Duration(payloads.IntRange(0, 500)) * time.Millisecond
 			timer := time.NewTimer(backoff + jitter)
 			select {
@@ -366,7 +456,12 @@ func (r *Runner) executeRequest(
 					mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 				}
 				// Re-calculate rawURL with new variables if any
-				rawURL = strings.TrimRight(baseURL, "/") + resolvedPath
+				base, parseErr := url.Parse(strings.TrimRight(baseURL, "/"))
+				if parseErr == nil {
+					rawURL = base.JoinPath(resolvedPath).String()
+				} else {
+					rawURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(resolvedPath, "/")
+				}
 				rawURL = r.subStateVars(r.subVarsLocked(rawURL))
 				r.configMu.RUnlock()
 

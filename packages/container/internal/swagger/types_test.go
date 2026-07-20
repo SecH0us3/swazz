@@ -3,6 +3,8 @@ package swagger
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIgnoreRule_UnmarshalJSON(t *testing.T) {
@@ -121,4 +123,22 @@ func TestIgnoreRule_UnmarshalJSON(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSettingsSerialization(t *testing.T) {
+	s := DefaultSettings()
+	s.ProxyList = []string{"http://127.0.0.1:8080"}
+	s.RandomizeUserAgent = true
+	s.EnableAdaptiveRateLimit = true
+
+	b, err := json.Marshal(s)
+	assert.NoError(t, err)
+
+	var s2 Settings
+	err = json.Unmarshal(b, &s2)
+	assert.NoError(t, err)
+
+	assert.Equal(t, s.ProxyList, s2.ProxyList)
+	assert.True(t, s2.RandomizeUserAgent)
+	assert.True(t, s2.EnableAdaptiveRateLimit)
 }
