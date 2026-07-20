@@ -873,3 +873,41 @@
     background-color: rgba(255, 255, 255, 0.05);
     border-color: var(--border-hover);
 }
+
+/* Deployment code wrapper */
+.deployment-code-wrapper {
+    position: relative;
+}
+
+/* Feature modal fullscreen classes */
+.feature-modal-screenshot.clickable {
+    cursor: pointer;
+}
+
+.feature-modal-backdrop.fullscreen-backdrop {
+    z-index: 10001;
+}
+
+.fullscreen-image-container {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.fullscreen-close-btn {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: transparent;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+}
+
+.fullscreen-image {
+    width: 100%;
+    height: auto;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 8px;
+}

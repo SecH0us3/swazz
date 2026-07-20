@@ -1,6 +1,67 @@
 import { useState, useEffect } from 'react';
 import './LandingShowcase.css';
 
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
+
+function ScanCounter() {
+    const [count, setCount] = useState<number | null>(null);
+    const [displayCount, setDisplayCount] = useState<number>(0);
+
+    useEffect(() => {
+        const fetchUrl = `${PROXY_URL}/api/telemetry/scans/count`;
+        fetch(fetchUrl)
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP error! Status: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data && typeof data.total === 'number') {
+                    setCount(data.total);
+                } else {
+                    setCount(1000000);
+                }
+            })
+            .catch(err => {
+                console.error('Failed to fetch scan count:', err);
+                setCount(1000000); // fallback
+            });
+    }, []);
+
+    useEffect(() => {
+        if (count === null) return;
+        let startTimestamp: number | null = null;
+        let animationFrameId: number;
+        const duration = 2000;
+        
+        const step = (timestamp: number) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            
+            // easeOutQuart
+            const ease = 1 - Math.pow(1 - progress, 4);
+            
+            setDisplayCount(Math.floor(ease * count));
+            
+            if (progress < 1) {
+                animationFrameId = window.requestAnimationFrame(step);
+            } else {
+                setDisplayCount(count);
+            }
+        };
+        
+        animationFrameId = window.requestAnimationFrame(step);
+        return () => window.cancelAnimationFrame(animationFrameId);
+    }, [count]);
+
+    if (count === null) {
+        return <>0+ Scans</>;
+    }
+
+    return <>{displayCount.toLocaleString()}+ Scans</>;
+}
+
 export const FEATURE_DETAILS = {
     fuzzing: {
         title: "Discover Zero-Days",
@@ -108,7 +169,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
                         </svg>
-                        1M+ Scans
+                        <ScanCounter />
                     </div>
                     <div className="trust-logo-item">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -273,7 +334,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             </div>
                         )}
                         {activeDeploymentTab === 'docker' && (
-                            <div style={{ position: 'relative' }}>
+                            <div className="deployment-code-wrapper">
                                 <div className="code-header">Option A: Run Standalone Scanner (CLI)
                                     <button 
                                         className="deploy-copy-btn" 
@@ -302,7 +363,7 @@ cd swazz && docker compose up --build`}</code>
                             </div>
                         )}
                         {activeDeploymentTab === 'local' && (
-                            <div style={{ position: 'relative' }}>
+                            <div className="deployment-code-wrapper">
                                 <div className="code-header">Run the Full Stack Locally (Without Docker)
                                     <button 
                                         className="deploy-copy-btn" 
@@ -322,7 +383,7 @@ cd swazz
                             </div>
                         )}
                         {activeDeploymentTab === 'worker' && (
-                            <div style={{ position: 'relative' }}>
+                            <div className="deployment-code-wrapper">
                                 <div className="code-header">Bind to your own Cloudflare account
                                     <button 
                                         className="deploy-copy-btn" 
@@ -451,9 +512,8 @@ cd swazz
                                 <img 
                                     src={selectedFeature.image} 
                                     alt={selectedFeature.title} 
-                                    className="feature-modal-screenshot" 
+                                    className="feature-modal-screenshot clickable" 
                                     onClick={() => setFullscreenImageUrl(selectedFeature.image || null)}
-                                    style={{ cursor: 'pointer' }}
                                 />
                             )}
                         </div>
@@ -463,15 +523,15 @@ cd swazz
 
             {/* Fullscreen Image Zoom Overlay */}
             {fullscreenImageUrl && (
-                <div className="feature-modal-backdrop" onClick={() => setFullscreenImageUrl(null)} style={{ zIndex: 10001 }}>
-                    <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-                        <button type="button" onClick={() => setFullscreenImageUrl(null)} aria-label="Close fullscreen view" style={{ position: 'absolute', top: '-40px', right: '0', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                <div className="feature-modal-backdrop fullscreen-backdrop" onClick={() => setFullscreenImageUrl(null)}>
+                    <div onClick={(e) => e.stopPropagation()} className="fullscreen-image-container">
+                        <button type="button" onClick={() => setFullscreenImageUrl(null)} aria-label="Close fullscreen view" className="fullscreen-close-btn">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
                             </svg>
                         </button>
-                        <img src={fullscreenImageUrl} alt="Fullscreen View" style={{ width: '100%', height: 'auto', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
+                        <img src={fullscreenImageUrl} alt="Fullscreen View" className="fullscreen-image" />
                     </div>
                 </div>
             )}
