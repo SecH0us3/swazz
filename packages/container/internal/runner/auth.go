@@ -55,6 +55,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				if secretStr == "" {
 					return nil, nil, fmt.Errorf("auth step %d: otpauth URL missing secret parameter", i+1)
 				}
+			} else if secretStr == "" {
+				return nil, nil, fmt.Errorf("auth step %d: totp secret is required", i+1)
 			}
 			code, err := totp.GenerateCode(secretStr, time.Now())
 			if err != nil {
@@ -71,6 +73,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 			r.updateReplacer()
 			r.logDebug("[Auth] totp: generated code for %s", step.TOTPVariable)
 			continue
+		} else if step.Type != "" && step.Type != "request" {
+			return nil, nil, fmt.Errorf("auth step %d: unsupported type %q", i+1, step.Type)
 		}
 
 		if len(step.SetVariables) > 0 {

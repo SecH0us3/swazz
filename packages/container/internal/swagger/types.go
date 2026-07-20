@@ -139,10 +139,10 @@ type AuthStep struct {
 	Type             string            `json:"type,omitempty"`
 	TOTPSecret       string            `json:"totp_secret,omitempty"`
 	TOTPVariable     string            `json:"totp_variable,omitempty"`
-	Method           string            `json:"method"`
-	URL              string            `json:"url"` // If relative, prefixed with BaseURL
-	Headers          map[string]string `json:"headers"`
-	Body             any               `json:"body"`
+	Method           string            `json:"method,omitempty"`
+	URL              string            `json:"url,omitempty"` // If relative, prefixed with BaseURL
+	Headers          map[string]string `json:"headers,omitempty"`
+	Body             any               `json:"body,omitempty"`
 	ExtractCookies   []string          `json:"extract_cookies,omitempty"`   // If empty, all cookies are saved
 	ExtractJSON      map[string]string `json:"extract_json,omitempty"`      // Map JSON field name (or simple path) to Global Header name
 	ExtractVariables map[string]string `json:"extract_variables,omitempty"` // Map JSON field name to template variable name

@@ -14,7 +14,18 @@ export function AuthSequenceTab() {
 
     const handleUpdateStep = (index: number, partial: Partial<AuthStep>) => {
         const next = [...authSequence];
-        next[index] = { ...next[index], ...partial };
+        const updated = { ...next[index], ...partial };
+        if (partial.type === 'totp') {
+            delete updated.method;
+            delete updated.url;
+            delete updated.headers;
+            delete updated.body;
+        } else if (partial.type === 'request') {
+            delete updated.totp_secret;
+            delete updated.totp_variable;
+            updated.method = updated.method || 'POST';
+        }
+        next[index] = updated;
         updateConfig({ auth_sequence: next });
     };
 
