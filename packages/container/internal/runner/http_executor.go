@@ -118,11 +118,9 @@ func (r *Runner) executeRequest(
 		}
 	}
 	
-	r.configMu.RLock()
 	randomizeUA := r.config.Settings.RandomizeUserAgent
 	proxyList := r.config.Settings.ProxyList
 	enableAdaptiveRateLimit := r.config.Settings.EnableAdaptiveRateLimit
-	r.configMu.RUnlock()
 
 	if !hasUA {
 		if randomizeUA {
@@ -148,7 +146,13 @@ func (r *Runner) executeRequest(
 		mergedHeaders["Content-Type"] = effectiveCT
 	}
 
-	rawURL := strings.TrimRight(baseURL, "/") + resolvedPath
+	base, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	var rawURL string
+	if err == nil {
+		rawURL = base.JoinPath(resolvedPath).String()
+	} else {
+		rawURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(resolvedPath, "/")
+	}
 	rawURL = r.subStateVars(r.subVarsLocked(rawURL))
 
 	if len(queryParams) > 0 {
@@ -434,7 +438,12 @@ func (r *Runner) executeRequest(
 					mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 				}
 				// Re-calculate rawURL with new variables if any
-				rawURL = strings.TrimRight(baseURL, "/") + resolvedPath
+				base, parseErr := url.Parse(strings.TrimRight(baseURL, "/"))
+				if parseErr == nil {
+					rawURL = base.JoinPath(resolvedPath).String()
+				} else {
+					rawURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(resolvedPath, "/")
+				}
 				rawURL = r.subStateVars(r.subVarsLocked(rawURL))
 				r.configMu.RUnlock()
 
