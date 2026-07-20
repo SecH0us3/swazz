@@ -197,6 +197,9 @@ export function PerformanceTab() {
                             />
                             <strong style={{ fontSize: '13px' }}>Randomize User-Agent per request</strong>
                         </label>
+                        <span className="fuzz-setting-checkbox-hint">
+                            Default: Swazz/1.0 (+https://github.com/SecH0us3/swazz)
+                        </span>
                     </div>
 
                     <div className="fuzz-setting-checkbox-group" style={{ borderTop: 'none', paddingTop: 0 }}>
