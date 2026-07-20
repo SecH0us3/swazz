@@ -17,6 +17,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net/url"
+
+	"github.com/pquerna/otp/totp"
 	"swazz-engine/internal/swagger"
 )
 
@@ -37,6 +40,42 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 	defer reqCancel()
 
 	for i, step := range sequence {
+
+		if step.Type == "totp" {
+			if step.TOTPVariable == "" {
+				return nil, nil, fmt.Errorf("auth step %d: totp_variable is required", i+1)
+			}
+			secretStr := r.subVars(step.TOTPSecret)
+			if strings.HasPrefix(secretStr, "otpauth://") {
+				u, err := url.Parse(secretStr)
+				if err != nil || u.Scheme != "otpauth" {
+					return nil, nil, fmt.Errorf("auth step %d: failed to parse otpauth URL: %w", i+1, err)
+				}
+				secretStr = u.Query().Get("secret")
+				if secretStr == "" {
+					return nil, nil, fmt.Errorf("auth step %d: otpauth URL missing secret parameter", i+1)
+				}
+			} else if secretStr == "" {
+				return nil, nil, fmt.Errorf("auth step %d: totp secret is required", i+1)
+			}
+			code, err := totp.GenerateCode(secretStr, time.Now())
+			if err != nil {
+				return nil, nil, fmt.Errorf("auth step %d: failed to generate TOTP code: %w", i+1, err)
+			}
+
+			r.configMu.Lock()
+			if cfg.Variables == nil {
+				cfg.Variables = make(map[string]any)
+			}
+			cfg.Variables[step.TOTPVariable] = code
+			r.configMu.Unlock()
+
+			r.updateReplacer()
+			r.logDebug("[Auth] totp: generated code for %s", step.TOTPVariable)
+			continue
+		} else if step.Type != "" && step.Type != "request" {
+			return nil, nil, fmt.Errorf("auth step %d: unsupported type %q", i+1, step.Type)
+		}
 
 		if len(step.SetVariables) > 0 {
 			cache := make(map[string]string) // кэш вызовов функций на этот шаг

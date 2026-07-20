@@ -91,13 +91,16 @@ export interface SwazzSettings {
 }
 
 export interface AuthStep {
-    method: string;
-    url: string;
-    headers: Record<string, string>;
-    body: any;
+    type?: string;
+    method?: string;
+    url?: string;
+    headers?: Record<string, string>;
+    body?: any;
     extract_cookies?: string[];
     extract_json?: Record<string, string>;
     extract_variables?: Record<string, string>;
+    totp_secret?: string;
+    totp_variable?: string;
 }
 
 export interface AuthIdentity {

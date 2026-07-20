@@ -321,6 +321,118 @@ func TestRunAuthSequenceSetVariables(t *testing.T) {
 	assert.True(t, strings.HasPrefix(hex.EncodeToString(h[:]), "00"))
 }
 
+func TestAuthSequenceTOTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/verify" {
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			code := body["code"]
+			if len(code) != 6 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		Variables: map[string]any{
+			"rawSecret": "JBSWY3DPEHPK3PXP",
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Type:         "totp",
+				TOTPSecret:   "{{rawSecret}}", // Ensure subVars works for secrets
+				TOTPVariable: "otpCode",
+			},
+			{
+				Type:         "totp",
+				TOTPSecret:   "otpauth://totp/Example:alice@google.com?secret=JBSWY3DPEHPK3PXP&issuer=Example",
+				TOTPVariable: "otpCodeUrl",
+			},
+			{
+				Method: "POST",
+				URL:    "/verify",
+				Body: map[string]any{
+					"code": "{{otpCode}}",
+				},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+	err := r.RunAuthSequence(context.Background())
+	require.NoError(t, err)
+
+	assert.Len(t, cfg.Variables["otpCode"], 6)
+	assert.Len(t, cfg.Variables["otpCodeUrl"], 6)
+}
+
+func TestAuthSequenceTOTPErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		totpSecret   string
+		totpVariable string
+		wantErrMsg   string
+	}{
+		{
+			name:         "InvalidURL",
+			totpSecret:   "otpauth://host:invalidport",
+			totpVariable: "otpCode",
+			wantErrMsg:   "failed to parse otpauth URL",
+		},
+		{
+			name:         "MissingSecret",
+			totpSecret:   "otpauth://totp/Example?issuer=Example",
+			totpVariable: "otpCode",
+			wantErrMsg:   "otpauth URL missing secret parameter",
+		},
+		{
+			name:         "InvalidBase32",
+			totpSecret:   "INVALID_BASE32_#1", // Invalid characters like # and 1 for base32
+			totpVariable: "otpCode",
+			wantErrMsg:   "failed to generate TOTP code",
+		},
+		{
+			name:         "MissingVariable",
+			totpSecret:   "JBSWY3DPEHPK3PXP",
+			totpVariable: "",
+			wantErrMsg:   "totp_variable is required",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &swagger.Config{
+				BaseURL: "http://localhost",
+				AuthSequence: []swagger.AuthStep{
+					{
+						Type:         "totp",
+						TOTPSecret:   tc.totpSecret,
+						TOTPVariable: tc.totpVariable,
+					},
+				},
+			}
+			r := New(cfg, nil)
+			defer r.Close()
+			err := r.RunAuthSequence(context.Background())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErrMsg)
+		})
+	}
+}
+
 func TestSetVariablesErrors(t *testing.T) {
 	tests := []struct {
 		name         string
