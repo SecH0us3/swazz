@@ -16,7 +16,7 @@ COPY tsconfig.base.json ./
 COPY packages/web/tsconfig.json packages/web/
 
 # Copy remaining source files
-COPY ai.txt llms.txt llms-full.txt ./
+COPY docs/ai.txt docs/llms.txt docs/llms-full.txt ./docs/
 COPY packages/web ./packages/web
 COPY packages/edge ./packages/edge
 

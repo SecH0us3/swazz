@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "sync-docs": "node -e \"const fs = require('fs'); fs.copyFileSync('../../ai.txt', 'public/ai.txt'); fs.copyFileSync('../../llms.txt', 'public/llms.txt'); fs.copyFileSync('../../llms-full.txt', 'public/llms-full.txt'); try { if (fs.existsSync('public/swazz-extension.zip')) fs.unlinkSync('public/swazz-extension.zip'); require('child_process').execSync('zip -r web/public/swazz-extension.zip extension', { cwd: '..' }); } catch(e) { console.error('Failed to zip extension:', e); }\"",
+        "sync-docs": "node -e \"const fs = require('fs'); fs.copyFileSync('../../docs/ai.txt', 'public/ai.txt'); fs.copyFileSync('../../docs/llms.txt', 'public/llms.txt'); fs.copyFileSync('../../docs/llms-full.txt', 'public/llms-full.txt'); try { if (fs.existsSync('public/swazz-extension.zip')) fs.unlinkSync('public/swazz-extension.zip'); require('child_process').execSync('zip -r web/public/swazz-extension.zip extension', { cwd: '..' }); } catch(e) { console.error('Failed to zip extension:', e); }\"",
         "predev": "npm run sync-docs",
         "prebuild": "npm run sync-docs",
         "dev": "vite",
