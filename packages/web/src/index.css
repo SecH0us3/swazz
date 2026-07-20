@@ -9148,11 +9148,48 @@ kbd {
   padding-top: 16px;
 }
 
+.fuzz-setting-checkbox-group.no-border {
+  border-top: none;
+  padding-top: 0;
+}
+
 .fuzz-setting-checkbox-hint {
   font-size: 11px;
   color: var(--text-muted);
   margin-left: 24px;
   line-height: 1.4;
+}
+
+.fuzz-setting-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 16px;
+}
+
+.fuzz-setting-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fuzz-setting-input-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.fuzz-setting-textarea-monospace {
+  width: 100%;
+  min-height: 80px;
+  font-family: monospace;
+}
+
+.fuzz-setting-label-bold {
+  font-size: 13px;
 }
 
 .fuzz-setting-intensity-title {

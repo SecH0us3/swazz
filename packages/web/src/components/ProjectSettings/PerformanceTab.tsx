@@ -168,25 +168,24 @@ export function PerformanceTab() {
                 </div>
 
                 {/* WAF Evasion & Proxies */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
-                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>WAF Evasion & Proxies</h3>
+                <div className="fuzz-setting-section">
+                    <h3 className="fuzz-setting-section-title">WAF Evasion & Proxies</h3>
                     
                     <div>
-                        <label htmlFor="proxyList" style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Proxy List (one per line, HTTP/SOCKS5)</label>
+                        <label htmlFor="proxyList" className="fuzz-setting-input-label">Proxy List (one per line, HTTP/SOCKS5)</label>
                         <textarea
                             id="proxyList"
-                            className="input"
+                            className="input fuzz-setting-textarea-monospace"
                             value={(config.settings.proxyList || []).join('\n')}
                             onChange={(e) => {
                                 const lines = e.target.value.split('\n').map(l => l.trim()).filter(Boolean);
                                 updateSettings({ proxyList: lines });
                             }}
                             placeholder="http://1.2.3.4:8080"
-                            style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }}
                         />
                     </div>
 
-                    <div className="fuzz-setting-checkbox-group" style={{ borderTop: 'none', paddingTop: 0 }}>
+                    <div className="fuzz-setting-checkbox-group no-border">
                         <label className="premium-checkbox-label">
                             <input
                                 type="checkbox"
@@ -195,14 +194,14 @@ export function PerformanceTab() {
                                 checked={config.settings.randomizeUserAgent ?? false}
                                 onChange={(e) => updateSettings({ randomizeUserAgent: e.target.checked })}
                             />
-                            <strong style={{ fontSize: '13px' }}>Randomize User-Agent per request</strong>
+                            <strong className="fuzz-setting-label-bold">Randomize User-Agent per request</strong>
                         </label>
                         <span className="fuzz-setting-checkbox-hint">
                             Default: Swazz/1.0 (+https://github.com/SecH0us3/swazz)
                         </span>
                     </div>
 
-                    <div className="fuzz-setting-checkbox-group" style={{ borderTop: 'none', paddingTop: 0 }}>
+                    <div className="fuzz-setting-checkbox-group no-border">
                         <label className="premium-checkbox-label">
                             <input
                                 type="checkbox"
@@ -211,9 +210,9 @@ export function PerformanceTab() {
                                 checked={config.settings.enableAdaptiveRateLimit ?? false}
                                 onChange={(e) => updateSettings({ enableAdaptiveRateLimit: e.target.checked })}
                             />
-                            <strong style={{ fontSize: '13px' }}>Enable Adaptive Rate Limiting</strong>
+                            <strong className="fuzz-setting-label-bold">Enable Adaptive Rate Limiting</strong>
                         </label>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '24px', lineHeight: '1.4' }}>
+                        <span className="fuzz-setting-checkbox-hint">
                             Automatically pauses requests when a 429 Too Many Requests response is detected, backing off based on the Retry-After header.
                         </span>
                     </div>
