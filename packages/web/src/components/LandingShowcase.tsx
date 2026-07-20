@@ -56,7 +56,7 @@ function ScanCounter() {
     }, [count]);
 
     if (count === null) {
-        return <>1M+ Scans</>;
+        return <>0+ Scans</>;
     }
 
     return <>{displayCount.toLocaleString()}+ Scans</>;

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Landing Page', () => {
   test('should display the global scan count', async ({ page }) => {
     // Mock the /api/telemetry/scans/count endpoint
-    await page.route('/api/telemetry/scans/count', async (route) => {
+    await page.route('**/api/telemetry/scans/count', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

@@ -22,7 +22,7 @@ describe('LandingShowcase Component - ScanCounter', () => {
         (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1M\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
         });
     });
 

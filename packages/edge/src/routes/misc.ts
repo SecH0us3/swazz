@@ -85,7 +85,7 @@ export function registerMiscRoutes(
     const services = miscServicesFactory(c.env);
     try {
       const result = await services.getGlobalScanCount();
-      c.header('Cache-Control', 'public, max-age=3600');
+      c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
       return c.json(result);
     } catch (err: any) {
       return c.json({ error: err.message || 'Internal server error' }, 500);
