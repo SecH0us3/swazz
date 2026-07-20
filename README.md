@@ -180,7 +180,7 @@ For detailed setup instructions, including advanced configuration, caching, and 
   "auth_sequence": [
     {
       "type": "totp",
-      "totp_secret": "JBSWY3DPEHPK3PXP",
+      "totp_secret": "JBSWY3DPEHPK3PXP", // In production, use env variables or secrets!
       "totp_variable": "totp_code"
     },
     {

@@ -45,8 +45,8 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 			secretStr := r.subVars(step.TOTPSecret)
 			if strings.HasPrefix(secretStr, "otpauth://") {
 				u, err := url.Parse(secretStr)
-				if err != nil {
-					return nil, nil, fmt.Errorf("auth step %d: failed to parse otpauth URL: %w", i+1, err)
+				if err != nil || u.Scheme != "otpauth" {
+					return nil, nil, fmt.Errorf("auth step %d: invalid otpauth URL: %w", i+1, err)
 				}
 				secretStr = u.Query().Get("secret")
 				if secretStr == "" {

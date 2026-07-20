@@ -101,3 +101,4 @@ packages/edge/coverage_report.txt
 # Git Worktrees
 .worktrees/
 
+docs/reviews/vibe-review.md

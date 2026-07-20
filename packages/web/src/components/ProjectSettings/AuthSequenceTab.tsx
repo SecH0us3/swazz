@@ -8,7 +8,7 @@ export function AuthSequenceTab() {
     const authSequence = config.auth_sequence || [];
 
     const handleAddStep = () => {
-        const next = [...authSequence, { type: 'request', method: 'POST', url: '', headers: {}, body: '', extract_variables: {} } as AuthStep];
+        const next = [...authSequence, { type: 'request', method: 'POST', url: '', headers: {}, body: '', extract_variables: {} } as const satisfies AuthStep];
         updateConfig({ auth_sequence: next });
     };
 
