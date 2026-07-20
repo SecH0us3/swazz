@@ -182,6 +182,9 @@ type Settings struct {
 	MaxScanDurationMin            int                         `json:"max_scan_duration_min,omitempty"`
 	ActiveParameterFuzzing        bool                        `json:"active_parameter_fuzzing"`
 	Checkpoint                    *Checkpoint                 `json:"checkpoint,omitempty"`
+	ProxyList                     []string                    `json:"proxyList"`
+	RandomizeUserAgent            bool                        `json:"randomizeUserAgent"`
+	EnableAdaptiveRateLimit       bool                        `json:"enableAdaptiveRateLimit"`
 }
 
 type Checkpoint struct {
@@ -213,6 +216,9 @@ func DefaultSettings() Settings {
 		MaxDepthLimit:                 64,
 		MaxScanDurationMin:            0,
 		ActiveParameterFuzzing:        true,
+		ProxyList:                     []string{},
+		RandomizeUserAgent:            false,
+		EnableAdaptiveRateLimit:       false,
 	}
 }
 
