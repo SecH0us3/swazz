@@ -15,6 +15,7 @@ import { KeysTab } from './ProjectSettings/KeysTab.js';
 import { ScheduleTab } from './ProjectSettings/ScheduleTab.js';
 import { AuditTrailTab } from './ProjectSettings/AuditTrailTab.js';
 import { WebhooksTab } from './ProjectSettings/WebhooksTab.js';
+import { AuthSequenceTab } from './ProjectSettings/AuthSequenceTab.js';
 interface Runner {
     connectionId: string | null;
     name: string;
@@ -26,7 +27,7 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'auth_sequence'>('general');
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -179,6 +180,17 @@ export function ProjectSettings() {
                     </button>
 
                     <button
+                        className={`tab-bar-btn ${activeSubTab === 'auth_sequence' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('auth_sequence')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        Auth Sequence
+                    </button>
+
+                    <button
                         className={`tab-bar-btn ${activeSubTab === 'chaining' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('chaining')}
                     >
@@ -281,6 +293,7 @@ export function ProjectSettings() {
                     {activeSubTab === 'wordlists' && <WordlistsTab />}
                     {activeSubTab === 'dictionaries' && <DictionariesTab />}
                     {activeSubTab === 'chaining' && <ChainingTab />}
+                    {activeSubTab === 'auth_sequence' && <AuthSequenceTab />}
 
                     {activeSubTab === 'runners' && (
                         <RunnersTab 

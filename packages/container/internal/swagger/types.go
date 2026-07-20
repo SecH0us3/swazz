@@ -136,6 +136,9 @@ func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
 
 // AuthStep describes a request to be made before fuzzing to establish a session.
 type AuthStep struct {
+	Type             string            `json:"type,omitempty"`
+	TOTPSecret       string            `json:"totp_secret,omitempty"`
+	TOTPVariable     string            `json:"totp_variable,omitempty"`
 	Method           string            `json:"method"`
 	URL              string            `json:"url"` // If relative, prefixed with BaseURL
 	Headers          map[string]string `json:"headers"`

@@ -179,9 +179,14 @@ For detailed setup instructions, including advanced configuration, caching, and 
   },
   "auth_sequence": [
     {
+      "type": "totp",
+      "totp_secret": "JBSWY3DPEHPK3PXP",
+      "totp_variable": "totp_code"
+    },
+    {
       "method": "POST",
       "url": "/login",
-      "body": { "user": "admin", "pass": "secret" }
+      "body": { "user": "admin", "pass": "secret", "totp": "{{totp_code}}" }
     }
   ],
   "rules": {
