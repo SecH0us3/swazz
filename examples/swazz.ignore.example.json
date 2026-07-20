@@ -1,0 +1,16 @@
+[
+  {
+    "rule_id": "swazz/reflected-xss",
+    "endpoint": "/api/search",
+    "method": "GET",
+    "payload": "<script>alert(1)</script>"
+  },
+  {
+    "endpoint": "/api/admin/*",
+    "method": "DELETE"
+  },
+  {
+    "rule_id": "swazz/status-500",
+    "payload": ".*(sql|syntax|database).*"
+  }
+]

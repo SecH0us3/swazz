@@ -15,7 +15,7 @@ A lightweight, ready-to-run configuration targeting the public Swagger Petstore 
 **Use case:** Quick start and testing the fuzzer's basic capabilities without complex setups.
 **How to run:**
 ```bash
-swazz run -c examples/swazz.config.petstore.json
+./swazz-engine start --config examples/swazz.config.petstore.json
 ```
 
 ### 3. `swazz.config.bola-test.json`
@@ -30,14 +30,18 @@ A minimal configuration used for the local Swazz Demo API.
 Configuration example for the Edge Coordinator (Wraggler).
 **Use case:** Setting up a custom deployment of the Swazz orchestration API.
 
+### 6. `swazz.ignore.example.json`
+An example of how to configure ignore rules to suppress false positives or skip specific endpoints.
+**Use case:** Filtering noisy findings from scan results.
+
 ---
 
 ## Getting Started
 
-To use any of these configurations, pass them to the `swazz run` command using the `-c` or `--config` flag:
+To use any of these configurations, pass them to the `swazz-engine` command using the `--config` flag:
 
 ```bash
-swazz run -c examples/<config-file>.json
+./swazz-engine start --config examples/<config-file>.json
 ```
 
 If you modify these templates, we recommend copying them to your project root or outside the repository rather than modifying the tracked examples:
