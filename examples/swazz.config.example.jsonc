@@ -16,10 +16,10 @@
         "email": ["admin@test.com", "a@b.c"]
     },
     // Custom payload wordlists to override or extend the built-in fuzzer mutations
-    "wordlist_files": {
-        "xss": "custom_xss.txt",
-        "sqli": "custom_sqli.txt"
-    },
+    // "wordlist_files": {
+    //     "xss": "custom_xss.txt",
+    //     "sqli": "custom_sqli.txt"
+    // },
     "settings": {
         /*
            iterations_per_profile defines how many fuzz attempts to perform per payload category,
