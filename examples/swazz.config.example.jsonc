@@ -15,6 +15,11 @@
         "username": ["admin", "test", "root"],
         "email": ["admin@test.com", "a@b.c"]
     },
+    // Custom payload wordlists to override or extend the built-in fuzzer mutations
+    // "wordlist_files": {
+    //     "xss": "custom_xss.txt",
+    //     "sqli": "custom_sqli.txt"
+    // },
     "settings": {
         /*
            iterations_per_profile defines how many fuzz attempts to perform per payload category,
@@ -25,6 +30,15 @@
         "timeout_ms": 2000,
         "max_nodes_budget": 50000, // Safety limit: maximum nodes resolved in a schema to prevent OOM on dense/complex specs
         "max_depth_limit": 64,     // Safety limit: maximum recursion depth in schema resolution to prevent stack overflow/excessive memory usage
+        // Rules to extract data from a request and inject it into subsequent fuzzing requests
+        "chaining_rules": [
+            {
+                "source_endpoint": "POST /api/login",
+                "extract_type": "json",
+                "extract_path": "data.token",
+                "variable_name": "AUTH_TOKEN"
+            }
+        ],
         "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"],
         "payload_categories": {
             "BOUNDARY": [

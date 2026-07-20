@@ -167,6 +167,8 @@ For detailed setup instructions, including advanced configuration, caching, and 
 
 ## ⚙️ Configuration Example
 
+For a full set of examples (including BOLA testing, Multi-step Auth, and Petstore scans), please check out our [Cookbook & Examples Directory](examples/).
+
 `swazz` uses a flexible JSONC configuration (JSON with comments) for fine-grained control, allowing both single-line (`//`) and multi-line (`/* */`) comments:
 
 ```json
