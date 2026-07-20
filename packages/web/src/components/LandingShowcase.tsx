@@ -8,25 +8,25 @@ function ScanCounter() {
     const [displayCount, setDisplayCount] = useState<number>(0);
 
     useEffect(() => {
-        try {
-            const fetchUrl = new URL('/api/telemetry/scans/count', PROXY_URL || window.location.origin).toString();
-            fetch(fetchUrl)
-                .then(res => res.json())
-                .then(data => {
-                    if (data && typeof data.total === 'number') {
-                        setCount(data.total);
-                    } else {
-                        setCount(1000000);
-                    }
-                })
-                .catch(err => {
-                    console.error('Failed to fetch scan count:', err);
-                    setCount(1000000); // fallback
-                });
-        } catch (e) {
-            console.error('Failed to construct URL:', e);
-            setCount(1000000);
-        }
+        const fetchUrl = `${PROXY_URL}/api/telemetry/scans/count`;
+        fetch(fetchUrl)
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP error! Status: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data && typeof data.total === 'number') {
+                    setCount(data.total);
+                } else {
+                    setCount(1000000);
+                }
+            })
+            .catch(err => {
+                console.error('Failed to fetch scan count:', err);
+                setCount(1000000); // fallback
+            });
     }, []);
 
     useEffect(() => {
@@ -521,7 +521,6 @@ cd swazz
                 </div>
             )}
 
-            {/* Fullscreen Image Zoom Overlay */}
             {/* Fullscreen Image Zoom Overlay */}
             {fullscreenImageUrl && (
                 <div className="feature-modal-backdrop fullscreen-backdrop" onClick={() => setFullscreenImageUrl(null)}>

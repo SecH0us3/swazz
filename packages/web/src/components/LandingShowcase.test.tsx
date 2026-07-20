@@ -28,6 +28,7 @@ describe('LandingShowcase Component - ScanCounter', () => {
 
     it('renders the fetched total count and formats it', async () => {
         (global.fetch as any).mockResolvedValueOnce({
+            ok: true,
             json: async () => ({ total: 1234567 })
         });
         render(<LandingShowcase />);
