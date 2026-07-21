@@ -206,6 +206,11 @@ body::before {
   to   { opacity:1; transform:translateY(0); }
 }
 
+@keyframes slide-in-down {
+  from { opacity:0; transform:translateY(-12px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
 @keyframes slide-up {
   from { opacity:0; transform:translateY(20px) scale(0.98); }
   to   { opacity:1; transform:translateY(0)    scale(1); }
@@ -2245,20 +2250,39 @@ body.resizing .sidebar-resizer {
 
 /* ─── Toast ──────────────────────────────────────────────── */
 
+.toast-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 3000;
+  pointer-events: none;
+  max-width: 90vw;
+}
+
 .toast {
   padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  animation: slide-in-up 280ms var(--ease-out);
+  animation: slide-in-down 280ms var(--ease-out);
   pointer-events: auto;
   cursor: pointer;
   backdrop-filter: blur(12px);
-  max-width: 340px;
-  transition: opacity var(--duration-base);
+  max-width: 520px;
+  text-align: center;
+  transition: opacity var(--duration-base), transform var(--duration-fast);
+}
+
+.toast:hover {
+  transform: scale(1.02);
 }
 
 /* ─── Tooltip ────────────────────────────────────────────── */

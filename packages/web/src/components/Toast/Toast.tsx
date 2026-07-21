@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+
 
 export interface ToastData {
     id: number;
@@ -12,13 +12,8 @@ export function Toast({ message, type, onDismiss }: { message: string; type: str
             type === 'success' ? 'var(--color-success)' :
                 'var(--color-info)';
 
-    useEffect(() => {
-        const timer = setTimeout(onDismiss, 4000);
-        return () => clearTimeout(timer);
-    }, [onDismiss]);
-
     return (
-        <div className="toast" style={{ borderLeft: `3px solid ${borderColor}` }} onClick={onDismiss}>
+        <div className="toast" style={{ borderLeft: `3px solid ${borderColor}` }} onClick={onDismiss} title="Click to dismiss">
             {message}
         </div>
     );
