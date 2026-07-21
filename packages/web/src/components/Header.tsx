@@ -182,7 +182,7 @@ export function Header({
                 </div>
             ) : betaModeEnabled && (
                 <div 
-                    className="header-beta-banner beta-badge" 
+                    className="header-beta-banner" 
                     title="Closed Beta Phase: System capacity is currently limited. Signups are subject to invite controls."
                 >
                     <span className="beta-alert-dot" />

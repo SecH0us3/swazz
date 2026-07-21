@@ -3932,6 +3932,7 @@ kbd {
   border-radius: var(--radius-full);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transition: all var(--duration-fast) ease;
+  text-transform: none;
 }
 
 .header-beta-banner:hover {
@@ -3946,6 +3947,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  text-transform: none;
 }
 
 .header-beta-banner-text strong {
