@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "swazz.fullname" . }}-edge
+  labels:
+    {{- include "swazz.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  replicas: {{ .Values.edge.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "swazz.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: edge
+  template:
+    metadata:
+      labels:
+        {{- include "swazz.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: edge
+    spec:
+      containers:
+        - name: edge
+          image: "{{ .Values.edge.image.repository }}:{{ .Values.edge.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.edge.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "swazz.fullname" . }}-secret
+                  key: jwtSecret
+            {{- range $key, $value := .Values.edge.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.edge.resources | nindent 12 }}
+      {{- with .Values.edge.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.edge.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.edge.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

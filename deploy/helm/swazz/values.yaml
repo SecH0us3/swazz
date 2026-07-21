@@ -1,0 +1,68 @@
+# Default values for swazz helm chart.
+
+global:
+  domain: swazz.local
+  # jwtSecret must be provided during installation, e.g., --set global.jwtSecret=mysecret
+  jwtSecret: "change-me-in-production"
+
+web:
+  replicaCount: 1
+  image:
+    repository: sech0us3/swazz-web
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+edge:
+  replicaCount: 1
+  image:
+    repository: sech0us3/swazz-edge
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: ClusterIP
+    port: 80
+  env:
+    AUTH_ENABLED: "true"
+    LIMIT_ANONYMOUS: "true"
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+runner:
+  replicaCount: 1
+  image:
+    repository: sech0us3/swazz-runner
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  env:
+    COORDINATOR_URL: "ws://swazz-edge:80/api/runners/connect"
+    RUNNER_TOKEN: "swazz_live_default_token"
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    # Adjust annotations as needed for your ingress controller
+  hosts:
+    - host: swazz.local
+      paths:
+        - path: /api/?(.*)
+          pathType: ImplementationSpecific
+          backend: edge
+        - path: /(.*)
+          pathType: ImplementationSpecific
+          backend: web
+  tls: []
