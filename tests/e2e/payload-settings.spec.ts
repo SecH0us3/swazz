@@ -20,7 +20,11 @@ test.describe('Payload Settings Modal Interaction', () => {
     // 3. Open the "Payload Settings" modal via the Customize Payloads button
     const customizePayloadsBtn = page.getByRole('button', { name: 'Customize Payloads' });
     await expect(customizePayloadsBtn).toBeVisible();
+    
+    // Wait for the API response while clicking
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/payload-catalog'));
     await customizePayloadsBtn.click();
+    await responsePromise;
 
     // Verify the modal appears and waits for the API to load payload categories
     const modalTitle = page.getByRole('heading', { name: 'Payload Settings' });
@@ -56,8 +60,12 @@ test.describe('Payload Settings Modal Interaction', () => {
     // Ensure the checkbox is checked by default
     await expect(checkbox).toBeChecked();
 
-    // Click to toggle
+    // Click to toggle and wait for backend persistence (e.g., config update)
+    const updatePromise = page.waitForResponse(response => 
+      response.url().includes('/api/') && response.request().method() !== 'GET' && response.status() >= 200 && response.status() < 300
+    );
     await firstCatalogItem.click();
+    await updatePromise;
 
     // Ensure the checkbox is now unchecked
     await expect(checkbox).not.toBeChecked();
