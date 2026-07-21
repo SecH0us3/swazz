@@ -1765,8 +1765,13 @@ body.resizing .sidebar-resizer {
   transition: opacity var(--duration-fast) var(--ease-in-out);
 }
 
-.response-copy-btn:hover {
+.detail-json-wrapper:hover .response-copy-btn,
+.response-copy-btn:focus {
   opacity: 1;
+}
+
+.detail-json-with-action {
+  padding-right: 48px;
 }
 
 .detail-copy-btn { margin-top: var(--space-2); }

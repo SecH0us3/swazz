@@ -357,7 +357,7 @@ export function RequestDetail({
         navigator.clipboard.writeText(text).then(() => {
             setCopied(label);
             setTimeout(() => setCopied(null), 2000);
-        });
+        }).catch(err => console.error('Failed to copy text: ', err));
     };
 
     useEffect(() => {
@@ -731,15 +731,17 @@ export function RequestDetail({
                     <div className="modal-pane">
                         <div className="detail-section-title">Response Body</div>
                         <div className="detail-json-wrapper detail-spacing-bottom">
-                            <pre className="detail-json">
+                            <pre className="detail-json detail-json-with-action">
                                 {renderHighlightedJson(responseBodyJson)}
                             </pre>
-                            <button
-                                className="btn btn-ghost btn-xs response-copy-btn"
-                                onClick={() => copy(responseBodyJson, 'responseBody')}
-                            >
-                                {copied === 'responseBody' ? '✓ Copied' : 'Copy'}
-                            </button>
+                            {responseBodyJson && (
+                                <button
+                                    className="btn btn-ghost btn-xs response-copy-btn"
+                                    onClick={() => copy(responseBodyJson, 'responseBody')}
+                                >
+                                    {copied === 'responseBody' ? '✓ Copied' : 'Copy'}
+                                </button>
+                            )}
                         </div>
 
                         {liveHeaders && Object.keys(liveHeaders).length > 0 && (
