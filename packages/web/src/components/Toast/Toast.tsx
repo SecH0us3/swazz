@@ -1,5 +1,7 @@
 
 
+import { useEffect } from 'react';
+
 export interface ToastData {
     id: number;
     message: string;
@@ -7,6 +9,13 @@ export interface ToastData {
 }
 
 export function Toast({ message, type, onDismiss }: { message: string; type: string; onDismiss: () => void }) {
+    useEffect(() => {
+        if (type !== 'error') {
+            const timer = setTimeout(onDismiss, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [type, onDismiss]);
+
     const borderColor =
         type === 'error' ? 'var(--color-error)' :
             type === 'success' ? 'var(--color-success)' :
