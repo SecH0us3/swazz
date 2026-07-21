@@ -4017,6 +4017,14 @@ kbd {
   color: #ffffff;
 }
 
+[data-theme="light"] .header-guest-action {
+  color: #0284c7;
+}
+
+[data-theme="light"] .header-guest-unified-btn:hover .header-guest-action {
+  color: #0369a1;
+}
+
 .header-center {
   grid-area: url;
   display: flex;
