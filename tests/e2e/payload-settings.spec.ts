@@ -31,9 +31,9 @@ test.describe('Payload Settings Modal Interaction', () => {
     await expect(catalogGrid).toBeVisible({ timeout: 10000 });
 
     // 4. Verify the tab navigation ('Random', 'Boundary', 'Malicious')
-    const randomTab = page.locator('button.tab-button:has-text("Random")');
-    const boundaryTab = page.locator('button.tab-button:has-text("Boundary")');
-    const maliciousTab = page.locator('button.tab-button:has-text("Malicious")');
+    const randomTab = page.getByRole('button', { name: 'Random', exact: true });
+    const boundaryTab = page.getByRole('button', { name: 'Boundary', exact: true });
+    const maliciousTab = page.getByRole('button', { name: 'Malicious', exact: true });
 
     await expect(randomTab).toBeVisible();
     await expect(boundaryTab).toBeVisible();
@@ -53,17 +53,13 @@ test.describe('Payload Settings Modal Interaction', () => {
     // Wait for the first item to be visible
     await expect(firstCatalogItem).toBeVisible();
 
-    // Assuming default is active (checked)
-    const wasChecked = await checkbox.isChecked();
+    // Ensure the checkbox is checked by default
+    await expect(checkbox).toBeChecked();
 
     // Click to toggle
     await firstCatalogItem.click();
 
-    // Ensure the checkbox reflects the updated active state
-    if (wasChecked) {
-      await expect(checkbox).not.toBeChecked();
-    } else {
-      await expect(checkbox).toBeChecked();
-    }
+    // Ensure the checkbox is now unchecked
+    await expect(checkbox).not.toBeChecked();
   });
 });
