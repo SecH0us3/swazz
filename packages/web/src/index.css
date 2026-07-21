@@ -2276,6 +2276,9 @@ body.resizing .sidebar-resizer {
 }
 
 .toast {
+  min-width: min(380px, 90vw);
+  max-width: 520px;
+  box-sizing: border-box;
   padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
@@ -2287,7 +2290,6 @@ body.resizing .sidebar-resizer {
   pointer-events: auto;
   cursor: pointer;
   backdrop-filter: blur(12px);
-  max-width: 520px;
   text-align: center;
   transition: opacity var(--duration-base), transform var(--duration-fast);
 }
