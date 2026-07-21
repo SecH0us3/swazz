@@ -43,6 +43,7 @@ runner:
     pullPolicy: IfNotPresent
     tag: "latest"
   env:
+    # RUNNER_TOKEN must be replaced with a Service Account token generated from the Swazz Dashboard in production
     RUNNER_TOKEN: "swazz_live_default_token"
   resources: {}
   nodeSelector: {}

@@ -23,7 +23,7 @@ spec:
           imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
           env:
             - name: COORDINATOR_URL
-              value: {{ .Values.runner.env.COORDINATOR_URL | default (printf "ws://%s-edge:%v/api/runners/connect" (include "swazz.fullname" .) .Values.edge.service.port) | quote }}
+              value: {{ index .Values.runner.env "COORDINATOR_URL" | default (printf "ws://%s-edge:%v/api/runners/connect" (include "swazz.fullname" .) .Values.edge.service.port) | quote }}
             {{- range $key, $value := .Values.runner.env }}
             {{- if ne $key "COORDINATOR_URL" }}
             - name: {{ $key }}
