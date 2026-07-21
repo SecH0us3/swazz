@@ -28,9 +28,9 @@ export function ApiSpecsTab() {
                 }
             });
         } else {
-            const updated = { ...config };
-            delete updated.mcp_server;
-            updateConfig(updated);
+            updateConfig({
+                mcp_server: undefined
+            });
         }
     };
 

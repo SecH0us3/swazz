@@ -283,7 +283,13 @@ export function useConfig() {
     }, [config, storageKey, token, activeProject]);
 
     const updateConfig = useCallback((partial: Partial<SwazzConfig>) => {
-        setConfig((prev) => ({ ...prev, ...partial }));
+        setConfig((prev) => {
+            const next = { ...prev, ...partial };
+            if ('mcp_server' in partial && partial.mcp_server === undefined) {
+                delete next.mcp_server;
+            }
+            return next;
+        });
     }, []);
 
     const updateHeaders = useCallback((headers: Record<string, string>) => {
