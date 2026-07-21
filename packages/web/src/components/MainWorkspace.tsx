@@ -183,6 +183,8 @@ export function MainWorkspace({
     const isBusy = isRunning || isLoadingSpecs || isQueued;
 
     const betaModeEnabled = useAppStore((state) => state.betaModeEnabled);
+    const userProfile = useAppStore((state) => state.userProfile);
+    const isGuest = userProfile?.isGuest || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('swazz_guest') === 'true');
 
     const handleConfigureTarget = () => {
         const input = document.querySelector('.workspace-target-input') as HTMLInputElement | null;
@@ -420,7 +422,7 @@ export function MainWorkspace({
                         </div>
                     )}
 
-                    {betaModeEnabled && (
+                    {betaModeEnabled && !isGuest && (
                         <div className="beta-status-alert">
                             <span className="beta-alert-dot" />
                             <span className="beta-alert-text">
