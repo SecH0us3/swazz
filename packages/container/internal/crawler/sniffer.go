@@ -371,12 +371,19 @@ func (s *Sniffer) ToOpenAPI() ([]byte, error) {
 			if ct == "" {
 				ct = "application/json"
 			}
+			var exampleVal any = ep.BodySample
+			if strings.Contains(strings.ToLower(ct), "json") {
+				var parsed any
+				if err := json.Unmarshal([]byte(ep.BodySample), &parsed); err == nil {
+					exampleVal = parsed
+				}
+			}
 			reqBody = &openAPIReqBody{
 				Content: map[string]openAPIMediaType{
 					ct: {
 						Schema: map[string]any{
 							"type":    "object",
-							"example": ep.BodySample,
+							"example": exampleVal,
 						},
 					},
 				},

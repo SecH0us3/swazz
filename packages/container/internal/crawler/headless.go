@@ -274,6 +274,12 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 			const elements = Array.from(document.querySelectorAll(selector));
 			const visibleElements = elements.filter(el => {
 				const rect = el.getBoundingClientRect();
+				if (el.tagName === 'A' && el.href) {
+					try {
+						const url = new URL(el.href);
+						if (url.origin !== window.location.origin) return false;
+					} catch(e) { return false; }
+				}
 				return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden';
 			});
 			if (visibleElements.length === 0) return { clicked: false, total: 0 };
@@ -302,7 +308,11 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		_ = evalRes
 
 		// Wait briefly after click to allow SPA router / fetch requests to complete
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-runCtx.Done():
+			goto Done
+		case <-time.After(500 * time.Millisecond):
+		}
 
 		var newLoc string
 		if err := chromedp.Run(runCtx, chromedp.Location(&newLoc)); err == nil {
