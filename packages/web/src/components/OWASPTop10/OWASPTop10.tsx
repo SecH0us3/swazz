@@ -473,7 +473,6 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                                                      {items.length > categoryLimit && (
                                                          <button
                                                              className="btn btn-ghost btn-sm load-more-findings"
-                                                             style={{ width: '100%', margin: 'var(--space-2) 0' }}
                                                              onClick={(e) => {
                                                                  e.stopPropagation();
                                                                  setCategoryLimits(prev => ({

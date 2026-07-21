@@ -391,3 +391,9 @@
     min-height: 200px;
 }
 
+.load-more-findings {
+    width: 100%;
+    margin: var(--space-2) 0;
+}
+
+
