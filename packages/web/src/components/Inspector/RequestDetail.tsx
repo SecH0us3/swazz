@@ -209,7 +209,7 @@ export function RequestDetail({
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
     const [subTab, setSubTab] = useState<'body' | 'query' | 'headers'>('body');
     const hasFindings = result.analyzerFindings && result.analyzerFindings.length > 0;
-    const [mainTab, setMainTab] = useState<'findings' | 'request'>(hasFindings ? 'findings' : 'request');
+    const [mainTab, setMainTab] = useState<'findings' | 'request'>('request');
 
     const isMultiIdentity = config?.settings?.bola_testing || Object.keys(config?.auth_identities || {}).length > 0;
 
@@ -518,6 +518,12 @@ export function RequestDetail({
                 {hasFindings && (
                     <div className="tabs-header request-detail-main-tabs">
                         <button 
+                            className={`tab-button ${mainTab === 'request' ? 'active' : ''}`} 
+                            onClick={() => setMainTab('request')}
+                        >
+                            Request Details
+                        </button>
+                        <button 
                             className={`tab-button ${mainTab === 'findings' ? 'active' : ''}`} 
                             onClick={() => setMainTab('findings')}
                         >
@@ -525,12 +531,6 @@ export function RequestDetail({
                             <span className="badge badge-error" style={{ marginLeft: 6 }}>
                                 {result.analyzerFindings!.length}
                             </span>
-                        </button>
-                        <button 
-                            className={`tab-button ${mainTab === 'request' ? 'active' : ''}`} 
-                            onClick={() => setMainTab('request')}
-                        >
-                            Request Details
                         </button>
                     </div>
                 )}
