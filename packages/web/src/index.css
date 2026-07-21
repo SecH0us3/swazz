@@ -9533,6 +9533,32 @@ kbd {
   color: var(--text-primary);
 }
 
+/* Sidebar Add URL & Spec File Upload */
+.sidebar-add-url-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sidebar-add-url-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-add-url-btn {
+  flex-shrink: 0;
+}
+
+.sidebar-file-input-hidden {
+  display: none;
+}
+
+.sidebar-upload-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
 /* ─── Parsing Error Modal ───────────────────────────────── */
 .parsing-error-backdrop {
     position: fixed;

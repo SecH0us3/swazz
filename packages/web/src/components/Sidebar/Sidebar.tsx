@@ -1,6 +1,6 @@
 import { ChangeEvent, useState, useRef } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig } from '../../types.js';
-import { detectMcpServer } from '../../services/swaggerService.js';
+import { detectMcpServer, parseRawSpec } from '../../services/swaggerService.js';
 
 import type { ScanRun } from '../../hooks/useDb.js';
 
@@ -42,6 +42,40 @@ export function Sidebar({
     
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const content = event.target?.result as string;
+            if (!content) return;
+            try {
+                onToast(`Parsing uploaded file ${file.name}...`, 'info');
+                const { basePath, endpointCount, endpoints } = await parseRawSpec(content);
+                const combinedEndpoints = [...(config.endpoints || []), ...endpoints];
+                const seen = new Set();
+                const uniqueEndpoints = combinedEndpoints.filter(ep => {
+                    const key = `${ep.method.toUpperCase()} ${ep.path}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+
+                onUpdateConfig({
+                    base_url: basePath || config.base_url,
+                    endpoints: uniqueEndpoints
+                });
+                onToast(`✓ Loaded ${endpointCount} endpoints from ${file.name}`, 'success');
+            } catch (err: any) {
+                onToast(`✗ Failed to parse ${file.name}: ${err.message || String(err)}`, 'error');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
 
     const setSwaggerUrls = (urls: string[]) => {
         onUpdateConfig({ _swagger_urls: urls });
@@ -156,22 +190,35 @@ export function Sidebar({
                             </div>
                         );
                     })}
-                    <div style={{ display:'flex', gap:4 }}>
+                    <div className="sidebar-add-url-row">
                         <input
-                            className="input"
-                            style={{ flex:1, minWidth:0 }}
+                            className="input sidebar-add-url-input"
                             value={urlInput}
                             placeholder="https://api.com/swagger.json or /graphql"
                             onChange={(e) => setUrlInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && addUrl()}
                         />
                         <button
-                            className="btn btn-primary btn-sm"
-                            style={{ flexShrink:0 }}
+                            className="btn btn-primary btn-sm sidebar-add-url-btn"
                             onClick={addUrl}
                             disabled={!urlInput.trim()}
                         >
                             Add
+                        </button>
+                        <input
+                            type="file"
+                            accept=".json,.yaml,.yml,.har"
+                            ref={fileInputRef}
+                            onChange={handleFileUpload}
+                            className="sidebar-file-input-hidden"
+                        />
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-sm sidebar-upload-btn"
+                            title="Upload Spec / HAR File"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            📁
                         </button>
                     </div>
                 </div>
