@@ -196,7 +196,10 @@ export function MainWorkspace({
     const [isExportHovered, setIsExportHovered] = useState(false);
 
     useEffect(() => {
-        setLocalUrl(baseUrl);
+        const inputEl = document.querySelector('.header-target-input');
+        if (document.activeElement !== inputEl) {
+            setLocalUrl(baseUrl);
+        }
     }, [baseUrl]);
 
     const handleUrlCommit = (val: string) => {

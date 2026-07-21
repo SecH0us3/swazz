@@ -749,7 +749,7 @@ body.resizing .sidebar-resizer {
   outline: none;
   width: 100%;
   min-width: 0;
-  direction: rtl;
+  direction: ltr;
   text-align: left;
   letter-spacing: 0.01em;
   transition: color var(--duration-fast);
