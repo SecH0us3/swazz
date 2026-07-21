@@ -294,14 +294,18 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
         DELETE: 'var(--method-delete)',
     };
 
+    const [activeTab, setActiveTab] = useState<'cards' | 'findings'>('cards');
+
     const handleCardClick = (title: string, count: number) => {
         if (count > 0) {
-            setExpandedCategory(expandedCategory === title ? null : title);
-            // Scroll to the accordion element
-            const el = document.getElementById(`accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+            setExpandedCategory(title);
+            setActiveTab('findings');
+            setTimeout(() => {
+                const el = document.getElementById(`accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`);
+                if (el && typeof el.scrollIntoView === 'function') {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 50);
         }
     };
 
@@ -336,49 +340,77 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                 </div>
             </div>
 
+            <div className="owasp-nav-tabs" role="tablist">
+                <button
+                    role="tab"
+                    aria-selected={activeTab === 'cards'}
+                    className={`owasp-tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('cards')}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+                        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+                    </svg>
+                    Categories Cards
+                </button>
+                <button
+                    role="tab"
+                    aria-selected={activeTab === 'findings'}
+                    className={`owasp-tab-btn ${activeTab === 'findings' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('findings')}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    Findings List ({totalFindingsCount})
+                </button>
+            </div>
+
             {isLoading && rows.length === 0 ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '200px' }}>
+                <div className="owasp-loading-state">
                     <span className="text-muted">Loading findings and categorizing...</span>
                 </div>
             ) : (
                 <>
-                    <div className="owasp-grid">
-                        {OWASP_CATEGORIES_METADATA.map(meta => {
-                            const count = groupedData[meta.title]?.length || 0;
-                            const hasFindings = count > 0;
-                            const isActive = expandedCategory === meta.title;
+                    {activeTab === 'cards' && (
+                        <div className="owasp-grid">
+                            {OWASP_CATEGORIES_METADATA.map(meta => {
+                                const count = groupedData[meta.title]?.length || 0;
+                                const hasFindings = count > 0;
+                                const isActive = expandedCategory === meta.title;
 
-                            return (
-                                <div
-                                    key={meta.id}
-                                    className={`owasp-card ${hasFindings ? 'has-findings' : ''} ${isActive ? 'active' : ''}`}
-                                    onClick={() => handleCardClick(meta.title, count)}
-                                >
-                                    <div className="owasp-card-header">
-                                        <span className="owasp-card-id">{meta.id}</span>
-                                        <span className={`owasp-card-badge ${hasFindings ? 'has-findings' : 'no-findings'}`}>
-                                            {count} {count === 1 ? 'finding' : 'findings'}
-                                        </span>
+                                return (
+                                    <div
+                                        key={meta.id}
+                                        className={`owasp-card ${hasFindings ? 'has-findings' : ''} ${isActive ? 'active' : ''}`}
+                                        onClick={() => handleCardClick(meta.title, count)}
+                                    >
+                                        <div className="owasp-card-header">
+                                            <span className="owasp-card-id">{meta.id}</span>
+                                            <span className={`owasp-card-badge ${hasFindings ? 'has-findings' : 'no-findings'}`}>
+                                                {count} {count === 1 ? 'finding' : 'findings'}
+                                            </span>
+                                        </div>
+                                        <div className="owasp-card-title">{meta.title.split(' ').slice(1).join(' ')}</div>
+                                        <div className="owasp-card-desc">{meta.desc}</div>
+                                        <div className="owasp-card-footer">
+                                            <a 
+                                                href={meta.link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="owasp-learn-more-link"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                Learn More ↗
+                                            </a>
+                                        </div>
                                     </div>
-                                    <div className="owasp-card-title">{meta.title.split(' ').slice(1).join(' ')}</div>
-                                    <div className="owasp-card-desc">{meta.desc}</div>
-                                    <div className="owasp-card-footer">
-                                        <a 
-                                            href={meta.link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="owasp-learn-more-link"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            Learn More ↗
-                                        </a>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
 
-                    <div className="owasp-details-section">
+                    {activeTab === 'findings' && (
+                        <div className="owasp-details-section">
                         {Object.entries(groupedData)
                             .filter(([_, items]) => items.length > 0)
                             .map(([title, items]) => {
@@ -441,7 +473,6 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                                                      {items.length > categoryLimit && (
                                                          <button
                                                              className="btn btn-ghost btn-sm load-more-findings"
-                                                             style={{ width: '100%', margin: 'var(--space-2) 0' }}
                                                              onClick={(e) => {
                                                                  e.stopPropagation();
                                                                  setCategoryLimits(prev => ({
@@ -460,6 +491,7 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
                                 );
                             })}
                     </div>
+                    )}
                 </>
             )}
         </div>

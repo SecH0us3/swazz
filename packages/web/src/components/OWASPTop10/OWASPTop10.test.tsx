@@ -70,6 +70,50 @@ describe('OWASPTop10 Component', () => {
         expect(screen.getAllByText(/Security Misconfiguration/)).toBeTruthy();
     });
 
+    it('renders sub-tab navigation buttons for Categories and Findings', async () => {
+        mockQueryResults.mockResolvedValue({
+            rows: mockFindings,
+            total: 2,
+        });
+
+        render(
+            <OWASPTop10
+                runId="run-123"
+                queryResults={mockQueryResults}
+                onSelectResult={() => {}}
+            />
+        );
+
+        expect(await screen.findByRole('tab', { name: /Categories Cards/i })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: /Findings List/i })).toBeTruthy();
+    });
+
+    it('switches to Findings sub-tab and expands category accordion when clicking a category card with findings', async () => {
+        mockQueryResults.mockResolvedValue({
+            rows: mockFindings,
+            total: 2,
+        });
+
+        render(
+            <OWASPTop10
+                runId="run-123"
+                queryResults={mockQueryResults}
+                onSelectResult={() => {}}
+            />
+        );
+
+        // Wait for findings count to be calculated
+        await screen.findByText(/2 Findings Detected/);
+
+        // Click category card for Broken Access Control
+        const card = screen.getByText('Broken Access Control').closest('.owasp-card');
+        expect(card).toBeTruthy();
+        fireEvent.click(card!);
+
+        // Findings sub-tab should now be active and accordion expanded showing finding message
+        expect(await screen.findByText(/A01:2025 Broken Access Control \(1\)/)).toBeTruthy();
+    });
+
     it('renders official site and category learn more links correctly', async () => {
         mockQueryResults.mockResolvedValue({
             rows: mockFindings,
@@ -100,6 +144,10 @@ describe('OWASPTop10 Component', () => {
         expect(a01Link?.getAttribute('target')).toBe('_blank');
         expect(a01Link?.getAttribute('rel')).toBe('noopener noreferrer');
 
+        // Switch to Findings sub-tab to test accordion link
+        const findingsTab = await screen.findByRole('tab', { name: /Findings List/i });
+        fireEvent.click(findingsTab);
+
         // Click to expand A01 category accordion and check accordion link
         const accordionHeader = await screen.findByText(/A01:2025 Broken Access Control \(1\)/, {}, { timeout: 3000 });
         fireEvent.click(accordionHeader);
@@ -129,6 +177,10 @@ describe('OWASPTop10 Component', () => {
                 onSelectResult={selectSpy}
             />
         );
+
+        // Switch to Findings sub-tab
+        const findingsTab = await screen.findByRole('tab', { name: /Findings List/i });
+        fireEvent.click(findingsTab);
 
         // Wait for the rows to load and accordion trigger to be visible
         const accordionHeader = await screen.findByText(/A01:2025 Broken Access Control \(1\)/, {}, { timeout: 3000 });
@@ -176,6 +228,10 @@ describe('OWASPTop10 Component', () => {
                 onSelectResult={() => {}}
             />
         );
+
+        // Switch to Findings sub-tab
+        const findingsTab = await screen.findByRole('tab', { name: /Findings List/i });
+        fireEvent.click(findingsTab);
 
         // Wait for the rows to load and accordion trigger to be visible
         const accordionHeader = await screen.findByText(/A10:2025 Mishandling of Exceptional Conditions \(60\)/, {}, { timeout: 3000 });
