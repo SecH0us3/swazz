@@ -2372,11 +2372,22 @@ body.resizing .sidebar-resizer {
     font-size: 0.8rem;
     font-family: var(--font-mono);
     color: var(--text-primary);
-    direction: rtl;
+    direction: ltr;
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.swagger-url-loading-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--color-warning);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* ─── History Items ──────────────────────────────────────── */

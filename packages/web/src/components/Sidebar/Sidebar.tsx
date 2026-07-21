@@ -39,6 +39,7 @@ export function Sidebar({
     token = null,
 }: Props) {
     const loadedRunId = useAppStore(state => state.loadedRunId);
+    const isLoadingSpecs = useAppStore(state => state.isLoadingSpecs);
     
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
@@ -156,10 +157,21 @@ export function Sidebar({
                             <div key={url} style={{ display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--bg-elevated)', borderRadius: 4, padding: '4px 8px', border: '1px solid var(--border-default)' }}>
                                 <div className="swagger-url-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', flex: 1 }}>
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
-                                            <polyline points="20 6 9 17 4 12"/>
-                                        </svg>
-                                        <span className="swagger-url-text" title={url} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{url}</span>
+                                        {isLoadingSpecs ? (
+                                            <span className="swagger-url-loading-badge" title={`Loading specs for ${url}`}>
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="header-spin-icon">
+                                                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                                                </svg>
+                                                Loading specs…
+                                            </span>
+                                        ) : (
+                                            <>
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
+                                                    <polyline points="20 6 9 17 4 12"/>
+                                                </svg>
+                                                <span className="swagger-url-text" title={url} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{url}</span>
+                                            </>
+                                        )}
                                     </div>
                                     <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink: 0 }}>
                                         <button
