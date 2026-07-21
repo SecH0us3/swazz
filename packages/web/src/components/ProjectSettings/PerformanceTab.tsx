@@ -110,9 +110,9 @@ export function PerformanceTab() {
                         <input
                             type="checkbox"
                             className="premium-checkbox"
-                            checked={config.settings.active_parameter_fuzzing ?? true}
+                            checked={config.settings.active_parameter_fuzzing ?? false}
                             onChange={() => updateSettings({
-                                active_parameter_fuzzing: !(config.settings.active_parameter_fuzzing ?? true)
+                                active_parameter_fuzzing: !(config.settings.active_parameter_fuzzing ?? false)
                             })}
                         />
                         <strong style={{ fontSize: '13px' }}>Active Parameter Fuzzing (Field-by-Field)</strong>

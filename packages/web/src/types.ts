@@ -139,7 +139,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     data_retention: 'forever',
     disable_shared_runners: false,
     max_scan_duration_min: 0,
-    active_parameter_fuzzing: true,
+    active_parameter_fuzzing: false,
     proxy_list: [],
     randomize_user_agent: false,
     enable_adaptive_rate_limit: false,
