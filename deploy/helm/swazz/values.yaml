@@ -3,7 +3,7 @@
 global:
   domain: swazz.local
   # jwtSecret must be provided during installation, e.g., --set global.jwtSecret=mysecret
-  jwtSecret: "change-me-in-production"
+  jwtSecret: ""
 
 web:
   replicaCount: 1
@@ -43,7 +43,6 @@ runner:
     pullPolicy: IfNotPresent
     tag: "latest"
   env:
-    COORDINATOR_URL: "ws://swazz-edge:80/api/runners/connect"
     RUNNER_TOKEN: "swazz_live_default_token"
   resources: {}
   nodeSelector: {}

@@ -10,7 +10,9 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
     {{- range .Values.ingress.tls }}
@@ -33,7 +35,7 @@ spec:
               service:
                 name: {{ include "swazz.fullname" $ }}-{{ .backend }}
                 port:
-                  number: 80
+                  number: {{ if eq .backend "web" }}{{ $.Values.web.service.port }}{{ else if eq .backend "edge" }}{{ $.Values.edge.service.port }}{{ else }}80{{ end }}
           {{- end }}
     {{- end }}
 {{- end }}

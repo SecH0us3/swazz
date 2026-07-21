@@ -6,7 +6,7 @@ To access the Web UI:
    echo "Visit https://{{ (index .Values.ingress.hosts 0).host }} to open Swazz"
 {{- else }}
 1. Port forward the Web UI service:
-   kubectl port-forward svc/{{ include "swazz.fullname" . }}-web 8080:80 -n {{ .Release.Namespace }}
+   kubectl port-forward svc/{{ include "swazz.fullname" . }}-web 8080:{{ .Values.web.service.port }} -n {{ .Release.Namespace }}
    echo "Visit http://localhost:8080 to open Swazz"
 {{- end }}
 
