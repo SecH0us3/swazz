@@ -323,15 +323,17 @@ body.resizing .sidebar-resizer {
 
 .header-status {
   position: absolute;
-  left: 100px;
+  left: 124px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 100;
   white-space: nowrap;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 10px;
+  padding: 0 10px;
+  height: 24px;
+  box-sizing: border-box;
   background: rgba(34,211,160,0.06);
   border: 1px solid rgba(34,211,160,0.2);
   border-radius: var(--radius-full);
