@@ -29,7 +29,7 @@ You can fully configure advanced settings (Base settings, Authentication & Multi
 
 ```bash
 cd packages/container
-go run main.go wizard
+go run . wizard
 ```
 
 - **Auto-Continuation**: If an existing `swazz.config.json` is found, the wizard will prompt you to edit the existing configuration or start a new one from scratch.
@@ -40,7 +40,7 @@ go run main.go wizard
 
 ```bash
 cd packages/container
-go run main.go start --config swazz.config.json
+go run . start --config swazz.config.json
 ```
 
 ### Headless Browser Crawler (`swazz spider`) 🕷️
@@ -49,7 +49,7 @@ Autonomous target discovery for modern Single Page Applications (SPAs: React, Vu
 
 ```bash
 cd packages/container
-go run main.go spider https://app.example.com --headless --out openapi.json --format openapi
+go run . spider https://app.example.com --headless --out openapi.json --format openapi
 ```
 
 - **`--headless`**: Enables the Chrome DevTools Protocol (CDP) headless crawler.
