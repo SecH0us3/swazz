@@ -10020,7 +10020,11 @@ kbd {
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .workspace-url-section {
