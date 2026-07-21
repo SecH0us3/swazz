@@ -211,6 +211,10 @@ export function RequestDetail({
     const hasFindings = result.analyzerFindings && result.analyzerFindings.length > 0;
     const [mainTab, setMainTab] = useState<'findings' | 'request'>('request');
 
+    useEffect(() => {
+        setMainTab('request');
+    }, [result.id]);
+
     const isMultiIdentity = config?.settings?.bola_testing || Object.keys(config?.auth_identities || {}).length > 0;
 
 

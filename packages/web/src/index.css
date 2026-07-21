@@ -1562,7 +1562,7 @@ body.resizing .sidebar-resizer {
 .request-detail-main-tabs {
   margin: 0 var(--space-4) var(--space-4) var(--space-4);
   padding: 4px;
-  background: var(--bg-main);
+  background: var(--bg-surface);
 }
 
 .detail-toggle-group {
