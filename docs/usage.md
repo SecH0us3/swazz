@@ -62,6 +62,14 @@ go run main.go spider https://app.example.com --headless --out openapi.json --fo
 - **`--config`**: Path to `swazz.config.json` file for executing `auth_sequence` before crawling.
 - **`--yes`**: Suppresses the interactive terminal warning prompt for CI/CD automation.
 
+#### Running `swazz spider` with Docker 🐳
+
+Since the Headless Browser Crawler is designed as a **Local-First CLI tool**, running it inside a Docker container requires passing `--yes` (to skip the interactive prompt) and mounting a volume to save the resulting OpenAPI/HAR file to your host machine:
+
+```bash
+docker run --rm -v $(pwd):/output ghcr.io/sech0us3/swazz-cli spider https://app.example.com --headless --out /output/openapi.json --yes
+```
+
 > [!WARNING]
 > The headless crawler clicks interactive elements randomly. It may trigger data deletion, emails, or state mutations. Do not run against production environments!
 
