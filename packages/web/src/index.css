@@ -1559,6 +1559,12 @@ body.resizing .sidebar-resizer {
   margin-bottom: var(--space-3);
 }
 
+.request-detail-main-tabs {
+  margin: 0 var(--space-4) var(--space-4) var(--space-4);
+  padding: 4px;
+  background: var(--bg-main);
+}
+
 .detail-toggle-group {
   display: flex;
   margin-left: auto;
