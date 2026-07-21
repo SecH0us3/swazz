@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"swazz-engine/internal/crawler"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
@@ -108,7 +109,7 @@ func runSpiderCLI(args []string) {
 		len(res.Endpoints), res.PagesVisited, res.DurationMs)
 
 	var outputData []byte
-	if *format == "har" || (*format == "openapi" && (len(*outPath) > 4 && (*outPath)[len(*outPath)-4:] == ".har")) {
+	if *format == "har" || (*format == "openapi" && strings.HasSuffix(strings.ToLower(*outPath), ".har")) {
 		outputData, err = sniffer.ToHAR()
 	} else {
 		outputData, err = sniffer.ToOpenAPI()

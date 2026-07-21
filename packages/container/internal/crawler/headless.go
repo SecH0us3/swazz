@@ -135,12 +135,15 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 
 	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(execPath),
-		chromedp.Headless,
 		chromedp.NoSandbox,
 		chromedp.DisableGPU,
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 	)
+
+	if c.config.Headless {
+		allocOpts = append(allocOpts, chromedp.Headless)
+	}
 
 	if c.config.MemoryLimitMB > 0 {
 		allocOpts = append(allocOpts, chromedp.Flag("js-flags", fmt.Sprintf("--max-old-space-size=%d", c.config.MemoryLimitMB)))
@@ -166,6 +169,17 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 	// Enable CDP network domain listening
 	if err := chromedp.Run(runCtx, network.Enable()); err != nil {
 		return nil, fmt.Errorf("failed to enable CDP network domain: %w", err)
+	}
+
+	// Inject extra HTTP headers if configured
+	if len(c.config.Headers) > 0 {
+		headersMap := make(network.Headers)
+		for k, v := range c.config.Headers {
+			headersMap[k] = v
+		}
+		if err := chromedp.Run(runCtx, network.SetExtraHTTPHeaders(headersMap)); err != nil {
+			fmt.Printf("Warning: failed to set extra HTTP headers: %v\n", err)
+		}
 	}
 
 	// Listen for CDP network events
@@ -282,10 +296,9 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string) (*CrawlerResult, 
 		}))
 
 		if errEval != nil || exceptionRes != nil {
-			// Click failed or no more interactive elements
-			break
+			// Click failed for this element; continue to next iteration
+			continue
 		}
-
 		_ = evalRes
 
 		// Wait briefly after click to allow SPA router / fetch requests to complete

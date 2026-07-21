@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -227,7 +228,11 @@ func (s *Sniffer) OnResponseReceived(evt *network.EventResponseReceived) {
 	resp := evt.Response
 	if s.IsNoise(resp.URL, resp.MimeType, "") {
 		s.mu.Lock()
-		delete(s.pendingRequests, evt.RequestID)
+		if ep, ok := s.pendingRequests[evt.RequestID]; ok {
+			key := ep.Method + " " + ep.URL
+			delete(s.endpoints, key)
+			delete(s.pendingRequests, evt.RequestID)
+		}
 		s.mu.Unlock()
 		return
 	}
@@ -257,7 +262,7 @@ func (s *Sniffer) AddEndpoint(ep DiscoveredEndpoint) {
 	s.endpoints[key] = ep
 }
 
-// GetEndpoints returns all discovered endpoints.
+// GetEndpoints returns all discovered endpoints, sorted deterministically by URL and Method.
 func (s *Sniffer) GetEndpoints() []DiscoveredEndpoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -265,6 +270,12 @@ func (s *Sniffer) GetEndpoints() []DiscoveredEndpoint {
 	for _, ep := range s.endpoints {
 		res = append(res, ep)
 	}
+	sort.Slice(res, func(i, j int) bool {
+		if res[i].URL == res[j].URL {
+			return res[i].Method < res[j].Method
+		}
+		return res[i].URL < res[j].URL
+	})
 	return res
 }
 
