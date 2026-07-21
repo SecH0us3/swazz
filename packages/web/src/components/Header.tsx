@@ -53,7 +53,6 @@ export function Header({
 
     const isConfigPanelOpen = typeof window !== 'undefined' && window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop;
     const isBusy = isRunning || isLoadingSpecs || isQueued;
-    const betaModeEnabled = useAppStore(state => state.betaModeEnabled);
 
     const { showToast } = useToast();
 
