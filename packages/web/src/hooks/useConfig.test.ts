@@ -19,12 +19,7 @@ const DEFAULT_CONFIG: SwazzConfig = {
     disabled_endpoints: [],
     _swagger_urls: [],
     security: { allow_private_ips: false },
-    rules: { ignore: [] },
-    mcp_server: {
-        type: 'stdio',
-        command: 'node',
-        args: ['demo/mcp-stdio.js']
-    }
+    rules: { ignore: [] }
 };
 
 describe('useConfig', () => {
