@@ -1124,3 +1124,125 @@
     background: var(--border-subtle);
     margin: 0 0.5rem;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Light Mode Theme Overrides for Auth Modal ([data-theme="light"])
+   ═══════════════════════════════════════════════════════════ */
+
+[data-theme="light"] .auth-modal-backdrop {
+    background-color: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+[data-theme="light"] .auth-modal {
+    background-color: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.18), 0 0 30px rgba(2, 132, 199, 0.08);
+}
+
+[data-theme="light"] .auth-modal-close {
+    color: #64748b;
+}
+
+[data-theme="light"] .auth-modal-close:hover {
+    color: #0f172a;
+    background-color: #f1f5f9;
+}
+
+[data-theme="light"] .login-header h2 {
+    color: #0f172a;
+}
+
+[data-theme="light"] .login-header p,
+[data-theme="light"] .login-subtitle {
+    color: #64748b;
+}
+
+[data-theme="light"] .beta-status-banner {
+    background-color: rgba(2, 132, 199, 0.08);
+    border-color: rgba(2, 132, 199, 0.25);
+    color: #0284c7;
+}
+
+[data-theme="light"] .login-form label {
+    color: #475569;
+}
+
+[data-theme="light"] .login-form input {
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+}
+
+[data-theme="light"] .login-form input::placeholder {
+    color: #94a3b8;
+}
+
+[data-theme="light"] .login-form input:focus {
+    background-color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+[data-theme="light"] .password-toggle-btn {
+    color: #64748b;
+}
+
+[data-theme="light"] .password-toggle-btn:hover {
+    color: #0f172a;
+    background-color: #f1f5f9;
+}
+
+[data-theme="light"] .primary-social-btn {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+
+[data-theme="light"] .primary-social-btn:hover {
+    background-color: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+[data-theme="light"] .oauth-divider-text {
+    color: #94a3b8;
+    background-color: #ffffff;
+}
+
+[data-theme="light"] .oauth-divider::before,
+[data-theme="light"] .oauth-divider::after {
+    background-color: #e2e8f0;
+}
+
+[data-theme="light"] .invite-code-toggle-btn,
+[data-theme="light"] .auth-toggle-link .text-btn {
+    color: #0284c7;
+}
+
+[data-theme="light"] .invite-code-toggle-btn:hover,
+[data-theme="light"] .auth-toggle-link .text-btn:hover {
+    color: #0369a1;
+}
+
+[data-theme="light"] .auth-toggle-link p {
+    color: #64748b;
+}
+
+[data-theme="light"] .guest-btn {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+
+[data-theme="light"] .guest-btn:hover {
+    background-color: #e0f2fe;
+    border-color: #0284c7;
+    color: #0284c7;
+}
+
+[data-theme="light"] .password-strength-label,
+[data-theme="light"] .password-requirements li {
+    color: #64748b;
+}
+

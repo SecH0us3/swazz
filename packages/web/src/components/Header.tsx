@@ -192,40 +192,31 @@ export function Header({
                     <span className="header-logo-text">Swazz</span>
                 </div>
 
-                {betaModeEnabled && (
-                    <div 
-                        className="header-beta-badge" 
-                        title="Closed Beta Phase: System capacity is currently limited. Signups are subject to invite controls."
-                    >
-                        <span className="header-beta-dot" />
-                        <span className="header-beta-text">Closed Beta</span>
-                    </div>
-                )}
-
-                <div className="header-divider" />
-
                 {/* Running status pill */}
                 {(isRunning || isPaused || isQueued) && (
-                    <div className={`header-status${isPaused ? ' paused' : isQueued ? ' queued' : ''}`}>
-                        {isPaused ? (
-                            <>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                                    <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                                </svg>
-                                Paused
-                            </>
-                        ) : isQueued ? (
-                            <>
-                                <span className="queued-dot" />
-                                Queued
-                            </>
-                        ) : (
-                            <>
-                                <span className="running-dot" />
-                                Running
-                            </>
-                        )}
-                    </div>
+                    <>
+                        <div className="header-divider" />
+                        <div className={`header-status${isPaused ? ' paused' : isQueued ? ' queued' : ''}`}>
+                            {isPaused ? (
+                                <>
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                                        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                                    </svg>
+                                    Paused
+                                </>
+                            ) : isQueued ? (
+                                <>
+                                    <span className="queued-dot" />
+                                    Queued
+                                </>
+                            ) : (
+                                <>
+                                    <span className="running-dot" />
+                                    Running
+                                </>
+                            )}
+                        </div>
+                    </>
                 )}
             </div>
 
@@ -253,9 +244,6 @@ export function Header({
                             placeholder="Enter target API URL (e.g. https://api.example.com)"
                             readOnly={!onChangeBaseUrl}
                         />
-                        {isBusy && !isLoadingSpecs && (
-                            <span className="workspace-status-indicator" />
-                        )}
                     </div>
 
                     <div className="header-action-section">
