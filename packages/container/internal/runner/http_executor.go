@@ -72,6 +72,7 @@ var (
 )
 
 func getRandomUserAgent() string {
+	// #nosec G404 -- Randomness here is just for user agent rotation, not security
 	return userAgents[rand.Intn(len(userAgents))]
 }
 
@@ -80,6 +81,7 @@ func getNextProxy(proxies []string) string {
 		return ""
 	}
 	idx := atomic.AddUint32(&proxyCounter, 1)
+	// #nosec G115 -- Length of proxies list will never exceed max uint32
 	return proxies[idx%uint32(len(proxies))]
 }
 

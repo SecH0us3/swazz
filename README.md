@@ -51,6 +51,8 @@ We package and run the Swazz application components via Docker and Docker Compos
 
 For detailed instructions on running the entire Web UI, coordinator, and runner agent locally, please see the [Docker Deployment Guide](DOCKER.md).
 
+For Kubernetes orchestration (Helm chart), please see the [Kubernetes Deployment Guide](docs/kubernetes.md).
+
 #### Running the Headless CLI
 ```bash
 docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>

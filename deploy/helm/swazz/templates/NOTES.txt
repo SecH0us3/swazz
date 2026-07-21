@@ -1,0 +1,18 @@
+Thank you for installing the Swazz Helm chart!
+
+To access the Web UI:
+{{- if .Values.ingress.enabled }}
+1. Get the application URL by running these commands:
+{{- if and .Values.ingress.hosts (gt (len .Values.ingress.hosts) 0) }}
+   echo "Visit https://{{ (index .Values.ingress.hosts 0).host }} to open Swazz"
+{{- else }}
+   echo "Visit the ingress controller's IP to open Swazz"
+{{- end }}
+{{- else }}
+1. Port forward the Web UI and Edge API services:
+   kubectl port-forward svc/{{ include "swazz.fullname" . }}-web 8080:{{ .Values.web.service.port }} -n {{ .Release.Namespace }} &
+   kubectl port-forward svc/{{ include "swazz.fullname" . }}-edge 3000:{{ .Values.edge.service.port }} -n {{ .Release.Namespace }} &
+   echo "Visit http://localhost:8080 to open Swazz"
+{{- end }}
+
+To ensure Runner Agents can connect to the Edge Coordinator, verify that `COORDINATOR_URL` in `runner.env` is accessible by the Runner pods.

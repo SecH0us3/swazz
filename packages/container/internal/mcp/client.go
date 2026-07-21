@@ -136,6 +136,7 @@ func (c *StdioClient) Connect(ctx context.Context) error {
 		}
 	}
 	c.ctx, c.cancel = context.WithCancel(ctx)
+	// #nosec G204 -- The command and args are already sanitized above
 	c.cmd = exec.CommandContext(c.ctx, c.command, c.args...)
 
 	stdin, err := c.cmd.StdinPipe()

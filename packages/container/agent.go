@@ -807,7 +807,8 @@ func startAgent(args []string) {
 					var mcpErr error
 					if mcpErr = mcpClient.Connect(mcpCtxHTTP); mcpErr != nil {
 						logWarn("[Parser] MCP HTTP connect failed: %v, falling back to SSE", mcpErr)
-						mcpClient.Close()
+						// #nosec G104 -- Ignore close error on fallback
+						_ = mcpClient.Close()
 
 						mcpClient = mcp.NewSSEClient(reqPayload.URL, false, mcpHeaders, nil)
 						mcpCtxSSE, cancelSSE := context.WithTimeout(context.Background(), 10*time.Second)
@@ -835,7 +836,8 @@ func startAgent(args []string) {
 							pruneSchema(&eps[i].Schema, 0, 3)
 						}
 
-						mcpClient.Close()
+						// #nosec G104 -- Ignore close error on successful fetch
+						_ = mcpClient.Close()
 						logInfo("[Parser] Fallback to MCP successful for %s (%d tools)", reqPayload.URL, len(eps))
 						result = map[string]interface{}{
 							"basePath":  reqPayload.URL,

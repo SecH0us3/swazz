@@ -335,6 +335,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	if !resuming {
 		r.baselinePhase(runCtx)
 	} else {
+		// #nosec G115 -- Number of endpoints will never exceed int32 max
 		r.progress.completedEndpoints.Store(int32(len(r.config.Endpoints)))
 	}
 
@@ -344,6 +345,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		}
 
 		if resuming && string(profile) != resumeProfile {
+			// #nosec G115 -- Number of endpoints will never exceed int32 max
 			r.progress.completedEndpoints.Add(int32(len(r.config.Endpoints)))
 			continue
 		}
