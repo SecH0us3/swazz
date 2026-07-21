@@ -53,8 +53,13 @@ go run main.go spider https://app.example.com --headless --out openapi.json --fo
 ```
 
 - **`--headless`**: Enables the Chrome DevTools Protocol (CDP) headless crawler.
-- **`--out`**: Specifies the output file path (e.g. `openapi.json` or `discovery.har`).
+- **`--out`**: Specifies the output file path (e.g. `openapi.json` or `discovery.har`). Default is `openapi.json`.
 - **`--format`**: Output format (`openapi` or `har`). Default is `openapi`.
+- **`--max-depth`**: Maximum crawling depth (default `3`).
+- **`--max-clicks`**: Maximum interactive element clicks per URL route (default `3`).
+- **`--max-pages`**: Maximum pages to visit (default `50`).
+- **`--timeout`**: Timeout per page in seconds (default `3`).
+- **`--config`**: Path to `swazz.config.json` file for executing `auth_sequence` before crawling.
 - **`--yes`**: Suppresses the interactive terminal warning prompt for CI/CD automation.
 
 > [!WARNING]
