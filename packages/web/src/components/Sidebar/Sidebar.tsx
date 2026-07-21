@@ -147,9 +147,9 @@ export function Sidebar({
                         const specCacheDates = useAppStore.getState().specCacheDates;
                         const cachedAt = specCacheDates[url];
                         return (
-                            <div key={url} style={{ display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--bg-elevated)', borderRadius: 4, padding: '4px 8px', border: '1px solid var(--border-default)' }}>
-                                <div className="swagger-url-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', flex: 1 }}>
+                            <div key={url} className="swagger-url-card">
+                                <div className="swagger-url-row">
+                                    <div className="swagger-url-left">
                                         {isLoadingSpecs ? (
                                             <span className="swagger-url-loading-badge" title={`Loading specs for ${url}`}>
                                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="header-spin-icon">
@@ -159,17 +159,16 @@ export function Sidebar({
                                             </span>
                                         ) : (
                                             <>
-                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" className="swagger-url-check-icon">
                                                     <polyline points="20 6 9 17 4 12"/>
                                                 </svg>
-                                                <span className="swagger-url-text" title={url} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{url}</span>
+                                                <span className="swagger-url-text" title={url}>{url}</span>
                                             </>
                                         )}
                                     </div>
-                                    <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink: 0 }}>
+                                    <div className="swagger-url-actions">
                                         <button
-                                            className="btn btn-ghost btn-sm"
-                                            style={{ padding: '2px 4px', height: 'auto', display: 'flex', alignItems: 'center' }}
+                                            className="swagger-url-action-btn"
                                             onClick={() => onLoadEndpoints([url], true)}
                                             title="Refresh / Rebuild Cache"
                                             aria-label="Refresh Cache"
@@ -179,16 +178,15 @@ export function Sidebar({
                                             </svg>
                                         </button>
                                         <button
-                                            className="kv-delete"
+                                            className="swagger-url-action-btn"
                                             onClick={() => removeUrl(url)}
                                             title="Remove"
                                             aria-label="Remove URL"
-                                            style={{ margin: 0, padding: '2px 4px', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                                         >✕</button>
                                     </div>
                                 </div>
                                 {cachedAt && (
-                                    <div style={{ fontSize: 10, color: 'var(--text-disabled)', marginLeft: 15, fontFamily: 'var(--font-mono)' }}>
+                                    <div className="swagger-url-cached-date">
                                         Cached: {new Date(cachedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                                     </div>
                                 )}
