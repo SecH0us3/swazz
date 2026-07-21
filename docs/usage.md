@@ -43,6 +43,23 @@ cd packages/container
 go run main.go start --config swazz.config.json
 ```
 
+### Headless Browser Crawler (`swazz spider`) 🕷️
+
+Autonomous target discovery for modern Single Page Applications (SPAs: React, Vue, Angular). It launches a local Chrome/Chromium instance, injects authentication cookies, navigates dynamic UI elements, intercepts background HTTP requests, and exports them as an OpenAPI v3 specification or HAR file.
+
+```bash
+cd packages/container
+go run main.go spider https://app.example.com --headless --out openapi.json --format openapi
+```
+
+- **`--headless`**: Enables the Chrome DevTools Protocol (CDP) headless crawler.
+- **`--out`**: Specifies the output file path (e.g. `openapi.json` or `discovery.har`).
+- **`--format`**: Output format (`openapi` or `har`). Default is `openapi`.
+- **`--yes`**: Suppresses the interactive terminal warning prompt for CI/CD automation.
+
+> [!WARNING]
+> The headless crawler clicks interactive elements randomly. It may trigger data deletion, emails, or state mutations. Do not run against production environments!
+
 ### Configuration File (`swazz.config.json`)
 
 The fuzzer engine relies on a JSON configuration file. It fully supports **JSONC** (JSON with Comments), meaning you can use single-line (`//`) and multi-line (`/* */`) comments. Here is an example:
