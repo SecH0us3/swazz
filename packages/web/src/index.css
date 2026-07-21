@@ -2949,6 +2949,10 @@ button:focus-visible {
     background: var(--accent-color);
 }
 
+.tab-badge {
+    margin-left: 6px;
+}
+
 .tab-content {
     animation: fadeIn 0.2s ease-out;
 }
@@ -3206,6 +3210,8 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  flex: 1;
+  overflow-y: auto;
 }
 
 .alert-banner {

@@ -520,28 +520,32 @@ export function RequestDetail({
                 </div>
 
                 {hasFindings && (
-                    <div className="tabs-header request-detail-main-tabs">
+                    <div className="tabs-header request-detail-main-tabs" role="tablist">
                         <button 
                             className={`tab-button ${mainTab === 'request' ? 'active' : ''}`} 
                             onClick={() => setMainTab('request')}
+                            role="tab"
+                            aria-selected={mainTab === 'request'}
                         >
                             Request Details
                         </button>
                         <button 
                             className={`tab-button ${mainTab === 'findings' ? 'active' : ''}`} 
                             onClick={() => setMainTab('findings')}
+                            role="tab"
+                            aria-selected={mainTab === 'findings'}
                         >
                             Alerts & Findings
-                            <span className="badge badge-error" style={{ marginLeft: 6 }}>
-                                {result.analyzerFindings!.length}
+                            <span className="badge badge-error tab-badge">
+                                {result.analyzerFindings?.length || 0}
                             </span>
                         </button>
                     </div>
                 )}
 
                 {hasFindings && mainTab === 'findings' && (
-                    <div className="analyzer-findings-alerts" style={{ flex: 1, overflowY: 'auto' }}>
-                        {result.analyzerFindings!.map((finding, idx) => (
+                    <div className="analyzer-findings-alerts">
+                        {result.analyzerFindings?.map((finding, idx) => (
                             <div key={idx} className={`alert-banner alert-${finding.level}`}>
                                 <div className="alert-banner-header">
                                     <span className={`alert-badge badge-${finding.level}`}>
