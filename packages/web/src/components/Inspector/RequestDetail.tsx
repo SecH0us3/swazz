@@ -734,6 +734,12 @@ export function RequestDetail({
                             <pre className="detail-json">
                                 {renderHighlightedJson(responseBodyJson)}
                             </pre>
+                            <button
+                                className="btn btn-ghost btn-xs response-copy-btn"
+                                onClick={() => copy(responseBodyJson, 'responseBody')}
+                            >
+                                {copied === 'responseBody' ? '✓ Copied' : 'Copy'}
+                            </button>
                         </div>
 
                         {liveHeaders && Object.keys(liveHeaders).length > 0 && (

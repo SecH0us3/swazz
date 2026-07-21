@@ -1741,6 +1741,10 @@ body.resizing .sidebar-resizer {
   margin-bottom: var(--space-3);
 }
 
+.detail-json-wrapper {
+  position: relative;
+}
+
 .detail-json {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
@@ -1751,6 +1755,18 @@ body.resizing .sidebar-resizer {
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.response-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0.3;
+  transition: opacity var(--duration-fast) var(--ease-in-out);
+}
+
+.response-copy-btn:hover {
+  opacity: 1;
 }
 
 .detail-copy-btn { margin-top: var(--space-2); }

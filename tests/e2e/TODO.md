@@ -161,3 +161,13 @@ This document lists candidate E2E test scenarios to be added to the Swazz suite 
   4. Ensure that the findings dashboard displays enriched IAST stack traces and verifies precise code locations of vulnerability sinks.
 
 
+
+## 19. Response Body Copy Button
+* **Objective**: Verify that the copy button correctly copies the JSON response body to the clipboard.
+* **Test Steps**:
+  1. Complete a fuzzing run.
+  2. Click on a fuzzed request row in the Inspector to open the Request Detail modal.
+  3. Ensure a response body is present.
+  4. Hover over the Response Body block and click the "Copy" button.
+  5. Verify that the button text changes to "✓ Copied".
+  6. Assert that the clipboard content matches the displayed JSON response body exactly.
