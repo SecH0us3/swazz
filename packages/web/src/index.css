@@ -2274,12 +2274,14 @@ body.resizing .sidebar-resizer {
   gap: 8px;
   z-index: 3000;
   pointer-events: none;
-  max-width: 90vw;
+  max-width: 95vw;
 }
 
 .toast {
-  min-width: min(380px, 90vw);
-  max-width: 520px;
+  min-width: min(520px, 92vw);
+  max-width: 720px;
+  width: auto;
+  height: auto;
   box-sizing: border-box;
   padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
@@ -2288,7 +2290,11 @@ body.resizing .sidebar-resizer {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
+  line-height: 1.5;
   color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   animation: slide-in-down 280ms var(--ease-out);
   pointer-events: auto;
   cursor: pointer;
