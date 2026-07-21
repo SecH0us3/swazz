@@ -29,7 +29,7 @@ You can fully configure advanced settings (Base settings, Authentication & Multi
 
 ```bash
 cd packages/container
-go run main.go wizard
+go run . wizard
 ```
 
 - **Auto-Continuation**: If an existing `swazz.config.json` is found, the wizard will prompt you to edit the existing configuration or start a new one from scratch.
@@ -40,8 +40,38 @@ go run main.go wizard
 
 ```bash
 cd packages/container
-go run main.go start --config swazz.config.json
+go run . start --config swazz.config.json
 ```
+
+### Headless Browser Crawler (`swazz spider`) 🕷️
+
+Autonomous target discovery for modern Single Page Applications (SPAs: React, Vue, Angular). It launches a local Chrome/Chromium instance, injects authentication cookies, navigates dynamic UI elements, intercepts background HTTP requests, and exports them as an OpenAPI v3 specification or HAR file.
+
+```bash
+cd packages/container
+go run . spider https://app.example.com --headless --out openapi.json --format openapi
+```
+
+- **`--headless`**: Enables the Chrome DevTools Protocol (CDP) headless crawler.
+- **`--out`**: Specifies the output file path (e.g. `openapi.json` or `discovery.har`). Default is `openapi.json`.
+- **`--format`**: Output format (`openapi` or `har`). Default is `openapi`.
+- **`--max-depth`**: Maximum crawling depth (default `3`).
+- **`--max-clicks`**: Maximum interactive element clicks per URL route (default `3`).
+- **`--max-pages`**: Maximum pages to visit (default `50`).
+- **`--timeout`**: Timeout per page in seconds (default `3`).
+- **`--config`**: Path to `swazz.config.json` file for executing `auth_sequence` before crawling.
+- **`--yes`**: Suppresses the interactive terminal warning prompt for CI/CD automation.
+
+#### Running `swazz spider` with Docker 🐳
+
+Since the Headless Browser Crawler is designed as a **Local-First CLI tool**, running it inside a Docker container requires passing `--yes` (to skip the interactive prompt) and mounting a volume to save the resulting OpenAPI/HAR file to your host machine:
+
+```bash
+docker run --rm -v $(pwd):/output ghcr.io/sech0us3/swazz-cli spider https://app.example.com --headless --out /output/openapi.json --yes
+```
+
+> [!WARNING]
+> The headless crawler clicks interactive elements randomly. It may trigger data deletion, emails, or state mutations. Do not run against production environments!
 
 ### Configuration File (`swazz.config.json`)
 

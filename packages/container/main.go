@@ -141,6 +141,8 @@ func main() {
 		runAgent(os.Args[2:])
 	case "start":
 		runCLI(os.Args[2:])
+	case "spider":
+		runSpiderCLI(os.Args[2:])
 	case "wizard":
 		runWizard()
 	case "generate-keys":
@@ -158,6 +160,7 @@ func printHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  swazz-engine run-agent [options]  Start headless runner connected to Cloudflare Coordinator")
 	fmt.Println("  swazz-engine start [options]      Start a CLI fuzzing run using config (Local offline mode)")
+	fmt.Println("  swazz-engine spider <url> [opts]  Headless browser crawler & CDP interception sniffer")
 	fmt.Println("  swazz-engine wizard               Interactive setup to generate swazz.config.json")
 	fmt.Println("  swazz-engine generate-keys        Generate asymmetric keypair for runner signing authentication")
 	fmt.Println()
