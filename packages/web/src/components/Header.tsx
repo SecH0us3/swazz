@@ -32,6 +32,7 @@ export function Header({
     })));
 
     const isBusy = isRunning || isLoadingSpecs || isQueued;
+    const betaModeEnabled = useAppStore(state => state.betaModeEnabled);
 
     const { showToast } = useToast();
 
@@ -163,8 +164,8 @@ export function Header({
                 )}
             </div>
 
-            {/* Center Section: Guest Mode conversion banner */}
-            {authEnabled && isGuest && (
+            {/* Center Section: Guest Mode or Closed Beta Banner */}
+            {authEnabled && isGuest ? (
                 <div 
                     className="header-guest-banner guest-badge" 
                     onClick={onLogout} 
@@ -177,6 +178,16 @@ export function Header({
                     </svg>
                     <span className="header-guest-banner-text">
                         <strong>Guest Mode:</strong> Scans are temporary. Save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up →</span>
+                    </span>
+                </div>
+            ) : betaModeEnabled && (
+                <div 
+                    className="header-beta-banner beta-badge" 
+                    title="Closed Beta Phase: System capacity is currently limited. Signups are subject to invite controls."
+                >
+                    <span className="beta-alert-dot" />
+                    <span className="header-beta-banner-text">
+                        <strong>Closed Beta Phase:</strong> System capacity limited • Invite controls active
                     </span>
                 </div>
             )}
