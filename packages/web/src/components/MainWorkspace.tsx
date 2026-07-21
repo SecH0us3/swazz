@@ -422,14 +422,7 @@ export function MainWorkspace({
                         </div>
                     )}
 
-                    {betaModeEnabled && !isGuest && (
-                        <div className="beta-status-alert">
-                            <span className="beta-alert-dot" />
-                            <span className="beta-alert-text">
-                                <strong>Closed Beta Phase:</strong> System capacity is currently limited. Signups are subject to invite controls.
-                            </span>
-                        </div>
-                    )}
+
 
 
 
