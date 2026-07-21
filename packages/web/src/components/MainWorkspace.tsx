@@ -185,6 +185,8 @@ export function MainWorkspace({
     const isBusy = isRunning || isLoadingSpecs || isQueued;
 
     const betaModeEnabled = useAppStore((state) => state.betaModeEnabled);
+    const userProfile = useAppStore((state) => state.userProfile);
+    const isGuest = userProfile?.isGuest || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('swazz_guest') === 'true');
 
     const handleConfigureTarget = () => {
         const input = document.querySelector('.workspace-target-input') as HTMLInputElement | null;
@@ -198,7 +200,10 @@ export function MainWorkspace({
     const [isExportHovered, setIsExportHovered] = useState(false);
 
     useEffect(() => {
-        setLocalUrl(baseUrl);
+        const inputEl = document.querySelector('.header-target-input');
+        if (document.activeElement !== inputEl) {
+            setLocalUrl(baseUrl);
+        }
     }, [baseUrl]);
 
     const handleUrlCommit = (val: string) => {
@@ -338,6 +343,7 @@ export function MainWorkspace({
                 <AboutPage />
             ) : (
                 <div className="workspace-main-layout">
+
 
 
 

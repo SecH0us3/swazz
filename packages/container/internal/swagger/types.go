@@ -218,7 +218,7 @@ func DefaultSettings() Settings {
 		MaxNodesBudget:                50000,
 		MaxDepthLimit:                 64,
 		MaxScanDurationMin:            0,
-		ActiveParameterFuzzing:        true,
+		ActiveParameterFuzzing:        false,
 		ProxyList:                     []string{},
 		RandomizeUserAgent:            false,
 		EnableAdaptiveRateLimit:       false,

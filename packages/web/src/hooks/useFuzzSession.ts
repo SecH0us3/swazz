@@ -221,7 +221,7 @@ export function useFuzzSession({
             useAppStore.setState({
                 liveCount,
             });
-            showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
+            showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
         };
 
         try {
@@ -292,7 +292,7 @@ export function useFuzzSession({
                 useAppStore.setState({
                     liveCount,
                 });
-                showToast(`Scan complete — ${liveCount.toLocaleString()} requests saved`, 'success');
+                showToast(`Scan complete — ${liveCount.toLocaleString()} requests completed`, 'success');
             };
 
             try {

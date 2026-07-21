@@ -1,6 +1,6 @@
 import { ChangeEvent, useState, useRef } from 'react';
 import type { SwazzConfig, FuzzingProfile, Dictionary, EndpointConfig } from '../../types.js';
-import { detectMcpServer } from '../../services/swaggerService.js';
+import { detectMcpServer, parseRawSpec } from '../../services/swaggerService.js';
 
 import type { ScanRun } from '../../hooks/useDb.js';
 
@@ -39,9 +39,44 @@ export function Sidebar({
     token = null,
 }: Props) {
     const loadedRunId = useAppStore(state => state.loadedRunId);
+    const isLoadingSpecs = useAppStore(state => state.isLoadingSpecs);
     
     const swaggerUrls: string[] = config._swagger_urls || [];
     const [urlInput, setUrlInput] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const content = event.target?.result as string;
+            if (!content) return;
+            try {
+                onToast(`Parsing uploaded file ${file.name}...`, 'info');
+                const { basePath, endpointCount, endpoints } = await parseRawSpec(content);
+                const combinedEndpoints = [...(config.endpoints || []), ...endpoints];
+                const seen = new Set();
+                const uniqueEndpoints = combinedEndpoints.filter(ep => {
+                    const key = `${ep.method.toUpperCase()} ${ep.path}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+
+                onUpdateConfig({
+                    base_url: basePath || config.base_url,
+                    endpoints: uniqueEndpoints
+                });
+                onToast(`✓ Loaded ${endpointCount} endpoints from ${file.name}`, 'success');
+            } catch (err: any) {
+                onToast(`✗ Failed to parse ${file.name}: ${err.message || String(err)}`, 'error');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
 
     const setSwaggerUrls = (urls: string[]) => {
         onUpdateConfig({ _swagger_urls: urls });
@@ -94,14 +129,7 @@ export function Sidebar({
     return (
         <aside className={`sidebar ${className || ''}`} style={style}>
             {authEnabled && token && (
-                <div className="sidebar-project-selector" style={{
-                    padding: '8px 12px 14px 12px',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    marginBottom: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px'
-                }}>
+                <div className="sidebar-project-selector">
                     <ProjectSelector />
                 </div>
             )}
@@ -122,10 +150,21 @@ export function Sidebar({
                             <div key={url} style={{ display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--bg-elevated)', borderRadius: 4, padding: '4px 8px', border: '1px solid var(--border-default)' }}>
                                 <div className="swagger-url-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', flex: 1 }}>
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
-                                            <polyline points="20 6 9 17 4 12"/>
-                                        </svg>
-                                        <span className="swagger-url-text" title={url} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{url}</span>
+                                        {isLoadingSpecs ? (
+                                            <span className="swagger-url-loading-badge" title={`Loading specs for ${url}`}>
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="header-spin-icon">
+                                                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                                                </svg>
+                                                Loading specs…
+                                            </span>
+                                        ) : (
+                                            <>
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink:0 }}>
+                                                    <polyline points="20 6 9 17 4 12"/>
+                                                </svg>
+                                                <span className="swagger-url-text" title={url} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{url}</span>
+                                            </>
+                                        )}
                                     </div>
                                     <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink: 0 }}>
                                         <button
@@ -156,22 +195,35 @@ export function Sidebar({
                             </div>
                         );
                     })}
-                    <div style={{ display:'flex', gap:4 }}>
+                    <div className="sidebar-add-url-row">
                         <input
-                            className="input"
-                            style={{ flex:1, minWidth:0 }}
+                            className="input sidebar-add-url-input"
                             value={urlInput}
                             placeholder="https://api.com/swagger.json or /graphql"
                             onChange={(e) => setUrlInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && addUrl()}
                         />
                         <button
-                            className="btn btn-primary btn-sm"
-                            style={{ flexShrink:0 }}
+                            className="btn btn-primary btn-sm sidebar-add-url-btn"
                             onClick={addUrl}
                             disabled={!urlInput.trim()}
                         >
                             Add
+                        </button>
+                        <input
+                            type="file"
+                            accept=".json,.yaml,.yml,.har"
+                            ref={fileInputRef}
+                            onChange={handleFileUpload}
+                            className="sidebar-file-input-hidden"
+                        />
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-sm sidebar-upload-btn"
+                            title="Upload Spec / HAR File"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            📁
                         </button>
                     </div>
                 </div>

@@ -21,11 +21,6 @@ const DEFAULT_CONFIG: SwazzConfig = {
     _swagger_urls: [],
     security: { allow_private_ips: false },
     rules: { ignore: [] },
-    mcp_server: {
-        type: 'stdio',
-        command: 'node',
-        args: ['demo/mcp-stdio.js']
-    },
 };
 
 export function validateConfig(config: any): void {
@@ -283,7 +278,13 @@ export function useConfig() {
     }, [config, storageKey, token, activeProject]);
 
     const updateConfig = useCallback((partial: Partial<SwazzConfig>) => {
-        setConfig((prev) => ({ ...prev, ...partial }));
+        setConfig((prev) => {
+            const next = { ...prev, ...partial };
+            if ('mcp_server' in partial && partial.mcp_server === undefined) {
+                delete next.mcp_server;
+            }
+            return next;
+        });
     }, []);
 
     const updateHeaders = useCallback((headers: Record<string, string>) => {

@@ -976,7 +976,7 @@ export default function App() {
                 onRegister={register}
             />
 
-            <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200 }}>
+            <div className="toast-container">
                 {toasts.map((t) => (
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
