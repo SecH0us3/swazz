@@ -178,6 +178,8 @@ export function MainWorkspace({
         isConfigHiddenDesktop: state.isConfigHiddenDesktop
     })));
 
+    const isConfigPanelOpen = typeof window !== 'undefined' && window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop;
+
     const isConfigVisible = typeof window !== 'undefined' ? (window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop) : false;
 
     const isBusy = isRunning || isLoadingSpecs || isQueued;
@@ -341,87 +343,6 @@ export function MainWorkspace({
                 <AboutPage />
             ) : (
                 <div className="workspace-main-layout">
-                    {loadedRunId === null && (
-                        <div className="workspace-control-bar">
-                            <div className="workspace-url-section">
-                                <svg className="url-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <line x1="2" y1="12" x2="22" y2="12"/>
-                                    <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-                                </svg>
-                                <input
-                                    className="workspace-target-input header-target-input"
-                                    value={localUrl}
-                                    aria-label="Target API URL"
-                                    onChange={(e) => setLocalUrl(e.target.value)}
-                                    onBlur={() => handleUrlCommit(localUrl)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleUrlCommit(localUrl);
-                                            e.currentTarget.blur();
-                                        }
-                                    }}
-                                    placeholder="Enter target API URL (e.g. https://api.example.com)"
-                                    readOnly={!onChangeBaseUrl}
-                                />
-                                {isBusy && !isLoadingSpecs && (
-                                    <span className="workspace-status-indicator" />
-                                )}
-                            </div>
-
-                            <div className="workspace-action-section">
-                                {!isBusy ? (
-                                    <button className="btn btn-primary btn-run" id="btn-start" onClick={handleStartClick}>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                            <polygon points="5,3 19,12 5,21"/>
-                                        </svg>
-                                        <span>Run Scan</span>
-                                    </button>
-                                ) : (
-                                    <div className="action-button-group">
-                                        {!isLoadingSpecs && (
-                                            isPaused ? (
-                                                <button className="btn btn-success" onClick={onResume} title="Resume">
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                                        <polygon points="5,3 19,12 5,21"/>
-                                                    </svg>
-                                                    <span>Resume</span>
-                                                </button>
-                                            ) : (
-                                                <button className="btn btn-ghost" onClick={onPause} title="Pause">
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                                        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                                                    </svg>
-                                                    <span>Pause</span>
-                                                </button>
-                                            )
-                                        )}
-                                        <button className="btn btn-danger" onClick={onStop} title="Stop">
-                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                                                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                            </svg>
-                                            <span>Stop</span>
-                                        </button>
-                                    </div>
-                                )}
-                                
-                                {!isConfigVisible && onToggleConfig && (
-                                    <button 
-                                        className="btn btn-ghost btn-icon btn-config-gear"
-                                        onClick={onToggleConfig}
-                                        title="Configure Fuzzer Settings"
-                                        aria-label="Configure Fuzzer Settings"
-                                    >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <circle cx="12" cy="12" r="3"/>
-                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                                        </svg>
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
 
 
 
@@ -563,6 +484,20 @@ export function MainWorkspace({
                                 </div>
                             )}
                         </div>
+
+                        {onToggleConfig && !isConfigPanelOpen && (
+                            <button
+                                className={`tab-bar-btn workspace-config-toggle-btn ${isConfigPanelOpen ? 'active' : ''}`}
+                                onClick={onToggleConfig}
+                                title="Open Scan Settings & Options"
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                </svg>
+                                Settings
+                            </button>
+                        )}
                     </div>
 
                     {activeTab === 'history' ? (

@@ -32,9 +32,9 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
 
 
 
-    // Verify logged-in dashboard shows the beta status alert banner
-    await expect(page.locator('.beta-status-alert')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('.beta-status-alert')).toContainText('Closed Beta Phase:');
+    // Verify logged-in header shows the beta status badge
+    await expect(page.locator('.header-beta-badge')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.header-beta-badge')).toContainText('Closed Beta');
   });
 
   test('should require invite code and enforce limits when beta limit is reached', async ({ page }) => {

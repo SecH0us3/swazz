@@ -12,6 +12,14 @@ interface Props {
     token?: string | null;
     isGuest?: boolean;
     onLogout?: () => void;
+    onOpenRegisterModal?: () => void;
+    baseUrl?: string;
+    onChangeBaseUrl?: (url: string) => void;
+    onStart?: (cleanUrl?: string) => void;
+    onStop?: () => void;
+    onPause?: () => void;
+    onResume?: () => void;
+    onToggleConfig?: () => void;
 }
 
 export function Header({
@@ -22,21 +30,78 @@ export function Header({
     token = null,
     isGuest = false,
     onLogout,
+    onOpenRegisterModal,
+    baseUrl = '',
+    onChangeBaseUrl,
+    onStart,
+    onStop,
+    onPause,
+    onResume,
+    onToggleConfig,
 }: Props) {
-    const { isRunning, isPaused, isLoadingSpecs, isQueued, activeTab } = useAppStore(useShallow(state => ({
+    const { isRunning, isPaused, isLoadingSpecs, isQueued, activeTab, betaModeEnabled, loadedRunId, isConfigOpen, isConfigHiddenDesktop } = useAppStore(useShallow(state => ({
         isRunning: state.isRunning,
         isPaused: state.isPaused,
         isLoadingSpecs: state.isLoadingSpecs,
         isQueued: state.isQueued,
         activeTab: state.activeTab,
+        betaModeEnabled: state.betaModeEnabled,
+        loadedRunId: state.loadedRunId,
+        isConfigOpen: state.isConfigOpen,
+        isConfigHiddenDesktop: state.isConfigHiddenDesktop,
     })));
 
+    const isConfigPanelOpen = typeof window !== 'undefined' && window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop;
     const isBusy = isRunning || isLoadingSpecs || isQueued;
     const betaModeEnabled = useAppStore(state => state.betaModeEnabled);
 
     const { showToast } = useToast();
 
     const [invitations, setInvitations] = useState<any[]>([]);
+    const [localUrl, setLocalUrl] = useState(baseUrl);
+
+    useEffect(() => {
+        setLocalUrl(baseUrl);
+    }, [baseUrl]);
+
+    const handleUrlCommit = (val: string) => {
+        let cleanUrl = val.trim();
+        if (!cleanUrl) {
+            if (onChangeBaseUrl) onChangeBaseUrl('');
+            setLocalUrl('');
+            return;
+        }
+
+        try {
+            const u = new URL(cleanUrl);
+            cleanUrl = u.origin;
+        } catch {
+            // Not a full URL, leave as is
+        }
+
+        setLocalUrl(cleanUrl);
+        if (onChangeBaseUrl && cleanUrl !== baseUrl) {
+            onChangeBaseUrl(cleanUrl);
+        }
+    };
+
+    const handleStartClick = () => {
+        let cleanUrl = localUrl.trim();
+        if (cleanUrl) {
+            try {
+                const u = new URL(cleanUrl);
+                cleanUrl = u.origin;
+            } catch {
+                // Not a full URL, leave as is
+            }
+        }
+        if (onChangeBaseUrl) {
+            onChangeBaseUrl(cleanUrl);
+        }
+        if (onStart) {
+            onStart(cleanUrl);
+        }
+    };
 
     useEffect(() => {
         if (!authEnabled || !token || isGuest) return;
@@ -105,11 +170,9 @@ export function Header({
         }
     };
 
-
-
     return (
         <header className="header">
-            {/* Left Section: Logo, Status, Toggles */}
+            {/* Left Section: Logo, Beta Badge, Status Pill */}
             <div className="header-left">
                 {/* Left Toggle (Mobile) */}
                 <button className="header-mobile-toggle" onClick={onToggleSidebar} title="Menu" aria-label="Toggle Menu">
@@ -129,6 +192,16 @@ export function Header({
                     </div>
                     <span className="header-logo-text">Swazz</span>
                 </div>
+
+                {betaModeEnabled && (
+                    <div 
+                        className="header-beta-badge" 
+                        title="Closed Beta Phase: System capacity is currently limited. Signups are subject to invite controls."
+                    >
+                        <span className="header-beta-dot" />
+                        <span className="header-beta-text">Closed Beta</span>
+                    </div>
+                )}
 
                 <div className="header-divider" />
 
@@ -157,36 +230,76 @@ export function Header({
                 )}
             </div>
 
-            {/* Center Section: Guest Mode or Closed Beta Banner */}
-            {authEnabled && isGuest ? (
-                <div 
-                    className="header-guest-banner guest-badge" 
-                    onClick={onLogout} 
-                    title="Temporary guest account. Data is automatically deleted after 24 hours."
-                >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="header-guest-icon">
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <span className="header-guest-banner-text">
-                        <strong>Guest Mode:</strong> Scans are temporary. Save history and unlock reports & webhooks. <span className="header-guest-register-link">Sign Up →</span>
-                    </span>
-                </div>
-            ) : betaModeEnabled && (
-                <div 
-                    className="header-beta-banner" 
-                    title="Closed Beta Phase: System capacity is currently limited. Signups are subject to invite controls."
-                >
-                    <span className="beta-alert-dot" />
-                    <span className="header-beta-banner-text">
-                        <strong>Closed Beta Phase:</strong> System capacity limited • Invite controls active
-                    </span>
+            {/* Center Section: Target API URL & Scan Controls */}
+            {loadedRunId === null && (
+                <div className="header-center">
+                    <div className="header-url-section">
+                        <svg className="url-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+                        </svg>
+                        <input
+                            className="workspace-target-input header-target-input"
+                            value={localUrl}
+                            aria-label="Target API URL"
+                            onChange={(e) => setLocalUrl(e.target.value)}
+                            onBlur={() => handleUrlCommit(localUrl)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleUrlCommit(localUrl);
+                                    e.currentTarget.blur();
+                                }
+                            }}
+                            placeholder="Enter target API URL (e.g. https://api.example.com)"
+                            readOnly={!onChangeBaseUrl}
+                        />
+                        {isBusy && !isLoadingSpecs && (
+                            <span className="workspace-status-indicator" />
+                        )}
+                    </div>
+
+                    <div className="header-action-section">
+                        {!isBusy ? (
+                            <button className="btn btn-primary btn-run" id="btn-start" onClick={handleStartClick}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5,3 19,12 5,21"/>
+                                </svg>
+                                <span>Run Scan</span>
+                            </button>
+                        ) : (
+                            <div className="action-button-group">
+                                {!isLoadingSpecs && (
+                                    isPaused ? (
+                                        <button className="btn btn-success" onClick={onResume} title="Resume">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                                <polygon points="5,3 19,12 5,21"/>
+                                            </svg>
+                                            <span>Resume</span>
+                                        </button>
+                                    ) : (
+                                        <button className="btn btn-ghost" onClick={onPause} title="Pause">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                                            </svg>
+                                            <span>Pause</span>
+                                        </button>
+                                    )
+                                )}
+                                <button className="btn btn-danger" onClick={onStop} title="Stop">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    </svg>
+                                    <span>Stop</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
+            {/* Right Section: Theme Toggle & Guest Unified Button / User Menu */}
             <div className="header-right">
-                {/* Theme Toggle */}
                 <button className="btn btn-ghost btn-icon" onClick={onToggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} aria-label="Toggle Theme">
                     {theme === 'dark' ? (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -199,22 +312,18 @@ export function Header({
                     )}
                 </button>
 
-                {authEnabled && isGuest && (
+                {authEnabled && isGuest ? (
                     <button 
-                        className="btn btn-primary sign-up-btn" 
-                        onClick={onLogout} 
+                        className="header-guest-unified-btn guest-badge sign-up-btn" 
+                        onClick={() => onOpenRegisterModal ? onOpenRegisterModal() : onLogout?.()} 
+                        title="Temporary guest session. Scans & history are automatically deleted after 24 hours. Click to Sign Up."
                     >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="8.5" cy="7" r="4"></circle>
-                            <line x1="20" y1="8" x2="20" y2="14"></line>
-                            <line x1="23" y1="11" x2="17" y2="11"></line>
-                        </svg>
-                        <span className="sign-up-text">Sign Up</span>
+                        <span className="guest-alert-dot" />
+                        <span className="header-guest-pill-text">Guest Mode</span>
+                        <span className="header-guest-divider">•</span>
+                        <span className="header-guest-action">Sign Up →</span>
                     </button>
-                )}
-
-                {authEnabled && token && (
+                ) : authEnabled && token ? (
                     <div className="header-flex-center">
                         {invitations.length > 0 && (
                             <div className="header-invitation-banner">
@@ -225,7 +334,7 @@ export function Header({
                         )}
                         <UserMenu onLogout={onLogout || (() => {})} isGuest={isGuest} />
                     </div>
-                )}
+                ) : null}
             </div>
 
             {isBusy && !isLoadingSpecs && (

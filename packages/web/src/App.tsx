@@ -22,6 +22,7 @@ import { HotkeysHelpModal } from './components/Shared/HotkeysHelpModal.js';
 import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
+import { AuthModal } from './components/Auth/AuthModal.js';
 import { fetchProjects } from './services/projectService.js';
 import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 
@@ -34,6 +35,7 @@ export default function App() {
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
+    const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -728,8 +730,21 @@ export default function App() {
         );
     }
 
+    const isLeftSidebarVisible = !isSidebarHiddenDesktop;
+    const isConfigPanelOpen = typeof window !== 'undefined' && window.innerWidth <= 768 ? isConfigOpen : !isConfigHiddenDesktop;
+
+    const leftColWidth = isLeftSidebarVisible ? `${sidebarWidth}px` : 'auto';
+    const rightColWidth = isConfigPanelOpen ? `${configSidebarWidth}px` : 'auto';
+
     return (
-        <div className="app-layout" style={{ gridTemplateColumns: `${isSidebarHiddenDesktop ? 0 : sidebarWidth}px 1fr` }}>
+        <div 
+            className={`app-layout ${isLeftSidebarVisible ? 'has-left-sidebar' : ''} ${isConfigPanelOpen ? 'has-right-sidebar' : ''}`}
+            style={{ 
+                gridTemplateColumns: `${isLeftSidebarVisible ? sidebarWidth : 0}px 1fr`,
+                '--sidebar-header-width': leftColWidth,
+                '--config-header-width': rightColWidth,
+            } as React.CSSProperties}
+        >
             <Header
                 onToggleSidebar={() => {
                     if (window.innerWidth <= 768) useAppStore.setState({ isSidebarOpen: !isSidebarOpen });
@@ -741,6 +756,35 @@ export default function App() {
                 token={token}
                 isGuest={isGuest}
                 onLogout={logout}
+                onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
+                baseUrl={displayUrl}
+                onChangeBaseUrl={(url) => {
+                    const trimmed = url.trim();
+                    if (trimmed.endsWith('swagger.json')) {
+                        try {
+                            const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+                            const parsed = new URL(inputUrl);
+                            const origin = parsed.origin;
+                            const currentUrls = config._swagger_urls || [];
+                            if (!currentUrls.includes(inputUrl)) {
+                                const newUrls = [...currentUrls, inputUrl];
+                                updateConfig({ base_url: origin, _swagger_urls: newUrls });
+                                loadEndpoints(newUrls);
+                            } else {
+                                updateConfig({ base_url: origin });
+                            }
+                        } catch {
+                            updateConfig({ base_url: trimmed });
+                        }
+                    } else {
+                        updateConfig({ base_url: trimmed });
+                    }
+                }}
+                onStart={(cleanUrl) => handleStart(undefined, cleanUrl)}
+                onStop={() => stop().catch((err: any) => showToast(err.message || 'Failed to stop', 'error'))}
+                onPause={() => pause().catch((err: any) => showToast(err.message || 'Failed to pause', 'error'))}
+                onResume={() => resume().catch((err: any) => showToast(err.message || 'Failed to resume', 'error'))}
+                onToggleConfig={handleToggleConfig}
             />
 
             <Sidebar
@@ -923,6 +967,14 @@ export default function App() {
                     onClose={() => setParsingError(null)}
                 />
             )}
+
+            <AuthModal
+                isOpen={isRegisterModalOpen}
+                onClose={() => setIsRegisterModalOpen(false)}
+                initialIsRegistering={true}
+                onLogin={login}
+                onRegister={register}
+            />
 
             <div className="toast-container">
                 {toasts.map((t) => (

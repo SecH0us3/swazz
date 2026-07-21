@@ -63,13 +63,24 @@ test.describe('Guest Login E2E Test', () => {
     // Stop fuzzing
     await stopBtn.click();
 
-    // 10. Click "Sign Up" button in the header to return to signup/login screen
+    // 10. Click "Sign Up" button in the header to open in-app registration modal
     const signUpBtn = page.locator('.sign-up-btn');
     await expect(signUpBtn).toBeVisible();
     await signUpBtn.click();
 
-    // 11. Verify we are back on the login screen
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(guestBtn).toBeVisible();
+    // 11. Verify in-app AuthModal pops up over the workspace
+    const authModal = page.locator('.auth-modal');
+    await expect(authModal).toBeVisible();
+    await expect(page.getByText('Join the Beta')).toBeVisible();
+
+    // 12. Register a new user in-place to convert guest session to registered session
+    const testUsername = `guest_${Date.now().toString().slice(-6)}`;
+    await page.locator('input#username').fill(testUsername);
+    await page.locator('input#password').fill('TestPassword123!');
+    await page.locator('button.primary-submit-btn').click();
+
+    // 13. Verify modal closes and session upgrades to registered user
+    await expect(authModal).not.toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.guest-badge')).not.toBeVisible();
   });
 });
