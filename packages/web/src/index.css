@@ -323,7 +323,7 @@ body.resizing .sidebar-resizer {
 
 .header-status {
   position: absolute;
-  left: 150px;
+  left: 170px;
   top: 53%;
   transform: translateY(-50%);
   z-index: 100;
