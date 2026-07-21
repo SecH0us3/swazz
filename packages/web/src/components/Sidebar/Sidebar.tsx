@@ -129,14 +129,7 @@ export function Sidebar({
     return (
         <aside className={`sidebar ${className || ''}`} style={style}>
             {authEnabled && token && (
-                <div className="sidebar-project-selector" style={{
-                    padding: '8px 12px 14px 12px',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    marginBottom: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px'
-                }}>
+                <div className="sidebar-project-selector">
                     <ProjectSelector />
                 </div>
             )}
