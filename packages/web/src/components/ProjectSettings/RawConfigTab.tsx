@@ -13,9 +13,18 @@ export function RawConfigTab() {
     const [rawConfigError, setRawConfigError] = useState('');
     const [isSavingRaw, setIsSavingRaw] = useState(false);
     const [saveRawSuccess, setSaveRawSuccess] = useState(false);
+    const [copied, setCopied] = useState(false);
     const lastSyncedConfigRef = React.useRef('');
     const rawConfigTextRef = React.useRef(rawConfigText);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleCopy = () => {
+        if (!rawConfigText) return;
+        navigator.clipboard.writeText(rawConfigText).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }).catch(err => console.error('Failed to copy raw config: ', err));
+    };
 
     const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -116,32 +125,43 @@ export function RawConfigTab() {
                 View or modify the raw JSON configuration for this project. Validates schema format before saving.
             </p>
             
-            <textarea
-                className="textarea"
-                value={rawConfigText}
-                onChange={(e) => {
-                    setRawConfigText(e.target.value);
-                    try {
-                        JSON.parse(stripJSONC(e.target.value));
-                        setRawConfigError('');
-                    } catch (err: any) {
-                        setRawConfigError(`Invalid JSON: ${err.message}`);
-                    }
-                }}
-                style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '13px',
-                    minHeight: '400px',
-                    backgroundColor: 'var(--bg-card)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '12px',
-                    width: '100%',
-                    resize: 'vertical'
-                }}
-                spellCheck={false}
-            />
+            <div className="detail-json-wrapper">
+                <textarea
+                    className="textarea"
+                    value={rawConfigText}
+                    onChange={(e) => {
+                        setRawConfigText(e.target.value);
+                        try {
+                            JSON.parse(stripJSONC(e.target.value));
+                            setRawConfigError('');
+                        } catch (err: any) {
+                            setRawConfigError(`Invalid JSON: ${err.message}`);
+                        }
+                    }}
+                    style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '13px',
+                        minHeight: '400px',
+                        backgroundColor: 'var(--bg-card)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '12px',
+                        paddingRight: '48px',
+                        width: '100%',
+                        resize: 'vertical'
+                    }}
+                    spellCheck={false}
+                />
+                <button
+                    type="button"
+                    className="btn btn-ghost btn-xs response-copy-btn"
+                    onClick={handleCopy}
+                    style={{ top: '12px', right: '12px' }}
+                >
+                    {copied ? '✓ Copied' : 'Copy'}
+                </button>
+            </div>
             
             {rawConfigError && (
                 <div style={{
