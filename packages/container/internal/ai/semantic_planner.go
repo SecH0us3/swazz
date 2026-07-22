@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -51,6 +52,8 @@ func (p *SemanticPlanner) GeneratePreScanPayloads(ctx context.Context, schemaSum
 	if p.gatewayURL == "" {
 		return nil, fmt.Errorf("ai_gateway_url is empty")
 	}
+
+	logger.Info("[AI] 📤 Executing Pre-Scan LLM schema analysis via Cloudflare AI Gateway (%s)...", p.gatewayURL)
 
 	userPrompt := fmt.Sprintf("Analyze this OpenAPI schema and generate 5 targeted edge-case fuzzing payload values as JSON array of strings:\n%s", schemaSummary)
 
@@ -106,16 +109,23 @@ func (p *SemanticPlanner) GeneratePreScanPayloads(ctx context.Context, schemaSum
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		logger.Warn("[AI] ⚠️ Pre-Scan LLM request failed: %v", err)
 		return nil, fmt.Errorf("failed to call AI Gateway: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, parseGatewayError(resp.StatusCode, respBytes)
+		gwErr := parseGatewayError(resp.StatusCode, respBytes)
+		logger.Warn("[AI] ⚠️ Pre-Scan LLM error response: %v", gwErr)
+		return nil, gwErr
 	}
 
-	return parseGatewayResponse(respBytes, isGemini)
+	payloads, parseErr := parseGatewayResponse(respBytes, isGemini)
+	if parseErr == nil {
+		logger.Info("[AI] ✅ Pre-Scan LLM analysis complete: generated %d custom payload templates", len(payloads))
+	}
+	return payloads, parseErr
 }
 
 func parseGatewayError(statusCode int, body []byte) error {

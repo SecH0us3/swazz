@@ -310,6 +310,12 @@ func runCLI(args []string) {
 	incrementGlobalScanTelemetry(telemetryURL, disableTelemetryVal)
 
 	logger.Info("Starting fuzz run on %d endpoints across %d profiles...", len(runCfg.Endpoints), len(runCfg.Settings.Profiles))
+	if runCfg.Settings.UseLLMPrepass {
+		logger.Info("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", runCfg.Settings.AIGatewayURL)
+	}
+	if runCfg.Settings.EnableSemanticMutation {
+		logger.Info("[Semantic] 🧬 Semantic Format Wrappers enabled (RFC email, uuid, date-time, phone, url)")
+	}
 	if err := r.Start(ctx); err != nil {
 		restoreTerm()
 		log.Fatalf("Run failed: %v", err)
