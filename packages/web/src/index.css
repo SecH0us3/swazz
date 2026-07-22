@@ -2864,10 +2864,63 @@ button:focus-visible {
     gap: 16px;
 }
 
+    }
+}
+
+.semantic-settings-section {
+    margin-bottom: 20px;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+}
+
+.semantic-settings-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.semantic-settings-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-light);
+}
+
+.semantic-options-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
 @media (max-width: 768px) {
-    .catalog-grid {
+    .semantic-options-grid {
         grid-template-columns: 1fr;
     }
+}
+
+.semantic-input-row {
+    margin-top: 12px;
+}
+
+.semantic-input-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.semantic-input-field {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    font-size: 0.85rem;
 }
 
 .catalog-item {
