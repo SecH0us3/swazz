@@ -54,6 +54,7 @@ type Generator struct {
 	oobServerURL string
 	Endpoint     string
 	RunID        string
+	settings     swagger.Settings
 }
 
 // New creates a new Generator.
@@ -77,7 +78,9 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		dictionaries:     norm,
 		profile:          profile,
 		activeCategories: active,
+		settings:         settings,
 		oobServerURL:     settings.OOBServerURL,
+		mSecHeaderIdxs:   make(map[string]int),
 	}
 	g.cachedMaliciousStrings, g.hasActiveMaliciousStrings = g.getActiveMaliciousStrings()
 	return g
@@ -375,7 +378,7 @@ func (g *Generator) generateString(format, propName string) any {
 				if strings.Contains(strVal, "7*7") || strings.Contains(strVal, "7+'7'") {
 					strVal = g.randomizeAndRegisterSSTI(strVal)
 				}
-				if format != "" {
+				if g.settings.EnableSemanticMutation && format != "" {
 					return g.GenerateSemanticValue(format, strVal)
 				}
 				return strVal
@@ -385,7 +388,7 @@ func (g *Generator) generateString(format, propName string) any {
 	}
 
 	res := g.fallbackRandom(propName)
-	if strRes, ok := res.(string); ok && format != "" {
+	if strRes, ok := res.(string); ok && g.settings.EnableSemanticMutation && format != "" {
 		return g.GenerateSemanticValue(format, strRes)
 	}
 	return res

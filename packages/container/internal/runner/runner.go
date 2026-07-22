@@ -1024,6 +1024,9 @@ func (r *Runner) runPreScanLLM(ctx context.Context) {
 		return
 	}
 
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	googleKey := os.Getenv("GOOGLE_API_KEY")
 	if googleKey == "" {
 		googleKey = os.Getenv("OPENAI_API_KEY")
@@ -1041,7 +1044,7 @@ func (r *Runner) runPreScanLLM(ctx context.Context) {
 		}
 	}
 
-	customPayloads, err := planner.GeneratePreScanPayloads(ctx, summaryBuilder.String())
+	customPayloads, err := planner.GeneratePreScanPayloads(timeoutCtx, summaryBuilder.String())
 	if err != nil {
 		r.logWarn("[AI] ⚠️ Pre-Scan LLM Batching failed: %v", err)
 		return
