@@ -17,7 +17,7 @@ import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
 import type { ResultSummary } from '../hooks/useRunner.js';
 import { categorizeFinding } from '../utils/findings.js';
-import { extractErrorSubtype } from '../utils/errors.js';
+import { extractErrorSubtype, getCleanDedupeKey } from '../utils/errors.js';
 
 // Helper to compute deduplicated count for Grouped Errors
 function getGroupedFindingsCount(rows: ResultSummary[]): number {
@@ -34,20 +34,27 @@ function getGroupedFindingsCount(rows: ResultSummary[]): number {
             }
         }
         if (!placed) {
+            const isMcpErr = row.method === 'CALL' || row.method === 'MCP' || (row.endpoint && row.endpoint.startsWith('mcp://tool/'));
             const isErrorStatus = row.status >= 400 || 
-                                 (row.status === 0 && row.error);
+                                 (row.status === 0 && row.error) ||
+                                 isMcpErr;
             if (isErrorStatus) {
-                let groupKey = `status_${row.status}`;
+                const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
+                let groupKey = `status_${displayStatus}`;
                 if (row.status === 0) {
                     groupKey = 'status_0';
                 } else {
                     const subType = extractErrorSubtype(row.responsePreview);
                     if (subType) {
-                        groupKey = `status_${row.status}_${subType.key}`;
+                        if (subType.key.startsWith('mcp_')) {
+                            groupKey = subType.key;
+                        } else {
+                            groupKey = `status_${displayStatus}_${subType.key}`;
+                        }
                     }
                 }
                 if (!groups[groupKey]) groups[groupKey] = new Set();
-                const dedupeKey = `${row.method} ${row.endpoint}::${row.status}::${row.error || ''}`;
+                const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error);
                 groups[groupKey].add(dedupeKey);
             }
         }
