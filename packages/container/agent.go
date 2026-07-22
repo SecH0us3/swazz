@@ -498,6 +498,23 @@ func startAgent(args []string) {
 					"message":   fmt.Sprintf("Starting fuzz runner for runID: %s", runID),
 					"timestamp": time.Now().Format(time.RFC3339),
 				})
+				if r.Config() != nil && r.Config().Settings.UseLLMPrepass {
+					msg := fmt.Sprintf("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", r.Config().Settings.AIGatewayURL)
+					logInfo("%s", msg)
+					sendWSEvent(runID, "runner_log", map[string]interface{}{
+						"level":     "info",
+						"message":   msg,
+						"timestamp": time.Now().Format(time.RFC3339),
+					})
+				} else {
+					msg := "[AI] ℹ️ Pre-Scan LLM Batching is disabled in Project Settings"
+					logInfo("%s", msg)
+					sendWSEvent(runID, "runner_log", map[string]interface{}{
+						"level":     "info",
+						"message":   msg,
+						"timestamp": time.Now().Format(time.RFC3339),
+					})
+				}
 				tURL := deriveTelemetryURL(coordinatorURL)
 				incrementGlobalScanTelemetry(tURL, disableTelemetry)
 				if err := r.Start(ctx); err != nil {

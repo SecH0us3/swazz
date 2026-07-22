@@ -55,6 +55,10 @@ const (
 	boundaryMaxPayloadBytes = 1 << 29 // 512 MiB
 )
 
+func (r *Runner) Config() *swagger.Config {
+	return r.config
+}
+
 // ─── embedded sub-structs ────────────────────────────────────────────────────
 
 // runnerLifecycle groups the atomic control-flow flags and the lifecycle mutex.
