@@ -457,6 +457,16 @@ func (r *Runner) executeRequest(
 				for k, v := range newHeaders {
 					mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
 				}
+				hasCT := false
+				for k := range mergedHeaders {
+					if strings.EqualFold(k, "content-type") {
+						hasCT = true
+						break
+					}
+				}
+				if isBody && !hasCT {
+					mergedHeaders["Content-Type"] = effectiveCT
+				}
 				// Re-calculate rawURL with new variables if any
 				base, parseErr := url.Parse(strings.TrimRight(baseURL, "/"))
 				if parseErr == nil {
