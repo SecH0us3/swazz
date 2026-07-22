@@ -22,7 +22,7 @@ export function RunnerLogsViewer({ runId, isRunning }: { runId: string | null; i
   const { token } = useAuth();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [minLevel, setMinLevel] = useState<'INFO' | 'WARN' | 'ERROR'>('WARN');
+  const [minLevel, setMinLevel] = useState<'INFO' | 'WARN' | 'ERROR'>('INFO');
 
   useEffect(() => {
     if (!runId) {
