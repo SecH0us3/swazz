@@ -144,7 +144,7 @@ func (r *Runner) executeRequest(
 			break
 		}
 	}
-	if isBody && payload != nil && !hasContentType {
+	if isBody && !hasContentType {
 		mergedHeaders["Content-Type"] = effectiveCT
 	}
 
