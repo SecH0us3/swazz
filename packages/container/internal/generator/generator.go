@@ -670,3 +670,27 @@ func (g *Generator) randomizeAndRegisterSSTI(s string) string {
 	}
 	return s
 }
+
+// GenerateSemanticValue returns a semantic format-wrapped payload for a given vector.
+func (g *Generator) GenerateSemanticValue(format string, vector string) string {
+	switch strings.ToLower(format) {
+	case "email":
+		res := WrapEmail(vector)
+		return res[0]
+	case "date", "date-time":
+		res := WrapDateTime(vector)
+		return res[0]
+	case "uri", "url":
+		res := WrapURL(vector)
+		return res[0]
+	case "uuid":
+		res := WrapUUID(vector)
+		return res[0]
+	case "phone", "tel":
+		res := WrapPhone(vector)
+		return res[0]
+	default:
+		return vector
+	}
+}
+
