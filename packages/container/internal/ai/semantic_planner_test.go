@@ -6,7 +6,7 @@ import (
 )
 
 func TestSemanticPlanner_ExtractSemanticFormats(t *testing.T) {
-	planner := NewSemanticPlanner("http://localhost:8080", "test-key")
+	planner := NewSemanticPlanner("http://localhost:8080", "test-cf-token", "test-key")
 	cfg := &swagger.Config{
 		Endpoints: []swagger.EndpointConfig{
 			{
