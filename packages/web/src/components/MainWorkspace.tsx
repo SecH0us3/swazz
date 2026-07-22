@@ -54,7 +54,7 @@ function getGroupedFindingsCount(rows: ResultSummary[]): number {
                     }
                 }
                 if (!groups[groupKey]) groups[groupKey] = new Set();
-                const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error);
+                const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error || row.responsePreview);
                 groups[groupKey].add(dedupeKey);
             }
         }

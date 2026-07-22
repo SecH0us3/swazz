@@ -211,7 +211,7 @@ export function Inspector({
                     if (!infraGroups[groupKey]) {
                         infraGroups[groupKey] = { title: categoryTitle, color, items: [], seenMap: new Map() };
                     }
-                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error);
+                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error || row.responsePreview);
                     const existing = infraGroups[groupKey].seenMap.get(dedupeKey);
                     if (existing) {
                         existing.count += 1;
