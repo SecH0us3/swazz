@@ -34,9 +34,8 @@ function getGroupedFindingsCount(rows: ResultSummary[]): number {
             }
         }
         if (!placed) {
-            const isErrorStatus = row.status >= 500 || 
-                                 (row.status === 0 && row.error) ||
-                                 (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status));
+            const isErrorStatus = row.status >= 400 || 
+                                 (row.status === 0 && row.error);
             if (isErrorStatus) {
                 let groupKey = `status_${row.status}`;
                 if (row.status === 0) {

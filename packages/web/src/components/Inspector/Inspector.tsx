@@ -203,9 +203,8 @@ export function Inspector({
 
             if (!placed) {
                 const isMcpErr = row.method === 'CALL' || row.method === 'MCP' || (row.endpoint && row.endpoint.startsWith('mcp://tool/'));
-                const isErrorStatus = row.status >= 500 || 
+                const isErrorStatus = row.status >= 400 || 
                                      (row.status === 0 && row.error) ||
-                                     (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status)) ||
                                      isMcpErr;
                 if (isErrorStatus) {
                     const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
