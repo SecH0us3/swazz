@@ -375,13 +375,20 @@ func (g *Generator) generateString(format, propName string) any {
 				if strings.Contains(strVal, "7*7") || strings.Contains(strVal, "7+'7'") {
 					strVal = g.randomizeAndRegisterSSTI(strVal)
 				}
+				if format != "" {
+					return g.GenerateSemanticValue(format, strVal)
+				}
 				return strVal
 			}
 			return val
 		}
 	}
 
-	return g.fallbackRandom(propName)
+	res := g.fallbackRandom(propName)
+	if strRes, ok := res.(string); ok && format != "" {
+		return g.GenerateSemanticValue(format, strRes)
+	}
+	return res
 }
 
 func (g *Generator) getActiveMaliciousStrings() ([]any, bool) {
@@ -673,24 +680,26 @@ func (g *Generator) randomizeAndRegisterSSTI(s string) string {
 
 // GenerateSemanticValue returns a semantic format-wrapped payload for a given vector.
 func (g *Generator) GenerateSemanticValue(format string, vector string) string {
+	var variants []string
 	switch strings.ToLower(format) {
 	case "email":
-		res := WrapEmail(vector)
-		return res[0]
+		variants = WrapEmail(vector)
 	case "date", "date-time":
-		res := WrapDateTime(vector)
-		return res[0]
+		variants = WrapDateTime(vector)
 	case "uri", "url":
-		res := WrapURL(vector)
-		return res[0]
+		variants = WrapURL(vector)
 	case "uuid":
-		res := WrapUUID(vector)
-		return res[0]
+		variants = WrapUUID(vector)
 	case "phone", "tel":
-		res := WrapPhone(vector)
-		return res[0]
+		variants = WrapPhone(vector)
 	default:
 		return vector
 	}
+
+	if len(variants) == 0 {
+		return vector
+	}
+	return variants[rand.IntN(len(variants))] // #nosec G404 -- fuzzer payload rotation
 }
+
 

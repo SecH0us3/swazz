@@ -3,7 +3,10 @@ package generator
 import (
 	"net/mail"
 	"net/url"
+	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestWrapEmail(t *testing.T) {
@@ -43,6 +46,11 @@ func TestWrapDateTime(t *testing.T) {
 	if len(wrapped) == 0 {
 		t.Fatalf("expected non-empty wrapped date-time payloads")
 	}
+	for _, dt := range wrapped {
+		if !strings.HasPrefix(dt, "2026-01-01T12:00:00") {
+			t.Errorf("expected valid ISO 8601 prefix, got %s", dt)
+		}
+	}
 }
 
 func TestWrapUUID(t *testing.T) {
@@ -51,6 +59,12 @@ func TestWrapUUID(t *testing.T) {
 	if len(wrapped) == 0 {
 		t.Fatalf("expected non-empty wrapped UUID payloads")
 	}
+	for _, uStr := range wrapped {
+		parts := strings.Split(uStr, "#")
+		if _, err := uuid.Parse(parts[0]); err != nil {
+			t.Errorf("expected valid UUID base, got %s: %v", parts[0], err)
+		}
+	}
 }
 
 func TestWrapPhone(t *testing.T) {
@@ -58,6 +72,11 @@ func TestWrapPhone(t *testing.T) {
 	wrapped := WrapPhone(vector)
 	if len(wrapped) == 0 {
 		t.Fatalf("expected non-empty wrapped phone payloads")
+	}
+	for _, p := range wrapped {
+		if !strings.HasPrefix(p, "+") {
+			t.Errorf("expected E.164 phone prefix (+), got %s", p)
+		}
 	}
 }
 
