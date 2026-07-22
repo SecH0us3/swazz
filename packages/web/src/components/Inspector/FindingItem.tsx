@@ -4,7 +4,7 @@ import type { AnalysisFinding } from '../../types.js';
 import { getBadgeClass } from './utils.js';
 
 interface FindingItemProps {
-    item: { result: ResultSummary; finding?: AnalysisFinding };
+    item: { result: ResultSummary; finding?: AnalysisFinding; count?: number };
     groupColor: string;
     onSelect: (row: ResultSummary) => void;
 }
@@ -53,9 +53,16 @@ export const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, group
                     <span className="finding-item-path">{item.result.endpoint}</span>
                     {triageBadge}
                 </div>
-                <span className={badgeClass}>
-                    {item.result.status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (isMcpErr ? `-${displayStatus}` : item.result.status || 'ERR')}
-                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {item.count && item.count > 1 && (
+                        <span className="badge" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', fontWeight: 600 }} title={`${item.count} occurrences`}>
+                            ×{item.count}
+                        </span>
+                    )}
+                    <span className={badgeClass}>
+                        {item.result.status === 0 ? <span title="Infinity (Timeout / Network Error)">∞</span> : (isMcpErr ? `-${displayStatus}` : item.result.status || 'ERR')}
+                    </span>
+                </div>
             </div>
             {item.finding?.message && (
                 <div className="finding-item-message">
