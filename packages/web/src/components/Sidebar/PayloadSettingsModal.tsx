@@ -57,67 +57,9 @@ export const PayloadSettingsModal: React.FC<PayloadSettingsModalProps> = ({ onCl
     if (!catalog) return null;
 
     const profiles: FuzzingProfile[] = ['RANDOM', 'BOUNDARY', 'MALICIOUS'];
-    const isSemanticEnabled = config.settings.enable_semantic_mutation !== false;
-    const isLLMEnabled = config.settings.use_llm_prepass ?? false;
-
     return (
         <Modal title="Payload Settings" onClose={onClose} width="800px">
             <div className="payload-catalog-container">
-                <div className="semantic-settings-section">
-                    <div className="semantic-settings-header">
-                        <span className="semantic-settings-title">Semantic & AI Mutation Options</span>
-                    </div>
-                    <div className="semantic-options-grid">
-                        <div 
-                            className={`catalog-item ${isSemanticEnabled ? 'active' : ''}`}
-                            onClick={() => updateSettings({ enable_semantic_mutation: !isSemanticEnabled })}
-                        >
-                            <input 
-                                type="checkbox" 
-                                checked={isSemanticEnabled} 
-                                readOnly
-                                onClick={e => e.stopPropagation()}
-                            />
-                            <div className="catalog-item-info">
-                                <div className="catalog-item-label">
-                                    <span className="catalog-item-name">Semantic Format Wrappers</span>
-                                </div>
-                                <div className="catalog-item-desc">Wrap payloads into valid email, UUID, date, phone & URL RFC formats</div>
-                            </div>
-                        </div>
-
-                        <div 
-                            className={`catalog-item ${isLLMEnabled ? 'active' : ''}`}
-                            onClick={() => updateSettings({ use_llm_prepass: !isLLMEnabled })}
-                        >
-                            <input 
-                                type="checkbox" 
-                                checked={isLLMEnabled} 
-                                readOnly
-                                onClick={e => e.stopPropagation()}
-                            />
-                            <div className="catalog-item-info">
-                                <div className="catalog-item-label">
-                                    <span className="catalog-item-name">Pre-Scan LLM Batching</span>
-                                </div>
-                                <div className="catalog-item-desc">Pre-scan OpenAPI schema with LLM to generate custom payload templates</div>
-                            </div>
-                        </div>
-                    </div>
-                    {isLLMEnabled && (
-                        <div className="semantic-input-row">
-                            <label className="semantic-input-label">AI Gateway / OpenAI Proxy URL</label>
-                            <input
-                                type="text"
-                                className="semantic-input-field"
-                                placeholder="https://gateway.ai.cloudflare.com/v1/ACCOUNT_ID/GATEWAY/openai"
-                                value={config.settings.ai_gateway_url || ''}
-                                onChange={e => updateSettings({ ai_gateway_url: e.target.value })}
-                            />
-                        </div>
-                    )}
-                </div>
-
                 <div className="tabs-header">
                     {profiles.map(p => (
                         <button 

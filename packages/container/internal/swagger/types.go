@@ -190,6 +190,7 @@ type Settings struct {
 	EnableSemanticMutation        bool                        `json:"enable_semantic_mutation,omitempty"`
 	UseLLMPrepass                 bool                        `json:"use_llm_prepass,omitempty"`
 	AIGatewayURL                  string                      `json:"ai_gateway_url,omitempty"`
+	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
 }
 
 type Checkpoint struct {
