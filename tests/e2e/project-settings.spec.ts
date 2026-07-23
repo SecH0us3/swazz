@@ -561,7 +561,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await userSettingsBtn.click();
 
     // 4. Switch to Traffic Capture tab in User Settings
-    const captureTabBtn = page.locator('.user-settings-nav button:has-text("Traffic Capture"), button.tab-bar-btn:has-text("Traffic Capture")').first();
+    const captureTabBtn = page.locator('.settings-nav-btn:has-text("Traffic Capture")');
     await expect(captureTabBtn).toBeVisible();
     await captureTabBtn.click();
 
