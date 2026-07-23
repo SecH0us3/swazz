@@ -5745,7 +5745,6 @@ kbd {
   color: var(--accent-light);
   background: var(--accent-subtle);
   border-color: rgba(2, 132, 199, 0.25);
-  font-weight: 600;
 }
 
 .performance-tab-content {
