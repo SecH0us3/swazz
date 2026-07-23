@@ -136,14 +136,15 @@ describe('useDb hook', () => {
 
         expect(allResults.rows).toHaveLength(4);
         
-        // Should only return:
+        // Should return:
         // - res_200_xss (has analyzerFindings)
         // - res_500_sqli (status >= 500)
-        // (res_200_clean has no findings, res_404_ignored is an ignored status)
-        expect(findingsOnlyResults.rows).toHaveLength(2);
+        // - res_404_ignored (HTTP 4xx error response)
+        expect(findingsOnlyResults.rows).toHaveLength(3);
         const ids = findingsOnlyResults.rows.map((r: any) => r.id);
         expect(ids).toContain('res_200_xss');
         expect(ids).toContain('res_500_sqli');
+        expect(ids).toContain('res_404_ignored');
     });
 
     it('updates triage status and retrieves all triaged results', async () => {

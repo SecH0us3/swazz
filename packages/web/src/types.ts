@@ -88,6 +88,10 @@ export interface SwazzSettings {
     proxy_list?: string[];
     randomize_user_agent?: boolean;
     enable_adaptive_rate_limit?: boolean;
+    enable_semantic_mutation?: boolean;
+    use_llm_prepass?: boolean;
+    ai_gateway_url?: string;
+    cf_aig_token?: string;
 }
 
 export interface AuthStep {
@@ -143,6 +147,10 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     proxy_list: [],
     randomize_user_agent: false,
     enable_adaptive_rate_limit: false,
+    enable_semantic_mutation: true,
+    use_llm_prepass: false,
+    ai_gateway_url: '',
+    cf_aig_token: '',
 };
 
 // ─── Full Config ────────────────────────────────────────

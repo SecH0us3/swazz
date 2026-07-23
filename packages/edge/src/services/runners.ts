@@ -60,7 +60,9 @@ export class RunnersService implements IRunnersService {
     }
 
     let userId = "";
-    if (publicKey) {
+    if (this.env.AUTH_ENABLED === 'false' || this.env.AUTH_ENABLED === false) {
+      userId = "anon-dev-user";
+    } else if (publicKey) {
       const user = await this.runnersRepo.getUserByPublicKey(publicKey);
       if (!user) {
         return new Response('Unauthorized: Invalid public key', { status: 401 });

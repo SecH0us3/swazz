@@ -1,7 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { cleanErrorMessage, extractErrorSubtype } from './errors.js';
+import { cleanErrorMessage, extractErrorSubtype, getCleanDedupeKey } from './errors.js';
 
 describe('errors utility', () => {
+    describe('getCleanDedupeKey', () => {
+        it('should format dedupe key with clean error message', () => {
+            const key = getCleanDedupeKey('POST', '/api/test', 400, 'Invalid parameter');
+            expect(key).toBe('POST /api/test::400::Invalid parameter');
+        });
+
+        it('should handle undefined or empty error message', () => {
+            const key = getCleanDedupeKey('GET', '/api/test', 500);
+            expect(key).toBe('GET /api/test::500::');
+        });
+
+        it('should redact Cloudflare Ray IDs', () => {
+            const key = getCleanDedupeKey('GET', '/api/test', 502, 'Bad Gateway Ray ID: 88f29d8a1c900000');
+            expect(key).toBe('GET /api/test::502::Bad Gateway Ray ID: [REDACTED]');
+        });
+
+        it('should replace UUIDs', () => {
+            const key = getCleanDedupeKey('POST', '/api/users', 404, 'User 12345678-1234-1234-1234-123456789abc not found');
+            expect(key).toBe('POST /api/users::404::User [UUID] not found');
+        });
+
+        it('should replace ISO timestamps and millisecond timestamps', () => {
+            const key = getCleanDedupeKey('POST', '/api/log', 500, 'Error at 2026-07-22T22:50:00.123Z (epoch 1784760600000)');
+            expect(key).toBe('POST /api/log::500::Error at [TIMESTAMP] (epoch [TIMESTAMP_MS])');
+        });
+
+        it('should simplify HTML error pages', () => {
+            const key = getCleanDedupeKey('GET', '/api/error', 500, '<!DOCTYPE html><html><head><title>500 Internal Server Error</title></head></html>');
+            expect(key).toBe('GET /api/error::500::HTML Error Page');
+        });
+
+        it('should truncate long error messages to 150 chars', () => {
+            const longMsg = 'A'.repeat(200);
+            const key = getCleanDedupeKey('GET', '/api/long', 400, longMsg);
+            expect(key).toBe(`GET /api/long::400::${'A'.repeat(150)}`);
+        });
+    });
+
     describe('cleanErrorMessage', () => {
         it('should return Unknown Error for falsy values', () => {
             expect(cleanErrorMessage('')).toBe('Unknown Error');

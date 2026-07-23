@@ -492,9 +492,8 @@ export function RequestDetail({
                     </div>
                     <div style={{ display:'flex', gap:'var(--space-2)', alignItems: 'center' }}>
                         {(() => {
-                            const isErrorStatus = result.status >= 500 || 
-                                                 (result.status === 0 && result.error) ||
-                                                 (result.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(result.status));
+                            const isErrorStatus = result.status >= 400 || 
+                                                 (result.status === 0 && result.error);
                             const isFinding = ((result.analyzerFindings && result.analyzerFindings.length > 0) || isErrorStatus) && !!onTriage;
                             if (isFinding) {
                                 return (

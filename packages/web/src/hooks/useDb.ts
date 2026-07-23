@@ -202,9 +202,8 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
             list = list.filter(r => {
                 const isMcpErr = r.method === 'CALL' || r.method === 'MCP' || (r.endpoint && r.endpoint.startsWith('mcp://tool/'));
                 return (r.analyzerFindings && r.analyzerFindings.length > 0) || 
-                    r.status >= 500 || 
+                    r.status >= 400 || 
                     (r.status === 0 && r.error) ||
-                    (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status)) ||
                     isMcpErr;
             });
         }
@@ -277,9 +276,8 @@ export async function dbQueryResults(db: IDBDatabase, opts: QueryOptions): Promi
                 const isMcpErr = r.method === 'CALL' || r.method === 'MCP' || (r.endpoint && r.endpoint.startsWith('mcp://tool/'));
                 matches = !!(
                     (r.analyzerFindings && r.analyzerFindings.length > 0) || 
-                    r.status >= 500 || 
+                    r.status >= 400 || 
                     (r.status === 0 && r.error) ||
-                    (r.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(r.status)) ||
                     isMcpErr
                 );
             }

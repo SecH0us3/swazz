@@ -4,7 +4,7 @@ import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding, SwazzConfig } from '../../types.js';
-import { extractErrorSubtype } from '../../utils/errors.js';
+import { extractErrorSubtype, getCleanDedupeKey } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
 import { FindingItem } from './FindingItem.js';
 import { StatusFilterDropdown } from './StatusFilterDropdown.js';
@@ -30,31 +30,6 @@ interface Props {
     findingsOnly?: boolean;
     config?: SwazzConfig;
     onUpdateCount?: (count: number) => void;
-}
-
-function getCleanDedupeKey(method: string, endpoint: string, status: number, errorMsg?: string): string {
-    let cleanErr = errorMsg || '';
-    
-    // 1. Remove Cloudflare Ray IDs
-    cleanErr = cleanErr.replace(/Ray ID:?\s*[a-z0-9]+/gi, 'Ray ID: [REDACTED]');
-    cleanErr = cleanErr.replace(/Ray ID\s*<strong[^>]*>[a-z0-9]+<\/strong>/gi, 'Ray ID: [REDACTED]');
-    
-    // 2. Remove UUIDs
-    cleanErr = cleanErr.replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '[UUID]');
-    
-    // 3. Remove common dynamic parts like timestamps or session IDs
-    cleanErr = cleanErr.replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/gi, '[TIMESTAMP]');
-    cleanErr = cleanErr.replace(/\d{10,13}/g, '[TIMESTAMP_MS]');
-    
-    // 4. Limit length or keep only first line if it's a huge HTML error page
-    if (cleanErr.includes('<!DOCTYPE html>') || cleanErr.includes('<html')) {
-        cleanErr = 'HTML Error Page';
-    } else {
-        // Just take the first 150 characters to avoid noise from different stack traces/IDs
-        cleanErr = cleanErr.slice(0, 150);
-    }
-    
-    return `${method} ${endpoint}::${status}::${cleanErr}`;
 }
 
 const PAGE_SIZE = 1000;
@@ -166,8 +141,8 @@ export function Inspector({
             {
                 title: string;
                 color: string;
-                items: { result: ResultSummary; finding?: AnalysisFinding }[];
-                seen: Set<string>;
+                items: { result: ResultSummary; finding?: AnalysisFinding; count: number }[];
+                seenMap: Map<string, { result: ResultSummary; finding?: AnalysisFinding; count: number }>;
             }
         > = {};
 
@@ -176,8 +151,8 @@ export function Inspector({
             {
                 title: string;
                 color: string;
-                items: { result: ResultSummary; finding?: AnalysisFinding }[];
-                seen: Set<string>;
+                items: { result: ResultSummary; finding?: AnalysisFinding; count: number }[];
+                seenMap: Map<string, { result: ResultSummary; finding?: AnalysisFinding; count: number }>;
             }
         > = {};
 
@@ -191,21 +166,24 @@ export function Inspector({
                     const { title, color, key: groupKey } = categorizeFinding(f, row.responsePreview);
 
                     if (!securityGroups[groupKey]) {
-                        securityGroups[groupKey] = { title, color, items: [], seen: new Set() };
+                        securityGroups[groupKey] = { title, color, items: [], seenMap: new Map() };
                     }
                     const dedupeKey = `${row.method} ${row.endpoint}::${f.ruleId}::${f.message}`;
-                    if (!securityGroups[groupKey].seen.has(dedupeKey)) {
-                        securityGroups[groupKey].seen.add(dedupeKey);
-                        securityGroups[groupKey].items.push({ result: row, finding: f });
+                    const existing = securityGroups[groupKey].seenMap.get(dedupeKey);
+                    if (existing) {
+                        existing.count += 1;
+                    } else {
+                        const newItem = { result: row, finding: f, count: 1 };
+                        securityGroups[groupKey].seenMap.set(dedupeKey, newItem);
+                        securityGroups[groupKey].items.push(newItem);
                     }
                 }
             }
 
             if (!placed) {
                 const isMcpErr = row.method === 'CALL' || row.method === 'MCP' || (row.endpoint && row.endpoint.startsWith('mcp://tool/'));
-                const isErrorStatus = row.status >= 500 || 
+                const isErrorStatus = row.status >= 400 || 
                                      (row.status === 0 && row.error) ||
-                                     (row.status >= 400 && ![401, 403, 404, 405, 422, 429].includes(row.status)) ||
                                      isMcpErr;
                 if (isErrorStatus) {
                     const displayStatus = isMcpErr ? (row.status === 200 ? 400 : row.status) : row.status;
@@ -231,12 +209,16 @@ export function Inspector({
                     }
 
                     if (!infraGroups[groupKey]) {
-                        infraGroups[groupKey] = { title: categoryTitle, color, items: [], seen: new Set() };
+                        infraGroups[groupKey] = { title: categoryTitle, color, items: [], seenMap: new Map() };
                     }
-                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error);
-                    if (!infraGroups[groupKey].seen.has(dedupeKey)) {
-                        infraGroups[groupKey].seen.add(dedupeKey);
-                        infraGroups[groupKey].items.push({ result: row });
+                    const dedupeKey = getCleanDedupeKey(row.method, row.endpoint, displayStatus, row.error || row.responsePreview);
+                    const existing = infraGroups[groupKey].seenMap.get(dedupeKey);
+                    if (existing) {
+                        existing.count += 1;
+                    } else {
+                        const newItem = { result: row, count: 1 };
+                        infraGroups[groupKey].seenMap.set(dedupeKey, newItem);
+                        infraGroups[groupKey].items.push(newItem);
                     }
                 }
             }
@@ -550,11 +532,12 @@ export function Inspector({
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inspector-section-icon security-shield">
                                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                                     </svg>
-                                    <h3 className="inspector-section-title">Security Vulnerabilities ({securityVulnerabilities.reduce((sum, g) => sum + g.items.length, 0)})</h3>
+                                    <h3 className="inspector-section-title">Security Vulnerabilities ({securityVulnerabilities.reduce((sum, g) => sum + g.items.reduce((s, i) => s + i.count, 0), 0)})</h3>
                                 </div>
                                 <div className="inspector-section-list">
                                     {securityVulnerabilities.map((group) => {
                                         const isCritical = group.color === 'var(--color-error)';
+                                        const totalReqs = group.items.reduce((sum, item) => sum + item.count, 0);
                                         return (
                                             <div key={group.key} className={`findings-group ${isCritical ? 'findings-group-critical' : ''}`}>
                                                 <div 
@@ -563,8 +546,8 @@ export function Inspector({
                                                 >
                                                     <div className="findings-group-title-row">
                                                         <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
-                                                        <span className="findings-group-count" style={{ backgroundColor: group.color }}>
-                                                            {group.items.length}
+                                                        <span className="findings-group-count" style={{ backgroundColor: group.color }} title={`${totalReqs} total requests across ${group.items.length} unique targets`}>
+                                                            {totalReqs}
                                                         </span>
                                                         {isCritical && <span className="badge-critical-indicator">CRITICAL</span>}
                                                         <span className="findings-group-title">{group.title}</span>
@@ -616,23 +599,25 @@ export function Inspector({
                                         <line x1="6" y1="6" x2="6.01" y2="6" />
                                         <line x1="6" y1="18" x2="6.01" y2="18" />
                                     </svg>
-                                    <h3 className="inspector-section-title">Infrastructure &amp; Runtime Errors ({infrastructureErrors.reduce((sum, g) => sum + g.items.length, 0)})</h3>
+                                    <h3 className="inspector-section-title">Infrastructure &amp; Runtime Errors ({infrastructureErrors.reduce((sum, g) => sum + g.items.reduce((s, i) => s + i.count, 0), 0)})</h3>
                                 </div>
                                 <div className="inspector-section-list">
-                                    {infrastructureErrors.map((group) => (
-                                        <div key={group.key} className="findings-group">
-                                            <div 
-                                                className="findings-group-header" 
-                                                onClick={() => toggleGroup(group.key)}
-                                            >
-                                                <div className="findings-group-title-row">
-                                                    <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
-                                                    <span className="findings-group-count" style={{ backgroundColor: group.color }}>
-                                                        {group.items.length}
-                                                    </span>
-                                                    <span className="findings-group-title">{group.title}</span>
+                                    {infrastructureErrors.map((group) => {
+                                        const totalReqs = group.items.reduce((sum, item) => sum + item.count, 0);
+                                        return (
+                                            <div key={group.key} className="findings-group">
+                                                <div 
+                                                    className="findings-group-header" 
+                                                    onClick={() => toggleGroup(group.key)}
+                                                >
+                                                    <div className="findings-group-title-row">
+                                                        <span className={`findings-group-chevron ${!expandedGroups[group.key] ? 'collapsed' : ''}`}>▼</span>
+                                                        <span className="findings-group-count" style={{ backgroundColor: group.color }} title={`${totalReqs} total requests across ${group.items.length} unique targets`}>
+                                                            {totalReqs}
+                                                        </span>
+                                                        <span className="findings-group-title">{group.title}</span>
+                                                    </div>
                                                 </div>
-                                            </div>
                                             {expandedGroups[group.key] && (() => {
                                                  const groupLimit = groupLimits[group.key] || 50;
                                                  const visibleItems = group.items.slice(0, groupLimit);
@@ -663,8 +648,9 @@ export function Inspector({
                                                      </div>
                                                  );
                                              })()}
-                                        </div>
-                                    ))}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

@@ -54,8 +54,34 @@ To refine remediation suggestions, Swazz allows you to tune AI prompts using tar
 * **Auto-Fix Rules Context**: Toggling rules in the "Select Auto-Fix Rules" modal automatically appends rule-specific security goals (like validating resource ownership for IDOR/BOLA or checking null-pointer references) into the prompts.
 * **Dynamic Cleaning**: Unchecking any stack or rule automatically parses the prompt templates using markers (e.g. `=== Tech Stack: Go ===`) and cleanly removes the respective instruction block, preserving any manual modifications you have written.
 
+## Pre-Scan LLM Batching & Cloudflare AI Gateway
+
+Swazz supports pre-scanning OpenAPI schemas with LLMs (Google Gemini, OpenAI) via Cloudflare AI Gateway to generate custom payload templates.
+
+### Cloudflare AI Gateway Setup
+
+1. **AI Gateway / OpenAI Proxy URL**:
+   In **Project Settings -> Performance / Fuzzing Settings**, set the **AI Gateway / OpenAI Proxy URL**:
+   - For Google Gemini / Google AI Studio:
+     `https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_NAME/google-ai-studio`
+   - For OpenAI:
+     `https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_NAME/openai`
+
+2. **Cloudflare AI Gateway Token (`cf-aig-authorization`)**:
+   If your Cloudflare AI Gateway has Authenticated Gateway enabled, enter your token in the **Cloudflare AI Gateway Token** field in Project Settings. It is transmitted via the `cf-aig-authorization: Bearer <token>` header.
+
+3. **Provider API Keys & BYOK (Bring Your Own Keys)**:
+   - **Using Cloudflare Provider Keys (BYOK)**: If you configured your Google AI Studio or OpenAI API key in Cloudflare's **Provider Keys** settings, you do **NOT** need to set `GOOGLE_API_KEY` or `OPENAI_API_KEY` in your environment. Cloudflare AI Gateway automatically injects the provider key on the edge.
+   - **Direct Environment Keys**: If you don't use Cloudflare BYOK, set `GOOGLE_API_KEY` (for Gemini) or `OPENAI_API_KEY` (for OpenAI) in your runner's environment variables:
+     ```bash
+     export GOOGLE_API_KEY="AIzaSy..."
+     # or
+     export OPENAI_API_KEY="sk-..."
+     ```
+
 ## How it works safely
 When a finding occurs:
 1. The AI engine wraps the untrusted payload inside `<untrusted-finding-context>` to mitigate Prompt Injections.
 2. The Runner executes `exec.Command` directly (without `bash` or `sh`) to prevent command injection.
 3. If "Propose Fixes" is enabled, a temporary `git worktree` is created alongside your existing repository clone to apply the patch, commit, push, and create a PR without polluting your active workspace.
+

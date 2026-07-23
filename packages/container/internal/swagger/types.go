@@ -178,7 +178,6 @@ type Settings struct {
 	AuthCookies                   []string                    `json:"auth_cookies,omitempty"`
 	AuthProbeURL                  string                      `json:"auth_probe_url,omitempty"`
 	ChainingRules                 []ChainingRule              `json:"chaining_rules,omitempty"`
-
 	HarDomainFilter               string                      `json:"har_domain_filter,omitempty"`
 	MaxNodesBudget                int                         `json:"max_nodes_budget,omitempty"`
 	MaxDepthLimit                 int                         `json:"max_depth_limit,omitempty"`
@@ -188,6 +187,19 @@ type Settings struct {
 	ProxyList                     []string                    `json:"proxy_list,omitempty"`
 	RandomizeUserAgent            bool                        `json:"randomize_user_agent,omitempty"`
 	EnableAdaptiveRateLimit       bool                        `json:"enable_adaptive_rate_limit,omitempty"`
+	EnableSemanticMutation        *bool                       `json:"enable_semantic_mutation,omitempty"`
+	UseLLMPrepass                 bool                        `json:"use_llm_prepass,omitempty"`
+	AIGatewayURL                  string                      `json:"ai_gateway_url,omitempty"`
+	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
+}
+
+// SemanticMutationEnabled returns true if semantic format wrappers are enabled.
+// Defaults to true when the field is not set (nil), matching the frontend default.
+func (s Settings) SemanticMutationEnabled() bool {
+	if s.EnableSemanticMutation == nil {
+		return true
+	}
+	return *s.EnableSemanticMutation
 }
 
 type Checkpoint struct {

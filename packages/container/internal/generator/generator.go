@@ -54,6 +54,7 @@ type Generator struct {
 	oobServerURL string
 	Endpoint     string
 	RunID        string
+	settings     swagger.Settings
 }
 
 // New creates a new Generator.
@@ -77,7 +78,9 @@ func New(dictionaries map[string][]any, profile swagger.FuzzingProfile, settings
 		dictionaries:     norm,
 		profile:          profile,
 		activeCategories: active,
+		settings:         settings,
 		oobServerURL:     settings.OOBServerURL,
+		mSecHeaderIdxs:   make(map[string]int),
 	}
 	g.cachedMaliciousStrings, g.hasActiveMaliciousStrings = g.getActiveMaliciousStrings()
 	return g
@@ -375,13 +378,20 @@ func (g *Generator) generateString(format, propName string) any {
 				if strings.Contains(strVal, "7*7") || strings.Contains(strVal, "7+'7'") {
 					strVal = g.randomizeAndRegisterSSTI(strVal)
 				}
+				if g.settings.SemanticMutationEnabled() && format != "" {
+					return g.GenerateSemanticValue(format, strVal)
+				}
 				return strVal
 			}
 			return val
 		}
 	}
 
-	return g.fallbackRandom(propName)
+	res := g.fallbackRandom(propName)
+	if strRes, ok := res.(string); ok && g.settings.SemanticMutationEnabled() && format != "" {
+		return g.GenerateSemanticValue(format, strRes)
+	}
+	return res
 }
 
 func (g *Generator) getActiveMaliciousStrings() ([]any, bool) {
@@ -670,3 +680,29 @@ func (g *Generator) randomizeAndRegisterSSTI(s string) string {
 	}
 	return s
 }
+
+// GenerateSemanticValue returns a semantic format-wrapped payload for a given vector.
+func (g *Generator) GenerateSemanticValue(format string, vector string) string {
+	var variants []string
+	switch strings.ToLower(format) {
+	case "email":
+		variants = WrapEmail(vector)
+	case "date", "date-time":
+		variants = WrapDateTime(vector)
+	case "uri", "url":
+		variants = WrapURL(vector)
+	case "uuid":
+		variants = WrapUUID(vector)
+	case "phone", "tel":
+		variants = WrapPhone(vector)
+	default:
+		return vector
+	}
+
+	if len(variants) == 0 {
+		return vector
+	}
+	return variants[rand.IntN(len(variants))] // #nosec G404 -- fuzzer payload rotation
+}
+
+

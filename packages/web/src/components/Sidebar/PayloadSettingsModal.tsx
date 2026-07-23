@@ -10,7 +10,7 @@ interface PayloadSettingsModalProps {
 const API_BASE = ((import.meta.env.VITE_PROXY_URL as string) || '').replace(/\/$/, '');
 
 export const PayloadSettingsModal: React.FC<PayloadSettingsModalProps> = ({ onClose }) => {
-    const { config, updatePayloadCategories } = useConfig();
+    const { config, updatePayloadCategories, updateSettings } = useConfig();
     const [catalog, setCatalog] = useState<PayloadCatalog | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -57,7 +57,6 @@ export const PayloadSettingsModal: React.FC<PayloadSettingsModalProps> = ({ onCl
     if (!catalog) return null;
 
     const profiles: FuzzingProfile[] = ['RANDOM', 'BOUNDARY', 'MALICIOUS'];
-
     return (
         <Modal title="Payload Settings" onClose={onClose} width="800px">
             <div className="payload-catalog-container">

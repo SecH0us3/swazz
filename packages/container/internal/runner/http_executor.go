@@ -144,7 +144,7 @@ func (r *Runner) executeRequest(
 			break
 		}
 	}
-	if isBody && payload != nil && !hasContentType {
+	if isBody && !hasContentType {
 		mergedHeaders["Content-Type"] = effectiveCT
 	}
 
@@ -456,6 +456,16 @@ func (r *Runner) executeRequest(
 				r.configMu.RLock()
 				for k, v := range newHeaders {
 					mergedHeaders[k] = r.subStateVars(r.subVarsLocked(v))
+				}
+				hasCT := false
+				for k := range mergedHeaders {
+					if strings.EqualFold(k, "content-type") {
+						hasCT = true
+						break
+					}
+				}
+				if isBody && !hasCT {
+					mergedHeaders["Content-Type"] = effectiveCT
 				}
 				// Re-calculate rawURL with new variables if any
 				base, parseErr := url.Parse(strings.TrimRight(baseURL, "/"))

@@ -5,8 +5,13 @@
 - Do NOT run gh pr merge or pass the --auto flag automatically.
 - After creating a PR, report the URL and wait for the user to say "merge" or similar confirmation.
 
-## Go Code Quality
+## Security & Environment Config Guardrails
+- **No dev-mode auth/security overrides in commits**: Never commit dev-mode overrides to `wrangler.toml` or security settings (e.g. `AUTH_ENABLED="false"`, `LIMIT_ANONYMOUS="false"`). Always audit `git diff` on infrastructure and environment files before committing to prevent accidentally pushing disabled authentication to production.
+
+## Go Code Quality & Schema Defaults
 - **Avoid manual URL query parameter formatting**: Never format query params using `fmt.Sprintf` or string concatenation. Always parse URLs with `net/url` and modify parameters via the `Query()` API.
+- **Go / Frontend Schema Default Parity**: When adding new boolean settings in Go (`swagger.Settings`), if the default in the frontend UI is `true`, use optional pointer fields (`*bool`) and helper getter methods in Go (e.g. `SemanticMutationEnabled()`) so that missing JSON keys in existing project configs default to `true` instead of Go's zero-value `false`.
+- **Complete LLM Pre-Scan Context**: When extracting OpenAPI schema context for LLM pre-scans or planners, always include all parameter types (`PathParams`, `QueryParams`, `HeaderParams`, and `Schema.Properties` body fields) rather than partially sampling query parameters alone.
 
 ## Frontend Layout & CSS
 - **No inline layout styles**: Never write inline layout styles (such as `padding`, `margin`, `width`, `height`, `display`, etc.) in React component files. Instead, define them as proper CSS classes in the associated stylesheet (e.g. `index.css`).

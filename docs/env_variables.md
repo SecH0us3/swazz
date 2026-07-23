@@ -56,3 +56,6 @@ These environment variables are read by the fuzzer agent engine (`packages/conta
 | **`SWAZZ_LOG_FORMAT`** | Format of log messages output to stdout/stderr. | `text`, `json` (Default: `text`) |
 | **`SWAZZ_DEV`** | Bypass local URL/SSRF blocks (enables scanning `localhost`). | `1` (Bypasses check), `0` (Enforced default) |
 | **`CLOUDFLARE_APPLICATION_ID`** | Optional Cloudflare Access client ID header injection. | *Header string* |
+| **`GOOGLE_API_KEY`** | Google AI Studio API key for Gemini models via Pre-Scan LLM Batching. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `AIzaSy...` |
+| **`OPENAI_API_KEY`** | OpenAI API key for pre-scan schema analysis. *(Optional if Cloudflare AI Gateway Provider Keys / BYOK is used)*. | `sk-...` |
+

@@ -223,3 +223,29 @@ export function extractErrorSubtype(responsePreview: string | undefined): { titl
 
     return null;
 }
+
+export function getCleanDedupeKey(method: string, endpoint: string, status: number, errorMsg?: string): string {
+    let cleanErr = errorMsg || '';
+    
+    // 1. Remove Cloudflare Ray IDs
+    cleanErr = cleanErr.replace(/Ray ID:?\s*[a-z0-9]+/gi, 'Ray ID: [REDACTED]');
+    cleanErr = cleanErr.replace(/Ray ID\s*<strong[^>]*>[a-z0-9]+<\/strong>/gi, 'Ray ID: [REDACTED]');
+    
+    // 2. Remove UUIDs
+    cleanErr = cleanErr.replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '[UUID]');
+    
+    // 3. Remove common dynamic parts like timestamps or session IDs
+    cleanErr = cleanErr.replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/gi, '[TIMESTAMP]');
+    cleanErr = cleanErr.replace(/\d{10,13}/g, '[TIMESTAMP_MS]');
+    
+    // 4. Limit length or keep only first line if it's a huge HTML error page
+    if (cleanErr.includes('<!DOCTYPE html>') || cleanErr.includes('<html')) {
+        cleanErr = 'HTML Error Page';
+    } else {
+        // Just take the first 150 characters to avoid noise from different stack traces/IDs
+        cleanErr = cleanErr.slice(0, 150);
+    }
+    
+    return `${method} ${endpoint}::${status}::${cleanErr}`;
+}
+

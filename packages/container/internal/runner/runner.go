@@ -24,12 +24,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"swazz-engine/internal/ai"
 	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
@@ -52,6 +54,10 @@ const (
 	defaultMaxPayloadBytes  = 1 << 20 // 1 MiB
 	boundaryMaxPayloadBytes = 1 << 29 // 512 MiB
 )
+
+func (r *Runner) Config() *swagger.Config {
+	return r.config
+}
 
 // ─── embedded sub-structs ────────────────────────────────────────────────────
 
@@ -266,6 +272,8 @@ func (r *Runner) Start(ctx context.Context) error {
 			}
 		}()
 	}
+
+	r.runPreScanLLM(runCtx)
 
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
@@ -1009,4 +1017,63 @@ func (r *Runner) logError(format string, v ...interface{}) {
 			"timestamp": time.Now().Format(time.RFC3339),
 		},
 	})
+}
+
+func (r *Runner) runPreScanLLM(ctx context.Context) {
+	if !r.config.Settings.UseLLMPrepass {
+		return
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	googleKey := os.Getenv("GOOGLE_API_KEY")
+	if googleKey == "" {
+		googleKey = os.Getenv("OPENAI_API_KEY")
+	}
+
+	planner := ai.NewSemanticPlanner(r.config.Settings.AIGatewayURL, r.config.Settings.CFAigToken, googleKey)
+
+	var summaryBuilder strings.Builder
+	for _, ep := range r.config.Endpoints {
+		summaryBuilder.WriteString(fmt.Sprintf("Endpoint: %s %s\n", ep.Method, ep.Path))
+		for pName, pProp := range ep.PathParams {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  PathParam: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
+		for pName, pProp := range ep.QueryParams {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  QueryParam: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
+		for pName, pProp := range ep.HeaderParams {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  Header: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
+		for pName, pProp := range ep.Schema.Properties {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  BodyField: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
+	}
+
+	customPayloads, err := planner.GeneratePreScanPayloads(timeoutCtx, summaryBuilder.String())
+	if err != nil {
+		r.logWarn("[AI] ⚠️ Pre-Scan LLM Batching failed: %v", err)
+		return
+	}
+
+	if len(customPayloads) > 0 {
+		if r.config.Dictionaries == nil {
+			r.config.Dictionaries = make(map[string][]any)
+		}
+		anyPayloads := make([]any, len(customPayloads))
+		for i, p := range customPayloads {
+			anyPayloads[i] = p
+		}
+		r.config.Dictionaries["custom_llm"] = anyPayloads
+		r.logInfo("[AI] ✅ Registered %d custom LLM payloads into fuzzing dictionary", len(customPayloads))
+	}
 }

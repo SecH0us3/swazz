@@ -233,6 +233,71 @@ export function PerformanceTab() {
                         Only import endpoints matching this domain when importing HAR files.
                     </span>
                 </div>
+
+                {/* Semantic & AI Mutation Options */}
+                <div className="fuzz-setting-section semantic-settings-section">
+                    <h3 className="fuzz-setting-section-title">Semantic &amp; AI Mutation Options</h3>
+                    
+                    <div className="fuzz-setting-checkbox-group no-border">
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                checked={config.settings.enable_semantic_mutation !== false}
+                                onChange={(e) => updateSettings({ enable_semantic_mutation: e.target.checked })}
+                            />
+                            <strong className="fuzz-setting-label-bold">Semantic Format Wrappers</strong>
+                        </label>
+                        <span className="fuzz-setting-checkbox-hint">
+                            Wrap payloads into valid email, UUID, date, phone &amp; URL RFC formats.
+                        </span>
+                    </div>
+
+                    <div className="fuzz-setting-checkbox-group no-border">
+                        <label className="premium-checkbox-label">
+                            <input
+                                type="checkbox"
+                                className="premium-checkbox"
+                                checked={config.settings.use_llm_prepass ?? false}
+                                onChange={(e) => updateSettings({ use_llm_prepass: e.target.checked })}
+                            />
+                            <strong className="fuzz-setting-label-bold">Pre-Scan LLM Batching</strong>
+                        </label>
+                        <span className="fuzz-setting-checkbox-hint">
+                            Pre-scan OpenAPI schema with LLM to generate custom payload templates.
+                        </span>
+                    </div>
+
+                    {(config.settings.use_llm_prepass ?? false) && (
+                        <div className="llm-nested-settings">
+                            <div>
+                                <label htmlFor="ai_gateway_url" className="fuzz-setting-input-label">AI Gateway / OpenAI Proxy URL</label>
+                                <input
+                                    id="ai_gateway_url"
+                                    type="text"
+                                    className="input semantic-input-field"
+                                    placeholder="https://gateway.ai.cloudflare.com/v1/ACCOUNT_ID/GATEWAY/openai"
+                                    value={config.settings.ai_gateway_url || ''}
+                                    onChange={(e) => updateSettings({ ai_gateway_url: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="cf_aig_token" className="fuzz-setting-input-label">Cloudflare AI Gateway Token (cf-aig-authorization)</label>
+                                <input
+                                    id="cf_aig_token"
+                                    type="password"
+                                    className="input semantic-input-field"
+                                    placeholder="Bearer token for Cloudflare AI Gateway"
+                                    value={config.settings.cf_aig_token || ''}
+                                    onChange={(e) => updateSettings({ cf_aig_token: e.target.value })}
+                                />
+                                <span className="fuzz-setting-checkbox-hint">
+                                    Bearer token sent in cf-aig-authorization header to Cloudflare AI Gateway.
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
