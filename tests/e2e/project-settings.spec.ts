@@ -348,7 +348,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
         await moreSettingsBtn.click();
       }
       await fuzzingTabBtn.click();
+      await page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")').click();
       await timeoutInput.fill('2000');
+      await page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")').click();
       await iterationsInput.fill('5');
       await rawConfigTabBtnSecond.click();
       await saveBtn.click();
