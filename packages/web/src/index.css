@@ -304,7 +304,7 @@ body.resizing .sidebar-resizer {
   padding: 0;
   height: 52px;
   box-sizing: border-box;
-  z-index: 50;
+  z-index: 1000;
   position: relative;
 }
 
