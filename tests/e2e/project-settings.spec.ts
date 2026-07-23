@@ -531,7 +531,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
 
     // Assert states are preserved
     await expect(toolSelect).toHaveValue('agy');
+    await page.locator('button.performance-subtab-btn:has-text("Triage Model")').click();
     await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
+    await page.locator('button.performance-subtab-btn:has-text("CLI & General Settings")').click();
     await expect(proposeFixesCheckbox).toBeChecked();
     await expect(urlMappingsTextarea).toHaveValue('{"/api/*": "git@github.com:SecH0us3/swazz.git"}');
   });
@@ -549,13 +551,17 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#password').press('Enter');
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // 3. Open Project Settings
-    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
-    await expect(moreSettingsBtn).toBeVisible();
-    await moreSettingsBtn.click();
+    // 3. Open User Settings modal
+    const userMenuBtn = page.locator('button.user-menu-btn, .user-avatar, button:has-text("Account")').first();
+    await expect(userMenuBtn).toBeVisible();
+    await userMenuBtn.click();
 
-    // 4. Switch to Traffic Capture tab
-    const captureTabBtn = page.locator('button.tab-bar-btn:has-text("Traffic Capture")');
+    const userSettingsBtn = page.locator('button:has-text("User Settings"), button:has-text("Settings")').first();
+    await expect(userSettingsBtn).toBeVisible();
+    await userSettingsBtn.click();
+
+    // 4. Switch to Traffic Capture tab in User Settings
+    const captureTabBtn = page.locator('.user-settings-nav button:has-text("Traffic Capture"), button.tab-bar-btn:has-text("Traffic Capture")').first();
     await expect(captureTabBtn).toBeVisible();
     await captureTabBtn.click();
 
