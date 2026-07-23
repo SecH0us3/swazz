@@ -48,7 +48,7 @@ export function UserMenu({ onLogout, isGuest: isGuestProp }: UserMenuProps) {
                     backgroundColor: 'var(--bg-elevated)',
                     minWidth: '180px',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    zIndex: 100,
+                    zIndex: 1000,
                     borderRadius: 'var(--radius-md)',
                     display: 'flex',
                     flexDirection: 'column',
