@@ -120,10 +120,66 @@ const removeRuleFromPrompt = (prompt: string | undefined | null, rule: string) =
     return safePrompt.replace(regex, '').trim();
 };
 
+type SubTabId = 'general' | 'triage' | 'remediation' | 'stacks_rules';
+
+interface SubTabConfig {
+    id: SubTabId;
+    label: string;
+    icon: React.ReactNode;
+}
+
+const TABS: SubTabConfig[] = [
+    {
+        id: 'general',
+        label: 'CLI & General Settings',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+        )
+    },
+    {
+        id: 'triage',
+        label: 'Triage Model (Pass 1)',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+        )
+    },
+    {
+        id: 'remediation',
+        label: 'Remediation Model (Pass 2)',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+        )
+    },
+    {
+        id: 'stacks_rules',
+        label: 'Tech Stacks & Auto-Fix Rules',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+        )
+    }
+];
+
 export function AiRemediationTab() {
     const activeProject = useAppStore(state => state.activeProject);
     const projects = useAppStore(state => state.projects);
 
+    const [subTab, setSubTab] = useState<SubTabId>('general');
     const [urlMappings, setUrlMappings] = useState(activeProject?.url_mappings || '');
     const [aiPrompts, setAiPrompts] = useState(DEFAULT_AI_PROMPTS);
     const [selectedStacks, setSelectedStacks] = useState<string[]>([]);
@@ -376,176 +432,222 @@ export function AiRemediationTab() {
                 AI Remediation Config
             </h2>
 
+            {/* Horizontal Sub-Tabs Bar */}
+            <div className="performance-subtabs-nav" role="tablist" aria-label="AI Remediation settings navigation">
+                {TABS.map((tab) => {
+                    const isActive = subTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            id={`ai-subtab-${tab.id}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            aria-controls={`ai-subtabpanel-${tab.id}`}
+                            className={`performance-subtab-btn ${isActive ? 'active' : ''}`}
+                            onClick={() => setSubTab(tab.id)}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    );
+                })}
+            </div>
+
             <form onSubmit={handleSave} className="settings-form">
-                <div>
-                    <label className="settings-label">URL to Repository Mappings</label>
-                    <textarea 
-                        className="input settings-textarea" 
-                        value={urlMappings} 
-                        onChange={(e) => setUrlMappings(e.target.value)}
-                        placeholder={'{\n  "/api/auth/*": "git@github.com:org/repo-auth.git"\n}'}
-                        data-1p-ignore
-                    />
-                    <span className="settings-help-text">
-                        JSON mapping of API paths to Git repositories for the local agent to fetch code context.
-                    </span>
-                </div>
+                {/* Sub-Tab 1: CLI & General Settings */}
+                {subTab === 'general' && (
+                    <div id="ai-subtabpanel-general" className="performance-tab-content" role="tabpanel" aria-labelledby="ai-subtab-general">
+                        <div className="settings-field-group">
+                            <label className="settings-label" htmlFor="preferred-ai-tool">Preferred AI Tool:</label>
+                            <select 
+                                id="preferred-ai-tool"
+                                className="input settings-tool-select" 
+                                value={selectedTool} 
+                                onChange={(e) => handleToolChange(e.target.value as any)}
+                            >
+                                <option value="claude">Anthropic Claude CLI</option>
+                                <option value="agy">Google Antigravity CLI (agy)</option>
+                                <option value="vibe">Mistral Vibe CLI</option>
+                                <option value="custom">Custom CLI</option>
+                            </select>
+                        </div>
 
-                <div className="settings-field-group" style={{ marginTop: 'var(--space-4)' }}>
-                    <label className="settings-label" htmlFor="preferred-ai-tool">Preferred AI Tool:</label>
-                    <select 
-                        id="preferred-ai-tool"
-                        className="input settings-tool-select" 
-                        value={selectedTool} 
-                        onChange={(e) => handleToolChange(e.target.value as any)}
-                    >
-                        <option value="claude">Anthropic Claude CLI</option>
-                        <option value="agy">Google Antigravity CLI (agy)</option>
-                        <option value="vibe">Mistral Vibe CLI</option>
-                        <option value="custom">Custom CLI</option>
-                    </select>
-                </div>
-
-                <div className="settings-pass-container">
-                    <h3 className="settings-pass-title">Pass 1: Triage Model (Fast / Cheap)</h3>
-                    <p className="settings-pass-desc">
-                        This model acts as a fast filter to reject obvious false positives (e.g. BOLA findings that are intended behavior).
-                    </p>
-                    
-                    <div>
-                        <label className="settings-label">CLI Execution Command & Model</label>
-                        <input 
-                            type="text" 
-                            className="input settings-input-full" 
-                            placeholder={getPlaceholder(1)}
-                            value={aiPrompts.pass1_cmd} 
-                            onChange={(e) => updatePromptField('pass1_cmd', e.target.value)}
-                            style={{ fontFamily: 'monospace' }} 
-                            data-1p-ignore
-                        />
-                    </div>
-                    <div>
-                        <label className="settings-label" htmlFor="triage-prompt">Triage Prompt Template</label>
-                        <div className="settings-prompt-wrapper">
+                        <div>
+                            <label className="settings-label" htmlFor="url-mappings">URL to Repository Mappings</label>
                             <textarea 
-                                id="triage-prompt"
+                                id="url-mappings"
                                 className="input settings-textarea" 
-                                value={aiPrompts.pass1_prompt} 
-                                onChange={(e) => updatePromptField('pass1_prompt', e.target.value)}
+                                value={urlMappings} 
+                                onChange={(e) => setUrlMappings(e.target.value)}
+                                placeholder={'{\n  "/api/auth/*": "git@github.com:org/repo-auth.git"\n}'}
                                 data-1p-ignore
                             />
-                            <button 
-                                type="button" 
-                                className="settings-prompt-expand"
-                                onClick={() => setExpandedPrompt('pass1_prompt')}
-                                title="Expand to full screen"
-                            >
-                                ⛶
-                            </button>
+                            <span className="settings-help-text">
+                                JSON mapping of API paths to Git repositories for the local agent to fetch code context.
+                            </span>
                         </div>
-                    </div>
-                </div>
 
-                <div className="settings-field-group-stacks">
-                    <label className="settings-label">Target Tech Stacks</label>
-                    <div className="tech-stacks-grid">
-                        {Object.keys(TECH_STACK_SNIPPETS).map(stack => (
-                            <label key={stack} className="tech-stack-label">
+                        <div className="settings-premium-group">
+                            <label className="premium-checkbox-label">
                                 <input
                                     type="checkbox"
-                                    checked={selectedStacks.includes(stack)}
-                                    onChange={() => handleStackToggle(stack)}
-                                    className="tech-stack-checkbox"
+                                    className="premium-checkbox"
+                                    checked={proposeFixes}
+                                    onChange={(e) => setProposeFixes(e.target.checked)}
                                 />
-                                {stack}
+                                <strong className="premium-checkbox-text">Propose Fixes Automatically</strong>
                             </label>
-                        ))}
-                    </div>
-                    <span className="settings-help-text">
-                        Select the technology stacks of your target application to automatically tune AI prompt templates.
-                    </span>
-                </div>
-
-                <div className="settings-pass-container">
-                    <h3 className="settings-pass-title">Pass 2: Remediation Model (Deep / Expensive)</h3>
-                    <p className="settings-pass-desc">
-                        This model generates a thorough explanation and a code patch for findings that pass the triage stage.
-                    </p>
-                    
-                    <div>
-                        <label className="settings-label">CLI Execution Command & Model</label>
-                        <input 
-                            type="text" 
-                            className="input settings-input-full" 
-                            placeholder={getPlaceholder(2)}
-                            value={aiPrompts.pass2_cmd} 
-                            onChange={(e) => updatePromptField('pass2_cmd', e.target.value)}
-                            style={{ fontFamily: 'monospace' }} 
-                            data-1p-ignore
-                        />
-                    </div>
-                    <div>
-                        <label className="settings-label" htmlFor="remediation-prompt">Remediation Prompt Template</label>
-                        <div className="settings-prompt-wrapper">
-                            <textarea 
-                                id="remediation-prompt"
-                                className="input settings-textarea" 
-                                style={{ minHeight: '120px' }}
-                                value={aiPrompts.pass2_prompt} 
-                                onChange={(e) => updatePromptField('pass2_prompt', e.target.value)}
-                                data-1p-ignore
-                            />
-                            <button 
-                                type="button" 
-                                className="settings-prompt-expand"
-                                onClick={() => setExpandedPrompt('pass2_prompt')}
-                                title="Expand to full screen"
-                            >
-                                ⛶
-                            </button>
+                            <span className="settings-help-text premium-help-text">
+                                If enabled, the Go runner will use `git worktree` to clone the target repository, apply the AI patch, and attempt to open a Pull Request.
+                            </span>
                         </div>
                     </div>
-                </div>
+                )}
 
-                <div className="settings-field-margin">
-                    <label className="settings-label">Rules to Auto-Fix</label>
-                    <textarea 
-                        className="input settings-textarea settings-textarea-min" 
-                        value={autoFixRules} 
-                        onChange={(e) => setAutoFixRules(e.target.value)}
-                        placeholder={DEFAULT_AUTO_FIX_RULES}
-                        data-1p-ignore
-                    />
-                    <div className="settings-help-container">
-                        <span className="settings-help-text" style={{ margin: 0 }}>
-                            JSON array of rule IDs that should be automatically fixed.
-                        </span>
-                        <button 
-                            type="button" 
-                            className="btn btn-secondary settings-rules-btn" 
-                            onClick={() => setShowRulesModal(true)}
-                        >
-                            + Select Rules
-                        </button>
+                {/* Sub-Tab 2: Pass 1 (Triage Model) */}
+                {subTab === 'triage' && (
+                    <div id="ai-subtabpanel-triage" className="performance-tab-content" role="tabpanel" aria-labelledby="ai-subtab-triage">
+                        <div className="settings-pass-container">
+                            <h3 className="settings-pass-title">Pass 1: Triage Model (Fast / Cheap)</h3>
+                            <p className="settings-pass-desc">
+                                This model acts as a fast filter to reject obvious false positives (e.g. BOLA findings that are intended behavior).
+                            </p>
+                            
+                            <div>
+                                <label className="settings-label" htmlFor="pass1-cmd">CLI Execution Command &amp; Model</label>
+                                <input 
+                                    id="pass1-cmd"
+                                    type="text" 
+                                    className="input settings-input-full" 
+                                    placeholder={getPlaceholder(1)}
+                                    value={aiPrompts.pass1_cmd} 
+                                    onChange={(e) => updatePromptField('pass1_cmd', e.target.value)}
+                                    style={{ fontFamily: 'monospace' }} 
+                                    data-1p-ignore
+                                />
+                            </div>
+                            <div>
+                                <label className="settings-label" htmlFor="triage-prompt">Triage Prompt Template</label>
+                                <div className="settings-prompt-wrapper">
+                                    <textarea 
+                                        id="triage-prompt"
+                                        className="input settings-textarea" 
+                                        value={aiPrompts.pass1_prompt} 
+                                        onChange={(e) => updatePromptField('pass1_prompt', e.target.value)}
+                                        data-1p-ignore
+                                    />
+                                    <button 
+                                        type="button" 
+                                        className="settings-prompt-expand"
+                                        onClick={() => setExpandedPrompt('pass1_prompt')}
+                                        title="Expand to full screen"
+                                    >
+                                        ⛶
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
 
-                <div className="settings-premium-group">
-                    <label className="premium-checkbox-label">
-                        <input
-                            type="checkbox"
-                            className="premium-checkbox"
-                            checked={proposeFixes}
-                            onChange={(e) => setProposeFixes(e.target.checked)}
-                        />
-                        <strong className="premium-checkbox-text">Propose Fixes Automatically</strong>
-                    </label>
-                    <span className="settings-help-text premium-help-text">
-                        If enabled, the Go runner will use `git worktree` to clone the target repository, apply the AI patch, and attempt to open a Pull Request.
-                    </span>
-                </div>
+                {/* Sub-Tab 3: Pass 2 (Remediation Model) */}
+                {subTab === 'remediation' && (
+                    <div id="ai-subtabpanel-remediation" className="performance-tab-content" role="tabpanel" aria-labelledby="ai-subtab-remediation">
+                        <div className="settings-pass-container">
+                            <h3 className="settings-pass-title">Pass 2: Remediation Model (Deep / Expensive)</h3>
+                            <p className="settings-pass-desc">
+                                This model generates a thorough explanation and a code patch for findings that pass the triage stage.
+                            </p>
+                            
+                            <div>
+                                <label className="settings-label" htmlFor="pass2-cmd">CLI Execution Command &amp; Model</label>
+                                <input 
+                                    id="pass2-cmd"
+                                    type="text" 
+                                    className="input settings-input-full" 
+                                    placeholder={getPlaceholder(2)}
+                                    value={aiPrompts.pass2_cmd} 
+                                    onChange={(e) => updatePromptField('pass2_cmd', e.target.value)}
+                                    style={{ fontFamily: 'monospace' }} 
+                                    data-1p-ignore
+                                />
+                            </div>
+                            <div>
+                                <label className="settings-label" htmlFor="remediation-prompt">Remediation Prompt Template</label>
+                                <div className="settings-prompt-wrapper">
+                                    <textarea 
+                                        id="remediation-prompt"
+                                        className="input settings-textarea" 
+                                        style={{ minHeight: '120px' }}
+                                        value={aiPrompts.pass2_prompt} 
+                                        onChange={(e) => updatePromptField('pass2_prompt', e.target.value)}
+                                        data-1p-ignore
+                                    />
+                                    <button 
+                                        type="button" 
+                                        className="settings-prompt-expand"
+                                        onClick={() => setExpandedPrompt('pass2_prompt')}
+                                        title="Expand to full screen"
+                                    >
+                                        ⛶
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
-                <div className="settings-actions">
+                {/* Sub-Tab 4: Tech Stacks & Rules */}
+                {subTab === 'stacks_rules' && (
+                    <div id="ai-subtabpanel-stacks_rules" className="performance-tab-content" role="tabpanel" aria-labelledby="ai-subtab-stacks_rules">
+                        <div className="settings-field-group-stacks">
+                            <label className="settings-label">Target Tech Stacks</label>
+                            <div className="tech-stacks-grid">
+                                {Object.keys(TECH_STACK_SNIPPETS).map(stack => (
+                                    <label key={stack} className="tech-stack-label">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedStacks.includes(stack)}
+                                            onChange={() => handleStackToggle(stack)}
+                                            className="tech-stack-checkbox"
+                                        />
+                                        {stack}
+                                    </label>
+                                ))}
+                            </div>
+                            <span className="settings-help-text">
+                                Select the technology stacks of your target application to automatically tune AI prompt templates.
+                            </span>
+                        </div>
+
+                        <div className="settings-field-margin">
+                            <label className="settings-label" htmlFor="auto-fix-rules">Rules to Auto-Fix</label>
+                            <textarea 
+                                id="auto-fix-rules"
+                                className="input settings-textarea settings-textarea-min" 
+                                value={autoFixRules} 
+                                onChange={(e) => setAutoFixRules(e.target.value)}
+                                placeholder={DEFAULT_AUTO_FIX_RULES}
+                                data-1p-ignore
+                            />
+                            <div className="settings-help-container">
+                                <span className="settings-help-text" style={{ margin: 0 }}>
+                                    JSON array of rule IDs that should be automatically fixed.
+                                </span>
+                                <button 
+                                    type="button" 
+                                    className="btn btn-secondary settings-rules-btn" 
+                                    onClick={() => setShowRulesModal(true)}
+                                >
+                                    + Select Rules
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="settings-actions" style={{ marginTop: '20px' }}>
                     <button type="submit" className="btn btn-primary" disabled={isSaving}>
                         {isSaving ? 'Saving...' : 'Save AI Settings'}
                     </button>

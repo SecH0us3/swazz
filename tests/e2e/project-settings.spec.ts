@@ -471,13 +471,18 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await expect(toolSelect).toBeVisible();
     await toolSelect.selectOption('agy');
 
-    // 6. Verify CLI command placeholders/inputs updated
+    // 6. Switch to Triage sub-tab and verify CLI command
+    await page.locator('button.performance-subtab-btn:has-text("Triage Model")').click();
     const pass1CmdInput = page.locator('input.settings-input-full').first();
-    const pass2CmdInput = page.locator('input.settings-input-full').nth(1);
     await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
+
+    // Switch to Remediation sub-tab and verify CLI command
+    await page.locator('button.performance-subtab-btn:has-text("Remediation Model")').click();
+    const pass2CmdInput = page.locator('input.settings-input-full').first();
     await expect(pass2CmdInput).toHaveValue('agy -m gemini-3.1-pro "{{prompt_file}}"');
 
-    // 7. Select rules modal
+    // 7. Switch to Tech Stacks & Rules sub-tab and open select rules modal
+    await page.locator('button.performance-subtab-btn:has-text("Tech Stacks & Auto-Fix Rules")').click();
     const selectRulesBtn = page.locator('button.settings-rules-btn');
     await expect(selectRulesBtn).toBeVisible();
     await selectRulesBtn.click();
@@ -499,7 +504,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     const autoFixRulesTextarea = page.locator('label:has-text("Rules to Auto-Fix") + textarea');
     await expect(autoFixRulesTextarea).toContainText('swazz/sensitive-data-leak');
 
-    // 9. Check "Propose Fixes Automatically"
+    // 9. Switch back to CLI & General Settings sub-tab for checkbox and URL mappings
+    await page.locator('button.performance-subtab-btn:has-text("CLI & General Settings")').click();
+
     const proposeFixesCheckbox = page.locator('label:has-text("Propose Fixes Automatically") >> input[type="checkbox"]');
     await expect(proposeFixesCheckbox).toBeVisible();
     await proposeFixesCheckbox.check();
