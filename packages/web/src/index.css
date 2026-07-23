@@ -356,7 +356,7 @@ body.resizing .sidebar-resizer {
   padding: 0 var(--space-4);
   height: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .app-layout.has-right-sidebar .header-right {
