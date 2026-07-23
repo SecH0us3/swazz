@@ -378,6 +378,12 @@ func startAgent(args []string) {
 			runCfg, err := BuildRunnerConfig(&dispatch.Config)
 			if err != nil {
 				logError("Failed to build runner config: %v", err)
+				errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
+				sendWSEvent(dispatch.RunID, "runner_log", map[string]interface{}{
+					"level":     "ERROR",
+					"message":   errMsg,
+					"timestamp": time.Now().Format(time.RFC3339),
+				})
 				sendWSError(dispatch.RunID, err.Error())
 				continue
 			}

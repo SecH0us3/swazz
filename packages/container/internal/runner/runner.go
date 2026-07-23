@@ -1024,7 +1024,7 @@ func (r *Runner) runPreScanLLM(ctx context.Context) {
 		return
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	googleKey := os.Getenv("GOOGLE_API_KEY")

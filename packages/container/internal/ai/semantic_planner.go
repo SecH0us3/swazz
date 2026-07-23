@@ -27,7 +27,7 @@ func NewSemanticPlanner(gatewayURL, cfAigToken, apiKey string) *SemanticPlanner 
 		gatewayURL: strings.TrimSuffix(gatewayURL, "/"),
 		cfAigToken: cfAigToken,
 		apiKey:     apiKey,
-		model:      "gemini-2.5-flash",
+		model:      "gemini-2.0-flash",
 		client:     &http.Client{Timeout: 30 * time.Second},
 	}
 }

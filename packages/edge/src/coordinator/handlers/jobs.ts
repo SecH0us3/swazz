@@ -26,14 +26,18 @@ export class DispatchHandler implements RouteHandler {
     });
 
     let runner = null;
-    if (payload.userPublicKey) {
-      runner = activeRunners.find(r => {
-        const tags = context.state.getTags(r);
-        return tags.includes(payload.userPublicKey);
-      });
-    }
-    if (!runner && !payload?.config?.settings?.disable_shared_runners) {
-      runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
+    if (context.env.AUTH_ENABLED === 'false' || (context.env.AUTH_ENABLED as any) === false) {
+      runner = activeRunners[0] || null;
+    } else {
+      if (payload.userPublicKey) {
+        runner = activeRunners.find(r => {
+          const tags = context.state.getTags(r);
+          return tags.includes(payload.userPublicKey);
+        });
+      }
+      if (!runner && !payload?.config?.settings?.disable_shared_runners) {
+        runner = activeRunners.find(r => !context.stateManager.isPrivateRunner(r)) || null;
+      }
     }
 
     if (runner) {

@@ -47,8 +47,8 @@ head_sampling_rate = 1
 invocation_logs = true
 
 [vars]
-AUTH_ENABLED = "true"
-LIMIT_ANONYMOUS = "true"
+AUTH_ENABLED = "false"
+LIMIT_ANONYMOUS = "false"
 ALLOWED_ORIGINS = "*"
 TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
 
