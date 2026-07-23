@@ -5709,6 +5709,128 @@ kbd {
   color: white;
 }
 
+/* Horizontal Sub-Tabs Navigation for PerformanceTab & Settings */
+.performance-subtabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.performance-subtab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-in-out);
+  white-space: nowrap;
+}
+
+.performance-subtab-btn:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.performance-subtab-btn.active {
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+  border-color: rgba(2, 132, 199, 0.25);
+  font-weight: 600;
+}
+
+.performance-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: slide-in-up var(--duration-base) var(--ease-out);
+}
+
+.performance-card {
+  background-color: var(--bg-elevated);
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.performance-card-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 12px;
+}
+
+.performance-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.performance-input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.performance-input-range {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.performance-input-number-center {
+  width: 60px;
+  text-align: center;
+}
+
+.performance-input-number-sm {
+  width: 120px;
+}
+
+.performance-input-full {
+  width: 100%;
+}
+
+.performance-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+.performance-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.performance-rate-limit-nested {
+  margin-left: 24px;
+  padding-left: 16px;
+  border-left: 2px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.performance-divider-top {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 16px;
+}
+
 
 .rbac-tab-container {
   display: flex;

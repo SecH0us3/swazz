@@ -17,7 +17,7 @@ The Web UI is the easiest way to manage your fuzzer, inspect requests, and visua
    - **Inspector**: Click on any cell in the heatmap to drill down into the fuzzed HTTP requests and responses.
      - **Mutation Diff**: Automatically compares fuzzed payloads and query parameters against the original API schemas or template structures. Mutated values are highlighted in **yellow** (for random/boundary mutations) or **red** (for malicious/security payloads), while newly added keys are highlighted in **green** and deleted keys are struck through.
      - **Raw Request**: Toggle to the raw request view to manually edit URLs, headers, and body payloads, then click **Replay** to send custom requests and view real-time responses.
-   - **Configuration Management**: Configure target hosts, auth tokens, and concurrency limits directly in the browser.
+   - **Configuration Management**: Configure target hosts, auth tokens, and fuzzing parameters directly in the browser. Fuzzing & Rate Limit settings are logically organized into horizontal sub-tabs (**Concurrency & Rate Limits**, **Fuzzing & Intensity**, **Timeout & Duration**, and **WAF Evasion & AI**).
 
 ## CLI Mode
 

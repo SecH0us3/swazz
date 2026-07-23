@@ -43,9 +43,19 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await expect(fuzzingTabBtn).toBeVisible();
     await fuzzingTabBtn.click();
 
+    // Navigate to Timeout & Duration sub-tab
+    const timeoutSubTabBtn = page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")');
+    await expect(timeoutSubTabBtn).toBeVisible();
+    await timeoutSubTabBtn.click();
+
     const timeoutInput = page.locator('label:has-text("Individual Request Timeout (ms)") + input');
     await expect(timeoutInput).toBeVisible();
     await timeoutInput.fill('2500');
+
+    // Switch back to Concurrency & Rate Limits sub-tab for delay setting
+    const concurrencySubTabBtn = page.locator('button.performance-subtab-btn:has-text("Concurrency & Rate Limits")');
+    await expect(concurrencySubTabBtn).toBeVisible();
+    await concurrencySubTabBtn.click();
 
     const delayInput = page.locator('label:has-text("Delay Between Requests (ms)") + input');
     await expect(delayInput).toBeVisible();
@@ -259,12 +269,22 @@ test.describe('Project and Payload Settings E2E Tests', () => {
         }
       });
 
-      // 8. Now set the timeout to 1ms to test the settings have actual effect on fuzzing
+      // 8. Now set the timeout to 5ms and iterations to 1 to test settings
       await expect(fuzzingTabBtn).toBeVisible();
       await fuzzingTabBtn.click();
 
+      // Switch to Timeout & Duration sub-tab
+      const timeoutSubTabBtn2 = page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")');
+      await expect(timeoutSubTabBtn2).toBeVisible();
+      await timeoutSubTabBtn2.click();
+
       await expect(timeoutInput).toBeVisible();
       await timeoutInput.fill('5'); // Set timeout to 5ms so swagger parser doesn't crash
+
+      // Switch to Fuzzing & Intensity sub-tab
+      const fuzzingSubTabBtn2 = page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")');
+      await expect(fuzzingSubTabBtn2).toBeVisible();
+      await fuzzingSubTabBtn2.click();
 
       await expect(iterationsInput).toBeVisible();
       await iterationsInput.fill('1'); // Set iterations to 1
