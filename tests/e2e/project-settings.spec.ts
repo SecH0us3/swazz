@@ -43,9 +43,19 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await expect(fuzzingTabBtn).toBeVisible();
     await fuzzingTabBtn.click();
 
+    // Navigate to Timeout & Duration sub-tab
+    const timeoutSubTabBtn = page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")');
+    await expect(timeoutSubTabBtn).toBeVisible();
+    await timeoutSubTabBtn.click();
+
     const timeoutInput = page.locator('label:has-text("Individual Request Timeout (ms)") + input');
     await expect(timeoutInput).toBeVisible();
     await timeoutInput.fill('2500');
+
+    // Switch back to Concurrency & Rate Limits sub-tab for delay setting
+    const concurrencySubTabBtn = page.locator('button.performance-subtab-btn:has-text("Concurrency & Rate Limits")');
+    await expect(concurrencySubTabBtn).toBeVisible();
+    await concurrencySubTabBtn.click();
 
     const delayInput = page.locator('label:has-text("Delay Between Requests (ms)") + input');
     await expect(delayInput).toBeVisible();
@@ -259,12 +269,22 @@ test.describe('Project and Payload Settings E2E Tests', () => {
         }
       });
 
-      // 8. Now set the timeout to 1ms to test the settings have actual effect on fuzzing
+      // 8. Now set the timeout to 5ms and iterations to 1 to test settings
       await expect(fuzzingTabBtn).toBeVisible();
       await fuzzingTabBtn.click();
 
+      // Switch to Timeout & Duration sub-tab
+      const timeoutSubTabBtn2 = page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")');
+      await expect(timeoutSubTabBtn2).toBeVisible();
+      await timeoutSubTabBtn2.click();
+
       await expect(timeoutInput).toBeVisible();
       await timeoutInput.fill('5'); // Set timeout to 5ms so swagger parser doesn't crash
+
+      // Switch to Fuzzing & Intensity sub-tab
+      const fuzzingSubTabBtn2 = page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")');
+      await expect(fuzzingSubTabBtn2).toBeVisible();
+      await fuzzingSubTabBtn2.click();
 
       await expect(iterationsInput).toBeVisible();
       await iterationsInput.fill('1'); // Set iterations to 1
@@ -328,7 +348,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
         await moreSettingsBtn.click();
       }
       await fuzzingTabBtn.click();
+      await page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")').click();
       await timeoutInput.fill('2000');
+      await page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")').click();
       await iterationsInput.fill('5');
       await rawConfigTabBtnSecond.click();
       await saveBtn.click();
@@ -449,13 +471,18 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await expect(toolSelect).toBeVisible();
     await toolSelect.selectOption('agy');
 
-    // 6. Verify CLI command placeholders/inputs updated
+    // 6. Switch to Triage sub-tab and verify CLI command
+    await page.locator('button.performance-subtab-btn:has-text("Triage Model")').click();
     const pass1CmdInput = page.locator('input.settings-input-full').first();
-    const pass2CmdInput = page.locator('input.settings-input-full').nth(1);
     await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
+
+    // Switch to Remediation sub-tab and verify CLI command
+    await page.locator('button.performance-subtab-btn:has-text("Remediation Model")').click();
+    const pass2CmdInput = page.locator('input.settings-input-full').first();
     await expect(pass2CmdInput).toHaveValue('agy -m gemini-3.1-pro "{{prompt_file}}"');
 
-    // 7. Select rules modal
+    // 7. Switch to Tech Stacks & Rules sub-tab and open select rules modal
+    await page.locator('button.performance-subtab-btn:has-text("Tech Stacks & Auto-Fix Rules")').click();
     const selectRulesBtn = page.locator('button.settings-rules-btn');
     await expect(selectRulesBtn).toBeVisible();
     await selectRulesBtn.click();
@@ -477,7 +504,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     const autoFixRulesTextarea = page.locator('label:has-text("Rules to Auto-Fix") + textarea');
     await expect(autoFixRulesTextarea).toContainText('swazz/sensitive-data-leak');
 
-    // 9. Check "Propose Fixes Automatically"
+    // 9. Switch back to CLI & General Settings sub-tab for checkbox and URL mappings
+    await page.locator('button.performance-subtab-btn:has-text("CLI & General Settings")').click();
+
     const proposeFixesCheckbox = page.locator('label:has-text("Propose Fixes Automatically") >> input[type="checkbox"]');
     await expect(proposeFixesCheckbox).toBeVisible();
     await proposeFixesCheckbox.check();
@@ -502,7 +531,9 @@ test.describe('Project and Payload Settings E2E Tests', () => {
 
     // Assert states are preserved
     await expect(toolSelect).toHaveValue('agy');
+    await page.locator('button.performance-subtab-btn:has-text("Triage Model")').click();
     await expect(pass1CmdInput).toHaveValue('agy -m gemini-3.5-flash "{{prompt_file}}"');
+    await page.locator('button.performance-subtab-btn:has-text("CLI & General Settings")').click();
     await expect(proposeFixesCheckbox).toBeChecked();
     await expect(urlMappingsTextarea).toHaveValue('{"/api/*": "git@github.com:SecH0us3/swazz.git"}');
   });
@@ -520,13 +551,17 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#password').press('Enter');
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-    // 3. Open Project Settings
-    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
-    await expect(moreSettingsBtn).toBeVisible();
-    await moreSettingsBtn.click();
+    // 3. Open User Settings modal
+    const userMenuBtn = page.locator('button.user-menu-btn, .user-avatar, button:has-text("Account")').first();
+    await expect(userMenuBtn).toBeVisible();
+    await userMenuBtn.click();
 
-    // 4. Switch to Traffic Capture tab
-    const captureTabBtn = page.locator('button.tab-bar-btn:has-text("Traffic Capture")');
+    const userSettingsBtn = page.locator('button:has-text("User Settings"), button:has-text("Settings")').first();
+    await expect(userSettingsBtn).toBeVisible();
+    await userSettingsBtn.click();
+
+    // 4. Switch to Traffic Capture tab in User Settings
+    const captureTabBtn = page.locator('.settings-nav-btn:has-text("Traffic Capture")');
     await expect(captureTabBtn).toBeVisible();
     await captureTabBtn.click();
 

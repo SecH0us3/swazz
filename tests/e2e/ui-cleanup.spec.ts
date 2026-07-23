@@ -55,8 +55,14 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await performanceTabBtn.click();
 
     await expect(page.locator('label:has-text("Request Concurrency")')).toBeVisible();
-    await expect(page.locator('label:has-text("Fuzzing Intensity (Iterations per profile)")')).toBeVisible();
     await expect(page.locator('label:has-text("Enable Rate Limit Detection")')).toBeVisible();
+
+    // Switch to Fuzzing & Intensity sub-tab for intensity & domain filter settings
+    const fuzzingSubTabBtn = page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")');
+    await expect(fuzzingSubTabBtn).toBeVisible();
+    await fuzzingSubTabBtn.click();
+
+    await expect(page.locator('label:has-text("Fuzzing Intensity (Iterations per profile)")')).toBeVisible();
     await expect(page.locator('label:has-text("HAR Domain Filter")')).toBeVisible();
 
     // 5. Verify "Anomalies & Security" tab has the BOLA identity config
