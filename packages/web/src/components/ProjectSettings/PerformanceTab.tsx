@@ -55,18 +55,6 @@ export function PerformanceTab() {
     const { config, updateSettings } = useConfig();
     const [subTab, setSubTab] = useState<SubTabId>('concurrency');
 
-    const handleKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
-        if (e.key === 'ArrowRight') {
-            e.preventDefault();
-            const nextIndex = (currentIndex + 1) % TABS.length;
-            setSubTab(TABS[nextIndex].id);
-        } else if (e.key === 'ArrowLeft') {
-            e.preventDefault();
-            const prevIndex = (currentIndex - 1 + TABS.length) % TABS.length;
-            setSubTab(TABS[prevIndex].id);
-        }
-    };
-
     return (
         <div className="performance-card">
             <h2 className="performance-card-title">
@@ -75,7 +63,7 @@ export function PerformanceTab() {
 
             {/* Horizontal Sub-Tabs Bar */}
             <div className="performance-subtabs-nav" role="tablist" aria-label="Performance settings navigation">
-                {TABS.map((tab, idx) => {
+                {TABS.map((tab) => {
                     const isActive = subTab === tab.id;
                     return (
                         <button
@@ -85,10 +73,8 @@ export function PerformanceTab() {
                             role="tab"
                             aria-selected={isActive}
                             aria-controls={`subtabpanel-${tab.id}`}
-                            tabIndex={isActive ? 0 : -1}
                             className={`performance-subtab-btn ${isActive ? 'active' : ''}`}
                             onClick={() => setSubTab(tab.id)}
-                            onKeyDown={(e) => handleKeyDown(e, idx)}
                         >
                             {tab.icon}
                             {tab.label}

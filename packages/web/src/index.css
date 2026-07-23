@@ -5752,7 +5752,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  animation: slide-in-up var(--duration-base) var(--ease-out);
+  min-height: 280px;
 }
 
 .performance-card {

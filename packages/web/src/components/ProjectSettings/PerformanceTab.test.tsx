@@ -55,11 +55,8 @@ describe('PerformanceTab horizontal sub-tabs navigation', () => {
 
         expect(concurrencyTab.getAttribute('aria-selected')).toBe('true');
         expect(concurrencyTab.getAttribute('aria-controls')).toBe('subtabpanel-concurrency');
-        expect(concurrencyTab.getAttribute('tabindex')).toBe('0');
 
         expect(fuzzingTab.getAttribute('aria-selected')).toBe('false');
-        expect(fuzzingTab.getAttribute('tabindex')).toBe('-1');
-
         expect(timeoutTab.getAttribute('aria-selected')).toBe('false');
         expect(evasionTab.getAttribute('aria-selected')).toBe('false');
 
@@ -70,14 +67,12 @@ describe('PerformanceTab horizontal sub-tabs navigation', () => {
         expect(screen.getByLabelText(/Burst Size/i)).toBeTruthy();
     });
 
-    it('switches between sub-tabs with click and arrow keys', () => {
+    it('switches between sub-tabs with click', () => {
         render(<PerformanceTab />);
 
-        const concurrencyTab = screen.getByRole('tab', { name: /Concurrency & Rate Limits/i });
         const fuzzingTab = screen.getByRole('tab', { name: /Fuzzing & Intensity/i });
+        fireEvent.click(fuzzingTab);
 
-        // Navigate with ArrowRight key
-        fireEvent.keyDown(concurrencyTab, { key: 'ArrowRight' });
         expect(fuzzingTab.getAttribute('aria-selected')).toBe('true');
         expect(screen.getByLabelText(/Fuzzing Intensity/i)).toBeTruthy();
 
@@ -87,10 +82,6 @@ describe('PerformanceTab horizontal sub-tabs navigation', () => {
 
         expect(timeoutTab.getAttribute('aria-selected')).toBe('true');
         expect(screen.getByLabelText(/Individual Request Timeout/i)).toBeTruthy();
-
-        // Navigate backwards with ArrowLeft key
-        fireEvent.keyDown(timeoutTab, { key: 'ArrowLeft' });
-        expect(fuzzingTab.getAttribute('aria-selected')).toBe('true');
     });
 
     it('updates multiline proxy list without stripping newlines until blur', () => {
