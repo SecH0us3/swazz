@@ -1,9 +1,71 @@
 import React, { useState } from 'react';
 import { useConfig } from '../../hooks/useConfig.js';
 
+type SubTabId = 'concurrency' | 'fuzzing_options' | 'timeout_rules' | 'evasion_ai';
+
+interface TabConfig {
+    id: SubTabId;
+    label: string;
+    icon: React.ReactNode;
+}
+
+const TABS: TabConfig[] = [
+    {
+        id: 'concurrency',
+        label: 'Concurrency & Rate Limits',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="6" x2="12" y2="12"></line>
+                <line x1="12" y1="12" x2="16" y2="14"></line>
+            </svg>
+        )
+    },
+    {
+        id: 'fuzzing_options',
+        label: 'Fuzzing & Intensity',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+        )
+    },
+    {
+        id: 'timeout_rules',
+        label: 'Timeout & Duration',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+        )
+    },
+    {
+        id: 'evasion_ai',
+        label: 'WAF Evasion & AI',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+        )
+    }
+];
+
 export function PerformanceTab() {
     const { config, updateSettings } = useConfig();
-    const [subTab, setSubTab] = useState<'concurrency' | 'fuzzing_options' | 'timeout_rules' | 'evasion_ai'>('concurrency');
+    const [subTab, setSubTab] = useState<SubTabId>('concurrency');
+
+    const handleKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            const nextIndex = (currentIndex + 1) % TABS.length;
+            setSubTab(TABS[nextIndex].id);
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const prevIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+            setSubTab(TABS[prevIndex].id);
+        }
+    };
 
     return (
         <div className="performance-card">
@@ -13,65 +75,36 @@ export function PerformanceTab() {
 
             {/* Horizontal Sub-Tabs Bar */}
             <div className="performance-subtabs-nav" role="tablist" aria-label="Performance settings navigation">
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={subTab === 'concurrency'}
-                    className={`performance-subtab-btn ${subTab === 'concurrency' ? 'active' : ''}`}
-                    onClick={() => setSubTab('concurrency')}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="6" x2="12" y2="12"></line>
-                        <line x1="12" y1="12" x2="16" y2="14"></line>
-                    </svg>
-                    Concurrency &amp; Rate Limits
-                </button>
-
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={subTab === 'fuzzing_options'}
-                    className={`performance-subtab-btn ${subTab === 'fuzzing_options' ? 'active' : ''}`}
-                    onClick={() => setSubTab('fuzzing_options')}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                    </svg>
-                    Fuzzing &amp; Intensity
-                </button>
-
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={subTab === 'timeout_rules'}
-                    className={`performance-subtab-btn ${subTab === 'timeout_rules' ? 'active' : ''}`}
-                    onClick={() => setSubTab('timeout_rules')}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                    Timeout &amp; Duration
-                </button>
-
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={subTab === 'evasion_ai'}
-                    className={`performance-subtab-btn ${subTab === 'evasion_ai' ? 'active' : ''}`}
-                    onClick={() => setSubTab('evasion_ai')}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                    </svg>
-                    WAF Evasion &amp; AI
-                </button>
+                {TABS.map((tab, idx) => {
+                    const isActive = subTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            id={`subtab-${tab.id}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            aria-controls={`subtabpanel-${tab.id}`}
+                            tabIndex={isActive ? 0 : -1}
+                            className={`performance-subtab-btn ${isActive ? 'active' : ''}`}
+                            onClick={() => setSubTab(tab.id)}
+                            onKeyDown={(e) => handleKeyDown(e, idx)}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Sub-Tab 1: Concurrency & Rate Limits */}
             {subTab === 'concurrency' && (
-                <div className="performance-tab-content" role="tabpanel" aria-label="Concurrency & Rate Limits">
+                <div 
+                    id="subtabpanel-concurrency"
+                    className="performance-tab-content" 
+                    role="tabpanel" 
+                    aria-labelledby="subtab-concurrency"
+                >
                     {/* Concurrency Workers */}
                     <div className="performance-input-group">
                         <div className="performance-input-row" style={{ justifyContent: 'space-between' }}>
@@ -184,7 +217,12 @@ export function PerformanceTab() {
 
             {/* Sub-Tab 2: Fuzzing & Intensity */}
             {subTab === 'fuzzing_options' && (
-                <div className="performance-tab-content" role="tabpanel" aria-label="Fuzzing & Intensity">
+                <div 
+                    id="subtabpanel-fuzzing_options"
+                    className="performance-tab-content" 
+                    role="tabpanel" 
+                    aria-labelledby="subtab-fuzzing_options"
+                >
                     {/* Fuzzing Intensity */}
                     <div className="performance-input-group">
                         <label htmlFor="fuzz-iterations-per-profile" className="fuzz-setting-intensity-title">Fuzzing Intensity (Iterations per profile)</label>
@@ -239,7 +277,12 @@ export function PerformanceTab() {
 
             {/* Sub-Tab 3: Timeout & Duration */}
             {subTab === 'timeout_rules' && (
-                <div className="performance-tab-content" role="tabpanel" aria-label="Timeout & Duration">
+                <div 
+                    id="subtabpanel-timeout_rules"
+                    className="performance-tab-content" 
+                    role="tabpanel" 
+                    aria-labelledby="subtab-timeout_rules"
+                >
                     {/* Individual Request Timeout */}
                     <div className="performance-input-group">
                         <label htmlFor="request-timeout-ms" className="performance-label">Individual Request Timeout (ms)</label>
@@ -276,7 +319,12 @@ export function PerformanceTab() {
 
             {/* Sub-Tab 4: WAF Evasion & AI */}
             {subTab === 'evasion_ai' && (
-                <div className="performance-tab-content" role="tabpanel" aria-label="WAF Evasion & AI">
+                <div 
+                    id="subtabpanel-evasion_ai"
+                    className="performance-tab-content" 
+                    role="tabpanel" 
+                    aria-labelledby="subtab-evasion_ai"
+                >
                     {/* WAF Evasion & Proxies */}
                     <div className="fuzz-setting-section">
                         <h3 className="fuzz-setting-section-title">WAF Evasion &amp; Proxies</h3>
@@ -288,6 +336,10 @@ export function PerformanceTab() {
                                 className="input fuzz-setting-textarea-monospace"
                                 value={(config.settings.proxy_list || []).join('\n')}
                                 onChange={(e) => {
+                                    const lines = e.target.value.split('\n');
+                                    updateSettings({ proxy_list: lines });
+                                }}
+                                onBlur={(e) => {
                                     const lines = e.target.value.split('\n').map(l => l.trim()).filter(Boolean);
                                     updateSettings({ proxy_list: lines });
                                 }}

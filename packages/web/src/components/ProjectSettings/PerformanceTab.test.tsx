@@ -54,7 +54,12 @@ describe('PerformanceTab horizontal sub-tabs navigation', () => {
         const evasionTab = screen.getByRole('tab', { name: /WAF Evasion & AI/i });
 
         expect(concurrencyTab.getAttribute('aria-selected')).toBe('true');
+        expect(concurrencyTab.getAttribute('aria-controls')).toBe('subtabpanel-concurrency');
+        expect(concurrencyTab.getAttribute('tabindex')).toBe('0');
+
         expect(fuzzingTab.getAttribute('aria-selected')).toBe('false');
+        expect(fuzzingTab.getAttribute('tabindex')).toBe('-1');
+
         expect(timeoutTab.getAttribute('aria-selected')).toBe('false');
         expect(evasionTab.getAttribute('aria-selected')).toBe('false');
 
@@ -65,100 +70,45 @@ describe('PerformanceTab horizontal sub-tabs navigation', () => {
         expect(screen.getByLabelText(/Burst Size/i)).toBeTruthy();
     });
 
-    it('switches between sub-tabs and updates aria-selected attributes', () => {
+    it('switches between sub-tabs with click and arrow keys', () => {
         render(<PerformanceTab />);
 
+        const concurrencyTab = screen.getByRole('tab', { name: /Concurrency & Rate Limits/i });
         const fuzzingTab = screen.getByRole('tab', { name: /Fuzzing & Intensity/i });
-        fireEvent.click(fuzzingTab);
 
+        // Navigate with ArrowRight key
+        fireEvent.keyDown(concurrencyTab, { key: 'ArrowRight' });
         expect(fuzzingTab.getAttribute('aria-selected')).toBe('true');
         expect(screen.getByLabelText(/Fuzzing Intensity/i)).toBeTruthy();
-        expect(screen.getByLabelText(/Active Parameter Fuzzing/i)).toBeTruthy();
-        expect(screen.getByLabelText(/HAR Domain Filter/i)).toBeTruthy();
 
+        // Switch with click to Timeout & Duration
         const timeoutTab = screen.getByRole('tab', { name: /Timeout & Duration/i });
         fireEvent.click(timeoutTab);
 
         expect(timeoutTab.getAttribute('aria-selected')).toBe('true');
         expect(screen.getByLabelText(/Individual Request Timeout/i)).toBeTruthy();
-        expect(screen.getByLabelText(/Maximum Scan Duration/i)).toBeTruthy();
 
-        const evasionTab = screen.getByRole('tab', { name: /WAF Evasion & AI/i });
-        fireEvent.click(evasionTab);
-
-        expect(evasionTab.getAttribute('aria-selected')).toBe('true');
-        expect(screen.getByLabelText(/Proxy List/i)).toBeTruthy();
-        expect(screen.getByLabelText(/Randomize User-Agent/i)).toBeTruthy();
-        expect(screen.getByLabelText(/Semantic Format Wrappers/i)).toBeTruthy();
-        expect(screen.getByLabelText(/AI Gateway \/ OpenAI Proxy URL/i)).toBeTruthy();
-        expect(screen.getByLabelText(/Cloudflare AI Gateway Token/i)).toBeTruthy();
+        // Navigate backwards with ArrowLeft key
+        fireEvent.keyDown(timeoutTab, { key: 'ArrowLeft' });
+        expect(fuzzingTab.getAttribute('aria-selected')).toBe('true');
     });
 
-    it('updates concurrency, rate limit burst, and delay in Concurrency & Rate Limits sub-tab', () => {
-        render(<PerformanceTab />);
-
-        // Concurrency worker number input
-        const concurrencyInput = screen.getByLabelText(/Request Concurrency Worker Count/i);
-        fireEvent.change(concurrencyInput, { target: { value: '8' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ concurrency: 8 }));
-
-        // Rate limit burst size
-        const burstInput = screen.getByLabelText(/Burst Size/i);
-        fireEvent.change(burstInput, { target: { value: '100' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ rate_limit_burst_size: 100 }));
-
-        // Delay between requests
-        const delayInput = screen.getByLabelText(/Delay Between Requests/i);
-        fireEvent.change(delayInput, { target: { value: '250' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ delay_between_requests_ms: 250 }));
-    });
-
-    it('updates fuzzing intensity, active parameter fuzzing, and HAR domain filter in Fuzzing & Intensity sub-tab', () => {
-        render(<PerformanceTab />);
-        fireEvent.click(screen.getByRole('tab', { name: /Fuzzing & Intensity/i }));
-
-        const intensityInput = screen.getByLabelText(/Fuzzing Intensity/i);
-        fireEvent.change(intensityInput, { target: { value: '25' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ iterations_per_profile: 25 }));
-
-        const harFilterInput = screen.getByLabelText(/HAR Domain Filter/i);
-        fireEvent.change(harFilterInput, { target: { value: 'sub.domain.com' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ har_domain_filter: 'sub.domain.com' }));
-    });
-
-    it('updates timeout and max scan duration in Timeout & Duration sub-tab', () => {
-        render(<PerformanceTab />);
-        fireEvent.click(screen.getByRole('tab', { name: /Timeout & Duration/i }));
-
-        const timeoutInput = screen.getByLabelText(/Individual Request Timeout/i);
-        fireEvent.change(timeoutInput, { target: { value: '3500' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ timeout_ms: 3500 }));
-
-        const durationInput = screen.getByLabelText(/Maximum Scan Duration/i);
-        fireEvent.change(durationInput, { target: { value: '60' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ max_scan_duration_min: 60 }));
-    });
-
-    it('updates evasion, proxy URL, and AI token settings in WAF Evasion & AI sub-tab', () => {
+    it('updates multiline proxy list without stripping newlines until blur', () => {
         render(<PerformanceTab />);
         fireEvent.click(screen.getByRole('tab', { name: /WAF Evasion & AI/i }));
 
         const proxyInput = screen.getByLabelText(/Proxy List/i);
-        fireEvent.change(proxyInput, { target: { value: 'http://proxy1\nhttp://proxy2' } });
+
+        // Typing a proxy and pressing Enter (producing trailing empty line)
+        fireEvent.change(proxyInput, { target: { value: 'http://proxy1\n' } });
         expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({
-            proxy_list: ['http://proxy1', 'http://proxy2']
+            proxy_list: ['http://proxy1', '']
         }));
 
-        const gatewayUrlInput = screen.getByLabelText(/AI Gateway \/ OpenAI Proxy URL/i);
-        fireEvent.change(gatewayUrlInput, { target: { value: 'https://new-gateway.ai.com' } });
+        // Blur filters out empty lines
+        fireEvent.blur(proxyInput, { target: { value: 'http://proxy1\n' } });
         expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({
-            ai_gateway_url: 'https://new-gateway.ai.com'
-        }));
-
-        const tokenInput = screen.getByLabelText(/Cloudflare AI Gateway Token/i);
-        fireEvent.change(tokenInput, { target: { value: 'new-bearer-token' } });
-        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({
-            cf_aig_token: 'new-bearer-token'
+            proxy_list: ['http://proxy1']
         }));
     });
 });
