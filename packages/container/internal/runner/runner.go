@@ -1037,9 +1037,24 @@ func (r *Runner) runPreScanLLM(ctx context.Context) {
 	var summaryBuilder strings.Builder
 	for _, ep := range r.config.Endpoints {
 		summaryBuilder.WriteString(fmt.Sprintf("Endpoint: %s %s\n", ep.Method, ep.Path))
+		for pName, pProp := range ep.PathParams {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  PathParam: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
 		for pName, pProp := range ep.QueryParams {
 			if pProp != nil {
-				summaryBuilder.WriteString(fmt.Sprintf("  Param: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+				summaryBuilder.WriteString(fmt.Sprintf("  QueryParam: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
+		for pName, pProp := range ep.HeaderParams {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  Header: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
+			}
+		}
+		for pName, pProp := range ep.Schema.Properties {
+			if pProp != nil {
+				summaryBuilder.WriteString(fmt.Sprintf("  BodyField: %s (%s, %s)\n", pName, pProp.Type, pProp.Format))
 			}
 		}
 	}

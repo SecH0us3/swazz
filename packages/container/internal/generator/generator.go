@@ -378,7 +378,7 @@ func (g *Generator) generateString(format, propName string) any {
 				if strings.Contains(strVal, "7*7") || strings.Contains(strVal, "7+'7'") {
 					strVal = g.randomizeAndRegisterSSTI(strVal)
 				}
-				if g.settings.EnableSemanticMutation && format != "" {
+				if g.settings.SemanticMutationEnabled() && format != "" {
 					return g.GenerateSemanticValue(format, strVal)
 				}
 				return strVal
@@ -388,7 +388,7 @@ func (g *Generator) generateString(format, propName string) any {
 	}
 
 	res := g.fallbackRandom(propName)
-	if strRes, ok := res.(string); ok && g.settings.EnableSemanticMutation && format != "" {
+	if strRes, ok := res.(string); ok && g.settings.SemanticMutationEnabled() && format != "" {
 		return g.GenerateSemanticValue(format, strRes)
 	}
 	return res

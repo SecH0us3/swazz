@@ -497,29 +497,25 @@ func startAgent(args []string) {
 				}
 			}(dispatch.RunID)
 
-			go func(runID string) {
+		go func(runID string) {
+				sendRunnerLog := func(level, msg string) {
+					sendWSEvent(runID, "runner_log", map[string]interface{}{
+						"level":     level,
+						"message":   msg,
+						"timestamp": time.Now().Format(time.RFC3339),
+					})
+				}
+
 				logInfo("Starting fuzz runner for runID: %s", runID)
-				sendWSEvent(runID, "runner_log", map[string]interface{}{
-					"level":     "warning",
-					"message":   fmt.Sprintf("Starting fuzz runner for runID: %s", runID),
-					"timestamp": time.Now().Format(time.RFC3339),
-				})
+				sendRunnerLog("warning", fmt.Sprintf("Starting fuzz runner for runID: %s", runID))
 				if r.Config() != nil && r.Config().Settings.UseLLMPrepass {
 					msg := fmt.Sprintf("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", r.Config().Settings.AIGatewayURL)
 					logInfo("%s", msg)
-					sendWSEvent(runID, "runner_log", map[string]interface{}{
-						"level":     "info",
-						"message":   msg,
-						"timestamp": time.Now().Format(time.RFC3339),
-					})
+					sendRunnerLog("info", msg)
 				} else {
 					msg := "[AI] ℹ️ Pre-Scan LLM Batching is disabled in Project Settings"
 					logInfo("%s", msg)
-					sendWSEvent(runID, "runner_log", map[string]interface{}{
-						"level":     "info",
-						"message":   msg,
-						"timestamp": time.Now().Format(time.RFC3339),
-					})
+					sendRunnerLog("info", msg)
 				}
 				tURL := deriveTelemetryURL(coordinatorURL)
 				incrementGlobalScanTelemetry(tURL, disableTelemetry)

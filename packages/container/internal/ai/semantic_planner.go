@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
@@ -28,7 +27,7 @@ func NewSemanticPlanner(gatewayURL, cfAigToken, apiKey string) *SemanticPlanner 
 		cfAigToken: cfAigToken,
 		apiKey:     apiKey,
 		model:      "gemini-2.0-flash",
-		client:     &http.Client{Timeout: 30 * time.Second},
+		client:     &http.Client{},
 	}
 }
 

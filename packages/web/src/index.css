@@ -2867,9 +2867,20 @@ button:focus-visible {
 .semantic-settings-section {
     margin-bottom: 20px;
     padding: 16px;
+    padding-top: 16px;
     border-radius: 8px;
     background: var(--bg-hover);
     border: 1px solid var(--border-color);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.llm-nested-settings {
+    margin-left: 24px;
+    padding-left: 16px;
+    border-left: 2px solid var(--border-default);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .semantic-settings-header {

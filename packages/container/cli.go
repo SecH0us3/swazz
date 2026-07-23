@@ -313,7 +313,7 @@ func runCLI(args []string) {
 	if runCfg.Settings.UseLLMPrepass {
 		logger.Info("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", runCfg.Settings.AIGatewayURL)
 	}
-	if runCfg.Settings.EnableSemanticMutation {
+	if runCfg.Settings.SemanticMutationEnabled() {
 		logger.Info("[Semantic] 🧬 Semantic Format Wrappers enabled (RFC email, uuid, date-time, phone, url)")
 	}
 	if err := r.Start(ctx); err != nil {

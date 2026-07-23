@@ -71,7 +71,7 @@ func WrapUUID(vector string) []string {
 	u := uuid.New().String()
 	return []string{
 		fmt.Sprintf("%s#%s", u, url.QueryEscape(vector)),
-		u,
+		u, // baseline: valid UUID without injection vector, for differential comparison
 	}
 }
 
