@@ -8,6 +8,7 @@ import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
 import { useAppStore } from '../../store/appStore.js';
 import { ProjectSelector } from '../ProjectSelector.js';
+import { sanitizeTargetUrl } from '../../utils/url.js';
 
 interface Props {
     style?: React.CSSProperties;
@@ -94,6 +95,11 @@ export function Sidebar({
     const addUrl = async () => {
         const trimmed = normalizeUrl(urlInput);
         if (!trimmed) return;
+
+        const sanitizedTarget = sanitizeTargetUrl(trimmed);
+        if (sanitizedTarget) {
+            onUpdateConfig({ base_url: sanitizedTarget });
+        }
 
         try {
             onToast(`Checking target type for ${trimmed}...`, 'info');
