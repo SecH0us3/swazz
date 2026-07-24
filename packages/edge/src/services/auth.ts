@@ -566,29 +566,40 @@ export class AuthService implements IAuthService {
     const ipRateLimit = await this.authRepo.checkIpRateLimit(`ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) throw new Error('Too many requests. Please try again later.|429');
 
-    const username = body.username.trim();
-    const user = await this.authRepo.getUserByUsername(username);
-    if (!user) {
-      await new Promise(r => setTimeout(r, 200));
-      throw new Error('User not found|404');
+    let allowCredentials: any[] | undefined = undefined;
+    let userId: string | null = null;
+
+    if (body && typeof body.username === 'string' && body.username.trim() !== '') {
+      const username = body.username.trim();
+      const user = await this.authRepo.getUserByUsername(username);
+      if (!user) {
+        await new Promise(r => setTimeout(r, 200));
+        throw new Error('User not found|404');
+      }
+
+      if (user.is_interactive === 0) {
+        await new Promise(r => setTimeout(r, 200));
+        throw new Error('Interactive login restricted for this account|403');
+      }
+
+      const passkeys = await this.authRepo.getPasskeysByUserId(user.id);
+      if (!passkeys || passkeys.length === 0) {
+        await new Promise(r => setTimeout(r, 200));
+        throw new Error('No passkeys found for user|404');
+      }
+
+      userId = user.id;
+      allowCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: pk.transports ? (pk.transports.split(',')) as any : undefined }));
     }
 
-    if (user.is_interactive === 0) {
-      await new Promise(r => setTimeout(r, 200));
-      throw new Error('Interactive login restricted for this account|403');
-    }
-
-    const passkeys = await this.authRepo.getPasskeysByUserId(user.id);
-    if (!passkeys || passkeys.length === 0) {
-      await new Promise(r => setTimeout(r, 200));
-      throw new Error('No passkeys found for user|404');
-    }
-
-    const allowCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: pk.transports ? (pk.transports.split(',')) as any : undefined }));
     const options = await generateAuthenticationOptions({ rpID, allowCredentials, userVerification: 'preferred' });
 
     if (!this.env.SESSION_CACHE) throw new Error('Internal server error: SESSION_CACHE is not configured|500');
-    await this.env.SESSION_CACHE.put("passkey_login:" + user.id, options.challenge, { expirationTtl: 300 });
+    
+    if (userId) {
+      await this.env.SESSION_CACHE.put("passkey_login:" + userId, options.challenge, { expirationTtl: 300 });
+    }
+    await this.env.SESSION_CACHE.put("passkey_login_challenge:" + options.challenge, options.challenge, { expirationTtl: 300 });
 
     return options;
   }
@@ -612,6 +623,15 @@ export class AuthService implements IAuthService {
     let expectedChallenge = '';
     if (this.env.SESSION_CACHE) {
       expectedChallenge = await this.env.SESSION_CACHE.get("passkey_login:" + pk.user_id) || '';
+      if (!expectedChallenge) {
+        // Try looking up challenge by clientDataJSON challenge if available
+        try {
+          const clientDataJSON = JSON.parse(atob(body.response.clientDataJSON.replace(/-/g, '+').replace(/_/g, '/')));
+          if (clientDataJSON && clientDataJSON.challenge) {
+            expectedChallenge = await this.env.SESSION_CACHE.get("passkey_login_challenge:" + clientDataJSON.challenge) || '';
+          }
+        } catch {}
+      }
       await this.env.SESSION_CACHE.delete("passkey_login:" + pk.user_id);
     }
     if (!expectedChallenge) throw new Error('Challenge expired or not found|400');

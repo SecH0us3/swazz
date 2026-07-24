@@ -288,10 +288,12 @@ export function registerAuthRoutes(
     }
   });
 
-  app.post('/api/auth/passkeys/login/generate-options', async (c) => {
+  const handleGeneratePasskeyOptions = async (c: any) => {
     try {
-      const body = await c.req.json();
-      if (typeof body.username !== 'string') return c.json({ error: 'Invalid or missing username' }, 400);
+      let body: any = {};
+      try {
+        body = await c.req.json();
+      } catch {}
 
       const clientIp = getClientIp(c);
       const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
@@ -304,7 +306,10 @@ export function registerAuthRoutes(
       const [msg, status] = err.message.split('|');
       return c.json({ error: msg }, parseInt(status) || 500);
     }
-  });
+  };
+
+  app.post('/api/auth/passkeys/login/generate-options', handleGeneratePasskeyOptions);
+  app.post('/api/auth/passkeys/login/options', handleGeneratePasskeyOptions);
 
   app.post('/api/auth/passkeys/login/verify', async (c) => {
     try {
