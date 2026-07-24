@@ -2654,6 +2654,42 @@ body.resizing .sidebar-resizer {
   min-width: 62px;
 }
 
+/* Endpoint Included Filter Toggle */
+.endpoint-filter-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: 6px;
+}
+
+.included-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  transition: all var(--duration-fast);
+}
+
+.included-filter-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.included-filter-toggle.active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+}
+
 /* ─── Responsive Adaptation ────────────────────────────────── */
 .workspace-container {
   display: flex;
