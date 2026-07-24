@@ -262,8 +262,10 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                         }}
                         aria-pressed={includedOnly}
                         aria-label="Filter included endpoints only"
+                        title="Filter included endpoints only (show enabled endpoints only)"
                     >
-                        <span style={{ fontSize: 10 }}>{includedOnly ? '●' : '○'}</span> Included Only
+                        <span>{includedOnly ? '🎯' : '🎯'}</span>
+                        <span className="included-filter-label">Included</span>
                     </button>
                 </div>
             </div>
