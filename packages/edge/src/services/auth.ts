@@ -566,12 +566,12 @@ export class AuthService implements IAuthService {
     const ipRateLimit = await this.authRepo.checkIpRateLimit(`ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) throw new Error('Too many requests. Please try again later.|429');
 
-    if (!body || typeof body.username !== 'string' || body.username.trim() === '') {
-      throw new Error('Invalid or missing username|400');
-    }
+    let allowCredentials: any[] | undefined = undefined;
+    let userId: string | null = null;
 
-    const username = body.username.trim();
-    const user = await this.authRepo.getUserByUsername(username);
+    if (body && typeof body.username === 'string' && body.username.trim() !== '') {
+      const username = body.username.trim();
+      const user = await this.authRepo.getUserByUsername(username);
       if (!user) {
         await new Promise(r => setTimeout(r, 200));
         throw new Error('User not found|404');
@@ -588,11 +588,17 @@ export class AuthService implements IAuthService {
         throw new Error('No passkeys found for user|404');
       }
 
-    const allowCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: pk.transports ? (pk.transports.split(',')) as any : undefined }));
+      userId = user.id;
+      allowCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: pk.transports ? (pk.transports.split(',')) as any : undefined }));
+    }
+
     const options = await generateAuthenticationOptions({ rpID, allowCredentials, userVerification: 'preferred' });
 
     if (!this.env.SESSION_CACHE) throw new Error('Internal server error: SESSION_CACHE is not configured|500');
-    await this.env.SESSION_CACHE.put("passkey_login:" + user.id, options.challenge, { expirationTtl: 300 });
+    if (userId) {
+      await this.env.SESSION_CACHE.put("passkey_login:" + userId, options.challenge, { expirationTtl: 300 });
+    }
+    await this.env.SESSION_CACHE.put("passkey_login_challenge:" + options.challenge, options.challenge, { expirationTtl: 300 });
 
     return options;
   }

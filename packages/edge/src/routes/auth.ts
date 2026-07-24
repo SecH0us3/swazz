@@ -295,10 +295,6 @@ export function registerAuthRoutes(
         body = await c.req.json();
       } catch {}
 
-      if (c.req.path.endsWith('/generate-options') && typeof body.username !== 'string') {
-        return c.json({ error: 'Invalid or missing username' }, 400);
-      }
-
       const clientIp = getClientIp(c);
       const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
       const rpID = new URL(requestOrigin).hostname;
