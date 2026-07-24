@@ -85,4 +85,66 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
       expect(text).not.toContain('/login');
     }
   });
+
+  test('should toggle "Included Only" filter to hide/show excluded endpoints', async ({ page }) => {
+    // 1. Navigate to the frontend dev server
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In' }).click();
+
+    // 2. Handle Login/Registration: Register a unique user
+    await page.getByRole('button', { name: 'Create an account' }).click();
+
+    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+    await page.locator('#username').fill(uniqueUsername);
+    await page.locator('#password').fill('Password123!');
+
+    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
+    await page.locator('#password').press('Enter');
+
+    // Wait for the main layout to load
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await configPromise;
+
+    // 3. Add the Swagger spec of our local Vulnerable Demo API
+    const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
+    await expect(specUrlInput).toBeVisible();
+    const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
+    await specUrlInput.fill(demoSpecUrl);
+
+    const addBtn = page.locator('button.btn-primary:has-text("Add")');
+    await addBtn.click();
+
+    // Verify spec is loaded
+    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
+
+    // Wait for endpoints list to render
+    const endpointItems = page.locator('.tree-leaf-row');
+    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+
+    // Locate "Included Only" toggle button (aria-label: "Filter included endpoints only")
+    const includedOnlyBtn = page.getByRole('button', { name: /Filter included endpoints/i });
+    await expect(includedOnlyBtn).toBeVisible();
+
+    // Locate checkbox for POST /login and uncheck it
+    const loginCheckbox = page.locator('input[aria-label="Enable endpoint POST /login"]');
+    await expect(loginCheckbox).toBeVisible();
+    expect(await loginCheckbox.isChecked()).toBe(true);
+    await loginCheckbox.uncheck();
+    expect(await loginCheckbox.isChecked()).toBe(false);
+
+    // Click "Included Only" toggle button to filter out excluded endpoints
+    await includedOnlyBtn.click();
+
+    // Verify POST /login row is hidden from sidebar endpoint tree while other included endpoints remain visible
+    await expect(loginCheckbox).not.toBeVisible();
+    await expect(endpointItems.first()).toBeVisible();
+
+    // Click "Included Only" toggle button again to deactivate filter
+    await includedOnlyBtn.click();
+
+    // Verify POST /login reappears in tree view as disabled/unchecked
+    await expect(loginCheckbox).toBeVisible();
+    expect(await loginCheckbox.isChecked()).toBe(false);
+  });
 });
+
