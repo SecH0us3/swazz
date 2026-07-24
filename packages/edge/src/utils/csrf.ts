@@ -6,7 +6,6 @@ export const csrfMiddleware = (): MiddlewareHandler => {
     const path = c.req.path;
     if (
       path === '/api/auth/oauth/exchange' ||
-      path.startsWith('/api/auth/passkeys/login') ||
       path.startsWith('/api/mcp/') ||
       path.startsWith('/api/oob/') ||
       path.startsWith('/api/telemetry/')

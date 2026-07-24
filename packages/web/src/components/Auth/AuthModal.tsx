@@ -144,7 +144,15 @@ export function AuthModal({
         setError('');
         setIsLoading(true);
         try {
-            const optRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/options`, { method: 'POST' });
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            const optRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/options`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ username })
+            });
             if (!optRes.ok) {
                 const errData = await optRes.json();
                 throw new Error(errData.error || 'Failed to get passkey options');
@@ -176,7 +184,7 @@ export function AuthModal({
 
             const verifyRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify(body)
             });
             const data = await verifyRes.json();
