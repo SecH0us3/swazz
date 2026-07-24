@@ -9,6 +9,7 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   TURNSTILE_SITE_KEY?: string;
   AUTH_ENABLED?: string; // 'true' | 'false'
+  PASSWORD_AUTH_ENABLED?: string; // 'true' | 'false'
   LIMIT_ANONYMOUS?: string; // 'true' | 'false'
   ALLOWED_ORIGINS?: string; // Comma-separated list of origins
   VERSION?: string;

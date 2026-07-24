@@ -956,17 +956,23 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-/* GitLab — primary filled style */
+/* GitLab — sleek dark style with brand accent */
 .primary-social-btn.gitlab-social-btn {
-    background-color: #e24329;
-    color: #ffffff;
-    box-shadow: 0 2px 8px rgba(226, 67, 41, 0.3);
+    background-color: #231e28;
+    color: #f0f0f5;
+    border: 1px solid rgba(226, 67, 41, 0.35);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.primary-social-btn.gitlab-social-btn .gitlab-icon {
+    color: #fc6d26;
 }
 
 .primary-social-btn.gitlab-social-btn:hover {
     transform: translateY(-1px);
-    background-color: #fc6d26;
-    box-shadow: 0 4px 16px rgba(252, 109, 38, 0.4);
+    background-color: #2d2636;
+    border-color: rgba(252, 109, 38, 0.6);
+    box-shadow: 0 4px 16px rgba(226, 67, 41, 0.25);
 }
 
 /* Passkey — ghost outline style */

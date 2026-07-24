@@ -97,6 +97,7 @@ app.get('/api/info', async (c) => {
 
   return c.json({
     auth_enabled: authEnabled,
+    password_auth_enabled: c.env.PASSWORD_AUTH_ENABLED !== 'false',
     limit_anonymous: limitAnonymous,
     github_auth_enabled: githubAuthEnabled,
     gitlab_auth_enabled: gitlabAuthEnabled,
