@@ -39,7 +39,7 @@ export function AuthModal({
     onRegister,
     onGuest,
 }: AuthModalProps) {
-    const { githubAuthEnabled } = useAuth();
+    const { githubAuthEnabled, gitlabAuthEnabled, passwordAuthEnabled } = useAuth();
     const { showToast } = useToast();
     const turnstileSiteKey = useAppStore(state => state.turnstileSiteKey);
     const [turnstileResponse, setTurnstileResponse] = useState('');
@@ -136,11 +136,23 @@ export function AuthModal({
         window.location.href = '/api/auth/login/github';
     };
 
+    const handleGitlabLogin = () => {
+        window.location.href = '/api/auth/login/gitlab';
+    };
+
     const handlePasskeyLogin = async () => {
         setError('');
         setIsLoading(true);
         try {
-            const optRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/options`, { method: 'POST' });
+            const csrfToken = useAppStore.getState().csrfToken;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+            const optRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/options`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ username })
+            });
             if (!optRes.ok) {
                 const errData = await optRes.json();
                 throw new Error(errData.error || 'Failed to get passkey options');
@@ -172,7 +184,7 @@ export function AuthModal({
 
             const verifyRes = await fetch(`${PROXY_URL}/api/auth/passkeys/login/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify(body)
             });
             const data = await verifyRes.json();
@@ -322,7 +334,7 @@ export function AuthModal({
                             </div>
                         )}
 
-                        {(githubAuthEnabled || !isRegistering) && (
+                        {(githubAuthEnabled || gitlabAuthEnabled || !isRegistering) && (
                             <div className="social-auth-container">
                                 {githubAuthEnabled && (
                                     <button 
@@ -335,6 +347,20 @@ export function AuthModal({
                                             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
                                         </svg>
                                         Continue with GitHub
+                                    </button>
+                                )}
+
+                                {gitlabAuthEnabled && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleGitlabLogin} 
+                                        disabled={isLoading} 
+                                        className="primary-social-btn gitlab-social-btn"
+                                    >
+                                        <svg className="gitlab-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 5.5 2a.43.43 0 0 1 .39.27L8.2 9.49h7.6l2.31-7.22a.43.43 0 0 1 .39-.27.42.42 0 0 1 .39.21l2.44 7.51 1.22 3.78a.84.84 0 0 1-.3.94z"/>
+                                        </svg>
+                                        Continue with GitLab
                                     </button>
                                 )}
 
@@ -362,7 +388,7 @@ export function AuthModal({
                             </div>
                         )}
 
-                        {(githubAuthEnabled || !isRegistering) && (
+                        {passwordAuthEnabled && (githubAuthEnabled || gitlabAuthEnabled || !isRegistering) && (
                             <div className="oauth-divider">
                                 <span className="oauth-divider-text">or continue with credentials</span>
                             </div>
@@ -373,182 +399,186 @@ export function AuthModal({
                                 <div className="error-content">
                                     <span className="error-text">{error}</span>
                                 </div>
-                            </div>
-                        )}
-
-                        <form className="login-form" onSubmit={handleSubmit}>
-                            {isRegistering && betaModeEnabled && (
-                                <>
-                                    {betaLimitReached ? (
-                                        <div className="form-group">
-                                            <label htmlFor="inviteCode">Invite Code <span className="required-star">*</span></label>
-                                            <input
-                                                type="text"
-                                                id="inviteCode"
-                                                name="inviteCode"
-                                                value={inviteCode}
-                                                onChange={(e) => setInviteCode(e.target.value)}
-                                                placeholder="XXXX-XXXX-XXXX"
-                                                data-1p-ignore
-                                                required
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className="form-group invite-code-group">
-                                            {!hasInviteCode ? (
-                                                <button
-                                                    type="button"
-                                                    className="text-btn invite-code-toggle-btn"
-                                                    onClick={() => setHasInviteCode(true)}
-                                                >
-                                                    Have an invite code?
-                                                </button>
-                                            ) : (
-                                                <>
-                                                    <label htmlFor="inviteCode">Invite Code (Optional)</label>
-                                                    <input
-                                                        type="text"
-                                                        id="inviteCode"
-                                                        name="inviteCode"
-                                                        value={inviteCode}
-                                                        onChange={(e) => setInviteCode(e.target.value)}
-                                                        placeholder="XXXX-XXXX-XXXX"
-                                                        data-1p-ignore
-                                                    />
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                </>
-                            )}
-
-                            <div className="form-group">
-                                <label htmlFor="username">Username{isRegistering && <span className="required-star"> *</span>}</label>
-                                <input
-                                    key={isRegistering ? "signup-username" : "signin-username"}
-                                    type="text"
-                                    id="username"
-                                    name="username"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    placeholder="Enter username"
-                                    autoComplete="username"
-                                    required
-                                    pattern="^[a-zA-Z0-9_\-]{3,20}$"
-                                    title="3 to 20 characters, alphanumeric, including hyphen or underscore"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label htmlFor="password">Password{isRegistering && <span className="required-star"> *</span>}</label>
-                                <div className="password-input-wrapper">
-                                    <input
-                                        key={isRegistering ? "signup-password" : "signin-password"}
-                                        type={showPassword ? "text" : "password"}
-                                        id="password"
-                                        name="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        placeholder={isRegistering ? "Min 12 characters" : "••••••••••••"}
-                                        autoComplete={isRegistering ? "new-password" : "current-password"}
-                                        required
-                                        minLength={12}
-                                    />
-                                    <button
-                                        type="button"
-                                        className="password-toggle-btn"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        aria-label={showPassword ? "Hide password" : "Show password"}
-                                    >
-                                        {showPassword ? (
-                                            <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                                                <line x1="1" y1="1" x2="23" y2="23"></line>
-                                            </svg>
-                                        ) : (
-                                            <svg className="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        )}
-                                    </button>
-                                </div>
-                                {isRegistering && password.length > 0 && (
-                                    <div className="password-strength-container">
-                                        <div className="password-strength-row">
-                                            <span className="password-strength-label">Strength:</span>
-                                            <span className={`password-strength-value strength-${calculatePasswordStrength(password).score}`}>
-                                                {['Weak', 'Fair', 'Good', 'Strong', 'Excellent'][calculatePasswordStrength(password).score]}
-                                            </span>
-                                        </div>
-                                        <div className="password-strength-bar">
-                                            <div className={`password-strength-fill strength-${calculatePasswordStrength(password).score}`}></div>
-                                            <ul className="password-requirements">
-                                                <li className={`password-req-item ${password.length >= 12 ? 'met' : ''}`}>
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                        {password.length >= 12 ? (
-                                                            <polyline points="20 6 9 17 4 12" />
-                                                        ) : (
-                                                            <>
-                                                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                                                            </>
-                                                        )}
-                                                    </svg>
-                                                    At least 12 characters
-                                                </li>
-                                            </ul>
-                                        </div>
+                                {error === 'Invalid credentials' && !isRegistering && (
+                                    <div className="login-error-tip">
+                                        New user? Click <strong>Create</strong> to sign up.
                                     </div>
                                 )}
                             </div>
+                        )}
+                        {passwordAuthEnabled ? (
+                            <form className="login-form" onSubmit={handleSubmit}>
+                                {isRegistering && betaModeEnabled && (
+                                    <>
+                                        {betaLimitReached ? (
+                                            <div className="form-group">
+                                                <label htmlFor="inviteCode">Invite Code <span className="required-star">*</span></label>
+                                                <input
+                                                    type="text"
+                                                    id="inviteCode"
+                                                    name="inviteCode"
+                                                    value={inviteCode}
+                                                    onChange={(e) => setInviteCode(e.target.value)}
+                                                    placeholder="XXXX-XXXX-XXXX"
+                                                    data-1p-ignore
+                                                    required
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="form-group invite-code-group">
+                                                {!hasInviteCode ? (
+                                                    <button
+                                                        type="button"
+                                                        className="text-btn invite-code-toggle-btn"
+                                                        onClick={() => setHasInviteCode(true)}
+                                                    >
+                                                        + Have an invite code?
+                                                    </button>
+                                                ) : (
+                                                    <>
+                                                        <label htmlFor="inviteCode">Invite Code</label>
+                                                        <input
+                                                            type="text"
+                                                            id="inviteCode"
+                                                            name="inviteCode"
+                                                            value={inviteCode}
+                                                            onChange={(e) => setInviteCode(e.target.value)}
+                                                            placeholder="XXXX-XXXX-XXXX"
+                                                            data-1p-ignore
+                                                        />
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
 
-                            {isRegistering && (
                                 <div className="form-group">
-                                    <label htmlFor="email">Email (Optional)</label>
+                                    <label htmlFor="username">Username{isRegistering && <span className="required-star"> *</span>}</label>
                                     <input
-                                        type="email"
-                                        id="email"
-                                        name="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="name@example.com"
+                                        key={isRegistering ? "signup-username" : "signin-username"}
+                                        type="text"
+                                        id="username"
+                                        name="username"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        placeholder="Enter username"
+                                        autoComplete="username"
+                                        required
+                                        pattern="^[a-zA-Z0-9_\-]{3,20}$"
+                                        title="3 to 20 characters, alphanumeric, including hyphen or underscore"
                                     />
                                 </div>
-                            )}
 
-                            <div className="login-actions">
-                                <button type="submit" disabled={isLoading} className="login-btn primary-submit-btn">
-                                    {isLoading ? (
-                                        <span className="spinner"></span>
-                                    ) : (
-                                        isRegistering ? 'Create Account' : 'Sign In'
+                                <div className="form-group">
+                                    <label htmlFor="password">Password{isRegistering && <span className="required-star"> *</span>}</label>
+                                    <div className="password-input-wrapper">
+                                        <input
+                                            key={isRegistering ? "signup-password" : "signin-password"}
+                                            type={showPassword ? "text" : "password"}
+                                            id="password"
+                                            name="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            placeholder={isRegistering ? "Min 12 characters" : "••••••••••••"}
+                                            autoComplete={isRegistering ? "new-password" : "current-password"}
+                                            required
+                                            minLength={12}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="password-toggle-btn"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            tabIndex={-1}
+                                        >
+                                            {showPassword ? 'Hide' : 'Show'}
+                                        </button>
+                                    </div>
+                                    {isRegistering && password.length > 0 && (
+                                        <div className="password-meter-container">
+                                            <div className="password-strength-header">
+                                                <span className="strength-label">Password Strength:</span>
+                                                <span className={`strength-value score-${calculatePasswordStrength(password).score}`}>
+                                                    {calculatePasswordStrength(password).label}
+                                                </span>
+                                            </div>
+                                            <div className="password-strength-bar">
+                                                <div className={`password-strength-fill strength-${calculatePasswordStrength(password).score}`}></div>
+                                                <ul className="password-requirements">
+                                                    <li className={`password-req-item ${password.length >= 12 ? 'met' : ''}`}>
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                            {password.length >= 12 ? (
+                                                                <polyline points="20 6 9 17 4 12" />
+                                                            ) : (
+                                                                <>
+                                                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                                </>
+                                                            )}
+                                                        </svg>
+                                                        At least 12 characters
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                     )}
-                                </button>
-                            </div>
-
-                            <div className="auth-toggle-link">
-                                {isRegistering ? (
-                                    <p>Already have an account? <button type="button" onClick={() => {setIsRegistering(false); setError('');}} className="text-btn">Log in</button></p>
-                                ) : (
-                                    <p>New user? <button type="button" onClick={() => {setIsRegistering(true); setError('');}} className="text-btn">Create an account</button></p>
-                                )}
-                            </div>
-
-                            {turnstileSiteKey && (
-                                <div className="turnstile-wrapper">
-                                    <div id="cf-turnstile-container-modal" className="cf-turnstile"></div>
                                 </div>
-                            )}
 
-                            {onGuest && (
-                                <div className="guest-action-wrapper">
+                                {isRegistering && (
+                                    <div className="form-group">
+                                        <label htmlFor="email">Email (Optional)</label>
+                                        <input
+                                            type="email"
+                                            id="email"
+                                            name="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            placeholder="name@example.com"
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="login-actions">
+                                    <button type="submit" disabled={isLoading} className="login-btn primary-submit-btn">
+                                        {isLoading ? (
+                                            <span className="spinner"></span>
+                                        ) : (
+                                            isRegistering ? 'Create Account' : 'Sign In'
+                                        )}
+                                    </button>
+                                </div>
+
+                                <div className="auth-toggle-link">
+                                    {isRegistering ? (
+                                        <p>Already have an account? <button type="button" onClick={() => {setIsRegistering(false); setError('');}} className="text-btn">Log in</button></p>
+                                    ) : (
+                                        <p>New user? <button type="button" onClick={() => {setIsRegistering(true); setError('');}} className="text-btn">Create an account</button></p>
+                                    )}
+                                </div>
+
+                                {turnstileSiteKey && (
+                                    <div className="turnstile-wrapper">
+                                        <div id="cf-turnstile-container-modal" className="cf-turnstile"></div>
+                                    </div>
+                                )}
+
+                                {onGuest && (
+                                    <div className="guest-action-wrapper">
+                                        <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
+                                            Try as guest →
+                                        </button>
+                                    </div>
+                                )}
+                            </form>
+                        ) : (
+                            onGuest && (
+                                <div className="guest-action-wrapper" style={{ marginTop: '1.5rem' }}>
                                     <button type="button" onClick={handleGuestClick} className="guest-btn" disabled={isLoading}>
                                         Try as guest →
                                     </button>
                                 </div>
-                            )}
-                        </form>
+                            )
+                        )}
                     </>
                 )}
             </div>

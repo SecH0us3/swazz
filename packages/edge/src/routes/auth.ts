@@ -288,10 +288,12 @@ export function registerAuthRoutes(
     }
   });
 
-  app.post('/api/auth/passkeys/login/generate-options', async (c) => {
+  const handleGeneratePasskeyOptions = async (c: any) => {
     try {
-      const body = await c.req.json();
-      if (typeof body.username !== 'string') return c.json({ error: 'Invalid or missing username' }, 400);
+      let body: any = {};
+      try {
+        body = await c.req.json();
+      } catch {}
 
       const clientIp = getClientIp(c);
       const requestOrigin = c.req.header('Origin') || new URL(c.req.url).origin;
@@ -304,7 +306,10 @@ export function registerAuthRoutes(
       const [msg, status] = err.message.split('|');
       return c.json({ error: msg }, parseInt(status) || 500);
     }
-  });
+  };
+
+  app.post('/api/auth/passkeys/login/generate-options', handleGeneratePasskeyOptions);
+  app.post('/api/auth/passkeys/login/options', handleGeneratePasskeyOptions);
 
   app.post('/api/auth/passkeys/login/verify', async (c) => {
     try {
@@ -413,6 +418,53 @@ export function registerAuthRoutes(
 
       const services = authServicesFactory(c.env);
       const result = await services.handleGithubCallback(code, state, frontendUrl, c);
+      return c.redirect(result.redirectUrl);
+    } catch (err: any) {
+      return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);
+    }
+  });
+
+  app.get('/api/auth/login/gitlab', async (c) => {
+    try {
+      let userId: string | null = null;
+      try {
+        userId = await getUserIdFromRequest(c);
+      } catch {}
+
+      const requestUrl = new URL(c.req.url);
+      const redirectUri = c.env.GITLAB_REDIRECT_URI || `${requestUrl.origin}/api/auth/callback/gitlab`;
+
+      const services = authServicesFactory(c.env);
+      const url = await services.handleGitlabLogin(userId, redirectUri);
+      return c.redirect(url);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
+
+  app.get('/api/auth/callback/gitlab', async (c) => {
+    try {
+      const code = c.req.query('code');
+      const state = c.req.query('state');
+
+      const requestUrl = new URL(c.req.url);
+      let frontendUrl = c.env.ALLOWED_ORIGINS && c.env.ALLOWED_ORIGINS !== '*' ? c.env.ALLOWED_ORIGINS.split(',')[0].trim() : '';
+      if (!frontendUrl) {
+        if (c.env.JWT_SECRET === 'test-secret' || requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1' || requestUrl.hostname === '[::1]' || requestUrl.hostname === '::1' || requestUrl.port === '8787') {
+          frontendUrl = 'http://localhost:5173';
+        } else {
+          frontendUrl = requestUrl.origin;
+        }
+      }
+      frontendUrl = frontendUrl.replace(/\/$/, '');
+
+      if (!code || !state) {
+        return c.redirect(`${frontendUrl}/?error=${encodeURIComponent('Missing code or state')}`);
+      }
+
+      const services = authServicesFactory(c.env);
+      const result = await services.handleGitlabCallback(code, state, frontendUrl, c);
       return c.redirect(result.redirectUrl);
     } catch (err: any) {
       return c.redirect(`/?error=${encodeURIComponent('Authentication failed. Please try again later.')}`);

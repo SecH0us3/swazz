@@ -16,18 +16,20 @@ cd "$ROOT_DIR"
 
 echo "=== Starting Swazz Dev Environment ==="
 
-# Set environment vars for coordinator
-echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
-echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
-echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
-echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
-echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
+# Set environment vars for coordinator if .dev.vars does not exist
+if [ ! -f packages/edge/.dev.vars ]; then
+  echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
+  echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
+  echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
+  echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
+  echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
+fi
 
 # Apply migrations and seed CI user
 echo "→ Applying local database migrations..."
 npx wrangler d1 migrations apply swazz_db --local --cwd packages/edge || true
 echo "→ Seeding CI runner user..."
-npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
+npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', 'swazz_live_citoken1234567890', 'Supporter Plan');" --cwd packages/edge || true
 
 # Start services
 echo "→ Starting Vulnerable Demo API (Port 8788)..."
