@@ -7,6 +7,8 @@
 
 ## Security & Environment Config Guardrails
 - **No dev-mode auth/security overrides in commits**: Never commit dev-mode overrides to `wrangler.toml` or security settings (e.g. `AUTH_ENABLED="false"`, `LIMIT_ANONYMOUS="false"`). Always audit `git diff` on infrastructure and environment files before committing to prevent accidentally pushing disabled authentication to production.
+- **Root Cause Tracing Over Security Bypasses**: Never resolve authentication/network errors (such as missing CSRF tokens, CORS, or 401s) by bypassing or disabling security checks (e.g., adding routes to CSRF exemption lists). Always inspect client request headers and payload implementations first to ensure required tokens (like `X-CSRF-Token`) are correctly included.
+- **Form-driven vs 1-Click Protocol Workflows**: When modifying authentication endpoints (WebAuthn Passkey, OAuth, TOTP), always verify both form-driven inputs (e.g., username entered into input field) and 1-click interactions (e.g., clicking Passkey or Social buttons without pre-entered fields) before enforcing strict parameter requirements.
 
 ## Go Code Quality & Schema Defaults
 - **Avoid manual URL query parameter formatting**: Never format query params using `fmt.Sprintf` or string concatenation. Always parse URLs with `net/url` and modify parameters via the `Query()` API.

@@ -112,7 +112,7 @@ describe("Swazz Worker (Hono)", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body).toEqual({ auth_enabled: true, limit_anonymous: true, github_auth_enabled: false, version: '1.0.0', turnstile_site_key: null, beta_mode_enabled: true, beta_limit_reached: false });
+    expect(body).toEqual({ auth_enabled: true, password_auth_enabled: true, limit_anonymous: true, github_auth_enabled: false, gitlab_auth_enabled: false, version: '1.0.0', turnstile_site_key: null, beta_mode_enabled: true, beta_limit_reached: false });
   });
 });
 

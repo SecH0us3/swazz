@@ -43,15 +43,18 @@ export interface IAuthRepository {
 
   linkGithubUser(userId: string, githubId: string): Promise<boolean>;
   getUserByGithubId(githubId: string): Promise<any>;
+  linkGitlabUser(userId: string, gitlabId: string): Promise<boolean>;
+  getUserByGitlabId(gitlabId: string): Promise<any>;
   getUserByEmail(email: string): Promise<any>;
   createGithubUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, githubId: string): Promise<{ id: string; projectId: string }>;
+  createGitlabUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, gitlabId: string): Promise<{ id: string; projectId: string }>;
 
   // Rate limiting & login tracking
   checkIpRateLimit(key: string, maxAttempts: number, windowSeconds: number): Promise<{ limited: boolean }>;
   checkLoginRateLimit(username: string): Promise<{ locked: boolean; retryAfter?: string }>;
   recordFailedLogin(username: string): Promise<void>;
   resetLoginAttempts(username: string): Promise<void>;
-  recordLoginHistory(userId: string, status: 'success' | 'failed_password' | 'failed_2fa' | 'locked', authMethod: 'password' | 'github', twoFactorActive: boolean, meta: LoginHistoryMeta): Promise<void>;
+  recordLoginHistory(userId: string, status: 'success' | 'failed_password' | 'failed_2fa' | 'locked', authMethod: 'password' | 'github' | 'gitlab', twoFactorActive: boolean, meta: LoginHistoryMeta): Promise<void>;
   cleanupExpiredGuests(): Promise<void>;
   getUserCount(): Promise<number>;
   checkInvitationTokenValid(token: string): Promise<boolean>;
@@ -116,7 +119,7 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async getUserById(userId: string): Promise<any> {
-    return await this.db.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id, is_interactive FROM users WHERE id = ?')
+    return await this.db.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id, gitlab_id, is_interactive FROM users WHERE id = ?')
       .bind(userId).first();
   }
 
@@ -194,6 +197,17 @@ export class AuthRepository extends BaseService implements IAuthRepository {
     return await this.db.prepare('SELECT id, two_factor_enabled, is_interactive FROM users WHERE github_id = ?').bind(githubId).first();
   }
 
+  async linkGitlabUser(userId: string, gitlabId: string): Promise<boolean> {
+    const existingLink = await this.db.prepare('SELECT id FROM users WHERE gitlab_id = ?').bind(gitlabId).first<{ id: string }>();
+    if (existingLink && existingLink.id !== userId) return false;
+    await this.db.prepare('UPDATE users SET gitlab_id = ? WHERE id = ?').bind(gitlabId, userId).run();
+    return true;
+  }
+
+  async getUserByGitlabId(gitlabId: string): Promise<any> {
+    return await this.db.prepare('SELECT id, two_factor_enabled, is_interactive FROM users WHERE gitlab_id = ?').bind(gitlabId).first();
+  }
+
   async getUserByEmail(email: string): Promise<any> {
     return await this.db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
   }
@@ -204,6 +218,19 @@ export class AuthRepository extends BaseService implements IAuthRepository {
     await this.db.batch([
       this.db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)').bind(usernameHash),
       this.db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, github_id, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')").bind(userId, username, hash, hashedApiKey, email, githubId),
+      this.db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')").bind(projectId),
+      this.db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userId),
+      this.db.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userId)
+    ]);
+    return { id: userId, projectId };
+  }
+
+  async createGitlabUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, gitlabId: string): Promise<{ id: string; projectId: string }> {
+    const userId = ulid();
+    const projectId = ulid();
+    await this.db.batch([
+      this.db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)').bind(usernameHash),
+      this.db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, gitlab_id, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')").bind(userId, username, hash, hashedApiKey, email, gitlabId),
       this.db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')").bind(projectId),
       this.db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userId),
       this.db.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userId)
@@ -307,7 +334,7 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   async recordLoginHistory(
     userId: string,
     status: 'success' | 'failed_password' | 'failed_2fa' | 'locked',
-    authMethod: 'password' | 'github',
+    authMethod: 'password' | 'github' | 'gitlab',
     twoFactorActive: boolean,
     meta: LoginHistoryMeta
   ): Promise<void> {

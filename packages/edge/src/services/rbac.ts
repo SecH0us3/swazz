@@ -126,7 +126,7 @@ export class RbacService implements IRbacService {
           username: r.username,
           email: r.email,
           two_factor_enabled: r.two_factor_enabled === 1,
-          auth_method: r.github_id ? 'github' : 'password',
+          auth_method: r.github_id ? 'github' : r.gitlab_id ? 'gitlab' : 'password',
           roles: []
         });
       }

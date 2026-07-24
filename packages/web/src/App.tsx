@@ -29,7 +29,7 @@ import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export default function App() {
-    const { authEnabled, githubAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
+    const { authEnabled, githubAuthEnabled, gitlabAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
     const userProfile = useAppStore(state => state.userProfile);
@@ -50,6 +50,12 @@ export default function App() {
         }
         if (status === 'github_linked') {
             showToast('GitHub account linked successfully!', 'success');
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.delete('status');
+            window.history.replaceState({}, '', newUrl);
+        }
+        if (status === 'gitlab_linked') {
+            showToast('GitLab account linked successfully!', 'success');
             const newUrl = new URL(window.location.href);
             newUrl.searchParams.delete('status');
             window.history.replaceState({}, '', newUrl);
@@ -79,6 +85,7 @@ export default function App() {
                         deleteRequestedAt: data.delete_requested_at,
                         twoFactorEnabled: data.two_factor_enabled,
                         githubId: data.github_id,
+                        gitlabId: data.gitlab_id,
                         plan: data.plan
                     } 
                 });

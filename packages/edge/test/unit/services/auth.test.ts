@@ -75,7 +75,10 @@ describe('AuthService', () => {
       linkGithubUser: vi.fn(),
       getUserByGithubId: vi.fn(),
       getUserByEmail: vi.fn(),
-      createGithubUser: vi.fn()
+      createGithubUser: vi.fn(),
+      linkGitlabUser: vi.fn(),
+      getUserByGitlabId: vi.fn(),
+      createGitlabUser: vi.fn()
     };
     mockEnv = {
       JWT_SECRET: 'test-secret',
@@ -524,6 +527,39 @@ describe('AuthService', () => {
 
       const res = await service.handleGithubCallback('code', state, 'http://front', mockContext);
       expect(res.redirectUrl).toContain('error=' + encodeURIComponent('Interactive login restricted for this account'));
+    });
+
+    it('handleGitlabLogin returns authorization URL', async () => {
+      mockEnv.GITLAB_CLIENT_ID = 'gl-client';
+      const url = await service.handleGitlabLogin('u1', 'http://redirect');
+      expect(url).toContain('https://gitlab.com/oauth/authorize');
+      expect(url).toContain('client_id=gl-client');
+    });
+
+    it('handleGitlabCallback links user successfully', async () => {
+      mockEnv.GITLAB_CLIENT_ID = 'gl-client';
+      mockEnv.GITLAB_CLIENT_SECRET = 'gl-secret';
+      mockEnv.GITLAB_REDIRECT_URI = 'http://localhost/api/auth/callback/gitlab';
+
+      const { sign } = await import('hono/jwt');
+      const state = await sign({ action: 'link', userId: 'u1', exp: Math.floor(Date.now() / 1000) + 60 * 10 }, 'test-secret');
+
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch;
+
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({ access_token: 'gl-token' })
+      });
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({ id: 98765, username: 'gluser', email: 'user@gitlab.com' })
+      });
+
+      mockRepo.getUserById.mockResolvedValue({ username: 'u1', is_interactive: 1 });
+      mockRepo.linkGitlabUser.mockResolvedValue(true);
+
+      const res = await service.handleGitlabCallback('code', state, 'http://front', mockContext);
+      expect(res.redirectUrl).toContain('status=gitlab_linked');
+      expect(mockRepo.linkGitlabUser).toHaveBeenCalledWith('u1', '98765');
     });
   });
 });

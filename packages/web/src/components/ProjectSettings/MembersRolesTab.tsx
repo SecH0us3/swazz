@@ -19,7 +19,7 @@ interface Member {
     roles: string[];
     is_pending?: boolean;
     two_factor_enabled?: boolean;
-    auth_method?: 'password' | 'github';
+    auth_method?: 'password' | 'github' | 'gitlab';
 }
 
 export function MembersRolesTab() {
@@ -415,7 +415,7 @@ export function MembersRolesTab() {
                                     </td>
                                     <td>
                                         <span className={`rbac-badge-method rbac-badge-method-${m.auth_method || 'password'}`}>
-                                            {m.auth_method === 'github' ? 'GitHub' : 'Password'}
+                                            {m.auth_method === 'github' ? 'GitHub' : m.auth_method === 'gitlab' ? 'GitLab' : 'Password'}
                                         </span>
                                     </td>
                                     <td>
@@ -861,7 +861,7 @@ export function MembersRolesTab() {
                                         </td>
                                         <td>
                                             <span className={`rbac-badge-method rbac-badge-method-${entry.auth_method || 'password'}`}>
-                                                {entry.auth_method === 'github' ? 'GitHub' : 'Password'}
+                                                {entry.auth_method === 'github' ? 'GitHub' : entry.auth_method === 'gitlab' ? 'GitLab' : 'Password'}
                                             </span>
                                         </td>
                                         <td>

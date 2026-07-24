@@ -27,6 +27,12 @@ These configurations apply to the Edge Coordinator service located in `packages/
 | :--- | :--- | :--- |
 | **`JWT_SECRET`** | Secret key for signing and validating session JSON Web Tokens. | *Secret string* (Dev: `test-secret`) |
 | **`TURNSTILE_SECRET_KEY`** | Secret key used for validating Cloudflare Turnstile CAPTCHA responses. | *Secret string* |
+| **`GITHUB_CLIENT_ID`** | Client ID for GitHub OAuth 2.0 application. | *Secret string* |
+| **`GITHUB_CLIENT_SECRET`** | Client Secret for GitHub OAuth 2.0 application. | *Secret string* |
+| **`GITHUB_REDIRECT_URI`** | Custom redirect URI for GitHub OAuth callback. | `https://your-domain.com/api/auth/callback/github` |
+| **`GITLAB_CLIENT_ID`** | Client ID (Application ID) for GitLab OAuth 2.0 application. | *Secret string* |
+| **`GITLAB_CLIENT_SECRET`** | Secret for GitLab OAuth 2.0 application. | *Secret string* |
+| **`GITLAB_REDIRECT_URI`** | Custom redirect URI for GitLab OAuth callback. | `https://your-domain.com/api/auth/callback/gitlab` |
 
 ### 3. Config Vars (Environment Variables)
 

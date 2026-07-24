@@ -11,18 +11,21 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
-    const enterWorkspaceBtn = page.getByRole('button', { name: 'Log In' });
+    const enterWorkspaceBtn = page.locator('form').getByRole('button', { name: 'Sign In' });
     await expect(createAccountBtn).toBeVisible();
     await expect(enterWorkspaceBtn).toBeVisible();
 
-    // 2. Perform direct registration
+    // Toggle to registration mode
+    await createAccountBtn.click();
+
+    // Fill credentials
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
 
-    // Register by clicking Create
+    // Register by clicking submit button
     const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await createAccountBtn.click();
+    await page.locator('form').getByRole('button', { name: 'Create Account' }).click();
 
     // Wait for main dashboard to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
@@ -37,7 +40,8 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     await expect(logoutBtn).toBeVisible();
     await logoutBtn.click();
 
-    // Verify back on login screen
+    // Verify back on login screen and open modal
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(createAccountBtn).toBeVisible();
 
     // 4. Fill in same username but invalid password to test "Invalid credentials" error & tip

@@ -9,6 +9,7 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   TURNSTILE_SITE_KEY?: string;
   AUTH_ENABLED?: string; // 'true' | 'false'
+  PASSWORD_AUTH_ENABLED?: string; // 'true' | 'false'
   LIMIT_ANONYMOUS?: string; // 'true' | 'false'
   ALLOWED_ORIGINS?: string; // Comma-separated list of origins
   VERSION?: string;
@@ -18,6 +19,9 @@ export interface Env {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   GITHUB_REDIRECT_URI?: string;
+  GITLAB_CLIENT_ID?: string;
+  GITLAB_CLIENT_SECRET?: string;
+  GITLAB_REDIRECT_URI?: string;
   BETA_BYPASS_CODE?: string;
   BETA_MODE_ENABLED?: string;
   BETA_USER_LIMIT?: string;

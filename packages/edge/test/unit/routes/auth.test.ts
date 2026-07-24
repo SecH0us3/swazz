@@ -369,9 +369,10 @@ describe('Auth Routes Unit Tests', () => {
 
   // POST /api/auth/passkeys/login/generate-options
   describe('POST /api/auth/passkeys/login/generate-options', () => {
-    it('missing username', async () => {
+    it('missing username generates discoverable options', async () => {
+      mockAuthService.generatePasskeyLoginOptions.mockResolvedValue({ status: 'ok' });
       const res = await app.request('/api/auth/passkeys/login/generate-options', { method: 'POST', body: JSON.stringify({}) });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
     });
     it('success', async () => {
       mockAuthService.generatePasskeyLoginOptions.mockResolvedValue({ status: 'ok' });
