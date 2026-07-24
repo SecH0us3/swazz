@@ -2654,29 +2654,29 @@ body.resizing .sidebar-resizer {
   min-width: 62px;
 }
 
-/* Endpoint Included Filter Toggle */
-.endpoint-filter-controls {
+/* Endpoint Included Filter Toggle & Method Filter Bar */
+.endpoint-filter-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  margin-top: 6px;
+  gap: var(--space-1);
 }
 
 .included-filter-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: 10.5px;
   font-family: var(--font-sans);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   background: var(--bg-tertiary);
   transition: all var(--duration-fast);
+  margin-left: auto;
 }
 
 .included-filter-toggle:hover {

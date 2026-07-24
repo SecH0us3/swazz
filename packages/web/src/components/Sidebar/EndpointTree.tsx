@@ -241,7 +241,7 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{ width: '100%', marginBottom: 6 }}
                 />
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                <div className="endpoint-filter-bar">
                     {ALL_METHODS.map(method => (
                         <button
                             key={method}
@@ -252,8 +252,6 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                             {method}
                         </button>
                     ))}
-                </div>
-                <div className="endpoint-filter-controls">
                     <button
                         type="button"
                         className={`included-filter-toggle ${includedOnly ? 'active' : ''}`}
