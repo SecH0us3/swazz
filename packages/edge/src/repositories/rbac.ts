@@ -226,7 +226,7 @@ export class RbacRepository extends BaseService implements IRbacRepository {
 
   async getProjectMembers(projectId: string): Promise<any[]> {
     const { results } = await this.db.prepare(`
-      SELECT u.id, u.username, u.email, u.two_factor_enabled, u.github_id, m.role_id 
+      SELECT u.id, u.username, u.email, u.two_factor_enabled, u.github_id, u.gitlab_id, m.role_id 
       FROM project_member_roles m 
       JOIN users u ON m.user_id = u.id 
       WHERE m.project_id = ?

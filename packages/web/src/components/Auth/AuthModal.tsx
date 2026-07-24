@@ -39,7 +39,7 @@ export function AuthModal({
     onRegister,
     onGuest,
 }: AuthModalProps) {
-    const { githubAuthEnabled } = useAuth();
+    const { githubAuthEnabled, gitlabAuthEnabled } = useAuth();
     const { showToast } = useToast();
     const turnstileSiteKey = useAppStore(state => state.turnstileSiteKey);
     const [turnstileResponse, setTurnstileResponse] = useState('');
@@ -134,6 +134,10 @@ export function AuthModal({
 
     const handleGithubLogin = () => {
         window.location.href = '/api/auth/login/github';
+    };
+
+    const handleGitlabLogin = () => {
+        window.location.href = '/api/auth/login/gitlab';
     };
 
     const handlePasskeyLogin = async () => {
@@ -322,7 +326,7 @@ export function AuthModal({
                             </div>
                         )}
 
-                        {(githubAuthEnabled || !isRegistering) && (
+                        {(githubAuthEnabled || gitlabAuthEnabled || !isRegistering) && (
                             <div className="social-auth-container">
                                 {githubAuthEnabled && (
                                     <button 
@@ -335,6 +339,20 @@ export function AuthModal({
                                             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
                                         </svg>
                                         Continue with GitHub
+                                    </button>
+                                )}
+
+                                {gitlabAuthEnabled && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleGitlabLogin} 
+                                        disabled={isLoading} 
+                                        className="primary-social-btn gitlab-social-btn"
+                                    >
+                                        <svg className="gitlab-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 5.5 2a.43.43 0 0 1 .39.27L8.2 9.49h7.6l2.31-7.22a.43.43 0 0 1 .39-.27.42.42 0 0 1 .39.21l2.44 7.51 1.22 3.78a.84.84 0 0 1-.3.94z"/>
+                                        </svg>
+                                        Continue with GitLab
                                     </button>
                                 )}
 
@@ -362,7 +380,7 @@ export function AuthModal({
                             </div>
                         )}
 
-                        {(githubAuthEnabled || !isRegistering) && (
+                        {(githubAuthEnabled || gitlabAuthEnabled || !isRegistering) && (
                             <div className="oauth-divider">
                                 <span className="oauth-divider-text">or continue with credentials</span>
                             </div>

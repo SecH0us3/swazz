@@ -14,7 +14,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) {
-    const { authEnabled, githubAuthEnabled } = useAuth();
+    const { authEnabled, githubAuthEnabled, gitlabAuthEnabled } = useAuth();
     const turnstileSiteKey = useAppStore(state => state.turnstileSiteKey);
     const [turnstileResponse, setTurnstileResponse] = useState('');
     const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
@@ -52,6 +52,10 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
 
     const handleGithubLogin = () => {
         window.location.href = '/api/auth/login/github';
+    };
+
+    const handleGitlabLogin = () => {
+        window.location.href = '/api/auth/login/gitlab';
     };
 
     // Initialize Turnstile script dynamically

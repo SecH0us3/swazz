@@ -84,6 +84,7 @@ describe('useAuth hook', () => {
         const mockInfo = {
             auth_enabled: true,
             github_auth_enabled: true,
+            gitlab_auth_enabled: true,
             turnstile_site_key: 'site-key-123'
         };
         const mockResponse = new Response(JSON.stringify(mockInfo), {
@@ -103,6 +104,7 @@ describe('useAuth hook', () => {
 
         expect(hookResult.current.authEnabled).toBe(true);
         expect(hookResult.current.githubAuthEnabled).toBe(true);
+        expect(hookResult.current.gitlabAuthEnabled).toBe(true);
         expect(useAppStore.getState().csrfToken).toBe('csrf-token-abc');
         expect(useAppStore.getState().turnstileSiteKey).toBe('site-key-123');
     });

@@ -69,7 +69,7 @@ const createStatsSlice: StateCreator<AppState, [], [], StatsSlice> = () => ({
 });
 
 export interface UserSlice {
-    userProfile: { username: string; apiKey: string; publicKey?: string | null; isGuest?: boolean; deleteRequestedAt?: string | null; twoFactorEnabled?: boolean; githubId?: string | null; plan?: string } | null;
+    userProfile: { username: string; apiKey: string; publicKey?: string | null; isGuest?: boolean; deleteRequestedAt?: string | null; twoFactorEnabled?: boolean; githubId?: string | null; gitlabId?: string | null; plan?: string } | null;
     csrfToken: string | null;
     turnstileSiteKey: string | null;
     betaModeEnabled: boolean;

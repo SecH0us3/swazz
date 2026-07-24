@@ -6,6 +6,7 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 export function useAuth() {
     const [authEnabled, setAuthEnabled] = useState(false);
     const [githubAuthEnabled, setGithubAuthEnabled] = useState(false);
+    const [gitlabAuthEnabled, setGitlabAuthEnabled] = useState(false);
     const [token, setToken] = useState<string | null>(localStorage.getItem('swazz_token'));
     const [isGuest, setIsGuest] = useState(sessionStorage.getItem('swazz_guest') === 'true');
     const [isLoading, setIsLoading] = useState(true);
@@ -66,6 +67,7 @@ export function useAuth() {
             .then(data => {
                 setAuthEnabled(!!data.auth_enabled);
                 setGithubAuthEnabled(!!data.github_auth_enabled);
+                setGitlabAuthEnabled(!!data.gitlab_auth_enabled);
                 if (data.turnstile_site_key) {
                     useAppStore.setState({ turnstileSiteKey: data.turnstile_site_key });
                 }
@@ -251,5 +253,5 @@ export function useAuth() {
         sessionStorage.removeItem('swazz_guest');
     };
 
-    return { authEnabled, githubAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout };
+    return { authEnabled, githubAuthEnabled, gitlabAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout };
 }

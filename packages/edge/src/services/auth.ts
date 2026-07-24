@@ -59,6 +59,8 @@ export interface IAuthService {
   updateAdminUserPlan(adminSecret: string, providedSecret: string | undefined, body: any): Promise<any>;
   handleGithubLogin(userId: string | null, redirectUri: string): Promise<string>;
   handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<{ Bindings: Env }>): Promise<{ redirectUrl: string }>;
+  handleGitlabLogin(userId: string | null, redirectUri: string): Promise<string>;
+  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<{ Bindings: Env }>): Promise<{ redirectUrl: string }>;
   exchangeOauthToken(body: any, c: Context<{ Bindings: Env }>): Promise<any>;
 }
 
@@ -258,7 +260,8 @@ export class AuthService implements IAuthService {
       delete_requested_at: user.delete_requested_at,
       two_factor_enabled: user.two_factor_enabled === 1,
       plan: user.plan || 'Free',
-      github_id: user.github_id || null
+      github_id: user.github_id || null,
+      gitlab_id: user.gitlab_id || null
     };
   }
 
@@ -756,6 +759,115 @@ export class AuthService implements IAuthService {
         }
         
         await this.authRepo.recordLoginHistory(userId, 'success', 'github', user ? user.two_factor_enabled === 1 : false, this.extractLoginMeta(c));
+        
+        const payload = { sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
+        const jwtToken = await sign(payload, secret);
+        const exchangeCode = crypto.randomUUID();
+        
+        if (this.env.SESSION_CACHE) {
+          await this.env.SESSION_CACHE.put(`oauth_code:${exchangeCode}`, jwtToken, { expirationTtl: 60 });
+        } else {
+          throw new Error('Internal server error: SESSION_CACHE is not configured|500');
+        }
+        
+        return { redirectUrl: `${frontendUrl}/?exchange_code=${exchangeCode}` };
+      }
+    } catch (err) {
+      return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Authentication failed. Please try again later.')}` };
+    }
+  }
+
+  async handleGitlabLogin(userId: string | null, redirectUri: string): Promise<string> {
+    const clientId = this.env.GITLAB_CLIENT_ID;
+    if (!clientId) throw new Error('GitLab OAuth not configured|500');
+    const statePayload = { action: userId ? 'link' : 'login', userId: userId || null, exp: Math.floor(Date.now() / 1000) + 60 * 10 };
+    const secret = this.env.JWT_SECRET;
+    const state = await sign(statePayload, secret);
+    const gitlabAuthUrl = new URL('https://gitlab.com/oauth/authorize');
+    gitlabAuthUrl.searchParams.set('client_id', clientId);
+    gitlabAuthUrl.searchParams.set('redirect_uri', redirectUri);
+    gitlabAuthUrl.searchParams.set('response_type', 'code');
+    gitlabAuthUrl.searchParams.set('scope', 'read_user openid email');
+    gitlabAuthUrl.searchParams.set('state', state);
+    return gitlabAuthUrl.toString();
+  }
+
+  async handleGitlabCallback(code: string, state: string, frontendUrl: string, c: any): Promise<{ redirectUrl: string }> {
+    const secret = this.env.JWT_SECRET;
+    let decodedState: any;
+    try {
+      decodedState = await verify(state, secret, "HS256");
+    } catch {
+      return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid or expired state')}` };
+    }
+    if (!decodedState || (decodedState.action !== 'login' && decodedState.action !== 'link')) {
+      return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid state payload')}` };
+    }
+
+    const clientId = this.env.GITLAB_CLIENT_ID;
+    const clientSecret = this.env.GITLAB_CLIENT_SECRET;
+    const redirectUri = this.env.GITLAB_REDIRECT_URI || `${new URL(c.req.url).origin}/api/auth/callback/gitlab`;
+    if (!clientId || !clientSecret) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('GitLab OAuth not configured on server')}` };
+
+    try {
+      const tokenRes = await fetch('https://gitlab.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)' },
+        body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, grant_type: 'authorization_code', redirect_uri: redirectUri }),
+      });
+      const tokenData = (await tokenRes.json()) as { access_token?: string; error?: string; error_description?: string };
+      if (tokenData.error || !tokenData.access_token) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Failed to exchange code: ' + (tokenData.error_description || tokenData.error || 'unknown'))}` };
+
+      const userRes = await fetch('https://gitlab.com/api/v4/user', {
+        headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'User-Agent': 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)', 'Accept': 'application/json' },
+      });
+      const userData = (await userRes.json()) as { id?: number; username?: string; email?: string | null };
+      if (!userData.id || !userData.username) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Failed to fetch GitLab profile')}` };
+
+      let email = userData.email || null;
+
+      if (decodedState.action === 'link') {
+        const userId = decodedState.userId;
+        if (!userId) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Invalid user session for linking')}` };
+        const user = await this.authRepo.getUserById(userId);
+        if (user && user.is_interactive === 0) {
+          return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Linking GitLab is not allowed for non-interactive service accounts')}` };
+        }
+        const linked = await this.authRepo.linkGitlabUser(userId, String(userData.id));
+        if (!linked) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('GitLab account is already linked to another user')}` };
+        return { redirectUrl: `${frontendUrl}/?status=gitlab_linked` };
+      } else {
+        let user = await this.authRepo.getUserByGitlabId(String(userData.id));
+        if (user && user.is_interactive === 0) {
+          return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Interactive login restricted for this account')}` };
+        }
+        let userId: string;
+        if (user) {
+          userId = user.id;
+        } else {
+          if (email) {
+            const existingUser = await this.authRepo.getUserByEmail(email);
+            if (existingUser) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('An account with this email already exists. Please log in with your password and link your GitLab account in settings.')}` };
+          }
+          let baseUsername = userData.username.replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 15);
+          if (baseUsername.length < 3) baseUsername = 'gl_' + baseUsername;
+          let username = baseUsername, usernameHash = '', isUnique = false, attempts = 0;
+          while (!isUnique && attempts < 10) {
+            const finalUsername = attempts === 0 ? username : `${username.substring(0, 16)}_${Math.floor(Math.random() * 100)}`;
+            const currentHash = await hashUsername(finalUsername);
+            const exists = await this.authRepo.checkUsernameExists(currentHash);
+            if (!exists) { username = finalUsername; usernameHash = currentHash; isUnique = true; } else { attempts++; }
+          }
+          if (!isUnique) return { redirectUrl: `${frontendUrl}/?error=${encodeURIComponent('Failed to generate a unique username')}` };
+          
+          const hash = await hashPassword(crypto.randomUUID() + crypto.randomUUID());
+          const hashedApiKey = await hashApiKey('swazz_live_' + crypto.randomUUID().replace(/-/g, ''));
+          
+          const created = await this.authRepo.createGitlabUser(username, usernameHash, hash, email, hashedApiKey, String(userData.id));
+          userId = created.id;
+        }
+        
+        await this.authRepo.recordLoginHistory(userId, 'success', 'gitlab', user ? user.two_factor_enabled === 1 : false, this.extractLoginMeta(c));
         
         const payload = { sub: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
         const jwtToken = await sign(payload, secret);

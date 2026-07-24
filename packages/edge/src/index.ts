@@ -79,6 +79,7 @@ app.get('/api/info', async (c) => {
   const authEnabled = c.env.AUTH_ENABLED === 'true';
   const limitAnonymous = c.env.LIMIT_ANONYMOUS === 'true';
   const githubAuthEnabled = !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET);
+  const gitlabAuthEnabled = !!(c.env.GITLAB_CLIENT_ID && c.env.GITLAB_CLIENT_SECRET);
 
   let betaUserCount = 0;
   try {
@@ -98,6 +99,7 @@ app.get('/api/info', async (c) => {
     auth_enabled: authEnabled,
     limit_anonymous: limitAnonymous,
     github_auth_enabled: githubAuthEnabled,
+    gitlab_auth_enabled: gitlabAuthEnabled,
     version: c.env.VERSION || '1.0.0',
     turnstile_site_key: c.env.TURNSTILE_SITE_KEY || null,
     beta_mode_enabled: c.env.BETA_MODE_ENABLED !== 'false',
