@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useConfig } from '../../hooks/useConfig.js';
 import { useToast } from '../../hooks/useToast.js';
+import { sanitizeTargetUrl } from '../../utils/url.js';
 
 export function GeneralTab() {
     const activeProject = useAppStore(state => state.activeProject);
@@ -68,7 +69,9 @@ export function GeneralTab() {
             }
 
             // Sync with base_url
-            updateConfig({ base_url: targetUrl.trim() });
+            const sanitizedUrl = sanitizeTargetUrl(targetUrl);
+            setTargetUrl(sanitizedUrl);
+            updateConfig({ base_url: sanitizedUrl });
 
             // Update local store state
             const updatedProject = { 

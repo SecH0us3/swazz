@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore.js';
 import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './UserMenu.js';
 import { useToast } from '../hooks/useToast.js';
+import { sanitizeTargetUrl } from '../utils/url.js';
 
 interface Props {
     onToggleSidebar?: () => void;
@@ -64,20 +65,7 @@ export function Header({
     }, [baseUrl]);
 
     const handleUrlCommit = (val: string) => {
-        let cleanUrl = val.trim();
-        if (!cleanUrl) {
-            if (onChangeBaseUrl) onChangeBaseUrl('');
-            setLocalUrl('');
-            return;
-        }
-
-        try {
-            const u = new URL(cleanUrl);
-            cleanUrl = u.origin;
-        } catch {
-            // Not a full URL, leave as is
-        }
-
+        const cleanUrl = sanitizeTargetUrl(val);
         setLocalUrl(cleanUrl);
         if (onChangeBaseUrl && cleanUrl !== baseUrl) {
             onChangeBaseUrl(cleanUrl);
@@ -85,14 +73,9 @@ export function Header({
     };
 
     const handleStartClick = () => {
-        let cleanUrl = localUrl.trim();
-        if (cleanUrl) {
-            try {
-                const u = new URL(cleanUrl);
-                cleanUrl = u.origin;
-            } catch {
-                // Not a full URL, leave as is
-            }
+        const cleanUrl = sanitizeTargetUrl(localUrl);
+        if (cleanUrl !== localUrl) {
+            setLocalUrl(cleanUrl);
         }
         if (onChangeBaseUrl) {
             onChangeBaseUrl(cleanUrl);

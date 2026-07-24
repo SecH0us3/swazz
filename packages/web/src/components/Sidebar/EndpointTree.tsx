@@ -62,6 +62,9 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
     const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
     const [searchQuery, setSearchQuery] = useState('');
     const [methodFilters, setMethodFilters] = useState<string[]>([]);
+    const [includedOnly, setIncludedOnly] = useState<boolean>(() => {
+        return localStorage.getItem('swazz_endpoint_filter_included_only') === 'true';
+    });
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
     const toggleExpand = (nodePath: string) => {
@@ -81,6 +84,7 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
         const filteredEndpoints = endpoints.filter(ep => {
             if (methodFilters.length > 0 && !methodFilters.includes(ep.method)) return false;
             if (searchQuery && !ep.path.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            if (includedOnly && isEndpointDisabled(`${ep.method} ${ep.path}`, disabledEndpoints)) return false;
             return true;
         });
 
@@ -112,7 +116,7 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
             });
         }
         return root;
-    }, [endpoints, searchQuery, methodFilters]);
+    }, [endpoints, searchQuery, methodFilters, includedOnly, disabledEndpoints]);
 
     const renderNode = (node: TreeNode, currentPath: string, depth: number = 0) => {
         const allIds = getAllEndpointIds(node);
@@ -237,7 +241,7 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{ width: '100%', marginBottom: 6 }}
                 />
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                <div className="endpoint-filter-bar">
                     {ALL_METHODS.map(method => (
                         <button
                             key={method}
@@ -248,6 +252,20 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
                             {method}
                         </button>
                     ))}
+                    <button
+                        type="button"
+                        className={`included-filter-toggle ${includedOnly ? 'active' : ''}`}
+                        onClick={() => {
+                            const next = !includedOnly;
+                            setIncludedOnly(next);
+                            localStorage.setItem('swazz_endpoint_filter_included_only', String(next));
+                        }}
+                        aria-pressed={includedOnly}
+                        aria-label="Filter included endpoints only"
+                        title="Filter included endpoints only (show enabled endpoints only)"
+                    >
+                        <span>{includedOnly ? '☑️' : '🔳'}</span>
+                    </button>
                 </div>
             </div>
             <div className="endpoint-tree">
@@ -256,3 +274,4 @@ export function EndpointTree({ endpoints, disabledEndpoints, onUpdateDisabled }:
         </div>
     );
 }
+

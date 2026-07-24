@@ -18,6 +18,7 @@ import type { QueryOptions } from '../hooks/useDb.js';
 import type { ResultSummary } from '../hooks/useRunner.js';
 import { categorizeFinding } from '../utils/findings.js';
 import { extractErrorSubtype, getCleanDedupeKey } from '../utils/errors.js';
+import { sanitizeTargetUrl } from '../utils/url.js';
 
 // Helper to compute deduplicated count for Grouped Errors
 function getGroupedFindingsCount(rows: ResultSummary[]): number {
@@ -213,20 +214,7 @@ export function MainWorkspace({
     }, [baseUrl]);
 
     const handleUrlCommit = (val: string) => {
-        let cleanUrl = val.trim();
-        if (!cleanUrl) {
-            if (onChangeBaseUrl) onChangeBaseUrl('');
-            setLocalUrl('');
-            return;
-        }
-
-        try {
-            const u = new URL(cleanUrl);
-            cleanUrl = u.origin;
-        } catch {
-            // Not a full URL, leave as is
-        }
-
+        const cleanUrl = sanitizeTargetUrl(val);
         setLocalUrl(cleanUrl);
         if (onChangeBaseUrl && cleanUrl !== baseUrl) {
             onChangeBaseUrl(cleanUrl);
@@ -234,14 +222,9 @@ export function MainWorkspace({
     };
 
     const handleStartClick = () => {
-        let cleanUrl = localUrl.trim();
-        if (cleanUrl) {
-            try {
-                const u = new URL(cleanUrl);
-                cleanUrl = u.origin;
-            } catch {
-                // Not a full URL, leave as is
-            }
+        const cleanUrl = sanitizeTargetUrl(localUrl);
+        if (cleanUrl !== localUrl) {
+            setLocalUrl(cleanUrl);
         }
         if (onChangeBaseUrl) {
             onChangeBaseUrl(cleanUrl);

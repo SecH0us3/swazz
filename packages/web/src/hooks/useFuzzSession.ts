@@ -6,6 +6,7 @@ import { dbStreamResult } from './useDb.js';
 import type { ScanRun } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
 import { matchesPattern } from '../utils/glob.js';
+import { sanitizeTargetUrl } from '../utils/url.js';
 
 interface UseFuzzSessionProps {
     config: SwazzConfig;
@@ -47,20 +48,7 @@ export function useFuzzSession({
                 );
                 allEndpoints = allEndpoints.concat(endpoints);
                 if (!detectedBaseUrl && basePath) {
-                    let cleanUrl = basePath.trim();
-                    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-                        if (cleanUrl.startsWith('localhost') || cleanUrl.startsWith('127.0.0.1') || cleanUrl.startsWith('0.0.0.0')) {
-                            cleanUrl = `http://${cleanUrl}`;
-                        } else if (cleanUrl.includes('.') || cleanUrl.includes(':')) {
-                            cleanUrl = `https://${cleanUrl}`;
-                        }
-                    }
-                    try {
-                        const u = new URL(cleanUrl);
-                        detectedBaseUrl = u.origin;
-                    } catch {
-                        detectedBaseUrl = basePath;
-                    }
+                    detectedBaseUrl = sanitizeTargetUrl(basePath);
                 }
 
                 // Update cache date in global store
@@ -113,25 +101,10 @@ export function useFuzzSession({
         let finalBaseUrl = overrideBaseUrl || config.base_url;
 
         if (finalBaseUrl) {
-            let cleanUrl = finalBaseUrl.trim();
-            if (cleanUrl) {
-                if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-                    if (cleanUrl.startsWith('localhost') || cleanUrl.startsWith('127.0.0.1') || cleanUrl.startsWith('0.0.0.0')) {
-                        cleanUrl = `http://${cleanUrl}`;
-                    } else {
-                        cleanUrl = `https://${cleanUrl}`;
-                    }
-                }
-                try {
-                    const u = new URL(cleanUrl);
-                    cleanUrl = u.origin;
-                } catch {
-                    // Not a full URL, leave as is
-                }
-                finalBaseUrl = cleanUrl;
-                if (cleanUrl !== config.base_url) {
-                    updateConfig({ base_url: cleanUrl });
-                }
+            const cleanUrl = sanitizeTargetUrl(finalBaseUrl);
+            finalBaseUrl = cleanUrl;
+            if (cleanUrl !== config.base_url) {
+                updateConfig({ base_url: cleanUrl });
             }
         }
 

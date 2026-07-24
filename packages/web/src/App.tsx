@@ -23,6 +23,7 @@ import { useAuth } from './hooks/useAuth.js';
 import { LoginScreen } from './components/Auth/LoginScreen.js';
 import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 import { AuthModal } from './components/Auth/AuthModal.js';
+import { sanitizeTargetUrl } from './utils/url.js';
 import { fetchProjects } from './services/projectService.js';
 import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 
@@ -837,23 +838,19 @@ export default function App() {
                     onChangeBaseUrl={(url) => {
                         const trimmed = url.trim();
                         if (trimmed.endsWith('swagger.json')) {
-                            try {
-                                const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
-                                const parsed = new URL(inputUrl);
-                                const origin = parsed.origin;
-                                const currentUrls = config._swagger_urls || [];
-                                if (!currentUrls.includes(inputUrl)) {
-                                    const newUrls = [...currentUrls, inputUrl];
-                                    updateConfig({ base_url: origin, _swagger_urls: newUrls });
-                                    loadEndpoints(newUrls);
-                                } else {
-                                    updateConfig({ base_url: origin });
-                                }
-                            } catch {
-                                updateConfig({ base_url: trimmed });
+                            const sanitized = sanitizeTargetUrl(trimmed);
+                            const inputUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+                            const currentUrls = config._swagger_urls || [];
+                            if (!currentUrls.includes(inputUrl)) {
+                                const newUrls = [...currentUrls, inputUrl];
+                                updateConfig({ base_url: sanitized, _swagger_urls: newUrls });
+                                loadEndpoints(newUrls);
+                            } else {
+                                updateConfig({ base_url: sanitized });
                             }
                         } else {
-                            updateConfig({ base_url: trimmed });
+                            const sanitized = sanitizeTargetUrl(trimmed);
+                            updateConfig({ base_url: sanitized });
                         }
                     }}
                     onStart={(cleanUrl) => handleStart(undefined, cleanUrl)}

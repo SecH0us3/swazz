@@ -128,4 +128,79 @@ describe('EndpointTree Component', () => {
         expect(screen.getByText('fetch_articles')).toBeTruthy();
         expect(screen.getByText('search')).toBeTruthy();
     });
+
+    describe('Included Only filter', () => {
+        beforeEach(() => {
+            localStorage.clear();
+        });
+
+        it('renders the "Included Only" filter toggle button', () => {
+            const onUpdateDisabled = vi.fn();
+            render(
+                <EndpointTree
+                    endpoints={mockEndpoints}
+                    disabledEndpoints={[]}
+                    onUpdateDisabled={onUpdateDisabled}
+                />
+            );
+
+            const toggleBtn = screen.getByRole('button', { name: /filter included endpoints only/i });
+            expect(toggleBtn).toBeTruthy();
+            expect(toggleBtn.getAttribute('aria-pressed')).toBe('false');
+        });
+
+        it('filters out disabled endpoints when "Included Only" is toggled on and restores when toggled off', () => {
+            const onUpdateDisabled = vi.fn();
+            render(
+                <EndpointTree
+                    endpoints={mockEndpoints}
+                    disabledEndpoints={['POST /api/v1/admins']}
+                    onUpdateDisabled={onUpdateDisabled}
+                />
+            );
+
+            // Initially all endpoints rendered
+            expect(screen.getByText('users')).toBeTruthy();
+            expect(screen.getByText('admins')).toBeTruthy();
+            expect(screen.getByText('health')).toBeTruthy();
+
+            // Click Included Only toggle
+            const toggleBtn = screen.getByRole('button', { name: /filter included endpoints only/i });
+            fireEvent.click(toggleBtn);
+
+            // Disabled endpoint (admins) should now be filtered out
+            expect(screen.getByText('users')).toBeTruthy();
+            expect(screen.queryByText('admins')).toBeNull();
+            expect(screen.getByText('health')).toBeTruthy();
+            expect(toggleBtn.getAttribute('aria-pressed')).toBe('true');
+            expect(localStorage.getItem('swazz_endpoint_filter_included_only')).toBe('true');
+
+            // Click toggle again to turn off
+            fireEvent.click(toggleBtn);
+            expect(screen.getByText('users')).toBeTruthy();
+            expect(screen.getByText('admins')).toBeTruthy();
+            expect(screen.getByText('health')).toBeTruthy();
+            expect(toggleBtn.getAttribute('aria-pressed')).toBe('false');
+            expect(localStorage.getItem('swazz_endpoint_filter_included_only')).toBe('false');
+        });
+
+        it('initializes includedOnly state from localStorage', () => {
+            localStorage.setItem('swazz_endpoint_filter_included_only', 'true');
+            const onUpdateDisabled = vi.fn();
+
+            render(
+                <EndpointTree
+                    endpoints={mockEndpoints}
+                    disabledEndpoints={['POST /api/v1/admins']}
+                    onUpdateDisabled={onUpdateDisabled}
+                />
+            );
+
+            const toggleBtn = screen.getByRole('button', { name: /filter included endpoints only/i });
+            expect(toggleBtn.getAttribute('aria-pressed')).toBe('true');
+            expect(screen.getByText('users')).toBeTruthy();
+            expect(screen.queryByText('admins')).toBeNull();
+        });
+    });
 });
+
