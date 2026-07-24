@@ -5,7 +5,7 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
 export function useAuth() {
     const [authEnabled, setAuthEnabled] = useState(false);
-    const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(true);
+    const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(false);
     const [githubAuthEnabled, setGithubAuthEnabled] = useState(false);
     const [gitlabAuthEnabled, setGitlabAuthEnabled] = useState(false);
     const [token, setToken] = useState<string | null>(localStorage.getItem('swazz_token'));
@@ -67,7 +67,7 @@ export function useAuth() {
             })
             .then(data => {
                 setAuthEnabled(!!data.auth_enabled);
-                setPasswordAuthEnabled(data.password_auth_enabled !== false);
+                setPasswordAuthEnabled(!!data.password_auth_enabled);
                 setGithubAuthEnabled(!!data.github_auth_enabled);
                 setGitlabAuthEnabled(!!data.gitlab_auth_enabled);
                 if (data.turnstile_site_key) {

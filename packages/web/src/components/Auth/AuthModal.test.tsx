@@ -4,6 +4,18 @@ import React from 'react';
 import { AuthModal } from './AuthModal.js';
 import { useAppStore } from '../../store/appStore.js';
 
+vi.mock('../../hooks/useAuth.js', () => ({
+    useAuth: () => ({
+        authEnabled: true,
+        passwordAuthEnabled: true,
+        githubAuthEnabled: false,
+        gitlabAuthEnabled: false,
+        token: null,
+        isGuest: false,
+        isLoading: false,
+    })
+}));
+
 describe('AuthModal Component', () => {
     const defaultProps = {
         isOpen: true,
