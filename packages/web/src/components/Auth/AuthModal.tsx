@@ -399,6 +399,11 @@ export function AuthModal({
                                 <div className="error-content">
                                     <span className="error-text">{error}</span>
                                 </div>
+                                {error === 'Invalid credentials' && !isRegistering && (
+                                    <div className="login-error-tip">
+                                        New user? Click <strong>Create</strong> to sign up.
+                                    </div>
+                                )}
                             </div>
                         )}
                         {passwordAuthEnabled ? (
