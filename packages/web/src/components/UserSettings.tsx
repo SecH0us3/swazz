@@ -9,7 +9,7 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 export function UserSettings() {
     const userProfile = useAppStore(state => state.userProfile);
     const apiBaseUrl = PROXY_URL || window.location.origin;
-    const { theme, toggleTheme } = useTheme();
+    const { mode, theme, setMode, toggleTheme } = useTheme();
     const [copiedApiKey, setCopiedApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
     const [newApiKeyToShow, setNewApiKeyToShow] = useState<string | null>(null);
@@ -562,14 +562,32 @@ export function UserSettings() {
                             )}
                             <div className="settings-form-group">
                                 <label className="settings-form-label">Theme Preference</label>
-                                <button 
-                                    className="btn btn-secondary btn-sm settings-btn-w-full"
-                                    onClick={toggleTheme}
-                                    type="button"
-                                    id="btn-toggle-theme-settings"
-                                >
-                                    Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
-                                </button>
+                                <div className="theme-selector-group" role="radiogroup" aria-label="Theme Preference">
+                                    <button
+                                        type="button"
+                                        className={`theme-selector-btn ${mode === 'system' ? 'active' : ''}`}
+                                        onClick={() => setMode('system')}
+                                        id="btn-theme-system"
+                                    >
+                                        System
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`theme-selector-btn ${mode === 'dark' ? 'active' : ''}`}
+                                        onClick={() => setMode('dark')}
+                                        id="btn-theme-dark"
+                                    >
+                                        Dark
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`theme-selector-btn ${mode === 'light' ? 'active' : ''}`}
+                                        onClick={() => setMode('light')}
+                                        id="btn-theme-light"
+                                    >
+                                        Light
+                                    </button>
+                                </div>
                             </div>
                             {apiKey && (
                                 <div className="settings-form-group">
