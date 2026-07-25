@@ -11,7 +11,8 @@
         ],
         "noEmit": true,
         "declaration": false,
-        "declarationMap": false
+        "declarationMap": false,
+        "types": ["vitest/globals"]
     },
     "include": [
         "src"
