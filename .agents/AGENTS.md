@@ -17,6 +17,7 @@
 
 ## Frontend Layout & CSS
 - **No inline layout styles**: Never write inline layout styles (such as `padding`, `margin`, `width`, `height`, `display`, etc.) in React component files. Instead, define them as proper CSS classes in the associated stylesheet (e.g. `index.css`).
+- **Design System Reference**: Refer to [.agents/DESIGN.md](file://.agents/DESIGN.md) for global design system tokens, color palettes, typography guidelines, and UI component standards.
 
 ## E2E Testing & Usernames
 - **Username length validation**: In this project, the registration username limit is **3 to 20 characters** (matching `^[a-zA-Z0-9_\-]{3,20}$`). When generating unique usernames for E2E tests, always keep them under 20 characters (e.g. using `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`) to prevent validation failures.
