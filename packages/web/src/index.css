@@ -4925,6 +4925,39 @@ kbd {
   width: 100%;
 }
 
+.theme-selector-group {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  background: var(--bg-surface-secondary, rgba(15, 23, 42, 0.4));
+  padding: 4px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+}
+
+.theme-selector-btn {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted, #94a3b8);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: all var(--duration-fast, 0.15s) ease;
+}
+
+.theme-selector-btn:hover {
+  color: var(--text-primary, #ffffff);
+}
+
+.theme-selector-btn.active {
+  background: var(--bg-card, #1e293b);
+  color: var(--text-primary, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
 .settings-input-row {
   display: flex;
   gap: 8px;

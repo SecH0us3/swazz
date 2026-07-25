@@ -17,12 +17,15 @@ describe('UserSettings Component', () => {
         });
     });
 
-    it('renders account details subtab by default', () => {
+    it('renders account details subtab by default and displays 3-way theme selector', () => {
         render(<UserSettings />);
 
         expect(screen.getByText('Settings')).toBeTruthy();
         expect(screen.getByDisplayValue('testdeveloper')).toBeTruthy();
         expect(screen.getByDisplayValue('test-api-key-12345')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'System' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Dark' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Light' })).toBeTruthy();
     });
 
     it('can switch to Security subtab and show 2FA instructions', () => {
