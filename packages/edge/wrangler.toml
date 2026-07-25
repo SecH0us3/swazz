@@ -48,6 +48,7 @@ invocation_logs = true
 
 [vars]
 AUTH_ENABLED = "true"
+PASSWORD_AUTH_ENABLED = "false"
 LIMIT_ANONYMOUS = "true"
 ALLOWED_ORIGINS = "*"
 TURNSTILE_SITE_KEY = "0x4AAAAAADry7cDPHW8cvNuC"
