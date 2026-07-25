@@ -24,7 +24,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(8, 8, 9, 0.75);
+    background-color: rgba(8, 8, 9, 0.88);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     display: flex;
@@ -35,9 +35,7 @@
 
 .auth-modal {
     position: relative;
-    background-color: rgba(11, 15, 26, 0.7);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background-color: #0b0f1a;
     border: 1px solid rgba(2, 132, 199, 0.25);
     border-radius: 16px;
     padding: var(--space-8);
@@ -1149,7 +1147,7 @@
    ═══════════════════════════════════════════════════════════ */
 
 [data-theme="light"] .auth-modal-backdrop {
-    background-color: rgba(15, 23, 42, 0.45);
+    background-color: rgba(15, 23, 42, 0.72);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
 }
@@ -1158,6 +1156,15 @@
     background-color: #ffffff;
     border: 1px solid rgba(226, 232, 240, 0.95);
     box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.18), 0 0 30px rgba(2, 132, 199, 0.08);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+    .auth-modal-backdrop {
+        background-color: rgba(8, 8, 9, 0.95);
+    }
+    [data-theme="light"] .auth-modal-backdrop {
+        background-color: rgba(15, 23, 42, 0.85);
+    }
 }
 
 [data-theme="light"] .auth-modal-close {
