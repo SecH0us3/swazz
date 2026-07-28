@@ -183,7 +183,7 @@ func runDiscover(args []string) {
 	}
 
 	// 6. Upload results
-	if opts.UploadTo != "" && opts.UploadPath != "" {
+	if opts.UploadTo != "" && (opts.UploadPath != "" || opts.CoordinatorURL != "") {
 		fmt.Println("\n📤 Uploading reports...")
 		uploadTarget := discovery.UploadTarget{
 			Type:           opts.UploadTo,
