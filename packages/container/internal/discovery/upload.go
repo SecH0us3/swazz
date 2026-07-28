@@ -55,6 +55,7 @@ func UploadReports(ctx context.Context, reportDir string, target UploadTarget) e
 
 func uploadToCoordinator(ctx context.Context, files []string, target UploadTarget) error {
 	client := &http.Client{Timeout: 30 * time.Second}
+	uploadURL := strings.TrimRight(target.CoordinatorURL, "/") + "/api/discovery/reports"
 
 	for _, path := range files {
 		data, err := os.ReadFile(path)
@@ -62,16 +63,22 @@ func uploadToCoordinator(ctx context.Context, files []string, target UploadTarge
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
+		var content any
+		if strings.ToLower(filepath.Ext(path)) == ".html" {
+			content = string(data)
+		} else {
+			content = json.RawMessage(data)
+		}
+
 		payload := map[string]any{
 			"filename": filepath.Base(path),
-			"content":  json.RawMessage(data),
+			"content":  content,
 		}
 		body, err := json.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("marshaling payload for %s: %w", path, err)
 		}
 
-		uploadURL := strings.TrimRight(target.CoordinatorURL, "/") + "/api/discovery/reports"
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, bytes.NewReader(body))
 		if err != nil {
 			return err
