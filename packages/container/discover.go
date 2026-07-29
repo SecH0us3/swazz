@@ -137,8 +137,14 @@ func runDiscover(args []string) {
 	// 4. Generate configs
 	configDir := filepath.Join(opts.OutputDir, "configs")
 	reportDir := filepath.Join(opts.OutputDir, "reports")
-	os.MkdirAll(configDir, 0o755)
-	os.MkdirAll(reportDir, 0o755)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		fmt.Printf("   ⚠️  Failed to create config directory %s: %v\n", configDir, err)
+		return
+	}
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		fmt.Printf("   ⚠️  Failed to create report directory %s: %v\n", reportDir, err)
+		return
+	}
 
 	fmt.Println("📝 Generating scan configs...")
 	var configPaths []string
@@ -179,22 +185,30 @@ func runDiscover(args []string) {
 			scanArgs = append(scanArgs, "--json", filepath.Join(reportDir, base+".json"))
 		}
 
-		runCLI(scanArgs)
+		if err := runCLIErr(scanArgs); err != nil {
+			fmt.Printf("   ⚠️  Scan failed for %s: %v\n", base, err)
+		}
 	}
 
 	// 6. Upload results
-	if opts.UploadTo != "" && (opts.UploadPath != "" || opts.CoordinatorURL != "") {
-		fmt.Println("\n📤 Uploading reports...")
-		uploadTarget := discovery.UploadTarget{
-			Type:           opts.UploadTo,
-			Prefix:         opts.UploadPath,
-			CoordinatorURL: opts.CoordinatorURL,
-			Token:          opts.CoordinatorToken,
-		}
-		if err := discovery.UploadReports(ctx, reportDir, uploadTarget); err != nil {
-			fmt.Printf("   ⚠️  Upload failed: %v\n", err)
+	if opts.UploadTo != "" {
+		if opts.UploadTo == "coordinator" && opts.CoordinatorURL == "" {
+			fmt.Println("   ⚠️  Upload skipped: --coordinator-url is required for coordinator upload target")
+		} else if opts.UploadTo == "local" && opts.UploadPath == "" {
+			fmt.Println("   ⚠️  Upload skipped: --upload-path is required for local upload target")
 		} else {
-			fmt.Println("   ✅ Reports uploaded successfully")
+			fmt.Println("\n📤 Uploading reports...")
+			uploadTarget := discovery.UploadTarget{
+				Type:           opts.UploadTo,
+				Prefix:         opts.UploadPath,
+				CoordinatorURL: opts.CoordinatorURL,
+				Token:          opts.CoordinatorToken,
+			}
+			if err := discovery.UploadReports(ctx, reportDir, uploadTarget); err != nil {
+				fmt.Printf("   ⚠️  Upload failed: %v\n", err)
+			} else {
+				fmt.Println("   ✅ Reports uploaded successfully")
+			}
 		}
 	}
 

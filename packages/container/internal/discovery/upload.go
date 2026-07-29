@@ -54,7 +54,7 @@ func UploadReports(ctx context.Context, reportDir string, target UploadTarget) e
 }
 
 func uploadToCoordinator(ctx context.Context, files []string, target UploadTarget) error {
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Minute}
 	uploadURL := strings.TrimRight(target.CoordinatorURL, "/") + "/api/discovery/reports"
 
 	for _, path := range files {

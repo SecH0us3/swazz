@@ -76,16 +76,23 @@ func ProbeAll(ctx context.Context, services []DiscoveredService, concurrency int
 			defer func() { <-sem }()
 
 			var headers map[string]string
+			var secretErr error
 			if s.AuthSecretRef != "" && secretResolver != nil {
 				token, err := secretResolver(s.Namespace, s.AuthSecretRef)
-				if err == nil && token != "" {
+				if err != nil {
+					secretErr = fmt.Errorf("resolving secret %s/%s: %w", s.Namespace, s.AuthSecretRef, err)
+				} else if token != "" {
 					headers = map[string]string{
 						"Authorization": "Bearer " + token,
 					}
 				}
 			}
 
-			results[idx] = ProbeService(ctx, s, headers)
+			probed := ProbeService(ctx, s, headers)
+			if secretErr != nil && probed.ProbeError == nil {
+				probed.ProbeError = secretErr
+			}
+			results[idx] = probed
 		}(i, svc)
 	}
 

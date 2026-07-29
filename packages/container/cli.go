@@ -107,7 +107,14 @@ func (c *CliConfig) UnmarshalJSON(data []byte) error {
 }
 
 func runCLI(args []string) {
-	flags := flag.NewFlagSet("start", flag.ExitOnError)
+	if err := runCLIErr(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func runCLIErr(args []string) error {
+	flags := flag.NewFlagSet("start", flag.ContinueOnError)
 	configPath := flags.String("config", "swazz.config.json", "Path to config file")
 	sarifOut := flags.String("sarif", "", "Path to save SARIF output")
 	jsonOut := flags.String("json", "", "Path to save JSON output")
@@ -125,8 +132,7 @@ func runCLI(args []string) {
 	disableTelemetry := flags.Bool("disable-telemetry", false, "Disable reporting anonymous global scan count telemetry")
 
 	if err := flags.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
 	disableTelemetryVal := *disableTelemetry
@@ -148,7 +154,7 @@ func runCLI(args []string) {
 	// 1. Read config
 	configData, err := os.ReadFile(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to read config file %s: %v", *configPath, err)
+		return fmt.Errorf("failed to read config file %s: %w", *configPath, err)
 	}
 	configData = swagger.StripJSONC(configData)
 
@@ -158,7 +164,7 @@ func runCLI(args []string) {
 		},
 	}
 	if err := json.Unmarshal(configData, &cliCfg); err != nil {
-		log.Fatalf("Invalid config JSON: %v", err)
+		return fmt.Errorf("invalid config JSON: %w", err)
 	}
 
 	if allowPrivateExplicit {
@@ -416,6 +422,7 @@ func runCLI(args []string) {
 		fmt.Fprintf(os.Stderr, "\n\033[1;31m[CI/CD] Findings at or above '%s' severity detected. Exiting with code 2.\033[0m\n", *failOnSeverity)
 		os.Exit(2)
 	}
+	return nil
 }
 
 func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {

@@ -18,6 +18,9 @@ rules:
   - apiGroups: [""]
     resources: ["services", "endpoints", "namespaces"]
     verbs: ["get", "list", "watch"]
+  # Note: "secrets: get" is required for resolving auth secrets referenced by annotations across namespaces.
+  # If strict cluster security policies prohibit cluster-wide secret access, restrict discovery namespaces
+  # or replace ClusterRoleBinding with targeted RoleBindings in specific namespaces.
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get"]
