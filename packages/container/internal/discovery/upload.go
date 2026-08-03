@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -55,7 +57,13 @@ func UploadReports(ctx context.Context, reportDir string, target UploadTarget) e
 
 func uploadToCoordinator(ctx context.Context, files []string, target UploadTarget) error {
 	client := &http.Client{Timeout: 3 * time.Minute}
-	uploadURL := strings.TrimRight(target.CoordinatorURL, "/") + "/api/discovery/reports"
+
+	baseURL, err := url.Parse(target.CoordinatorURL)
+	if err != nil {
+		return fmt.Errorf("invalid coordinator URL: %w", err)
+	}
+	baseURL.Path = path.Join(baseURL.Path, "api", "discovery", "reports")
+	uploadURL := baseURL.String()
 
 	for _, path := range files {
 		data, err := os.ReadFile(path)

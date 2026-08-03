@@ -3,8 +3,11 @@ package discovery
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"swazz-engine/internal/swagger"
 )
@@ -52,7 +55,11 @@ func GenerateConfig(server ProbedServer, opts DiscoveryConfig) (*ScanConfig, err
 		iterations = 10
 	}
 
-	baseURL := fmt.Sprintf("http://%s:%d", server.Host, server.Port)
+	baseU := &url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(server.Host, strconv.Itoa(server.Port)),
+	}
+	baseURL := baseU.String()
 	mcpURL := server.InClusterURL()
 
 	cfg := &ScanConfig{

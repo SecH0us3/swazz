@@ -3,6 +3,8 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -35,7 +37,12 @@ type DiscoveredService struct {
 
 // InClusterURL returns the full URL to the MCP endpoint.
 func (d DiscoveredService) InClusterURL() string {
-	return fmt.Sprintf("http://%s:%d%s", d.Host, d.Port, d.Endpoint)
+	u := &url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(d.Host, strconv.Itoa(d.Port)),
+		Path:   d.Endpoint,
+	}
+	return u.String()
 }
 
 // ListOptions configures which namespaces and services to scan.
