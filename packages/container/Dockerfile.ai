@@ -15,13 +15,18 @@ RUN apk update && apk add --no-cache \
     npm \
     python3 \
     py3-pip \
-    pipx
+    pipx \
+    gcc \
+    g++ \
+    musl-dev \
+    python3-dev \
+    libffi-dev
 
 # Switch back to the non-root user inherited from swazz-runner:ci
 USER swazz:swazz
 
-# Install Antigravity CLI (agy)
-RUN pipx install antigravity-cli && pipx install mistral-vibe
+# Install AI CLI tools (Mistral Vibe)
+RUN pipx install mistral-vibe
 
 # Install Claude CLI (community Node.js package as example)
 RUN npm config set prefix '~/.npm-global'
