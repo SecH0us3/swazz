@@ -911,3 +911,113 @@
     object-fit: contain;
     border-radius: 8px;
 }
+
+/* Waitlist Modal Styles */
+.waitlist-modal-content {
+    background-color: var(--bg-obsidian);
+    border: 1px solid var(--border-hover);
+    border-radius: 16px;
+    padding: 2.5rem;
+    max-width: 520px;
+    width: 90%;
+    position: relative;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(2, 132, 199, 0.15);
+}
+
+.waitlist-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.waitlist-icon {
+    width: 56px;
+    height: 56px;
+    background: rgba(2, 132, 199, 0.15);
+    color: var(--primary-blue);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem auto;
+    border: 1px solid rgba(2, 132, 199, 0.3);
+}
+
+.waitlist-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0 0 0.5rem 0;
+}
+
+.waitlist-header p {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.waitlist-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.waitlist-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.waitlist-form label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.waitlist-form input {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: var(--text-main);
+    font-size: 0.9375rem;
+    transition: var(--transition-smooth);
+}
+
+.waitlist-form input:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 10px rgba(2, 132, 199, 0.3);
+}
+
+.waitlist-success {
+    text-align: center;
+    padding: 1.5rem 0;
+}
+
+.waitlist-success .success-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--status-success);
+    font-size: 1.5rem;
+    font-weight: bold;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem auto;
+}
+
+.waitlist-success h3 {
+    font-size: 1.25rem;
+    color: var(--text-main);
+    margin: 0 0 0.5rem 0;
+}
+
+.waitlist-success p {
+    font-size: 0.9375rem;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}

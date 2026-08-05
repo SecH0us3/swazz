@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
-cd "$(dirname "$0")/../packages/container"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../packages/container"
 
 # Helper function to run commands optionally with rtk wrapper if available
 run_cmd() {
@@ -14,6 +15,9 @@ run_cmd() {
 echo "======================================"
 echo "🔎 Running SAST and Linter checks..."
 echo "======================================"
+
+echo "-> Ensuring BSL 1.1 copyright headers on source files..."
+bash "$SCRIPT_DIR/add-copyright-headers.sh"
 
 # Run go vet for compiler-like warnings
 echo "-> Running go vet..."

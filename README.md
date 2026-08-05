@@ -290,6 +290,12 @@ Swazz supports self-service data deletion. Users can permanently and immediately
 
 ---
 
-## 📄 License
+## 📄 License & Pricing
 
-Distributed under the Business Source License 1.1. See `LICENSE` for more information.
+Swazz is distributed under the **Business Source License 1.1 (BSL 1.1)**.
+
+- **Free Commercial Exemption**: Free for non-commercial use, open-source projects, and companies with under **$1,000,000 USD** in annual gross revenue.
+- **Enterprise Commercial License**: Required for production commercial use by companies with annual revenue exceeding $1M USD.
+- To view the embedded license text at any time, run `./swazz-engine license`.
+- For detailed pricing, feature comparisons, and licensing terms, read our [Pricing & Licensing Guide](docs/PRICING.md).
+

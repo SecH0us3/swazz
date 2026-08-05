@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/ed25519"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -13,7 +14,16 @@ import (
 	"time"
 )
 
+//go:embed LICENSE
+var embeddedLicense string
+
 var Version = "dev"
+
+func printBSLBanner() {
+	fmt.Println("\033[1;33m[BSL 1.1 Notice]\033[0m Free for non-commercial use & businesses under $1M revenue.")
+	fmt.Println("\033[90mFor enterprise licensing & commercial terms, visit: https://github.com/SecH0us3/swazz\033[0m")
+	fmt.Println()
+}
 
 func validatePprofAddr(addr string) (string, error) {
 	if addr == "" {
@@ -138,8 +148,10 @@ func main() {
 
 	switch command {
 	case "run-agent":
+		printBSLBanner()
 		runAgent(os.Args[2:])
 	case "start":
+		printBSLBanner()
 		runCLI(os.Args[2:])
 	case "spider":
 		runSpiderCLI(os.Args[2:])
@@ -149,11 +161,21 @@ func main() {
 		runGenerateKeys()
 	case "discover":
 		runDiscover(os.Args[2:])
+	case "license":
+		runLicenseCommand()
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printHelp()
 		os.Exit(1)
 	}
+}
+
+func runLicenseCommand() {
+	if embeddedLicense == "" {
+		fmt.Println("No embedded LICENSE found.")
+		return
+	}
+	fmt.Println(embeddedLicense)
 }
 
 func printHelp() {
@@ -165,6 +187,7 @@ func printHelp() {
 	fmt.Println("  swazz-engine spider <url> [opts]  Headless browser crawler & CDP interception sniffer")
 	fmt.Println("  swazz-engine wizard               Interactive setup to generate swazz.config.json")
 	fmt.Println("  swazz-engine generate-keys        Generate asymmetric keypair for runner signing authentication")
+	fmt.Println("  swazz-engine license              Display Business Source License 1.1 (BSL 1.1) terms")
 	fmt.Println()
 	fmt.Println("Options for 'run-agent':")
 	fmt.Println("  --coordinator <ws-url>       WebSocket URL of the Swazz Coordinator (e.g. wss://swazz.secmy.app/api/runners/connect)")
