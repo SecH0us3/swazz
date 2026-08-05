@@ -93,7 +93,7 @@ func GenerateConfigFile(server ProbedServer, opts DiscoveryConfig, outputDir str
 		return "", err
 	}
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return "", fmt.Errorf("creating output dir: %w", err)
 	}
 
@@ -105,7 +105,7 @@ func GenerateConfigFile(server ProbedServer, opts DiscoveryConfig, outputDir str
 		return "", fmt.Errorf("marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", fmt.Errorf("writing config to %s: %w", path, err)
 	}
 

@@ -20,7 +20,7 @@ const (
 	AnnotationPath       = "mcp.network/path"
 	AnnotationTransport  = "mcp.network/transport" // "http", "sse"
 	AnnotationName       = "mcp.network/name"
-	AnnotationAuthSecret = "mcp.network/auth-secret"
+	AnnotationAuthSecret = "mcp.network/auth-secret" // #nosec G101 -- annotation name, not credential
 )
 
 // DiscoveredService represents an MCP server found via K8s service discovery.

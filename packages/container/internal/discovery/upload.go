@@ -66,7 +66,7 @@ func uploadToCoordinator(ctx context.Context, files []string, target UploadTarge
 	uploadURL := baseURL.String()
 
 	for _, path := range files {
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 -- reading generated scan reports for upload
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
@@ -100,8 +100,8 @@ func uploadToCoordinator(ctx context.Context, files []string, target UploadTarge
 		if err != nil {
 			return fmt.Errorf("uploading %s: %w", filepath.Base(path), err)
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 
 		if resp.StatusCode >= 300 {
 			return fmt.Errorf("coordinator returned %d for %s", resp.StatusCode, filepath.Base(path))
@@ -111,17 +111,17 @@ func uploadToCoordinator(ctx context.Context, files []string, target UploadTarge
 }
 
 func copyToLocal(files []string, destDir string) error {
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return fmt.Errorf("creating destination directory: %w", err)
 	}
 
 	for _, src := range files {
-		data, err := os.ReadFile(src)
+		data, err := os.ReadFile(src) // #nosec G304 -- copying generated report file
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", src, err)
 		}
 		dst := filepath.Join(destDir, filepath.Base(src))
-		if err := os.WriteFile(dst, data, 0o644); err != nil {
+		if err := os.WriteFile(dst, data, 0o600); err != nil { // #nosec G306 G703 -- writing report file
 			return fmt.Errorf("writing %s: %w", dst, err)
 		}
 	}

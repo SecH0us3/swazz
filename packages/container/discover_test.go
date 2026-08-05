@@ -75,6 +75,14 @@ func TestParseDiscoverFlags(t *testing.T) {
 		_, err := parseDiscoverFlags([]string{"--invalid-flag"})
 		assert.Error(t, err)
 	})
+
+	t.Run("invalid concurrency or iterations", func(t *testing.T) {
+		_, err := parseDiscoverFlags([]string{"--concurrency", "0"})
+		assert.Error(t, err)
+
+		_, err = parseDiscoverFlags([]string{"--iterations", "-5"})
+		assert.Error(t, err)
+	})
 }
 
 func TestMakeK8sSecretResolver(t *testing.T) {

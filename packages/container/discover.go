@@ -75,6 +75,13 @@ func parseDiscoverFlags(args []string) (*discoverOptions, error) {
 		opts.Profiles = strings.Split(profiles, ",")
 	}
 
+	if opts.Concurrency <= 0 {
+		return nil, fmt.Errorf("concurrency must be greater than 0")
+	}
+	if opts.Iterations <= 0 {
+		return nil, fmt.Errorf("iterations must be greater than 0")
+	}
+
 	return opts, nil
 }
 
@@ -137,11 +144,11 @@ func runDiscover(args []string) {
 	// 4. Generate configs
 	configDir := filepath.Join(opts.OutputDir, "configs")
 	reportDir := filepath.Join(opts.OutputDir, "reports")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
+	if err := os.MkdirAll(configDir, 0o750); err != nil {
 		fmt.Printf("   ⚠️  Failed to create config directory %s: %v\n", configDir, err)
 		return
 	}
-	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+	if err := os.MkdirAll(reportDir, 0o750); err != nil {
 		fmt.Printf("   ⚠️  Failed to create report directory %s: %v\n", reportDir, err)
 		return
 	}
