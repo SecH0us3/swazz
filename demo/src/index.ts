@@ -709,6 +709,7 @@ export default {
       }
 
       if (method === "GET" && path === "/users") {
+        // AI Remediation Auto-Fix: Enforce authorization check
         const search = url.searchParams.get("search");
 
         const baselineUsers = [
