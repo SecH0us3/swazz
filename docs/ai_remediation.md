@@ -85,3 +85,16 @@ When a finding occurs:
 2. The Runner executes `exec.Command` directly (without `bash` or `sh`) to prevent command injection.
 3. If "Propose Fixes" is enabled, a temporary `git worktree` is created alongside your existing repository clone to apply the patch, commit, push, and create a PR without polluting your active workspace.
 
+## Example Real-World AI Remediation Pull Request (Draft)
+
+To see an end-to-end example of how Swazz AI Remediation automatically triages a finding, generates a code patch using Tech Stack rules, and opens a Pull Request, inspect this live example:
+
+* **Example Pull Request**: [**SecH0us3/swazz#559 (Draft)**](https://github.com/SecH0us3/swazz/pull/559)
+* **Code Changes (Diff)**: [**SecH0us3/swazz#559 Files Changed**](https://github.com/SecH0us3/swazz/pull/559/files)
+
+### What the example demonstrates:
+1. **Pass 1 (Triage Model)**: Analyzed the `GET /users` BOLA/IDOR vulnerability and confirmed it (`CONFIRMED`).
+2. **Pass 2 (Remediation Model)**: Generated a TypeScript security patch using **Node** Tech Stack rules, adding `Authorization` header validation and returning HTTP 401.
+3. **Automated Git Worktree & PR Submission**: Created isolated worktree branch `swazz/fix-vibe-remediation-...`, applied patch via `patch -p1`, committed, pushed, and executed `gh pr create` to submit the Draft Pull Request on GitHub.
+
+

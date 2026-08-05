@@ -76,10 +76,16 @@ func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent
 
 	// Step B: Apply the patch
 	// #nosec G204 -- The command is intentionally constructed from safe variables
-	applyCmd := exec.Command("git", "apply", patchFilePath)
+	applyCmd := exec.Command("git", "apply", "--3way", "--recount", "--ignore-space-change", patchFilePath)
 	applyCmd.Dir = worktreePath
 	if out, err := applyCmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to apply patch: %v, output: %s", err, string(out))
+		// Fallback to standard Unix patch utility if git apply strict line matching fails
+		// #nosec G204 -- The command is intentionally constructed from safe variables
+		patchCmd := exec.Command("patch", "-p1", "--ignore-whitespace", "-i", patchFilePath)
+		patchCmd.Dir = worktreePath
+		if patchOut, patchErr := patchCmd.CombinedOutput(); patchErr != nil {
+			return "", fmt.Errorf("failed to apply patch: %v, git apply out: %s, patch out: %s", err, string(out), string(patchOut))
+		}
 	}
 
 	// Step C: Commit
