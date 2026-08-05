@@ -66,3 +66,29 @@ ingress:
           pathType: ImplementationSpecific
           backend: web
   tls: []
+
+discovery:
+  enabled: false
+  schedule: "0 2 * * *" # Every day at 02:00 UTC
+  image:
+    repository: sech0us3/swazz-runner
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  concurrency: 5
+  iterations: 10
+  profiles: "BOUNDARY,MALICIOUS"
+  excludeNamespaces: "kube-system,kube-public,kube-node-lease"
+  reports:
+    sarif: true
+    html: true
+    json: false
+    uploadTo: "local"       # "local", "coordinator"
+    uploadPath: "/tmp/swazz-discovery/reports"
+    coordinatorURL: ""
+    coordinatorToken: ""
+  webhookURL: ""
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+

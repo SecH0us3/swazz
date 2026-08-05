@@ -147,6 +147,8 @@ func main() {
 		runWizard()
 	case "generate-keys":
 		runGenerateKeys()
+	case "discover":
+		runDiscover(os.Args[2:])
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printHelp()

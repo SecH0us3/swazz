@@ -1,0 +1,93 @@
+{{- if .Values.discovery.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "swazz.fullname" . }}-discovery
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "swazz.labels" . | nindent 4 }}
+    app.kubernetes.io/component: discovery
+spec:
+  schedule: {{ .Values.discovery.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "swazz.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: discovery
+        spec:
+          serviceAccountName: {{ include "swazz.fullname" . }}-discovery
+          restartPolicy: OnFailure
+          containers:
+            - name: discovery
+              image: "{{ .Values.discovery.image.repository }}:{{ .Values.discovery.image.tag }}"
+              imagePullPolicy: {{ .Values.discovery.image.pullPolicy }}
+              command:
+                - swazz-engine
+                - discover
+              args:
+                - "--exclude-namespace"
+                - {{ .Values.discovery.excludeNamespaces | quote }}
+                - "--concurrency"
+                - {{ .Values.discovery.concurrency | quote }}
+                - "--iterations"
+                - {{ .Values.discovery.iterations | quote }}
+                - "--profiles"
+                - {{ .Values.discovery.profiles | quote }}
+                - "--output-dir"
+                - "/tmp/swazz-discovery"
+                - "--upload-to"
+                - {{ .Values.discovery.reports.uploadTo | quote }}
+                {{- if .Values.discovery.reports.uploadPath }}
+                - "--upload-path"
+                - {{ .Values.discovery.reports.uploadPath | quote }}
+                {{- end }}
+                {{- if .Values.discovery.reports.coordinatorURL }}
+                - "--coordinator-url"
+                - {{ .Values.discovery.reports.coordinatorURL | quote }}
+                {{- end }}
+                {{- if .Values.discovery.reports.coordinatorToken }}
+                - "--coordinator-token"
+                - {{ .Values.discovery.reports.coordinatorToken | quote }}
+                {{- end }}
+                {{- if .Values.discovery.reports.sarif }}
+                - "--sarif"
+                {{- end }}
+                {{- if .Values.discovery.reports.html }}
+                - "--html"
+                {{- end }}
+                {{- if .Values.discovery.reports.json }}
+                - "--json"
+                {{- end }}
+                {{- if .Values.discovery.webhookURL }}
+                - "--webhook-url"
+                - {{ .Values.discovery.webhookURL | quote }}
+                {{- end }}
+              volumeMounts:
+                - name: reports
+                  mountPath: /tmp/swazz-discovery
+              {{- with .Values.discovery.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: reports
+              emptyDir: {}
+          {{- with .Values.discovery.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.discovery.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.discovery.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
