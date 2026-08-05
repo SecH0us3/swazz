@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Swazz Authors
+// This file is part of Swazz
+// Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
+// See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
+
 /**
  * Sanitizes a target API URL down to scheme + domain (origin).
  * E.g.: "https://example.com/swagger.json" -> "https://example.com"

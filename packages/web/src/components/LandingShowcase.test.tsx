@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Swazz Authors
+// This file is part of Swazz
+// Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
+// See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
+
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -34,6 +39,19 @@ describe('LandingShowcase Component - ScanCounter', () => {
         render(<LandingShowcase />);
         await waitFor(() => {
             expect(screen.getByText(/1,234,567\+ Scans/)).toBeDefined();
+        });
+    });
+
+    it('opens and submits the Enterprise Waitlist modal', async () => {
+        (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+        render(<LandingShowcase />);
+        
+        const requestBtn = screen.getByText('Request Enterprise License');
+        expect(requestBtn).toBeDefined();
+        requestBtn.click();
+
+        await waitFor(() => {
+            expect(screen.getByText('Swazz Enterprise Waitlist')).toBeDefined();
         });
     });
 });

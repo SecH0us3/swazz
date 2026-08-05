@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Swazz Authors
+// This file is part of Swazz
+// Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
+// See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
+
 import { useState, useEffect } from 'react';
 import './LandingShowcase.css';
 
@@ -118,6 +123,11 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
     const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
     const [activeDeploymentTab, setActiveDeploymentTab] = useState<'cloud'|'docker'|'local'|'worker'>('cloud');
     const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
+    const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+    const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
+    const [waitlistEmail, setWaitlistEmail] = useState('');
+    const [waitlistName, setWaitlistName] = useState('');
+    const [waitlistCompany, setWaitlistCompany] = useState('');
 
     const handleCopy = (text: string, id: string) => {
         navigator.clipboard.writeText(text);
@@ -405,57 +415,65 @@ cd swazz
             {showPricing && (
                 <section id="pricing" className="pricing-section">
                     <div className="landing-section-header">
-                        <h2>Transparent Security Pricing</h2>
-                        <p>Start with our robust open-source engine for free. Scale to enterprise cloud when your team grows.</p>
+                        <h2>Transparent Security Pricing & Licensing</h2>
+                        <p>Swazz is licensed under BSL 1.1 — Free for non-commercial use & businesses under $1M revenue. Commercial Enterprise licenses available for large teams.</p>
                     </div>
 
                     <div className="pricing-grid">
                         <div className="pricing-card">
                             <h3>Community Edition</h3>
-                            <div className="price">Free</div>
+                            <div className="price">Free <span>(BSL 1.1)</span></div>
                             <ul className="pricing-features">
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Shared Runners
+                                    Self-Hosted & Local CLI Fuzzer
                                 </li>
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Standard Fuzzing Rules
+                                    Private Dedicated & Shared Runners
                                 </li>
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Open Source Access
+                                    OpenAPI, HAR, SOAP & GraphQL Support
+                                </li>
+                                <li>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Free for Revenue &lt; $1,000,000 / Open Source
                                 </li>
                             </ul>
                             <button type="button" onClick={onActionClick} className="btn-pricing primary">
-                                Get Started
+                                Get Started Free
                             </button>
                         </div>
                         
                         <div className="pricing-card featured">
-                            <div className="pricing-badge">Recommended</div>
-                            <h3>Enterprise Cloud</h3>
+                            <div className="pricing-badge">Commercial</div>
+                            <h3>Support Us & Enterprise</h3>
                             <div className="price">Custom</div>
                             <ul className="pricing-features">
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Private Dedicated Runners
+                                    BSL 1.1 Enterprise Production Grant
                                 </li>
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Custom Auth Injections (SAML/OAuth)
+                                    Enterprise SAML SSO & Okta Integration
                                 </li>
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Priority Email Support
+                                    RBAC & Multi-Tenant Organizations
                                 </li>
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Advanced CI/CD SARIF Exports
+                                    Custom Compliance PDF Reports (PCI-DSS, SOC2)
+                                </li>
+                                <li>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Jira & GitLab Security Center Integration
                                 </li>
                             </ul>
-                            <button type="button" onClick={onActionClick} className="btn-pricing secondary">
-                                Contact Sales
+                            <button type="button" onClick={() => setShowWaitlistModal(true)} className="btn-pricing secondary">
+                                Request Enterprise License
                             </button>
                         </div>
                     </div>
@@ -517,6 +535,81 @@ cd swazz
                                 />
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Enterprise Waitlist Modal */}
+            {showWaitlistModal && (
+                <div className="feature-modal-backdrop" onClick={() => setShowWaitlistModal(false)}>
+                    <div className="waitlist-modal-content" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="auth-modal-close" onClick={() => setShowWaitlistModal(false)} aria-label="Close modal">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                        <div className="waitlist-header">
+                            <div className="waitlist-icon">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                </svg>
+                            </div>
+                            <h2>Swazz Enterprise Waitlist</h2>
+                            <p>Unlock custom BSL 1.1 commercial licensing, SAML SSO, RBAC, dedicated cloud runners, and custom compliance reports.</p>
+                        </div>
+                        {waitlistSubmitted ? (
+                            <div className="waitlist-success">
+                                <div className="success-icon">✓</div>
+                                <h3>Request Received!</h3>
+                                <p>Thank you, {waitlistName || 'security teammate'}. Our enterprise licensing team will contact you at <strong>{waitlistEmail}</strong> shortly.</p>
+                                <button type="button" className="btn-pricing primary" onClick={() => { setShowWaitlistModal(false); setWaitlistSubmitted(false); }}>
+                                    Close
+                                </button>
+                            </div>
+                        ) : (
+                            <form className="waitlist-form" onSubmit={(e) => { e.preventDefault(); setWaitlistSubmitted(true); }}>
+                                <div className="form-group">
+                                    <label htmlFor="waitlist-name">Full Name</label>
+                                    <input 
+                                        id="waitlist-name" 
+                                        type="text" 
+                                        required 
+                                        data-1p-ignore
+                                        placeholder="Alex Smith" 
+                                        value={waitlistName} 
+                                        onChange={(e) => setWaitlistName(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label htmlFor="waitlist-email">Work Email</label>
+                                    <input 
+                                        id="waitlist-email" 
+                                        type="email" 
+                                        required 
+                                        data-1p-ignore
+                                        placeholder="alex@company.com" 
+                                        value={waitlistEmail} 
+                                        onChange={(e) => setWaitlistEmail(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label htmlFor="waitlist-company">Company Name</label>
+                                    <input 
+                                        id="waitlist-company" 
+                                        type="text" 
+                                        required 
+                                        data-1p-ignore
+                                        placeholder="Acme Security Inc." 
+                                        value={waitlistCompany} 
+                                        onChange={(e) => setWaitlistCompany(e.target.value)} 
+                                    />
+                                </div>
+                                <button type="submit" className="btn-pricing primary">
+                                    Submit Enterprise Access Request
+                                </button>
+                            </form>
+                        )}
                     </div>
                 </div>
             )}

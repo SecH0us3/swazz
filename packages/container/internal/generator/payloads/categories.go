@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Swazz Authors
+// This file is part of Swazz
+// Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
+// See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
+
 // Package payloads — category registry for dynamic UI catalog.
 // Each profile exposes a list of named categories with their payload slices.
 // The generator uses the enabled category IDs to filter which payloads to apply.
