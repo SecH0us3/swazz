@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"swazz-engine/internal/license"
 )
 
 //go:embed LICENSE
@@ -171,11 +173,35 @@ func main() {
 }
 
 func runLicenseCommand() {
-	if embeddedLicense == "" {
-		fmt.Println("No embedded LICENSE found.")
+	fmt.Println("\033[1;33m[BSL 1.1 Notice]\033[0m Free for non-commercial use & businesses under $1M revenue.")
+	fmt.Println("\033[90mFor enterprise licensing & commercial terms, visit: https://github.com/SecH0us3/swazz\033[0m")
+	fmt.Println()
+
+	keyStr := os.Getenv("SWAZZ_LICENSE_KEY")
+	if keyStr == "" {
+		fmt.Println("License Status: \033[1;36mCommunity (Free)\033[0m")
+		fmt.Println("No enterprise license key found (set SWAZZ_LICENSE_KEY to activate).")
 		return
 	}
-	fmt.Println(embeddedLicense)
+
+	lic, err := license.LoadAndVerify(keyStr)
+	if err != nil {
+		fmt.Printf("License Status: \033[1;31mInvalid\033[0m (%v)\n", err)
+		return
+	}
+
+	remaining := time.Until(lic.ExpiresAt)
+	daysLeft := int(remaining.Hours() / 24)
+
+	fmt.Println("License Status: \033[1;32mEnterprise Active ✓\033[0m")
+	fmt.Printf("  Company:     %s\n", lic.Company)
+	fmt.Printf("  Expires At:  %s (%d days remaining)\n", lic.ExpiresAt.Format("2006-01-02"), daysLeft)
+	fmt.Printf("  Features:    %s\n", strings.Join(lic.Features, ", "))
+	if lic.MaxUsers > 0 {
+		fmt.Printf("  Max Users:   %d\n", lic.MaxUsers)
+	} else {
+		fmt.Printf("  Max Users:   unlimited\n")
+	}
 }
 
 func printHelp() {
