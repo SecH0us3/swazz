@@ -54,4 +54,27 @@ describe('LandingShowcase Component - ScanCounter', () => {
             expect(screen.getByText('Swazz Enterprise Waitlist')).toBeDefined();
         });
     });
+
+    it('renders PCI-DSS Compliant badge instead of SOC 2 Type II', async () => {
+        (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+        render(<LandingShowcase />);
+        await waitFor(() => {
+            expect(screen.getByText(/PCI-DSS Compliant/i)).toBeDefined();
+            expect(screen.queryByText(/SOC 2 Type II/i)).toBeNull();
+        });
+    });
+
+    it('renders Browser Extension bento card and opens feature detail modal', async () => {
+        (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+        render(<LandingShowcase />);
+        
+        const bentoCard = screen.getByText('Browser Extension');
+        expect(bentoCard).toBeDefined();
+        bentoCard.click();
+
+        await waitFor(() => {
+            expect(screen.getByText(/Swazz's browser extension streams live traffic/i)).toBeDefined();
+        });
+    });
 });
+

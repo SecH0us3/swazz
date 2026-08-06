@@ -109,6 +109,13 @@ export const FEATURE_DETAILS = {
         goal: "Integrate scan results into existing issue trackers, developers' dashboards, and security visualization tools.",
         benefit: "Security teams can monitor vulnerabilities without teaching developers new platforms; alerts surface directly in standard PR reviews.",
         image: "/screenshots/sarif_integration.png"
+    },
+    extension: {
+        title: "Browser Extension",
+        details: "Capture HTTP/HTTPS requests, custom headers, and authentication tokens directly as you navigate your application. Swazz's browser extension streams live traffic directly to your local runner profile.",
+        goal: "Eliminate manual HAR file exports and automatically record real-time user session flows for immediate fuzzing.",
+        benefit: "Start fuzzing single endpoints or multi-step browser interactions with zero configuration.",
+        image: "/screenshots/browser_extension.png"
     }
 };
 
@@ -192,7 +199,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                         </svg>
-                        SOC 2 Type II
+                        PCI-DSS Compliant
                     </div>
                 </div>
             </section>
@@ -228,6 +235,17 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         </div>
                         <h3>Smart Fuzzing</h3>
                         <p>Context-aware payload generation mapping exactly to your API constraints and types.</p>
+                    </div>
+                    <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.extension)}>
+                        <div className="bento-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                            </svg>
+                        </div>
+                        <h3>Browser Extension</h3>
+                        <p>Capture real-time browser requests and authentication headers directly into Swazz.</p>
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.har)}>
                         <div className="bento-icon-wrapper">
