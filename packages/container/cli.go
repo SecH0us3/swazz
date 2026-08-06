@@ -57,6 +57,7 @@ type CliConfig struct {
 	Variables           map[string]any                   `json:"variables,omitempty"`
 	Security            swagger.SecurityConfig           `json:"security"`
 	MCPServer           *swagger.MCPServerConfig         `json:"mcp_server,omitempty"`
+	LicenseKey          string                           `json:"license_key,omitempty"`
 }
 
 func (c *CliConfig) Validate() error {
