@@ -37,13 +37,13 @@ openssl pkey -in swazz_master_private.pem -pubout -out swazz_master_public.pem
 
 After generating the keypair, run the issuing script once (see Step 3). The output will include the **Public Key (hex)** — a 64-character hex string.
 
-Update the embedded default in [`packages/container/internal/license/license.go`](file:///Users/alex/src/swazz/packages/container/internal/license/license.go) line 29:
+Update the embedded default in [`packages/container/internal/license/license.go`](../packages/container/internal/license/license.go#L29):
 
 ```go
 var DefaultPublicKeyHex = "<your-64-char-hex-public-key>"
 ```
 
-Alternatively, clients/operators can set the `SWAZZ_LICENSE_PUBKEY` environment variable to override the embedded key at runtime.
+Alternatively, clients/operators can set the `SWAZZ_LICENSE_PUBKEY` environment variable or compile with `-ldflags "-X swazz-engine/internal/license.DefaultPublicKeyHex=..."` to set the embedded key at runtime.
 
 ---
 
@@ -53,7 +53,7 @@ When an Enterprise Client purchases a commercial license or requests a trial:
 
 ### Step 3.1: Execute License Issuance Tool
 
-Run [`scripts/issue-license.go`](file:///Users/alex/src/swazz/scripts/issue-license.go):
+Run [`scripts/issue-license.go`](../scripts/issue-license.go):
 
 ```bash
 # Full enterprise license (all features, 1 year, 50 users)
@@ -75,15 +75,26 @@ go run scripts/issue-license.go \
   -max-users 10
 ```
 
+```bash
+# CI/Automated issuance (output token to file only)
+go run scripts/issue-license.go \
+  -key /path/to/swazz_master_private.pem \
+  -company "Automation Client" \
+  -out license.key \
+  -token-only
+```
+
 ### Available Flags
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
-| `-key` | ✅ Yes | — | Path to Ed25519 PEM private key |
+| `-key` | ✅ Yes | — | Path to Ed25519 PEM PKCS#8 private key |
 | `-company` | ✅ Yes | — | Company / organization name |
 | `-days` | No | `365` | Validity duration in days |
 | `-features` | No | `*` | Comma-separated features, or `*` for all |
 | `-max-users` | No | `0` | Max users (`0` = unlimited) |
+| `-token-only` | No | `false` | Output raw license token string only (CI/automation) |
+| `-out` | No | — | Path to save license token string to file |
 
 ### Known Feature Identifiers
 

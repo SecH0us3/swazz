@@ -208,6 +208,38 @@ func TestIssueLicenseCLI_E2E(t *testing.T) {
 		assert.Contains(t, string(output), "Error: -key flag is required")
 	})
 
+	t.Run("CLI script with -token-only and -out flags", func(t *testing.T) {
+		tokenFile := filepath.Join(t.TempDir(), "license.key")
+
+		cmd := exec.Command("go", "run", scriptPath,
+			"-key", pemPath,
+			"-company", "TokenOnlyCorp",
+			"-token-only",
+			"-out", tokenFile,
+		)
+
+		output, err := cmd.CombinedOutput()
+		outStr := strings.TrimSpace(string(output))
+		require.NoError(t, err, "CLI script execution failed: %s", outStr)
+
+		// Output should be raw token string only
+		assert.False(t, strings.Contains(outStr, "SWAZZ ENTERPRISE LICENSE KEY GENERATED"))
+		assert.Equal(t, 3, len(strings.Split(outStr, ".")))
+
+		// Verify file contents
+		fileData, err := os.ReadFile(tokenFile)
+		require.NoError(t, err)
+		fileToken := strings.TrimSpace(string(fileData))
+		assert.Equal(t, outStr, fileToken)
+
+		// Verify token
+		verifier, err := NewVerifier(expectedPubKeyHex)
+		require.NoError(t, err)
+		lic, err := verifier.VerifyToken(fileToken)
+		require.NoError(t, err)
+		assert.Equal(t, "TokenOnlyCorp", lic.Company)
+	})
+
 	t.Run("CLI script missing required company flag", func(t *testing.T) {
 		cmd := exec.Command("go", "run", scriptPath, "-key", pemPath)
 		output, err := cmd.CombinedOutput()

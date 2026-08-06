@@ -46,6 +46,8 @@ func main() {
 	daysFlag := flag.Int("days", 365, "License validity duration in days")
 	featuresFlag := flag.String("features", "*", "Comma-separated feature list (use '*' for unlimited)")
 	maxUsersFlag := flag.Int("max-users", 0, "Maximum users (0 = unlimited)")
+	tokenOnlyFlag := flag.Bool("token-only", false, "Output raw license token string only (useful for CI/automation)")
+	outFileFlag := flag.String("out", "", "Path to write license token string to file")
 
 	flag.Parse()
 
@@ -93,7 +95,20 @@ func main() {
 	// --- Derive the public key hex for embedding ---
 	pubKeyHex := hex.EncodeToString(pubKey)
 
+	// --- Save to file if -out is specified ---
+	if *outFileFlag != "" {
+		if err := os.WriteFile(*outFileFlag, []byte(strings.TrimSpace(token)+"\n"), 0600); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing token to file %s: %v\n", *outFileFlag, err)
+			os.Exit(1)
+		}
+	}
+
 	// --- Output ---
+	if *tokenOnlyFlag {
+		fmt.Println(token)
+		return
+	}
+
 	fmt.Println("=========================================================")
 	fmt.Println("🔑 SWAZZ ENTERPRISE LICENSE KEY GENERATED SUCCESSFULLY")
 	fmt.Println("=========================================================")
@@ -112,6 +127,9 @@ func main() {
 	fmt.Println("---------------------------------------------------------")
 	fmt.Println("Public Key (hex, for DefaultPublicKeyHex / SWAZZ_LICENSE_PUBKEY):")
 	fmt.Println(pubKeyHex)
+	if *outFileFlag != "" {
+		fmt.Printf("Token saved to:    %s\n", *outFileFlag)
+	}
 	fmt.Println("=========================================================")
 }
 
@@ -124,12 +142,12 @@ func loadEd25519PrivateKey(path string) (ed25519.PrivateKey, ed25519.PublicKey, 
 
 	block, _ := pem.Decode(data)
 	if block == nil {
-		return nil, nil, fmt.Errorf("no PEM block found in %s", path)
+		return nil, nil, fmt.Errorf("no PEM block found in %s (expected PKCS#8 PRIVATE KEY)", path)
 	}
 
 	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parsing PKCS8 private key: %w", err)
+		return nil, nil, fmt.Errorf("parsing PKCS#8 private key: %w (ensure key was generated via openssl genpkey -algorithm ed25519)", err)
 	}
 
 	privKey, ok := key.(ed25519.PrivateKey)
