@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
@@ -57,6 +58,7 @@ type CliConfig struct {
 	Variables           map[string]any                   `json:"variables,omitempty"`
 	Security            swagger.SecurityConfig           `json:"security"`
 	MCPServer           *swagger.MCPServerConfig         `json:"mcp_server,omitempty"`
+	LicenseKey          string                           `json:"license_key,omitempty"`
 }
 
 func (c *CliConfig) Validate() error {
@@ -199,6 +201,22 @@ func runCLIErr(args []string) error {
 
 	logger.SetLevelByName(finalLevel)
 	cliCfg.Settings.Debug = (logger.GetLevel() == logger.LevelDebug)
+
+	var activeLicense *license.License
+	licenseKey := cliCfg.LicenseKey
+	if licenseKey == "" {
+		licenseKey = os.Getenv("SWAZZ_LICENSE_KEY")
+	}
+	if licenseKey != "" {
+		lic, err := license.LoadAndVerify(licenseKey)
+		if err != nil {
+			logger.Warn("⚠️  License verification failed: %v (running in community mode)", err)
+		} else if lic != nil {
+			activeLicense = lic
+			logger.Info("🔑 Enterprise license active: %s (expires %s)", lic.Company, lic.ExpiresAt.Format("2006-01-02"))
+		}
+	}
+	_ = activeLicense
 
 	runCfg, err := BuildRunnerConfig(&cliCfg)
 	if err != nil {

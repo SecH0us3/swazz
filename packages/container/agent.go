@@ -22,6 +22,7 @@ import (
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
+	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/postman"
@@ -110,6 +111,16 @@ func startAgent(args []string) {
 	}
 
 	logger.SetLevelByName(finalLevel)
+
+	agentLicenseKey := os.Getenv("SWAZZ_LICENSE_KEY")
+	if agentLicenseKey != "" {
+		lic, err := license.LoadAndVerify(agentLicenseKey)
+		if err != nil {
+			logWarn("⚠️  License verification failed: %v (running in community mode)", err)
+		} else if lic != nil {
+			logInfo("🔑 Enterprise license active: %s (expires %s)", lic.Company, lic.ExpiresAt.Format("2006-01-02"))
+		}
+	}
 
 	safenet.AssertRunningInContainer(dangerousNoContainer)
 
@@ -379,6 +390,15 @@ func startAgent(args []string) {
 			}
 
 			logInfo("Received job dispatch for runID: %s", dispatch.RunID)
+
+			if dispatch.Config.LicenseKey != "" {
+				jobLic, licErr := license.LoadAndVerify(dispatch.Config.LicenseKey)
+				if licErr != nil {
+					logWarn("[%s] License verification failed for job: %v", dispatch.RunID, licErr)
+				} else if jobLic != nil {
+					logInfo("[%s] Job license active: %s (expires %s)", dispatch.RunID, jobLic.Company, jobLic.ExpiresAt.Format("2006-01-02"))
+				}
+			}
 
 			runCfg, err := BuildRunnerConfig(&dispatch.Config)
 			if err != nil {
