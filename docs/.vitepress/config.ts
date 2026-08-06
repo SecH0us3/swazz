@@ -10,6 +10,9 @@ export default withMermaid(defineConfig({
   title: "Swazz Docs",
   description: "Smart API Fuzzer — find crashes before your users do",
   base: '/swazz/',
+  head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/swazz/favicon.svg' }]
+  ],
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
