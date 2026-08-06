@@ -40,16 +40,17 @@ test.describe('User Settings and Profile Management E2E Test', () => {
     const body = page.locator('body');
     await expect(body).toHaveClass(/light/);
 
-    // 6. Click the toggle theme button in Settings page
-    const toggleThemeBtn = page.locator('#btn-toggle-theme-settings');
-    await expect(toggleThemeBtn).toBeVisible();
-    await toggleThemeBtn.click();
+    // 6. Click the dark theme button in Settings page
+    const darkThemeBtn = page.locator('#btn-theme-dark');
+    await expect(darkThemeBtn).toBeVisible();
+    await darkThemeBtn.click();
 
     // 7. Verify body has .dark class instantly
     await expect(body).toHaveClass(/dark/);
 
-    // 8. Click toggle theme button again to revert
-    await toggleThemeBtn.click();
+    // 8. Click light theme button to revert
+    const lightThemeBtn = page.locator('#btn-theme-light');
+    await lightThemeBtn.click();
 
     // 9. Verify body is back to .light class
     await expect(body).toHaveClass(/light/);
