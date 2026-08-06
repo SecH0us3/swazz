@@ -1,10 +1,62 @@
+/* ═══════════════════════════════════════════════════════════
+   Swazz Docs - VitePress Custom Theme Harmonization
+   Aligns documentation with Swazz "Future-Proof Security" Design System
+   ═══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
 :root {
-  --vp-c-brand-1: #7c3aed;
-  --vp-c-brand-2: #8b5cf6;
-  --vp-c-brand-3: #a78bfa;
-  --vp-c-brand-soft: rgba(124, 58, 237, 0.16);
+  /* Swazz Brand Colors - True Blue (#0284C7) */
+  --vp-c-brand-1: #0284C7;
+  --vp-c-brand-2: #38BDF8;
+  --vp-c-brand-3: #026aa1;
+  --vp-c-brand-soft: rgba(2, 132, 199, 0.14);
+
+  /* Typography */
+  --vp-font-family-base: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', monospace;
 }
 
+/* Dark Theme Adjustments (Obsidian Slate Palette) */
+.dark {
+  /* Backgrounds */
+  --vp-c-bg: #0B0F1A;                     /* Deep Obsidian Navy */
+  --vp-c-bg-alt: #0F172A;                 /* Slate sub-surface */
+  --vp-c-bg-elv: #1E293B;                 /* Elevated dropdowns & cards */
+  --vp-c-bg-soft: rgba(30, 41, 59, 0.5);    /* Soft card background */
+
+  /* Navigation & Sidebar */
+  --vp-sidebar-bg-color: #0F172A;
+  --vp-nav-bg-color: rgba(11, 15, 26, 0.85);
+
+  /* Borders & Dividers */
+  --vp-c-border: rgba(255, 255, 255, 0.08);
+  --vp-c-divider: rgba(255, 255, 255, 0.08);
+  --vp-c-gutter: rgba(255, 255, 255, 0.08);
+
+  /* Text Colors */
+  --vp-c-text-1: #F8FAFC;
+  --vp-c-text-2: #94A3B8;
+  --vp-c-text-3: #64748B;
+
+  /* Code Block Custom Styling */
+  --vp-code-block-bg: #090D16;
+  --vp-code-bg: rgba(2, 132, 199, 0.12);
+  --vp-code-color: #38BDF8;
+
+  /* Custom Container Callouts (Tip, Info, Warning, Danger) */
+  --vp-custom-block-tip-border: rgba(2, 132, 199, 0.5);
+  --vp-custom-block-tip-text: #38BDF8;
+  --vp-custom-block-tip-bg: rgba(2, 132, 199, 0.08);
+  --vp-custom-block-warning-border: rgba(245, 158, 11, 0.5);
+  --vp-custom-block-warning-text: #F59E0B;
+  --vp-custom-block-warning-bg: rgba(245, 158, 11, 0.08);
+  --vp-custom-block-danger-border: rgba(239, 68, 68, 0.5);
+  --vp-custom-block-danger-text: #EF4444;
+  --vp-custom-block-danger-bg: rgba(239, 68, 68, 0.08);
+}
+
+/* Video & Media Container Styling */
 .docs-video-container {
   display: flex;
   justify-content: center;
@@ -12,8 +64,11 @@
 }
 
 .docs-video-element {
-  border-radius: 8px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   max-width: 100%;
   width: 100%;
 }
