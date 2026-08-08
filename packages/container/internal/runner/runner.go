@@ -38,6 +38,8 @@ import (
 
 	"swazz-engine/internal/ai"
 	"swazz-engine/internal/analyzer"
+
+	"github.com/google/uuid"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/logger"
@@ -62,6 +64,15 @@ const (
 
 func (r *Runner) Config() *swagger.Config {
 	return r.config
+}
+
+// Results returns a copy of all accumulated FuzzResults.
+func (r *Runner) Results() []*swagger.FuzzResult {
+	r.resultsMu.Lock()
+	defer r.resultsMu.Unlock()
+	res := make([]*swagger.FuzzResult, len(r.allResults))
+	copy(res, r.allResults)
+	return res
 }
 
 // ─── embedded sub-structs ────────────────────────────────────────────────────
@@ -609,6 +620,14 @@ func (r *Runner) fuzzEndpoint(
 				p, profile, qp, gh,
 				endpoint.ContentType,
 			)
+
+			if len(result.AnalyzerFindings) > 0 {
+				for fi := range result.AnalyzerFindings {
+					if result.AnalyzerFindings[fi].ID == "" {
+						result.AnalyzerFindings[fi].ID = uuid.New().String()
+					}
+				}
+			}
 
 			if profile == swagger.ProfileRandom && result.Status >= 200 && result.Status < 300 {
 				r.recordSizeBaseline(endpoint.Method, endpoint.Path, result.ResponseSize)

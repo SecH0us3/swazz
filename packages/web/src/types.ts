@@ -54,6 +54,7 @@ export interface AnalysisFinding {
     ai_remediation?: string;
     ai_proposed_patch?: string;
     pr_link?: string;
+    ai_confidence?: number;
 }
 
 export interface ChainingRule {
@@ -95,6 +96,8 @@ export interface SwazzSettings {
     enable_adaptive_rate_limit?: boolean;
     enable_semantic_mutation?: boolean;
     use_llm_prepass?: boolean;
+    enable_smart_triage?: boolean;
+    max_triage_per_scan?: number;
     ai_gateway_url?: string;
     cf_aig_token?: string;
 }

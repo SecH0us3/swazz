@@ -6,33 +6,21 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
 
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
 type SemanticPlanner struct {
-	gatewayURL string
-	cfAigToken string
-	apiKey     string
-	model      string
-	client     *http.Client
+	client *GatewayClient
 }
 
 func NewSemanticPlanner(gatewayURL, cfAigToken, apiKey string) *SemanticPlanner {
 	return &SemanticPlanner{
-		gatewayURL: strings.TrimSuffix(gatewayURL, "/"),
-		cfAigToken: cfAigToken,
-		apiKey:     apiKey,
-		model:      "gemini-2.0-flash",
-		client:     &http.Client{},
+		client: NewGatewayClient(gatewayURL, cfAigToken, apiKey),
 	}
 }
 
@@ -53,83 +41,28 @@ func (p *SemanticPlanner) ExtractSemanticFormats(cfg *swagger.Config) map[string
 
 // GeneratePreScanPayloads dispatches a pre-scan schema analysis request to Gemini / OpenAI via Cloudflare AI Gateway.
 func (p *SemanticPlanner) GeneratePreScanPayloads(ctx context.Context, schemaSummary string) ([]string, error) {
-	if p.gatewayURL == "" {
+	if p.client == nil || p.client.gatewayURL == "" {
 		return nil, fmt.Errorf("ai_gateway_url is empty")
 	}
 
-	logger.Info("[AI] 📤 Executing Pre-Scan LLM schema analysis via Cloudflare AI Gateway (%s)...", p.gatewayURL)
+	logger.Info("[AI] 📤 Executing Pre-Scan LLM schema analysis via Cloudflare AI Gateway (%s)...", p.client.gatewayURL)
 
 	userPrompt := fmt.Sprintf("Analyze this OpenAPI schema and generate 5 targeted edge-case fuzzing payload values as JSON array of strings:\n%s", schemaSummary)
 
-	var targetURL string
-	var reqBody []byte
-	var err error
-
-	isGemini := strings.Contains(p.gatewayURL, "google-ai-studio") || strings.Contains(p.gatewayURL, "googleapis.com") || strings.Contains(p.gatewayURL, "gemini")
-
-	if isGemini {
-		targetURL = fmt.Sprintf("%s/v1beta/models/%s:generateContent", p.gatewayURL, p.model)
-		payload := map[string]interface{}{
-			"contents": []map[string]interface{}{
-				{
-					"role": "user",
-					"parts": []map[string]string{
-						{"text": userPrompt},
-					},
-				},
-			},
-		}
-		reqBody, err = json.Marshal(payload)
-	} else {
-		targetURL = fmt.Sprintf("%s/chat/completions", p.gatewayURL)
-		payload := map[string]interface{}{
-			"model": "gpt-4o-mini",
-			"messages": []map[string]string{
-				{"role": "user", "content": userPrompt},
-			},
-		}
-		reqBody, err = json.Marshal(payload)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if isGemini && p.apiKey != "" {
-		req.Header.Set("x-goog-api-key", p.apiKey)
-	} else if p.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
-
-	if p.cfAigToken != "" {
-		req.Header.Set("cf-aig-authorization", "Bearer "+p.cfAigToken)
-	}
-
-	resp, err := p.client.Do(req)
+	respText, err := p.client.ChatCompletion(ctx, "", userPrompt)
 	if err != nil {
 		logger.Warn("[AI] ⚠️ Pre-Scan LLM request failed: %v", err)
-		return nil, fmt.Errorf("failed to call AI Gateway: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBytes, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		gwErr := parseGatewayError(resp.StatusCode, respBytes)
-		logger.Warn("[AI] ⚠️ Pre-Scan LLM error response: %v", gwErr)
-		return nil, gwErr
+		return nil, err
 	}
 
-	payloads, parseErr := parseGatewayResponse(respBytes, isGemini)
-	if parseErr == nil {
-		logger.Info("[AI] ✅ Pre-Scan LLM analysis complete: generated %d custom payload templates", len(payloads))
+	if respText == "" {
+		return nil, nil
 	}
-	return payloads, parseErr
+
+	var payloads []string
+	_ = json.Unmarshal([]byte(respText), &payloads)
+	logger.Info("[AI] ✅ Pre-Scan LLM analysis complete: generated %d custom payload templates", len(payloads))
+	return payloads, nil
 }
 
 func parseGatewayError(statusCode int, body []byte) error {

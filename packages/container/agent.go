@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"swazz-engine/internal/ai"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/har"
@@ -29,6 +30,7 @@ import (
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/triage"
 	"sync"
 	"syscall"
 	"time"
@@ -548,6 +550,31 @@ func startAgent(args []string) {
 					logError("Runner failed: %v", err)
 					sendWSError(runID, err.Error())
 				}
+
+				// Post-scan Smart Triage (LLM False Positive Classifier)
+				if r.Config() != nil && r.Config().Settings.EnableSmartTriage && r.Config().Settings.AIGatewayURL != "" {
+					msg := fmt.Sprintf("[AI] 🤖 Running Smart Triage (LLM False Positive Classifier) via %s...", r.Config().Settings.AIGatewayURL)
+					logInfo("%s", msg)
+					sendRunnerLog("info", msg)
+
+					apiKey := os.Getenv("OPENAI_API_KEY")
+					if apiKey == "" {
+						apiKey = os.Getenv("GEMINI_API_KEY")
+					}
+					gwClient := ai.NewGatewayClient(r.Config().Settings.AIGatewayURL, r.Config().Settings.CFAigToken, apiKey)
+					triager := triage.NewOrchestrator(gwClient, r.Config().Settings.GetMaxTriagePerScan())
+					triageResults := triager.Run(ctx, r.Results())
+
+					if len(triageResults) > 0 {
+						if patchErr := sendTriageBatchToEdge(coordinatorURL, token, runID, triageResults); patchErr != nil {
+							logError("Failed to send triage results to Edge API: %v", patchErr)
+							sendRunnerLog("warning", fmt.Sprintf("[AI] ⚠️ Failed to upload triage results: %v", patchErr))
+						} else {
+							sendRunnerLog("info", fmt.Sprintf("[AI] ✅ Successfully applied Smart Triage to %d defect groups", len(triageResults)))
+						}
+					}
+				}
+
 				r.Close()
 				logInfo("Runner for %s finished", runID)
 
@@ -1097,4 +1124,69 @@ func incrementGlobalScanTelemetry(telemetryURL string, disableTelemetry bool) {
 			logWarn("Warning: Failed to report telemetry scan count: HTTP status %d. You can disable telemetry using --disable-telemetry or SWAZZ_DISABLE_TELEMETRY=true.", resp.StatusCode)
 		}
 	}()
+}
+
+func sendTriageBatchToEdge(coordinatorURL, token, scanID string, results []*triage.TriageResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+
+	baseURL := strings.TrimSuffix(coordinatorURL, "/")
+	if strings.HasPrefix(baseURL, "ws://") {
+		baseURL = "http://" + strings.TrimPrefix(baseURL, "ws://")
+	} else if strings.HasPrefix(baseURL, "wss://") {
+		baseURL = "https://" + strings.TrimPrefix(baseURL, "wss://")
+	}
+
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid coordinator URL: %w", err)
+	}
+	joinedPath, _ := url.JoinPath("/api/scans", url.PathEscape(scanID), "findings", "ai-triage")
+	u.Path = joinedPath
+	apiURL := u.String()
+
+	var updates []map[string]interface{}
+	for _, tr := range results {
+		for _, fid := range tr.FindingIDs {
+			updates = append(updates, map[string]interface{}{
+				"finding_id":     fid,
+				"ai_status":      tr.AIStatus,
+				"ai_relevance":   tr.AIRelevance,
+				"ai_explanation": tr.AIExplanation,
+				"ai_confidence":  tr.AIConfidence,
+			})
+		}
+	}
+
+	payloadBytes, err := json.Marshal(map[string]interface{}{
+		"updates": updates,
+	})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("PATCH", apiURL, bytes.NewReader(payloadBytes)) // #nosec G704
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req) // #nosec G704
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Edge API batch triage error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }

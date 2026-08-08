@@ -196,6 +196,8 @@ type Settings struct {
 	UseLLMPrepass                 bool                        `json:"use_llm_prepass,omitempty"`
 	AIGatewayURL                  string                      `json:"ai_gateway_url,omitempty"`
 	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
+	EnableSmartTriage             bool                        `json:"enable_smart_triage,omitempty"`
+	MaxTriagePerScan              int                         `json:"max_triage_per_scan,omitempty"`
 }
 
 // SemanticMutationEnabled returns true if semantic format wrappers are enabled.
@@ -205,6 +207,15 @@ func (s Settings) SemanticMutationEnabled() bool {
 		return true
 	}
 	return *s.EnableSemanticMutation
+}
+
+// GetMaxTriagePerScan returns the configured max triage limit,
+// defaulting to 30 when the field is zero (missing from old configs).
+func (s Settings) GetMaxTriagePerScan() int {
+	if s.MaxTriagePerScan <= 0 {
+		return 30
+	}
+	return s.MaxTriagePerScan
 }
 
 type Checkpoint struct {
@@ -243,6 +254,7 @@ func DefaultSettings() Settings {
 }
 
 type AnalysisFinding struct {
+	ID            string   `json:"id,omitempty"`
 	RuleID        string   `json:"ruleId"`
 	Level         string   `json:"level"` // "error", "warning", "note"
 	Message       string   `json:"message"`

@@ -570,6 +570,14 @@ export function RequestDetail({
                                             <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
                                                 {finding.ai_relevance ? 'True Positive' : 'False Positive'}
                                             </span>
+                                            {finding.ai_confidence != null && (
+                                                <span className={`ai-confidence-badge ${
+                                                    finding.ai_confidence >= 80 ? 'high' :
+                                                    finding.ai_confidence >= 50 ? 'medium' : 'low'
+                                                }`}>
+                                                    {finding.ai_confidence}% confidence
+                                                </span>
+                                            )}
                                         </div>
                                         {finding.ai_explanation && (
                                             <div className="ai-insights-block">

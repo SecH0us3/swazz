@@ -10995,3 +10995,61 @@ kbd {
   margin: 0 !important;
   padding: 8px 12px !important;
 }
+
+/* AI Confidence Badge Styles */
+.ai-confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: 6px;
+}
+
+.ai-confidence-badge.high {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.ai-confidence-badge.medium {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.ai-confidence-badge.low {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* PerformanceTab Utility Classes */
+.performance-input-row-space-between {
+  justify-content: space-between;
+}
+
+.performance-workers-badge {
+  font-weight: 600;
+  color: var(--accent-light);
+}
+
+.performance-label-md {
+  font-size: 13px;
+}
+
+.performance-hint-indented {
+  margin-left: 24px;
+  line-height: 1.4;
+}
+
+.performance-warning-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.performance-warning-text {
+  font-size: 11px;
+  color: var(--color-warning);
+}

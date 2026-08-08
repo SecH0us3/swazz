@@ -37,6 +37,7 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 - 🌐 **Web Dashboard**: Real-time Heatmap, Request Inspector, Sidebar Endpoint Tree with **Included Only** filter toggle, and OWASP Compliance dashboard for deep-dive analysis.
 - 🔔 **Real-Time Webhooks**: Deliver POST JSON payloads to external URLs on scan events and findings (see [Webhooks Guide](docs/webhooks.md)).
 - 🤖 **MCP Server**: Expose Swazz commands, local codebase search, and scan findings natively through Model Context Protocol.
+- 🧠 **Smart Triage**: LLM-based post-scan classifier via Cloudflare AI Gateway (Gemini, OpenAI) to automatically triage noisy false positives with an AI Confidence Score.
 
 ---
 

@@ -98,9 +98,9 @@ export function PerformanceTab() {
                 >
                     {/* Concurrency Workers */}
                     <div className="performance-input-group">
-                        <div className="performance-input-row" style={{ justifyContent: 'space-between' }}>
+                        <div className="performance-input-row performance-input-row-space-between">
                             <label className="performance-label" htmlFor="concurrency-range">Request Concurrency</label>
-                            <span style={{ fontWeight: 600, color: 'var(--accent-light)' }}>{config.settings.concurrency} workers</span>
+                            <span className="performance-workers-badge">{config.settings.concurrency} workers</span>
                         </div>
                         <div className="performance-input-row">
                             <input 
@@ -153,9 +153,9 @@ export function PerformanceTab() {
                                     rate_limit_check: !(config.settings.rate_limit_check ?? false)
                                 })}
                             />
-                            <strong style={{ fontSize: '13px' }}>Enable Rate Limit Detection</strong>
+                            <strong className="performance-label-md">Enable Rate Limit Detection</strong>
                         </label>
-                        <span className="performance-hint" style={{ marginLeft: '24px', lineHeight: '1.4' }}>
+                        <span className="performance-hint performance-hint-indented">
                             Send a rapid burst of concurrent requests to each API endpoint to detect active rate limit controls or application security blocks.
                         </span>
 
@@ -174,12 +174,12 @@ export function PerformanceTab() {
                                     />
                                 </div>
                                 <div className="sidebar-rate-limit-warning">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: 1 }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="performance-warning-icon">
                                         <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                                         <line x1="12" y1="9" x2="12" y2="13"/>
                                         <line x1="12" y1="17" x2="12.01" y2="17"/>
                                     </svg>
-                                    <span style={{ fontSize: '11px', color: 'var(--color-warning)' }}>
+                                    <span className="performance-warning-text">
                                         Warning: Enabling rate-limit testing sends a rapid burst of concurrent requests. This might trigger active rate-limiting bans or WAF blocks.
                                     </span>
                                 </div>
@@ -241,7 +241,7 @@ export function PerformanceTab() {
                                     active_parameter_fuzzing: !(config.settings.active_parameter_fuzzing ?? false)
                                 })}
                             />
-                            <strong style={{ fontSize: '13px' }}>Active Parameter Fuzzing (Field-by-Field)</strong>
+                            <strong className="performance-label-md">Active Parameter Fuzzing (Field-by-Field)</strong>
                         </label>
                         <span className="fuzz-setting-checkbox-hint">
                             Mutate one request parameter or body field at a time while leaving other fields at baseline values. Extremely useful for avoiding validation errors on non-targeted fields.
@@ -389,7 +389,22 @@ export function PerformanceTab() {
                             </span>
                         </div>
 
-                        {(config.settings.use_llm_prepass ?? false) && (
+                        <div className="fuzz-setting-checkbox-group no-border">
+                            <label className="premium-checkbox-label">
+                                <input
+                                    type="checkbox"
+                                    className="premium-checkbox"
+                                    checked={config.settings.enable_smart_triage ?? false}
+                                    onChange={(e) => updateSettings({ enable_smart_triage: e.target.checked })}
+                                />
+                                <strong className="fuzz-setting-label-bold">Enable Smart Triage (LLM False Positive Classifier)</strong>
+                            </label>
+                            <span className="fuzz-setting-checkbox-hint">
+                                Post-scan AI analysis that triages findings into True/False Positives with a confidence score.
+                            </span>
+                        </div>
+
+                        {((config.settings.use_llm_prepass ?? false) || (config.settings.enable_smart_triage ?? false)) && (
                             <div className="llm-nested-settings">
                                 <div>
                                     <label htmlFor="ai_gateway_url" className="fuzz-setting-input-label">AI Gateway / OpenAI Proxy URL</label>
@@ -407,6 +422,7 @@ export function PerformanceTab() {
                                     <input
                                         id="cf_aig_token"
                                         type="password"
+                                        data-1p-ignore
                                         className="input semantic-input-field"
                                         placeholder="Bearer token for Cloudflare AI Gateway"
                                         value={config.settings.cf_aig_token || ''}
@@ -416,6 +432,23 @@ export function PerformanceTab() {
                                         Bearer token sent in cf-aig-authorization header to Cloudflare AI Gateway.
                                     </span>
                                 </div>
+                                {(config.settings.enable_smart_triage ?? false) && (
+                                    <div>
+                                        <label htmlFor="max_triage_per_scan" className="fuzz-setting-input-label">Max AI Triage Requests per Scan</label>
+                                        <input
+                                            id="max_triage_per_scan"
+                                            type="number"
+                                            min="1"
+                                            max="500"
+                                            className="input performance-input-number-sm"
+                                            value={config.settings.max_triage_per_scan || 30}
+                                            onChange={(e) => updateSettings({ max_triage_per_scan: Math.max(1, parseInt(e.target.value) || 30) })}
+                                        />
+                                        <span className="fuzz-setting-checkbox-hint">
+                                            Limits maximum LLM classification calls per scan (default: 30).
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
