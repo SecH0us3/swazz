@@ -254,6 +254,7 @@ func DefaultSettings() Settings {
 }
 
 type AnalysisFinding struct {
+	ID            string   `json:"id,omitempty"`
 	RuleID        string   `json:"ruleId"`
 	Level         string   `json:"level"` // "error", "warning", "note"
 	Message       string   `json:"message"`

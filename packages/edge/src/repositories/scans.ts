@@ -449,7 +449,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
 
       if (payload && payload.type === 'result' && payload.data && Array.isArray(payload.data.analyzerFindings)) {
         for (const finding of payload.data.analyzerFindings) {
-          const findingId = crypto.randomUUID();
+          const findingId = finding.id || crypto.randomUUID();
           statements.push(
             this.db.prepare(
               `INSERT INTO findings (id, scan_id, rule_id, level, message, evidence)

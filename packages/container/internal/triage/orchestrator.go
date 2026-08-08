@@ -141,7 +141,10 @@ func (o *Orchestrator) GroupFindings(results []*swagger.FuzzResult) []*GroupFind
 			}
 
 			defectKey := fmt.Sprintf("%s::%s %s", finding.RuleID, res.Method, res.Endpoint)
-			findingID := fmt.Sprintf("%s-%d", defectKey, i)
+			findingID := finding.ID
+			if findingID == "" {
+				findingID = fmt.Sprintf("%s-%d", defectKey, i)
+			}
 
 			gf, exists := groupMap[defectKey]
 			if !exists {

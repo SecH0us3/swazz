@@ -566,7 +566,7 @@ func startAgent(args []string) {
 					triageResults := triager.Run(ctx, r.Results())
 
 					if len(triageResults) > 0 {
-						if patchErr := sendTriageBatchToEdge(coordinatorURL, token, dispatch.RunID, triageResults); patchErr != nil {
+						if patchErr := sendTriageBatchToEdge(coordinatorURL, token, runID, triageResults); patchErr != nil {
 							logError("Failed to send triage results to Edge API: %v", patchErr)
 							sendRunnerLog("warning", fmt.Sprintf("[AI] ⚠️ Failed to upload triage results: %v", patchErr))
 						} else {

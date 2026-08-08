@@ -28,6 +28,14 @@ export interface IScansService {
   updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
 }
 
+export interface TriageUpdatePayload {
+  finding_id: string;
+  ai_status: string;
+  ai_relevance: string;
+  ai_explanation: string;
+  ai_confidence: number;
+}
+
 export class ScansService implements IScansService {
   constructor(
     private env: Env, 
@@ -302,13 +310,7 @@ export class ScansService implements IScansService {
     return { finding: updated };
   }
 
-export interface TriageUpdatePayload {
-  finding_id: string;
-  ai_status: string;
-  ai_relevance: string;
-  ai_explanation: string;
-  ai_confidence: number;
-}
+
 
   async batchUpdateFindingsAI(scanId: string, updates: TriageUpdatePayload[], userId: string | null, isAuthEnabled: boolean) {
     const scan = await this.scansRepo.getScan(scanId);
