@@ -54,30 +54,23 @@ To refine remediation suggestions, Swazz allows you to tune AI prompts using tar
 * **Auto-Fix Rules Context**: Toggling rules in the "Select Auto-Fix Rules" modal automatically appends rule-specific security goals (like validating resource ownership for IDOR/BOLA or checking null-pointer references) into the prompts.
 * **Dynamic Cleaning**: Unchecking any stack or rule automatically parses the prompt templates using markers (e.g. `=== Tech Stack: Go ===`) and cleanly removes the respective instruction block, preserving any manual modifications you have written.
 
-## Pre-Scan LLM Batching & Cloudflare AI Gateway
+## Smart Triage & False Positive Classification
 
-Swazz supports pre-scanning OpenAPI schemas with LLMs (Google Gemini, OpenAI) via Cloudflare AI Gateway to generate custom payload templates.
+Swazz includes an automated LLM-based post-scan classifier to eliminate alert fatigue caused by noisy findings (such as HTTP 500 input validation errors or expected timeout anomalies).
 
-### Cloudflare AI Gateway Setup
+### How Smart Triage Works
 
-1. **AI Gateway / OpenAI Proxy URL**:
-   In **Project Settings -> Performance / Fuzzing Settings**, set the **AI Gateway / OpenAI Proxy URL**:
-   - For Google Gemini / Google AI Studio:
-     `https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_NAME/google-ai-studio`
-   - For OpenAI:
-     `https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_NAME/openai`
+1. **Defect Grouping**: Post-scan, findings are grouped by `defectKey = "{RuleID}::{Method} {Endpoint}"`. For 10,000+ raw scan results, only representative findings (the ones with the richest evidence) are evaluated.
+2. **Quota & Rate Control**: A configurable per-scan quota (`max_triage_per_scan`, default: 30) limits LLM token consumption. The Go runner dispatches requests concurrently via a bounded worker pool (3–5 goroutines) with exponential backoff on HTTP 429 rate limits.
+3. **True/False Positive Verdicts**: The LLM classifies findings into `True Positive` or `False Positive` along with an **AI Confidence Score (0-100%)** and reasoning.
+4. **Auto-Action**: Findings classified as `False Positive` with $\ge 80\%$ confidence are automatically dimmed/muted in the Web Dashboard.
 
-2. **Cloudflare AI Gateway Token (`cf-aig-authorization`)**:
-   If your Cloudflare AI Gateway has Authenticated Gateway enabled, enter your token in the **Cloudflare AI Gateway Token** field in Project Settings. It is transmitted via the `cf-aig-authorization: Bearer <token>` header.
+### Enabling Smart Triage
 
-3. **Provider API Keys & BYOK (Bring Your Own Keys)**:
-   - **Using Cloudflare Provider Keys (BYOK)**: If you configured your Google AI Studio or OpenAI API key in Cloudflare's **Provider Keys** settings, you do **NOT** need to set `GOOGLE_API_KEY` or `OPENAI_API_KEY` in your environment. Cloudflare AI Gateway automatically injects the provider key on the edge.
-   - **Direct Environment Keys**: If you don't use Cloudflare BYOK, set `GOOGLE_API_KEY` (for Gemini) or `OPENAI_API_KEY` (for OpenAI) in your runner's environment variables:
-     ```bash
-     export GOOGLE_API_KEY="AIzaSy..."
-     # or
-     export OPENAI_API_KEY="sk-..."
-     ```
+In **Project Settings -> Performance / Fuzzing Settings -> WAF Evasion & AI**:
+1. Check **Enable Smart Triage (LLM False Positive Classifier)**.
+2. Set **Max AI Triage Requests per Scan** (default: `30`).
+3. Configure your **AI Gateway / OpenAI Proxy URL** and optional **Cloudflare AI Gateway Token**.
 
 ## How it works safely
 When a finding occurs:

@@ -184,4 +184,22 @@ export function registerScansRoutes(
       return c.json({ error: parts[0] }, statusCode as any);
     }
   });
+
+  app.patch('/api/scans/:id/findings/ai-triage', async (c) => {
+    const services = scansServicesFactory(c.env);
+    const scanId = c.req.param('id');
+    const body = await c.req.json();
+    const userId = await getUserIdFromRequest(c);
+    const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
+
+    try {
+      const updates = body.updates || [];
+      const result = await services.batchUpdateFindingsAI(scanId, updates, userId, isAuthEnabled);
+      return c.json(result);
+    } catch (err: any) {
+      const parts = err.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
 }

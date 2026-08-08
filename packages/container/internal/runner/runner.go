@@ -64,6 +64,15 @@ func (r *Runner) Config() *swagger.Config {
 	return r.config
 }
 
+// Results returns a copy of all accumulated FuzzResults.
+func (r *Runner) Results() []*swagger.FuzzResult {
+	r.resultsMu.Lock()
+	defer r.resultsMu.Unlock()
+	res := make([]*swagger.FuzzResult, len(r.allResults))
+	copy(res, r.allResults)
+	return res
+}
+
 // ─── embedded sub-structs ────────────────────────────────────────────────────
 
 // runnerLifecycle groups the atomic control-flow flags and the lifecycle mutex.

@@ -301,4 +301,26 @@ export class ScansService implements IScansService {
     const updated = await this.scansRepo.updateFinding(findingId, body, ctx);
     return { finding: updated };
   }
+
+export interface TriageUpdatePayload {
+  finding_id: string;
+  ai_status: string;
+  ai_relevance: string;
+  ai_explanation: string;
+  ai_confidence: number;
+}
+
+  async batchUpdateFindingsAI(scanId: string, updates: TriageUpdatePayload[], userId: string | null, isAuthEnabled: boolean) {
+    const scan = await this.scansRepo.getScan(scanId);
+    if (!scan) throw new Error('Scan not found|404');
+
+    if (isAuthEnabled) {
+      if (!userId) throw new Error('Unauthorized|401');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
+      if (!hasAccess && scan.user_id !== userId) throw new Error('Forbidden|403');
+    }
+
+    const updatedCount = await this.scansRepo.batchUpdateFindingsAI(scanId, updates);
+    return { success: true, updated_count: updatedCount };
+  }
 }

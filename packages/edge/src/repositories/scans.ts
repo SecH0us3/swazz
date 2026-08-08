@@ -176,7 +176,8 @@ export class ScansRepository extends BaseService implements IScansRepository {
       'ai_explanation',
       'ai_remediation',
       'ai_proposed_patch',
-      'pr_link'
+      'pr_link',
+      'ai_confidence'
     ] as const;
 
     const setClauses: string[] = [];
@@ -211,6 +212,38 @@ export class ScansRepository extends BaseService implements IScansRepository {
     }
 
     return updatedFinding;
+  }
+
+  async batchUpdateFindingsAI(
+    scanId: string,
+    updates: Array<{
+      finding_id: string;
+      ai_status: string;
+      ai_relevance: string;
+      ai_explanation: string;
+      ai_confidence: number;
+    }>
+  ): Promise<number> {
+    if (!updates || updates.length === 0) return 0;
+
+    const statements: any[] = [];
+    for (const u of updates) {
+      statements.push(
+        this.db.prepare(
+          `UPDATE findings SET ai_status = ?, ai_relevance = ?, ai_explanation = ?, ai_confidence = ? WHERE id = ? AND scan_id = ?`
+        ).bind(
+          u.ai_status,
+          u.ai_relevance,
+          u.ai_explanation,
+          u.ai_confidence,
+          u.finding_id,
+          scanId
+        )
+      );
+    }
+
+    await this.db.batch(statements);
+    return updates.length;
   }
 
   async getScheduledScanConfigs(): Promise<{ id: string; project_id: string; name: string; config_json: string; cron_schedule: string; last_run_at: string | null }[]> {
