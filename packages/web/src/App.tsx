@@ -31,6 +31,8 @@ import { AuthModal } from './components/Auth/AuthModal.js';
 import { sanitizeTargetUrl } from './utils/url.js';
 import { fetchProjects } from './services/projectService.js';
 import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
+import { useTips } from './hooks/useTips.js';
+import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -38,6 +40,7 @@ export default function App() {
     const { authEnabled, githubAuthEnabled, gitlabAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
+    const { enabled: tipsEnabled, currentTip, dismissTip } = useTips();
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
@@ -989,6 +992,9 @@ export default function App() {
                 {toasts.map((t) => (
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
+                {tipsEnabled && currentTip && (
+                    <DidYouKnowToast tip={currentTip} onDismiss={() => dismissTip(currentTip.id)} />
+                )}
             </div>
 
             {!isSidebarHiddenDesktop && <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />}
