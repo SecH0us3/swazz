@@ -4,12 +4,14 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 import fs from 'fs';
 import path from 'path';
 
 test.describe('Additional UI Coverage E2E Tests', () => {
   // Helper to register and log in before each test case
   test.beforeEach(async ({ page }) => {
+    await disableTours(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
     await page.getByRole('button', { name: 'Create an account' }).click();

@@ -4,10 +4,12 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
   // Common login/registration helper
   test.beforeEach(async ({ page }) => {
+    await disableTours(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
 

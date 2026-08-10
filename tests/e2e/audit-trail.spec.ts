@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect, Download } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Audit Trail E2E', () => {
   test('should record action and display in audit trail tab', async ({ page }) => {
+    await disableTours(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
 
@@ -70,6 +72,7 @@ test.describe('Audit Trail E2E', () => {
   });
 
   test('should filter audit logs by source', async ({ page }) => {
+    await disableTours(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
     await page.getByRole('button', { name: 'Create an account' }).click();
@@ -105,6 +108,7 @@ test.describe('Audit Trail E2E', () => {
   });
 
   test('should search audit logs', async ({ page }) => {
+    await disableTours(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
     await page.getByRole('button', { name: 'Create an account' }).click();
@@ -145,6 +149,7 @@ test.describe('Audit Trail E2E', () => {
   });
 
   test('should export CSV from audit trail', async ({ page }) => {
+    await disableTours(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
     await page.getByRole('button', { name: 'Create an account' }).click();

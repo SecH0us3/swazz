@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('User Settings and Profile Management E2E Test', () => {
   test('should open settings, toggle theme preference, and apply to body instantly', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -57,6 +59,7 @@ test.describe('User Settings and Profile Management E2E Test', () => {
   });
 
   test('should toggle runner modes and save Ed25519 public key in user settings', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

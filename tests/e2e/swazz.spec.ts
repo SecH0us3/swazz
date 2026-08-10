@@ -4,10 +4,12 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 import fs from 'fs';
 
 test.describe('Swazz Integration E2E Test', () => {
   test('should load dashboard, add vulnerable demo spec, trigger fuzzing, and verify results', async ({ page }) => {
+    await disableTours(page);
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
@@ -127,6 +129,7 @@ test.describe('Swazz Integration E2E Test', () => {
   });
 
   test('should load dashboard, click Try Vulnerable Demo button, and verify fuzzing starts and finishes successfully', async ({ page }) => {
+    await disableTours(page);
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
 

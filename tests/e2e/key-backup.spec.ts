@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('E2EE Key Backup & Recovery E2E Test', () => {
   const mockPrivateJwk = {
@@ -14,6 +15,7 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
   };
 
   test('should support background generation, backup download, and setting restore', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to main page and sign in
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

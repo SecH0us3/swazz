@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Config Sidebar Contextual Toggle E2E Tests', () => {
   test('should toggle the configuration sidebar using the control bar gear and sidebar close button', async ({ page }) => {
+    await disableTours(page);
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
 

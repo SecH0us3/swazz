@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
   test('should import a HAR file, extract endpoints, and successfully run fuzzing', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -83,6 +85,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
   });
 
   test('should display toast error message when attempting to load an invalid HAR/spec URL', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

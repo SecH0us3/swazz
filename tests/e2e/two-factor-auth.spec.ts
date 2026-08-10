@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 import { webcrypto } from 'crypto';
 
 // Base32 Alphabet
@@ -67,6 +68,7 @@ async function generateTOTP(secret: string): Promise<string> {
 
 test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
   test('should allow setting up, verifying, logging in with, and disabling 2FA', async ({ page }) => {
+    await disableTours(page);
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));

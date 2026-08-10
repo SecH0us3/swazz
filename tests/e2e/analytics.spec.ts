@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Analytics Dashboard E2E Tests', () => {
   test('should navigate to Analytics tab and render charts', async ({ page }) => {
+    await disableTours(page);
     // Listen for console errors or logs
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', err => console.error('PAGE ERROR:', err.message));

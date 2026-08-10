@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Guest Login E2E Test', () => {
   test('should allow entering as guest, parsing a spec, starting fuzzing, and logging out', async ({ page }) => {
+    await disableTours(page);
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));

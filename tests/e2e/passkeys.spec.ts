@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Passkeys E2E Tests', () => {
   test('should allow registering a passkey and signing in with it', async ({ page, context }) => {
+    await disableTours(page);
     // 1. Setup virtual authenticator using CDP session
     const client = await context.newCDPSession(page);
     await client.send('WebAuthn.enable');

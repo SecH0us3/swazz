@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('Input Validation & Error Handling (Broken Specs) E2E Test', () => {
   test('should display validation error toast when adding an invalid or nonexistent Swagger spec URL', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

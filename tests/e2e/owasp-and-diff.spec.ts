@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', () => {
   test('should run scan, verify request mutation visual diff, and verify OWASP mapping', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

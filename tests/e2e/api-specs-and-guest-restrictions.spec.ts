@@ -4,10 +4,12 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
   
   test('Guest Mode should restrict Member/Role modifications but allow viewing settings', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate and log in as Guest
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -46,6 +48,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
   });
 
   test('Owner should be able to view, edit, upload, and add API Specifications', async ({ page }) => {
+    await disableTours(page);
     // 1. Navigate and register standard user
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

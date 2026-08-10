@@ -4,9 +4,11 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { disableTours } from './helpers.js';
 
 test.describe('RBAC and Project Invitations E2E Tests', () => {
   test('should create custom roles, validate inputs, invite a user, and accept invitation', async ({ page, context }) => {
+    await disableTours(page);
     // 1. Navigate to the frontend dev server and register User A (Owner)
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
