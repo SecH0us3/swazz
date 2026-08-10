@@ -1,0 +1,99 @@
+.dyd-toast {
+  min-width: min(460px, 92vw);
+  max-width: 560px;
+  width: auto;
+  box-sizing: border-box;
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  color: var(--text-primary);
+  text-align: left;
+  animation: slide-in-down 280ms var(--ease-out);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dyd-toast {
+    animation: none;
+  }
+}
+
+.dyd-toast-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.dyd-toast-emoji {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.dyd-toast-title {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-light);
+}
+
+.dyd-toast-body {
+  margin-bottom: var(--space-3);
+}
+
+.dyd-toast-tip-title {
+  display: block;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.dyd-toast-summary {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.dyd-toast-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dyd-toast-link {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  color: var(--accent-light);
+  text-decoration: none;
+  transition: text-decoration var(--duration-fast) var(--ease-out);
+}
+
+.dyd-toast-link:hover {
+  text-decoration: underline;
+}
+
+.dyd-toast-dismiss {
+  background: var(--accent);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.dyd-toast-dismiss:hover {
+  opacity: 0.85;
+}
