@@ -77,7 +77,7 @@ export function useTours() {
     const next = useCallback(() => {
         const tour = TOURS.find((t) => t.id === activeTourId);
         if (!tour) return;
-        if (currentStep + 1 >= tour.steps.length) { finish(activeTourId); return; }
+        if (currentStep + 1 >= tour.steps.length) { finish(tour.id); return; }
         setCurrentStep((s) => s + 1);
     }, [activeTourId, currentStep, finish]);
 
