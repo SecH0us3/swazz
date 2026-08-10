@@ -26,6 +26,10 @@ function isDisabled(): boolean {
     try { return localStorage.getItem(DISABLED_KEY) === 'true'; } catch { return false; }
 }
 
+export function dispatchTourRequest(tourId: string) {
+    window.dispatchEvent(new CustomEvent('swazz:tour', { detail: { tourId } }));
+}
+
 export function useTours() {
     const [activeTourId, setActiveTourId] = useState<string | null>(null);
     const [currentStep, setCurrentStep] = useState(0);

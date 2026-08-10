@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useTours } from './useTours.js';
+import { useTours, dispatchTourRequest } from './useTours.js';
 import { TOURS } from '../data/tours.js';
 import { useAppStore } from '../store/appStore.js';
 
@@ -33,6 +33,12 @@ describe('useTours', () => {
     it('starts a tour on event trigger', () => {
         const { result } = renderHook(() => useTours());
         act(() => { fireTourEvent(TOURS[0].id); });
+        expect(result.current.activeTourId).toBe(TOURS[0].id);
+    });
+
+    it('starts a tour via dispatchTourRequest', () => {
+        const { result } = renderHook(() => useTours());
+        act(() => { dispatchTourRequest(TOURS[0].id); });
         expect(result.current.activeTourId).toBe(TOURS[0].id);
     });
 
