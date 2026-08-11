@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Admin Logs Viewer E2E Tests', () => {
   test('Admin Logs Tab access and log viewing', async ({ page }) => {
-    await disableTours(page);
     // Mock the admin logs API response to ensure logs are returned
     await page.route('**/api/admin/logs', async (route) => {
       const mockLogs = [

@@ -4,7 +4,6 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 async function expandSection(page: any, sectionTitle: string) {
   const sectionHeader = page.locator(`.sidebar-section:has-text("${sectionTitle}") >> .sidebar-section-header`).first();
@@ -28,7 +27,6 @@ async function fillKVRow(row: any, key: string, value: string) {
 
 test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
   test('should run scan with User A and User B credentials and detect BOLA/IDOR vulnerability', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     page.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
     await page.goto('/');

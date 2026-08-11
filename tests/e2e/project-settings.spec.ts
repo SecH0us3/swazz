@@ -4,7 +4,6 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 async function fillKVRow(row: any, key: string, value: string) {
   const keyInput = row.locator('input[placeholder="Header"], input[placeholder="Name"], input[placeholder="Key"], input[placeholder="Category (e.g. xss)"]');
@@ -20,7 +19,6 @@ async function fillKVRow(row: any, key: string, value: string) {
 
 test.describe('Project and Payload Settings E2E Tests', () => {
   test('should configure project settings, verify raw config, and toggle payload settings', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -154,7 +152,6 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   });
 
   test('should verify settings have actual effect on fuzzer and cover General, Chaining, and Wordlists tabs', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -380,7 +377,6 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   });
 
   test('should support editing raw JSON config with comments (JSONC)', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to frontend
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -453,7 +449,6 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   });
 
   test('should configure AI Remediation settings and select rules', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to frontend
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -549,7 +544,6 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   });
 
   test('should display Traffic Capture settings tab', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to frontend
     await page.goto('/');
 

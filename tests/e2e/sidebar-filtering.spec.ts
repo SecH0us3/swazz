@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
   test('should exclude checked-out endpoints from fuzzing scope', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -94,7 +92,6 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
   });
 
   test('should toggle "Included Only" filter to hide/show excluded endpoints', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

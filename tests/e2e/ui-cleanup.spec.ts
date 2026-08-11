@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('UI/UX Right Column Cleanup Verification', () => {
   test('Verify streamlined ConfigSidebar and moved controls', async ({ page }) => {
-    await disableTours(page);
     // 1. Register and sign in a new user
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

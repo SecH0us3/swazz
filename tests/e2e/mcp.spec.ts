@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('MCP and API Key Hashing E2E Tests', () => {
   test('should display masked key, support rotation and show plain-text key once', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -86,7 +84,6 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
   });
 
   test('should support MCP server fuzzing and detect crashes/exceptions in MCP tools', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend
     page.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
     await page.goto('/');

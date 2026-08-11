@@ -4,12 +4,10 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () => {
   // Helper to register and log in before each test case
   test.beforeEach(async ({ page }) => {
-    await disableTours(page);
     page.on("console", msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on("pageerror", exception => console.log(`BROWSER EXCEPTION: ${exception}`));
     page.on("requestfailed", req => console.log(`BROWSER REQUEST FAILED: ${req.url()} - ${req.failure()?.errorText}`));

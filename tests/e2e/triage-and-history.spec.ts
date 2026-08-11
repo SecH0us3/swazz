@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () => {
   test('should complete scan, triage a finding, reload page, restore from history, and verify triage state is persisted', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to frontend
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

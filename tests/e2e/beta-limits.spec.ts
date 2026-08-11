@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
   test('should display beta slots banner and handle regular registration when under limit', async ({ page }) => {
-    await disableTours(page);
     await page.goto('/?no_bypass_e2e_gate=true');
     await page.getByRole('button', { name: 'Sign In' }).click();
     await page.getByRole('button', { name: 'Create an account' }).click();
@@ -45,7 +43,6 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
   });
 
   test('should require invite code and enforce limits when beta limit is reached', async ({ page }) => {
-    await disableTours(page);
     await page.route('**/api/info', async route => {
       const response = await route.fetch();
       const headers = response.headers();

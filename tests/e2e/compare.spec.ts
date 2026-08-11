@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Multi-Scan Comparison E2E Tests', () => {
   test('should run multiple scans, select them in History, compare them, and verify comparison data', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

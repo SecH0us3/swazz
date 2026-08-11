@@ -4,7 +4,6 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 
@@ -19,7 +18,6 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
   });
 
   test('should failover fuzzing tasks when a runner agent disconnects midway', async ({ page }) => {
-    await disableTours(page);
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));

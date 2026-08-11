@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
   test('should navigate to runners settings tab and verify active runner version', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -53,7 +51,6 @@ test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
   });
 
   test('should not show restart button for shared runners', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();

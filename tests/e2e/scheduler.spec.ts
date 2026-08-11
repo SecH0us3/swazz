@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Scan Scheduler & Timeout E2E Tests', () => {
   test('should restrict scheduling to Supporter Plan, allow saving valid cron, reject fast cron, support scan timeout, and reconnect on refresh', async ({ page }) => {
-    await disableTours(page);
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));

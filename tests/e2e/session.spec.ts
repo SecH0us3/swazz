@@ -4,11 +4,9 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { disableTours } from './helpers.js';
 
 test.describe('Session Expiration and Authentication Flow E2E Test', () => {
   test('should redirect to login screen when session token becomes invalid or expired (401)', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
@@ -43,7 +41,6 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
   });
 
   test('should enforce custom project session timeout and redirect to login screen', async ({ page }) => {
-    await disableTours(page);
     // 1. Navigate to the frontend dev server
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign In' }).click();
