@@ -3,12 +3,15 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { TIPS } from '../data/tips.js';
 import type { Tip } from '../data/tips.js';
 
 const ENABLED_KEY = 'swazz_tips_enabled';
 const DISMISSED_KEY = 'swazz_dismissed_tips';
+const LAST_SHOWN_KEY = 'swazz_tips_last_shown';
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 function readEnabled(): boolean {
     try { return localStorage.getItem(ENABLED_KEY) !== 'false'; }
@@ -29,15 +32,49 @@ function writeDismissed(ids: string[]) {
     catch { /* ignore */ }
 }
 
+function readLastShown(): number {
+    try {
+        const raw = localStorage.getItem(LAST_SHOWN_KEY);
+        const n = raw ? Number(raw) : 0;
+        return Number.isFinite(n) ? n : 0;
+    } catch { return 0; }
+}
+
+function writeLastShown(ts: number) {
+    try { localStorage.setItem(LAST_SHOWN_KEY, String(ts)); }
+    catch { /* ignore */ }
+}
+
+function nextTip(dismissed: string[]): Tip | null {
+    return TIPS.find((t) => !dismissed.includes(t.id)) ?? null;
+}
+
 export function useTips() {
     const [enabled, setEnabledState] = useState<boolean>(() => readEnabled());
     const [dismissed, setDismissedState] = useState<string[]>(() => readDismissed());
     const [currentTip, setCurrentTip] = useState<Tip | null>(null);
+    const lastShownRef = useRef<number>(readLastShown());
+
+    const maybeShow = useCallback(() => {
+        if (!enabled) { setCurrentTip(null); return; }
+        const now = Date.now();
+        if (lastShownRef.current !== 0 && now - lastShownRef.current < DAY_MS) return;
+        const tip = nextTip(dismissed);
+        if (!tip) { setCurrentTip(null); return; }
+        lastShownRef.current = now;
+        writeLastShown(now);
+        setCurrentTip(tip);
+    }, [enabled, dismissed]);
 
     useEffect(() => {
-        if (!enabled) { setCurrentTip(null); return; }
-        setCurrentTip(TIPS.find((t) => !dismissed.includes(t.id)) ?? null);
-    }, [enabled, dismissed]);
+        maybeShow();
+    }, [maybeShow]);
+
+    useEffect(() => {
+        if (!enabled) return;
+        const id = setInterval(maybeShow, CHECK_INTERVAL_MS);
+        return () => clearInterval(id);
+    }, [enabled, maybeShow]);
 
     const dismissTip = useCallback((id: string) => {
         setDismissedState((prev) => {
@@ -46,6 +83,7 @@ export function useTips() {
             writeDismissed(next);
             return next;
         });
+        setCurrentTip(null);
     }, []);
 
     const resetDismissed = useCallback(() => {
@@ -59,6 +97,7 @@ export function useTips() {
     const setEnabled = useCallback((value: boolean) => {
         try { localStorage.setItem(ENABLED_KEY, value ? 'true' : 'false'); } catch { /* ignore */ }
         setEnabledState(value);
+        if (!value) setCurrentTip(null);
     }, []);
 
     return { enabled, currentTip, dismissTip, resetDismissed, setEnabled };
