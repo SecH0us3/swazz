@@ -9,6 +9,7 @@ import { useTheme } from '../hooks/useTheme.js';
 import QRCode from 'qrcode';
 import { TrafficCaptureTab } from './UserSettings/TrafficCaptureTab.js';
 import { useTips } from '../hooks/useTips.js';
+import { useToast } from '../hooks/useToast.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -17,6 +18,7 @@ export function UserSettings() {
     const apiBaseUrl = PROXY_URL || window.location.origin;
     const { mode, theme, setMode, toggleTheme } = useTheme();
     const { enabled: tipsEnabled, resetDismissed, setEnabled: setTipsEnabled } = useTips();
+    const { showToast } = useToast();
     const [copiedApiKey, setCopiedApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
     const [newApiKeyToShow, setNewApiKeyToShow] = useState<string | null>(null);
@@ -598,7 +600,7 @@ export function UserSettings() {
                             </div>
                             <div className="settings-form-group">
                                 <label className="settings-form-label">Tip Notifications</label>
-                                <div className="settings-action-row">
+                                <div className="settings-action-row-left">
                                     <label className="premium-checkbox-label">
                                         <input
                                             type="checkbox"
@@ -609,11 +611,14 @@ export function UserSettings() {
                                         <strong style={{ fontSize: '13px' }}>Show "Did you know" tips</strong>
                                     </label>
                                 </div>
-                                <div className="settings-action-row">
+                                <div className="settings-action-row-left">
                                     <button
                                         type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={resetDismissed}
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => {
+                                            resetDismissed();
+                                            showToast('Dismissed tips reset', 'success');
+                                        }}
                                     >
                                         Reset dismissed tips
                                     </button>
