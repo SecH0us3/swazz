@@ -94,6 +94,13 @@ describe('useTips cooldown', () => {
         expect(localStorage.getItem(LAST_SHOWN_KEY)).not.toBeNull();
     });
 
+    it('always shows a tip on mount even if one was shown recently (no entry cooldown)', () => {
+        // simulate a tip shown 1 hour ago
+        localStorage.setItem(LAST_SHOWN_KEY, String(Date.now() - 60 * 60 * 1000));
+        const { result } = renderHook(() => useTips());
+        expect(result.current.currentTip?.id).toBe(TIPS[0].id);
+    });
+
     it('does not show a tip again within 24h', () => {
         const { result } = renderHook(() => useTips());
         act(() => { result.current.dismissTip(TIPS[0].id); });

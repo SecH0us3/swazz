@@ -55,10 +55,10 @@ export function useTips() {
     const [currentTip, setCurrentTip] = useState<Tip | null>(null);
     const lastShownRef = useRef<number>(readLastShown());
 
-    const maybeShow = useCallback(() => {
+    const showNext = useCallback((force: boolean) => {
         if (!enabled) { setCurrentTip(null); return; }
         const now = Date.now();
-        if (lastShownRef.current !== 0 && now - lastShownRef.current < DAY_MS) return;
+        if (!force && lastShownRef.current !== 0 && now - lastShownRef.current < DAY_MS) return;
         const tip = nextTip(dismissed);
         if (!tip) { setCurrentTip(null); return; }
         lastShownRef.current = now;
@@ -66,15 +66,20 @@ export function useTips() {
         setCurrentTip(tip);
     }, [enabled, dismissed]);
 
+    // On mount (login/entry): ALWAYS show the next un-dismissed tip (no cooldown).
+    // Run exactly once on genuine mount so dismissing a tip does not immediately
+    // re-trigger the forced show (next tip only arrives via the daily timer).
     useEffect(() => {
-        maybeShow();
-    }, [maybeShow]);
+        showNext(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
+    // While the session stays open: one more per day.
     useEffect(() => {
         if (!enabled) return;
-        const id = setInterval(maybeShow, CHECK_INTERVAL_MS);
+        const id = setInterval(() => showNext(false), CHECK_INTERVAL_MS);
         return () => clearInterval(id);
-    }, [enabled, maybeShow]);
+    }, [enabled, showNext]);
 
     const dismissTip = useCallback((id: string) => {
         setDismissedState((prev) => {
