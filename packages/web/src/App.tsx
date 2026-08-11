@@ -40,7 +40,7 @@ export default function App() {
     const { authEnabled, githubAuthEnabled, gitlabAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
-    const { enabled: tipsEnabled, currentTip, dismissTip } = useTips();
+    const { enabled: tipsEnabled, currentTip, dismissTip, setEnabled: setTipsEnabled } = useTips();
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
@@ -993,7 +993,7 @@ export default function App() {
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
                 {tipsEnabled && currentTip && (
-                    <DidYouKnowToast tip={currentTip} onDismiss={() => dismissTip(currentTip.id)} />
+                    <DidYouKnowToast tip={currentTip} onDismiss={() => dismissTip(currentTip.id)} onDisable={() => setTipsEnabled(false)} />
                 )}
             </div>
 

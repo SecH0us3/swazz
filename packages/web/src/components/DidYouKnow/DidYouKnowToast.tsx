@@ -6,22 +6,31 @@
 import type { Tip } from '../../data/tips.js';
 import './DidYouKnowToast.css';
 
-export function DidYouKnowToast({ tip, onDismiss }: { tip: Tip; onDismiss: () => void }) {
+export function DidYouKnowToast({ tip, onDismiss, onDisable }: { tip: Tip; onDismiss: () => void; onDisable: () => void }) {
     return (
-        <div className="dyd-toast" role="status" aria-live="polite">
-            <div className="dyd-toast-head">
-                <span className="dyd-toast-emoji" aria-hidden="true">💡</span>
-                <span className="dyd-toast-title">Did you know / А знаете ли вы...</span>
+        <div className="dyd-tip" role="status" aria-live="polite">
+            <button
+                type="button"
+                className="dyd-tip-close"
+                onClick={onDisable}
+                title="Turn off tips"
+                aria-label="Turn off tips"
+            >
+                ×
+            </button>
+            <div className="dyd-tip-head">
+                <span className="dyd-tip-icon" aria-hidden="true">💡</span>
+                <span className="dyd-tip-eyebrow">Did you know</span>
             </div>
-            <div className="dyd-toast-body">
-                <strong className="dyd-toast-tip-title">{tip.title}</strong>
-                <p className="dyd-toast-summary">{tip.summary}</p>
+            <div className="dyd-tip-body">
+                <strong className="dyd-tip-title">{tip.title}</strong>
+                <p className="dyd-tip-summary">{tip.summary}</p>
             </div>
-            <div className="dyd-toast-actions">
+            <div className="dyd-tip-actions">
                 {tip.docsUrl && (
-                    <a className="dyd-toast-link" href={tip.docsUrl} target="_blank" rel="noopener noreferrer">Documentation</a>
+                    <a className="dyd-tip-link" href={tip.docsUrl} target="_blank" rel="noopener noreferrer">Learn more</a>
                 )}
-                <button type="button" className="dyd-toast-dismiss" onClick={onDismiss}>Понятно / I know</button>
+                <button type="button" className="dyd-tip-ok" onClick={onDismiss}>OK</button>
             </div>
         </div>
     );
