@@ -33,6 +33,7 @@ import { fetchProjects } from './services/projectService.js';
 import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 import { useTips } from './hooks/useTips.js';
 import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
+import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -41,6 +42,7 @@ export default function App() {
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
     const { enabled: tipsEnabled, currentTip, dismissTip, setEnabled: setTipsEnabled } = useTips();
+    const [tipsOffNotice, setTipsOffNotice] = useState(false);
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
@@ -992,10 +994,27 @@ export default function App() {
                 {toasts.map((t) => (
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
-                {tipsEnabled && currentTip && (
-                    <DidYouKnowToast tip={currentTip} onDismiss={() => dismissTip(currentTip.id)} onDisable={() => setTipsEnabled(false)} />
-                )}
             </div>
+
+            {tipsEnabled && currentTip && (
+                <DidYouKnowToast
+                    tip={currentTip}
+                    onDismiss={() => dismissTip(currentTip.id)}
+                    onDisable={() => {
+                        setTipsEnabled(false);
+                        setTipsOffNotice(true);
+                    }}
+                />
+            )}
+
+            {tipsOffNotice && (
+                <TipsOffNotice
+                    onOpenSettings={() => {
+                        setTipsOffNotice(false);
+                        useAppStore.setState({ activeTab: 'settings' });
+                    }}
+                />
+            )}
 
             {!isSidebarHiddenDesktop && <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />}
             {!isConfigHiddenDesktop && <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />}
