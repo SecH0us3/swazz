@@ -15,7 +15,7 @@ export const TIPS: Tip[] = [
         id: 'disable-active-param-fuzzing',
         title: 'Disable Active Parameter Fuzzing for fast scans',
         summary: 'Active parameter fuzzing mutates every parameter with a large payload corpus, which can dramatically slow down a scan. Disable it when you only need a quick structural or pass-through check of an endpoint. Re-enable it for deep coverage when time allows.',
-        docsUrl: 'https://sech0us3.github.io/swazz/usage.html',
+        docsUrl: 'https://sech0us3.github.io/swazz/usage.html#ui-performance-optimization',
     },
     {
         id: 'auth-headers',
@@ -27,7 +27,7 @@ export const TIPS: Tip[] = [
         id: 'rate-limiting',
         title: 'Mind the rate limits',
         summary: 'Fuzzing sends many concurrent requests and can trip rate limiters on the target or get you blocked. Reduce concurrency and add delays between requests for production targets. Respect the target API\'s documented rate policy to keep scans reliable.',
-        docsUrl: 'https://sech0us3.github.io/swazz/usage.html',
+        docsUrl: 'https://sech0us3.github.io/swazz/usage.html#configuration-file-swazzconfigjson',
     },
     {
         id: 'enable-2fa',
@@ -39,7 +39,7 @@ export const TIPS: Tip[] = [
         id: 'custom-wordlists',
         title: 'Bring your own wordlists',
         summary: 'Swazz ships with default payloads, but you can supply your own wordlists tuned to your API\'s domain. Custom lists improve detection of application-specific injection points. Load them via the scan configuration to override the built-in corpus.',
-        docsUrl: 'https://sech0us3.github.io/swazz/usage.html',
+        docsUrl: 'https://sech0us3.github.io/swazz/usage.html#configuration-file-swazzconfigjson',
     },
     {
         id: 'bola-testing',
@@ -51,7 +51,7 @@ export const TIPS: Tip[] = [
         id: 'schedule-scans',
         title: 'Schedule recurring scans',
         summary: 'Automate regular scans so your API is continuously checked against new vulnerabilities as it changes. Recurring scans catch regressions and newly introduced weaknesses between manual review cycles. Set a cadence that matches your release frequency.',
-        docsUrl: 'https://sech0us3.github.io/swazz/usage.html',
+        docsUrl: 'https://sech0us3.github.io/swazz/ci_cd.html',
     },
     {
         id: 'chaining-rules',
@@ -63,7 +63,7 @@ export const TIPS: Tip[] = [
         id: 'webhooks',
         title: 'Get alerted on findings',
         summary: 'Configure webhooks so Swazz pushes notifications to your chat or ticketing system the moment a finding is detected. Instant alerts let your team respond before an issue is exploited. Add your endpoint URL and select which severities trigger a notification.',
-        docsUrl: 'https://sech0us3.github.io/swazz/webhooks.html',
+        docsUrl: 'https://sech0us3.github.io/swazz/webhooks.html#configuration',
     },
     {
         id: 'rotate-api-keys',
@@ -75,6 +75,6 @@ export const TIPS: Tip[] = [
         id: 'response-anomaly-tuning',
         title: 'Tune response anomaly detection',
         summary: 'Swazz flags responses whose size or structure differs dramatically from the baseline to surface potential issues. Tune the sensitivity thresholds to filter out noisy benign responses. Tight thresholds focus your attention on genuinely anomalous behavior.',
-        docsUrl: 'https://sech0us3.github.io/swazz/usage.html',
+        docsUrl: 'https://sech0us3.github.io/swazz/usage.html#configuration-file-swazzconfigjson',
     },
 ];
