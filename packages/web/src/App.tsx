@@ -43,15 +43,6 @@ export default function App() {
     const { toasts, showToast, dismissToast } = useToast();
     const { enabled: tipsEnabled, currentTip, dismissTip, setEnabled: setTipsEnabled, showOnEntry } = useTips();
     const [tipsOffNotice, setTipsOffNotice] = useState(false);
-
-    const isAuthed = !!token || !!isGuest;
-    const prevAuthed = useRef(false);
-    useEffect(() => {
-        if (isAuthed && !prevAuthed.current) {
-            showOnEntry();
-        }
-        prevAuthed.current = isAuthed;
-    }, [isAuthed, showOnEntry]);
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
@@ -729,6 +720,20 @@ export default function App() {
         } as FuzzResult });
     };
 
+    const handleLogin = async (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => {
+        const res = await login(username, password, twoFactorCode, turnstileToken);
+        if (res?.success) showOnEntry();
+        return res;
+    };
+    const handleRegister = async (username: string, password: string, email?: string, turnstileToken?: string, inviteCode?: string) => {
+        await register(username, password, email, turnstileToken, inviteCode);
+        showOnEntry();
+    };
+    const handleGuest = async (turnstileToken?: string) => {
+        await continueAsGuest(turnstileToken);
+        showOnEntry();
+    };
+
 
 
     if (isLoading) {
@@ -736,7 +741,7 @@ export default function App() {
     }
 
     if (!token && !isGuest) {
-        return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
+        return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} onGuest={handleGuest} />;
     }
 
     if (userProfile?.deleteRequestedAt) {
