@@ -31,6 +31,9 @@ import { AuthModal } from './components/Auth/AuthModal.js';
 import { sanitizeTargetUrl } from './utils/url.js';
 import { fetchProjects } from './services/projectService.js';
 import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
+import { useTips } from './hooks/useTips.js';
+import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
+import { TipsOffNotice } from './components/DidYouKnow/TipsOffNotice.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -38,6 +41,8 @@ export default function App() {
     const { authEnabled, githubAuthEnabled, gitlabAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
+    const { enabled: tipsEnabled, currentTip, dismissTip, setEnabled: setTipsEnabled, showOnEntry } = useTips();
+    const [tipsOffNotice, setTipsOffNotice] = useState(false);
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
@@ -715,6 +720,20 @@ export default function App() {
         } as FuzzResult });
     };
 
+    const handleLogin = async (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => {
+        const res = await login(username, password, twoFactorCode, turnstileToken);
+        if (res?.success) showOnEntry();
+        return res;
+    };
+    const handleRegister = async (username: string, password: string, email?: string, turnstileToken?: string, inviteCode?: string) => {
+        await register(username, password, email, turnstileToken, inviteCode);
+        showOnEntry();
+    };
+    const handleGuest = async (turnstileToken?: string) => {
+        await continueAsGuest(turnstileToken);
+        showOnEntry();
+    };
+
 
 
     if (isLoading) {
@@ -722,7 +741,7 @@ export default function App() {
     }
 
     if (!token && !isGuest) {
-        return <LoginScreen onLogin={login} onRegister={register} onGuest={continueAsGuest} />;
+        return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} onGuest={handleGuest} />;
     }
 
     if (userProfile?.deleteRequestedAt) {
@@ -990,6 +1009,26 @@ export default function App() {
                     <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
                 ))}
             </div>
+
+            {tipsEnabled && currentTip && (
+                <DidYouKnowToast
+                    tip={currentTip}
+                    onDismiss={() => dismissTip(currentTip.id)}
+                    onDisable={() => {
+                        setTipsEnabled(false);
+                        setTipsOffNotice(true);
+                    }}
+                />
+            )}
+
+            {tipsOffNotice && (
+                <TipsOffNotice
+                    onOpenSettings={() => {
+                        setTipsOffNotice(false);
+                        useAppStore.setState({ activeTab: 'settings' });
+                    }}
+                />
+            )}
 
             {!isSidebarHiddenDesktop && <div className="sidebar-resizer" style={{ left: sidebarWidth - 4 }} onMouseDown={startResizingLeft} title="Drag to resize" />}
             {!isConfigHiddenDesktop && <div className="sidebar-resizer" style={{ right: configSidebarWidth - 4, left: 'auto' }} onMouseDown={startResizingRight} title="Drag to resize" />}

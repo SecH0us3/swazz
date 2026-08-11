@@ -1,0 +1,46 @@
+.dyd-off {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 3000;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  animation: slide-in-up 280ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dyd-off {
+    animation: none;
+  }
+}
+
+.dyd-off-text {
+  display: inline;
+}
+
+.dyd-off-action {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--accent-light);
+  cursor: pointer;
+  transition: text-decoration var(--duration-fast) var(--ease-out);
+}
+
+.dyd-off-action:hover {
+  text-decoration: underline;
+}
