@@ -26,23 +26,27 @@ describe('useTips', () => {
 
     it('selects the first non-dismissed tip', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         expect(result.current.currentTip?.id).toBe(TIPS[0].id);
     });
 
     it('hides the current tip on dismissal', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { result.current.dismissTip(TIPS[0].id); });
         expect(result.current.currentTip).toBeNull();
     });
 
     it('returns null when all tips are dismissed', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { TIPS.forEach((t) => result.current.dismissTip(t.id)); });
         expect(result.current.currentTip).toBeNull();
     });
 
     it('persists dismissed tips to localStorage', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { result.current.dismissTip(TIPS[0].id); });
         expect(JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]')).toContain(TIPS[0].id);
     });
@@ -50,6 +54,7 @@ describe('useTips', () => {
     it('resetDismissed restores the pool', () => {
         const { result } = renderHook(() => useTips());
         act(() => {
+            result.current.showOnEntry();
             result.current.dismissTip(TIPS[0].id);
             result.current.resetDismissed();
         });
@@ -58,6 +63,7 @@ describe('useTips', () => {
 
     it('setEnabled(false) hides current tip and persists', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { result.current.setEnabled(false); });
         expect(result.current.enabled).toBe(false);
         expect(result.current.currentTip).toBeNull();
@@ -88,21 +94,24 @@ describe('useTips cooldown', () => {
         vi.useRealTimers();
     });
 
-    it('shows a tip on mount when no tip was shown before', () => {
+    it('shows a tip on entry when no tip was shown before', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         expect(result.current.currentTip?.id).toBe(TIPS[0].id);
         expect(localStorage.getItem(LAST_SHOWN_KEY)).not.toBeNull();
     });
 
-    it('always shows a tip on mount even if one was shown recently (no entry cooldown)', () => {
+    it('always shows a tip on entry even if one was shown recently (no entry cooldown)', () => {
         // simulate a tip shown 1 hour ago
         localStorage.setItem(LAST_SHOWN_KEY, String(Date.now() - 60 * 60 * 1000));
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         expect(result.current.currentTip?.id).toBe(TIPS[0].id);
     });
 
-    it('does not show a tip again within 24h', () => {
+    it('does not show a tip again within 24h while the session stays open', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { result.current.dismissTip(TIPS[0].id); });
         expect(result.current.currentTip).toBeNull();
         // advance 23h total (still within the 24h cooldown)
@@ -113,6 +122,7 @@ describe('useTips cooldown', () => {
 
     it('shows the next tip after 24h while the session stays open', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { result.current.dismissTip(TIPS[0].id); });
         // advance 24h
         vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
@@ -123,11 +133,13 @@ describe('useTips cooldown', () => {
     it('does not show when disabled', () => {
         localStorage.setItem(ENABLED_KEY, 'false');
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         expect(result.current.currentTip).toBeNull();
     });
 
     it('setEnabled(false) hides the current tip', () => {
         const { result } = renderHook(() => useTips());
+        act(() => { result.current.showOnEntry(); });
         act(() => { result.current.setEnabled(false); });
         expect(result.current.currentTip).toBeNull();
     });

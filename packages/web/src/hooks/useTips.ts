@@ -66,13 +66,10 @@ export function useTips() {
         setCurrentTip(tip);
     }, [enabled, dismissed]);
 
-    // On mount (login/entry): ALWAYS show the next un-dismissed tip (no cooldown).
-    // Run exactly once on genuine mount so dismissing a tip does not immediately
-    // re-trigger the forced show (next tip only arrives via the daily timer).
-    useEffect(() => {
+    // Public: call on every login/entry to ALWAYS show the next un-dismissed tip.
+    const showOnEntry = useCallback(() => {
         showNext(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [showNext]);
 
     // While the session stays open: one more per day.
     useEffect(() => {
@@ -105,5 +102,5 @@ export function useTips() {
         if (!value) setCurrentTip(null);
     }, []);
 
-    return { enabled, currentTip, dismissTip, resetDismissed, setEnabled };
+    return { enabled, currentTip, dismissTip, resetDismissed, setEnabled, showOnEntry };
 }
