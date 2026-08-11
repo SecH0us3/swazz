@@ -41,8 +41,17 @@ export default function App() {
     const { authEnabled, githubAuthEnabled, gitlabAuthEnabled, token, isGuest, isLoading, login, register, continueAsGuest, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { toasts, showToast, dismissToast } = useToast();
-    const { enabled: tipsEnabled, currentTip, dismissTip, setEnabled: setTipsEnabled } = useTips();
+    const { enabled: tipsEnabled, currentTip, dismissTip, setEnabled: setTipsEnabled, showOnEntry } = useTips();
     const [tipsOffNotice, setTipsOffNotice] = useState(false);
+
+    const isAuthed = !!token || !!isGuest;
+    const prevAuthed = useRef(false);
+    useEffect(() => {
+        if (isAuthed && !prevAuthed.current) {
+            showOnEntry();
+        }
+        prevAuthed.current = isAuthed;
+    }, [isAuthed, showOnEntry]);
     const userProfile = useAppStore(state => state.userProfile);
     const parsingError = useAppStore(state => state.parsingError);
     const setParsingError = useAppStore(state => state.setParsingError);
