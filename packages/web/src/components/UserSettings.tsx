@@ -9,7 +9,6 @@ import { useTheme } from '../hooks/useTheme.js';
 import QRCode from 'qrcode';
 import { TrafficCaptureTab } from './UserSettings/TrafficCaptureTab.js';
 import { useTips } from '../hooks/useTips.js';
-import { useTours } from '../hooks/useTours.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
@@ -18,7 +17,6 @@ export function UserSettings() {
     const apiBaseUrl = PROXY_URL || window.location.origin;
     const { mode, theme, setMode, toggleTheme } = useTheme();
     const { enabled: tipsEnabled, resetDismissed, setEnabled: setTipsEnabled } = useTips();
-    const { resetAll: resetTours } = useTours();
     const [copiedApiKey, setCopiedApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
     const [newApiKeyToShow, setNewApiKeyToShow] = useState<string | null>(null);
@@ -618,15 +616,6 @@ export function UserSettings() {
                                         onClick={resetDismissed}
                                     >
                                         Reset dismissed tips
-                                    </button>
-                                </div>
-                                <div className="settings-action-row">
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={resetTours}
-                                    >
-                                        Reset completed tours
                                     </button>
                                 </div>
                             </div>

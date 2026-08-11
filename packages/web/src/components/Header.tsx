@@ -9,7 +9,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './UserMenu.js';
 import { useToast } from '../hooks/useToast.js';
 import { sanitizeTargetUrl } from '../utils/url.js';
-import { dispatchTourRequest } from '../hooks/useTours.js';
 
 interface Props {
     onToggleSidebar?: () => void;
@@ -276,18 +275,6 @@ export function Header({
 
             {/* Right Section: Theme Toggle & Guest Unified Button / User Menu */}
             <div className="header-right">
-                <button
-                    type="button"
-                    className="btn btn-ghost btn-icon"
-                    title="Replay onboarding tour"
-                    aria-label="Replay tour"
-                    onClick={() => dispatchTourRequest('workspace-first')}
-                >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polygon points="10 8 16 12 10 16 10 8"></polygon>
-                    </svg>
-                </button>
                 <button className="btn btn-ghost btn-icon" onClick={onToggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} aria-label="Toggle Theme">
                     {theme === 'dark' ? (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
