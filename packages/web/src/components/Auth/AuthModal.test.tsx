@@ -45,6 +45,27 @@ describe('AuthModal Component', () => {
         expect(container.firstChild).toBeNull();
     });
 
+    it('adds always-dark modifier class when forceDark is true', () => {
+        const { container } = render(<AuthModal {...defaultProps} forceDark />);
+        const modal = container.querySelector('.auth-modal');
+        expect(modal).not.toBeNull();
+        expect(modal!.classList.contains('auth-modal--always-dark')).toBe(true);
+    });
+
+    it('omits always-dark modifier class when forceDark is false', () => {
+        const { container } = render(<AuthModal {...defaultProps} forceDark={false} />);
+        const modal = container.querySelector('.auth-modal');
+        expect(modal).not.toBeNull();
+        expect(modal!.classList.contains('auth-modal--always-dark')).toBe(false);
+    });
+
+    it('omits always-dark modifier class when forceDark is not provided', () => {
+        const { container } = render(<AuthModal {...defaultProps} />);
+        const modal = container.querySelector('.auth-modal');
+        expect(modal).not.toBeNull();
+        expect(modal!.classList.contains('auth-modal--always-dark')).toBe(false);
+    });
+
     it('renders registration form when initialIsRegistering is true', () => {
         render(<AuthModal {...defaultProps} initialIsRegistering={true} />);
 

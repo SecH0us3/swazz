@@ -356,6 +356,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                 isOpen={showModal}
                 onClose={closeAuthModal}
                 initialIsRegistering={isRegistering}
+                forceDark
                 onLogin={onLogin}
                 onRegister={onRegister}
                 onGuest={onGuest}
