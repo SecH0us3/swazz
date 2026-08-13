@@ -31,6 +31,7 @@ interface AuthModalProps {
     isOpen: boolean;
     onClose: () => void;
     initialIsRegistering?: boolean;
+    forceDark?: boolean;
     onLogin: (username: string, password: string, twoFactorCode?: string, turnstileToken?: string) => Promise<{ twoFactorRequired?: boolean } | void>;
     onRegister: (username: string, password: string, email?: string, turnstileToken?: string, inviteCode?: string) => Promise<void>;
     onGuest?: (turnstileToken?: string) => Promise<void>;
@@ -40,6 +41,7 @@ export function AuthModal({
     isOpen,
     onClose,
     initialIsRegistering = false,
+    forceDark = false,
     onLogin,
     onRegister,
     onGuest,
@@ -253,7 +255,7 @@ export function AuthModal({
 
     return (
         <div className="auth-modal-backdrop" onClick={onClose}>
-            <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+            <div className={`auth-modal${forceDark ? ' auth-modal--always-dark' : ''}`} onClick={(e) => e.stopPropagation()}>
                 <button type="button" className="auth-modal-close" onClick={onClose} aria-label="Close modal">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
