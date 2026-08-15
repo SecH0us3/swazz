@@ -8,6 +8,7 @@ import { useAppStore } from '../store/appStore.js';
 import { useTheme } from '../hooks/useTheme.js';
 import QRCode from 'qrcode';
 import { TrafficCaptureTab } from './UserSettings/TrafficCaptureTab.js';
+import { LicenseTab } from './UserSettings/LicenseTab.js';
 import { useTips } from '../hooks/useTips.js';
 import { useToast } from '../hooks/useToast.js';
 
@@ -75,7 +76,7 @@ export function UserSettings() {
     const [setupSuccess, setSetupSuccess] = useState('');
     const [is2faLoading, setIs2faLoading] = useState(false);
 
-    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger' | 'admin' | 'mcp' | 'traffic_capture'>('account');
+    const [activeSubTab, setActiveSubTab] = useState<'account' | 'security' | 'danger' | 'admin' | 'mcp' | 'traffic_capture' | 'license'>('account');
 
     const [adminSecret, setAdminSecret] = useState(() => localStorage.getItem('admin_secret') || '');
     const [inputSecret, setInputSecret] = useState(() => localStorage.getItem('admin_secret') || '');
@@ -491,6 +492,16 @@ export function UserSettings() {
                             <circle cx="12" cy="12" r="3" />
                         </svg>
                         Traffic Capture
+                    </button>
+                    <button
+                        className={`settings-nav-btn ${activeSubTab === 'license' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('license')}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        License & Subscription
                     </button>
                 </div>
 
@@ -1262,6 +1273,7 @@ console.log("Successfully added Swazz Cloud MCP to Google Antigravity!");
                         </div>
                     )}
                     {activeSubTab === 'traffic_capture' && <TrafficCaptureTab />}
+                    {activeSubTab === 'license' && <LicenseTab />}
                 </div>
             </div>
         </div>

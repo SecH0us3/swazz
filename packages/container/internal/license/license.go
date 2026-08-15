@@ -29,10 +29,11 @@ var (
 var DefaultPublicKeyHex = "a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314"
 
 type License struct {
-	Company   string    `json:"company"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Features  []string  `json:"features"`
-	MaxUsers  int       `json:"max_users,omitempty"`
+	Company        string    `json:"company"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	Features       []string  `json:"features"`
+	MaxUsers       int       `json:"max_users,omitempty"`
+	MaxConcurrency int       `json:"max_concurrency,omitempty"`
 }
 
 func (l *License) HasFeature(feature string) bool {

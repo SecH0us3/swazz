@@ -216,7 +216,7 @@ func runCLIErr(args []string) error {
 			logger.Info("🔑 Enterprise license active: %s (expires %s)", lic.Company, lic.ExpiresAt.Format("2006-01-02"))
 		}
 	}
-	_ = activeLicense
+	gate := license.GateFromLicense(activeLicense)
 
 	runCfg, err := BuildRunnerConfig(&cliCfg)
 	if err != nil {
@@ -225,7 +225,7 @@ func runCLIErr(args []string) error {
 
 	// 4. Initialize and start runner
 	client := &http.Client{Timeout: time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond}
-	r := runner.New(runCfg, client)
+	r := runner.New(runCfg, client, gate)
 	defer r.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -400,7 +400,17 @@ func runCLIErr(args []string) error {
 
 	printSummary(findings, &stats)
 
+	requireExport := func(name string) error {
+		if gate.Has(license.FeatureReportExports) {
+			return nil
+		}
+		return fmt.Errorf("report export '%s' requires a paid plan (feature: %s)", name, license.FeatureReportExports)
+	}
+
 	if *sarifOut != "" {
+		if err := requireExport("sarif"); err != nil {
+			return err
+		}
 		report := output.ToSARIF(findings, "0.1.0", runCfg.BaseURL)
 		if err := writeJSON(*sarifOut, report); err != nil {
 			log.Printf("Failed to save SARIF: %v", err)
@@ -417,6 +427,9 @@ func runCLIErr(args []string) error {
 		}
 	}
 	if *htmlOut != "" {
+		if err := requireExport("html"); err != nil {
+			return err
+		}
 		html := output.ToHTML(findings, &stats)
 		if err := os.WriteFile(*htmlOut, []byte(html), 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
 			log.Printf("Failed to write HTML report: %v", err)
@@ -425,6 +438,9 @@ func runCLIErr(args []string) error {
 		}
 	}
 	if *junitOut != "" {
+		if err := requireExport("junit"); err != nil {
+			return err
+		}
 		junitData := output.ToJUnit(findings, &stats)
 		if err := os.WriteFile(*junitOut, junitData, 0600); err != nil { // #nosec G306
 			log.Printf("Failed to write JUnit report: %v", err)
@@ -433,6 +449,9 @@ func runCLIErr(args []string) error {
 		}
 	}
 	if *markdownOut != "" {
+		if err := requireExport("markdown"); err != nil {
+			return err
+		}
 		mdData := output.ToMarkdown(findings, &stats, Version)
 		if err := os.WriteFile(*markdownOut, mdData, 0600); err != nil { // #nosec G306
 			log.Printf("Failed to write Markdown report: %v", err)

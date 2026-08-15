@@ -7,10 +7,12 @@ import { Hono } from 'hono';
 import { Env } from '../env';
 import { getUserIdFromRequest } from '../utils/auth';
 import { requirePermission } from '../middleware/rbac';
+import { requireFeature } from '../middleware/license';
 import { auditLog } from '../middleware/auditLog';
 import { IProjectRepository, ProjectRepository } from '../repositories/projects';
 import { IProjectService, ProjectService } from '../services/projects';
 import { RbacRepository } from '../repositories/rbac';
+import { FEATURE_SCHEDULED_RUNS } from '@swazz/shared';
 
 export function registerProjectsRoutes(
   app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
@@ -62,7 +64,7 @@ export function registerProjectsRoutes(
     return c.json(result);
   });
 
-  app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), auditLog('post:/api/projects/:id/schedule', 'Updated scan schedule'), async (c) => {
+  app.post('/api/projects/:id/schedule', requirePermission('post:/api/projects/:id/schedule'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('post:/api/projects/:id/schedule', 'Updated scan schedule'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const body = await c.req.json();
@@ -167,7 +169,7 @@ export function registerProjectsRoutes(
     }
   });
 
-  app.post('/api/projects/:id/webhooks', requirePermission('post:/api/projects/:id/webhooks'), auditLog('post:/api/projects/:id/webhooks', 'Created project webhook'), async (c) => {
+  app.post('/api/projects/:id/webhooks', requirePermission('post:/api/projects/:id/webhooks'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('post:/api/projects/:id/webhooks', 'Created project webhook'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const body = await c.req.json();
@@ -181,7 +183,7 @@ export function registerProjectsRoutes(
     }
   });
 
-  app.put('/api/projects/:id/webhooks/:webhook_id', requirePermission('put:/api/projects/:id/webhooks/:webhook_id'), auditLog('put:/api/projects/:id/webhooks/:webhook_id', 'Updated project webhook'), async (c) => {
+  app.put('/api/projects/:id/webhooks/:webhook_id', requirePermission('put:/api/projects/:id/webhooks/:webhook_id'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('put:/api/projects/:id/webhooks/:webhook_id', 'Updated project webhook'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const webhookId = c.req.param('webhook_id') as string;
@@ -196,7 +198,7 @@ export function registerProjectsRoutes(
     }
   });
 
-  app.delete('/api/projects/:id/webhooks/:webhook_id', requirePermission('delete:/api/projects/:id/webhooks/:webhook_id'), auditLog('delete:/api/projects/:id/webhooks/:webhook_id', 'Deleted project webhook'), async (c) => {
+  app.delete('/api/projects/:id/webhooks/:webhook_id', requirePermission('delete:/api/projects/:id/webhooks/:webhook_id'), requireFeature(FEATURE_SCHEDULED_RUNS), auditLog('delete:/api/projects/:id/webhooks/:webhook_id', 'Deleted project webhook'), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const webhookId = c.req.param('webhook_id') as string;
@@ -210,7 +212,7 @@ export function registerProjectsRoutes(
     }
   });
 
-  app.post('/api/projects/:id/webhooks/:webhook_id/test', requirePermission('post:/api/projects/:id/webhooks/:webhook_id/test'), async (c) => {
+  app.post('/api/projects/:id/webhooks/:webhook_id/test', requirePermission('post:/api/projects/:id/webhooks/:webhook_id/test'), requireFeature(FEATURE_SCHEDULED_RUNS), async (c) => {
     const services = projectServicesFactory(c.env);
     const projectId = c.req.param('id') as string;
     const webhookId = c.req.param('webhook_id') as string;

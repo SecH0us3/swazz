@@ -7,6 +7,7 @@
     "packages/web",
     "packages/edge",
     "packages/rag",
+    "packages/shared",
     "demo",
     "docs"
   ],
@@ -25,7 +26,7 @@
     "@playwright/test": "^1.62.1",
     "concurrently": "^10.0.3",
     "jsdom": "^30.0.0",
-    "wrangler": "^4.119.0"
+    "wrangler": "^4.123.0"
   },
   "dependencies": {
     "fake-indexeddb": "^6.2.5"

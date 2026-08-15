@@ -100,13 +100,23 @@ export default function App() {
                         plan: data.plan
                     } 
                 });
+                if (!data.is_guest) {
+                    fetch(`${PROXY_URL}/api/user/license`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                    .then(res => res.ok ? res.json() : null)
+                    .then(lic => {
+                        if (lic) useAppStore.setState({ licenseStatus: lic });
+                    })
+                    .catch(() => {});
+                }
             })
             .catch(err => {
                 console.error(err);
                 useAppStore.setState({ userProfile: null });
             });
         } else {
-            useAppStore.setState({ userProfile: null, activeProject: null });
+            useAppStore.setState({ userProfile: null, activeProject: null, licenseStatus: null });
         }
     }, [token]);
 

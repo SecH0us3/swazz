@@ -45,6 +45,8 @@ export interface IAuthRepository {
   deletePasskey(userId: string, credentialId: string): Promise<boolean>;
 
   updateUserPlan(username: string, plan: string): Promise<number>;
+  getLicenseKey(userId: string): Promise<string | null>;
+  setLicenseKey(userId: string, licenseKey: string | null): Promise<void>;
 
   linkGithubUser(userId: string, githubId: string): Promise<boolean>;
   getUserByGithubId(githubId: string): Promise<any>;
@@ -189,6 +191,15 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   async updateUserPlan(username: string, plan: string): Promise<number> {
     const result = await this.db.prepare('UPDATE users SET plan = ? WHERE username = ?').bind(plan, username).run();
     return result.meta.changes;
+  }
+
+  async getLicenseKey(userId: string): Promise<string | null> {
+    const row = await this.db.prepare('SELECT license_key FROM users WHERE id = ?').bind(userId).first<{ license_key: string | null }>();
+    return row?.license_key ?? null;
+  }
+
+  async setLicenseKey(userId: string, licenseKey: string | null): Promise<void> {
+    await this.db.prepare('UPDATE users SET license_key = ? WHERE id = ?').bind(licenseKey, userId).run();
   }
 
   async linkGithubUser(userId: string, githubId: string): Promise<boolean> {

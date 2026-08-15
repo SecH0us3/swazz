@@ -34,10 +34,11 @@ import (
 // License mirrors the License struct in packages/container/internal/license/license.go.
 // Fields must match exactly for VerifyToken() to deserialize correctly.
 type License struct {
-	Company   string    `json:"company"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Features  []string  `json:"features"`
-	MaxUsers  int       `json:"max_users,omitempty"`
+	Company        string    `json:"company"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	Features       []string  `json:"features"`
+	MaxUsers       int       `json:"max_users,omitempty"`
+	MaxConcurrency int       `json:"max_concurrency,omitempty"`
 }
 
 func main() {
@@ -46,6 +47,7 @@ func main() {
 	daysFlag := flag.Int("days", 365, "License validity duration in days")
 	featuresFlag := flag.String("features", "*", "Comma-separated feature list (use '*' for unlimited)")
 	maxUsersFlag := flag.Int("max-users", 0, "Maximum users (0 = unlimited)")
+	maxConcurrencyFlag := flag.Int("max-concurrency", 0, "Maximum concurrency ceiling (0 = free default of 5)")
 	tokenOnlyFlag := flag.Bool("token-only", false, "Output raw license token string only (useful for CI/automation)")
 	outFileFlag := flag.String("out", "", "Path to write license token string to file")
 
@@ -79,10 +81,11 @@ func main() {
 	features := parseFeatures(*featuresFlag)
 
 	lic := &License{
-		Company:   *companyFlag,
-		ExpiresAt: exp,
-		Features:  features,
-		MaxUsers:  *maxUsersFlag,
+		Company:        *companyFlag,
+		ExpiresAt:      exp,
+		Features:       features,
+		MaxUsers:       *maxUsersFlag,
+		MaxConcurrency: *maxConcurrencyFlag,
 	}
 
 	// --- Generate JWT token (EdDSA) matching GenerateToken() in license.go ---
@@ -120,6 +123,11 @@ func main() {
 		fmt.Printf("Max Users:         %d\n", lic.MaxUsers)
 	} else {
 		fmt.Printf("Max Users:         unlimited\n")
+	}
+	if lic.MaxConcurrency > 0 {
+		fmt.Printf("Max Concurrency:   %d\n", lic.MaxConcurrency)
+	} else {
+		fmt.Printf("Max Concurrency:   free default (5)\n")
 	}
 	fmt.Println("---------------------------------------------------------")
 	fmt.Println("SWAZZ_LICENSE_KEY:")

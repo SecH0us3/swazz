@@ -7,6 +7,8 @@ import React, { useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore.js';
 import type { ScanRun } from '../hooks/useDb.js';
 import { useToast } from '../hooks/useToast.js';
+import { useFeatureGate } from '../hooks/useFeatureGate.js';
+import { FEATURE_REPORT_EXPORTS } from '@swazz/shared';
 
 interface HistoryPageProps {
     runs: ScanRun[];
@@ -41,6 +43,7 @@ export function HistoryPage({
     const loadedRunId = useAppStore(state => state.loadedRunId);
     const liveRunId = useAppStore(state => state.liveRunId);
     const { showToast } = useToast();
+    const gateReportExports = useFeatureGate(FEATURE_REPORT_EXPORTS);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentTab, setCurrentTab] = useState<'all' | 'active' | 'completed' | 'failed'>('all');
 
@@ -326,8 +329,8 @@ export function HistoryPage({
                                                                 value=""
                                                             >
                                                                 <option value="" disabled>Export</option>
-                                                                <option value="html">HTML</option>
-                                                                <option value="md">Markdown</option>
+                                                                <option value="html" disabled={!gateReportExports.unlocked}>{gateReportExports.unlocked ? 'HTML' : 'HTML 🔒'}</option>
+                                                                <option value="md" disabled={!gateReportExports.unlocked}>{gateReportExports.unlocked ? 'Markdown' : 'Markdown 🔒'}</option>
                                                                 <option value="json">JSON</option>
                                                             </select>
                                                             <svg 

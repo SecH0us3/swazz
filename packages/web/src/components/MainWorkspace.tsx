@@ -23,7 +23,10 @@ import type { QueryOptions } from '../hooks/useDb.js';
 import type { ResultSummary } from '../hooks/useRunner.js';
 import { categorizeFinding } from '../utils/findings.js';
 import { extractErrorSubtype, getCleanDedupeKey } from '../utils/errors.js';
+import { useFeatureGate } from '../hooks/useFeatureGate.js';
+import { FEATURE_REPORT_EXPORTS, FEATURE_CLOUD_HISTORY } from '@swazz/shared';
 import { sanitizeTargetUrl } from '../utils/url.js';
+import { useToast } from '../hooks/useToast.js';
 
 // Helper to compute deduplicated count for Grouped Errors
 function getGroupedFindingsCount(rows: ResultSummary[]): number {
@@ -154,6 +157,7 @@ export function MainWorkspace({
     onResume,
     onToggleConfig,
 }: MainWorkspaceProps) {
+    const { showToast } = useToast();
     const {
         activeRunId,
         activeStats,
@@ -199,6 +203,8 @@ export function MainWorkspace({
     const betaModeEnabled = useAppStore((state) => state.betaModeEnabled);
     const userProfile = useAppStore((state) => state.userProfile);
     const isGuest = userProfile?.isGuest || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('swazz_guest') === 'true');
+    const gateReportExports = useFeatureGate(FEATURE_REPORT_EXPORTS);
+    const gateCloudHistory = useFeatureGate(FEATURE_CLOUD_HISTORY);
 
     const handleConfigureTarget = () => {
         const input = document.querySelector('.workspace-target-input') as HTMLInputElement | null;
@@ -429,13 +435,20 @@ export function MainWorkspace({
                         {compareRunIdA && compareRunIdB && (
                             <button
                                 className={`tab-bar-btn ${activeTab === 'compare' ? 'active' : ''}`}
-                                onClick={() => useAppStore.setState({ activeTab: 'compare' })}
+                                onClick={() => {
+                                    if (!gateCloudHistory.unlocked) {
+                                        showToast(gateCloudHistory.lockMessage, 'error');
+                                        return;
+                                    }
+                                    useAppStore.setState({ activeTab: 'compare' });
+                                }}
+                                title={gateCloudHistory.unlocked ? 'Compare Scans' : gateCloudHistory.lockMessage}
                             >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                                     <line x1="12" y1="3" x2="12" y2="21" />
                                 </svg>
-                                Compare Scans
+                                Compare Scans {!gateCloudHistory.unlocked && (gateCloudHistory.gateType === 'coming_soon' ? '⏳' : '🔒')}
                             </button>
                         )}
                         <div 
@@ -457,23 +470,35 @@ export function MainWorkspace({
                                 <div className="workspace-export-dropdown-menu">
                                     <button
                                         className="tab-bar-btn workspace-export-dropdown-item"
-                                        onClick={() => handleExportHTML(inspectorRunId)}
-                                        title="Generate and download a visual HTML report"
+                                        onClick={() => {
+                                            if (!gateReportExports.unlocked) {
+                                                showToast(gateReportExports.lockMessage, 'error');
+                                                return;
+                                            }
+                                            handleExportHTML(inspectorRunId);
+                                        }}
+                                        title={gateReportExports.unlocked ? 'Generate and download a visual HTML report' : gateReportExports.lockMessage}
                                     >
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                                         </svg>
-                                        HTML Report
+                                        HTML Report {!gateReportExports.unlocked && (gateReportExports.gateType === 'coming_soon' ? '⏳' : '🔒')}
                                     </button>
                                     <button
                                         className="tab-bar-btn workspace-export-dropdown-item"
-                                        onClick={() => handleExportMD(inspectorRunId)}
-                                        title="Generate and download a Markdown report"
+                                        onClick={() => {
+                                            if (!gateReportExports.unlocked) {
+                                                showToast(gateReportExports.lockMessage, 'error');
+                                                return;
+                                            }
+                                            handleExportMD(inspectorRunId);
+                                        }}
+                                        title={gateReportExports.unlocked ? 'Generate and download a Markdown report' : gateReportExports.lockMessage}
                                     >
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
                                         </svg>
-                                        MD Report
+                                        MD Report {!gateReportExports.unlocked && (gateReportExports.gateType === 'coming_soon' ? '⏳' : '🔒')}
                                     </button>
                                 </div>
                             )}

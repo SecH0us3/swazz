@@ -8,25 +8,58 @@ package runner
 import (
 	"context"
 	"sync"
+
+	"swazz-engine/internal/license"
 )
 
 type ConcurrencyLimiter struct {
 	mu      sync.Mutex
 	target  int
+	ceiling int
 	current int
 	waiters []chan struct{}
 }
 
-func NewConcurrencyLimiter(initial int) *ConcurrencyLimiter {
+// NewConcurrencyLimiter creates a limiter with the given initial target.
+// An optional ceiling caps the target (defaults to MaxConcurrencyCeiling).
+func NewConcurrencyLimiter(initial int, ceilings ...int) *ConcurrencyLimiter {
 	if initial <= 0 {
 		initial = 5
 	}
 	if initial > 1000 {
 		initial = 1000
 	}
-	return &ConcurrencyLimiter{
-		target: initial,
+	ceiling := license.MaxConcurrencyCeiling
+	if len(ceilings) > 0 && ceilings[0] > 0 {
+		ceiling = ceilings[0]
 	}
+	if initial > ceiling {
+		initial = ceiling
+	}
+	return &ConcurrencyLimiter{
+		target:  initial,
+		ceiling: ceiling,
+	}
+}
+
+// SetCeiling updates the maximum allowed target. The current target is
+// re-clamped immediately.
+func (l *ConcurrencyLimiter) SetCeiling(ceiling int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if ceiling <= 0 {
+		ceiling = license.MaxConcurrencyCeiling
+	}
+	l.ceiling = ceiling
+	if l.target > l.ceiling {
+		l.target = l.ceiling
+	}
+}
+
+func (l *ConcurrencyLimiter) GetCeiling() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.ceiling
 }
 
 func (l *ConcurrencyLimiter) SetTarget(target int) {
@@ -36,6 +69,9 @@ func (l *ConcurrencyLimiter) SetTarget(target int) {
 	}
 	if target > 1000 {
 		target = 1000
+	}
+	if target > l.ceiling {
+		target = l.ceiling
 	}
 	l.target = target
 
@@ -109,6 +145,11 @@ func (l *ConcurrencyLimiter) Release() {
 
 func (r *Runner) GetConcurrency() int {
 	return r.limiter.GetTarget()
+}
+
+// Gate returns the license gate used by this runner.
+func (r *Runner) Gate() license.Gate {
+	return r.gate
 }
 
 func (r *Runner) SetConcurrency(c int) {

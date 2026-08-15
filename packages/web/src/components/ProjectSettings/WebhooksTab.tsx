@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore.js';
 import { useToast } from '../../hooks/useToast.js';
 import { Webhook } from '../../types.js';
+import { useFeatureGate } from '../../hooks/useFeatureGate.js';
+import { FEATURE_SCHEDULED_RUNS } from '@swazz/shared';
 
 interface WebhookFormState {
     id?: string;
@@ -18,6 +20,7 @@ interface WebhookFormState {
 export function WebhooksTab() {
     const activeProject = useAppStore(state => state.activeProject);
     const { showToast } = useToast();
+    const gateScheduledRuns = useFeatureGate(FEATURE_SCHEDULED_RUNS);
 
     const [webhooks, setWebhooks] = useState<Webhook[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -88,6 +91,11 @@ export function WebhooksTab() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!activeProject || !token) return;
+
+        if (!gateScheduledRuns.unlocked) {
+            showToast('Webhooks require the Scheduled Runs feature (paid plan)', 'error');
+            return;
+        }
 
         // Validation
         if (!formState.url.trim()) {

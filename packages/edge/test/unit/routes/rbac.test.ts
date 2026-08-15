@@ -19,6 +19,9 @@ vi.mock('../../../src/middleware/rbac', () => ({
 vi.mock('../../../src/middleware/auditLog', () => ({
   auditLog: vi.fn(() => async (c: any, next: any) => await next())
 }));
+vi.mock('../../../src/middleware/license', () => ({
+  requireFeature: vi.fn(() => async (c: any, next: any) => await next())
+}));
 
 describe('RBAC Routes Unit Tests', () => {
   let app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>;

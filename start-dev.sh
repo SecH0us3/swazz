@@ -10,6 +10,7 @@ echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
 echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
 echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
+echo 'PASSWORD_AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 
 # Create dummy wordlist folder and file
 mkdir -p wordlists

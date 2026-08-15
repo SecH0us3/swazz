@@ -21,6 +21,9 @@ import { ScheduleTab } from './ProjectSettings/ScheduleTab.js';
 import { AuditTrailTab } from './ProjectSettings/AuditTrailTab.js';
 import { WebhooksTab } from './ProjectSettings/WebhooksTab.js';
 import { AuthSequenceTab } from './ProjectSettings/AuthSequenceTab.js';
+import { useFeatureGate } from '../hooks/useFeatureGate.js';
+import { useToast } from '../hooks/useToast.js';
+import { FEATURE_ENTERPRISE, FEATURE_AI_REMEDIATION_PRO, FEATURE_SCHEDULED_RUNS, FEATURE_WAF_ANALYSIS, FEATURE_DOMAIN_RECON } from '@swazz/shared';
 interface Runner {
     connectionId: string | null;
     name: string;
@@ -33,6 +36,13 @@ interface Runner {
 
 export function ProjectSettings() {
     const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'auth_sequence'>('general');
+    const { showToast } = useToast();
+
+    const gateMembers = useFeatureGate(FEATURE_ENTERPRISE);
+    const gateAIRemediation = useFeatureGate(FEATURE_AI_REMEDIATION_PRO);
+    const gateScheduledRuns = useFeatureGate(FEATURE_SCHEDULED_RUNS);
+    const gateWAF = useFeatureGate(FEATURE_WAF_ANALYSIS);
+    const gateRecon = useFeatureGate(FEATURE_DOMAIN_RECON);
 
     // Runners state (kept in parent for count badge in tab navigation)
     const [runners, setRunners] = useState<Runner[]>([]);
@@ -117,8 +127,16 @@ export function ProjectSettings() {
                         General & Target
                     </button>
                     <button
+                        id="tab-members"
                         className={`tab-bar-btn ${activeSubTab === 'members' ? 'active' : ''}`}
-                        onClick={() => setActiveSubTab('members')}
+                        onClick={() => {
+                            if (!gateMembers.unlocked) {
+                                showToast(gateMembers.lockMessage, 'error');
+                                return;
+                            }
+                            setActiveSubTab('members');
+                        }}
+                        title={gateMembers.unlocked ? 'Members & Roles' : gateMembers.lockMessage}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -126,7 +144,7 @@ export function ProjectSettings() {
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        Members & Roles
+                        Members & Roles {!gateMembers.unlocked && (gateMembers.gateType === 'coming_soon' ? '⏳' : '🔒')}
                     </button>
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'api_specs' ? 'active' : ''}`}
@@ -223,15 +241,23 @@ export function ProjectSettings() {
                         )}
                     </button>
                     <button
+                        id="tab-ai-remediation"
                         className={`tab-bar-btn ${activeSubTab === 'ai_remediation' ? 'active' : ''}`}
-                        onClick={() => setActiveSubTab('ai_remediation')}
+                        onClick={() => {
+                            if (!gateAIRemediation.unlocked) {
+                                showToast(gateAIRemediation.lockMessage, 'error');
+                                return;
+                            }
+                            setActiveSubTab('ai_remediation');
+                        }}
+                        title={gateAIRemediation.unlocked ? 'AI Remediation' : gateAIRemediation.lockMessage}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
                             <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
                             <path d="M12 12L2.1 7.1"></path>
                             <path d="M12 12l9.9 4.9"></path>
                         </svg>
-                        AI Remediation
+                        AI Remediation {!gateAIRemediation.unlocked && (gateAIRemediation.gateType === 'coming_soon' ? '⏳' : '🔒')}
                     </button>
                     <button
                         className={`tab-bar-btn ${activeSubTab === 'keys' ? 'active' : ''}`}
@@ -254,8 +280,16 @@ export function ProjectSettings() {
                         Raw JSON Config
                     </button>
                     <button
+                        id="tab-schedule"
                         className={`tab-bar-btn ${activeSubTab === 'schedule' ? 'active' : ''}`}
-                        onClick={() => setActiveSubTab('schedule')}
+                        onClick={() => {
+                            if (!gateScheduledRuns.unlocked) {
+                                showToast(gateScheduledRuns.lockMessage, 'error');
+                                return;
+                            }
+                            setActiveSubTab('schedule');
+                        }}
+                        title={gateScheduledRuns.unlocked ? 'Scan Scheduler' : gateScheduledRuns.lockMessage}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -263,7 +297,7 @@ export function ProjectSettings() {
                             <line x1="8" y1="2" x2="8" y2="6" />
                             <line x1="3" y1="10" x2="21" y2="10" />
                         </svg>
-                        Scan Scheduler
+                        Scan Scheduler {!gateScheduledRuns.unlocked && (gateScheduledRuns.gateType === 'coming_soon' ? '⏳' : '🔒')}
                     </button>
                     <button
                         id="tab-audit-trail"
@@ -277,14 +311,45 @@ export function ProjectSettings() {
                         Audit Trail
                     </button>
                     <button
+                        id="tab-waf-analysis"
+                        className="tab-bar-btn"
+                        onClick={() => showToast(gateWAF.lockMessage, 'error')}
+                        title={gateWAF.lockMessage}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        </svg>
+                        WAF Analysis ⏳
+                    </button>
+                    <button
+                        id="tab-domain-recon"
+                        className="tab-bar-btn"
+                        onClick={() => showToast(gateRecon.lockMessage, 'error')}
+                        title={gateRecon.lockMessage}
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                        Domain Recon ⏳
+                    </button>
+                    <button
                         id="tab-webhooks"
                         className={`tab-bar-btn ${activeSubTab === 'webhooks' ? 'active' : ''}`}
-                        onClick={() => setActiveSubTab('webhooks')}
+                        onClick={() => {
+                            if (!gateScheduledRuns.unlocked) {
+                                showToast(gateScheduledRuns.lockMessage, 'error');
+                                return;
+                            }
+                            setActiveSubTab('webhooks');
+                        }}
+                        title={gateScheduledRuns.unlocked ? 'Webhooks' : gateScheduledRuns.lockMessage}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
                         </svg>
-                        Webhooks
+                        Webhooks {!gateScheduledRuns.unlocked && (gateScheduledRuns.gateType === 'coming_soon' ? '⏳' : '🔒')}
                     </button>
                 </div>
 

@@ -8,6 +8,7 @@ import { Env } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { IAuthService, AuthService } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
+import { LicenseService } from '../services/license';
 
 export function registerAuthRoutes(
   app: Hono<{ Bindings: Env }>,
@@ -483,6 +484,53 @@ export function registerAuthRoutes(
 
       const services = authServicesFactory(c.env);
       const result = await services.exchangeOauthToken(body, c);
+      return c.json(result);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
+
+  app.get('/api/user/license', async (c) => {
+    try {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+      const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
+      const result = await licenseService.getStatus(userId);
+      return c.json(result);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
+
+  app.post('/api/user/license', async (c) => {
+    try {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+      const body = await c.req.json();
+      if (typeof body.license_key !== 'string' || body.license_key.trim() === '') {
+        return c.json({ error: 'Missing license_key' }, 400);
+      }
+
+      const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
+      const result = await licenseService.activate(userId, body.license_key);
+      return c.json(result);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
+
+  app.delete('/api/user/license', async (c) => {
+    try {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+      const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
+      const result = await licenseService.deactivate(userId);
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');

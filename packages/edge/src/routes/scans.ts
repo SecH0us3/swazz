@@ -9,6 +9,8 @@ import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { IScansRepository, ScansRepository } from '../repositories/scans';
 import { IScansService, ScansService } from '../services/scans';
 import { RbacRepository } from '../repositories/rbac';
+import { requireFeature } from '../middleware/license';
+import { FEATURE_AI_REMEDIATION_PRO } from '@swazz/shared';
 
 export function registerScansRoutes(
   app: Hono<{ Bindings: Env }>,
@@ -185,7 +187,7 @@ export function registerScansRoutes(
     }
   });
 
-  app.patch('/api/scans/:id/findings/ai-triage', async (c) => {
+  app.patch('/api/scans/:id/findings/ai-triage', requireFeature(FEATURE_AI_REMEDIATION_PRO), async (c) => {
     const services = scansServicesFactory(c.env);
     const scanId = c.req.param('id');
     const body = await c.req.json();
