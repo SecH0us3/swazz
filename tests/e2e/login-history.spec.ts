@@ -13,11 +13,12 @@ test.describe('Login History E2E Tests', () => {
 
     const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createAccountBtn).toBeVisible();
+    await createAccountBtn.click();
 
     const usernameA = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(usernameA);
     await page.locator('#password').fill('Password123!');
-    await createAccountBtn.click();
+    await page.locator('#password').press('Enter');
 
     // Wait for the main dashboard to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
