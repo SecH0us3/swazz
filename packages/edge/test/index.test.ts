@@ -1929,7 +1929,11 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
     describe("checkAndDispatchQueuedScans Coordinator Logic", () => {
       beforeEach(async () => {
-        await env.DB.prepare("UPDATE scans SET status = 'dispatched' WHERE status = 'queued'").run();
+        // Clear ALL active scans (queued/dispatched/paused), not just queued.
+        // getActiveScans() selects IN ('queued','dispatched','paused'), so any
+        // leftover dispatched/paused rows from previous tests would otherwise be
+        // dispatched first (ORDER BY created_at ASC) and pollute this describe.
+        await env.DB.prepare("UPDATE scans SET status = 'completed' WHERE status IN ('queued', 'dispatched', 'paused')").run();
       });
 
       it("dispatches queued public scans to shared runner on connection", async () => {

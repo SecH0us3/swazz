@@ -464,7 +464,7 @@ describe('RequestHandler', () => {
       expect(res.status).toBe(503);
     });
 
-    it('returns 503 if only private runner connected and public key is missing', async () => {
+    it('falls back to the only connected private runner when no public key matches', async () => {
       const stateManager = new StateManager(mockState);
       mockState.getTags.mockReturnValue(['runner', 'pubkey-abc']); // Private runner
       stateManager.runners.add(mockWs);
@@ -472,13 +472,22 @@ describe('RequestHandler', () => {
       const handler = new RequestHandler(mockEnv, mockState, stateManager, mockQueueService);
       mockGetCachedSwagger.mockResolvedValue(null);
 
+      // The request carries no userPublicKey; the handler falls back to the
+      // only connected runner and awaits the parse response.
+      setTimeout(() => {
+        const reqId = Array.from(stateManager.pendingParses.keys())[0];
+        const resolve = stateManager.pendingParses.get(reqId);
+        resolve?.(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      }, 50);
+
       const res = await handler.handle(new Request('http://localhost/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: 'http://example.com/swagger.json' })
       }));
 
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(200);
+      expect(mockWs.send).toHaveBeenCalled();
     });
 
     it('sends parse_request to matching private runner and awaits response', async () => {

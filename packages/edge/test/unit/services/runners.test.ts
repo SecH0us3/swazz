@@ -9,6 +9,18 @@ import { IRunnersRepository } from '../../../src/repositories/runners';
 import { IRbacRepository } from '../../../src/repositories/rbac';
 import { Env } from '../../../src/env';
 
+const mockUpdateScanStatus = vi.fn();
+
+vi.mock('../../../src/repositories/scans', () => {
+  return {
+    ScansRepository: vi.fn().mockImplementation(function () {
+      return {
+        updateScanStatus: mockUpdateScanStatus,
+      };
+    })
+  };
+});
+
 describe('RunnersService Unit Tests', () => {
   let runnersService: RunnersService;
   let mockEnv: Env;
