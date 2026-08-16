@@ -78,12 +78,13 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     const enterWorkspaceBtn = page.getByRole('button', { name: 'Log In' });
     await expect(createAccountBtn).toBeVisible();
+    await createAccountBtn.click();
 
     // 2. Perform direct registration
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
-    await createAccountBtn.click();
+    await page.locator('#password').press('Enter');
 
     // Wait for main dashboard to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
@@ -140,12 +141,13 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     await accountBtn.click();
     const logoutBtn = page.locator('button:has-text("Logout")');
     await logoutBtn.click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(createAccountBtn).toBeVisible();
 
     // 7. Login (should trigger 2FA)
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
-    await enterWorkspaceBtn.click();
+    await page.locator('#password').press('Enter');
 
     // Verify 2FA screen shows up
     const twoFactorVerifyHeader = page.getByRole('heading', { name: 'Two-Factor Verification', exact: true });

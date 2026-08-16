@@ -13,11 +13,12 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
 
     const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createAccountBtn).toBeVisible();
+    await createAccountBtn.click();
 
     const usernameA = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(usernameA);
     await page.locator('#password').fill('Password123!');
-    await createAccountBtn.click();
+    await page.locator('#password').press('Enter');
 
     // Wait for the main dashboard to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
@@ -115,20 +116,22 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     await expect(logoutBtn).toBeVisible();
     await logoutBtn.click();
 
-    // Wait for login screen to reappear
+    // Wait for login screen to reappear and open the auth modal
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(createAccountBtn).toBeVisible();
 
     // 8. Register User B
+    await createAccountBtn.click();
     await page.locator('#username').fill(usernameB);
     await page.locator('#password').fill('Password123!');
-    await createAccountBtn.click();
+    await page.locator('#password').press('Enter');
 
     // Wait for the main dashboard to load for User B
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
     // 9. Navigate to the invitation URL (using the token query parameter) to trigger invitation acceptance
+    // User B is already logged in, so the app auto-accepts the invitation on load
     await page.goto(`/?token=${inviteToken}`);
-    await page.getByRole('button', { name: 'Sign In' }).click();
 
     // Wait for toast notification confirming invitation acceptance
     await expect(page.locator('.toast:has-text("Invitation accepted successfully")')).toBeVisible({ timeout: 10000 });

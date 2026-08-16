@@ -26,13 +26,14 @@ test.describe('Passkeys E2E Tests', () => {
 
     const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
     await expect(createAccountBtn).toBeVisible();
+    await createAccountBtn.click();
 
     // Perform direct registration
     // Username length limited to under 20 chars per project rules
     const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
-    await createAccountBtn.click();
+    await page.locator('#password').press('Enter');
 
     // Wait for main dashboard to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
@@ -73,7 +74,8 @@ test.describe('Passkeys E2E Tests', () => {
     const logoutBtn = page.locator('button:has-text("Logout")');
     await logoutBtn.click();
     
-    // Wait for the login screen to appear
+    // Wait for the login screen to appear and open the auth modal
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(createAccountBtn).toBeVisible();
 
     // 6. Sign in with Passkey

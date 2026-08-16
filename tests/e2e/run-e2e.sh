@@ -11,6 +11,13 @@ cd "$ROOT_DIR"
 echo "=== Swazz E2E Automated Test Runner ==="
 echo "Project Root: $ROOT_DIR"
 
+# Use the pinned local wrangler binary (never npx, which may resolve a newer version)
+WRANGLER="$ROOT_DIR/node_modules/.bin/wrangler"
+if [ ! -x "$WRANGLER" ]; then
+  echo "✗ Error: wrangler binary not found at $WRANGLER. Run 'npm install' first."
+  exit 1
+fi
+
 # Backup packages/edge/.dev.vars if it exists, and configure bypass secret
 if [ -f packages/edge/.dev.vars ]; then
   cp packages/edge/.dev.vars packages/edge/.dev.vars.bak
@@ -55,14 +62,46 @@ check_port() {
 wait_for_port() {
   local port="$1"
   local name="$2"
-  for i in {1..15}; do
+  for i in {1..30}; do
     if check_port "$port"; then
       return 0
     fi
     sleep 1
   done
-  echo "✗ Error: $name on port $port failed to start within 15 seconds."
+  echo "✗ Error: $name on port $port failed to start within 30 seconds."
   exit 1
+}
+
+# Watchdog: restarts a wrangler dev process if it dies mid-session.
+# wrangler dev (miniflare) can crash with "Network connection lost" on some
+# versions; the watchdog keeps the service alive so E2E runs are not flaky.
+# Usage: start_watchdog <port> <name> <logfile> <command...>
+start_watchdog() {
+  local port="$1"
+  local name="$2"
+  local logfile="$3"
+  shift 3
+  (
+    while true; do
+      if ! check_port "$port"; then
+        echo "[watchdog] $name down on port $port — restarting..." >> "$logfile"
+        "$@" >> "$logfile" 2>&1 &
+        local child=$!
+        # Wait until the port comes up or the child exits
+        for i in {1..30}; do
+          if check_port "$port"; then
+            break
+          fi
+          if ! kill -0 "$child" 2>/dev/null; then
+            break
+          fi
+          sleep 1
+        done
+      fi
+      sleep 2
+    done
+  ) &
+  PIDS+=($!)
 }
 
 # Pre-cleanup: kill any zombie processes on the test ports and clear wrangler states
@@ -77,9 +116,9 @@ sleep 1
 if check_port 8788; then
   echo "✓ Vulnerable Demo API is already running on port 8788."
 else
-  echo "→ Starting Vulnerable Demo API..."
-  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --cwd demo --log-level info > demo.log 2>&1 &
-  PIDS+=($!)
+  echo "→ Starting Vulnerable Demo API (with watchdog)..."
+  start_watchdog 8788 "Vulnerable Demo API" demo.log \
+    env NODE_OPTIONS="--max-old-space-size=4096" "$WRANGLER" dev --port 8788 --cwd demo --inspector-port 0 --log-level info
   wait_for_port 8788 "Vulnerable Demo API"
 fi
 
@@ -88,18 +127,18 @@ if check_port 8787; then
   echo "✓ Edge Coordinator is already running on port 8787."
 else
   echo "→ Applying local database migrations..."
-  npx wrangler d1 migrations apply swazz_db --local --cwd packages/edge || true
+  "$WRANGLER" d1 migrations apply swazz_db --local --cwd packages/edge || true
   echo "→ Seeding CI runner user..."
-  npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
-  echo "→ Starting Edge Coordinator..."
-  NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --cwd packages/edge --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error > edge.log 2>&1 &
-  PIDS+=($!)
+  "$WRANGLER" d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
+  echo "→ Starting Edge Coordinator (with watchdog)..."
+  start_watchdog 8787 "Edge Coordinator" edge.log \
+    env NODE_OPTIONS="--max-old-space-size=4096" "$WRANGLER" dev --cwd packages/edge --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
   wait_for_port 8787 "Edge Coordinator"
 fi
 
 # Always clean up test users left over from previous runs (keep ci_user)
 echo "→ Cleaning up test users from previous runs..."
-npx wrangler d1 execute swazz_db --local --command "DELETE FROM users WHERE username != 'ci_user';" --cwd packages/edge || true
+"$WRANGLER" d1 execute swazz_db --local --command "DELETE FROM users WHERE username != 'ci_user';" --cwd packages/edge || true
 
 # 3. Start React Web Frontend (Port 5173)
 if check_port 5173; then
