@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -169,13 +170,6 @@ func startAgent(args []string) {
 
 	logInfo("Starting agent '%s', connecting to %s (log level: %s)", name, coordinatorURL, logLevelStr) // #nosec G706
 
-	var (
-		activeRunners   = make(map[string]*runner.Runner)
-		activeRunnersMu sync.Mutex
-	)
-
-	ctx := context.Background()
-
 	headers := make(http.Header)
 	headers.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
 	u, err := url.Parse(coordinatorURL)
@@ -207,13 +201,54 @@ func startAgent(args []string) {
 		HTTPHeader:   headers,
 	}
 
+	ctx := context.Background()
+
+	// Auto-reconnect loop: `wrangler dev` can crash and restart mid-session
+	// (miniflare "Network connection lost"), which drops this WebSocket. Instead
+	// of terminating the agent, retry the connection with exponential backoff so
+	// the runner survives coordinator restarts.
+	backoff := 2 * time.Second
+	const maxBackoff = 30 * time.Second
+	for {
+		runErr := runAgentConnection(ctx, urlWithParams, opts, coordinatorURL, token, name, useSignatureAuth, privKey, pubKeyHex, disableTelemetry)
+		if runErr == nil {
+			return
+		}
+		if errors.Is(runErr, errAgentShutdown) {
+			return
+		}
+		if errors.Is(runErr, errAgentAuthFatal) {
+			os.Exit(1)
+		}
+		logError("Agent connection lost (%v). Reconnecting in %v...", runErr, backoff)
+		time.Sleep(backoff)
+		if backoff < maxBackoff {
+			backoff *= 2
+		}
+	}
+}
+
+var (
+	errAgentShutdown  = errors.New("agent shutting down")
+	errAgentAuthFatal = errors.New("authentication failed")
+)
+
+// runAgentConnection establishes a single coordinator connection and services
+// it until the connection drops (returning the cause) or the agent is told to
+// shut down (returning errAgentShutdown).
+func runAgentConnection(ctx context.Context, urlWithParams string, opts *websocket.DialOptions, coordinatorURL, token, name string, useSignatureAuth bool, privKey ed25519.PrivateKey, pubKeyHex string, disableTelemetry bool) error {
+	var (
+		activeRunners   = make(map[string]*runner.Runner)
+		activeRunnersMu sync.Mutex
+	)
+
 	c, resp, err := websocket.Dial(ctx, urlWithParams, opts)
 	if err != nil {
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			logError("Critical Authentication Error: Unauthorized/Forbidden (Status Code: %d). Revoked or invalid credentials. Terminating agent process.", resp.StatusCode)
-			os.Exit(1)
+			return errAgentAuthFatal
 		}
-		log.Fatalf("Failed to connect to coordinator: %v", err)
+		return fmt.Errorf("failed to connect to coordinator: %w", err)
 	}
 
 	// Increase read limit to 50MB to support large HAR payloads from the browser extension
@@ -244,15 +279,15 @@ func startAgent(args []string) {
 			Nonce string `json:"nonce"`
 		}
 		if err := wsjson.Read(ctx, c, &challengeMsg); err != nil {
-			log.Fatalf("Failed to read challenge message from coordinator: %v", err)
+			return fmt.Errorf("failed to read challenge message from coordinator: %w", err)
 		}
 
 		if challengeMsg.Type != "challenge" {
-			log.Fatalf("Expected challenge message, got: %s", challengeMsg.Type)
+			return fmt.Errorf("expected challenge message, got: %s", challengeMsg.Type)
 		}
 
 		if challengeMsg.Nonce == "" {
-			log.Fatalf("Challenge message missing nonce")
+			return fmt.Errorf("challenge message missing nonce")
 		}
 
 		// Sign the raw nonce bytes directly as a string
@@ -264,7 +299,7 @@ func startAgent(args []string) {
 			"signature": signatureHex,
 		}
 		if err := wsjson.Write(ctx, c, responseMsg); err != nil {
-			log.Fatalf("Failed to send challenge response: %v", err)
+			return fmt.Errorf("failed to send challenge response: %w", err)
 		}
 
 		var authResult struct {
@@ -272,14 +307,14 @@ func startAgent(args []string) {
 			Error string `json:"error"`
 		}
 		if err := wsjson.Read(ctx, c, &authResult); err != nil {
-			log.Fatalf("Failed to read authentication result: %v", err)
+			return fmt.Errorf("failed to read authentication result: %w", err)
 		}
 
 		if authResult.Type == "auth_ok" {
 			logInfo("✓ Authentication successful!")
 		} else {
 			logError("Critical Authentication Error: Handshake authentication failed: %s", authResult.Error)
-			os.Exit(1)
+			return errAgentAuthFatal
 		}
 	}
 
@@ -312,7 +347,6 @@ func startAgent(args []string) {
 			}
 		}
 	}()
-
 	sendWSEvent := func(runID, typ string, payload interface{}) {
 		outChan <- WSEventOut{
 			Type:  "event",
@@ -338,7 +372,8 @@ func startAgent(args []string) {
 	for {
 		var wsMsg WSMessageIn
 		if err := wsjson.Read(ctx, c, &wsMsg); err != nil {
-			log.Fatalf("Connection read error: %v", err)
+			logError("Connection read error: %v", err)
+			return err
 		}
 
 		switch wsMsg.Type {
@@ -630,8 +665,11 @@ func startAgent(args []string) {
 				var resp *http.Response
 
 				if reqPayload.RawSpec != "" {
-					// Validate rawSpec to prevent injection attacks
-					if strings.Contains(reqPayload.RawSpec, "{{{)") || strings.Contains(reqPayload.RawSpec, "}}}") {
+					// Validate rawSpec to prevent injection attacks.
+					// Only reject template-literal style markers (e.g. "{{{")
+					// used by SST/Cloudflare template engines. A plain "}}}"
+					// legitimately appears in nested JSON/YAML specs.
+					if strings.Contains(reqPayload.RawSpec, "{{{") {
 						err = fmt.Errorf("rawSpec contains suspicious patterns")
 					} else {
 						data = []byte(reqPayload.RawSpec)

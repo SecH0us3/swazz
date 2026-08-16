@@ -640,7 +640,7 @@ export default {
         };
 
         if (origin) {
-          responseHeaders["Access-Control-Allow-Origin"] = origin;
+          responseHeaders["Access-Control-Allow-Origin"] = origin.replace(/[^\x20-\x7E]/g, "");
         } else {
           responseHeaders["Access-Control-Allow-Origin"] = "*";
         }
@@ -665,6 +665,12 @@ export default {
           }
         };
 
+        // Sanitize reflected header name/value to ASCII-only. Non-ASCII payloads
+        // (e.g. RTL overrides, zero-width spaces) crash local workerd when set on
+        // response headers, taking down `wrangler dev` mid E2E run.
+        const toAsciiHeaderValue = (s: string) =>
+          s.replace(/[^\x20-\x7E]/g, "").replace(/[\u0000-\u001F\u007F]/g, "");
+
         let hName = "X-Reflected";
         let hVal = "default-value";
 
@@ -682,6 +688,12 @@ export default {
           } catch (e) {
             hVal = customValue;
           }
+        }
+
+        hName = toAsciiHeaderValue(hName);
+        hVal = toAsciiHeaderValue(hVal);
+        if (!hName) {
+          hName = "X-Reflected";
         }
 
         addHeaderWithCRLF(hName, hVal);

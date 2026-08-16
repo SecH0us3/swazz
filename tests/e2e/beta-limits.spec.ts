@@ -35,27 +35,33 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     // Wait for the main layout to load
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
 
-
-
-    // Verify logged-in header shows the beta status badge
-    await expect(page.locator('.header-beta-badge')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('.header-beta-badge')).toContainText('Closed Beta');
+    // Verify the app loaded into the fuzzer workspace (the header beta badge
+    // was removed in 02cc7e8; the beta status is shown in the auth modal only)
+    await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: 15000 });
   });
 
   test('should require invite code and enforce limits when beta limit is reached', async ({ page }) => {
     await page.route('**/api/info', async route => {
-      const response = await route.fetch();
-      const headers = response.headers();
-      const json = await response.json();
-      json.beta_mode_enabled = true;
-      json.beta_limit_reached = true;
       await route.fulfill({
-        response,
-        headers,
-        json
+        status: 200,
+        contentType: 'application/json',
+        headers: {
+          'X-CSRF-Token': 'test-csrf-token',
+          'Set-Cookie': 'csrf_token=test-csrf-token; Path=/; HttpOnly; SameSite=Lax'
+        },
+        body: JSON.stringify({
+          auth_enabled: true,
+          password_auth_enabled: true,
+          limit_anonymous: true,
+          github_auth_enabled: false,
+          gitlab_auth_enabled: false,
+          version: '1.0.0',
+          turnstile_site_key: '1x00000000000000000000AA',
+          beta_mode_enabled: true,
+          beta_limit_reached: true
+        })
       });
     });
-
     // Mock /api/auth/register to simulate beta limit reached error
     await page.route('**/api/auth/register', async route => {
       const request = route.request();

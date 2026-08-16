@@ -33,7 +33,7 @@ test.describe('Config Sidebar Contextual Toggle E2E Tests', () => {
     await expect(sidebar).toHaveClass(/hidden-desktop/);
 
     // Verify the settings gear button is visible in the fuzzer control bar
-    const gearBtn = page.locator('.btn-config-gear');
+    const gearBtn = page.locator('.workspace-config-toggle-btn');
     await expect(gearBtn).toBeVisible();
 
     // 4. Click the gear button to open the configuration sidebar

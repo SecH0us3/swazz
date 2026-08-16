@@ -60,6 +60,11 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     await expect(fuzzingTabBtn).toBeVisible();
     await fuzzingTabBtn.click();
 
+    // Switch to Fuzzing & Intensity sub-tab
+    const fuzzingSubTabBtn = page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")');
+    await expect(fuzzingSubTabBtn).toBeVisible();
+    await fuzzingSubTabBtn.click();
+
     const iterationsInput = page.locator('label:has-text("Fuzzing Intensity") + input');
     await expect(iterationsInput).toBeVisible();
     await iterationsInput.fill('1');

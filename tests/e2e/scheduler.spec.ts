@@ -91,6 +91,11 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await expect(performanceTabBtn).toBeVisible();
     await performanceTabBtn.click();
 
+    // Switch to Timeout & Duration sub-tab
+    const timeoutSubTabBtn = page.locator('button.performance-subtab-btn:has-text("Timeout & Duration")');
+    await expect(timeoutSubTabBtn).toBeVisible();
+    await timeoutSubTabBtn.click();
+
     // Fill "Maximum Scan Duration (minutes)" with 1
     const timeoutInput = page.locator('input.input-width-md');
     await expect(timeoutInput).toBeVisible();

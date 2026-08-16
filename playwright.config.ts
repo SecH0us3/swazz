@@ -20,6 +20,21 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // Disable the "Did you know" tips toast in E2E runs. The fixed-position
+    // toast (z-index 3000) intercepts pointer events and makes tests flaky
+    // (clicks on Project Settings tabs time out).
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://localhost:5173',
+          localStorage: [
+            { name: 'swazz_tips_enabled', value: 'false' },
+            { name: 'swazz_dismissed_tips', value: '[]' },
+          ],
+        },
+      ],
+    },
   },
   projects: [
     {

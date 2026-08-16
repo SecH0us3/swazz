@@ -171,16 +171,35 @@ export class WebSocketHandler {
         }
         if (msg.type === 'event' || msg.type === 'error') {
           const runId = msg.runId;
-          
-          this.state.waitUntil(
-            this.env.FINDINGS_QUEUE.send({
-              scanId: runId,
-              type: msg.type,
-              payload: msg.payload
-            }).catch(qErr => {
-              logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
-            })
-          );
+
+          if (this.env.JWT_SECRET === 'test-secret') {
+            // Local dev: write findings/events straight to D1, bypassing the
+            // queue emulation. Miniflare's queue broker is unstable under the
+            // high event volume of a fuzz run ("Unknown Internal Error (15000)")
+            // and can take down `wrangler dev` mid-session.
+            this.state.waitUntil(
+              (async () => {
+                try {
+                  const scansRepo = new ScansRepository(this.env);
+                  await scansRepo.processFindingsQueueMessages([{
+                    body: { scanId: runId, type: msg.type, payload: msg.payload }
+                  }]);
+                } catch (qErr) {
+                  logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to persist event to D1", { error: qErr });
+                }
+              })()
+            );
+          } else {
+            this.state.waitUntil(
+              this.env.FINDINGS_QUEUE.send({
+                scanId: runId,
+                type: msg.type,
+                payload: msg.payload
+              }).catch(qErr => {
+                logError({ env: this.env, executionCtx: this.state }, "Coordinator", "Failed to send to FINDINGS_QUEUE", { error: qErr });
+              })
+            );
+          }
 
           const clientSet = this.stateManager.clients.get(runId);
           if (clientSet) {
