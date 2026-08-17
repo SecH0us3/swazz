@@ -6,10 +6,12 @@
 import { Hono } from 'hono';
 import { Env } from '../env';
 import { requirePermission } from '../middleware/rbac';
+import { requireFeature } from '../middleware/license';
 import { auditLog } from '../middleware/auditLog';
 import { getUserIdFromRequest } from '../utils/auth';
 import { IRbacRepository, RbacRepository } from '../repositories/rbac';
 import { IRbacService, RbacService } from '../services/rbac';
+import { FEATURE_ENTERPRISE } from '@swazz/shared';
 
 export function registerRbacRoutes(
   app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
@@ -32,7 +34,7 @@ export function registerRbacRoutes(
     }
   });
 
-  app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), auditLog('post:/api/projects/:id/roles', 'Created custom role'), async (c) => {
+  app.post('/api/projects/:id/roles', requirePermission('post:/api/projects/:id/roles'), requireFeature(FEATURE_ENTERPRISE), auditLog('post:/api/projects/:id/roles', 'Created custom role'), async (c) => {
     const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const userId = await getUserIdFromRequest(c);
@@ -59,7 +61,7 @@ export function registerRbacRoutes(
     }
   });
 
-  app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), auditLog('put:/api/projects/:id/members/:user_id', 'Updated member role'), async (c) => {
+  app.put('/api/projects/:id/members/:user_id', requirePermission('put:/api/projects/:id/members/:user_id'), requireFeature(FEATURE_ENTERPRISE), auditLog('put:/api/projects/:id/members/:user_id', 'Updated member role'), async (c) => {
     const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const memberId = (c.req.param('user_id') as string);
@@ -76,7 +78,7 @@ export function registerRbacRoutes(
     }
   });
 
-  app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), auditLog('delete:/api/projects/:id/members/:user_id', 'Removed a member'), async (c) => {
+  app.delete('/api/projects/:id/members/:user_id', requirePermission('delete:/api/projects/:id/members/:user_id'), requireFeature(FEATURE_ENTERPRISE), auditLog('delete:/api/projects/:id/members/:user_id', 'Removed a member'), async (c) => {
     const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const memberId = (c.req.param('user_id') as string);
@@ -92,7 +94,7 @@ export function registerRbacRoutes(
     }
   });
 
-  app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), auditLog('put:/api/projects/:id/roles/:role_id', 'Updated custom role'), async (c) => {
+  app.put('/api/projects/:id/roles/:role_id', requirePermission('put:/api/projects/:id/roles/:role_id'), requireFeature(FEATURE_ENTERPRISE), auditLog('put:/api/projects/:id/roles/:role_id', 'Updated custom role'), async (c) => {
     const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const roleId = c.req.param('role_id') as string;
@@ -109,7 +111,7 @@ export function registerRbacRoutes(
     }
   });
 
-  app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), auditLog('delete:/api/projects/:id/roles/:role_id', 'Deleted custom role'), async (c) => {
+  app.delete('/api/projects/:id/roles/:role_id', requirePermission('delete:/api/projects/:id/roles/:role_id'), requireFeature(FEATURE_ENTERPRISE), auditLog('delete:/api/projects/:id/roles/:role_id', 'Deleted custom role'), async (c) => {
     const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const roleId = c.req.param('role_id') as string;
@@ -139,7 +141,7 @@ export function registerRbacRoutes(
     }
   });
 
-  app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), auditLog('post:/api/projects/:id/invitations', 'Invited a member'), async (c) => {
+  app.post('/api/projects/:id/invitations', requirePermission('post:/api/projects/:id/invitations'), requireFeature(FEATURE_ENTERPRISE), auditLog('post:/api/projects/:id/invitations', 'Invited a member'), async (c) => {
     const services = rbacServicesFactory(c.env);
     const projectId = (c.req.param('id') as string);
     const userId = await getUserIdFromRequest(c);

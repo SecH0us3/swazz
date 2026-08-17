@@ -10,6 +10,15 @@ echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
 echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
 echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
+echo 'PASSWORD_AUTH_ENABLED="true"' >> packages/edge/.dev.vars
+if [ -n "$SWAZZ_LICENSE_PUBKEY" ]; then
+  echo "SWAZZ_LICENSE_PUBKEY=\"$SWAZZ_LICENSE_PUBKEY\"" >> packages/edge/.dev.vars
+elif [ -f "swazz_test_key.pem" ]; then
+  DEV_PUBKEY=$(openssl pkey -in swazz_test_key.pem -pubout -outform DER 2>/dev/null | tail -c 32 | xxd -p -c 32 2>/dev/null || true)
+  if [ -n "$DEV_PUBKEY" ]; then
+    echo "SWAZZ_LICENSE_PUBKEY=\"$DEV_PUBKEY\"" >> packages/edge/.dev.vars
+  fi
+fi
 
 # Create dummy wordlist folder and file
 mkdir -p wordlists

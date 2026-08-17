@@ -14,6 +14,7 @@ import { ulid } from "ulidx";
 import { sign } from "hono/jwt";
 import { hashApiKey } from "../src/utils/auth";
 import { getDB } from "../src/utils/db";
+import { getSharedTestKeyPair, signSharedLicenseToken, activateSharedLicense } from "./utils/license";
 
 const originalFetch = app.fetch;
 // @ts-ignore
@@ -65,6 +66,11 @@ const appFetchWrapper = async (req: any, e?: any, ctx?: any) => {
 
 
 beforeAll(async () => {
+  // Generate the shared test license keypair and expose its public key to testEnv
+  // so requireFeature middleware can verify test license tokens.
+  const kp = await getSharedTestKeyPair();
+  (testEnv as any).SWAZZ_LICENSE_PUBKEY = kp.pubKeyHex;
+
   // Use Vite's import.meta.glob to bundle SQL migrations as raw strings
   const migrationFiles = (import.meta as any).glob("../migrations/*.sql", {
     eager: true,
@@ -98,7 +104,8 @@ const testEnv = {
   TURNSTILE_SITE_KEY: undefined, 
   TURNSTILE_SECRET: undefined,
   GITHUB_CLIENT_ID: undefined,
-  GITHUB_CLIENT_SECRET: undefined
+  GITHUB_CLIENT_SECRET: undefined,
+  SWAZZ_LICENSE_PUBKEY: undefined
 } as unknown as Env;
 
 describe("Swazz Worker (Hono)", () => {
@@ -1922,7 +1929,11 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
 
     describe("checkAndDispatchQueuedScans Coordinator Logic", () => {
       beforeEach(async () => {
-        await env.DB.prepare("UPDATE scans SET status = 'dispatched' WHERE status = 'queued'").run();
+        // Clear ALL active scans (queued/dispatched/paused), not just queued.
+        // getActiveScans() selects IN ('queued','dispatched','paused'), so any
+        // leftover dispatched/paused rows from previous tests would otherwise be
+        // dispatched first (ORDER BY created_at ASC) and pollute this describe.
+        await env.DB.prepare("UPDATE scans SET status = 'completed' WHERE status IN ('queued', 'dispatched', 'paused')").run();
       });
 
       it("dispatches queued public scans to shared runner on connection", async () => {
@@ -2144,6 +2155,9 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       }), testEnv);
       tokenOwner = ((await resA.json()) as any).token;
 
+      // Activate enterprise license for owner (unlocks RBAC/roles/invitations)
+      await activateSharedLicense(appFetchWrapper, testEnv, tokenOwner, ["*"]);
+
       // 2. Register/Login Invitee (userB)
       const nameB = "u_invitee_" + Date.now().toString().slice(-4);
       inviteeUsername = nameB;
@@ -2307,6 +2321,9 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         }), testEnv);
         const editorData = (await resD.json()) as any;
         const tokenEditor = editorData.token;
+
+        // Activate enterprise license for editor (invitations are gated)
+        await activateSharedLicense(appFetchWrapper, testEnv, tokenEditor, ["*"]);
 
         // Assign 'editor' role to userD in the database
         await testEnv.DB.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, ?)")
@@ -2711,7 +2728,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({ name: "Custom Auditor", permissions: ["get:/api/projects/:id"] })
       }), testEnv);
       expect(res.status).toBe(403);
-      expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
+      expect(((await res.json()) as any).error).toContain("paid plan");
     });
 
     it("rejects guest user attempting to invite members", async () => {
@@ -2724,7 +2741,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({ email: "test@example.com", roles: ["viewer"] })
       }), testEnv);
       expect(res.status).toBe(403);
-      expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
+      expect(((await res.json()) as any).error).toContain("paid plan");
     });
 
     it("rejects guest user attempting to modify member roles", async () => {
@@ -2737,7 +2754,7 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({ roles: ["editor"] })
       }), testEnv);
       expect(res.status).toBe(403);
-      expect(((await res.json()) as any).error).toContain("Guest accounts cannot modify members or roles");
+      expect(((await res.json()) as any).error).toContain("paid plan");
     });
   });
 
@@ -3099,6 +3116,10 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
         body: JSON.stringify({ username: suppUsername, password: "Password123!" })
       }), testEnv);
       tokenSupporter = ((await loginSuppRes.json()) as any).token;
+
+      // Activate license with scheduled_runs for both users
+      await activateSharedLicense(appFetchWrapper, testEnv, tokenFree, ["scheduled_runs"]);
+      await activateSharedLicense(appFetchWrapper, testEnv, tokenSupporter, ["scheduled_runs"]);
 
       // Create a project under Supporter User
       const projRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
@@ -3531,6 +3552,9 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
       }), testEnv);
       const loginBody = await loginRes.json();
       token = loginBody.token;
+
+      // Activate license with scheduled_runs (webhooks are gated behind it)
+      await activateSharedLicense(appFetchWrapper, testEnv, token, ["scheduled_runs"]);
 
       const projRes = await appFetchWrapper(new Request("http://localhost/api/projects", {
         method: "POST",

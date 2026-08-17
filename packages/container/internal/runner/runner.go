@@ -42,6 +42,7 @@ import (
 	"github.com/google/uuid"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
@@ -155,6 +156,7 @@ type Runner struct {
 	resultsMu     sync.Mutex
 	allResults    []*swagger.FuzzResult
 	limiter       *ConcurrencyLimiter
+	gate          license.Gate
 
 	analyzer *analyzer.AnalyzerRegistry
 
@@ -164,7 +166,8 @@ type Runner struct {
 }
 
 // New creates a new Runner with sensible defaults.
-func New(config *swagger.Config, client *http.Client) *Runner {
+// An optional license gate caps concurrency and gates paid features.
+func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Runner {
 	if config == nil {
 		return nil
 	}
@@ -206,9 +209,14 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 	}
 	client.Transport = security.WrapWithSSRFProtection(client.Transport, config.Security.AllowPrivateIPs)
 
+	var gate license.Gate = license.NewCommunityGate()
+	if len(gates) > 0 && gates[0] != nil {
+		gate = gates[0]
+	}
 	r := &Runner{
 		config:        config,
 		client:        client,
+		gate:          gate,
 		subs:          make(map[chan Event]struct{}),
 		eventQueue:    NewMPSCQueue(),
 		doneCh:        make(chan struct{}),
@@ -241,7 +249,7 @@ func New(config *swagger.Config, client *http.Client) *Runner {
 			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders)
 		}
 	}
-	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency)
+	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency, gate.ConcurrencyCeiling())
 	r.pause.cond = sync.NewCond(&r.pause.mu)
 	r.updateReplacer()
 

@@ -202,6 +202,13 @@ func runLicenseCommand() {
 	} else {
 		fmt.Printf("  Max Users:   unlimited\n")
 	}
+	if lic.MaxConcurrency > 0 {
+		fmt.Printf("  Max Concurrency: %d\n", lic.MaxConcurrency)
+	} else if lic.HasFeature("unlimited_scans") {
+		fmt.Printf("  Max Concurrency: unlimited\n")
+	} else {
+		fmt.Printf("  Max Concurrency: free default (5)\n")
+	}
 }
 
 func printHelp() {

@@ -79,6 +79,7 @@ export interface UserSlice {
     turnstileSiteKey: string | null;
     betaModeEnabled: boolean;
     betaLimitReached: boolean;
+    licenseStatus: { status: 'community' | 'active' | 'invalid'; license: { company: string; expires_at: string; features: string[]; max_users?: number; max_concurrency?: number } | null } | null;
 }
 
 const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
@@ -87,6 +88,7 @@ const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({
     turnstileSiteKey: null,
     betaModeEnabled: true,
     betaLimitReached: false,
+    licenseStatus: null,
 });
 
 export interface ProjectSlice {

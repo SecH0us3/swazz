@@ -11,12 +11,22 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"swazz-engine/internal/license"
 )
 
-type GitPatcher struct{}
+type GitPatcher struct {
+	gate license.Gate
+}
 
-func NewGitPatcher() *GitPatcher {
-	return &GitPatcher{}
+// NewGitPatcher creates a GitPatcher. An optional license gate controls access
+// to the AI remediation feature (defaults to community mode = gated).
+func NewGitPatcher(gates ...license.Gate) *GitPatcher {
+	var gate license.Gate = license.NewCommunityGate()
+	if len(gates) > 0 && gates[0] != nil {
+		gate = gates[0]
+	}
+	return &GitPatcher{gate: gate}
 }
 
 // defaultBranch detects the default branch from origin/HEAD.
@@ -38,7 +48,11 @@ func defaultBranch(repoPath string) string {
 }
 
 // CreateFixPR creates a branch, applies a patch, commits, pushes, and opens a PR.
+// Requires the ai_remediation_pro feature; returns ErrFeatureGated otherwise.
 func (p *GitPatcher) CreateFixPR(repoPath string, findingID string, patchContent string, title string, body string) (prUrl string, err error) {
+	if !p.gate.Has(license.FeatureAIRemediation) {
+		return "", fmt.Errorf("AI remediation requires a paid plan (feature: %s)", license.FeatureAIRemediation)
+	}
 	worktreePath := fmt.Sprintf("%s-fix-%s", repoPath, findingID)
 	branchName := fmt.Sprintf("swazz/fix-%s", findingID)
 

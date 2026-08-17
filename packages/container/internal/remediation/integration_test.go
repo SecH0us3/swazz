@@ -14,6 +14,7 @@ import (
 
 	"swazz-engine/internal/ai"
 	"swazz-engine/internal/analyzer"
+	"swazz-engine/internal/license"
 )
 
 func TestAI_Remediation_Integration(t *testing.T) {
@@ -146,7 +147,7 @@ func main() {
 	defer os.Setenv("PATH", oldPath)
 
 	// 6. Run GitPatcher to create branch, apply patch, and open PR
-	patcher := NewGitPatcher()
+	patcher := NewGitPatcher(license.NewAllFeaturesGate())
 	prUrl, err := patcher.CreateFixPR(repoDir, "finding-123", expectedPatch, "fix(security): resolve BOLA vulnerability", "This PR fixes the BOLA vulnerability detected by Swazz.")
 	if err != nil {
 		t.Fatalf("failed to create fix PR: %v", err)

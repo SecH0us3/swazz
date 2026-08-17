@@ -29,10 +29,11 @@ var (
 var DefaultPublicKeyHex = "a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314"
 
 type License struct {
-	Company   string    `json:"company"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Features  []string  `json:"features"`
-	MaxUsers  int       `json:"max_users,omitempty"`
+	Company        string    `json:"company"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	Features       []string  `json:"features"`
+	MaxUsers       int       `json:"max_users,omitempty"`
+	MaxConcurrency int       `json:"max_concurrency,omitempty"`
 }
 
 func (l *License) HasFeature(feature string) bool {
@@ -88,6 +89,16 @@ func NewVerifier(pubKeyInput string) (*Verifier, error) {
 
 func (v *Verifier) VerifyToken(tokenStr string) (*License, error) {
 	tokenStr = strings.TrimSpace(tokenStr)
+	if idx := strings.Index(tokenStr, "SWAZZ_LICENSE_KEY:"); idx != -1 {
+		tokenStr = strings.TrimSpace(tokenStr[idx+len("SWAZZ_LICENSE_KEY:"):])
+	}
+	for _, line := range strings.Split(tokenStr, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "eyJ") && len(strings.Split(line, ".")) == 3 {
+			tokenStr = line
+			break
+		}
+	}
 	parts := strings.Split(tokenStr, ".")
 	if len(parts) != 3 {
 		return nil, ErrInvalidTokenFormat

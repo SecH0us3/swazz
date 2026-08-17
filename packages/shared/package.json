@@ -1,0 +1,21 @@
+{
+  "name": "@swazz/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/features.ts",
+  "types": "./src/features.ts",
+  "exports": {
+    ".": {
+      "types": "./src/features.ts",
+      "import": "./src/features.ts",
+      "default": "./src/features.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

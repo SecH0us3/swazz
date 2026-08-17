@@ -27,6 +27,12 @@ vi.mock('../../../src/middleware/auditLog', () => ({
   },
 }));
 
+vi.mock('../../../src/middleware/license', () => ({
+  requireFeature: () => async (c: any, next: any) => {
+    await next();
+  },
+}));
+
 describe('Projects Routes', () => {
   let mockServices: Partial<IProjectService>;
   let app: Hono<any>;

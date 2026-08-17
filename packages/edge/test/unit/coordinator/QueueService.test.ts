@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueueService } from '../../../src/coordinator/QueueService';
 import { StateManager } from '../../../src/coordinator/StateManager';
 
-const mockGetQueuedScans = vi.fn();
+const mockGetActiveScans = vi.fn();
 const mockUpdateScanStatus = vi.fn();
 const mockGetScanConfigByProject = vi.fn();
 
@@ -15,7 +15,7 @@ vi.mock('../../../src/repositories/scans', () => {
   return {
     ScansRepository: vi.fn().mockImplementation(function () {
       return {
-        getQueuedScans: mockGetQueuedScans,
+        getActiveScans: mockGetActiveScans,
         updateScanStatus: mockUpdateScanStatus,
         getScanConfigByProject: mockGetScanConfigByProject,
       };
@@ -55,7 +55,7 @@ describe('QueueService', () => {
 
     mockEnv = {};
     
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockResolvedValue(true);
@@ -91,7 +91,7 @@ describe('QueueService', () => {
 
   it('should dispatch public scan to shared runner (no public key tag)', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner']);
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
     
@@ -108,7 +108,7 @@ describe('QueueService', () => {
 
   it('should not dispatch public scan to shared runner if disable_shared_runners is set to true', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner']);
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: null, target_url: 'http://example.com' }
     ]);
     const mockStorageMap = new Map();
@@ -126,7 +126,7 @@ describe('QueueService', () => {
 
   it('should fallback to fetching scan config from project in DB if not in DO storage', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     
@@ -148,7 +148,7 @@ describe('QueueService', () => {
 
   it('should default base_url to target_url if not present in config', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
     ]);
 
@@ -163,7 +163,7 @@ describe('QueueService', () => {
   });
 
   it('should handle DB errors during scan status update gracefully without failing execution', async () => {
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: 'key-123', target_url: 'http://example.com' }
     ]);
     mockUpdateScanStatus.mockRejectedValue(new Error('D1 connection failure'));
@@ -177,7 +177,7 @@ describe('QueueService', () => {
 
   it('should handle errors during config fetching from DB gracefully', async () => {
     mockState.getTags = vi.fn().mockReturnValue(['runner', 'key-123']);
-    mockGetQueuedScans.mockResolvedValue([
+    mockGetActiveScans.mockResolvedValue([
       { id: 'scan-1', userPublicKey: 'key-123', project_id: 'proj-123', profile: 'default', target_url: 'http://example.com' }
     ]);
     mockGetScanConfigByProject.mockRejectedValue(new Error('DB failure'));
@@ -190,8 +190,8 @@ describe('QueueService', () => {
   });
 
   it('should handle general runtime errors gracefully by logging', async () => {
-    // Force a runtime error (e.g. mockGetQueuedScans rejects)
-    mockGetQueuedScans.mockRejectedValue(new Error('Fetch queue error'));
+    // Force a runtime error (e.g. mockGetActiveScans rejects)
+    mockGetActiveScans.mockRejectedValue(new Error('Fetch queue error'));
     
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);

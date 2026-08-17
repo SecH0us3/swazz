@@ -13,6 +13,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"swazz-engine/internal/license"
+	"swazz-engine/internal/swagger"
 )
 
 func TestConcurrencyLimiter_Basic(t *testing.T) {
@@ -93,4 +97,75 @@ func TestConcurrencyLimiter_Concurrent(t *testing.T) {
 
 	wg.Wait()
 	assert.True(t, maxActive <= 5, "Max active goroutines (%d) exceeded limit (5)", maxActive)
+}
+
+func TestConcurrencyLimiter_Ceiling(t *testing.T) {
+	t.Run("constructor clamps initial target to ceiling", func(t *testing.T) {
+		l := NewConcurrencyLimiter(50, 5)
+		assert.Equal(t, 5, l.GetTarget())
+		assert.Equal(t, 5, l.GetCeiling())
+	})
+
+	t.Run("SetTarget clamps to ceiling", func(t *testing.T) {
+		l := NewConcurrencyLimiter(2, 5)
+		l.SetTarget(100)
+		assert.Equal(t, 5, l.GetTarget())
+	})
+
+	t.Run("SetCeiling re-clamps current target", func(t *testing.T) {
+		l := NewConcurrencyLimiter(10, 20)
+		assert.Equal(t, 10, l.GetTarget())
+		l.SetCeiling(8)
+		assert.Equal(t, 8, l.GetTarget())
+	})
+
+	t.Run("no ceiling defaults to absolute max", func(t *testing.T) {
+		l := NewConcurrencyLimiter(10)
+		assert.Equal(t, license.MaxConcurrencyCeiling, l.GetCeiling())
+		l.SetTarget(500)
+		assert.Equal(t, 500, l.GetTarget())
+	})
+
+	t.Run("community gate caps at free ceiling", func(t *testing.T) {
+		l := NewConcurrencyLimiter(50, license.NewCommunityGate().ConcurrencyCeiling())
+		assert.Equal(t, license.FreeConcurrencyCeiling, l.GetTarget())
+	})
+
+	t.Run("license gate caps at MaxConcurrency", func(t *testing.T) {
+		lic := &license.License{
+			Company:        "Scaled",
+			ExpiresAt:      time.Now().Add(24 * time.Hour),
+			Features:       []string{license.FeatureHighConcurrency},
+			MaxConcurrency: 50,
+		}
+		gate := license.NewLicenseGate(lic)
+		l := NewConcurrencyLimiter(100, gate.ConcurrencyCeiling())
+		assert.Equal(t, 50, l.GetTarget())
+	})
+
+	t.Run("all-features gate does not clamp", func(t *testing.T) {
+		gate := license.NewAllFeaturesGate()
+		l := NewConcurrencyLimiter(100, gate.ConcurrencyCeiling())
+		assert.Equal(t, 100, l.GetTarget())
+	})
+}
+
+func TestRunnerGate(t *testing.T) {
+	t.Run("defaults to community gate", func(t *testing.T) {
+		cfg := &swagger.Config{Settings: swagger.Settings{Concurrency: 5}}
+		r := New(cfg, nil)
+		require.NotNil(t, r)
+		defer r.Close()
+		assert.False(t, r.Gate().Has(license.FeatureReportExports))
+		assert.Equal(t, license.FreeConcurrencyCeiling, r.Gate().ConcurrencyCeiling())
+	})
+
+	t.Run("accepts injected gate", func(t *testing.T) {
+		cfg := &swagger.Config{Settings: swagger.Settings{Concurrency: 5}}
+		r := New(cfg, nil, license.NewAllFeaturesGate())
+		require.NotNil(t, r)
+		defer r.Close()
+		assert.True(t, r.Gate().Has(license.FeatureReportExports))
+		assert.Equal(t, license.MaxConcurrencyCeiling, r.Gate().ConcurrencyCeiling())
+	})
 }
