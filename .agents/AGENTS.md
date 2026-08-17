@@ -38,6 +38,7 @@
 - **Vibe Code Review**: Before finishing feature branch development, run `./scripts/vibe-review.sh` (or `rtk ./scripts/vibe-review.sh < /dev/null`) to trigger an automated code review using Vibe. Verify the generated review at `docs/reviews/vibe-review.md` and address any code quality or styling violations.
 ## Git and Tracking
 - **Never track docs/superpowers/**: The `docs/superpowers/` folder contains plan and design files that are gitignored. Do NOT run `git add -f` or track any files under `docs/superpowers/` in Git. Keep them local and untracked.
+- **Never track docs/reviews/**: The `docs/reviews/` folder contains local automated code review reports (like `vibe-review.md`) that are gitignored. Do NOT run `git add -f` or track any files under `docs/reviews/` in Git. Keep them local and untracked.
 
 ## SOFA Usage
 When beginning meaningful work in this project, create or confirm a SOFA API session using your configured SOFA credentials.

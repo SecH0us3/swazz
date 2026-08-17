@@ -65,7 +65,7 @@ CRITICAL RULES TO VERIFY:
 1. Go: NEVER format URL parameters using fmt.Sprintf or string concatenation. Use net/url and Query() API.
 2. React: No inline layout styles (padding, margin, width, height, display) in React files. Define them in stylesheets.
 3. E2E Tests: Registration username must be 3 to 20 characters. Ensure test usernames are < 20 chars.
-4. Git: Never track docs/superpowers/ directory.
+4. Git: Never track docs/superpowers/ or docs/reviews/ directories. Do not stage or commit files.
 
 Run 'git diff $MERGE_BASE HEAD' to inspect the code changes. You can also view modified files using read_file.
 Summarize the changes, highlight potential bugs, and suggest improvements.
