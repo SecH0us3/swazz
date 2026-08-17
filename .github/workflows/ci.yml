@@ -50,6 +50,7 @@ jobs:
               - 'tests/**'
               - 'package.json'
               - 'package-lock.json'
+              - 'playwright.config.ts'
 
   test-frontend:
     name: Test Frontend
@@ -95,9 +96,7 @@ jobs:
   test-e2e:
     name: Test E2E (Playwright)
     needs: changes
-    # E2E is temporarily disabled. To re-enable, change this to:
-    #   if: needs.changes.outputs.e2e == 'true'
-    if: false
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       # v6.0.2
