@@ -5,6 +5,13 @@
   "type": "module",
   "main": "./src/features.ts",
   "types": "./src/features.ts",
+  "exports": {
+    ".": {
+      "types": "./src/features.ts",
+      "import": "./src/features.ts",
+      "default": "./src/features.ts"
+    }
+  },
   "scripts": {
     "test": "vitest run"
   },

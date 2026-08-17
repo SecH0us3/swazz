@@ -49,12 +49,12 @@ test.describe('Feature Gating E2E', () => {
 
     // Clicking a locked paid tab does not open it and shows a toast.
     await page.locator('#tab-webhooks').click();
-    await expect(page.locator('.toast')).toContainText('requires a paid plan', { timeout: 5000 });
+    await expect(page.locator('.toast', { hasText: 'requires a paid plan' })).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.project-settings-content')).not.toContainText('Webhook');
 
     // Clicking a coming-soon tab shows the coming-soon toast.
     await page.locator('#tab-waf-analysis').click();
-    await expect(page.locator('.toast')).toContainText('coming soon', { timeout: 5000 });
+    await expect(page.locator('.toast', { hasText: 'coming soon' })).toBeVisible({ timeout: 5000 });
   });
 
   test('activating a license unlocks paid tabs', async ({ page }) => {

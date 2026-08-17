@@ -89,6 +89,16 @@ func NewVerifier(pubKeyInput string) (*Verifier, error) {
 
 func (v *Verifier) VerifyToken(tokenStr string) (*License, error) {
 	tokenStr = strings.TrimSpace(tokenStr)
+	if idx := strings.Index(tokenStr, "SWAZZ_LICENSE_KEY:"); idx != -1 {
+		tokenStr = strings.TrimSpace(tokenStr[idx+len("SWAZZ_LICENSE_KEY:"):])
+	}
+	for _, line := range strings.Split(tokenStr, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "eyJ") && len(strings.Split(line, ".")) == 3 {
+			tokenStr = line
+			break
+		}
+	}
 	parts := strings.Split(tokenStr, ".")
 	if len(parts) != 3 {
 		return nil, ErrInvalidTokenFormat

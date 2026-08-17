@@ -103,7 +103,19 @@ export class LicenseService implements ILicenseService {
   }
 
   async verifyToken(tokenStr: string): Promise<LicenseInfo> {
-    const parts = tokenStr.trim().split('.');
+    let cleanToken = tokenStr.trim();
+    if (cleanToken.includes('SWAZZ_LICENSE_KEY:')) {
+      cleanToken = cleanToken.split('SWAZZ_LICENSE_KEY:')[1].trim();
+    }
+    const lines = cleanToken.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (line.startsWith('eyJ') && line.split('.').length === 3) {
+        cleanToken = line;
+        break;
+      }
+    }
+
+    const parts = cleanToken.split('.');
     if (parts.length !== 3) {
       throw new Error('license: invalid token format|400');
     }

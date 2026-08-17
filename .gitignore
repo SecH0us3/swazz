@@ -70,6 +70,7 @@ packages/web/public/swazz-extension.zip
 # Runner Keys
 *.key
 *.pub
+*.pem
 !keys/cosign.pub
 
 # Temporary scratch directory

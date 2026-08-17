@@ -50,7 +50,18 @@ export function LicenseTab() {
 
     const handleActivate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!licenseKey.trim()) return;
+        let cleanKey = licenseKey.trim();
+        if (cleanKey.includes('SWAZZ_LICENSE_KEY:')) {
+            cleanKey = cleanKey.split('SWAZZ_LICENSE_KEY:')[1].trim();
+        }
+        const lines = cleanKey.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+            if (line.startsWith('eyJ') && line.split('.').length === 3) {
+                cleanKey = line;
+                break;
+            }
+        }
+        if (!cleanKey) return;
         setIsActivating(true);
         setError('');
         setSuccess('');
@@ -66,7 +77,7 @@ export function LicenseTab() {
             const res = await fetch(`${PROXY_URL}/api/user/license`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ license_key: licenseKey.trim() })
+                body: JSON.stringify({ license_key: cleanKey })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to activate license');
