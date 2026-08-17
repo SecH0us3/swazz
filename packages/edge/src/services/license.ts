@@ -7,7 +7,8 @@ import { Env } from '../env';
 import { IAuthRepository } from '../repositories/auth';
 import { getFeatureType, FEATURE_TYPE_PAID } from '@swazz/shared';
 
-export const DEFAULT_LICENSE_PUBKEY_HEX = 'a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314';
+export const DEFAULT_LICENSE_PUBKEY_HEX = '0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef';
+export const DEFAULT_DEV_LICENSE_PRIVKEY_HEX = '302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6';
 
 export interface LicenseInfo {
   company: string;
@@ -281,7 +282,14 @@ export class LicenseService implements ILicenseService {
       throw new Error('Trial license has already been claimed for this account|409');
     }
 
-    const privKeyHex = this.env.SWAZZ_LICENSE_PRIVKEY;
+    let privKeyHex = this.env.SWAZZ_LICENSE_PRIVKEY;
+    if (!privKeyHex) {
+      const pubKeyHex = this.getPublicKeyHex();
+      if (pubKeyHex === DEFAULT_LICENSE_PUBKEY_HEX) {
+        privKeyHex = DEFAULT_DEV_LICENSE_PRIVKEY_HEX;
+      }
+    }
+
     if (!privKeyHex) {
       throw new Error('Trial license generation is not configured on this server|503');
     }

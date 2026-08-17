@@ -26,7 +26,7 @@ var (
 
 // DefaultPublicKeyHex is the embedded default Ed25519 public key for Swazz Enterprise license verification.
 // Can be overridden via SWAZZ_LICENSE_PUBKEY environment variable.
-var DefaultPublicKeyHex = "a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314"
+var DefaultPublicKeyHex = "0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef"
 
 type License struct {
 	Company        string    `json:"company"`
