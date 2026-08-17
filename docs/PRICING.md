@@ -47,7 +47,7 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 | **Custom Compliance PDF Reports (PCI-DSS, SOC2)** | ❌ | ✅ Included |
 | **Bi-directional Ticket Sync (Jira, GitLab)** | ❌ | ✅ Included |
 | **CLI Startup BSL Notice Banner** | Displayed | Suppressed / Clean |
-| **SLA & Priority Security Support** | Community | Dedicated 24/7 |
+| **Communication & Issue Triage** | Public GitHub Issues | Direct Priority Channel |
 
 ---
 
@@ -79,6 +79,6 @@ For air-gapped or dedicated enterprise deployments:
 
 ## 📧 Contact & Enterprise Sales
 
-For commercial licensing, enterprise waitlist registration, or custom deployment support:
+For commercial licensing, enterprise waitlist registration, or deployment inquiries:
 - Visit the landing page and click **Request Enterprise License**.
 - Or email our team directly at: `enterprise@swazz.secmy.app`
