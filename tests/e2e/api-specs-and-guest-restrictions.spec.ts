@@ -14,7 +14,15 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Navigate and log in as Guest
     await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem('swazz_tips_enabled', 'false');
+    });
+    await page.goto('/');
+    const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
+    await expect(signInBtn).toBeVisible({ timeout: 10000 });
+    await signInBtn.click();
     const guestBtn = page.getByRole('button', { name: 'Try as guest →' });
     await expect(guestBtn).toBeVisible();
     await guestBtn.click();

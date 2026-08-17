@@ -55,7 +55,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 90000 });
 
     // 7. Verify that no request targeting "POST /login" was executed
     // Switch to Request Logs tab

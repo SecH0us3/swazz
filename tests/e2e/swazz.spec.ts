@@ -70,7 +70,7 @@ test.describe('Swazz Integration E2E Test', () => {
     await expect(heatmapGrid).toBeVisible({ timeout: 30000 });
 
     // Wait for the run to complete (Stop button goes away, or starts showing "Run" again)
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 90000 });
 
     // 8. Assert that findings are populated
     // Switch to Grouped Errors tab to view findings

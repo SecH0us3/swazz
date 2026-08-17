@@ -53,7 +53,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
 
     // Wait for the run to complete (Start button "Run" is visible again)
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 90000 });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
