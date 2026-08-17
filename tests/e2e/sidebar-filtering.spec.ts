@@ -4,26 +4,13 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
   test('should exclude checked-out endpoints from fuzzing scope', async ({ page }) => {
-    // 1. Navigate to the frontend dev server
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await configPromise;
+    // 1. Mock Enterprise license & register user
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -91,24 +78,10 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     }
   });
 
-  test('should toggle "Included Only" filter to hide/show excluded endpoints', async ({ page }) => {
-    // 1. Navigate to the frontend dev server
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await configPromise;
+  test('should toggle Included Only filter to isolate tested endpoints', async ({ page }) => {
+    // 1. Mock Enterprise license & register user
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

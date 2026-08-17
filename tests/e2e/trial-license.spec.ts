@@ -3,23 +3,8 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { test, expect, Page } from '@playwright/test';
-
-async function registerAndLogin(page: Page): Promise<string> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  const createBtn = page.getByRole('button', { name: 'Create an account' });
-  await expect(createBtn).toBeVisible();
-  await createBtn.click();
-
-  const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-  await page.locator('#username').fill(uniqueUsername);
-  await page.locator('#password').fill('Password123!');
-  await page.locator('#password').press('Enter');
-
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-  return uniqueUsername;
-}
+import { test, expect } from '@playwright/test';
+import { registerAndLogin } from './helpers';
 
 async function navigateToLicenseSettings(page: Page) {
   // Open UserMenu dropdown
@@ -48,7 +33,7 @@ test.describe('Trial License Self-Generation E2E Test', () => {
   });
 
   test('allows registered user to claim one-time 14-day trial and shows badge and token', async ({ page }) => {
-    await registerAndLogin(page);
+    await registerAndLogin(page, 'u', false);
     await navigateToLicenseSettings(page);
 
     // Initial state: Community mode and claim card visible

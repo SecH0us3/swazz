@@ -4,24 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Login History E2E Tests', () => {
   test('should display login history audit logs for project members', async ({ page }) => {
-    // 1. Navigate to the frontend dev server and register User A (Owner)
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    // 1. Mock Enterprise license to unlock Members & Roles (RBAC)
+    await mockEnterpriseLicense(page);
 
-    const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
-    await expect(createAccountBtn).toBeVisible();
-    await createAccountBtn.click();
-
-    const usernameA = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(usernameA);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    // Register User A (Owner)
+    const usernameA = await registerAndLogin(page, 'owner');
 
     // 2. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
