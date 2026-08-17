@@ -32,15 +32,21 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 
 | Feature / Capability | Community Edition (BSL 1.1 Free) | Swazz Enterprise |
 | :--- | :---: | :---: |
+| **Scan Volume & Fuzzing Runs** | ✅ **Unlimited** (no time/scan caps) | ✅ **Unlimited** |
 | **Max Annual Gross Revenue** | Under $1,000,000 USD | Unlimited |
 | **Self-Hosted Engine & Local CLI** | ✅ Included | ✅ Included |
 | **OpenAPI, HAR, SOAP & GraphQL Fuzzing** | ✅ Included | ✅ Included |
+| **Max Fuzzer Concurrency** | 5 parallel workers | Up to 1,000 workers |
+| **Export Formats** | JSON | JSON, SARIF, HTML, MD, JUnit |
+| **AI Remediation Pro (Auto-Fixes)** | ❌ | ✅ Included |
+| **Scheduled / Recurring CI Runs & Webhooks** | ❌ | ✅ Included |
 | **Shared & Private Dedicated Runners** | ✅ Included | ✅ Included |
 | **Source Code Access & Auditing** | ✅ Included | ✅ Included |
 | **Enterprise SAML / Single Sign-On (Okta, Azure AD)** | ❌ | ✅ Included |
 | **Multi-Tenant Organizations & RBAC** | ❌ | ✅ Included |
 | **Custom Compliance PDF Reports (PCI-DSS, SOC2)** | ❌ | ✅ Included |
 | **Bi-directional Ticket Sync (Jira, GitLab)** | ❌ | ✅ Included |
+| **CLI Startup BSL Notice Banner** | Displayed | Suppressed / Clean |
 | **SLA & Priority Security Support** | Community | Dedicated 24/7 |
 
 ---
