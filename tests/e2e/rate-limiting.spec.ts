@@ -40,6 +40,11 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
     await expect(burstSizeInput).toBeVisible();
     await burstSizeInput.fill('25');
 
+    // Switch to Fuzzing & Intensity sub-tab
+    const fuzzingSubTabBtn = page.locator('button.performance-subtab-btn:has-text("Fuzzing & Intensity")');
+    await expect(fuzzingSubTabBtn).toBeVisible();
+    await fuzzingSubTabBtn.click();
+
     const iterationsInput = page.locator('label:has-text("Fuzzing Intensity") + input');
     await expect(iterationsInput).toBeVisible();
     await iterationsInput.fill('1');
@@ -111,7 +116,10 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       // Verify the details sidebar contains "swazz/no-rate-limit"
       const detailsInspector = page.locator('.modal-pane:has-text("Request Details")');
       await expect(detailsInspector).toBeVisible();
-      
+
+      // Switch to the Alerts & Findings tab to see the analyzer finding
+      await page.getByRole('tab', { name: /Alerts & Findings/ }).click();
+
       const findingBanner = page.locator('.alert-banner-header:has-text("swazz/no-rate-limit")');
       await expect(findingBanner).toBeVisible({ timeout: 10000 });
 

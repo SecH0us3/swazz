@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebSocketHandler } from '../../../src/coordinator/WebSocketHandler';
 import { StateManager } from '../../../src/coordinator/StateManager';
 import { QueueService } from '../../../src/coordinator/QueueService';
+import { ScansRepository } from '../../../src/repositories/scans';
 
 const mockGetCachedSwaggerDetails = vi.fn();
 const mockUpsertSwaggerCache = vi.fn();
@@ -184,6 +185,8 @@ describe('WebSocketHandler', () => {
   });
 
   it('should send events to FINDINGS_QUEUE and broadcast to clients', async () => {
+    // Production mode (non test-secret JWT) routes events through the queue.
+    mockEnv.JWT_SECRET = 'prod-secret';
     mockState.getTags.mockReturnValue(['runner']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);
@@ -208,6 +211,48 @@ describe('WebSocketHandler', () => {
       type: 'event',
       payload: msg.payload
     });
+    expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(msg.payload));
+  });
+
+  it('should persist events to D1 directly in local dev (test-secret) and broadcast to clients', async () => {
+    // Local dev mode (JWT_SECRET === 'test-secret') bypasses the queue and
+    // writes events straight to D1 to avoid miniflare queue emulation crashes.
+    const mockProcessFindings = vi.fn().mockResolvedValue(undefined);
+    (ScansRepository as any).mockImplementation(function () {
+      return {
+        getCachedSwaggerDetails: mockGetCachedSwaggerDetails,
+        upsertSwaggerCache: mockUpsertSwaggerCache,
+        processFindingsQueueMessages: mockProcessFindings,
+      };
+    });
+
+    mockEnv.JWT_SECRET = 'test-secret';
+    mockState.getTags.mockReturnValue(['runner']);
+    const stateManager = new StateManager(mockState);
+    const queueService = new QueueService(mockEnv, mockState, stateManager);
+    const handler = new WebSocketHandler(mockEnv, mockState, stateManager, queueService);
+
+    stateManager.clients.set('run-456', new Set([mockClientWs]));
+
+    const msg = {
+      type: 'event',
+      runId: 'run-456',
+      payload: {
+        type: 'log',
+        message: 'Scan started'
+      }
+    };
+
+    await handler.handleMessage(mockWs, JSON.stringify(msg));
+
+    const waitUntilPromise = mockState.waitUntil.mock.calls[0]?.[0];
+    if (waitUntilPromise) {
+      await waitUntilPromise;
+    }
+    expect(mockProcessFindings).toHaveBeenCalledWith([
+      { body: { scanId: 'run-456', type: 'event', payload: msg.payload } }
+    ]);
+    expect(mockEnv.FINDINGS_QUEUE.send).not.toHaveBeenCalled();
     expect(mockClientWs.send).toHaveBeenCalledWith(JSON.stringify(msg.payload));
   });
 
@@ -383,6 +428,8 @@ describe('WebSocketHandler', () => {
   });
 
   it('should log error if FINDINGS_QUEUE.send fails', async () => {
+    // Production mode (non test-secret JWT) routes events through the queue.
+    mockEnv.JWT_SECRET = 'prod-secret';
     mockState.getTags.mockReturnValue(['runner']);
     const stateManager = new StateManager(mockState);
     const queueService = new QueueService(mockEnv, mockState, stateManager);

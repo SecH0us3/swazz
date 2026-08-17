@@ -31,8 +31,10 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     await page.reload();
     await page.waitForTimeout(2000);
 
-    // 5. Verify that the user is logged out and redirected back to the login screen
-    const loginHeader = page.locator('h2:has-text("Welcome to Swazz")');
+    // 5. Verify that the user is logged out and redirected to the login screen
+    // (open the auth modal; the landing page is shown after logout)
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    const loginHeader = page.locator('h2:has-text("Welcome back")');
     await expect(loginHeader).toBeVisible({ timeout: 15000 });
 
     // 6. Assert that localStorage token is cleaned up
@@ -128,7 +130,9 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     await page.waitForTimeout(2000);
 
     // 9. Verify that user gets redirected back to the login screen
-    const loginHeader = page.locator('h2:has-text("Welcome to Swazz")');
+    // (open the auth modal; the landing page is shown after logout)
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    const loginHeader = page.locator('h2:has-text("Welcome back")');
     await expect(loginHeader).toBeVisible({ timeout: 15000 });
 
     // 10. Verify that localStorage token was cleared
