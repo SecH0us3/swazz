@@ -53,6 +53,33 @@ func (l *License) HasFeature(feature string) bool {
 	return false
 }
 
+// DaysRemaining returns the number of whole days remaining until the license expires.
+// Returns -1 if the license does not expire, or 0 if it is already expired.
+func (l *License) DaysRemaining() int {
+	if l == nil || l.ExpiresAt.IsZero() {
+		return -1
+	}
+	remaining := time.Until(l.ExpiresAt)
+	if remaining <= 0 {
+		return 0
+	}
+	days := int((remaining + 24*time.Hour - time.Nanosecond) / (24 * time.Hour))
+	return days
+}
+
+// IsExpiringSoon returns true if the license expires within thresholdDays (and is not already expired).
+func (l *License) IsExpiringSoon(thresholdDays int) bool {
+	if l == nil || l.ExpiresAt.IsZero() {
+		return false
+	}
+	remaining := time.Until(l.ExpiresAt)
+	if remaining <= 0 {
+		return false
+	}
+	days := l.DaysRemaining()
+	return days <= thresholdDays
+}
+
 type Verifier struct {
 	PublicKey ed25519.PublicKey
 }

@@ -15,10 +15,15 @@ describe('LicenseService', () => {
 
   beforeEach(async () => {
     keyPair = await generateTestKeyPair();
-    env = { SWAZZ_LICENSE_PUBKEY: keyPair.pubKeyHex };
+    env = {
+      SWAZZ_LICENSE_PUBKEY: keyPair.pubKeyHex,
+      SWAZZ_LICENSE_PRIVKEY: keyPair.privKeyHex,
+    };
     authRepo = {
       getLicenseKey: vi.fn(),
       setLicenseKey: vi.fn(),
+      getTrialClaimedAt: vi.fn().mockResolvedValue(null),
+      setTrialClaimedAt: vi.fn().mockResolvedValue(undefined),
     };
   });
 
@@ -188,5 +193,53 @@ describe('LicenseService', () => {
     expect(result.status).toBe('ok');
     expect(authRepo.setLicenseKey).toHaveBeenCalledWith('user-1', null);
     expect(kv.delete).toHaveBeenCalledWith('license:user-1');
+  });
+
+  describe('Trial License', () => {
+    it('getTrialStatus returns unclaimed state initially', async () => {
+      authRepo.getTrialClaimedAt.mockResolvedValue(null);
+      const res = await makeService().getTrialStatus('user-1');
+      expect(res.claimed).toBe(false);
+      expect(res.claimed_at).toBeNull();
+    });
+
+    it('getTrialStatus returns claimed state when timestamp exists', async () => {
+      authRepo.getTrialClaimedAt.mockResolvedValue('2026-08-17T12:00:00.000Z');
+      const res = await makeService().getTrialStatus('user-1');
+      expect(res.claimed).toBe(true);
+      expect(res.claimed_at).toBe('2026-08-17T12:00:00.000Z');
+    });
+
+    it('claimTrial successfully generates, activates, and returns a 14-day trial token', async () => {
+      const res = await makeService().claimTrial('user-1', 'alex');
+      expect(res.status).toBe('ok');
+      expect(res.license.company).toBe('alex (14-Day Trial)');
+      expect(res.license.features).toEqual(['*']);
+      expect(res.license.max_users).toBe(1);
+      expect(res.license.max_concurrency).toBe(1000);
+      expect(typeof res.token).toBe('string');
+      expect(res.token.split('.').length).toBe(3);
+
+      // Verify expiration is ~14 days from now
+      const expiresAt = new Date(res.license.expires_at).getTime();
+      const expectedMin = Date.now() + 13 * 24 * 60 * 60 * 1000;
+      const expectedMax = Date.now() + 15 * 24 * 60 * 60 * 1000;
+      expect(expiresAt).toBeGreaterThan(expectedMin);
+      expect(expiresAt).toBeLessThan(expectedMax);
+
+      expect(authRepo.setTrialClaimedAt).toHaveBeenCalledWith('user-1');
+      expect(authRepo.setLicenseKey).toHaveBeenCalledWith('user-1', res.token);
+    });
+
+    it('claimTrial rejects if trial was already claimed', async () => {
+      authRepo.getTrialClaimedAt.mockResolvedValue('2026-08-17T12:00:00.000Z');
+      await expect(makeService().claimTrial('user-1', 'alex')).rejects.toThrow('already been claimed');
+      expect(authRepo.setTrialClaimedAt).not.toHaveBeenCalled();
+    });
+
+    it('claimTrial rejects if SWAZZ_LICENSE_PRIVKEY is not configured', async () => {
+      env.SWAZZ_LICENSE_PRIVKEY = undefined;
+      await expect(makeService().claimTrial('user-1', 'alex')).rejects.toThrow('Trial license generation is not configured');
+    });
   });
 });

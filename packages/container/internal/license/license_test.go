@@ -119,6 +119,49 @@ func TestLicenseVerification(t *testing.T) {
 		_, err := NewVerifier("1234567890abcdef")
 		assert.ErrorIs(t, err, ErrNoPublicKey)
 	})
+
+	t.Run("DaysRemaining and IsExpiringSoon calculations", func(t *testing.T) {
+		var nilLic *License
+		assert.Equal(t, -1, nilLic.DaysRemaining())
+		assert.False(t, nilLic.IsExpiringSoon(3))
+
+		noExpiryLic := &License{Company: "Perpetual"}
+		assert.Equal(t, -1, noExpiryLic.DaysRemaining())
+		assert.False(t, noExpiryLic.IsExpiringSoon(3))
+
+		expiredLic := &License{
+			Company:   "Expired",
+			ExpiresAt: time.Now().Add(-2 * time.Hour),
+		}
+		assert.Equal(t, 0, expiredLic.DaysRemaining())
+		assert.False(t, expiredLic.IsExpiringSoon(3))
+
+		expiringSoonLic := &License{
+			Company:   "Soon",
+			ExpiresAt: time.Now().Add(48 * time.Hour), // 2 days
+		}
+		assert.Equal(t, 2, expiringSoonLic.DaysRemaining())
+		assert.True(t, expiringSoonLic.IsExpiringSoon(3))
+		assert.False(t, expiringSoonLic.IsExpiringSoon(1))
+
+		trialLic := &License{
+			Company:   "TrialUser (14-Day Trial)",
+			ExpiresAt: time.Now().Add(14 * 24 * time.Hour),
+			Features:  []string{"*"},
+		}
+		assert.Equal(t, 14, trialLic.DaysRemaining())
+		assert.False(t, trialLic.IsExpiringSoon(3))
+
+		token, err := GenerateToken(privKey, trialLic)
+		require.NoError(t, err)
+
+		verifiedTrial, err := verifier.VerifyToken(token)
+		require.NoError(t, err)
+		assert.Equal(t, "TrialUser (14-Day Trial)", verifiedTrial.Company)
+		assert.True(t, verifiedTrial.HasFeature("ai_remediation_pro"))
+		assert.True(t, verifiedTrial.HasFeature("unlimited_scans"))
+		assert.True(t, verifiedTrial.HasFeature("enterprise"))
+	})
 }
 
 // createTempEd25519PEM helper creates a temporary PKCS#8 PEM encoded Ed25519 private key file.

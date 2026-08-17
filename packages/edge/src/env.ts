@@ -31,5 +31,6 @@ export interface Env {
   BETA_MODE_ENABLED?: string;
   BETA_USER_LIMIT?: string;
   SWAZZ_LICENSE_PUBKEY?: string;
+  SWAZZ_LICENSE_PRIVKEY?: string;
 }
 

@@ -190,12 +190,14 @@ func runLicenseCommand() {
 		return
 	}
 
-	remaining := time.Until(lic.ExpiresAt)
-	daysLeft := int(remaining.Hours() / 24)
+	daysLeft := lic.DaysRemaining()
 
 	fmt.Println("License Status: \033[1;32mEnterprise Active ✓\033[0m")
 	fmt.Printf("  Company:     %s\n", lic.Company)
 	fmt.Printf("  Expires At:  %s (%d days remaining)\n", lic.ExpiresAt.Format("2006-01-02"), daysLeft)
+	if lic.IsExpiringSoon(3) {
+		fmt.Printf("  \033[1;33m⚠️  Warning: License expires soon (in %d day(s))!\033[0m\n", daysLeft)
+	}
 	fmt.Printf("  Features:    %s\n", strings.Join(lic.Features, ", "))
 	if lic.MaxUsers > 0 {
 		fmt.Printf("  Max Users:   %d\n", lic.MaxUsers)

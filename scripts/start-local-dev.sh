@@ -23,6 +23,8 @@ if [ ! -f packages/edge/.dev.vars ]; then
   echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
   echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
   echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
+  echo 'SWAZZ_LICENSE_PUBKEY="f898c80ea5b137e6a3ae4b20f3a1e454bf4610e70a317fd2025c6be915690376"' >> packages/edge/.dev.vars
+  echo 'SWAZZ_LICENSE_PRIVKEY="302e020100300506032b6570042204200657144fe93d6f78447ab72677fc9a6e109ca180de50b690929123aa1ea4b71d"' >> packages/edge/.dev.vars
 fi
 
 # Apply migrations and seed CI user

@@ -47,6 +47,8 @@ export interface IAuthRepository {
   updateUserPlan(username: string, plan: string): Promise<number>;
   getLicenseKey(userId: string): Promise<string | null>;
   setLicenseKey(userId: string, licenseKey: string | null): Promise<void>;
+  getTrialClaimedAt(userId: string): Promise<string | null>;
+  setTrialClaimedAt(userId: string): Promise<void>;
 
   linkGithubUser(userId: string, githubId: string): Promise<boolean>;
   getUserByGithubId(githubId: string): Promise<any>;
@@ -200,6 +202,15 @@ export class AuthRepository extends BaseService implements IAuthRepository {
 
   async setLicenseKey(userId: string, licenseKey: string | null): Promise<void> {
     await this.db.prepare('UPDATE users SET license_key = ? WHERE id = ?').bind(licenseKey, userId).run();
+  }
+
+  async getTrialClaimedAt(userId: string): Promise<string | null> {
+    const row = await this.db.prepare('SELECT trial_claimed_at FROM users WHERE id = ?').bind(userId).first<{ trial_claimed_at: string | null }>();
+    return row?.trial_claimed_at ?? null;
+  }
+
+  async setTrialClaimedAt(userId: string): Promise<void> {
+    await this.db.prepare('UPDATE users SET trial_claimed_at = CURRENT_TIMESTAMP WHERE id = ?').bind(userId).run();
   }
 
   async linkGithubUser(userId: string, githubId: string): Promise<boolean> {
