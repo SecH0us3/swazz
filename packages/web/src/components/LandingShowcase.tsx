@@ -456,6 +456,10 @@ cd swazz
                                 </li>
                                 <li>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    14-Day Free Trial for Enterprise Features
+                                </li>
+                                <li>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     Free for Revenue &lt; $1,000,000 / Open Source
                                 </li>
                             </ul>
@@ -466,7 +470,7 @@ cd swazz
                         
                         <div className="pricing-card featured">
                             <div className="pricing-badge">Commercial</div>
-                            <h3>Support Us & Enterprise</h3>
+                            <h3>Commercial & Enterprise</h3>
                             <div className="price">Custom</div>
                             <ul className="pricing-features">
                                 <li>
