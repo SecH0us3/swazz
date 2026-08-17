@@ -17,6 +17,7 @@ on:
       - 'GEMINI.md'
       - '.gitignore'
       - 'docs/**'
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -40,8 +41,10 @@ jobs:
               - 'packages/web/**'
               - 'package.json'
               - 'package-lock.json'
+              - '.github/workflows/ci.yml'
             backend:
               - 'packages/container/**'
+              - '.github/workflows/ci.yml'
             e2e:
               - 'packages/web/**'
               - 'packages/edge/**'
@@ -51,11 +54,12 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'playwright.config.ts'
+              - '.github/workflows/ci.yml'
 
   test-frontend:
     name: Test Frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       # v6.0.2
@@ -77,7 +81,7 @@ jobs:
   test-backend:
     name: Test Backend
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       # v6.0.2
@@ -96,7 +100,7 @@ jobs:
   test-e2e:
     name: Test E2E (Playwright)
     needs: changes
-    if: needs.changes.outputs.e2e == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       # v6.0.2
