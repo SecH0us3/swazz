@@ -237,9 +237,17 @@ describe('LicenseService', () => {
       expect(authRepo.setTrialClaimedAt).not.toHaveBeenCalled();
     });
 
-    it('claimTrial rejects if SWAZZ_LICENSE_PRIVKEY is not configured', async () => {
+    it('claimTrial rejects if SWAZZ_LICENSE_PRIVKEY is not configured with custom pubkey', async () => {
       env.SWAZZ_LICENSE_PRIVKEY = undefined;
       await expect(makeService().claimTrial('user-1', 'alex')).rejects.toThrow('Trial license generation is not configured');
+    });
+
+    it('claimTrial falls back to default dev keypair when pubkey is default and privkey is undefined', async () => {
+      const defaultService = new LicenseService({}, authRepo);
+      const res = await defaultService.claimTrial('user-1', 'alex');
+      expect(res.status).toBe('ok');
+      expect(res.license.company).toBe('alex (14-Day Trial)');
+      expect(typeof res.token).toBe('string');
     });
   });
 });

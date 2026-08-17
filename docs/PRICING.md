@@ -56,6 +56,19 @@ Swazz Engine binary includes cryptographic **Ed25519 + JWT** license key verific
    ./swazz-engine license
    ```
 
+### 🛡️ Production Master Key Setup (Self-Hosted Deployment)
+For air-gapped or dedicated enterprise deployments:
+1. Generate an Ed25519 keypair:
+   ```bash
+   openssl genpkey -algorithm ed25519 -out swazz_master_private.pem
+   openssl pkey -in swazz_master_private.pem -pubout -out swazz_master_public.pem
+   ```
+2. Configure `SWAZZ_LICENSE_PRIVKEY` (private key) and `SWAZZ_LICENSE_PUBKEY` (public key) in Cloudflare Worker secrets or environment variables.
+3. Issue manual enterprise licenses with:
+   ```bash
+   go run scripts/issue-license.go -key swazz_master_private.pem -company "Acme Corp" -days 365 -features "*"
+   ```
+
 ---
 
 ## 📧 Contact & Enterprise Sales

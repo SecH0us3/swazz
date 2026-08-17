@@ -194,7 +194,11 @@ export function LicenseTab() {
     const remainingDays = status?.license?.expires_at
         ? Math.max(0, Math.ceil((new Date(status.license.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : null;
-    const isTrialLicense = (trialStatus?.claimed && isActive) || (status?.license?.company.includes('Trial') ?? false);
+    const isTrialLicense = (trialStatus?.claimed && isActive) ||
+        (Boolean(status?.license?.company) && (
+            status!.license!.company.endsWith('(14-Day Trial)') ||
+            status!.license!.company === 'Swazz Trial User'
+        ));
 
     return (
         <div className="settings-card">
