@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -157,16 +158,16 @@ func convertScalarValue(fd protoreflect.FieldDescriptor, val any) (protoreflect.
 			return protoreflect.ValueOfBool(lower == "true" || lower == "1"), true
 		}
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		if num, ok := toInt64(val); ok {
-			return protoreflect.ValueOfInt32(int32(num)), true // #nosec G115 -- proto field bounds are bounded by protobuf type
+		if num, ok := toInt32(val); ok {
+			return protoreflect.ValueOfInt32(num), true
 		}
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		if num, ok := toInt64(val); ok {
 			return protoreflect.ValueOfInt64(num), true
 		}
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		if num, ok := toUint64(val); ok {
-			return protoreflect.ValueOfUint32(uint32(num)), true // #nosec G115 -- proto field bounds are bounded by protobuf type
+		if num, ok := toUint32(val); ok {
+			return protoreflect.ValueOfUint32(num), true
 		}
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		if num, ok := toUint64(val); ok {
@@ -197,11 +198,79 @@ func convertScalarValue(fd protoreflect.FieldDescriptor, val any) (protoreflect.
 				return protoreflect.ValueOfEnum(ev.Number()), true
 			}
 		}
-		if num, ok := toInt64(val); ok {
-			return protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)), true // #nosec G115 -- enum ordinal conversion
+		if num, ok := toInt32(val); ok {
+			return protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)), true
 		}
 	}
 	return protoreflect.Value{}, false
+}
+
+func toInt32(val any) (int32, bool) {
+	switch v := val.(type) {
+	case int32:
+		return v, true
+	case int:
+		if v >= math.MinInt32 && v <= math.MaxInt32 {
+			return int32(v), true // #nosec G115
+		}
+	case int64:
+		if v >= math.MinInt32 && v <= math.MaxInt32 {
+			return int32(v), true // #nosec G115
+		}
+	case float64:
+		if v >= math.MinInt32 && v <= math.MaxInt32 {
+			return int32(v), true // #nosec G115
+		}
+	case float32:
+		if v >= math.MinInt32 && v <= math.MaxInt32 {
+			return int32(v), true // #nosec G115
+		}
+	case string:
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			if n >= math.MinInt32 && n <= math.MaxInt32 {
+				return int32(n), true // #nosec G115
+			}
+		}
+	}
+	return 0, false
+}
+
+func toUint32(val any) (uint32, bool) {
+	switch v := val.(type) {
+	case uint32:
+		return v, true
+	case uint64:
+		if v <= math.MaxUint32 {
+			return uint32(v), true // #nosec G115
+		}
+	case uint:
+		if v <= math.MaxUint32 {
+			return uint32(v), true // #nosec G115
+		}
+	case int:
+		if v >= 0 && int64(v) <= math.MaxUint32 {
+			return uint32(v), true // #nosec G115
+		}
+	case int64:
+		if v >= 0 && v <= math.MaxUint32 {
+			return uint32(v), true // #nosec G115
+		}
+	case float64:
+		if v >= 0 && v <= math.MaxUint32 {
+			return uint32(v), true // #nosec G115
+		}
+	case float32:
+		if v >= 0 && v <= math.MaxUint32 {
+			return uint32(v), true // #nosec G115
+		}
+	case string:
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			if n <= math.MaxUint32 {
+				return uint32(n), true // #nosec G115
+			}
+		}
+	}
+	return 0, false
 }
 
 func toInt64(val any) (int64, bool) {
