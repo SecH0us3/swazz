@@ -21,6 +21,7 @@ describe('AuthRepository Unit Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
 
     mockAll = vi.fn();
     const mockStmt: any = {
