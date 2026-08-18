@@ -14,6 +14,7 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
 
@@ -133,6 +134,7 @@ func ConvertFileDescriptorsToEndpoints(fds []protoreflect.FileDescriptor, defaul
 				m := methods.Get(j)
 				// Skip streaming RPCs for v1
 				if m.IsStreamingClient() || m.IsStreamingServer() {
+					logger.Debug("[Proto] Skipping streaming RPC %s/%s (only unary RPCs are supported in v1)", svc.FullName(), m.Name())
 					continue
 				}
 

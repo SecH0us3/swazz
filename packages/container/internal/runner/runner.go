@@ -277,7 +277,9 @@ func (r *Runner) Close() {
 	}
 	r.grpcClients.Range(func(key, value any) bool {
 		if c, ok := value.(*swazzGrpc.Client); ok {
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				logger.Debug("[Runner] Error closing gRPC client for %v: %v", key, err)
+			}
 		}
 		return true
 	})
@@ -291,7 +293,10 @@ func (r *Runner) getGRPCClient(addr string, isTLS bool, md map[string]string) *s
 	}
 	c := swazzGrpc.NewClient(addr, isTLS, md)
 	actual, _ := r.grpcClients.LoadOrStore(addr, c)
-	return actual.(*swazzGrpc.Client)
+	if client, ok := actual.(*swazzGrpc.Client); ok {
+		return client
+	}
+	return c
 }
 
 // Start begins the fuzzing run. It blocks until the run completes or is stopped.

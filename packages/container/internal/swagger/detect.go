@@ -199,15 +199,25 @@ func IsGRPCURL(urlStr string) bool {
 // IsProtoFile reports whether raw bytes look like a .proto source file.
 func IsProtoFile(raw []byte) bool {
 	content := strings.TrimSpace(string(raw))
+	if len(content) == 0 {
+		return false
+	}
+	// Avoid false-positives on JSON or XML
+	if (strings.HasPrefix(content, "{") && strings.HasSuffix(content, "}")) ||
+		(strings.HasPrefix(content, "[") && strings.HasSuffix(content, "]")) ||
+		strings.HasPrefix(content, "<?xml") || strings.HasPrefix(content, "<definitions") {
+		return false
+	}
 	if strings.HasPrefix(content, "syntax = \"proto3\"") || strings.HasPrefix(content, "syntax = \"proto2\"") ||
 		strings.HasPrefix(content, "syntax=\"proto3\"") || strings.HasPrefix(content, "syntax=\"proto2\"") ||
 		strings.HasPrefix(content, "syntax = 'proto3'") || strings.HasPrefix(content, "syntax = 'proto2'") {
 		return true
 	}
-	if strings.Contains(content, "service ") && strings.Contains(content, "rpc ") {
+	if (strings.Contains(content, "service ") || strings.Contains(content, "message ")) &&
+		strings.Contains(content, "rpc ") {
 		return true
 	}
-	if strings.Contains(content, "message ") && strings.Contains(content, "package ") {
+	if strings.Contains(content, "message ") && strings.Contains(content, "package ") && strings.Contains(content, ";") {
 		return true
 	}
 	return false

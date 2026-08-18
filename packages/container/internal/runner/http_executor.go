@@ -877,6 +877,9 @@ func (r *Runner) executeGRPCRequest(
 	}
 
 	if len(respBytes) > 0 {
+		if outMd == nil {
+			logger.Debug("[GRPC] No output descriptor for %s; response unmarshaled as raw string", method)
+		}
 		resMap, jsonStr, unmarshalErr := swazzGrpc.UnmarshalResponse(outMd, respBytes)
 		if unmarshalErr == nil && resMap != nil {
 			respBody = resMap
