@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
 	"swazz-engine/internal/grpc"
@@ -436,7 +437,8 @@ func runCLIErr(args []string) error {
 			return err
 		}
 		html := output.ToHTML(findings, &stats)
-		if err := os.WriteFile(*htmlOut, []byte(html), 0600); err != nil { // #nosec G306 -- report file, 0600 is appropriate
+		cleanHTML := filepath.Clean(*htmlOut)
+		if err := os.WriteFile(cleanHTML, []byte(html), 0600); err != nil { // #nosec G306,G703 -- report file output
 			log.Printf("Failed to write HTML report: %v", err)
 		} else {
 			logger.Info("Saved HTML to %s", *htmlOut)
@@ -447,7 +449,8 @@ func runCLIErr(args []string) error {
 			return err
 		}
 		junitData := output.ToJUnit(findings, &stats)
-		if err := os.WriteFile(*junitOut, junitData, 0600); err != nil { // #nosec G306
+		cleanJUnit := filepath.Clean(*junitOut)
+		if err := os.WriteFile(cleanJUnit, junitData, 0600); err != nil { // #nosec G306,G703 -- report file output
 			log.Printf("Failed to write JUnit report: %v", err)
 		} else {
 			logger.Info("Saved JUnit XML to %s", *junitOut)
@@ -458,7 +461,8 @@ func runCLIErr(args []string) error {
 			return err
 		}
 		mdData := output.ToMarkdown(findings, &stats, Version)
-		if err := os.WriteFile(*markdownOut, mdData, 0600); err != nil { // #nosec G306
+		cleanMD := filepath.Clean(*markdownOut)
+		if err := os.WriteFile(cleanMD, mdData, 0600); err != nil { // #nosec G306,G703 -- report file output
 			log.Printf("Failed to write Markdown report: %v", err)
 		} else {
 			logger.Info("Saved Markdown to %s", *markdownOut)

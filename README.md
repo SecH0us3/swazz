@@ -10,7 +10,7 @@
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://mariadb.com/bsl11/)
 [![Docs](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://SecH0us3.github.io/swazz/)
 
-**swazz** is a modern, smart API fuzzer designed for security researchers and developers. It parses OpenAPI (Swagger) specifications (in both JSON and YAML formats), Postman Collections, and SOAP (WSDL) to automatically identify crashes, logic flaws, and security vulnerabilities (XSS, Injection, etc.) through intelligent payload generation.
+**swazz** is a modern, smart API fuzzer designed for security researchers and developers. It parses OpenAPI (Swagger) specifications (in both JSON and YAML formats), Postman Collections, SOAP (WSDL), and gRPC services (via Protobuf `.proto` schemas or live gRPC Server Reflection) to automatically identify crashes, logic flaws, and security vulnerabilities (XSS, Injection, etc.) through intelligent payload generation.
 
 ---
 
@@ -27,6 +27,7 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 ## 🚀 Key Features
 
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
+- **🛰️ gRPC Microservice Fuzzing**: Direct fuzzing of gRPC microservices via live Server Reflection (`grpc://`, `grpcs://`) or `.proto` schema ingestion, with dynamic binary Protobuf wire serialization and specialized gRPC vulnerability analyzers.
 - **🔄 Zero-Setup HAR Replay**: Import browser `.har` files directly for instant fuzzing of undocumented APIs and real-world workflows without needing an OpenAPI spec.
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
 - **🛡️ Compliance Mapping**: Automatically map all discovered vulnerabilities to the **OWASP Top 10 (2025)** standard in reports and the Web Dashboard.
@@ -125,11 +126,33 @@ Swazz can extract variables from previous responses and inject them into subsequ
 }
 ```
 
-### 5. Test on the Vulnerable Demo API
-If you want to quickly test Swazz's capabilities, we provide a built-in vulnerable API simulated as a Cloudflare Worker in the `demo/` folder.
-> **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (like SQL injection) for testing Swazz. It should **NOT** be used in production or audited for security issues.
+### 5. Fuzzing gRPC Microservices
+Swazz supports native fuzzing of gRPC microservices via live Server Reflection (`grpc://` or `grpcs://`) or `.proto` files in `swagger_urls`:
+```json
+{
+  "base_url": "grpc://localhost:50051",
+  "swagger_urls": [
+    "grpc://localhost:50051"
+  ],
+  "settings": {
+    "iterations": 10,
+    "concurrency": 5,
+    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+  }
+}
+```
+Run with:
+```bash
+./swazz-engine start --config examples/swazz.config.grpc.json --html grpc-report.html
+```
 
-### 6. End-to-End (E2E) Browser Testing
+### 6. Test on the Vulnerable Demo API
+If you want to quickly test Swazz's capabilities, we provide built-in vulnerable APIs:
+- **HTTP / REST API**: simulated as a Cloudflare Worker in `demo/`
+- **gRPC Microservice API**: standalone server with Reflection in `demo/grpc/`
+> **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (SQL injection, command execution, panics) for testing Swazz. It should **NOT** be used in production or audited for security issues.
+
+### 7. End-to-End (E2E) Browser Testing
 We have a suite of Playwright E2E browser automation tests that verify integration between the frontend dashboard, the Cloudflare coordinator, the Go runner agent, and the Vulnerable Demo API.
 
 To run Playwright tests locally:

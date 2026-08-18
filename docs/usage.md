@@ -384,6 +384,64 @@ The Swazz Web Dashboard is optimized to handle high-concurrency fuzzing runs. Th
 
 During beta, registrations may be capped (default 50 users) to ensure stability. Once the limit is reached, new users can only register using a `BETA_BYPASS_CODE` provided by the administrator.
 
+## gRPC Microservice Fuzzing 🛰️
+
+Swazz includes native, high-performance security fuzzing for **gRPC microservices**. Unlike standard HTTP fuzzing, gRPC services communicate over HTTP/2 with binary Protobuf serialization and specialized status codes.
+
+### Target Discovery Modes
+
+You can specify gRPC microservice targets in `swagger_urls` or `base_url`:
+
+1. **Live gRPC Server Reflection (`grpc://` or `grpcs://`)**:
+   Swazz connects directly to the target server and queries its `grpc.reflection.v1` / `v1alpha` reflection service to automatically discover all registered service definitions, unary methods, and message field descriptors in real time.
+   - `grpc://hostname:port` — Unencrypted gRPC (Insecure plaintext connection)
+   - `grpcs://hostname:port` — TLS-encrypted gRPC connection
+
+   ```json
+   {
+     "base_url": "grpc://localhost:50051",
+     "swagger_urls": [
+       "grpc://localhost:50051"
+     ]
+   }
+   ```
+
+2. **Direct Protobuf Schema Ingestion (`.proto` files)**:
+   Swazz can parse local `.proto` source files using its embedded `protocompile` parser, converting Protobuf `service` and `message` definitions into typed fuzzing schemas:
+   ```json
+   {
+     "base_url": "localhost:50051",
+     "swagger_urls": [
+       "./api/user_service.proto",
+       "./api/payment_service.proto"
+     ]
+   }
+   ```
+
+### Dynamic Protobuf Wire Serialization
+
+Swazz's mutation engine converts payload maps dynamically into binary Protobuf wire format (`dynamicpb.Message`), supporting:
+- Scalar types (integers, floats, doubles, booleans, strings, bytes)
+- Enums (symbolic names and enum integer ordinals)
+- Nested messages and repeated arrays
+- Maps and structured objects
+
+### gRPC Vulnerability Analysis & Rule Detection
+
+During execution, responses and gRPC error metadata are passed to the analyzer pipeline to identify critical microservice flaws:
+
+| Rule ID | Severity | Description |
+| :--- | :--- | :--- |
+| `swazz/grpc-internal-error` | **Error** | Target server returned `codes.Internal` (code 13), indicating an unhandled server crash, runtime panic, or nil pointer dereference. |
+| `swazz/grpc-server-crash` | **Error** | The gRPC connection dropped, reset by peer, or EOF occurred during RPC invocation. |
+| `swazz/grpc-data-loss` | **Error** | Target server returned `codes.DataLoss` (code 15), signaling unrecoverable data loss or corruption. |
+| `swazz/grpc-unknown-error` | **Warning** | Target server returned status `Unknown` (code 2). |
+| `swazz/sql-error-leak` | **Error** | Database syntax error or SQL exception leaked in gRPC status message or response body. |
+| `swazz/cmdi-leak` | **Error** | OS command execution output signatures (e.g. Unix `id` / Windows `whoami`) detected. |
+| `swazz/sensitive-data-leak`| **Error** | Leaked secrets, AWS credentials, tokens, or JWTs in Protobuf response fields. |
+
+---
+
 ## Anonymous Global Scan Counter Telemetry 📊
 
 Swazz includes a completely anonymous telemetry system to track the total number of scans executed globally. This aggregated data helps substantiate the statistics shown in the trust bar. 

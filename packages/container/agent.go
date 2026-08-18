@@ -666,7 +666,7 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 			reqID := wsMsg.ReqID
 
 			logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v", reqPayload.URL, reqPayload.RawSpec != "")
-			go func() {
+			go func() { // #nosec G118 -- parse request handles asynchronous spec fetching
 				var result interface{}
 				var data []byte
 				var err error

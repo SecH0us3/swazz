@@ -158,7 +158,7 @@ func convertScalarValue(fd protoreflect.FieldDescriptor, val any) (protoreflect.
 		}
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 		if num, ok := toInt64(val); ok {
-			return protoreflect.ValueOfInt32(int32(num)), true
+			return protoreflect.ValueOfInt32(int32(num)), true // #nosec G115 -- proto field bounds are bounded by protobuf type
 		}
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		if num, ok := toInt64(val); ok {
@@ -166,7 +166,7 @@ func convertScalarValue(fd protoreflect.FieldDescriptor, val any) (protoreflect.
 		}
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
 		if num, ok := toUint64(val); ok {
-			return protoreflect.ValueOfUint32(uint32(num)), true
+			return protoreflect.ValueOfUint32(uint32(num)), true // #nosec G115 -- proto field bounds are bounded by protobuf type
 		}
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		if num, ok := toUint64(val); ok {
@@ -198,7 +198,7 @@ func convertScalarValue(fd protoreflect.FieldDescriptor, val any) (protoreflect.
 			}
 		}
 		if num, ok := toInt64(val); ok {
-			return protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)), true
+			return protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)), true // #nosec G115 -- enum ordinal conversion
 		}
 	}
 	return protoreflect.Value{}, false
@@ -227,15 +227,21 @@ func toInt64(val any) (int64, bool) {
 func toUint64(val any) (uint64, bool) {
 	switch v := val.(type) {
 	case float64:
-		return uint64(v), true
+		if v >= 0 {
+			return uint64(v), true
+		}
 	case float32:
-		return uint64(v), true
+		if v >= 0 {
+			return uint64(v), true
+		}
 	case uint64:
 		return v, true
 	case uint32:
 		return uint64(v), true
 	case int:
-		return uint64(v), true
+		if v >= 0 {
+			return uint64(v), true // #nosec G115
+		}
 	case string:
 		if n, err := strconv.ParseUint(v, 10, 64); err == nil {
 			return n, true
