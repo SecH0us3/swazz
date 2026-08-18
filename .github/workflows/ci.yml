@@ -131,12 +131,14 @@ jobs:
       - name: Run E2E tests
         run: |
           TARGET_SPECS=$(bash scripts/get-affected-e2e.sh)
-          if [ -n "$TARGET_SPECS" ]; then
-            echo "→ Running targeted Playwright specs: $TARGET_SPECS"
-            bash tests/e2e/run-e2e.sh $TARGET_SPECS
-          else
+          if [ "$TARGET_SPECS" = "NONE" ]; then
+            echo "✓ No frontend or edge routes affected by this change. Skipping browser E2E tests."
+          elif [ "$TARGET_SPECS" = "ALL" ] || [ -z "$TARGET_SPECS" ]; then
             echo "→ Running full Playwright E2E test suite"
             bash tests/e2e/run-e2e.sh
+          else
+            echo "→ Running targeted Playwright specs: $TARGET_SPECS"
+            bash tests/e2e/run-e2e.sh $TARGET_SPECS
           fi
 
       - name: Upload Playwright report on failure
