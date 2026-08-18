@@ -1,0 +1,58 @@
+syntax = "proto3";
+package demo;
+option go_package = "demo/grpc/demopb";
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc SearchUsers(SearchRequest) returns (SearchResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (User);
+  rpc ExecuteDiagnostic(DiagnosticRequest) returns (DiagnosticResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+}
+
+message User {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  string role = 4;
+}
+
+message GetUserRequest {
+  int64 id = 1;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SearchResponse {
+  repeated User users = 1;
+  int32 total = 2;
+}
+
+message UpdateUserRequest {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message DiagnosticRequest {
+  string host = 1;
+  int32 count = 2;
+}
+
+message DiagnosticResponse {
+  string output = 1;
+  int32 packets_sent = 2;
+}
+
+message DeleteUserRequest {
+  int64 id = 1;
+  string reason = 2;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+  string message = 2;
+}

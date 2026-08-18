@@ -43,15 +43,18 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ValidateBaseURL ensures the base URL is valid and has http/https scheme if present.
+// ValidateBaseURL ensures the base URL is valid and has http/https/grpc/grpcs scheme if present.
 func ValidateBaseURL(baseURL string) error {
 	if baseURL != "" {
+		if IsGRPCURL(baseURL) {
+			return nil
+		}
 		u, err := url.Parse(baseURL)
 		if err != nil {
 			return fmt.Errorf("invalid base_url: %w", err)
 		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			return fmt.Errorf("base_url must have a valid http or https scheme")
+		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "grpc" && u.Scheme != "grpcs" {
+			return fmt.Errorf("base_url must have a valid http, https, grpc, or grpcs scheme")
 		}
 	}
 	return nil

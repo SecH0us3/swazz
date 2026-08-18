@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SecH0us3/swazz/master/packages/container/schema.json",
+  "base_url": "grpc://localhost:50051",
+  "swagger_urls": [
+    "grpc://localhost:50051"
+  ],
+  "settings": {
+    "iterations_per_profile": 10,
+    "concurrency": 5,
+    "profiles": [
+      "RANDOM",
+      "BOUNDARY",
+      "MALICIOUS"
+    ]
+  }
+}

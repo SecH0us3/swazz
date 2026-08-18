@@ -7,15 +7,22 @@ package runner
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"swazz-engine/internal/analyzer"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAdaptiveRateLimitAndUA(t *testing.T) {
@@ -71,4 +78,76 @@ func TestAdaptiveRateLimitAndUA(t *testing.T) {
 	for _, ua := range userAgentsVal {
 		assert.NotEqual(t, "Swazz/1.0 (+https://github.com/SecH0us3/swazz)", ua)
 	}
+}
+
+func TestExecuteGRPCRequest_Basic(t *testing.T) {
+	r := &Runner{
+		config: &swagger.Config{
+			BaseURL: "127.0.0.1:50051",
+			Settings: swagger.Settings{
+				TimeoutMs: 1000,
+			},
+		},
+	}
+	defer r.Close()
+	res := r.executeGRPCRequest(context.Background(), "127.0.0.1:50051", "/demo.UserService/GetUser", "/demo.UserService/GetUser", map[string]any{"id": 1}, swagger.ProfileRandom, nil)
+	assert.NotNil(t, res)
+	assert.Equal(t, "GRPC", res.Method)
+	assert.Equal(t, "/demo.UserService/GetUser", res.Endpoint)
+}
+
+func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer lis.Close()
+
+	srv := grpc.NewServer(
+		grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+			return status.Error(codes.Internal, "panic: runtime error: invalid memory address")
+		}),
+	)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	defer srv.Stop()
+
+	r := &Runner{
+		config: &swagger.Config{
+			BaseURL: "grpc://" + lis.Addr().String(),
+			GlobalHeaders: map[string]string{
+				"Authorization": "Bearer test-jwt",
+			},
+			Settings: swagger.Settings{
+				TimeoutMs:           2000,
+				AnalyzeResponseBody: true,
+			},
+		},
+		analyzer: analyzer.NewRegistry(),
+	}
+	defer r.Close()
+
+	res := r.executeGRPCRequest(
+		context.Background(),
+		"grpc://"+lis.Addr().String(),
+		"/demo.UserService/GetUser",
+		"/demo.UserService/GetUser",
+		map[string]any{"id": 1},
+		swagger.ProfileMalicious,
+		map[string]string{"X-Trace": "123"},
+	)
+
+	require.NotNil(t, res)
+	assert.Equal(t, "GRPC", res.Method)
+	assert.Equal(t, 500, res.Status)
+	assert.Contains(t, res.RequestHeaders, "Authorization")
+	assert.Contains(t, res.RequestHeaders, "X-Trace")
+	require.NotEmpty(t, res.AnalyzerFindings)
+	var foundGrpcInternal bool
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/grpc-internal-error" {
+			foundGrpcInternal = true
+			break
+		}
+	}
+	assert.True(t, foundGrpcInternal, "expected finding swazz/grpc-internal-error to be captured")
 }

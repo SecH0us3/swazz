@@ -105,6 +105,8 @@ jobs:
     steps:
       # v6.0.2
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         # v6.4.0
@@ -127,7 +129,17 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
-        run: bash tests/e2e/run-e2e.sh
+        run: |
+          TARGET_SPECS=$(bash scripts/get-affected-e2e.sh)
+          if [ "$TARGET_SPECS" = "NONE" ]; then
+            echo "✓ No frontend or edge routes affected by this change. Skipping browser E2E tests."
+          elif [ "$TARGET_SPECS" = "ALL" ] || [ -z "$TARGET_SPECS" ]; then
+            echo "→ Running full Playwright E2E test suite"
+            bash tests/e2e/run-e2e.sh
+          else
+            echo "→ Running targeted Playwright specs: $TARGET_SPECS"
+            bash tests/e2e/run-e2e.sh $TARGET_SPECS
+          fi
 
       - name: Upload Playwright report on failure
         if: failure()

@@ -116,3 +116,30 @@ curl -X POST "https://defectdojo.company.local/api/v2/import-scan/" \
   -F "engagement=4" \
   -F "file=@results.sarif"
 ```
+
+---
+
+## 🛰 Recipe 6: Fuzzing gRPC Microservices with Reflection
+
+Fuzz a target gRPC service using Server Reflection without needing local `.proto` files:
+
+1. Create a `swazz.config.grpc.json`:
+```json
+{
+  "base_url": "grpc://localhost:50051",
+  "swagger_urls": [
+    "grpc://localhost:50051"
+  ],
+  "settings": {
+    "iterations": 15,
+    "concurrency": 5,
+    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"],
+    "analyze_response_body": true
+  }
+}
+```
+
+2. Run Swazz CLI against the gRPC service:
+```bash
+swazz-engine start --config swazz.config.grpc.json --sarif grpc-findings.sarif --html grpc-report.html
+```

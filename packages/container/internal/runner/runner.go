@@ -42,6 +42,7 @@ import (
 	"github.com/google/uuid"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/generator/payloads"
+	swazzGrpc "swazz-engine/internal/grpc"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/mcp"
@@ -160,9 +161,11 @@ type Runner struct {
 
 	analyzer *analyzer.AnalyzerRegistry
 
-	mcpClient     mcp.Client
-	mcpMutex      sync.Mutex
+	mcpClient      mcp.Client
+	mcpMutex       sync.Mutex
 	mcpRateLimiter *mcp.RateLimiter
+
+	grpcClients sync.Map // map[string]*swazzGrpc.Client
 }
 
 // New creates a new Runner with sensible defaults.
@@ -266,10 +269,34 @@ func (r *Runner) Close() {
 		r.lifecycle.cancel()
 	}
 	r.lifecycle.mu.Unlock()
-	close(r.doneCh)
+	if r.doneCh != nil {
+		close(r.doneCh)
+	}
 	if r.client != nil {
 		r.client.CloseIdleConnections()
 	}
+	r.grpcClients.Range(func(key, value any) bool {
+		if c, ok := value.(*swazzGrpc.Client); ok {
+			if err := c.Close(); err != nil {
+				logger.Debug("[Runner] Error closing gRPC client for %v: %v", key, err)
+			}
+		}
+		return true
+	})
+}
+
+func (r *Runner) getGRPCClient(addr string, isTLS bool, md map[string]string) *swazzGrpc.Client {
+	if val, ok := r.grpcClients.Load(addr); ok {
+		if c, ok := val.(*swazzGrpc.Client); ok {
+			return c
+		}
+	}
+	c := swazzGrpc.NewClient(addr, isTLS, md)
+	actual, _ := r.grpcClients.LoadOrStore(addr, c)
+	if client, ok := actual.(*swazzGrpc.Client); ok {
+		return client
+	}
+	return c
 }
 
 // Start begins the fuzzing run. It blocks until the run completes or is stopped.

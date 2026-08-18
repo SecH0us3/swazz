@@ -94,6 +94,16 @@ func TestValidateBaseURL(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name:      "Valid gRPC URL",
+			baseURL:   "grpc://localhost:50051",
+			expectErr: false,
+		},
+		{
+			name:      "Valid gRPCS URL",
+			baseURL:   "grpcs://api.example.com:443",
+			expectErr: false,
+		},
+		{
 			name:      "Invalid URL scheme FTP",
 			baseURL:   "ftp://api.example.com",
 			expectErr: true,

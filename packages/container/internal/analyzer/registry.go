@@ -31,6 +31,7 @@ func NewRegistry() *AnalyzerRegistry {
 			&CmdiAnalyzer{},
 			&SSTIAnalyzer{},
 			&XXEAnalyzer{},
+			&GRPCStatusAnalyzer{},
 		},
 	}
 }
