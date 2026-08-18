@@ -374,3 +374,45 @@ func TestIsHAR(t *testing.T) {
 		t.Errorf("IsHAR failed to detect valid HAR spec")
 	}
 }
+
+func TestIsGRPCURL(t *testing.T) {
+	tests := []struct {
+		url      string
+		expected bool
+	}{
+		{"grpc://localhost:50051", true},
+		{"grpcs://api.example.com:443", true},
+		{"grpc://127.0.0.1:9090", true},
+		{"http://localhost:8080", false},
+		{"https://api.example.com", false},
+		{"./api/service.proto", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		if got := IsGRPCURL(tc.url); got != tc.expected {
+			t.Errorf("IsGRPCURL(%q) = %v, expected %v", tc.url, got, tc.expected)
+		}
+	}
+}
+
+func TestIsProtoFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected bool
+	}{
+		{"proto3 standard", `syntax = "proto3"; package demo; service Test { rpc Call(Req) returns (Resp); }`, true},
+		{"proto2 standard", `syntax = "proto2"; package demo; message Req { required string id = 1; }`, true},
+		{"proto without syntax but service", `package demo; service UserService { rpc GetUser(Req) returns (Resp); }`, true},
+		{"json spec", `{"openapi": "3.0.0", "info": {"title": "test"}}`, false},
+		{"wsdl xml", `<?xml version="1.0"?><definitions xmlns="http://schemas.xmlsoap.org/wsdl/"></definitions>`, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsProtoFile([]byte(tc.content)); got != tc.expected {
+				t.Errorf("IsProtoFile() = %v, expected %v", got, tc.expected)
+			}
+		})
+	}
+}
+

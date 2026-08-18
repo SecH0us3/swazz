@@ -189,3 +189,27 @@ func FetchRemoteSpec(ctx context.Context, client *http.Client, urlStr string, he
 	}
 	return nil, fmt.Errorf("spec server returned status %d on POST introspection request", postResp.StatusCode)
 }
+
+// IsGRPCURL reports whether the URL targets a gRPC server (grpc:// or grpcs://).
+func IsGRPCURL(urlStr string) bool {
+	lower := strings.ToLower(strings.TrimSpace(urlStr))
+	return strings.HasPrefix(lower, "grpc://") || strings.HasPrefix(lower, "grpcs://")
+}
+
+// IsProtoFile reports whether raw bytes look like a .proto source file.
+func IsProtoFile(raw []byte) bool {
+	content := strings.TrimSpace(string(raw))
+	if strings.HasPrefix(content, "syntax = \"proto3\"") || strings.HasPrefix(content, "syntax = \"proto2\"") ||
+		strings.HasPrefix(content, "syntax=\"proto3\"") || strings.HasPrefix(content, "syntax=\"proto2\"") ||
+		strings.HasPrefix(content, "syntax = 'proto3'") || strings.HasPrefix(content, "syntax = 'proto2'") {
+		return true
+	}
+	if strings.Contains(content, "service ") && strings.Contains(content, "rpc ") {
+		return true
+	}
+	if strings.Contains(content, "message ") && strings.Contains(content, "package ") {
+		return true
+	}
+	return false
+}
+
