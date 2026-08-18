@@ -37,6 +37,9 @@ npx wrangler d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users 
 echo "→ Starting Vulnerable Demo API (Port 8788)..."
 NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --port 8788 --inspector-port 9230 --cwd demo --log-level error > demo.log 2>&1 &
 
+echo "→ Starting Vulnerable gRPC Demo API (Port 50051)..."
+(cd demo/grpc && go run main.go --port 50051) > grpc-demo.log 2>&1 &
+
 echo "→ Starting Edge Coordinator (Port 8787)..."
 NODE_OPTIONS="--max-old-space-size=4096" npx wrangler dev --inspector-port 9229 --cwd packages/edge --var JWT_SECRET:test-secret --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error > edge.log 2>&1 &
 
@@ -64,6 +67,7 @@ echo "=== Swazz is now running! ==="
 echo "  - Web Dashboard: http://localhost:5173"
 echo "  - Edge Coordinator API: http://localhost:8787"
 echo "  - Vulnerable Demo API: http://localhost:8788"
+echo "  - Vulnerable gRPC Demo API: grpc://localhost:50051"
 echo ""
-echo "Logs are available at: demo.log, edge.log, web.log, packages/container/agent.log"
-echo "To stop all services, run: pkill -f wrangler; pkill -f vite; pkill -f swazz-engine"
+echo "Logs are available at: demo.log, grpc-demo.log, edge.log, web.log, packages/container/agent.log"
+echo "To stop all services, run: pkill -f wrangler; pkill -f vite; pkill -f swazz-engine; pkill -f 'go run main.go --port 50051'"
