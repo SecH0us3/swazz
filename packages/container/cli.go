@@ -17,12 +17,14 @@ import (
 	"os/signal"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/grpc"
+	"swazz-engine/internal/har"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/postman"
-	"swazz-engine/internal/har"
-	"swazz-engine/internal/mcp"
+	"swazz-engine/internal/proto"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
@@ -601,6 +603,50 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 					headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
 				}
 
+				if swagger.IsGRPCURL(urlStr) {
+					isTLS := strings.HasPrefix(strings.ToLower(urlStr), "grpcs://")
+					grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer grpcCancel()
+					parsedGRPC, errGRPC := grpc.DiscoverViaReflection(grpcCtx, urlStr, isTLS, headersCopy)
+					if errGRPC == nil {
+						resChan <- specResult{
+							urlStr:    urlStr,
+							endpoints: parsedGRPC.Endpoints,
+							basePath:  parsedGRPC.BasePath,
+						}
+						return
+					}
+					resChan <- specResult{err: fmt.Errorf("failed to discover gRPC service via reflection (%s): %w", urlStr, errGRPC)}
+					return
+				}
+
+				if strings.HasSuffix(strings.ToLower(urlStr), ".proto") {
+					parsedProto, errProto := proto.ParseProtoFile(urlStr, cliCfg.BaseURL)
+					if errProto == nil {
+						resChan <- specResult{
+							urlStr:    urlStr,
+							endpoints: parsedProto.Endpoints,
+							basePath:  parsedProto.BasePath,
+						}
+						return
+					}
+					if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
+						specRaw, fetchErr := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
+						if fetchErr == nil {
+							if parsedProtoBytes, errBytes := proto.ParseProtoBytes(urlStr, specRaw, cliCfg.BaseURL); errBytes == nil {
+								resChan <- specResult{
+									urlStr:    urlStr,
+									endpoints: parsedProtoBytes.Endpoints,
+									basePath:  parsedProtoBytes.BasePath,
+								}
+								return
+							}
+						}
+					}
+					resChan <- specResult{err: fmt.Errorf("failed to parse proto file (%s): %w", urlStr, errProto)}
+					return
+				}
+
 				specRaw, fetchErr := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
 				
 				var parsed *swagger.ParseResult
@@ -627,6 +673,14 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 								parseErr = fmt.Errorf("failed to parse as HAR: %w", errHAR)
 							} else {
 								parsed = parsedHAR
+								parseErr = nil
+							}
+						} else if swagger.IsProtoFile(specRaw) {
+							parsedProto, errProto := proto.ParseProtoBytes(urlStr, specRaw, cliCfg.BaseURL)
+							if errProto != nil {
+								parseErr = fmt.Errorf("failed to parse as Proto file: %w", errProto)
+							} else {
+								parsed = parsedProto
 								parseErr = nil
 							}
 						} else if swagger.IsPostman(specRaw) {

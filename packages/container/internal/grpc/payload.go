@@ -48,12 +48,12 @@ func FindMessageDescriptor(protoSrc, fullMsgName string) (protoreflect.MessageDe
 
 // MarshalPayload converts a mutation payload (map[string]any, JSON string, or raw bytes) into binary Protobuf wire format.
 func MarshalPayload(md protoreflect.MessageDescriptor, payload any) ([]byte, error) {
-	if md == nil {
-		return nil, fmt.Errorf("nil message descriptor")
-	}
-
 	if rawBytes, ok := payload.([]byte); ok {
 		return rawBytes, nil
+	}
+
+	if md == nil {
+		return nil, fmt.Errorf("nil message descriptor")
 	}
 
 	msg := dynamicpb.NewMessage(md)

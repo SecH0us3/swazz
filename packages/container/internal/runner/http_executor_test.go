@@ -72,3 +72,19 @@ func TestAdaptiveRateLimitAndUA(t *testing.T) {
 		assert.NotEqual(t, "Swazz/1.0 (+https://github.com/SecH0us3/swazz)", ua)
 	}
 }
+
+func TestExecuteGRPCRequest_Basic(t *testing.T) {
+	r := &Runner{
+		config: &swagger.Config{
+			BaseURL: "127.0.0.1:50051",
+			Settings: swagger.Settings{
+				TimeoutMs: 1000,
+			},
+		},
+	}
+	defer r.Close()
+	res := r.executeGRPCRequest(context.Background(), "127.0.0.1:50051", "/demo.UserService/GetUser", "/demo.UserService/GetUser", map[string]any{"id": 1}, swagger.ProfileRandom, nil)
+	assert.NotNil(t, res)
+	assert.Equal(t, "GRPC", res.Method)
+	assert.Equal(t, "/demo.UserService/GetUser", res.Endpoint)
+}

@@ -10,11 +10,47 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/bufbuild/protocompile"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"swazz-engine/internal/swagger"
 )
+
+var (
+	methodInputDesc  sync.Map // string -> protoreflect.MessageDescriptor
+	methodOutputDesc sync.Map // string -> protoreflect.MessageDescriptor
+)
+
+// RegisterMethodDescriptors stores input and output MessageDescriptors for an RPC method path.
+func RegisterMethodDescriptors(rpcPath string, input, output protoreflect.MessageDescriptor) {
+	if input != nil {
+		methodInputDesc.Store(rpcPath, input)
+	}
+	if output != nil {
+		methodOutputDesc.Store(rpcPath, output)
+	}
+}
+
+// GetMethodInputDescriptor returns the protoreflect.MessageDescriptor for the RPC method's input.
+func GetMethodInputDescriptor(rpcPath string) protoreflect.MessageDescriptor {
+	if val, ok := methodInputDesc.Load(rpcPath); ok {
+		if md, ok := val.(protoreflect.MessageDescriptor); ok {
+			return md
+		}
+	}
+	return nil
+}
+
+// GetMethodOutputDescriptor returns the protoreflect.MessageDescriptor for the RPC method's output.
+func GetMethodOutputDescriptor(rpcPath string) protoreflect.MessageDescriptor {
+	if val, ok := methodOutputDesc.Load(rpcPath); ok {
+		if md, ok := val.(protoreflect.MessageDescriptor); ok {
+			return md
+		}
+	}
+	return nil
+}
 
 // ParseProtoFile reads a .proto file from disk and parses it into Swazz EndpointConfigs.
 func ParseProtoFile(path string, baseURL string) (*swagger.ParseResult, error) {
@@ -95,9 +131,11 @@ func ConvertFileDescriptorsToEndpoints(fds []protoreflect.FileDescriptor, defaul
 				}
 
 				inputMsg := m.Input()
+				outputMsg := m.Output()
 				schema := ConvertMessageToSchema(inputMsg, make(map[string]bool))
 
 				rpcPath := fmt.Sprintf("/%s/%s", svc.FullName(), m.Name())
+				RegisterMethodDescriptors(rpcPath, inputMsg, outputMsg)
 				endpoints = append(endpoints, swagger.EndpointConfig{
 					Method:      "GRPC",
 					Path:        rpcPath,

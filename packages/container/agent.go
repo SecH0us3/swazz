@@ -23,11 +23,13 @@ import (
 	"swazz-engine/internal/ai"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/graphql"
+	"swazz-engine/internal/grpc"
 	"swazz-engine/internal/har"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/postman"
+	"swazz-engine/internal/proto"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
@@ -669,8 +671,24 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 				var data []byte
 				var err error
 				var resp *http.Response
+				var parseResult *swagger.ParseResult
+				var parseErr error
+				var originalErr error
 
-				if reqPayload.RawSpec != "" {
+				if reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL) {
+					isTLS := strings.HasPrefix(strings.ToLower(reqPayload.URL), "grpcs://")
+					grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer grpcCancel()
+					grpcResult, grpcErr := grpc.DiscoverViaReflection(grpcCtx, reqPayload.URL, isTLS, reqPayload.Headers)
+					if grpcErr != nil {
+						err = fmt.Errorf("failed to discover gRPC service via reflection: %w", grpcErr)
+					} else {
+						parseResult = grpcResult
+						parseErr = nil
+					}
+				} else if reqPayload.RawSpec != "" && swagger.IsProtoFile([]byte(reqPayload.RawSpec)) {
+					parseResult, parseErr = proto.ParseProtoBytes("upload.proto", []byte(reqPayload.RawSpec), "")
+				} else if reqPayload.RawSpec != "" {
 					// Validate rawSpec to prevent injection attacks.
 					// Only reject template-literal style markers (e.g. "{{{")
 					// used by SST/Cloudflare template engines. A plain "}}}"
@@ -782,26 +800,27 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 					}
 					result = errMap
 				} else {
-					var parseResult *swagger.ParseResult
-					var parseErr error
-					var originalErr error
-					parseResult, parseErr = swagger.ParseRawSpec(data)
-					if parseErr != nil {
-						originalErr = parseErr
-						if swagger.IsHAR(data) {
-							parseResult, parseErr = har.ParseHAR(data, "")
-						} else if swagger.IsPostman(data) {
-							parseResult, parseErr = postman.ParsePostman(data)
-						} else {
-							defaultPath := "/graphql"
-							if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
-								if parsedURL.Path != "" && parsedURL.Path != "/" {
-									defaultPath = parsedURL.Path
+					if parseResult == nil && parseErr == nil {
+						parseResult, parseErr = swagger.ParseRawSpec(data)
+						if parseErr != nil {
+							originalErr = parseErr
+							if swagger.IsHAR(data) {
+								parseResult, parseErr = har.ParseHAR(data, "")
+							} else if swagger.IsProtoFile(data) {
+								parseResult, parseErr = proto.ParseProtoBytes(reqPayload.URL, data, "")
+							} else if swagger.IsPostman(data) {
+								parseResult, parseErr = postman.ParsePostman(data)
+							} else {
+								defaultPath := "/graphql"
+								if parsedURL, errURL := url.Parse(reqPayload.URL); errURL == nil {
+									if parsedURL.Path != "" && parsedURL.Path != "/" {
+										defaultPath = parsedURL.Path
+									}
 								}
-							}
-							parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
-							if parseErr != nil {
-								parseErr = originalErr
+								parseResult, parseErr = graphql.ParseGraphQLIntrospection(data, defaultPath)
+								if parseErr != nil {
+									parseErr = originalErr
+								}
 							}
 						}
 					}
@@ -814,6 +833,8 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 						parserName := "swagger"
 						if swagger.IsHAR(data) {
 							parserName = "har"
+						} else if swagger.IsProtoFile(data) || (reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL)) {
+							parserName = "grpc"
 						} else if swagger.IsPostman(data) {
 							parserName = "postman"
 						} else if originalErr != nil && parseErr == originalErr {
