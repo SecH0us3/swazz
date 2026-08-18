@@ -37,7 +37,7 @@ openssl pkey -in swazz_master_private.pem -pubout -out swazz_master_public.pem
 
 After generating the keypair, run the issuing script once (see Step 3). The output will include the **Public Key (hex)** — a 64-character hex string.
 
-Update the embedded default in [`packages/container/internal/license/license.go`](../packages/container/internal/license/license.go#L29):
+Update the embedded default in [`packages/container/internal/license/license.go`](https://github.com/SecH0us3/swazz/blob/master/packages/container/internal/license/license.go#L29):
 
 ```go
 var DefaultPublicKeyHex = "<your-64-char-hex-public-key>"
@@ -53,7 +53,7 @@ When an Enterprise Client purchases a commercial license or requests a trial:
 
 ### Step 3.1: Execute License Issuance Tool
 
-Run [`scripts/issue-license.go`](../scripts/issue-license.go):
+Run [`scripts/issue-license.go`](https://github.com/SecH0us3/swazz/blob/master/scripts/issue-license.go):
 
 ```bash
 # Full enterprise license (all features, 1 year, 50 users)
