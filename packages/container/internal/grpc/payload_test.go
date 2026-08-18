@@ -185,3 +185,85 @@ service TestService {}
 	_, err = FindMessageDescriptor("invalid proto", "demo.Test")
 	assert.Error(t, err)
 }
+
+func TestMarshalPayload_ComprehensiveFallback(t *testing.T) {
+	protoSrc := `
+syntax = "proto3";
+package demo;
+
+enum Status {
+  UNKNOWN = 0;
+  ACTIVE = 1;
+  SUSPENDED = 2;
+}
+
+message NestedChild {
+  string child_name = 1;
+  int32 child_age = 2;
+}
+
+message AllTypesMsg {
+  int32 i32 = 1;
+  int64 i64 = 2;
+  uint32 u32 = 3;
+  uint64 u64 = 4;
+  float flt = 5;
+  double dbl = 6;
+  bool flag = 7;
+  bool flag_str = 8;
+  string str = 9;
+  bytes raw_b64 = 10;
+  bytes raw_str = 11;
+  Status status_str = 12;
+  Status status_num = 13;
+  repeated string tags = 14;
+  repeated int32 numbers = 15;
+  NestedChild child = 16;
+}
+`
+	md, err := FindMessageDescriptor(protoSrc, "demo.AllTypesMsg")
+	require.NoError(t, err)
+
+	// Provide bad/unconventional types to trigger manual fallback population
+	payload := map[string]any{
+		"i32":        "42",
+		"i64":        float64(10000000000),
+		"u32":        "500",
+		"u64":        "999999999",
+		"flt":        "3.14",
+		"dbl":        float64(2.71828),
+		"flag":       true,
+		"flag_str":   "true",
+		"str":        12345,
+		"raw_b64":    "aGVsbG8=",
+		"raw_str":    "plainbytes",
+		"status_str": "ACTIVE",
+		"status_num": 2,
+		"tags":       []any{"tag1", "tag2"},
+		"numbers":    []any{10, "20", float64(30)},
+		"child": map[string]any{
+			"child_name": "Bobby",
+			"child_age":  "12",
+		},
+	}
+
+	bin, err := MarshalPayload(md, payload)
+	require.NoError(t, err)
+	assert.NotEmpty(t, bin)
+
+	parsed, jsonStr, err := UnmarshalResponse(md, bin)
+	require.NoError(t, err)
+	assert.NotEmpty(t, jsonStr)
+
+	assert.Equal(t, float64(42), parsed["i32"])
+	assert.Equal(t, "10000000000", parsed["i64"]) // protojson marshals int64 as string
+	assert.Equal(t, float64(500), parsed["u32"])
+	assert.Equal(t, "999999999", parsed["u64"])
+	assert.InDelta(t, 3.14, parsed["flt"].(float64), 0.01)
+	assert.InDelta(t, 2.71828, parsed["dbl"].(float64), 0.001)
+	assert.Equal(t, true, parsed["flag"])
+	assert.Equal(t, true, parsed["flagStr"])
+	assert.Equal(t, "12345", parsed["str"])
+	assert.Equal(t, "ACTIVE", parsed["statusStr"])
+	assert.Equal(t, "SUSPENDED", parsed["statusNum"])
+}

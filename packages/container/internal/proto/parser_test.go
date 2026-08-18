@@ -206,3 +206,88 @@ func TestParseProtoErrors(t *testing.T) {
 	_, err = ParseProtoFile("non_existent_file.proto", "")
 	assert.Error(t, err)
 }
+
+func TestParseProtoAllScalarTypes(t *testing.T) {
+	protoSrc := `
+syntax = "proto3";
+package scalardemo;
+
+service ScalarService {
+  rpc CheckScalars(ScalarRequest) returns (ScalarResponse);
+}
+
+message ScalarRequest {
+  int32 i32 = 1;
+  sint32 si32 = 2;
+  sfixed32 sf32 = 3;
+  int64 i64 = 4;
+  sint64 si64 = 5;
+  sfixed64 sf64 = 6;
+  uint32 u32 = 7;
+  fixed32 f32 = 8;
+  uint64 u64 = 9;
+  fixed64 f64 = 10;
+  float flt = 11;
+  double dbl = 12;
+  bool flag = 13;
+  string str = 14;
+  bytes raw = 15;
+}
+
+message ScalarResponse {
+  bool ok = 1;
+}
+`
+	res, err := ParseProtoBytes("scalars.proto", []byte(protoSrc), "grpc://127.0.0.1:50051")
+	require.NoError(t, err)
+	require.Len(t, res.Endpoints, 1)
+
+	ep := res.Endpoints[0]
+	props := ep.Schema.Properties
+
+	assert.Equal(t, "integer", props["i32"].Type)
+	assert.Equal(t, "int32", props["i32"].Format)
+	assert.Equal(t, "integer", props["si32"].Type)
+	assert.Equal(t, "int32", props["si32"].Format)
+	assert.Equal(t, "integer", props["sf32"].Type)
+	assert.Equal(t, "int32", props["sf32"].Format)
+
+	assert.Equal(t, "integer", props["i64"].Type)
+	assert.Equal(t, "int64", props["i64"].Format)
+	assert.Equal(t, "integer", props["si64"].Type)
+	assert.Equal(t, "int64", props["si64"].Format)
+	assert.Equal(t, "integer", props["sf64"].Type)
+	assert.Equal(t, "int64", props["sf64"].Format)
+
+	assert.Equal(t, "integer", props["u32"].Type)
+	assert.Equal(t, "uint32", props["u32"].Format)
+	assert.Equal(t, "integer", props["f32"].Type)
+	assert.Equal(t, "uint32", props["f32"].Format)
+
+	assert.Equal(t, "integer", props["u64"].Type)
+	assert.Equal(t, "uint64", props["u64"].Format)
+	assert.Equal(t, "integer", props["f64"].Type)
+	assert.Equal(t, "uint64", props["f64"].Format)
+
+	assert.Equal(t, "number", props["flt"].Type)
+	assert.Equal(t, "float", props["flt"].Format)
+	assert.Equal(t, "number", props["dbl"].Type)
+	assert.Equal(t, "double", props["dbl"].Format)
+
+	assert.Equal(t, "boolean", props["flag"].Type)
+	assert.Equal(t, "string", props["str"].Type)
+	assert.Equal(t, "string", props["raw"].Type)
+	assert.Equal(t, "byte", props["raw"].Format)
+
+	// Check descriptor getters
+	inDesc := GetMethodInputDescriptor(ep.Path)
+	assert.NotNil(t, inDesc)
+	assert.Equal(t, "ScalarRequest", string(inDesc.Name()))
+
+	outDesc := GetMethodOutputDescriptor(ep.Path)
+	assert.NotNil(t, outDesc)
+	assert.Equal(t, "ScalarResponse", string(outDesc.Name()))
+
+	assert.Nil(t, GetMethodInputDescriptor("/non/existent"))
+	assert.Nil(t, GetMethodOutputDescriptor("/non/existent"))
+}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"swazz-engine/internal/swagger"
 )
 
 func TestInferOOBServerURL(t *testing.T) {
@@ -111,4 +112,13 @@ func TestIncrementGlobalScanTelemetry(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout waiting for telemetry increment call")
 	}
+}
+
+func TestAgent_GRPCAndProtoDetection(t *testing.T) {
+	protoBytes := []byte("syntax = \"proto3\";\npackage test;\nmessage M { string a = 1; }")
+	assert.True(t, swagger.IsProtoFile(protoBytes))
+	assert.True(t, swagger.IsGRPCURL("grpc://localhost:50051"))
+	assert.True(t, swagger.IsGRPCURL("grpcs://10.0.0.1:443"))
+	assert.False(t, swagger.IsGRPCURL("http://localhost:8080"))
+	assert.False(t, swagger.IsGRPCURL("https://api.example.com"))
 }

@@ -117,4 +117,19 @@ func TestClient_Invoke(t *testing.T) {
 	_, statusHttp500, err500 := client.Invoke(ctx, "/test.Service/Echo", []byte("hello"), map[string]string{"x-test-panic": "1"})
 	assert.Error(t, err500)
 	assert.Equal(t, 500, statusHttp500)
+
+	// Test Connect idempotency
+	require.NoError(t, client.Connect(ctx))
+	require.NoError(t, client.Connect(ctx))
+
+	// Test Close idempotency
+	require.NoError(t, client.Close())
+	require.NoError(t, client.Close())
+}
+
+func TestClient_TLSInit(t *testing.T) {
+	client := NewClient("grpcs://localhost:50051", true, nil)
+	assert.NotNil(t, client)
+	assert.True(t, client.isTLS)
+	assert.Equal(t, "localhost:50051", client.addr)
 }
