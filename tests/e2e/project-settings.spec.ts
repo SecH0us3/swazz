@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 async function fillKVRow(row: any, key: string, value: string) {
   const keyInput = row.locator('input[placeholder="Header"], input[placeholder="Name"], input[placeholder="Key"], input[placeholder="Category (e.g. xss)"]');
@@ -449,17 +450,11 @@ test.describe('Project and Payload Settings E2E Tests', () => {
   });
 
   test('should configure AI Remediation settings and select rules', async ({ page }) => {
-    // 1. Navigate to frontend
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    // 1. Mock Enterprise license to unlock AI Remediation tab
+    await mockEnterpriseLicense(page);
 
     // 2. Register unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await registerAndLogin(page);
 
     // 3. Open Project Settings
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

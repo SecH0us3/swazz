@@ -26,7 +26,7 @@ var (
 
 // DefaultPublicKeyHex is the embedded default Ed25519 public key for Swazz Enterprise license verification.
 // Can be overridden via SWAZZ_LICENSE_PUBKEY environment variable.
-var DefaultPublicKeyHex = "a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314"
+var DefaultPublicKeyHex = "0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef"
 
 type License struct {
 	Company        string    `json:"company"`
@@ -51,6 +51,33 @@ func (l *License) HasFeature(feature string) bool {
 		}
 	}
 	return false
+}
+
+// DaysRemaining returns the number of whole days remaining until the license expires.
+// Returns -1 if the license does not expire, or 0 if it is already expired.
+func (l *License) DaysRemaining() int {
+	if l == nil || l.ExpiresAt.IsZero() {
+		return -1
+	}
+	remaining := time.Until(l.ExpiresAt)
+	if remaining <= 0 {
+		return 0
+	}
+	days := int((remaining + 24*time.Hour - time.Nanosecond) / (24 * time.Hour))
+	return days
+}
+
+// IsExpiringSoon returns true if the license expires within thresholdDays (and is not already expired).
+func (l *License) IsExpiringSoon(thresholdDays int) bool {
+	if l == nil || l.ExpiresAt.IsZero() {
+		return false
+	}
+	remaining := time.Until(l.ExpiresAt)
+	if remaining <= 0 {
+		return false
+	}
+	days := l.DaysRemaining()
+	return days <= thresholdDays
 }
 
 type Verifier struct {

@@ -122,6 +122,9 @@ func startAgent(args []string) {
 			logWarn("⚠️  License verification failed: %v (running in community mode)", err)
 		} else if lic != nil {
 			logInfo("🔑 Enterprise license active: %s (expires %s)", lic.Company, lic.ExpiresAt.Format("2006-01-02"))
+			if lic.IsExpiringSoon(3) {
+				logWarn("⚠️  License expires soon: %d day(s) remaining (expires %s)", lic.DaysRemaining(), lic.ExpiresAt.Format("2006-01-02"))
+			}
 		}
 	}
 
@@ -434,6 +437,9 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 					logWarn("[%s] License verification failed for job: %v", dispatch.RunID, licErr)
 				} else if jobLic != nil {
 					logInfo("[%s] Job license active: %s (expires %s)", dispatch.RunID, jobLic.Company, jobLic.ExpiresAt.Format("2006-01-02"))
+					if jobLic.IsExpiringSoon(3) {
+						logWarn("[%s] ⚠️  Job license expires soon: %d day(s) remaining (expires %s)", dispatch.RunID, jobLic.DaysRemaining(), jobLic.ExpiresAt.Format("2006-01-02"))
+					}
 				}
 			}
 

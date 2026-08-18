@@ -4,23 +4,13 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('MCP and API Key Hashing E2E Tests', () => {
   test('should display masked key, support rotation and show plain-text key once', async ({ page }) => {
-    // 1. Navigate to the frontend
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    // 2. Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    // 1. Mock Enterprise license & register user
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page, 'u', false);
 
     // 3. Open Profile Settings
     const accountBtn = page.locator('button[title="Account"]');
@@ -84,21 +74,10 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
   });
 
   test('should support MCP server fuzzing and detect crashes/exceptions in MCP tools', async ({ page }) => {
-    // 1. Navigate to the frontend
+    // 1. Mock Enterprise license & register user
     page.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    // 2. Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
     // 3. Open More Project Settings to access Raw JSON Config
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

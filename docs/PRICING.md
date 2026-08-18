@@ -21,9 +21,10 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 
 1. **Non-Commercial / Open Source Use**: You are using Swazz exclusively to scan non-commercial, academic, or open-source projects.
 2. **Small Business / Startup Exemption**: The annual gross revenue of your company (including parent, subsidiary, and affiliated entities) does not exceed **$1,000,000 USD**.
+3. **14-Day Free Trial**: Any registered user can self-generate a one-time 14-day commercial trial license in **Settings → License & Subscription** to explore all enterprise features without vendor intervention.
 
 > [!NOTE]
-> If your company's annual revenue exceeds **$1,000,000 USD** and you use Swazz in production or commercial environments, an official **Swazz Enterprise Commercial License** is required.
+> If your company's annual revenue exceeds **$1,000,000 USD** and you use Swazz in production or commercial environments beyond the 14-day trial period, an official **Swazz Enterprise Commercial License** is required.
 
 ---
 
@@ -31,16 +32,22 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 
 | Feature / Capability | Community Edition (BSL 1.1 Free) | Swazz Enterprise |
 | :--- | :---: | :---: |
+| **Scan Volume & Fuzzing Runs** | ✅ **Unlimited** (no time/scan caps) | ✅ **Unlimited** |
 | **Max Annual Gross Revenue** | Under $1,000,000 USD | Unlimited |
 | **Self-Hosted Engine & Local CLI** | ✅ Included | ✅ Included |
 | **OpenAPI, HAR, SOAP & GraphQL Fuzzing** | ✅ Included | ✅ Included |
+| **Max Fuzzer Concurrency** | 5 parallel workers | Up to 1,000 workers |
+| **Export Formats** | JSON | JSON, SARIF, HTML, MD, JUnit |
+| **AI Remediation Pro (Auto-Fixes)** | ❌ | ✅ Included |
+| **Scheduled / Recurring CI Runs & Webhooks** | ❌ | ✅ Included |
 | **Shared & Private Dedicated Runners** | ✅ Included | ✅ Included |
 | **Source Code Access & Auditing** | ✅ Included | ✅ Included |
 | **Enterprise SAML / Single Sign-On (Okta, Azure AD)** | ❌ | ✅ Included |
 | **Multi-Tenant Organizations & RBAC** | ❌ | ✅ Included |
 | **Custom Compliance PDF Reports (PCI-DSS, SOC2)** | ❌ | ✅ Included |
 | **Bi-directional Ticket Sync (Jira, GitLab)** | ❌ | ✅ Included |
-| **SLA & Priority Security Support** | Community | Dedicated 24/7 |
+| **CLI Startup BSL Notice Banner** | Displayed | Suppressed / Clean |
+| **Communication & Issue Triage** | Public GitHub Issues | Direct Priority Channel |
 
 ---
 
@@ -55,10 +62,23 @@ Swazz Engine binary includes cryptographic **Ed25519 + JWT** license key verific
    ./swazz-engine license
    ```
 
+### 🛡️ Production Master Key Setup (Self-Hosted Deployment)
+For air-gapped or dedicated enterprise deployments:
+1. Generate an Ed25519 keypair:
+   ```bash
+   openssl genpkey -algorithm ed25519 -out swazz_master_private.pem
+   openssl pkey -in swazz_master_private.pem -pubout -out swazz_master_public.pem
+   ```
+2. Configure `SWAZZ_LICENSE_PRIVKEY` (private key) and `SWAZZ_LICENSE_PUBKEY` (public key) in Cloudflare Worker secrets or environment variables.
+3. Issue manual enterprise licenses with:
+   ```bash
+   go run scripts/issue-license.go -key swazz_master_private.pem -company "Acme Corp" -days 365 -features "*"
+   ```
+
 ---
 
 ## 📧 Contact & Enterprise Sales
 
-For commercial licensing, enterprise waitlist registration, or custom deployment support:
+For commercial licensing, enterprise waitlist registration, or deployment inquiries:
 - Visit the landing page and click **Request Enterprise License**.
 - Or email our team directly at: `enterprise@swazz.secmy.app`

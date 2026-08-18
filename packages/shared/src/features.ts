@@ -30,7 +30,7 @@ export const FEATURES: FeatureDef[] = [
   { id: FEATURE_AI_REMEDIATION_PRO, label: "AI Remediation Pro", type: "paid" },
   { id: FEATURE_CLOUD_HISTORY, label: "Cloud History & Compare", type: "paid" },
   { id: FEATURE_DOMAIN_RECON, label: "Domain Reconnaissance", type: "coming_soon" },
-  { id: FEATURE_ENTERPRISE, label: "Enterprise (SSO / RBAC / Jira / SLA)", type: "paid" },
+  { id: FEATURE_ENTERPRISE, label: "Enterprise (SSO / RBAC / Jira)", type: "paid" },
   { id: FEATURE_REPORT_EXPORTS, label: "Report Exports (SARIF / HTML / MD / JUnit)", type: "paid" },
   { id: FEATURE_SCHEDULED_RUNS, label: "Scheduled / CI Runs & Webhooks", type: "paid" },
   { id: FEATURE_UNLIMITED_SCANS, label: "High Concurrency", type: "paid" },

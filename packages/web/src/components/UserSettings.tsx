@@ -434,7 +434,7 @@ export function UserSettings() {
                         className={`settings-nav-btn ${activeSubTab === 'account' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('account')}
                     >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                             <circle cx="12" cy="7" r="4"></circle>
                         </svg>
@@ -451,6 +451,7 @@ export function UserSettings() {
                         Security (2FA)
                     </button>
                     <button
+                        id="tab-user-license"
                         className={`settings-nav-btn ${activeSubTab === 'license' ? 'active' : ''}`}
                         onClick={() => setActiveSubTab('license')}
                     >
@@ -619,7 +620,7 @@ export function UserSettings() {
                                             checked={tipsEnabled}
                                             onChange={(e) => setTipsEnabled(e.target.checked)}
                                         />
-                                        <strong style={{ fontSize: '13px' }}>Show "Did you know" tips</strong>
+                                        <strong className="tips-toggle-label">Show "Did you know" tips</strong>
                                     </label>
                                 </div>
                                 <div className="settings-action-row-left">

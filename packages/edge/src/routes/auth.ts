@@ -537,4 +537,37 @@ export function registerAuthRoutes(
       return c.json({ error: msg }, parseInt(status) || 500);
     }
   });
+
+  app.get('/api/user/trial-status', async (c) => {
+    try {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+      const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
+      const result = await licenseService.getTrialStatus(userId);
+      return c.json(result);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
+
+  app.post('/api/user/trial-license', async (c) => {
+    try {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+      const authRepo = new AuthRepository(c.env);
+      const user = await authRepo.getUserById(userId);
+      if (!user) return c.json({ error: 'User not found' }, 404);
+      if (user.is_guest) return c.json({ error: 'Trial licenses are only available for registered accounts' }, 403);
+
+      const licenseService = new LicenseService(c.env, authRepo);
+      const result = await licenseService.claimTrial(userId, user.username);
+      return c.json(result);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
 }

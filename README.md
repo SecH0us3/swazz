@@ -296,6 +296,7 @@ Swazz supports self-service data deletion. Users can permanently and immediately
 Swazz is distributed under the **Business Source License 1.1 (BSL 1.1)**.
 
 - **Free Commercial Exemption**: Free for non-commercial use, open-source projects, and companies with under **$1,000,000 USD** in annual gross revenue.
+- **14-Day Free Trial Self-Generation**: Registered users can generate a one-time 14-day trial commercial license directly in **Settings → License & Subscription** to evaluate all enterprise capabilities (AI Remediation Pro, high concurrency, scheduled runs, report exports).
 - **Enterprise Commercial License**: Required for production commercial use by companies with annual revenue exceeding $1M USD.
 - To view the embedded license text at any time, run `./swazz-engine license`.
 - For detailed pricing, feature comparisons, and licensing terms, read our [Pricing & Licensing Guide](docs/PRICING.md).

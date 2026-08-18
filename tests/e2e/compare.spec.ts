@@ -4,25 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Multi-Scan Comparison E2E Tests', () => {
   test('should run multiple scans, select them in History, compare them, and verify comparison data', async ({ page }) => {
-    // 1. Navigate to frontend dev server
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    // 1. Mock Enterprise license to unlock Cloud History & Comparison
+    await mockEnterpriseLicense(page);
 
     // 2. Handle Registration
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await configPromise;
+    await registerAndLogin(page);
 
     // 3. Add Vulnerable Demo API Swagger Specification
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

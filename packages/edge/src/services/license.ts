@@ -7,7 +7,8 @@ import { Env } from '../env';
 import { IAuthRepository } from '../repositories/auth';
 import { getFeatureType, FEATURE_TYPE_PAID } from '@swazz/shared';
 
-export const DEFAULT_LICENSE_PUBKEY_HEX = 'a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314';
+export const DEFAULT_LICENSE_PUBKEY_HEX = '0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef';
+export const DEFAULT_DEV_LICENSE_PRIVKEY_HEX = '302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6';
 
 export interface LicenseInfo {
   company: string;
@@ -22,6 +23,8 @@ export interface ILicenseService {
   deactivate(userId: string): Promise<{ status: string }>;
   getStatus(userId: string): Promise<{ status: string; license: LicenseInfo | null }>;
   hasFeature(userId: string, feature: string): Promise<boolean>;
+  getTrialStatus(userId: string): Promise<{ claimed: boolean; claimed_at: string | null }>;
+  claimTrial(userId: string, username: string): Promise<{ status: string; license: LicenseInfo; token: string }>;
 }
 
 function base64UrlDecode(str: string): Uint8Array {
@@ -40,12 +43,53 @@ function base64UrlDecode(str: string): Uint8Array {
   return bytes;
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 function hexToBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
+}
+
+export async function signLicenseToken(
+  privKeyHex: string,
+  payload: { company: string; expires_at: string; features: string[]; max_users?: number; max_concurrency?: number }
+): Promise<string> {
+  const header = { alg: 'EdDSA', typ: 'JWT' };
+  const headerB64 = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(header)));
+  const payloadB64 = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const signedMessage = new TextEncoder().encode(headerB64 + '.' + payloadB64);
+
+  let privKeyBytes = hexToBytes(privKeyHex);
+  if (privKeyBytes.length === 32) {
+    const pkcs8Header = new Uint8Array([
+      0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20
+    ]);
+    const wrapped = new Uint8Array(48);
+    wrapped.set(pkcs8Header, 0);
+    wrapped.set(privKeyBytes, 16);
+    privKeyBytes = wrapped;
+  }
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    privKeyBytes,
+    { name: 'Ed25519' },
+    true,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('Ed25519', cryptoKey, signedMessage);
+  const sigB64 = bytesToBase64Url(new Uint8Array(sig));
+
+  return `${headerB64}.${payloadB64}.${sigB64}`;
 }
 
 export class LicenseService implements ILicenseService {
@@ -222,5 +266,53 @@ export class LicenseService implements ILicenseService {
   async hasFeature(userId: string, feature: string): Promise<boolean> {
     const license = await this.loadLicense(userId);
     return this.hasFeatureIn(license, feature);
+  }
+
+  async getTrialStatus(userId: string): Promise<{ claimed: boolean; claimed_at: string | null }> {
+    const claimedAt = await this.authRepo.getTrialClaimedAt(userId);
+    return {
+      claimed: claimedAt !== null,
+      claimed_at: claimedAt,
+    };
+  }
+
+  async claimTrial(userId: string, username: string): Promise<{ status: string; license: LicenseInfo; token: string }> {
+    const claimedAt = await this.authRepo.getTrialClaimedAt(userId);
+    if (claimedAt !== null) {
+      throw new Error('Trial license has already been claimed for this account|409');
+    }
+
+    let privKeyHex = this.env.SWAZZ_LICENSE_PRIVKEY;
+    if (!privKeyHex) {
+      const pubKeyHex = this.getPublicKeyHex();
+      if (pubKeyHex === DEFAULT_LICENSE_PUBKEY_HEX) {
+        privKeyHex = DEFAULT_DEV_LICENSE_PRIVKEY_HEX;
+      }
+    }
+
+    if (!privKeyHex) {
+      throw new Error('Trial license generation is not configured on this server|503');
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const company = username ? `${username} (14-Day Trial)` : 'Swazz Trial User';
+
+    const payload = {
+      company,
+      expires_at: expiresAt,
+      features: ['*'],
+      max_users: 1,
+      max_concurrency: 1000,
+    };
+
+    const token = await signLicenseToken(privKeyHex, payload);
+    const license = await this.verifyToken(token);
+
+    await this.authRepo.setTrialClaimedAt(userId);
+    await this.authRepo.setLicenseKey(userId, token);
+    await this.setCachedLicense(userId, license);
+
+    return { status: 'ok', license, token };
   }
 }

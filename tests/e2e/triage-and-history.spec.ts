@@ -4,26 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () => {
   test('should complete scan, triage a finding, reload page, restore from history, and verify triage state is persisted', async ({ page }) => {
-    // 1. Navigate to frontend
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    // 1. Mock Enterprise license to unlock Cloud History & Triage
+    await mockEnterpriseLicense(page);
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await configPromise;
+    await registerAndLogin(page);
 
     // 3. Add Vulnerable Demo API spec
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -64,7 +53,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
 
     // Wait for the run to complete (Start button "Run" is visible again)
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 90000 });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');

@@ -15,7 +15,7 @@ const (
 	FeatureReportExports   = "report_exports"   // SARIF / HTML / MD / JUnit exports (JSON stays free)
 	FeatureAIRemediation   = "ai_remediation_pro" // AI-powered auto-remediation
 	FeatureCloudHistory    = "cloud_history"     // dashboard compare / export, cloud-persisted history
-	FeatureEnterprise      = "enterprise"        // SSO/RBAC, compliance PDF, Jira sync, SLA
+	FeatureEnterprise      = "enterprise"        // SSO/RBAC, compliance PDF, Jira sync
 )
 
 // FeatureType describes how a feature is gated.
@@ -42,7 +42,7 @@ type FeatureDef struct {
 var Features = []FeatureDef{
 	{ID: FeatureAIRemediation, Label: "AI Remediation Pro", Type: FeatureTypePaid},
 	{ID: FeatureCloudHistory, Label: "Cloud History & Compare", Type: FeatureTypePaid},
-	{ID: FeatureEnterprise, Label: "Enterprise (SSO / RBAC / Jira / SLA)", Type: FeatureTypePaid},
+	{ID: FeatureEnterprise, Label: "Enterprise (SSO / RBAC / Jira)", Type: FeatureTypePaid},
 	{ID: FeatureHighConcurrency, Label: "High Concurrency", Type: FeatureTypePaid},
 	{ID: FeatureReportExports, Label: "Report Exports (SARIF / HTML / MD / JUnit)", Type: FeatureTypePaid},
 	{ID: FeatureScheduledRuns, Label: "Scheduled / CI Runs & Webhooks", Type: FeatureTypePaid},

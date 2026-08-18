@@ -4,13 +4,25 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense } from './helpers';
 
 test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
   
   test('Guest Mode should restrict Member/Role modifications but allow viewing settings', async ({ page }) => {
-    // 1. Navigate and log in as Guest
+    // 1. Mock Enterprise license to unlock Members & Roles tab
+    await mockEnterpriseLicense(page);
+
+    // Navigate and log in as Guest
     await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem('swazz_tips_enabled', 'false');
+    });
+    await page.goto('/');
+    const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
+    await expect(signInBtn).toBeVisible({ timeout: 10000 });
+    await signInBtn.click();
     const guestBtn = page.getByRole('button', { name: 'Try as guest →' });
     await expect(guestBtn).toBeVisible();
     await guestBtn.click();

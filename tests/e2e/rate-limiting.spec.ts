@@ -4,23 +4,13 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
   test('should detect rate limits and report them in findings', async ({ page }) => {
-    // 1. Navigate to the frontend dev server
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    // 1. Mock Enterprise license & register user
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
     // 3. Go to More Project Settings to configure rate limiting and intensity
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

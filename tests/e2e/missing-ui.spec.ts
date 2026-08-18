@@ -6,21 +6,13 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Additional UI Coverage E2E Tests', () => {
   // Helper to register and log in before each test case
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    // Use a unique username complying with length constraints (3 to 20 chars)
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
   });
 
   test('Keyboard Shortcuts - Numeric tab switching, Alt+L / Alt+C toggles, and detail Esc close', async ({ page }) => {

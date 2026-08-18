@@ -4,9 +4,13 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Scan Scheduler & Timeout E2E Tests', () => {
   test('should restrict scheduling to Supporter Plan, allow saving valid cron, reject fast cron, support scan timeout, and reconnect on refresh', async ({ page }) => {
+    // 1. Mock Enterprise license to unlock Scan Scheduler tab
+    await mockEnterpriseLicense(page);
+
     // Enable diagnostics logging
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
@@ -18,23 +22,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     });
 
     // 1. Navigate to frontend & register a new user
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    const createAccountBtn = page.getByRole('button', { name: 'Create an account' });
-    await expect(createAccountBtn).toBeVisible();
-    await createAccountBtn.click();
-
-    // Short username under 20 chars limit (Rule: username length validation 3 to 20 chars)
-    const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(username);
-    await page.locator('#password').fill('Password123!');
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await configPromise;
+    await registerAndLogin(page);
 
     // Add Vulnerable Demo API swagger spec so we have endpoints to scan
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

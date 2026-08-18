@@ -214,6 +214,9 @@ func runCLIErr(args []string) error {
 		} else if lic != nil {
 			activeLicense = lic
 			logger.Info("🔑 Enterprise license active: %s (expires %s)", lic.Company, lic.ExpiresAt.Format("2006-01-02"))
+			if lic.IsExpiringSoon(3) {
+				logger.Warn("⚠️  License expires soon: %d day(s) remaining (expires %s)", lic.DaysRemaining(), lic.ExpiresAt.Format("2006-01-02"))
+			}
 		}
 	}
 	gate := license.GateFromLicense(activeLicense)
