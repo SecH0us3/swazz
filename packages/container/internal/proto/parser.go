@@ -52,6 +52,12 @@ func GetMethodOutputDescriptor(rpcPath string) protoreflect.MessageDescriptor {
 	return nil
 }
 
+// ClearMethodDescriptors resets the stored method descriptor registries.
+func ClearMethodDescriptors() {
+	methodInputDesc = sync.Map{}
+	methodOutputDesc = sync.Map{}
+}
+
 // ParseProtoFile reads a .proto file from disk and parses it into Swazz EndpointConfigs.
 func ParseProtoFile(path string, baseURL string) (*swagger.ParseResult, error) {
 	absPath, err := filepath.Abs(path)

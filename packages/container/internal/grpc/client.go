@@ -70,6 +70,7 @@ type Client struct {
 func NewClient(addr string, isTLS bool, md map[string]string) *Client {
 	cleanAddr := strings.TrimPrefix(addr, "grpc://")
 	cleanAddr = strings.TrimPrefix(cleanAddr, "grpcs://")
+	cleanAddr = strings.TrimRight(cleanAddr, "/")
 	return &Client{
 		addr:     cleanAddr,
 		isTLS:    isTLS,

@@ -39,7 +39,7 @@ func (a *GRPCStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	// 2. Check for Internal Error (Code = 13)
-	if strings.Contains(bodyStr, "code = Internal") || strings.Contains(bodyStr, "code = 13") {
+	if strings.Contains(bodyStr, "code = Internal") || strings.Contains(bodyStr, "code = 13 ") || strings.Contains(bodyStr, "code = 13\n") || strings.Contains(bodyStr, "rpc error: code = 13") {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:   "swazz/grpc-internal-error",
 			Level:    "error",
@@ -49,7 +49,7 @@ func (a *GRPCStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	// 3. Check for DataLoss (Code = 15)
-	if strings.Contains(bodyStr, "code = DataLoss") || strings.Contains(bodyStr, "code = 15") {
+	if strings.Contains(bodyStr, "code = DataLoss") || strings.Contains(bodyStr, "code = 15 ") || strings.Contains(bodyStr, "code = 15\n") || strings.Contains(bodyStr, "rpc error: code = 15") {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:   "swazz/grpc-data-loss",
 			Level:    "error",
@@ -59,7 +59,7 @@ func (a *GRPCStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 	}
 
 	// 4. Check for Unknown (Code = 2)
-	if strings.Contains(bodyStr, "code = Unknown") || strings.Contains(bodyStr, "code = 2") {
+	if strings.Contains(bodyStr, "code = Unknown") || strings.Contains(bodyStr, "code = 2 ") || strings.Contains(bodyStr, "code = 2\n") || strings.Contains(bodyStr, "rpc error: code = 2") {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:   "swazz/grpc-unknown-error",
 			Level:    "warning",

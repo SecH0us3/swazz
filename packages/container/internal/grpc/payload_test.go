@@ -267,3 +267,39 @@ message AllTypesMsg {
 	assert.Equal(t, "ACTIVE", parsed["statusStr"])
 	assert.Equal(t, "SUSPENDED", parsed["statusNum"])
 }
+
+func TestMarshalPayload_MapFieldFallback(t *testing.T) {
+	protoSrc := `
+syntax = "proto3";
+package demo;
+
+message MapMsg {
+  map<string, string> meta = 1;
+  map<string, int32> counts = 2;
+}
+`
+	md, err := FindMessageDescriptor(protoSrc, "demo.MapMsg")
+	require.NoError(t, err)
+
+	// Trigger manual fallback with string numbers in integer map
+	payload := map[string]any{
+		"meta": map[string]any{
+			"env": "prod",
+			"ver": "1.0.0",
+		},
+		"counts": map[string]any{
+			"requests": "100",
+			"errors":   float64(5),
+		},
+	}
+
+	bin, err := MarshalPayload(md, payload)
+	require.NoError(t, err)
+	assert.NotEmpty(t, bin)
+
+	parsed, _, err := UnmarshalResponse(md, bin)
+	require.NoError(t, err)
+	require.NotNil(t, parsed["meta"])
+	require.NotNil(t, parsed["counts"])
+}
+

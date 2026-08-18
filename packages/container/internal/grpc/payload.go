@@ -122,6 +122,19 @@ func setFieldValue(msg *dynamicpb.Message, fd protoreflect.FieldDescriptor, val 
 	}()
 
 	switch {
+	case fd.IsMap():
+		if mapVal, ok := val.(map[string]any); ok {
+			mapRef := msg.Mutable(fd).Map()
+			keyDesc := fd.MapKey()
+			valDesc := fd.MapValue()
+			for k, v := range mapVal {
+				if kVal, ok := convertScalarValue(keyDesc, k); ok {
+					if vVal, ok := convertScalarValue(valDesc, v); ok {
+						mapRef.Set(kVal.MapKey(), vVal)
+					}
+				}
+			}
+		}
 	case fd.IsList():
 		if slice, ok := val.([]any); ok {
 			listVal := msg.Mutable(fd).List()
