@@ -12,7 +12,7 @@ test.describe('Webhooks Tab E2E Tests', () => {
     await mockEnterpriseLicense(page);
 
     // 2. Handle Login/Registration
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Navigate to Project Settings
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

@@ -34,7 +34,7 @@ test.describe('Feature Gating E2E', () => {
 
   test('guest sees locked paid tabs and coming-soon tabs in Project Settings', async ({ page }) => {
     // Register as a regular (free) user — no license key.
-    await registerAndLogin(page);
+    await page.goto('/');
     await openProjectSettings(page);
 
     // Paid tabs show the lock badge.
@@ -58,7 +58,7 @@ test.describe('Feature Gating E2E', () => {
   });
 
   test('activating a license unlocks paid tabs', async ({ page }) => {
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // Mock the license API to simulate a successful activation with
     // scheduled_runs granted. The real Ed25519 verification is covered by

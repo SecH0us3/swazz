@@ -10,7 +10,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
   test('should detect rate limits and report them in findings', async ({ page }) => {
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Go to More Project Settings to configure rate limiting and intensity
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

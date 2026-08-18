@@ -21,7 +21,7 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -119,7 +119,7 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // Click Try Vulnerable Demo
     const demoBtn = page.getByRole('button', { name: /Try Vulnerable Demo/ });

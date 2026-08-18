@@ -10,7 +10,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
   test('should exclude checked-out endpoints from fuzzing scope', async ({ page }) => {
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -81,7 +81,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
   test('should toggle Included Only filter to isolate tested endpoints', async ({ page }) => {
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

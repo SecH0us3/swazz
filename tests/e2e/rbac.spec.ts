@@ -131,7 +131,6 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     // Switch to the invited project (which is the older project in the list)
     await page.locator('.sidebar-project-selector button.btn-ghost').click();
     await page.locator('button.dropdown-item').nth(1).click();
-    await page.waitForTimeout(500); // give it a moment to render
 
     // 10. Verify that User B now has access to the project settings of the invited project
     // (Open project settings to verify User B has custom roles)
