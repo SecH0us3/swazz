@@ -211,8 +211,8 @@ jobs:
             DOCKER_TAG=${{ env.DOCKER_TAG }}
 
       - name: Run Trivy vulnerability scanner on Server
-        # v0.36.0
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        # v0.74.0
+        uses: aquasecurity/trivy-action@d2a0b60797ff03db6132bd4e2b293f9b37081297
         with:
           image-ref: "ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}"
           format: "table"
@@ -222,8 +222,8 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Run Trivy vulnerability scanner on CLI
-        # v0.36.0
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        # v0.74.0
+        uses: aquasecurity/trivy-action@d2a0b60797ff03db6132bd4e2b293f9b37081297
         with:
           image-ref: "ghcr.io/${{ env.REPO_LC }}-cli:${{ env.DOCKER_TAG }}"
           format: "table"
