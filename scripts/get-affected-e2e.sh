@@ -74,7 +74,7 @@ while IFS= read -r file; do
       ;;
 
     # MCP (Model Context Protocol)
-    packages/container/internal/mcp/*|packages/web/src/components/*MCP*)
+    packages/web/src/components/*MCP*)
       SPECS+=("tests/e2e/mcp.spec.ts")
       HAS_UI_CHANGES=true
       ;;
@@ -91,9 +91,9 @@ while IFS= read -r file; do
       HAS_UI_CHANGES=true
       ;;
 
-    # Runners & Failover (Agent interaction)
-    packages/edge/src/routes/runners*|packages/web/src/components/*Runner*|packages/container/agent.go)
-      SPECS+=("tests/e2e/runners.spec.ts" "tests/e2e/failover.spec.ts")
+    # Runners UI
+    packages/edge/src/routes/runners*|packages/web/src/components/*Runner*)
+      SPECS+=("tests/e2e/runners.spec.ts")
       HAS_UI_CHANGES=true
       ;;
 
@@ -115,14 +115,14 @@ while IFS= read -r file; do
       HAS_UI_CHANGES=true
       ;;
 
-    # HAR & Spec Ingestion
-    packages/container/internal/har/*|packages/container/internal/postman/*|packages/web/src/components/*HAR*)
+    # HAR & Spec Ingestion UI
+    packages/web/src/components/*HAR*)
       SPECS+=("tests/e2e/har-import.spec.ts" "tests/e2e/api-specs-and-guest-restrictions.spec.ts")
       HAS_UI_CHANGES=true
       ;;
 
     # BOLA, OWASP & Diff
-    packages/web/src/components/*Compare*|packages/web/src/components/*Diff*|packages/container/internal/analyzer/*)
+    packages/web/src/components/*Compare*|packages/web/src/components/*Diff*|packages/web/src/components/*BOLA*)
       SPECS+=("tests/e2e/bola.spec.ts" "tests/e2e/owasp-and-diff.spec.ts" "tests/e2e/compare.spec.ts")
       HAS_UI_CHANGES=true
       ;;
