@@ -22,7 +22,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     });
 
     // 1. Navigate to frontend & register a new user
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // Add Vulnerable Demo API swagger spec so we have endpoints to scan
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -101,7 +101,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await startFuzzBtn.click();
 
     // Wait for run to get active
-    await page.waitForTimeout(1500);
+    await page.waitForLoadState('networkidle');
 
     // Reload the page
     const reconnectConfigPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);

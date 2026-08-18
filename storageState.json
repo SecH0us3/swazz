@@ -1,0 +1,42 @@
+{
+  "cookies": [
+    {
+      "name": "csrf_token",
+      "value": "4737b4be-8913-4051-b646-089743de6f10",
+      "domain": "localhost",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:5173",
+      "localStorage": [
+        {
+          "name": "swazz_tips_enabled",
+          "value": "false"
+        },
+        {
+          "name": "swazz_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMU0wQjQ0NTgwMEswMjZTSjNBWkNEUE5XVCIsImlhdCI6MTc4NzA3OTgyNCwiZXhwIjoxNzg3Njg0NjI0fQ.F9kA0D4cLWyPaNZURmXTarUr4zgb5S1US3cMzVGrg_I"
+        },
+        {
+          "name": "swazz:config",
+          "value": "{\"base_url\":\"\",\"global_headers\":{},\"cookies\":{},\"dictionaries\":{},\"settings\":{\"iterations_per_profile\":10,\"concurrency\":2,\"timeout_ms\":2000,\"max_payload_size_bytes\":1048576,\"delay_between_requests_ms\":0,\"profiles\":[\"RANDOM\",\"BOUNDARY\",\"MALICIOUS\"],\"analyze_response_body\":true,\"response_size_anomaly_multiplier\":5,\"rate_limit_check\":false,\"rate_limit_burst_size\":50,\"bola_testing\":false,\"auth_headers\":[\"Authorization\",\"X-API-Key\"],\"auth_cookies\":[\"session\",\"token\",\"jwt\",\"sid\",\"JSESSIONID\",\"PHPSESSID\"],\"bola_similarity_threshold\":0.85,\"time_anomaly_threshold_ms\":4000,\"oob_server_url\":\"\",\"debug\":false,\"data_retention\":\"forever\",\"disable_shared_runners\":false,\"max_scan_duration_min\":0,\"active_parameter_fuzzing\":false,\"proxy_list\":[],\"randomize_user_agent\":false,\"enable_adaptive_rate_limit\":false,\"enable_semantic_mutation\":true,\"use_llm_prepass\":false,\"ai_gateway_url\":\"\",\"cf_aig_token\":\"\"},\"endpoints\":[],\"disabled_endpoints\":[],\"_swagger_urls\":[],\"security\":{\"allow_private_ips\":false},\"rules\":{\"ignore\":[]}}"
+        }
+      ]
+    },
+    {
+      "origin": "https://challenges.cloudflare.com",
+      "localStorage": [
+        {
+          "name": "cf.turnstile.u",
+          "value": "H9i51q7Zy0kMmeNZdoLupQiry_hnShtrG.68e3VGTtg-1787079823-1.3.1.1-TBsoihdo0kbku6ayaiQLS2X4afcnA0nJNFH3ZdB8dup83Aj_u0TcTcUvp5PN.juubGYY.Qxxqq2Tn5Tt8lW76Q"
+        }
+      ]
+    }
+  ]
+}

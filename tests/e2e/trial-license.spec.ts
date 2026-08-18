@@ -26,6 +26,8 @@ async function navigateToLicenseSettings(page: Page) {
 }
 
 test.describe('Trial License Self-Generation E2E Test', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test.beforeEach(async ({ page }) => {
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));

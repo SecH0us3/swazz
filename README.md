@@ -157,15 +157,12 @@ We have a suite of Playwright E2E browser automation tests that verify integrati
 
 To run Playwright tests locally:
 ```bash
-# Apply migrations for local D1 coordinator DB
-npx --workspace=packages/edge wrangler d1 migrations apply swazz_db --local
-
-# Start all services (Dashboard, Coordinator, Demo API, and Runner Agent)
-./start-dev.sh
-
-# Run the test suite
+npm install
 npx playwright install chromium
-npm run test:e2e
+
+# The runner script automatically builds the frontend, starts all required
+# backend services (Coordinator, Demo API, Runner Agent), and executes the suite.
+bash tests/e2e/run-e2e.sh
 ```
 
 ---

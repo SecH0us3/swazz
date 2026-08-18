@@ -77,7 +77,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // 1. Mock Enterprise license & register user
     page.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Open More Project Settings to access Raw JSON Config
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

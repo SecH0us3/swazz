@@ -146,8 +146,10 @@ echo "→ Cleaning up test users from previous runs..."
 if check_port 5173; then
   echo "✓ React Web Frontend is already running on port 5173."
 else
-  echo "→ Starting React Web Frontend..."
-  npm run dev:frontend > web.log 2>&1 &
+  echo "→ Building React Web Frontend..."
+  npm run build --workspace=packages/web
+  echo "→ Starting React Web Frontend Preview..."
+  npm run preview --workspace=packages/web -- --port 5173 > web.log 2>&1 &
   PIDS+=($!)
   wait_for_port 5173 "React Web Frontend"
 fi

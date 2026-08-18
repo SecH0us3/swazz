@@ -59,7 +59,9 @@ export async function registerAndLogin(
   await expect(createBtn).toBeVisible({ timeout: 10000 });
   await createBtn.click();
 
-  const uniqueUsername = `${usernamePrefix}${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
+  // Ensure total length is strictly < 20 chars for database constraints
+  const prefix = usernamePrefix.slice(0, 5); // limit prefix
+  const uniqueUsername = `${prefix}${Date.now().toString().slice(-5)}_${Math.floor(Math.random() * 1000)}`;
   await page.locator('#username').fill(uniqueUsername);
   await page.locator('#password').fill('Password123!');
   await page.locator('#password').press('Enter');

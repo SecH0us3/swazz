@@ -10,7 +10,7 @@ test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
   test('should navigate to runners settings tab and verify active runner version', async ({ page }) => {
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Open "Project Settings" page from the right Config Sidebar
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -43,7 +43,7 @@ test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
   test('should not show restart button for shared runners', async ({ page }) => {
     // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-    await registerAndLogin(page);
+    await page.goto('/');
 
     // 3. Open "Project Settings" page from the right Config Sidebar
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

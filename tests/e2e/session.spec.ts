@@ -29,7 +29,6 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
 
     // 4. Reload page to trigger profile check with the expired token
     await page.reload();
-    await page.waitForTimeout(2000);
 
     // 5. Verify that the user is logged out and redirected to the login screen
     // (open the auth modal; the landing page is shown after logout)
@@ -127,7 +126,6 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
 
     // 8. Reload page to trigger authorization with the backdated token
     await page.reload();
-    await page.waitForTimeout(2000);
 
     // 9. Verify that user gets redirected back to the login screen
     // (open the auth modal; the landing page is shown after logout)
