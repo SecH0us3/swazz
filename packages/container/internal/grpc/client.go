@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -34,7 +35,10 @@ func (c *rawCodec) Marshal(v any) ([]byte, error) {
 	if b, ok := v.(*[]byte); ok {
 		return *b, nil
 	}
-	return nil, fmt.Errorf("rawCodec: expected []byte, got %T", v)
+	if pm, ok := v.(proto.Message); ok {
+		return proto.Marshal(pm)
+	}
+	return nil, fmt.Errorf("rawCodec: expected []byte or proto.Message, got %T", v)
 }
 
 func (c *rawCodec) Unmarshal(data []byte, v any) error {
@@ -43,7 +47,10 @@ func (c *rawCodec) Unmarshal(data []byte, v any) error {
 		copy(*b, data)
 		return nil
 	}
-	return fmt.Errorf("rawCodec: expected *[]byte, got %T", v)
+	if pm, ok := v.(proto.Message); ok {
+		return proto.Unmarshal(data, pm)
+	}
+	return fmt.Errorf("rawCodec: expected *[]byte or proto.Message, got %T", v)
 }
 
 func (c *rawCodec) Name() string {
