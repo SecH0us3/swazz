@@ -83,12 +83,12 @@ export function getFeatureType(id: string): FeatureType {
 }
 `)
 
-	outPath := filepath.Join(root, "packages", "shared", "src", "features.ts")
-	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+	outPath := filepath.Clean(filepath.Join(root, "packages", "shared", "src", "features.ts"))
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o750); err != nil { // #nosec G301 -- directory for generated code
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-	if err := os.WriteFile(outPath, []byte(b.String()), 0o644); err != nil {
+	if err := os.WriteFile(outPath, []byte(b.String()), 0o600); err != nil { // #nosec G306 -- generated code file
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
@@ -113,8 +113,8 @@ func findRepoRoot() (string, error) {
 		return "", err
 	}
 	for {
-		marker := filepath.Join(dir, "package.json")
-		if data, err := os.ReadFile(marker); err == nil && strings.Contains(string(data), `"workspaces"`) {
+		marker := filepath.Clean(filepath.Join(dir, "package.json"))
+		if data, err := os.ReadFile(marker); err == nil && strings.Contains(string(data), `"workspaces"`) { // #nosec G304 -- local repo root detection
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
