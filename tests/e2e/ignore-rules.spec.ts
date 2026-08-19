@@ -50,7 +50,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the run to complete
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');

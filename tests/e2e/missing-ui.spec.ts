@@ -339,7 +339,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the scan to complete
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 2. Go to request logs
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');

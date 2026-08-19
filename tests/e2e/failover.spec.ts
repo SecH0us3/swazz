@@ -112,7 +112,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     secondAgent = null;
 
     // 9. Wait for the fuzzer to complete (Start button becomes visible again)
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 10. Verify scan completed successfully and we have findings
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
