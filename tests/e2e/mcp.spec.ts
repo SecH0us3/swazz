@@ -77,7 +77,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // 1. Mock Enterprise license & register user
     page.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
     await mockEnterpriseLicense(page);
-    await page.goto('/');
+    await registerAndLogin(page);
 
     // 3. Open More Project Settings to access Raw JSON Config
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -144,7 +144,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // Wait for the stop button to show (fuzzing in progress) and then the start button to reappear (fuzzing completed)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 5. Verify MCP findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');

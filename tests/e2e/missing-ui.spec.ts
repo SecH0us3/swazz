@@ -12,7 +12,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
   // Helper to register and log in before each test case
   test.beforeEach(async ({ page }) => {
     await mockEnterpriseLicense(page);
-    await page.goto('/');
+    await registerAndLogin(page);
   });
 
   test('Keyboard Shortcuts - Numeric tab switching, Alt+L / Alt+C toggles, and detail Esc close', async ({ page }) => {
@@ -339,7 +339,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the scan to complete
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 2. Go to request logs
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');

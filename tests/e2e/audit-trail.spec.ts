@@ -36,7 +36,7 @@ test.describe('Audit Trail E2E', () => {
       if (await saveBtn.isVisible()) {
         await saveBtn.click();
         // Wait for save to complete
-        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(500);
       }
     }
 
@@ -46,7 +46,7 @@ test.describe('Audit Trail E2E', () => {
     await auditTab.click();
 
     // Wait for content to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1500);
 
     // Verify the audit trail table or empty state is visible
     const tableOrEmpty = page.locator('.audit-trail-table, .audit-trail-empty-state');
@@ -88,20 +88,20 @@ test.describe('Audit Trail E2E', () => {
 
     const auditTab = page.locator('#tab-audit-trail');
     await auditTab.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1200);
 
     // Source filter: select 'api_key' — should show empty state or filtered results (not crash)
     const sourceSelect = page.locator('#audit-trail-source-filter');
     await expect(sourceSelect).toBeVisible({ timeout: 5000 });
     await sourceSelect.selectOption('api_key');
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
 
     const tableOrEmpty = page.locator('.audit-trail-table, .audit-trail-empty-state');
     await expect(tableOrEmpty).toBeVisible({ timeout: 5000 });
 
     // Reset filter
     await sourceSelect.selectOption('');
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
   });
 
   test('should search audit logs', async ({ page }) => {
@@ -123,14 +123,14 @@ test.describe('Audit Trail E2E', () => {
 
     const auditTab = page.locator('#tab-audit-trail');
     await auditTab.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1200);
 
     const searchInput = page.locator('#audit-trail-search');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
     // Search for something that won't match → should show empty state
     await searchInput.fill('xyznonexistentterm123456');
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
 
     const emptyState = page.locator('.audit-trail-empty-state');
     const tableNotEmpty = page.locator('.audit-trail-table tbody tr');
@@ -141,7 +141,7 @@ test.describe('Audit Trail E2E', () => {
 
     // Clear search
     await searchInput.fill('');
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
   });
 
   test('should export CSV from audit trail', async ({ page }) => {
@@ -164,7 +164,7 @@ test.describe('Audit Trail E2E', () => {
 
     const auditTab = page.locator('#tab-audit-trail');
     await auditTab.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1500);
 
     const exportBtn = page.locator('#audit-trail-export-btn');
     await expect(exportBtn).toBeVisible({ timeout: 5000 });

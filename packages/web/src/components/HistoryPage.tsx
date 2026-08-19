@@ -8,7 +8,7 @@ import { useAppStore } from '../store/appStore.js';
 import type { ScanRun } from '../hooks/useDb.js';
 import { useToast } from '../hooks/useToast.js';
 import { useFeatureGate } from '../hooks/useFeatureGate.js';
-import { FEATURE_REPORT_EXPORTS } from '@swazz/shared';
+import { FEATURE_REPORT_EXPORTS, FEATURE_CLOUD_HISTORY } from '@swazz/shared';
 
 interface HistoryPageProps {
     runs: ScanRun[];
@@ -44,6 +44,7 @@ export function HistoryPage({
     const liveRunId = useAppStore(state => state.liveRunId);
     const { showToast } = useToast();
     const gateReportExports = useFeatureGate(FEATURE_REPORT_EXPORTS);
+    const gateCloudHistory = useFeatureGate(FEATURE_CLOUD_HISTORY);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentTab, setCurrentTab] = useState<'all' | 'active' | 'completed' | 'failed'>('all');
 
@@ -395,7 +396,12 @@ export function HistoryPage({
                         <button
                             id="compare-scans-submit-btn"
                             className="btn btn-primary btn-sm"
+                            title={gateCloudHistory.unlocked ? 'Compare Scans' : gateCloudHistory.lockMessage}
                             onClick={() => {
+                                if (!gateCloudHistory.unlocked) {
+                                    showToast(gateCloudHistory.lockMessage, 'error');
+                                    return;
+                                }
                                 const runA = runs.find(r => r.id === selectedIds[0]);
                                 const runB = runs.find(r => r.id === selectedIds[1]);
                                 const timeA = runA?.startedAt || 0;
@@ -411,7 +417,7 @@ export function HistoryPage({
                                 });
                             }}
                         >
-                            Compare Scans
+                            Compare Scans {!gateCloudHistory.unlocked && (gateCloudHistory.gateType === 'coming_soon' ? '⏳' : '🔒')}
                         </button>
                     </div>
                 </div>

@@ -454,7 +454,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await mockEnterpriseLicense(page);
 
     // 2. Register unique user
-    await page.goto('/');
+    await registerAndLogin(page);
 
     // 3. Open Project Settings
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

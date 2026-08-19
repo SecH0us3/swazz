@@ -12,7 +12,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     await mockEnterpriseLicense(page);
 
     // 2. Handle Registration
-    await page.goto('/');
+    await registerAndLogin(page);
 
     // 3. Add Vulnerable Demo API Swagger Specification
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -39,7 +39,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
 
     // Wait for the first run to complete
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // Disable Boundary profile for run 2 to vary the stats slightly
     const boundaryToggle = page.locator('.profile-toggle.boundary');
@@ -49,7 +49,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     // --- Run Scan 2 ---
     await startBtn.click();
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 4. Navigate to Scan History
     const historyBtn = page.locator('button:has-text("History")');

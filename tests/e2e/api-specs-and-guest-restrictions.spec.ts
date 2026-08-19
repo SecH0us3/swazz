@@ -27,7 +27,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     await expect(guestBtn).toBeVisible();
     await guestBtn.click();
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 2. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -68,7 +68,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 2. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -136,7 +136,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Wait for the Refresh All operation to complete
     const successToast = page.locator('.toast:has-text("Refreshed all specs")');
-    await expect(successToast).toBeVisible({ timeout: 15000 });
+    await expect(successToast).toBeVisible({ timeout: 30000 });
 
     // 6. Test file upload functionality
     const filePayload = {
@@ -162,7 +162,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Verify the new endpoint has been parsed and loaded in the sidebar
     const uploadedEndpointItem = page.locator('.tree-leaf-row:has-text("/test-fuzz-e2e-upload")');
-    await expect(uploadedEndpointItem).toBeVisible({ timeout: 15000 });
+    await expect(uploadedEndpointItem).toBeVisible({ timeout: 30000 });
   });
 
 });

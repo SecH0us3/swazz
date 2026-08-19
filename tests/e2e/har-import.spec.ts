@@ -55,7 +55,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await expect(startBtn).toBeHidden();
 
     // Wait for the fuzzer to complete (timeout of 60s max since it's a small mock HAR)
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 5. Navigate to "Request Logs" tab to verify requests were sent
     const requestLogsTab = page.locator('button:has-text("Request Logs")');

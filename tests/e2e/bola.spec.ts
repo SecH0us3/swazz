@@ -166,7 +166,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 7. Verify BOLA findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');

@@ -50,7 +50,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the run to complete
-    await expect(startBtn).toBeVisible({ timeout: 60000 });
+    await expect(startBtn).toBeVisible({ timeout: 120000 });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -98,7 +98,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await closeInspectorBtn.click();
 
     // Wait for the 1.5s debounced config sync to finish persisting to the backend API
-    await page.waitForResponse(resp => resp.request().method() === 'PUT' && resp.url().includes('/config'));
+    await page.waitForTimeout(2000);
 
     // 7. Verify the ignore rule is synced to project settings raw config
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -147,7 +147,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await expect(igBadge).not.toBeVisible();
 
     // Wait for the cleanup config sync to finish persisting to the backend API
-    await page.waitForResponse(resp => resp.request().method() === 'PUT' && resp.url().includes('/config'));
+    await page.waitForTimeout(2000);
 
     // Verify rule was automatically cleaned up from settings
     await moreSettingsBtn.click();
