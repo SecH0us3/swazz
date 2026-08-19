@@ -154,6 +154,7 @@ jobs:
           name: blob-report-${{ matrix.shardIndex }}
           path: blob-report/
           retention-days: 1
+          if-no-files-found: ignore
 
   merge-reports:
     name: Merge E2E Reports
@@ -173,15 +174,25 @@ jobs:
 
       - name: Download all blob reports
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           path: all-blob-reports
           pattern: blob-report-*
           merge-multiple: true
 
       - name: Merge reports
-        run: npx playwright merge-reports --reporter html ./all-blob-reports
+        run: |
+          if [ -d "./all-blob-reports" ] && [ -n "$(ls -A ./all-blob-reports 2>/dev/null)" ]; then
+            echo "→ Merging Playwright blob reports..."
+            npx playwright merge-reports --reporter html ./all-blob-reports
+          else
+            echo "✓ No blob reports found to merge (E2E tests were skipped or none executed)."
+            mkdir -p playwright-report
+            echo "<html><body><p>No E2E tests were executed for this run.</p></body></html>" > playwright-report/index.html
+          fi
 
       - name: Upload merged HTML report
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: playwright-report
