@@ -33,6 +33,7 @@ import (
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/ws"
 	"swazz-engine/internal/triage"
 	"sync"
 	"syscall"
@@ -675,7 +676,15 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 				var parseErr error
 				var originalErr error
 
-				if reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL) {
+				if reqPayload.URL != "" && swagger.IsWSURL(reqPayload.URL) {
+					wsResult, wsErr := ws.SynthesizeWSEndpoint(reqPayload.URL)
+					if wsErr != nil {
+						err = fmt.Errorf("failed to synthesize ws endpoint: %w", wsErr)
+					} else {
+						parseResult = wsResult
+						parseErr = nil
+					}
+				} else if reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL) {
 					isTLS := strings.HasPrefix(strings.ToLower(reqPayload.URL), "grpcs://")
 					grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer grpcCancel()
@@ -686,6 +695,8 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 						parseResult = grpcResult
 						parseErr = nil
 					}
+				} else if reqPayload.RawSpec != "" && swagger.IsAsyncAPISpec([]byte(reqPayload.RawSpec)) {
+					parseResult, parseErr = ws.ParseAsyncAPISpec([]byte(reqPayload.RawSpec), reqPayload.URL)
 				} else if reqPayload.RawSpec != "" && swagger.IsProtoFile([]byte(reqPayload.RawSpec)) {
 					parseResult, parseErr = proto.ParseProtoBytes("upload.proto", []byte(reqPayload.RawSpec), "")
 				} else if reqPayload.RawSpec != "" {
@@ -835,6 +846,8 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 							parserName = "har"
 						} else if swagger.IsProtoFile(data) || (reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL)) {
 							parserName = "grpc"
+						} else if swagger.IsWSURL(reqPayload.URL) || swagger.IsAsyncAPISpec(data) {
+							parserName = "asyncapi"
 						} else if swagger.IsPostman(data) {
 							parserName = "postman"
 						} else if originalErr != nil && parseErr == originalErr {
