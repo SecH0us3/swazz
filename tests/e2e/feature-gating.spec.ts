@@ -11,7 +11,6 @@ async function openProjectSettings(page: Page) {
 }
 
 test.describe('Feature Gating E2E', () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
 
   test.beforeEach(async ({ page }) => {
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
