@@ -1136,24 +1136,32 @@ func logError(format string, v ...interface{}) {
 }
 
 func inferOOBServerURL(coordinatorURL string) string {
+	return deriveHTTPBaseURL(coordinatorURL)
+}
+
+func deriveHTTPBaseURL(coordinatorURL string) string {
 	if coordinatorURL == "" {
 		return ""
 	}
-	// Convert ws:// or wss:// to http:// or https:// securely using prefix matching
-	u := coordinatorURL
-	if strings.HasPrefix(u, "wss://") {
-		u = "https://" + u[6:]
-	} else if strings.HasPrefix(u, "ws://") {
-		u = "http://" + u[5:]
+	u, err := url.Parse(coordinatorURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Scheme == "ws" {
+		u.Scheme = "http"
+	} else if u.Scheme == "wss" {
+		u.Scheme = "https"
 	}
 
 	// Strip known router endpoints if they were passed
-	if idx := strings.Index(u, "/api/runners/connect"); idx > -1 {
-		u = u[:idx]
-	} else if idx := strings.Index(u, "/api/"); idx > -1 {
-		u = u[:idx]
+	if idx := strings.Index(u.Path, "/api/runners/connect"); idx > -1 {
+		u.Path = u.Path[:idx]
+	} else if idx := strings.Index(u.Path, "/api/"); idx > -1 {
+		u.Path = u.Path[:idx]
 	}
-	return u
+	u.Path = strings.TrimSuffix(u.Path, "/")
+	u.RawQuery = ""
+	return u.String()
 }
 
 func deriveTelemetryURL(coordURL string) string {
@@ -1209,11 +1217,9 @@ func sendTriageBatchToEdge(coordinatorURL, token, scanID string, results []*tria
 		return nil
 	}
 
-	baseURL := strings.TrimSuffix(coordinatorURL, "/")
-	if strings.HasPrefix(baseURL, "ws://") {
-		baseURL = "http://" + strings.TrimPrefix(baseURL, "ws://")
-	} else if strings.HasPrefix(baseURL, "wss://") {
-		baseURL = "https://" + strings.TrimPrefix(baseURL, "wss://")
+	baseURL := deriveHTTPBaseURL(coordinatorURL)
+	if baseURL == "" {
+		return fmt.Errorf("invalid coordinator URL")
 	}
 
 	u, err := url.Parse(baseURL)

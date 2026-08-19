@@ -90,14 +90,17 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		case "exec_diag":
 			query, _ := req["query"].(string)
+			cmd, _ := req["cmd"].(string)
 			payload, _ := req["payload"].(map[string]interface{})
-			cmd := query
-			if payload != nil {
+			if cmd == "" && query != "" {
+				cmd = query
+			}
+			if cmd == "" && payload != nil {
 				if c, ok := payload["cmd"].(string); ok && c != "" {
 					cmd = c
 				}
 			}
-			if strings.ContainsAny(cmd, "|;&$`") || strings.Contains(cmd, "id") || strings.Contains(cmd, "whoami") || strings.Contains(cmd, "cat") || strings.Contains(cmd, "ping") {
+			if strings.ContainsAny(cmd, "|;&$`") || strings.Contains(cmd, "id") || strings.Contains(cmd, "whoami") || strings.Contains(cmd, "cat") || strings.Contains(cmd, "ping") || cmd != "" {
 				resp := map[string]string{
 					"output": "uid=0(root) gid=0(root) groups=0(root)",
 				}
