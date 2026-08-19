@@ -12,7 +12,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     await mockEnterpriseLicense(page);
 
     // 2. Handle Registration
-    await page.goto('/');
+    await registerAndLogin(page);
 
     // 3. Add Vulnerable Demo API Swagger Specification
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

@@ -7,7 +7,6 @@ import { test, expect } from '@playwright/test';
 import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () => {
-
   test('should complete scan, triage a finding, reload page, restore from history, and verify triage state is persisted', async ({ page }) => {
     // 1. Mock Enterprise license to unlock Cloud History & Triage
     await mockEnterpriseLicense(page);
