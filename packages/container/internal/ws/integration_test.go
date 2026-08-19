@@ -97,7 +97,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					cmd = c
 				}
 			}
-			if strings.ContainsAny(cmd, "|;&$") {
+			if strings.ContainsAny(cmd, "|;&$`") || strings.Contains(cmd, "id") || strings.Contains(cmd, "whoami") || strings.Contains(cmd, "cat") || strings.Contains(cmd, "ping") {
 				resp := map[string]string{
 					"output": "uid=0(root) gid=0(root) groups=0(root)",
 				}

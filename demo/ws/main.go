@@ -99,9 +99,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			payload, _ := req["payload"].(map[string]interface{})
 			if payload != nil {
 				cmd, _ := payload["cmd"].(string)
-				if strings.ContainsAny(cmd, "|;&$") {
+				if strings.ContainsAny(cmd, "|;&$`") || strings.Contains(cmd, "id") || strings.Contains(cmd, "whoami") || strings.Contains(cmd, "cat") || strings.Contains(cmd, "ping") {
 					resp := map[string]string{
-						"output": "sh: command not found",
+						"output": "uid=0(root) gid=0(root) groups=0(root)",
 					}
 					b, _ := json.Marshal(resp)
 					c.Write(r.Context(), websocket.MessageText, b)

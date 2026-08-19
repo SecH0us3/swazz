@@ -90,4 +90,39 @@ func TestClient_SendMessage(t *testing.T) {
 			t.Errorf("expected status 500, got %d", status)
 		}
 	})
+
+	t.Run("custom handshake headers", func(t *testing.T) {
+		headerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("X-Custom-Auth") != "secret-token-123" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			c, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer c.Close(websocket.StatusNormalClosure, "")
+			ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+			defer cancel()
+			typ, msg, err := c.Read(ctx)
+			if err != nil {
+				return
+			}
+			c.Write(ctx, typ, msg)
+		}))
+		defer headerServer.Close()
+
+		hWsURL := "ws" + strings.TrimPrefix(headerServer.URL, "http")
+		headers := map[string]string{"X-Custom-Auth": "secret-token-123"}
+		msg, status, err := client.SendMessage(context.Background(), hWsURL, []byte("ping"), headers)
+		if err != nil {
+			t.Fatalf("expected no error with auth header, got %v", err)
+		}
+		if status != 200 {
+			t.Errorf("expected status 200, got %d", status)
+		}
+		if string(msg) != "ping" {
+			t.Errorf("expected msg 'ping', got %q", string(msg))
+		}
+	})
 }
