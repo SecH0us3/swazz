@@ -17,8 +17,8 @@ func SynthesizeWSEndpoint(wsURL string) (*swagger.ParseResult, error) {
 	schema := swagger.SchemaProperty{
 		Type: "object",
 		Properties: map[string]*swagger.SchemaProperty{
-			"action":  {Type: "string"},
-			"payload": {Type: "object"},
+			"action":  {Type: "string", Enum: []any{"search", "query", "update", "user", "exec_diag", "get_config", "crash"}},
+			"payload": {Type: "object", Properties: map[string]*swagger.SchemaProperty{"cmd": {Type: "string"}}},
 			"data":    {Type: "object"},
 			"query":   {Type: "string"},
 			"id":      {Type: "string"},

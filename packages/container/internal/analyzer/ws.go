@@ -32,7 +32,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 	
 	if status == "500" {
 		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:        "ws-crash-detected",
+			RuleID:        "swazz/ws-crash-detected",
 			Level:         "error",
 			Message:       "WebSocket connection closed abnormally (equivalent to HTTP 500) or dropped unexpectedly.",
 			Evidence:      wsError,
@@ -40,7 +40,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 		})
 	} else if status == "504" {
 		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:        "ws-timeout",
+			RuleID:        "swazz/ws-timeout",
 			Level:         "warning",
 			Message:       "WebSocket request timed out without receiving a response frame.",
 			Evidence:      "Timeout",
@@ -53,7 +53,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 		lowerResp := strings.ToLower(string(input.ResponseBody))
 		if strings.Contains(lowerResp, "panic:") || strings.Contains(lowerResp, "internal error") || strings.Contains(lowerResp, "runtime error:") {
 			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:        "ws-internal-error-leak",
+				RuleID:        "swazz/ws-internal-error-leak",
 				Level:         "error",
 				Message:       "WebSocket response frame contains internal stack traces, panics, or unhandled error messages.",
 				Evidence:      string(input.ResponseBody),
@@ -64,7 +64,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 
 	if wsError != "" && (strings.Contains(wsError, "EOF") || strings.Contains(wsError, "connection reset by peer")) {
 		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:        "ws-eof-drop",
+			RuleID:        "swazz/ws-eof-drop",
 			Level:         "error",
 			Message:       "WebSocket connection dropped abruptly (EOF or connection reset).",
 			Evidence:      wsError,

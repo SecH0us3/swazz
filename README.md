@@ -321,3 +321,12 @@ Swazz is distributed under the **Business Source License 1.1 (BSL 1.1)**.
 - To view the embedded license text at any time, run `./swazz-engine license`.
 - For detailed pricing, feature comparisons, and licensing terms, read our [Pricing & Licensing Guide](docs/PRICING.md).
 
+
+### WebSocket Fuzzing
+Swazz supports dynamic fuzzing over WebSocket connections natively. You can target WebSocket APIs using `ws://` or `wss://` URLs in `swagger_urls`. 
+```json
+{
+  "swagger_urls": ["wss://api.example.com/ws"]
+}
+```
+Swazz will discover and extract message payload structures through interactive endpoint synthesis or AsyncAPI specification parsing, checking for unhandled exceptions, sudden connection drops (e.g. 1006 / 1011), and application logic vulnerabilities over persistent WebSocket sessions.
