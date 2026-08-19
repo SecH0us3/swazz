@@ -416,3 +416,41 @@ func TestIsProtoFile(t *testing.T) {
 	}
 }
 
+func TestIsWSURL(t *testing.T) {
+	tests := []struct {
+		url      string
+		expected bool
+	}{
+		{"ws://localhost:8080", true},
+		{"wss://api.example.com", true},
+		{"http://localhost:8080", false},
+		{"https://api.example.com", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		if got := IsWSURL(tc.url); got != tc.expected {
+			t.Errorf("IsWSURL(%q) = %v, expected %v", tc.url, got, tc.expected)
+		}
+	}
+}
+
+func TestIsAsyncAPISpec(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected bool
+	}{
+		{"valid asyncapi", `{"asyncapi": "2.0.0", "info": {"title": "test"}}`, true},
+		{"openapi json", `{"openapi": "3.0.0", "info": {"title": "test"}}`, false},
+		{"invalid json", `{"asyncapi": "2.0.0"`, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsAsyncAPISpec([]byte(tc.content)); got != tc.expected {
+				t.Errorf("IsAsyncAPISpec() = %v, expected %v", got, tc.expected)
+			}
+		})
+	}
+}
+
+

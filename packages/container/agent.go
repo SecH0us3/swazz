@@ -33,6 +33,7 @@ import (
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/ws"
 	"swazz-engine/internal/triage"
 	"sync"
 	"syscall"
@@ -675,7 +676,15 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 				var parseErr error
 				var originalErr error
 
-				if reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL) {
+				if reqPayload.URL != "" && swagger.IsWSURL(reqPayload.URL) {
+					wsResult, wsErr := ws.SynthesizeWSEndpoint(reqPayload.URL)
+					if wsErr != nil {
+						err = fmt.Errorf("failed to synthesize ws endpoint: %w", wsErr)
+					} else {
+						parseResult = wsResult
+						parseErr = nil
+					}
+				} else if reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL) {
 					isTLS := strings.HasPrefix(strings.ToLower(reqPayload.URL), "grpcs://")
 					grpcCtx, grpcCancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer grpcCancel()
@@ -686,6 +695,8 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 						parseResult = grpcResult
 						parseErr = nil
 					}
+				} else if reqPayload.RawSpec != "" && swagger.IsAsyncAPISpec([]byte(reqPayload.RawSpec)) {
+					parseResult, parseErr = ws.ParseAsyncAPISpec([]byte(reqPayload.RawSpec), reqPayload.URL)
 				} else if reqPayload.RawSpec != "" && swagger.IsProtoFile([]byte(reqPayload.RawSpec)) {
 					parseResult, parseErr = proto.ParseProtoBytes("upload.proto", []byte(reqPayload.RawSpec), "")
 				} else if reqPayload.RawSpec != "" {
@@ -835,6 +846,8 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 							parserName = "har"
 						} else if swagger.IsProtoFile(data) || (reqPayload.URL != "" && swagger.IsGRPCURL(reqPayload.URL)) {
 							parserName = "grpc"
+						} else if swagger.IsWSURL(reqPayload.URL) || swagger.IsAsyncAPISpec(data) {
+							parserName = "asyncapi"
 						} else if swagger.IsPostman(data) {
 							parserName = "postman"
 						} else if originalErr != nil && parseErr == originalErr {
@@ -1123,24 +1136,32 @@ func logError(format string, v ...interface{}) {
 }
 
 func inferOOBServerURL(coordinatorURL string) string {
+	return deriveHTTPBaseURL(coordinatorURL)
+}
+
+func deriveHTTPBaseURL(coordinatorURL string) string {
 	if coordinatorURL == "" {
 		return ""
 	}
-	// Convert ws:// or wss:// to http:// or https:// securely using prefix matching
-	u := coordinatorURL
-	if strings.HasPrefix(u, "wss://") {
-		u = "https://" + u[6:]
-	} else if strings.HasPrefix(u, "ws://") {
-		u = "http://" + u[5:]
+	u, err := url.Parse(coordinatorURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Scheme == "ws" {
+		u.Scheme = "http"
+	} else if u.Scheme == "wss" {
+		u.Scheme = "https"
 	}
 
 	// Strip known router endpoints if they were passed
-	if idx := strings.Index(u, "/api/runners/connect"); idx > -1 {
-		u = u[:idx]
-	} else if idx := strings.Index(u, "/api/"); idx > -1 {
-		u = u[:idx]
+	if idx := strings.Index(u.Path, "/api/runners/connect"); idx > -1 {
+		u.Path = u.Path[:idx]
+	} else if idx := strings.Index(u.Path, "/api/"); idx > -1 {
+		u.Path = u.Path[:idx]
 	}
-	return u
+	u.Path = strings.TrimSuffix(u.Path, "/")
+	u.RawQuery = ""
+	return u.String()
 }
 
 func deriveTelemetryURL(coordURL string) string {
@@ -1196,11 +1217,9 @@ func sendTriageBatchToEdge(coordinatorURL, token, scanID string, results []*tria
 		return nil
 	}
 
-	baseURL := strings.TrimSuffix(coordinatorURL, "/")
-	if strings.HasPrefix(baseURL, "ws://") {
-		baseURL = "http://" + strings.TrimPrefix(baseURL, "ws://")
-	} else if strings.HasPrefix(baseURL, "wss://") {
-		baseURL = "https://" + strings.TrimPrefix(baseURL, "wss://")
+	baseURL := deriveHTTPBaseURL(coordinatorURL)
+	if baseURL == "" {
+		return fmt.Errorf("invalid coordinator URL")
 	}
 
 	u, err := url.Parse(baseURL)

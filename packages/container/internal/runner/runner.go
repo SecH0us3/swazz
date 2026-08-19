@@ -136,6 +136,9 @@ type Runner struct {
 	configMu    sync.RWMutex
 	varReplacer *strings.Replacer
 
+	// WebSocket clients map (key: string address/endpoint, value: *ws.Client)
+	wsClients sync.Map
+
 	// Domain state & regex cache — used by chaining rules.
 	stateMu       sync.RWMutex
 	state         map[string]string
@@ -280,6 +283,13 @@ func (r *Runner) Close() {
 			if err := c.Close(); err != nil {
 				logger.Debug("[Runner] Error closing gRPC client for %v: %v", key, err)
 			}
+		}
+		return true
+	})
+	r.wsClients.Range(func(key, value any) bool {
+		// we will import ws package in runner.go if we need to assert, but we can just use an interface or import it.
+		if c, ok := value.(interface{ Close() error }); ok {
+			_ = c.Close()
 		}
 		return true
 	})

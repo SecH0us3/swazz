@@ -223,3 +223,22 @@ func IsProtoFile(raw []byte) bool {
 	return false
 }
 
+// IsWSURL reports whether the URL targets a WebSocket server (ws:// or wss://).
+func IsWSURL(urlStr string) bool {
+	lower := strings.ToLower(strings.TrimSpace(urlStr))
+	return strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://")
+}
+
+// IsAsyncAPISpec checks if the given raw JSON represents an AsyncAPI specification.
+func IsAsyncAPISpec(raw []byte) bool {
+	var check map[string]any
+	if err := json.Unmarshal(raw, &check); err != nil {
+		return false
+	}
+	if _, ok := check["asyncapi"]; ok {
+		return true
+	}
+	return false
+}
+
+

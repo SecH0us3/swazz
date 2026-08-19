@@ -146,13 +146,37 @@ Run with:
 ./swazz-engine start --config examples/swazz.config.grpc.json --html grpc-report.html
 ```
 
-### 6. Test on the Vulnerable Demo API
+### 6. Fuzzing WebSocket APIs
+Swazz natively supports security fuzzing of WebSocket interfaces (`ws://` and `wss://`) and event-driven architectures:
+- **AsyncAPI schemas (`asyncapi.json` / `asyncapi.yaml`)**: Automatically parses channels and message schemas.
+- **Recorded Traffic (`.har` files)**: Reconstructs real message envelopes captured from browser interactions.
+- **Live Endpoint Synthesis (`ws://` or `wss://`)**: Generates polymorphic action/command schemas automatically.
+
+```json
+{
+  "base_url": "wss://api.example.com/socket",
+  "swagger_urls": [
+    "wss://api.example.com/socket"
+  ],
+  "global_headers": {
+    "Authorization": "Bearer my_jwt_token"
+  },
+  "settings": {
+    "iterations": 20,
+    "concurrency": 5,
+    "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+  }
+}
+```
+
+### 7. Test on the Vulnerable Demo API
 If you want to quickly test Swazz's capabilities, we provide built-in vulnerable APIs:
 - **HTTP / REST API**: simulated as a Cloudflare Worker in `demo/`
 - **gRPC Microservice API**: standalone server with Reflection in `demo/grpc/`
+- **WebSocket API**: standalone server with real-time test vectors in `demo/ws/`
 > **⚠️ Disclaimer:** The code in the `demo/` directory is intentionally designed with vulnerabilities (SQL injection, command execution, panics) for testing Swazz. It should **NOT** be used in production or audited for security issues.
 
-### 7. End-to-End (E2E) Browser Testing
+### 8. End-to-End (E2E) Browser Testing
 We have a suite of Playwright E2E browser automation tests that verify integration between the frontend dashboard, the Cloudflare coordinator, the Go runner agent, and the Vulnerable Demo API.
 
 To run Playwright tests locally:
@@ -320,4 +344,3 @@ Swazz is distributed under the **Business Source License 1.1 (BSL 1.1)**.
 - **Enterprise Commercial License**: Required for production commercial use by companies with annual revenue exceeding $1M USD.
 - To view the embedded license text at any time, run `./swazz-engine license`.
 - For detailed pricing, feature comparisons, and licensing terms, read our [Pricing & Licensing Guide](docs/PRICING.md).
-

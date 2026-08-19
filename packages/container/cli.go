@@ -29,6 +29,7 @@ import (
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/ws"
 	"strings"
 	"sync"
 	"syscall"
@@ -605,6 +606,18 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 						cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
 					}
 					headersCopy["Cookie"] = strings.Join(cookieParts, "; ")
+				}
+
+				if swagger.IsWSURL(urlStr) {
+					parsedWS, errWS := ws.SynthesizeWSEndpoint(urlStr)
+					if errWS == nil {
+						resChan <- specResult{
+							urlStr:    urlStr,
+							endpoints: parsedWS.Endpoints,
+							basePath:  parsedWS.BasePath,
+						}
+						return
+					}
 				}
 
 				if swagger.IsGRPCURL(urlStr) {
