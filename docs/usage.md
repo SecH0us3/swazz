@@ -442,6 +442,81 @@ During execution, responses and gRPC error metadata are passed to the analyzer p
 
 ---
 
+## WebSocket Protocol Fuzzing 🔌
+
+Swazz supports native security fuzzing of **WebSocket APIs** (`ws://` and `wss://`) and event-driven real-time interfaces. Because WebSocket connections do not have standard built-in introspection or reflection mechanisms like gRPC or OpenAPI, Swazz provides multiple strategies for discovering and specifying message schemas.
+
+### Target Discovery & Specification Modes
+
+You can specify WebSocket targets in `swagger_urls`:
+
+1. **AsyncAPI Specification File (`asyncapi.json` / `asyncapi.yaml`) — Recommended**:
+   If your application uses AsyncAPI to document event-driven or WebSocket interfaces, provide the file path or URL directly in `swagger_urls`. Swazz parses all channels, operations (`publish` / `subscribe`), and JSON schema message payload definitions:
+   ```json
+   {
+     "base_url": "wss://api.example.com/ws",
+     "swagger_urls": [
+       "./specs/asyncapi.json"
+     ]
+   }
+   ```
+
+2. **Recorded Browser Traffic (HAR / Swazz Extension)**:
+   If no formal AsyncAPI schema exists, you can record real-world WebSocket traffic using your browser's DevTools or the Swazz Chrome Extension and export it as a `.har` file:
+   ```json
+   {
+     "swagger_urls": [
+       "./recordings/ws_session.har"
+     ]
+   }
+   ```
+   Swazz reconstructs the JSON frame structures exchanged during the recorded session and uses them as baseline templates for payload mutation.
+
+3. **Interactive Endpoint Synthesis (`ws://` or `wss://` Direct URL)**:
+   When targeting a live WebSocket endpoint directly without a schema file, Swazz automatically synthesizes a versatile envelope schema covering standard JSON-RPC, Action-dispatcher, and Command-based patterns:
+   - `ws://hostname:port/path` — Plaintext WebSocket connection
+   - `wss://hostname:port/path` — TLS-encrypted WebSocket connection
+
+   ```json
+   {
+     "base_url": "wss://api.example.com/socket",
+     "swagger_urls": [
+       "wss://api.example.com/socket"
+     ],
+     "global_headers": {
+       "Authorization": "Bearer my_jwt_token"
+     },
+     "settings": {
+       "iterations": 20,
+       "concurrency": 5,
+       "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+     }
+   }
+   ```
+
+### WebSocket Handshake Authentication
+If your WebSocket endpoint requires authentication headers during the initial HTTP Upgrade handshake, configure them in `global_headers`:
+```json
+"global_headers": {
+  "Authorization": "Bearer <token>",
+  "Sec-WebSocket-Protocol": "graphql-ws"
+}
+```
+
+### RFC 6455 Status Code Translation & Vulnerability Detection
+Swazz captures WebSocket close frames, disconnection reasons, and asynchronous response messages, mapping them into the vulnerability analysis pipeline:
+
+| Rule ID | Severity | Description |
+| :--- | :--- | :--- |
+| `swazz/ws-crash-detected` | **Error** | Target server closed connection with code 1011 (Internal Error) or HTTP status 500. |
+| `swazz/ws-eof-drop` | **Error** | The WebSocket socket was abruptly reset (code 1006 / unexpected EOF) without a proper close frame, signaling a process crash or unhandled fatal exception. |
+| `swazz/ws-internal-error-leak` | **Error** | Runtime panics, internal tracebacks, or unhandled exception signatures leaked in WebSocket response frames. |
+| `swazz/sql-error-leak` | **Error** | SQL syntax errors or database exceptions leaked in WebSocket JSON message bodies. |
+| `swazz/cmdi-leak` | **Error** | OS command execution output signatures detected in WebSocket response payloads. |
+| `swazz/sensitive-data-leak` | **Error** | Leaked secrets, API tokens, or credential signatures in WebSocket frames. |
+
+---
+
 ## Anonymous Global Scan Counter Telemetry 📊
 
 Swazz includes a completely anonymous telemetry system to track the total number of scans executed globally. This aggregated data helps substantiate the statistics shown in the trust bar. 
