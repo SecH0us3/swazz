@@ -40,8 +40,8 @@ func TestWSStatusAnalyzer(t *testing.T) {
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
-		if findings[0].RuleID != "ws-crash-detected" {
-			t.Errorf("expected rule ws-crash-detected, got %s", findings[0].RuleID)
+		if findings[0].RuleID != "swazz/ws-crash-detected" {
+			t.Errorf("expected rule swazz/ws-crash-detected, got %s", findings[0].RuleID)
 		}
 	})
 
@@ -56,8 +56,8 @@ func TestWSStatusAnalyzer(t *testing.T) {
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
-		if findings[0].RuleID != "ws-internal-error-leak" {
-			t.Errorf("expected rule ws-internal-error-leak, got %s", findings[0].RuleID)
+		if findings[0].RuleID != "swazz/ws-internal-error-leak" {
+			t.Errorf("expected rule swazz/ws-internal-error-leak, got %s", findings[0].RuleID)
 		}
 	})
 
@@ -73,8 +73,8 @@ func TestWSStatusAnalyzer(t *testing.T) {
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
-		if findings[0].RuleID != "ws-eof-drop" {
-			t.Errorf("expected rule ws-eof-drop, got %s", findings[0].RuleID)
+		if findings[0].RuleID != "swazz/ws-eof-drop" {
+			t.Errorf("expected rule swazz/ws-eof-drop, got %s", findings[0].RuleID)
 		}
 	})
 }
