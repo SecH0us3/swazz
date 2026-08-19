@@ -7,12 +7,14 @@ import { test, expect } from '@playwright/test';
 import { mockEnterpriseLicense, registerAndLogin } from './helpers';
 
 test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test('should complete scan, triage a finding, reload page, restore from history, and verify triage state is persisted', async ({ page }) => {
     // 1. Mock Enterprise license to unlock Cloud History & Triage
     await mockEnterpriseLicense(page);
 
     // 2. Handle Login/Registration: Register a unique user
-    await page.goto('/');
+    await registerAndLogin(page);
 
     // 3. Add Vulnerable Demo API spec
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

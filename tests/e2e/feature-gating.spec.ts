@@ -3,22 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 
 import { test, expect, Page } from '@playwright/test';
-
-async function registerAndLogin(page: Page): Promise<string> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  const createBtn = page.getByRole('button', { name: 'Create an account' });
-  await expect(createBtn).toBeVisible();
-  await createBtn.click();
-
-  const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-  await page.locator('#username').fill(uniqueUsername);
-  await page.locator('#password').fill('Password123!');
-  await page.locator('#password').press('Enter');
-
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-  return uniqueUsername;
-}
+import { registerAndLogin } from './helpers';
 
 async function openProjectSettings(page: Page) {
   await page.locator('button:has-text("More Project Settings")').click();
@@ -26,6 +11,8 @@ async function openProjectSettings(page: Page) {
 }
 
 test.describe('Feature Gating E2E', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test.beforeEach(async ({ page }) => {
     page.on('console', msg => console.log(`BROWSER CONSOLE [${msg.type()}]: ${msg.text()}`));
     page.on('pageerror', exception => console.log(`BROWSER EXCEPTION: ${exception}`));
@@ -34,7 +21,7 @@ test.describe('Feature Gating E2E', () => {
 
   test('guest sees locked paid tabs and coming-soon tabs in Project Settings', async ({ page }) => {
     // Register as a regular (free) user — no license key.
-    await page.goto('/');
+    await registerAndLogin(page, 'guest', false);
     await openProjectSettings(page);
 
     // Paid tabs show the lock badge.
@@ -58,7 +45,7 @@ test.describe('Feature Gating E2E', () => {
   });
 
   test('activating a license unlocks paid tabs', async ({ page }) => {
-    await page.goto('/');
+    await registerAndLogin(page, 'guest', false);
 
     // Mock the license API to simulate a successful activation with
     // scheduled_runs granted. The real Ed25519 verification is covered by
