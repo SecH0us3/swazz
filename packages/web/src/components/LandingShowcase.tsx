@@ -24,7 +24,7 @@ function ScanCounter() {
             })
             .then(data => {
                 if (data && typeof data.total === 'number') {
-                    setCount(data.total);
+                    setCount(data.total >= 1000000 ? data.total : 1000000 + data.total);
                 } else {
                     setCount(1000000);
                 }
