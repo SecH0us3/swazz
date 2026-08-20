@@ -155,18 +155,37 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return results || [];
   }
 
+  private mapFindingRow(row: any): any {
+    if (!row) return row;
+    let ai_relevance: boolean | undefined = undefined;
+    if (row.ai_relevance !== null && row.ai_relevance !== undefined) {
+      if (typeof row.ai_relevance === 'boolean') {
+        ai_relevance = row.ai_relevance;
+      } else if (typeof row.ai_relevance === 'number') {
+        ai_relevance = row.ai_relevance === 1;
+      } else if (typeof row.ai_relevance === 'string') {
+        const norm = row.ai_relevance.trim().toLowerCase();
+        ai_relevance = norm === '1' || norm === '1.0' || norm === 'true' || norm === 'true positive' || norm === 'true_positive' || norm === 'tp';
+      }
+    }
+    return {
+      ...row,
+      ...(ai_relevance !== undefined ? { ai_relevance } : {})
+    };
+  }
+
   async getFindings(scanId: string): Promise<any[]> {
     const { results } = await this.db.prepare('SELECT * FROM findings WHERE scan_id = ?')
       .bind(scanId)
       .all();
-    return results || [];
+    return (results || []).map(r => this.mapFindingRow(r));
   }
 
   async getFindingDetails(findingId: string): Promise<any | null> {
     const row = await this.db.prepare(
       'SELECT f.*, s.project_id, s.user_id FROM findings f JOIN scans s ON f.scan_id = s.id WHERE f.id = ?'
     ).bind(findingId).first();
-    return row || null;
+    return row ? this.mapFindingRow(row) : null;
   }
 
   async updateFinding(findingId: string, fields: Record<string, any>, ctx?: any): Promise<any> {
@@ -186,7 +205,13 @@ export class ScansRepository extends BaseService implements IScansRepository {
     for (const field of allowedFields) {
       if (fields[field] !== undefined) {
         setClauses.push(`${field} = ?`);
-        values.push(fields[field]);
+        if (field === 'ai_relevance') {
+          const val = fields[field];
+          const relVal = val === null ? null : (val === true || val === 1 || val === '1' || val === 'True Positive' || val === 'true_positive' || val === 'true' ? 1 : 0);
+          values.push(relVal);
+        } else {
+          values.push(fields[field]);
+        }
       }
     }
 
@@ -219,23 +244,27 @@ export class ScansRepository extends BaseService implements IScansRepository {
     updates: Array<{
       finding_id: string;
       ai_status: string;
-      ai_relevance: string;
-      ai_explanation: string;
-      ai_confidence: number;
+      ai_relevance?: boolean | string | null;
+      ai_explanation?: string;
+      ai_confidence?: number;
     }>
   ): Promise<number> {
     if (!updates || updates.length === 0) return 0;
 
     const statements: any[] = [];
     for (const u of updates) {
+      let relVal: number | null = null;
+      if (u.ai_relevance !== undefined && u.ai_relevance !== null) {
+        relVal = (u.ai_relevance === true || u.ai_relevance === 1 || u.ai_relevance === '1' || u.ai_relevance === 'True Positive' || u.ai_relevance === 'true_positive' || u.ai_relevance === 'true') ? 1 : 0;
+      }
       statements.push(
         this.db.prepare(
           `UPDATE findings SET ai_status = ?, ai_relevance = ?, ai_explanation = ?, ai_confidence = ? WHERE id = ? AND scan_id = ?`
         ).bind(
           u.ai_status,
-          u.ai_relevance,
-          u.ai_explanation,
-          u.ai_confidence,
+          relVal,
+          u.ai_explanation ?? null,
+          u.ai_confidence ?? null,
           u.finding_id,
           scanId
         )

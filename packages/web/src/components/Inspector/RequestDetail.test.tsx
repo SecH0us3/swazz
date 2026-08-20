@@ -27,13 +27,13 @@ describe('RequestDetail Component - AI Insights & Findings', () => {
         responseBody: '{"error":"sql error"}'
     });
 
-    it('renders True Positive badge with badge-error for string and boolean TP verdicts', () => {
+    it('renders True Positive badge with badge-error for boolean true', () => {
         const finding: AnalysisFinding = {
             ruleId: 'swazz/sqli',
             level: 'error',
             message: 'SQL Injection detected',
             ai_status: 'completed',
-            ai_relevance: 'True Positive',
+            ai_relevance: true,
             ai_confidence: 95,
             ai_explanation: 'Input directly concatenated into query',
             ai_remediation: 'Use parameterized queries'
@@ -62,13 +62,13 @@ describe('RequestDetail Component - AI Insights & Findings', () => {
         expect(screen.getByText('Input directly concatenated into query')).toBeTruthy();
     });
 
-    it('renders False Positive badge with badge-success for string and boolean FP verdicts', () => {
+    it('renders False Positive badge with badge-success for boolean false', () => {
         const finding: AnalysisFinding = {
             ruleId: 'swazz/sqli',
             level: 'error',
             message: 'SQL Injection suspected',
             ai_status: 'completed',
-            ai_relevance: 'False Positive',
+            ai_relevance: false,
             ai_confidence: 85,
             ai_explanation: 'Standard database error message not exploitable'
         };
@@ -88,61 +88,6 @@ describe('RequestDetail Component - AI Insights & Findings', () => {
         fireEvent.click(findingsTabBtn);
 
         expect(screen.getByText('✨ AI Insights')).toBeTruthy();
-        const badge = screen.getByText('False Positive');
-        expect(badge).toBeTruthy();
-        expect(badge.className).toContain('badge-success');
-    });
-
-    it('renders True Positive badge with badge-error for boolean true and true_positive', () => {
-        const finding: AnalysisFinding = {
-            ruleId: 'swazz/sqli',
-            level: 'error',
-            message: 'SQL Injection detected',
-            ai_status: 'completed',
-            ai_relevance: 'true_positive',
-            ai_confidence: 90
-        };
-
-        render(
-            <RequestDetail
-                result={createMockResult([finding])}
-                baseUrl="http://localhost"
-                onClose={vi.fn()}
-                globalHeaders={{}}
-                globalCookies={{}}
-            />
-        );
-
-        const findingsTabBtn = screen.getByRole('tab', { name: /Alerts & Findings/i });
-        fireEvent.click(findingsTabBtn);
-
-        const badge = screen.getByText('True Positive');
-        expect(badge).toBeTruthy();
-        expect(badge.className).toContain('badge-error');
-    });
-
-    it('renders False Positive badge with badge-success for boolean false and false_positive', () => {
-        const finding: AnalysisFinding = {
-            ruleId: 'swazz/sqli',
-            level: 'error',
-            message: 'SQL Injection suspected',
-            ai_status: 'completed',
-            ai_relevance: false
-        };
-
-        render(
-            <RequestDetail
-                result={createMockResult([finding])}
-                baseUrl="http://localhost"
-                onClose={vi.fn()}
-                globalHeaders={{}}
-                globalCookies={{}}
-            />
-        );
-
-        const findingsTabBtn = screen.getByRole('tab', { name: /Alerts & Findings/i });
-        fireEvent.click(findingsTabBtn);
-
         const badge = screen.getByText('False Positive');
         expect(badge).toBeTruthy();
         expect(badge.className).toContain('badge-success');

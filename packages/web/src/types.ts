@@ -49,7 +49,7 @@ export interface AnalysisFinding {
     evidence?: string;
     owaspCategory?: string[];
     ai_status?: 'pending' | 'completed' | 'failed';
-    ai_relevance?: boolean | string;
+    ai_relevance?: boolean;
     ai_explanation?: string;
     ai_remediation?: string;
     ai_proposed_patch?: string;

@@ -154,7 +154,7 @@ describe('ScansRepository Unit Tests', () => {
     mockAll.mockResolvedValue({ results: findings });
 
     const repo = new ScansRepository(mockEnv);
-    expect(await repo.getFindings('s-1')).toBe(findings);
+    expect(await repo.getFindings('s-1')).toEqual(findings);
   });
 
   it('getFindingDetails queries finding and scan details', async () => {
@@ -162,7 +162,7 @@ describe('ScansRepository Unit Tests', () => {
     mockAll.mockResolvedValue(details);
 
     const repo = new ScansRepository(mockEnv);
-    expect(await repo.getFindingDetails('f-1')).toBe(details);
+    expect(await repo.getFindingDetails('f-1')).toEqual(details);
   });
 
   describe('updateFinding', () => {
@@ -178,11 +178,11 @@ describe('ScansRepository Unit Tests', () => {
         .mockResolvedValueOnce(updated);          // getFindingDetails query first
 
       const repo = new ScansRepository(mockEnv);
-      const res = await repo.updateFinding('f-1', { ai_status: 'confirmed', ai_relevance: 'high' });
+      const res = await repo.updateFinding('f-1', { ai_status: 'confirmed', ai_relevance: true });
 
-      expect(res).toBe(updated);
+      expect(res).toEqual(updated);
       expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE findings SET ai_status = ?, ai_relevance = ? WHERE id = ?'));
-      expect(mockBind).toHaveBeenCalledWith('confirmed', 'high', 'f-1');
+      expect(mockBind).toHaveBeenCalledWith('confirmed', 1, 'f-1');
       expect(dispatchWebhook).toHaveBeenCalledWith(mockEnv, 'p-1', 'finding.triaged', updated);
     });
   });

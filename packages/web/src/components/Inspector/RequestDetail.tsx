@@ -6,7 +6,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
-import { isTruePositiveVerdict } from './utils.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -568,9 +567,9 @@ export function RequestDetail({
                                     <div className="ai-insights-section">
                                         <div className="ai-insights-header">
                                             <span className="ai-insights-title">✨ AI Insights</span>
-                                            {finding.ai_relevance != null && finding.ai_relevance !== '' && (
-                                                <span className={`alert-badge ${isTruePositiveVerdict(finding.ai_relevance) ? 'badge-error' : 'badge-success'}`}>
-                                                    {isTruePositiveVerdict(finding.ai_relevance) ? 'True Positive' : 'False Positive'}
+                                            {finding.ai_relevance != null && (
+                                                <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
+                                                    {finding.ai_relevance ? 'True Positive' : 'False Positive'}
                                                 </span>
                                             )}
                                             {finding.ai_confidence != null && (

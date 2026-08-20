@@ -9,43 +9,10 @@ import {
     getBadgeClass,
     formatBytes,
     formatTime,
-    formatIdentityName,
-    isTruePositiveVerdict
+    formatIdentityName
 } from './utils.js';
 
 describe('Inspector utils', () => {
-    describe('isTruePositiveVerdict', () => {
-        it('handles boolean values', () => {
-            expect(isTruePositiveVerdict(true)).toBe(true);
-            expect(isTruePositiveVerdict(false)).toBe(false);
-        });
-
-        it('handles string variants of True Positive', () => {
-            expect(isTruePositiveVerdict('True Positive')).toBe(true);
-            expect(isTruePositiveVerdict('true positive')).toBe(true);
-            expect(isTruePositiveVerdict('TRUE POSITIVE')).toBe(true);
-            expect(isTruePositiveVerdict('true_positive')).toBe(true);
-            expect(isTruePositiveVerdict('TRUE_POSITIVE')).toBe(true);
-            expect(isTruePositiveVerdict('true')).toBe(true);
-            expect(isTruePositiveVerdict('TRUE')).toBe(true);
-            expect(isTruePositiveVerdict('tp')).toBe(true);
-            expect(isTruePositiveVerdict('TP')).toBe(true);
-        });
-
-        it('handles string variants of False Positive', () => {
-            expect(isTruePositiveVerdict('False Positive')).toBe(false);
-            expect(isTruePositiveVerdict('false positive')).toBe(false);
-            expect(isTruePositiveVerdict('false_positive')).toBe(false);
-            expect(isTruePositiveVerdict('false')).toBe(false);
-            expect(isTruePositiveVerdict('fp')).toBe(false);
-        });
-
-        it('handles undefined, null, and empty/unrecognized values', () => {
-            expect(isTruePositiveVerdict(undefined)).toBe(false);
-            expect(isTruePositiveVerdict('')).toBe(false);
-            expect(isTruePositiveVerdict('unknown')).toBe(false);
-        });
-    });
 
     describe('getStatusClass', () => {
         it('returns correct class for 5xx and 0', () => {

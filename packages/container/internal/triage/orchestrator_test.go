@@ -90,8 +90,8 @@ func TestOrchestrator_Run(t *testing.T) {
 	if tr.AIStatus != "completed" {
 		t.Errorf("expected status 'completed', got '%s'", tr.AIStatus)
 	}
-	if tr.AIRelevance != "False Positive" {
-		t.Errorf("expected relevance 'False Positive', got '%s'", tr.AIRelevance)
+	if tr.AIRelevance == nil || *tr.AIRelevance != false {
+		t.Errorf("expected relevance false, got %v", tr.AIRelevance)
 	}
 	if tr.AIConfidence != 85 {
 		t.Errorf("expected confidence 85, got %d", tr.AIConfidence)

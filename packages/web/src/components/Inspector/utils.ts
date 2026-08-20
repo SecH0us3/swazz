@@ -40,12 +40,3 @@ export function formatIdentityName(name: string): string {
     return name;
 }
 
-export function isTruePositiveVerdict(relevance?: boolean | string): boolean {
-    if (typeof relevance === 'boolean') return relevance;
-    if (typeof relevance === 'string') {
-        const normalized = relevance.trim().toLowerCase();
-        return normalized === 'true' || normalized === 'true positive' || normalized === 'true_positive' || normalized === 'tp';
-    }
-    return false;
-}
-

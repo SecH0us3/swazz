@@ -85,7 +85,7 @@ Every webhook payload conforms to the following schema:
     "message": "Potential SQL Injection vulnerability detected on GET /api/v1/users/{id} via parameter 'id'.",
     "evidence": "...",
     "ai_status": "completed",
-    "ai_relevance": "true",
+    "ai_relevance": true,
     "ai_explanation": "The fuzzer payload caused a database error in the response body indicating unescaped input concatenation.",
     "ai_remediation": "Use parameterized queries or ORM to escape SQL parameters.",
     "ai_proposed_patch": "...",
