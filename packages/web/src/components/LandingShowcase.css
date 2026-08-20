@@ -47,22 +47,22 @@
     left: 50%;
     transform: translateX(-50%);
     width: 100vw;
-    height: 950px;
+    height: 580px;
     pointer-events: none;
     overflow: hidden;
     z-index: 0;
-    background: radial-gradient(ellipse 95% 75% at 50% 30%, transparent 40%, var(--bg-obsidian) 90%);
+    background: radial-gradient(ellipse 90% 70% at 50% 25%, transparent 30%, var(--bg-obsidian) 85%);
 }
 
 .cyber-backdrop-image {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center 25%;
-    opacity: 0.42;
-    filter: brightness(0.95) contrast(1.15) saturate(1.15);
-    mask-image: radial-gradient(ellipse 85% 70% at 50% 30%, rgba(0,0,0,1) 25%, rgba(0,0,0,0.8) 55%, rgba(0,0,0,0) 100%);
-    -webkit-mask-image: radial-gradient(ellipse 85% 70% at 50% 30%, rgba(0,0,0,1) 25%, rgba(0,0,0,0.8) 55%, rgba(0,0,0,0) 100%);
+    object-position: center 15%;
+    opacity: 0.32;
+    filter: brightness(0.9) contrast(1.15) saturate(1.1);
+    mask-image: radial-gradient(ellipse 80% 65% at 50% 25%, rgba(0,0,0,1) 20%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 90%), linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 65% at 50% 25%, rgba(0,0,0,1) 20%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 90%), linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
 }
 
 .cyber-laser-scanner {
@@ -89,7 +89,7 @@
         opacity: 0.7;
     }
     100% {
-        top: 800px;
+        top: 550px;
         opacity: 0;
     }
 }
@@ -120,11 +120,64 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 2rem;
-    background-color: rgba(7, 10, 18, 0.8);
+    background-color: rgba(7, 10, 18, 0.85);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border-subtle);
     z-index: 1000;
+}
+
+/* ─── Section Headers & Common Spacing ─────────────────────── */
+
+.simulator-section,
+.landing-video-section,
+.benchmark-section,
+.landing-features,
+.deployment-section,
+.pricing-section {
+    scroll-margin-top: 88px;
+}
+
+.landing-section-header {
+    text-align: center;
+    margin-bottom: 2.25rem;
+    padding: 0 1rem;
+}
+
+.section-eyebrow {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--neon-cyan);
+    margin-bottom: 0.625rem;
+    text-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+}
+
+.landing-section-header h2 {
+    font-size: clamp(2rem, 3.5vw, 2.75rem);
+    font-weight: 800;
+    color: #FFFFFF;
+    margin: 0 0 0.875rem 0;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.landing-section-header p {
+    font-size: 1.0625rem;
+    color: #CBD5E1;
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* ─── Live Fuzzing Simulator ──────────────────────────────── */
+
+.simulator-section {
+    width: 100%;
+    margin-bottom: 5rem;
 }
 
 .landing-nav-left {
