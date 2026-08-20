@@ -126,8 +126,8 @@ describe('LandingShowcase Component', () => {
         });
 
         expect(screen.getByText('How Swazz Outperforms Legacy Scanners')).toBeDefined();
-        expect(screen.getByText('Traditional DAST Scanners')).toBeDefined();
-        expect(screen.getByText('Generic Random Fuzzers')).toBeDefined();
+        expect(screen.getByText('Traditional DAST')).toBeDefined();
+        expect(screen.getByText('Generic Fuzzers')).toBeDefined();
         expect(screen.getByText(/Deep AST parsing & smart mutation/i)).toBeDefined();
     });
 

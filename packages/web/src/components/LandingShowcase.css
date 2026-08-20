@@ -1068,7 +1068,8 @@
 
 .benchmark-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     text-align: left;
 }
 
@@ -1079,13 +1080,23 @@
     color: var(--text-muted);
     border-bottom: 1px solid var(--border-subtle);
     background: rgba(11, 15, 26, 0.85);
+    white-space: nowrap;
 }
 
 .benchmark-table td {
     padding: 1.25rem 1.5rem;
     font-size: 0.875rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    vertical-align: middle;
+    vertical-align: top;
+    transition: background-color 0.2s ease;
+}
+
+.benchmark-table tbody tr:hover td {
+    background-color: rgba(255, 255, 255, 0.025);
+}
+
+.benchmark-table tbody tr:hover td.val-swazz {
+    background-color: rgba(2, 132, 199, 0.12);
 }
 
 .benchmark-table tr:last-child td {
@@ -1093,16 +1104,22 @@
 }
 
 .col-capability {
-    width: 32%;
+    width: 30%;
 }
 
 .col-swazz {
-    width: 28%;
+    width: 26%;
     background: rgba(2, 132, 199, 0.08);
+    border-left: 1px solid rgba(56, 189, 248, 0.25);
+    border-right: 1px solid rgba(56, 189, 248, 0.25);
 }
 
-.col-legacy, .col-generic {
-    width: 20%;
+.col-legacy {
+    width: 22%;
+}
+
+.col-generic {
+    width: 22%;
 }
 
 .swazz-col-header {
@@ -1125,6 +1142,7 @@
     padding: 0.15rem 0.5rem;
     border-radius: 12px;
     font-weight: 700;
+    box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .cap-title {
@@ -1139,7 +1157,7 @@
 }
 
 .cap-title span {
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 0.8125rem;
     line-height: 1.4;
 }
@@ -1148,28 +1166,41 @@
     color: var(--text-main);
     font-weight: 600;
     background: rgba(2, 132, 199, 0.06);
+    border-left: 1px solid rgba(56, 189, 248, 0.2);
+    border-right: 1px solid rgba(56, 189, 248, 0.2);
 }
 
 .val-other {
-    color: var(--text-muted);
+    color: var(--text-secondary);
+}
+
+.val-cell {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+}
+
+.val-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-weight: 800;
+    font-size: 0.9375rem;
+}
+
+.val-text {
+    line-height: 1.45;
 }
 
 .check-icon {
     color: var(--status-success);
-    font-weight: 800;
-    margin-right: 0.35rem;
 }
 
 .cross-icon {
     color: var(--status-critical);
-    font-weight: 800;
-    margin-right: 0.35rem;
 }
 
 .partial-icon {
     color: var(--status-high);
-    font-weight: 800;
-    margin-right: 0.35rem;
 }
 
 /* ─── Bento Grid Features ─────────────────────────────────── */

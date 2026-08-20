@@ -607,8 +607,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         <span className="swazz-pill">Next-Gen</span>
                                     </div>
                                 </th>
-                                <th scope="col" className="col-legacy">Traditional DAST Scanners</th>
-                                <th scope="col" className="col-generic">Generic Random Fuzzers</th>
+                                <th scope="col" className="col-legacy">Traditional DAST</th>
+                                <th scope="col" className="col-generic">Generic Fuzzers</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -618,28 +618,46 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     <span>Parses OpenAPI, SOAP &amp; GraphQL parameter constraints and types.</span>
                                 </td>
                                 <td className="val-swazz">
-                                    <span className="check-icon">✓</span> Deep AST parsing &amp; smart mutation
+                                    <div className="val-cell">
+                                        <span className="val-icon check-icon">✓</span>
+                                        <span className="val-text">Deep AST parsing &amp; smart mutation</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Blind regex &amp; string injection
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Blind string payloads (Zero schema context)</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="partial-icon">~</span> Basic schema checks only
+                                    <div className="val-cell">
+                                        <span className="val-icon partial-icon">~</span>
+                                        <span className="val-text">Shallow type fuzzing without logic awareness</span>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
                                 <td className="cap-title">
                                     <strong>Zero-Setup HAR Replay</strong>
-                                    <span>Replay real browser user journeys and authenticate traffic in 1 click.</span>
+                                    <span>Replay real authenticated user journeys in 1 click.</span>
                                 </td>
                                 <td className="val-swazz">
-                                    <span className="check-icon">✓</span> Instant drag-and-drop &amp; Chrome Extension
+                                    <div className="val-cell">
+                                        <span className="val-icon check-icon">✓</span>
+                                        <span className="val-text">Instant drag-and-drop &amp; Chrome Extension</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Heavy proxy &amp; manual certificate setup
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Complex MITM proxy &amp; CA cert configuration</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Unsupported
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Unsupported</span>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -648,13 +666,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     <span>Automatic mapping to BOLA, Broken Auth, and SSRF CWEs.</span>
                                 </td>
                                 <td className="val-swazz">
-                                    <span className="check-icon">✓</span> Native 2023 classification + remediation
+                                    <div className="val-cell">
+                                        <span className="val-icon check-icon">✓</span>
+                                        <span className="val-text">Native 2023 classification + remediation</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="partial-icon">~</span> Generic web vulnerabilities only
+                                    <div className="val-cell">
+                                        <span className="val-icon partial-icon">~</span>
+                                        <span className="val-text">Generic web DAST (Misses API1–10 logic flaws)</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Raw HTTP status logs
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Raw HTTP 500 error logs only</span>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -663,13 +690,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     <span>Groups thousands of responses by structural root causes.</span>
                                 </td>
                                 <td className="val-swazz">
-                                    <span className="check-icon">✓</span> Automatic clustering (Zero alert fatigue)
+                                    <div className="val-cell">
+                                        <span className="val-icon check-icon">✓</span>
+                                        <span className="val-text">Automatic clustering (Zero alert fatigue)</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Endless duplicate alert lists
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Massive alert fatigue (No root-cause grouping)</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Unprocessed stdout streams
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Unstructured raw stdout dumps</span>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -678,13 +714,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     <span>Runs natively in GitHub Actions and Cloudflare Edge Workers.</span>
                                 </td>
                                 <td className="val-swazz">
-                                    <span className="check-icon">✓</span> Blazing fast Go engine + Edge routing
+                                    <div className="val-cell">
+                                        <span className="val-icon check-icon">✓</span>
+                                        <span className="val-text">Blazing fast Go engine + Edge routing</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Multi-GB Java VM overhead
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Heavy runtime overhead (10–30 min delays)</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="partial-icon">~</span> Single-thread Python / CLI only
+                                    <div className="val-cell">
+                                        <span className="val-icon partial-icon">~</span>
+                                        <span className="val-text">Single-threaded CLI execution</span>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -693,13 +738,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     <span>Surface security alerts directly in standard PR reviews and Jira.</span>
                                 </td>
                                 <td className="val-swazz">
-                                    <span className="check-icon">✓</span> Standard SARIF for GitHub Code Scanning
+                                    <div className="val-cell">
+                                        <span className="val-icon check-icon">✓</span>
+                                        <span className="val-text">Standard SARIF for GitHub Code Scanning</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="partial-icon">~</span> Proprietary XML/HTML exports
+                                    <div className="val-cell">
+                                        <span className="val-icon partial-icon">~</span>
+                                        <span className="val-text">Proprietary PDF/HTML exports</span>
+                                    </div>
                                 </td>
                                 <td className="val-other">
-                                    <span className="cross-icon">✗</span> Non-standard text output
+                                    <div className="val-cell">
+                                        <span className="val-icon cross-icon">✗</span>
+                                        <span className="val-text">Non-standard console logs</span>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
