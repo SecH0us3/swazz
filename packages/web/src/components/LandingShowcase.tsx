@@ -71,11 +71,14 @@ export interface AttackScenario {
     id: string;
     name: string;
     category: string;
-    cwe: string;
     owasp: string;
+    cwe: string;
     severity: 'Critical' | 'High' | 'Medium';
     endpoint: string;
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
+    story: string;
+    exploitAction: string;
+    impact: string;
     originalSpec: {
         headers: Record<string, string>;
         body?: string;
@@ -105,26 +108,29 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
         severity: 'Critical',
         endpoint: '/api/v1/users/{id}/billing',
         method: 'GET',
+        story: 'A valid customer (User #1042) requests their own invoice. The backend uses the URL path {id} without verifying caller ownership.',
+        exploitAction: 'Swazz mutates the path parameter from 1042 → 1043 while reusing User #1042\'s valid authorization token.',
+        impact: 'Tenant Isolation Breach: User #1042 views foreign billing records, credit cards, and PII of User #1043.',
         originalSpec: {
             headers: {
                 'Authorization': 'Bearer user_token_1042',
                 'Accept': 'application/json'
             },
-            description: 'Valid request: Accessing authenticated user ID 1042 profile.'
+            description: 'Valid request: Authenticated User #1042 accesses their own billing endpoint.'
         },
         mutatedPayload: {
             headers: {
                 'Authorization': 'Bearer user_token_1042',
                 'Accept': 'application/json'
             },
-            mutationDiff: 'GET /api/v1/users/1043/billing  [Tampered path parameter to foreign ID 1043]'
+            mutationDiff: 'GET /api/v1/users/1043/billing  [Path parameter tampered from 1042 → 1043]'
         },
         detectionResult: {
             status: 200,
-            statusText: '200 OK (Data Leak)',
-            findingTitle: 'Broken Object Level Authorization Detected',
-            findingSummary: 'User 1042 successfully accessed confidential billing records of User 1043 without tenant-level authorization checks.',
-            remediationTip: 'Enforce record-level ownership checks inside database queries using authenticated session context.'
+            statusText: '200 OK (Cross-Tenant Data Leaked)',
+            findingTitle: 'Broken Object Level Authorization Detected (BOLA)',
+            findingSummary: 'User #1042 successfully accessed confidential billing records of User #1043 without tenant-level authorization checks.',
+            remediationTip: 'Enforce record-level ownership checks inside database queries using authenticated session context (e.g., WHERE user_id = :session_user_id).'
         }
     },
     {
@@ -136,13 +142,16 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
         severity: 'Critical',
         endpoint: '/api/v2/orders/search',
         method: 'POST',
+        story: 'An order search filter accepts JSON parameters. The backend concatenates JSON string fields directly into SQL queries.',
+        exploitAction: 'Swazz detects structured parameter types and injects an AST-aware SQL polyglot payload inside the nested JSON body.',
+        impact: 'Database Driver Parser Crash / Full Table Exfiltration bypassing application input filters.',
         originalSpec: {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer live_token'
             },
             body: JSON.stringify({ category: 'hardware', limit: 20 }, null, 2),
-            description: 'Valid request: Filtering hardware orders with schema-compliant JSON body.'
+            description: 'Valid request: Standard order filtering with schema-compliant JSON body.'
         },
         mutatedPayload: {
             headers: {
@@ -150,13 +159,13 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
                 'Authorization': 'Bearer live_token'
             },
             body: JSON.stringify({ category: "hardware' OR 1=1;--", limit: 20 }, null, 2),
-            mutationDiff: 'category: "hardware\' OR 1=1;--" [Semantic AST mutation in nested JSON parameter]'
+            mutationDiff: 'category: "hardware\' OR 1=1;--" [Semantic AST mutation in nested JSON field]'
         },
         detectionResult: {
             status: 500,
-            statusText: '500 SQL Syntax Error',
-            findingTitle: 'Unescaped SQL Query Execution in JSON Property',
-            findingSummary: 'Database driver returned raw SQL syntax error (PG::SyntaxError: unterminated quoted string).',
+            statusText: '500 SQL Syntax Error (Vulnerability Confirmed)',
+            findingTitle: 'Unescaped SQL Query Execution in Structured JSON',
+            findingSummary: 'Database driver returned raw SQL syntax error (PG::SyntaxError: unterminated quoted string), indicating direct SQL interpolation.',
             remediationTip: 'Always use parameterized SQL queries and ORM prepared statements for JSON payload fields.'
         }
     },
@@ -169,6 +178,9 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
         severity: 'High',
         endpoint: '/api/v1/integrations/webhook/test',
         method: 'POST',
+        story: 'A webhook test endpoint accepts a destination callback URL. The server fetches the URL from its internal network context.',
+        exploitAction: 'Swazz substitutes the public destination URL with the cloud instance metadata IP (169.254.169.254).',
+        impact: 'Exfiltration of Cloud IAM Role security credentials, temporary tokens, and internal microservice endpoints.',
         originalSpec: {
             headers: {
                 'Content-Type': 'application/json',
@@ -189,8 +201,8 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
             status: 200,
             statusText: '200 OK (Internal Metadata Leaked)',
             findingTitle: 'SSRF against Cloud Instance Metadata Service',
-            findingSummary: 'Backend fetched AWS/GCP instance metadata endpoint and reflected internal security tokens.',
-            remediationTip: 'Activate Swazz SSRF Protection and disallow RFC 1918 & 169.254.0.0/16 private IP ranges in HTTP transport.'
+            findingSummary: 'Backend fetched AWS/GCP instance metadata endpoint and reflected internal security tokens in the response.',
+            remediationTip: 'Activate Swazz SSRF Protection and disallow RFC 1918 & 169.254.0.0/16 private IP ranges in HTTP transport layer.'
         }
     },
     {
@@ -202,6 +214,9 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
         severity: 'High',
         endpoint: '/api/v1/users/profile',
         method: 'PATCH',
+        story: 'A user updates their public display name. The backend automatically binds all incoming JSON properties directly to the DB model.',
+        exploitAction: 'Swazz injects unannounced privilege properties (role: "admin", is_superuser: true) into the update payload.',
+        impact: 'Immediate privilege escalation to full admin status due to unconstrained ORM model binding.',
         originalSpec: {
             headers: {
                 'Content-Type': 'application/json',
@@ -220,10 +235,10 @@ export const SIMULATOR_SCENARIOS: AttackScenario[] = [
         },
         detectionResult: {
             status: 200,
-            statusText: '200 OK (Role Escalated)',
+            statusText: '200 OK (Role Escalated to Admin)',
             findingTitle: 'Privilege Escalation via Unrestricted Parameter Binding',
-            findingSummary: 'Object attributes were updated with elevated admin privileges without schema whitelisting.',
-            remediationTip: 'Explicitly define permitted DTO request fields and discard undeclared JSON keys in updates.'
+            findingSummary: 'Object attributes were updated with elevated admin privileges without schema whitelisting or authorization guards.',
+            remediationTip: 'Explicitly define permitted DTO request fields and discard undeclared JSON keys in ORM update mutations.'
         }
     }
 ];
@@ -403,8 +418,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
             <section id="simulator" className="simulator-section">
                 <div className="landing-section-header">
                     <div className="section-eyebrow">Interactive Attack Simulator</div>
-                    <h2>Experience Semantic Fuzzing in Action</h2>
-                    <p>Select an API attack vector below to see how Swazz parses valid contracts, mutates AST structures, and isolates root-cause vulnerabilities.</p>
+                    <h2>See How Semantic Fuzzing Works in 3 Steps</h2>
+                    <p>Select a real-world API attack vector below to see how Swazz crafts precision exploits from baseline schema contracts.</p>
                 </div>
 
                 <div className="simulator-container">
@@ -431,6 +446,39 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
 
                     {/* Simulator Console Box */}
                     <div className={`simulator-console ${isSimulating ? 'simulating' : ''}`}>
+                        {/* 3-Step Process Flow Ribbon */}
+                        <div className="simulator-process-ribbon">
+                            <div className="process-step active">
+                                <span className="step-num">1</span>
+                                <span className="step-label">Baseline Contract</span>
+                            </div>
+                            <div className="process-arrow">➔</div>
+                            <div className="process-step active">
+                                <span className="step-num">2</span>
+                                <span className="step-label">Semantic Mutation</span>
+                            </div>
+                            <div className="process-arrow">➔</div>
+                            <div className="process-step active step-result">
+                                <span className="step-num">3</span>
+                                <span className="step-label">Vulnerability Caught</span>
+                            </div>
+                        </div>
+
+                        {/* Story Context Callout Banner */}
+                        <div className="simulator-story-banner">
+                            <div className="story-badge">
+                                <span className="story-dot"></span>
+                                <strong>Attack Vector:</strong> {activeScenario.category} ({activeScenario.owasp} • {activeScenario.cwe})
+                            </div>
+                            <p className="story-text">
+                                <strong>Scenario:</strong> {activeScenario.story}
+                            </p>
+                            <p className="story-exploit">
+                                <strong>Swazz Action:</strong> {activeScenario.exploitAction}
+                            </p>
+                        </div>
+
+                        {/* Top Console Bar */}
                         <div className="simulator-header-bar">
                             <div className="simulator-endpoint-tag">
                                 <span className={`method-badge method-${activeScenario.method.toLowerCase()}`}>
@@ -439,14 +487,13 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                 <span className="endpoint-path-text">{activeScenario.endpoint}</span>
                             </div>
                             <div className="simulator-action-group">
-                                <span className="cwe-badge">{activeScenario.cwe} • {activeScenario.owasp}</span>
                                 <button 
                                     type="button" 
                                     className="btn-simulator-run"
                                     onClick={handleRunSimulation}
                                     disabled={isSimulating}
                                 >
-                                    {isSimulating ? 'Mutating Payload...' : '↻ Re-run Mutation'}
+                                    {isSimulating ? '⚡ Mutating Payload...' : '↻ Re-run Mutation'}
                                 </button>
                             </div>
                         </div>
@@ -456,8 +503,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             {/* Left: Original Request */}
                             <div className="simulator-panel original-panel">
                                 <div className="panel-title">
-                                    <span>Original OpenAPI Contract</span>
-                                    <span className="panel-status-indicator normal">Valid Schema</span>
+                                    <span className="panel-title-step">Step 1: Normal API Request</span>
+                                    <span className="panel-status-indicator normal">Valid Schema Contract</span>
                                 </div>
                                 <div className="panel-code-box">
                                     <div className="code-line-desc">{activeScenario.originalSpec.description}</div>
@@ -477,7 +524,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             {/* Right: Swazz Mutated Payload */}
                             <div className="simulator-panel mutated-panel">
                                 <div className="panel-title">
-                                    <span>Swazz Semantic Mutation</span>
+                                    <span className="panel-title-step">Step 2: Swazz Attack Vector</span>
                                     <span className="panel-status-indicator mutated">Payload Mutated</span>
                                 </div>
                                 <div className="panel-code-box">
@@ -501,12 +548,16 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         {/* Result / Detection Telemetry */}
                         <div className="simulator-result-footer">
                             <div className="result-header">
+                                <span className="step-tag-pill">Step 3: Root Cause Triage</span>
                                 <span className={`result-status-badge status-${activeScenario.detectionResult.status >= 500 ? '500' : 'vuln'}`}>
                                     {activeScenario.detectionResult.statusText}
                                 </span>
                                 <strong className="result-finding-title">{activeScenario.detectionResult.findingTitle}</strong>
                             </div>
                             <p className="result-summary-text">{activeScenario.detectionResult.findingSummary}</p>
+                            <div className="result-impact-line">
+                                <strong>💥 Real-World Impact:</strong> {activeScenario.impact}
+                            </div>
                             <div className="result-remediation-box">
                                 <span className="remediation-label">💡 Recommended Fix:</span> {activeScenario.detectionResult.remediationTip}
                             </div>
@@ -517,6 +568,11 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
 
             {/* DEMO VIDEO / SHOWCASE */}
             <section id="demo" className="landing-video-section">
+                <div className="landing-section-header">
+                    <div className="section-eyebrow">Full Platform Tour</div>
+                    <h2>From OpenAPI Spec to CI/CD Gate in 60 Seconds</h2>
+                    <p>Watch how Swazz scans distributed endpoints, groups duplicate anomalies, and blocks security regressions in pull requests.</p>
+                </div>
                 <div className="glass-container">
                     <div className="glass-header">
                         <div className="glass-dots">

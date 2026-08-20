@@ -575,6 +575,139 @@
     box-shadow: 0 0 35px var(--accent-glow);
 }
 
+/* ─── 3-Step Process Flow Ribbon ──────────────────────────── */
+
+.simulator-process-ribbon {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: rgba(11, 15, 26, 0.95);
+    padding: 0.875rem 1.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 0.75rem;
+}
+
+.process-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.process-step.active {
+    color: var(--text-main);
+}
+
+.process-step.step-result {
+    color: #FCA5A5;
+}
+
+.step-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-subtle);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    color: var(--accent-light);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.process-step.step-result .step-num {
+    background: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.4);
+    color: var(--status-critical);
+}
+
+.process-arrow {
+    color: var(--text-dim);
+    font-size: 0.875rem;
+}
+
+/* ─── Explanatory Story Callout Banner ────────────────────── */
+
+.simulator-story-banner {
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.story-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--accent-light);
+    font-family: var(--font-technical);
+}
+
+.story-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--accent-light);
+    box-shadow: 0 0 6px var(--accent-light);
+}
+
+.story-text {
+    font-size: 0.9375rem;
+    color: var(--text-main);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.story-text strong,
+.story-exploit strong {
+    color: var(--accent-light);
+}
+
+.story-exploit {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.panel-title-step {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.step-tag-pill {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(244, 63, 94, 0.15);
+    color: var(--status-critical);
+    border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+.result-impact-line {
+    font-size: 0.875rem;
+    color: #FECDD3;
+    background: rgba(244, 63, 94, 0.08);
+    border-left: 3px solid var(--status-critical);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    line-height: 1.4;
+}
+
+.result-impact-line strong {
+    color: #FFFFFF;
+}
+
 .simulator-header-bar {
     display: flex;
     align-items: center;
