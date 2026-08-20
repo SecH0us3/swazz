@@ -529,13 +529,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             </p>
                         </div>
 
-                        {/* Top Console Bar */}
+                        {/* Top Console Bar with Authentic Scanning Loader */}
                         <div className="simulator-header-bar">
+                            {isSimulating && (
+                                <div className="simulator-scan-progress-bar" aria-hidden="true">
+                                    <div className="scan-progress-glow" />
+                                </div>
+                            )}
                             <div className="simulator-endpoint-tag">
                                 <span className={`method-badge method-${activeScenario.method.toLowerCase()}`}>
                                     {activeScenario.method}
                                 </span>
                                 <span className="endpoint-path-text">{activeScenario.endpoint}</span>
+                                <div className={`simulator-status-indicator ${isSimulating ? 'running' : 'ready'}`}>
+                                    <span className={`status-dot ${isSimulating ? 'pulsing' : 'green'}`} />
+                                    <span>{isSimulating ? 'AST Fuzzing in progress...' : 'Exploit Verified'}</span>
+                                </div>
                             </div>
                             <div className="simulator-action-group">
                                 <button 
@@ -544,7 +553,14 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     onClick={handleRunSimulation}
                                     disabled={isSimulating}
                                 >
-                                    {isSimulating ? '⚡ Mutating Payload...' : '↻ Re-run Mutation'}
+                                    {isSimulating ? (
+                                        <>
+                                            <span className="sim-spinner" aria-hidden="true" />
+                                            <span>Fuzzing AST...</span>
+                                        </>
+                                    ) : (
+                                        '↻ Re-run Mutation'
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -573,7 +589,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             </div>
 
                             {/* Right: Swazz Mutated Payload */}
-                            <div className="simulator-panel mutated-panel">
+                            <div className={`simulator-panel mutated-panel ${isSimulating ? 'simulating-panel' : ''}`}>
                                 <div className="panel-title">
                                     <span className="panel-title-step">Step 2: Swazz Attack Vector</span>
                                     <span className="panel-status-indicator mutated">Payload Mutated</span>

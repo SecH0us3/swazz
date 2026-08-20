@@ -112,11 +112,11 @@ describe('LandingShowcase Component', () => {
         });
 
         // Test running mutation button
-        const runBtn = screen.getByRole('button', { name: /Re-run Mutation|Mutating Payload/i });
+        const runBtn = screen.getByRole('button', { name: /Re-run Mutation|Fuzzing AST/i });
         act(() => {
             fireEvent.click(runBtn);
         });
-        expect(screen.getByText(/Mutating Payload.../i)).toBeDefined();
+        expect(screen.getByText(/Fuzzing AST.../i)).toBeDefined();
     });
 
     it('renders Technical Benchmarks comparison matrix', async () => {
