@@ -31,6 +31,14 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // --- Run Scan 1 ---
     const startBtn = page.locator('#btn-start');
+    // Disable Boundary profile for run 1 to avoid massive payload generation
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    await expect(boundaryToggle).toBeVisible();
+    if (await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.click();
+    }
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     await expect(startBtn).toBeVisible();
     await startBtn.click();
 
@@ -41,10 +49,10 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     // Wait for the first run to complete
     await expect(startBtn).toBeVisible({ timeout: 180000 });
 
-    // Disable Boundary profile for run 2 to vary the stats slightly
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-    await expect(boundaryToggle).toBeVisible();
-    await boundaryToggle.click();
+    // Disable Malicious profile (since Boundary is already disabled) for run 2 to vary the stats slightly
+    const maliciousToggle = page.locator('.profile-toggle.malicious');
+    await expect(maliciousToggle).toBeVisible();
+    await maliciousToggle.click();
 
     // --- Run Scan 2 ---
     await startBtn.click();
