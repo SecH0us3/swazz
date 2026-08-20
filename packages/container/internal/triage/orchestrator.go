@@ -27,8 +27,8 @@ type GroupFinding struct {
 type TriageResult struct {
 	DefectKey     string   `json:"defect_key"`
 	FindingIDs    []string `json:"finding_ids"`
-	AIStatus      string   `json:"ai_status"`     // "completed" or "failed"
-	AIRelevance   string   `json:"ai_relevance"`  // "True Positive" or "False Positive"
+	AIStatus      string   `json:"ai_status"`              // "completed" or "failed"
+	AIRelevance   *bool    `json:"ai_relevance,omitempty"` // true = True Positive, false = False Positive
 	AIExplanation string   `json:"ai_explanation"`
 	AIConfidence  int      `json:"ai_confidence"`
 }
@@ -199,18 +199,14 @@ func (o *Orchestrator) triageSingleGroup(ctx context.Context, group *GroupFindin
 		}
 	}
 
-	relevance := "True Positive"
-	if verdict.Classification == "false_positive" {
-		relevance = "False Positive"
-	}
-
-	logger.Info("[Triage] 🎯 %s -> %s (Confidence: %d%%) - %s", group.DefectKey, relevance, verdict.Confidence, verdict.Reasoning)
+	isTruePositive := verdict.Classification == "true_positive"
+	logger.Info("[Triage] 🎯 %s -> TP=%t (Confidence: %d%%) - %s", group.DefectKey, isTruePositive, verdict.Confidence, verdict.Reasoning)
 
 	return &TriageResult{
 		DefectKey:     group.DefectKey,
 		FindingIDs:    group.AffectedFindingIDs,
 		AIStatus:      "completed",
-		AIRelevance:   relevance,
+		AIRelevance:   &isTruePositive,
 		AIExplanation: verdict.Reasoning,
 		AIConfidence:  verdict.Confidence,
 	}

@@ -39,3 +39,4 @@ export function formatIdentityName(name: string): string {
     }
     return name;
 }
+

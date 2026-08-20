@@ -2614,12 +2614,12 @@ describe("Auth Security Features (PoW, Magic Links, Passwords)", () => {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${tokenOwner}`
           },
-          body: JSON.stringify({ ai_status: "triaged", ai_relevance: "True Positive" })
+          body: JSON.stringify({ ai_status: "triaged", ai_relevance: true })
         }), testEnv);
         expect(res.status).toBe(200);
         const body = await res.json() as any;
         expect(body.finding.ai_status).toBe("triaged");
-        expect(body.finding.ai_relevance).toBe("True Positive");
+        expect(body.finding.ai_relevance).toBe(true);
       });
 
       it("rejects unauthorized users from updating a finding", async () => {

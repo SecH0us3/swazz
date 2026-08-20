@@ -25,11 +25,12 @@ export interface Finding {
   evidence?: string;
   created_at?: string;
   ai_status?: string;
-  ai_relevance?: string;
+  ai_relevance?: boolean;
   ai_explanation?: string;
   ai_remediation?: string;
   ai_proposed_patch?: string;
   pr_link?: string;
+  ai_confidence?: number;
 }
 
 export interface Webhook {

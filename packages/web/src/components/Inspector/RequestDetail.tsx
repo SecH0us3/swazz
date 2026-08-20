@@ -567,9 +567,11 @@ export function RequestDetail({
                                     <div className="ai-insights-section">
                                         <div className="ai-insights-header">
                                             <span className="ai-insights-title">✨ AI Insights</span>
-                                            <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
-                                                {finding.ai_relevance ? 'True Positive' : 'False Positive'}
-                                            </span>
+                                            {finding.ai_relevance != null && (
+                                                <span className={`alert-badge ${finding.ai_relevance ? 'badge-error' : 'badge-success'}`}>
+                                                    {finding.ai_relevance ? 'True Positive' : 'False Positive'}
+                                                </span>
+                                            )}
                                             {finding.ai_confidence != null && (
                                                 <span className={`ai-confidence-badge ${
                                                     finding.ai_confidence >= 80 ? 'high' :
