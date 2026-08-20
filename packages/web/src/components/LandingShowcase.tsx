@@ -502,8 +502,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
             <section id="simulator" className="simulator-section">
                 <div className="landing-section-header">
                     <div className="section-eyebrow">Interactive Attack Simulator</div>
-                    <h2>See How Semantic Fuzzing Works in 3 Steps</h2>
-                    <p>Select a real-world API attack vector below to see how Swazz crafts precision exploits from baseline schema contracts.</p>
+                    <h2>See How Semantic Fuzzing Works in Real Time</h2>
+                    <p>Select an API attack scenario below to see how Swazz parses schema contracts, crafts AST mutations, and catches deep vulnerabilities.</p>
                 </div>
 
                 <div className="simulator-container">
@@ -539,42 +539,6 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         aria-labelledby={`scenario-tab-${activeScenario.id}`}
                         className={`simulator-console ${isSimulating ? 'simulating' : ''}`}
                     >
-                        {/* 3-Step Process Flow Ribbon with Sequential Animation */}
-                        <div className="simulator-process-ribbon">
-                            <div className={`process-step ${simulationStage >= 1 ? 'active' : ''} ${isSimulating && simulationStage === 1 ? 'stage-pulsing' : ''}`}>
-                                <span className="step-num">1</span>
-                                <span className="step-label">Baseline Contract</span>
-                            </div>
-                            <div className="process-arrow">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                            </div>
-                            <div className={`process-step ${simulationStage >= 2 ? 'active' : ''} ${isSimulating && simulationStage === 2 ? 'stage-pulsing' : ''}`}>
-                                <span className="step-num">2</span>
-                                <span className="step-label">Semantic Mutation</span>
-                            </div>
-                            <div className="process-arrow">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                            </div>
-                            <div className={`process-step ${simulationStage === 3 ? 'active step-result' : ''}`}>
-                                <span className="step-num">3</span>
-                                <span className="step-label">Vulnerability Caught</span>
-                            </div>
-                        </div>
-
-                        {/* Story Context Callout Banner */}
-                        <div className="simulator-story-banner">
-                            <div className="story-badge">
-                                <span className="story-dot"></span>
-                                <strong>Attack Vector:</strong> {activeScenario.category} ({activeScenario.owasp} • {activeScenario.cwe})
-                            </div>
-                            <p className="story-text">
-                                <strong>Scenario:</strong> {activeScenario.story}
-                            </p>
-                            <p className="story-exploit">
-                                <strong>Swazz Action:</strong> {activeScenario.exploitAction}
-                            </p>
-                        </div>
-
                         {/* Top Console Bar with Authentic Scanning Loader */}
                         <div className="simulator-header-bar">
                             {isSimulating && (
@@ -583,6 +547,11 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                 </div>
                             )}
                             <div className="simulator-endpoint-tag">
+                                <div className="window-decor-dots" aria-hidden="true">
+                                    <span className="window-dot red"></span>
+                                    <span className="window-dot yellow"></span>
+                                    <span className="window-dot green"></span>
+                                </div>
                                 <span className={`method-badge method-${activeScenario.method.toLowerCase()}`}>
                                     {activeScenario.method}
                                 </span>
@@ -616,11 +585,10 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             {/* Left: Original Request */}
                             <div className="simulator-panel original-panel">
                                 <div className="panel-title">
-                                    <span className="panel-title-step">Step 1: Normal API Request</span>
-                                    <span className="panel-status-indicator normal">Valid Schema Contract</span>
+                                    <span className="panel-title-step">Baseline Schema Contract</span>
+                                    <span className="panel-status-indicator normal">Valid Request</span>
                                 </div>
                                 <div className="panel-code-box">
-                                    <div className="code-line-desc">{activeScenario.originalSpec.description}</div>
                                     <div className="headers-block">
                                         {Object.entries(activeScenario.originalSpec.headers).map(([k, v]) => (
                                             <div key={k} className="header-line">
@@ -637,7 +605,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                             {/* Right: Swazz Mutated Payload */}
                             <div className={`simulator-panel mutated-panel ${isSimulating ? 'simulating-panel' : ''}`}>
                                 <div className="panel-title">
-                                    <span className="panel-title-step">Step 2: Swazz Attack Vector</span>
+                                    <span className="panel-title-step">Swazz Attack Mutation</span>
                                     <span className="panel-status-indicator mutated">Payload Mutated</span>
                                 </div>
                                 <div className="panel-code-box">
@@ -666,19 +634,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     {activeScenario.detectionResult.statusText}
                                 </span>
                                 <strong className="result-finding-title">{activeScenario.detectionResult.findingTitle}</strong>
+                                <span className="result-cwe-tag">{activeScenario.owasp} • {activeScenario.cwe}</span>
                             </div>
                             <p className="result-summary-text">{activeScenario.detectionResult.findingSummary}</p>
-                            <div className="result-impact-line">
-                                <span className="callout-icon impact-icon">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                                </span>
-                                <div><strong>Real-World Impact:</strong> {activeScenario.impact}</div>
-                            </div>
-                            <div className="result-remediation-box">
-                                <span className="callout-icon fix-icon">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                                </span>
-<div><strong className="remediation-label">Recommended Fix:</strong> {activeScenario.detectionResult.remediationTip}</div>
+                            <div className="result-details-row">
+                                <div className="result-impact-line">
+                                    <span className="callout-icon impact-icon">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                    </span>
+                                    <div><strong>Impact:</strong> {activeScenario.impact}</div>
+                                </div>
+                                <div className="result-remediation-box">
+                                    <span className="callout-icon fix-icon">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                                    </span>
+                                    <div><strong className="remediation-label">Fix:</strong> {activeScenario.detectionResult.remediationTip}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -895,14 +866,14 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
             </section>
 
             {/* BENTO GRID OF CORE PILLARS */}
-            <section id="features" className="features-bento-section">
+            <section id="features" className="landing-features">
                 <div className="landing-section-header">
                     <div className="section-eyebrow">Enterprise Security Architecture</div>
-                    <h2>Engineered for High-Velocity Engineering Teams</h2>
-                    <p>Click any capability below to explore deep technical architecture and deployment details.</p>
+                    <h2>Everything You Need to Ship Resilient APIs</h2>
+                    <p>Designed from the ground up for modern AppSec and high-velocity DevSecOps engineering teams.</p>
                 </div>
 
-                <div className="bento-grid">
+                <div className="landing-bento-grid">
                     <div className="bento-card bento-card-large" onClick={() => setSelectedFeature(FEATURE_DETAILS.fuzzing)}>
                         <div className="bento-icon-wrapper">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -934,6 +905,49 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         </div>
                         <h3>Zero-Setup HAR</h3>
                         <p>Instantly replay and mutate traffic from browser recordings without configuration.</p>
+                    </div>
+                    <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.pipelines)}>
+                        <div className="bento-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                        </div>
+                        <h3>CI/CD Integration</h3>
+                        <p>Native pipelines for GitHub Actions and GitLab with real-time performance telemetry.</p>
+                    </div>
+                    <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.compliance)}>
+                        <div className="bento-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                        </div>
+                        <h3>OWASP Top 10 Mapping</h3>
+                        <p>Classify vulnerabilities instantly to industry-standard API Security Risks and CWEs.</p>
+                    </div>
+                    <div className="bento-card bento-card-large" onClick={() => setSelectedFeature(FEATURE_DETAILS.grouping)}>
+                        <div className="bento-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </div>
+                        <h3>Response Deduplication</h3>
+                        <p>Automatically cluster thousands of payloads into root causes to eliminate alert fatigue.</p>
+                    </div>
+                    <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.integration)}>
+                        <div className="bento-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                            </svg>
+                        </div>
+                        <h3>SARIF &amp; Jira Exports</h3>
+                        <p>Generate standard SARIF logs to surface security findings in GitHub PR reviews and Jira.</p>
                     </div>
                 </div>
             </section>
@@ -1154,29 +1168,6 @@ cd swazz
                     </div>
                 </section>
             )}
-
-            {/* PRE-FOOTER FINAL CALL TO ACTION */}
-            <section className="landing-final-cta">
-                <div className="final-cta-card">
-                    <div className="final-cta-glow" aria-hidden="true"></div>
-                    <h2>Ready to Harden Your APIs Against Zero-Days?</h2>
-                    <p>Start discovering hidden logic bugs, BOLA exploits, and schema violations in under 60 seconds. Free for developers and teams.</p>
-                    <div className="final-cta-actions">
-                        {onActionClick ? (
-                            <button type="button" onClick={onActionClick} className="btn-landing-primary">
-                                {actionText || "Start Free Scan Now"}
-                            </button>
-                        ) : (
-                            <a href="#simulator" className="btn-landing-primary">
-                                Try Live Simulator
-                            </a>
-                        )}
-                        <button type="button" onClick={() => setShowWaitlistModal(true)} className="btn-landing-secondary">
-                            Request Enterprise Demo
-                        </button>
-                    </div>
-                </div>
-            </section>
 
             {/* FOOTER */}
             <footer className="landing-footer">

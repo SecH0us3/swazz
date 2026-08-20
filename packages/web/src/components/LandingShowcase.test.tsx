@@ -240,9 +240,15 @@ describe('LandingShowcase Component', () => {
         });
     });
 
-    it('renders pre-footer final call to action banner', async () => {
+    it('renders all 7 enterprise feature bento cards and fair pricing tiers', async () => {
         render(<LandingShowcase />);
-        expect(screen.getByText(/Ready to Harden Your APIs Against Zero-Days\?/i)).toBeDefined();
-        expect(screen.getByText('Request Enterprise Demo')).toBeDefined();
+        expect(screen.getByText('Intelligent AST Fuzzing')).toBeDefined();
+        expect(screen.getByText('Browser Extension')).toBeDefined();
+        expect(screen.getByText('Zero-Setup HAR')).toBeDefined();
+        expect(screen.getByText('CI/CD Integration')).toBeDefined();
+        expect(screen.getByText('OWASP Top 10 Mapping')).toBeDefined();
+        expect(screen.getByText('Response Deduplication')).toBeDefined();
+        expect(screen.getByText('SARIF & Jira Exports')).toBeDefined();
+        expect(screen.getByText('Transparent Security Pricing')).toBeDefined();
     });
 });
