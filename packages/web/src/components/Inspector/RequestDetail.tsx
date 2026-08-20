@@ -6,6 +6,7 @@
 import { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
+import { isTruePositiveVerdict } from './utils.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -563,56 +564,55 @@ export function RequestDetail({
                                         {finding.evidence}
                                     </div>
                                 )}
-                                {finding.ai_status === 'completed' && (() => {
-                                    const isTruePositive = finding.ai_relevance === true || finding.ai_relevance === 'True Positive' || finding.ai_relevance === 'true_positive';
-                                    return (
-                                        <div className="ai-insights-section">
-                                            <div className="ai-insights-header">
-                                                <span className="ai-insights-title">✨ AI Insights</span>
-                                                <span className={`alert-badge ${isTruePositive ? 'badge-error' : 'badge-success'}`}>
-                                                    {isTruePositive ? 'True Positive' : 'False Positive'}
+                                {finding.ai_status === 'completed' && (
+                                    <div className="ai-insights-section">
+                                        <div className="ai-insights-header">
+                                            <span className="ai-insights-title">✨ AI Insights</span>
+                                            {finding.ai_relevance != null && finding.ai_relevance !== '' && (
+                                                <span className={`alert-badge ${isTruePositiveVerdict(finding.ai_relevance) ? 'badge-error' : 'badge-success'}`}>
+                                                    {isTruePositiveVerdict(finding.ai_relevance) ? 'True Positive' : 'False Positive'}
                                                 </span>
-                                                {finding.ai_confidence != null && (
-                                                    <span className={`ai-confidence-badge ${
-                                                        finding.ai_confidence >= 80 ? 'high' :
-                                                        finding.ai_confidence >= 50 ? 'medium' : 'low'
-                                                    }`}>
-                                                        {finding.ai_confidence}% confidence
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {finding.ai_explanation && (
-                                                <div className="ai-insights-block">
-                                                    <strong className="ai-insights-label">Explanation</strong>
-                                                    <div className="ai-insights-text">{finding.ai_explanation}</div>
-                                                </div>
                                             )}
-                                            {finding.ai_remediation && (
-                                                <div className="ai-insights-block">
-                                                    <strong className="ai-insights-label">Remediation</strong>
-                                                    <div className="ai-insights-text">{finding.ai_remediation}</div>
-                                                </div>
-                                            )}
-                                            {finding.ai_proposed_patch && (
-                                                <div className="ai-insights-block">
-                                                    <strong className="ai-insights-label">Proposed Patch</strong>
-                                                    <div className="detail-json-wrapper">
-                                                        <pre className="detail-json ai-insights-code">
-                                                            <code>{finding.ai_proposed_patch}</code>
-                                                        </pre>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {finding.pr_link && (
-                                                <div className="ai-insights-actions">
-                                                    <a href={finding.pr_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
-                                                        View Pull Request ↗
-                                                    </a>
-                                                </div>
+                                            {finding.ai_confidence != null && (
+                                                <span className={`ai-confidence-badge ${
+                                                    finding.ai_confidence >= 80 ? 'high' :
+                                                    finding.ai_confidence >= 50 ? 'medium' : 'low'
+                                                }`}>
+                                                    {finding.ai_confidence}% confidence
+                                                </span>
                                             )}
                                         </div>
-                                    );
-                                })()}
+                                        {finding.ai_explanation && (
+                                            <div className="ai-insights-block">
+                                                <strong className="ai-insights-label">Explanation</strong>
+                                                <div className="ai-insights-text">{finding.ai_explanation}</div>
+                                            </div>
+                                        )}
+                                        {finding.ai_remediation && (
+                                            <div className="ai-insights-block">
+                                                <strong className="ai-insights-label">Remediation</strong>
+                                                <div className="ai-insights-text">{finding.ai_remediation}</div>
+                                            </div>
+                                        )}
+                                        {finding.ai_proposed_patch && (
+                                            <div className="ai-insights-block">
+                                                <strong className="ai-insights-label">Proposed Patch</strong>
+                                                <div className="detail-json-wrapper">
+                                                    <pre className="detail-json ai-insights-code">
+                                                        <code>{finding.ai_proposed_patch}</code>
+                                                    </pre>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {finding.pr_link && (
+                                            <div className="ai-insights-actions">
+                                                <a href={finding.pr_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
+                                                    View Pull Request ↗
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
