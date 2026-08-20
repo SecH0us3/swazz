@@ -568,8 +568,14 @@
     color: var(--text-primary);
 }
 
+.process-step.stage-pulsing .step-num {
+    box-shadow: 0 0 10px var(--accent-light);
+    transform: scale(1.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
 .process-step.step-result {
-    color: #FCA5A5;
+    color: var(--color-error);
 }
 
 .step-num {
@@ -593,8 +599,10 @@
 }
 
 .process-arrow {
-    color: var(--text-dim);
-    font-size: 0.875rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ─── Explanatory Story Callout Banner ────────────────────── */
@@ -664,16 +672,35 @@
 
 .result-impact-line {
     font-size: 0.875rem;
-    color: #FECDD3;
+    color: var(--color-error-light, #FECDD3);
     background: rgba(244, 63, 94, 0.08);
     border-left: 3px solid var(--color-error);
-    padding: 0.5rem 0.75rem;
+    padding: 0.625rem 0.875rem;
     border-radius: 4px;
     line-height: 1.4;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
 }
 
 .result-impact-line strong {
-    color: #FFFFFF;
+    color: var(--text-primary);
+}
+
+.callout-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.impact-icon {
+    color: var(--color-error);
+}
+
+.fix-icon {
+    color: var(--accent-light);
 }
 
 .simulator-header-bar {
@@ -810,16 +837,6 @@
     gap: 1rem;
 }
 
-.cwe-badge {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 0.25rem 0.625rem;
-    border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-}
-
 .btn-simulator-run {
     display: inline-flex;
     align-items: center;
@@ -949,9 +966,12 @@
     padding: 0.5rem 0.75rem;
     background: rgba(244, 63, 94, 0.12);
     border: 1px solid rgba(244, 63, 94, 0.3);
-    color: #FCA5A5;
+    color: var(--color-error-light, #FECDD3);
     border-radius: 6px;
     line-height: 1.4;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .headers-block {
@@ -1252,27 +1272,35 @@
     gap: 0.625rem;
 }
 
-.val-icon {
+.val-svg {
     flex-shrink: 0;
-    margin-top: 1px;
-    font-weight: 800;
-    font-size: 0.9375rem;
+    margin-top: 2px;
 }
 
 .val-text {
     line-height: 1.45;
 }
 
-.check-icon {
+.check-svg {
     color: var(--color-success);
 }
 
-.cross-icon {
+.cross-svg {
     color: var(--color-error);
 }
 
-.partial-icon {
+.partial-svg {
     color: var(--color-warning);
+}
+
+.benchmark-disclaimer {
+    max-width: 1080px;
+    margin: 1.25rem auto 0 auto;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.5;
+    text-align: center;
 }
 
 /* ─── Bento Grid Features ─────────────────────────────────── */
@@ -1893,6 +1921,60 @@
     color: var(--text-secondary);
     margin-bottom: 1.5rem;
     line-height: 1.5;
+}
+
+/* ─── Final Pre-Footer Call to Action ─────────────────────── */
+
+.landing-final-cta {
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto 5rem auto;
+    padding: 0 1.5rem;
+}
+
+.final-cta-card {
+    position: relative;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(11, 15, 26, 0.95) 100%);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    padding: 4rem 2rem;
+    text-align: center;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px var(--accent-glow);
+}
+
+.final-cta-glow {
+    position: absolute;
+    top: -50%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 300px;
+    background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.final-cta-card h2 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    letter-spacing: -0.02em;
+}
+
+.final-cta-card p {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+    max-width: 680px;
+    margin: 0 auto 2.5rem auto;
+    line-height: 1.6;
+}
+
+.final-cta-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
 }
 
 /* ─── Media Queries (Responsive Design) ───────────────────── */

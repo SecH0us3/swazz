@@ -10,12 +10,18 @@ import { LandingShowcase } from './LandingShowcase.js';
 
 describe('LandingShowcase Component', () => {
     beforeEach(() => {
-        global.fetch = vi.fn().mockImplementation(() =>
-            Promise.resolve({
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/waitlist')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true })
+                });
+            }
+            return Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({ total: 1000000 })
-            })
-        );
+            });
+        });
         let frameTime = 0;
         vi.stubGlobal('requestAnimationFrame', (cb: any) => {
             frameTime += 2000;
@@ -36,15 +42,17 @@ describe('LandingShowcase Component', () => {
         vi.unstubAllGlobals();
     });
 
-    it('renders fallback count when telemetry fetch fails', async () => {
+    it('hides scan counter item when telemetry fetch fails (no fake counter displayed)', async () => {
         (global.fetch as any).mockImplementationOnce(() => Promise.reject(new Error('Network error')));
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.queryByText(/Scans Run/)).toBeNull();
         });
+        // Other trust badges should still be present
+        expect(screen.getByText(/PCI-DSS 6.6 Audit Support/i)).toBeDefined();
     });
 
-    it('renders the fetched total count and formats it', async () => {
+    it('renders the fetched total count and formats it when telemetry succeeds', async () => {
         (global.fetch as any).mockImplementationOnce(() =>
             Promise.resolve({
                 ok: true,
@@ -53,28 +61,28 @@ describe('LandingShowcase Component', () => {
         );
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,234,567\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,234,567\+ Scans Run/)).toBeDefined();
         });
     });
 
-    it('renders PCI-DSS Compliant and OWASP API Top 10 badges', async () => {
+    it('renders PCI-DSS 6.6 Audit Support, OWASP API Top 10, and BSL 1.1 badges', async () => {
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans Run/)).toBeDefined();
         });
-        expect(screen.getByText(/PCI-DSS Compliant/i)).toBeDefined();
+        expect(screen.getByText(/PCI-DSS 6.6 Audit Support/i)).toBeDefined();
         expect(screen.getAllByText(/OWASP API Top 10/i).length).toBeGreaterThan(0);
-        expect(screen.getByText(/BSL 1.1 Licensed/i)).toBeDefined();
+        expect(screen.getByText(/Source-Available \(BSL 1.1\)/i)).toBeDefined();
     });
 
     it('renders Live Fuzzing Simulator and allows switching scenarios', async () => {
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans Run/)).toBeDefined();
         });
 
         // Default scenario: BOLA
-        expect(screen.getByText('BOLA / ID Tampering')).toBeDefined();
+        expect(screen.getByText('BOLA / IDOR Exploit')).toBeDefined();
         expect(screen.getByText('/api/v1/users/{id}/billing')).toBeDefined();
         expect(screen.getByText(/Broken Object Level Authorization Detected/i)).toBeDefined();
 
@@ -90,18 +98,18 @@ describe('LandingShowcase Component', () => {
         });
 
         // Switch to SSRF scenario
-        const ssrfTab = screen.getByText('SSRF via Header Injection');
+        const ssrfTab = screen.getByText('SSRF via Webhook URL');
         act(() => {
             fireEvent.click(ssrfTab);
         });
 
         await waitFor(() => {
-            expect(screen.getByText('/api/v1/integrations/webhook/test')).toBeDefined();
-            expect(screen.getByText(/SSRF against Cloud Instance Metadata/i)).toBeDefined();
+            expect(screen.getByText('/api/v1/integrations/webhook')).toBeDefined();
+            expect(screen.getByText(/Server-Side Request Forgery \(SSRF\) to Cloud Metadata/i)).toBeDefined();
         });
 
         // Switch to Mass Assignment scenario
-        const massAssignTab = screen.getByText('Privilege Mass Assignment');
+        const massAssignTab = screen.getByText('Mass Assignment Privilege Escalation');
         act(() => {
             fireEvent.click(massAssignTab);
         });
@@ -119,25 +127,26 @@ describe('LandingShowcase Component', () => {
         expect(screen.getByText(/Fuzzing AST.../i)).toBeDefined();
     });
 
-    it('renders Technical Benchmarks comparison matrix', async () => {
+    it('renders Technical Benchmarks comparison matrix and methodology disclaimer', async () => {
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans Run/)).toBeDefined();
         });
 
         expect(screen.getByText('How Swazz Outperforms Legacy Scanners')).toBeDefined();
         expect(screen.getByText('Traditional DAST')).toBeDefined();
         expect(screen.getByText('Generic Fuzzers')).toBeDefined();
         expect(screen.getByText(/Deep AST parsing & smart mutation/i)).toBeDefined();
+        expect(screen.getByText(/Benchmark metrics based on controlled microservice test suites/i)).toBeDefined();
     });
 
     it('allows switching quickstart deployment tabs and copying commands', async () => {
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans Run/)).toBeDefined();
         });
 
-        expect(screen.getByText(/Run Instant CLI Scan against OpenAPI Spec/i)).toBeDefined();
+        expect(screen.getByText(/Install Native Go Scanner & Run Instant Scan/i)).toBeDefined();
 
         // Switch to Docker tab
         const dockerTab = screen.getByText('Docker');
@@ -162,7 +171,7 @@ describe('LandingShowcase Component', () => {
     it('renders Browser Extension bento card and opens feature detail modal', async () => {
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans Run/)).toBeDefined();
         });
         
         const bentoCard = screen.getByText('Browser Extension');
@@ -185,10 +194,10 @@ describe('LandingShowcase Component', () => {
         });
     });
 
-    it('opens and submits the Enterprise Waitlist modal', async () => {
+    it('opens, submits, and dispatches POST /api/waitlist for enterprise access modal', async () => {
         render(<LandingShowcase />);
         await waitFor(() => {
-            expect(screen.getByText(/1,000,000\+ Scans/)).toBeDefined();
+            expect(screen.getByText(/1,000,000\+ Scans Run/)).toBeDefined();
         });
         
         const requestBtn = screen.getByText('Request Enterprise License');
@@ -198,7 +207,7 @@ describe('LandingShowcase Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText('Swazz Enterprise Waitlist')).toBeDefined();
+            expect(screen.getByText('Swazz Enterprise Access')).toBeDefined();
         });
 
         const nameInput = screen.getByPlaceholderText('Alex Smith');
@@ -206,7 +215,7 @@ describe('LandingShowcase Component', () => {
         const companyInput = screen.getByPlaceholderText('Acme Security Inc.');
         const submitBtn = screen.getByText('Submit Enterprise Access Request');
 
-        act(() => {
+        await act(async () => {
             fireEvent.change(nameInput, { target: { value: 'Jane Doe' } });
             fireEvent.change(emailInput, { target: { value: 'jane@enterprise.com' } });
             fireEvent.change(companyInput, { target: { value: 'Enterprise Security LLC' } });
@@ -214,8 +223,26 @@ describe('LandingShowcase Component', () => {
         });
 
         await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/waitlist'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'jane@enterprise.com',
+                        name: 'Jane Doe',
+                        company: 'Enterprise Security LLC'
+                    })
+                })
+            );
             expect(screen.getByText('Request Received!')).toBeDefined();
             expect(screen.getByText(/jane@enterprise.com/)).toBeDefined();
         });
+    });
+
+    it('renders pre-footer final call to action banner', async () => {
+        render(<LandingShowcase />);
+        expect(screen.getByText(/Ready to Harden Your APIs Against Zero-Days\?/i)).toBeDefined();
+        expect(screen.getByText('Request Enterprise Demo')).toBeDefined();
     });
 });

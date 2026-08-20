@@ -96,4 +96,18 @@ export function registerMiscRoutes(
       return c.json({ error: err.message || 'Internal server error' }, 500);
     }
   });
+
+  app.post('/api/waitlist', async (c) => {
+    try {
+      const body = await c.req.json();
+      const { email, name, company } = body || {};
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return c.json({ error: 'Valid email address is required' }, 400);
+      }
+      console.log(`[Waitlist] New enterprise lead: ${email}, Name: ${name || 'N/A'}, Company: ${company || 'N/A'}`);
+      return c.json({ success: true, message: 'Waitlist entry registered successfully' });
+    } catch (err: any) {
+      return c.json({ error: 'Invalid request payload' }, 400);
+    }
+  });
 }

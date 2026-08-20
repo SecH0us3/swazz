@@ -17,6 +17,11 @@ export default defineConfig({
       }
     }),
   ],
+  resolve: {
+    alias: {
+      "@swazz/shared": path.resolve(__dirname, "../shared/src/features.ts"),
+    },
+  },
   test: {
     coverage: {
       provider: 'istanbul',
