@@ -170,10 +170,15 @@ else
     --dangerous-no-container > packages/container/agent.log 2>&1 &
   PIDS+=($!)
   
-  # Wait for agent to start up
-  for i in {1..5}; do
-    if pgrep -f "swazz-engine run-agent" >/dev/null; then
+  # Wait for agent to connect to coordinator
+  for i in {1..15}; do
+    if grep -q "connected to coordinator" packages/container/agent.log; then
       break
+    fi
+    if ! pgrep -f "swazz-engine run-agent" >/dev/null; then
+      echo "✗ Error: Go Runner Agent crashed during startup."
+      cat packages/container/agent.log
+      exit 1
     fi
     sleep 1
   done
