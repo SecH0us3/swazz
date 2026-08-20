@@ -50,6 +50,16 @@ export interface IScansRepository {
   processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void>;
 }
 
+function normalizeAIRelevance(val: unknown): boolean {
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'number') return val === 1;
+  if (typeof val === 'string') {
+    const norm = val.trim().toLowerCase();
+    return norm === '1' || norm === '1.0' || norm === 'true' || norm === 'true positive' || norm === 'true_positive' || norm === 'tp';
+  }
+  return false;
+}
+
 export class ScansRepository extends BaseService implements IScansRepository {
   constructor(env: Env) {
     super(env);
@@ -159,14 +169,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     if (!row) return row;
     let ai_relevance: boolean | undefined = undefined;
     if (row.ai_relevance !== null && row.ai_relevance !== undefined) {
-      if (typeof row.ai_relevance === 'boolean') {
-        ai_relevance = row.ai_relevance;
-      } else if (typeof row.ai_relevance === 'number') {
-        ai_relevance = row.ai_relevance === 1;
-      } else if (typeof row.ai_relevance === 'string') {
-        const norm = row.ai_relevance.trim().toLowerCase();
-        ai_relevance = norm === '1' || norm === '1.0' || norm === 'true' || norm === 'true positive' || norm === 'true_positive' || norm === 'tp';
-      }
+      ai_relevance = normalizeAIRelevance(row.ai_relevance);
     }
     return {
       ...row,
@@ -207,7 +210,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
         setClauses.push(`${field} = ?`);
         if (field === 'ai_relevance') {
           const val = fields[field];
-          const relVal = val === null ? null : (val === true || val === 1 || val === '1' || val === 'True Positive' || val === 'true_positive' || val === 'true' ? 1 : 0);
+          const relVal = val === null ? null : (normalizeAIRelevance(val) ? 1 : 0);
           values.push(relVal);
         } else {
           values.push(fields[field]);
@@ -255,7 +258,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     for (const u of updates) {
       let relVal: number | null = null;
       if (u.ai_relevance !== undefined && u.ai_relevance !== null) {
-        relVal = (u.ai_relevance === true || u.ai_relevance === 1 || u.ai_relevance === '1' || u.ai_relevance === 'True Positive' || u.ai_relevance === 'true_positive' || u.ai_relevance === 'true') ? 1 : 0;
+        relVal = normalizeAIRelevance(u.ai_relevance) ? 1 : 0;
       }
       statements.push(
         this.db.prepare(
