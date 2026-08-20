@@ -551,8 +551,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         <span className="swazz-pill">Next-Gen</span>
                                     </div>
                                 </th>
-                                <th scope="col" className="col-legacy">Legacy DAST (Burp / ZAP)</th>
-                                <th scope="col" className="col-generic">Generic Fuzzers (Schemathesis / AFL)</th>
+                                <th scope="col" className="col-legacy">Traditional DAST Scanners</th>
+                                <th scope="col" className="col-generic">Generic Random Fuzzers</th>
                             </tr>
                         </thead>
                         <tbody>
