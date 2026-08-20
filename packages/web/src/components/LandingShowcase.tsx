@@ -337,7 +337,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
             {/* AMBIENT FUTURISTIC CYBER BACKGROUND */}
             <div className="cyber-ambient-backdrop" aria-hidden="true">
                 <img 
-                    src="/assets/future_quantum_resilience_bg.jpg" 
+                    src="/assets/cyber_futuristic_bg.jpg" 
                     alt="" 
                     className="cyber-backdrop-image"
                 />

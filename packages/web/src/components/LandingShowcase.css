@@ -46,7 +46,7 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 1200px;
+    height: 850px;
     pointer-events: none;
     overflow: hidden;
     z-index: 0;
@@ -56,11 +56,11 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center top;
-    opacity: 0.35;
-    filter: saturate(1.2) contrast(1.1);
-    mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.8) 50%, rgba(0,0,0,0) 100%);
-    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.8) 50%, rgba(0,0,0,0) 100%);
+    object-position: center 20%;
+    opacity: 0.38;
+    filter: brightness(0.9) contrast(1.15) saturate(1.1);
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%);
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%);
 }
 
 .cyber-laser-scanner {
@@ -87,7 +87,7 @@
         opacity: 0.7;
     }
     100% {
-        top: 1100px;
+        top: 800px;
         opacity: 0;
     }
 }
@@ -433,34 +433,62 @@
 }
 
 .simulator-container {
-    max-width: 1080px;
+    max-width: 1140px;
+    width: 100%;
     margin: 0 auto;
+    padding: 0 1rem;
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+    box-sizing: border-box;
 }
 
 .simulator-scenario-bar {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.75rem;
-    overflow-x: auto;
-    padding-bottom: 0.5rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+    .simulator-scenario-bar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .simulator-scenario-bar {
+        grid-template-columns: 1fr;
+    }
 }
 
 .scenario-tab-btn {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
-    padding: 0.75rem 1.25rem;
-    background: rgba(15, 23, 42, 0.6);
+    justify-content: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem 0.875rem;
+    background: rgba(15, 23, 42, 0.65);
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
     transition: var(--transition-smooth);
+}
+
+.scenario-tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .scenario-tab-btn:hover {
@@ -613,6 +641,16 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     border-bottom: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 840px) {
+    .simulator-body-grid {
+        grid-template-columns: 1fr;
+    }
+    .original-panel {
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+    }
 }
 
 .simulator-panel {
