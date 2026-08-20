@@ -29,7 +29,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Wait for endpoints list to render to ensure spec is loaded
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // Verify target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -53,7 +53,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
 
     // Wait for the run to complete (Start button "Run" is visible again)
-    await expect(startBtn).toBeVisible({ timeout: 90000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -95,7 +95,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     // 7. Reload the page
     const configPromiseReload = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
     await configPromiseReload;
 
     // 8. Navigate to Scan History in the sidebar

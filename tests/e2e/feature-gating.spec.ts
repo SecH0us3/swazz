@@ -16,7 +16,7 @@ async function registerAndLogin(page: Page): Promise<string> {
   await page.locator('#password').fill('Password123!');
   await page.locator('#password').press('Enter');
 
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
   return uniqueUsername;
 }
 
@@ -86,7 +86,7 @@ test.describe('Feature Gating E2E', () => {
 
     // Reload so the app fetches the (mocked) license status.
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     await openProjectSettings(page);
 

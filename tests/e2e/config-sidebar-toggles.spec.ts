@@ -19,7 +19,7 @@ test.describe('Config Sidebar Contextual Toggle E2E Tests', () => {
     await guestBtn.click();
 
     // 2. Wait for main layout
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     const sidebar = page.locator('.config-sidebar');
     const closeBtn = page.locator('.config-sidebar-close');

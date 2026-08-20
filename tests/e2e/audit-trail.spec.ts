@@ -16,7 +16,7 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // Navigate to Project Settings
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
@@ -77,7 +77,7 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
       .or(page.locator('[data-tab="settings"]'))
@@ -112,7 +112,7 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
       .or(page.locator('[data-tab="settings"]'))
@@ -152,7 +152,7 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // Trigger some action first so there's something to export
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })

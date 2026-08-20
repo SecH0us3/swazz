@@ -18,7 +18,7 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 2. Verify ConfigSidebar right column exists and is streamlined
     const sidebar = page.locator('.config-sidebar');

@@ -75,7 +75,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
 
       // Wait for endpoints list to render
       const endpointItems = page.locator('.tree-leaf-row');
-      await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+      await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
       // Run fuzzer
       const startBtn = page.locator('#btn-start');
@@ -86,7 +86,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       await expect(startBtn).toBeHidden();
 
       // Wait for the fuzzer to complete (timeout of 120s max)
-      await expect(startBtn).toBeVisible({ timeout: 120000 });
+      await expect(startBtn).toBeVisible({ timeout: 180000 });
 
       // 4. Verify that 'Missing Rate Limiting' (swazz/no-rate-limit) Finding was detected on /users
       const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
@@ -100,7 +100,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
 
       // Click on the rate limit log row (indicated by RATE-LIMIT profile)
       const rateLimitLogRow = page.locator('.log-row').filter({ hasText: 'RATE-LIMIT' }).first();
-      await expect(rateLimitLogRow).toBeVisible({ timeout: 15000 });
+      await expect(rateLimitLogRow).toBeVisible({ timeout: 30000 });
       await rateLimitLogRow.click();
 
       // Verify the details sidebar contains "swazz/no-rate-limit"

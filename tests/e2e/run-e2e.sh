@@ -171,8 +171,10 @@ else
   PIDS+=($!)
   
   # Wait for agent to connect to coordinator
-  for i in {1..15}; do
+  AGENT_CONNECTED=false
+  for i in {1..20}; do
     if grep -q "connected to coordinator" packages/container/agent.log; then
+      AGENT_CONNECTED=true
       break
     fi
     if ! pgrep -f "swazz-engine run-agent" >/dev/null; then
@@ -182,6 +184,11 @@ else
     fi
     sleep 1
   done
+  if [ "$AGENT_CONNECTED" = false ]; then
+    echo "✗ Error: Go Runner Agent failed to connect to coordinator within 20 seconds."
+    cat packages/container/agent.log
+    exit 1
+  fi
 fi
 
 # Double check services are up

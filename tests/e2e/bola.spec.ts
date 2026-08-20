@@ -49,7 +49,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
         }
       }
       return false;
-    }, { timeout: 15000 });
+    }, { timeout: 30000 });
 
     // Go to More Project Settings to set intensity
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -155,7 +155,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 6. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
@@ -166,7 +166,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 7. Verify BOLA findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');

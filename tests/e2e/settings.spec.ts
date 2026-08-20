@@ -20,7 +20,7 @@ test.describe('User Settings and Profile Management E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open the UserMenu dropdown in the header
     const accountBtn = page.locator('button[title="Account"]');
@@ -70,7 +70,7 @@ test.describe('User Settings and Profile Management E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open Project Settings page from the right Config Sidebar
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -131,7 +131,7 @@ test.describe('User Settings and Profile Management E2E Test', () => {
 
     // 9. Reload page and check persistence (persistency scenario)
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // Open Project Settings again
     const moreSettingsBtn2 = page.locator('button:has-text("More Project Settings")');

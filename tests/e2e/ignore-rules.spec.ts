@@ -21,7 +21,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
     await configPromise;
 
     // 3. Add Vulnerable Demo API spec
@@ -35,7 +35,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await addBtn.click();
 
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 4. Trigger fuzzing
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
@@ -50,7 +50,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the run to complete
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');

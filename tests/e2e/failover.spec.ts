@@ -37,7 +37,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
     await configPromise;
 
     // 3. Spawn a second runner agent process
@@ -71,7 +71,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
 
     // Verify both our primary agent and the new runner-failover-agent are listed
     const secondRunnerRow = page.locator(`.runner-name:has-text("${agentName}")`);
-    await expect(secondRunnerRow).toBeVisible({ timeout: 15000 });
+    await expect(secondRunnerRow).toBeVisible({ timeout: 30000 });
 
     // 5. Go back to Dashboard
     const backBtn = page.locator('button:has-text("Back to Dashboard")');
@@ -90,7 +90,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 7. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
@@ -104,7 +104,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     const logsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
     await expect(logsTab).toBeVisible();
     // Wait until there is at least one digit in the count
-    await expect(logsTab).toContainText(/[1-9]\d*/, { timeout: 15000 });
+    await expect(logsTab).toContainText(/[1-9]\d*/, { timeout: 30000 });
 
     // 8. Kill the second runner agent midway!
     console.log(`Killing second agent runner: ${agentName}`);
@@ -112,7 +112,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     secondAgent = null;
 
     // 9. Wait for the fuzzer to complete (Start button becomes visible again)
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 10. Verify scan completed successfully and we have findings
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');

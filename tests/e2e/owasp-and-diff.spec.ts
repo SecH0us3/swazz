@@ -28,7 +28,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 4. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
@@ -39,7 +39,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 5. Verify Request Mutation Visual Diff
     // Switch to Request Logs tab

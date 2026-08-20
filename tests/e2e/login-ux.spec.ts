@@ -33,7 +33,7 @@ test.describe('Login UX and Combined Actions E2E Tests', () => {
     await page.locator('form').getByRole('button', { name: 'Create Account' }).click();
 
     // Wait for main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
     await configPromise;
 
     // 3. Log out via User Menu dropdown

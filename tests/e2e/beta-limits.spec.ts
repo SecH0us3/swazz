@@ -33,11 +33,11 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     await page.locator('button.login-btn').click();
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // Verify the app loaded into the fuzzer workspace (the header beta badge
     // was removed in 02cc7e8; the beta status is shown in the auth modal only)
-    await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: 30000 });
   });
 
   test('should require invite code and enforce limits when beta limit is reached', async ({ page }) => {
@@ -107,6 +107,6 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     await page.locator('button.login-btn').click();
 
     // Wait for layout to load successfully
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
   });
 });

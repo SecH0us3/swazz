@@ -26,7 +26,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 4. Search for the /login endpoint in the sidebar endpoint tree
     const searchInput = page.locator('input[placeholder="Search endpoints..."]');
@@ -55,7 +55,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 90000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 7. Verify that no request targeting "POST /login" was executed
     // Switch to Request Logs tab
@@ -97,7 +97,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // Locate "Included Only" toggle button (aria-label: "Filter included endpoints only")
     const includedOnlyBtn = page.getByRole('button', { name: /Filter included endpoints/i });

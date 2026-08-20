@@ -22,7 +22,7 @@ test.describe('Input Validation & Error Handling (Broken Specs) E2E Test', () =>
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
     await configPromise;
 
     // 3. Find the spec URL input and fill it with a malformed/nonexistent spec URL

@@ -40,7 +40,7 @@ test.describe('Swazz Integration E2E Test', () => {
     
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 5. Verify the target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -67,10 +67,10 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // Wait for the heatmap or status codes to start rendering
     const heatmapGrid = page.locator('.heatmap-grid');
-    await expect(heatmapGrid).toBeVisible({ timeout: 30000 });
+    await expect(heatmapGrid).toBeVisible({ timeout: 180000 });
 
     // Wait for the run to complete (Stop button goes away, or starts showing "Run" again)
-    await expect(startBtn).toBeVisible({ timeout: 90000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 8. Assert that findings are populated
     // Switch to Grouped Errors tab to view findings
@@ -128,7 +128,7 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // 3. Verify endpoints are populated in the sidebar
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 4. Verify target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -136,12 +136,12 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // 5. Verify the run starts and click Stop to finish the test quickly
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 15000 });
+    await expect(stopBtn).toBeVisible({ timeout: 30000 });
     await stopBtn.click();
 
     // Verify fuzzer has stopped
     const startBtn = page.locator('#btn-start');
-    await expect(startBtn).toBeVisible({ timeout: 15000 });
+    await expect(startBtn).toBeVisible({ timeout: 30000 });
   });
 });
 

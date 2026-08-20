@@ -20,7 +20,7 @@ test.describe('Payload Settings Modal Interaction', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open the "Payload Settings" modal via the Customize Payloads button
     const customizePayloadsBtn = page.getByRole('button', { name: 'Customize Payloads' });

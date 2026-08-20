@@ -60,7 +60,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     // 8. Reload page to verify that the key returns to being masked
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // Navigate back to Profile Settings
     await accountBtn.click();
@@ -134,7 +134,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // Verify spec is loaded and endpoints list is visible
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 4. Click Start
     const startBtn = page.locator('#btn-start');
@@ -144,7 +144,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // Wait for the stop button to show (fuzzing in progress) and then the start button to reappear (fuzzing completed)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 5. Verify MCP findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');

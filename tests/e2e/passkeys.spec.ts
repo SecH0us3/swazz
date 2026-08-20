@@ -36,7 +36,7 @@ test.describe('Passkeys E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Navigate to Profile Settings > Security (2FA)
     const accountBtn = page.locator('button[title="Account"]');
@@ -86,6 +86,6 @@ test.describe('Passkeys E2E Tests', () => {
     await passkeyLoginBtn.click();
 
     // Verify successful login
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
   });
 });

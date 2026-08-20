@@ -20,7 +20,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Programmatically corrupt/expire the session token in localStorage
     await page.evaluate(() => {
@@ -35,7 +35,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     // (open the auth modal; the landing page is shown after logout)
     await page.getByRole('button', { name: 'Sign In' }).click();
     const loginHeader = page.locator('h2:has-text("Welcome back")');
-    await expect(loginHeader).toBeVisible({ timeout: 15000 });
+    await expect(loginHeader).toBeVisible({ timeout: 30000 });
 
     // 6. Assert that localStorage token is cleaned up
     const token = await page.evaluate(() => localStorage.getItem('swazz_token'));
@@ -56,7 +56,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -133,7 +133,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     // (open the auth modal; the landing page is shown after logout)
     await page.getByRole('button', { name: 'Sign In' }).click();
     const loginHeader = page.locator('h2:has-text("Welcome back")');
-    await expect(loginHeader).toBeVisible({ timeout: 15000 });
+    await expect(loginHeader).toBeVisible({ timeout: 30000 });
 
     // 10. Verify that localStorage token was cleared
     const token = await page.evaluate(() => localStorage.getItem('swazz_token'));

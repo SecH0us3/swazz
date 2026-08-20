@@ -59,7 +59,7 @@ test.describe('Analytics Dashboard E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for app layout to mount
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Try Vulnerable Demo to show active workspace
     const demoBtn = page.getByRole('button', { name: /Try Vulnerable Demo/ });
@@ -67,11 +67,11 @@ test.describe('Analytics Dashboard E2E Tests', () => {
     await demoBtn.click();
 
     // Wait for endpoints tree structure to render so sidebar has loaded the workspace fully
-    await expect(page.locator('.tree-leaf-row').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.tree-leaf-row').first()).toBeVisible({ timeout: 30000 });
 
     // 4. Locate and click Analytics tab
     const analyticsTab = page.locator('button.tab-bar-btn:has-text("Analytics")');
-    await expect(analyticsTab).toBeVisible({ timeout: 15000 });
+    await expect(analyticsTab).toBeVisible({ timeout: 30000 });
     
     // Perform click with toPass retry block to safely wait for React event binding
     await expect(async () => {

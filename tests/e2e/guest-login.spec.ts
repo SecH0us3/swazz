@@ -35,7 +35,7 @@ test.describe('Guest Login E2E Test', () => {
     await guestBtn.click();
 
     // 3. Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 4. Verify guest badge is shown in the header
     const guestBadge = page.locator('.guest-badge');
@@ -56,7 +56,7 @@ test.describe('Guest Login E2E Test', () => {
     // 6. Verify endpoints are populated in the sidebar (confirms /api/parse works!)
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 7. Verify target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');

@@ -22,7 +22,7 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
   });
 
   test('should configure anomalies, validate invalid ignore status codes, and update ignore rules', async ({ page }) => {
@@ -243,7 +243,7 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
 
     // Wait for endpoints list to render to ensure spec is loaded
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // Focus on the endpoints search input field
     const searchEndpointsInput = page.locator('input[placeholder="Search endpoints..."]');

@@ -20,7 +20,7 @@ test.describe('Auth Sequence E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

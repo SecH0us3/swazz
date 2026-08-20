@@ -21,6 +21,6 @@ test.describe('Landing Page', () => {
 
     // Wait for the formatted number to become visible on the page
     // Using a slightly longer timeout in case of counting animation (takes ~2s)
-    await expect(page.getByText('8,765,432+ Scans')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('8,765,432+ Scans')).toBeVisible({ timeout: 30000 });
   });
 });

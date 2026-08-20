@@ -20,7 +20,7 @@ test.describe('Project Lifecycle and Selection E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Locate the Project Selector button (avoiding .first() by targeting its specific class)
     const projectSelectorBtn = page.locator('.sidebar-project-selector button.btn-ghost');

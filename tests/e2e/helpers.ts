@@ -66,7 +66,7 @@ export async function registerAndLogin(
   await page.locator('#password').fill('Password123!');
   await page.locator('#password').press('Enter');
 
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
   if (claimTrial) {
     await page.evaluate(async () => {

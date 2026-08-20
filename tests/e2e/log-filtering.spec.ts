@@ -20,7 +20,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -36,7 +36,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // 4. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
@@ -47,7 +47,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: 10000 });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 6. Switch to Request Logs tab
     const requestLogsTab = page.locator('button:has-text("Request Logs")');

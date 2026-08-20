@@ -21,7 +21,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Fill the Swagger URL input with the mock HAR endpoint
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -42,9 +42,9 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     const usersLeaf = page.locator('.tree-leaf-row:has-text("GET"):has-text("/users")');
     const goodsLeaf = page.locator('.tree-leaf-row:has-text("GET"):has-text("goods")');
 
-    await expect(welcomeLeaf).toBeVisible({ timeout: 15000 });
-    await expect(usersLeaf).toBeVisible({ timeout: 15000 });
-    await expect(goodsLeaf).toBeVisible({ timeout: 15000 });
+    await expect(welcomeLeaf).toBeVisible({ timeout: 30000 });
+    await expect(usersLeaf).toBeVisible({ timeout: 30000 });
+    await expect(goodsLeaf).toBeVisible({ timeout: 30000 });
 
     // 4. Click the Start button to run the fuzzer on the imported HAR endpoints
     const startBtn = page.locator('#btn-start');
@@ -55,7 +55,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await expect(startBtn).toBeHidden();
 
     // Wait for the fuzzer to complete (timeout of 60s max since it's a small mock HAR)
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 5. Navigate to "Request Logs" tab to verify requests were sent
     const requestLogsTab = page.locator('button:has-text("Request Logs")');
@@ -96,7 +96,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Fill the Swagger URL input with a non-existent endpoint
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');

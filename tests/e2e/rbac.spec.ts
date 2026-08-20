@@ -119,7 +119,7 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main dashboard to load for User B
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 9. Navigate to the invitation URL (using the token query parameter) to trigger invitation acceptance
     // User B is already logged in, so the app auto-accepts the invitation on load

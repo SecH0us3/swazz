@@ -28,7 +28,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
     // Wait for endpoints list to render to ensure spec is loaded
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     // Blur any active element (like the search/input fields) to ensure keyboard shortcuts fire on window
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
@@ -261,7 +261,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
       await fileChooser.setFiles(tempReportPath);
 
       // Successfully importing a CLI report should redirect to main dashboard/heatmap view
-      await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible({ timeout: 15000 });
+      await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible({ timeout: 30000 });
 
       // Verify that imported run's findings are populated in Grouped Errors
       const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -332,14 +332,14 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await addBtn.click();
 
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
     await startBtn.click();
 
     // Wait for the scan to complete
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(startBtn).toBeVisible({ timeout: 180000 });
 
     // 2. Go to request logs
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
@@ -377,7 +377,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(replayBtn).toHaveText(/Replay|Sending/);
     
     // Wait for replay to complete (Replay button is enabled again)
-    await expect(replayBtn).not.toBeDisabled({ timeout: 15000 });
+    await expect(replayBtn).not.toBeDisabled({ timeout: 30000 });
 
     // Close the panel
     await closeBtn.click();

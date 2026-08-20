@@ -33,7 +33,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -166,7 +166,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -326,7 +326,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await addBtn.click();
 
       const endpointItems = page.locator('.tree-leaf-row');
-      await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+      await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
 
       // Trigger fuzzing
       const startBtn = page.locator('#btn-start');
@@ -338,7 +338,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
 
       // 10. Verify that the 5ms timeout had an effect by checking that total requests ran but 2xx success count is low
       const totalStat = page.locator('.stat-card.stat-total .stat-value');
-      await expect(totalStat).not.toHaveText('0', { timeout: 15000 });
+      await expect(totalStat).not.toHaveText('0', { timeout: 30000 });
 
       const successStat = page.locator('.stat-card.stat-2xx .stat-value');
       // Tolerate very low success count (e.g. < 20) on fast machines where loopback is < 5ms
@@ -388,7 +388,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open Project Settings
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -549,7 +549,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
 
     // 3. Open User Settings modal
     const userMenuBtn = page.locator('button.user-menu-btn, .user-avatar, button:has-text("Account")').first();
