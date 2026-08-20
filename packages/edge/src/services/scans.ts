@@ -31,7 +31,7 @@ export interface IScansService {
 export interface TriageUpdatePayload {
   finding_id: string;
   ai_status: string;
-  ai_relevance?: boolean | string;
+  ai_relevance?: boolean;
   ai_explanation?: string;
   ai_confidence?: number;
 }
