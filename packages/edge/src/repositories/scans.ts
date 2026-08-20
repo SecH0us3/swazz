@@ -247,7 +247,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     updates: Array<{
       finding_id: string;
       ai_status: string;
-      ai_relevance?: boolean | string | null;
+      ai_relevance?: boolean | null;
       ai_explanation?: string;
       ai_confidence?: number;
     }>
