@@ -335,21 +335,31 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
     const activeScenario = SIMULATOR_SCENARIOS.find(s => s.id === activeScenarioId) || SIMULATOR_SCENARIOS[0];
 
     const handleRunSimulation = () => {
-        setIsSimulating(true);
-        setSimulationStage(1);
         if (simulationTimerRef.current) {
             clearTimeout(simulationTimerRef.current);
         }
         if (stageTimerRef.current) {
             clearTimeout(stageTimerRef.current);
         }
+
+        const prefersReduced = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (prefersReduced) {
+            setSimulationStage(3);
+            setIsSimulating(false);
+            return;
+        }
+
+        setIsSimulating(true);
+        setSimulationStage(1);
+
         stageTimerRef.current = setTimeout(() => {
             setSimulationStage(2);
-        }, 220);
+        }, 450);
+
         simulationTimerRef.current = setTimeout(() => {
             setSimulationStage(3);
             setIsSimulating(false);
-        }, 600);
+        }, 950);
     };
 
     const handleCopy = (text: string, id: string) => {
@@ -502,8 +512,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
             <section id="simulator" className="simulator-section">
                 <div className="landing-section-header">
                     <div className="section-eyebrow">Interactive Attack Simulator</div>
-                    <h2>See How Semantic Fuzzing Works in Real Time</h2>
-                    <p>Select an API attack scenario below to see how Swazz parses schema contracts, crafts AST mutations, and catches deep vulnerabilities.</p>
+                    <h2>Pick an Attack Vector. Watch Swazz Find It.</h2>
+                    <p>Select a real-world scenario below to see how Swazz crafts semantic mutations from baseline schema contracts and exposes critical vulnerabilities in seconds.</p>
                 </div>
 
                 <div className="simulator-container">
@@ -539,6 +549,28 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         aria-labelledby={`scenario-tab-${activeScenario.id}`}
                         className={`simulator-console ${isSimulating ? 'simulating' : ''}`}
                     >
+                        {/* 3-Step Process Flow Ribbon (Single Owner of 1-2-3 Numbering) */}
+                        <div className="simulator-process-ribbon">
+                            <div className={`process-step ${simulationStage >= 1 ? 'active' : ''} ${isSimulating && simulationStage === 1 ? 'stage-pulsing' : ''}`}>
+                                <span className="step-num">1</span>
+                                <span className="step-label">Baseline Contract</span>
+                            </div>
+                            <div className="process-arrow" aria-hidden="true">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            </div>
+                            <div className={`process-step ${simulationStage >= 2 ? 'active' : ''} ${isSimulating && simulationStage === 2 ? 'stage-pulsing' : ''}`}>
+                                <span className="step-num">2</span>
+                                <span className="step-label">Semantic Mutation</span>
+                            </div>
+                            <div className="process-arrow" aria-hidden="true">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            </div>
+                            <div className={`process-step ${simulationStage === 3 ? 'active step-result' : ''}`}>
+                                <span className="step-num">3</span>
+                                <span className="step-label">Vulnerability Caught</span>
+                            </div>
+                        </div>
+
                         {/* Top Console Bar with Authentic Scanning Loader */}
                         <div className="simulator-header-bar">
                             {isSimulating && (
@@ -556,9 +588,14 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     {activeScenario.method}
                                 </span>
                                 <span className="endpoint-path-text">{activeScenario.endpoint}</span>
+                                <span className="simulator-cwe-badge">{activeScenario.owasp} • {activeScenario.cwe}</span>
                                 <div className={`simulator-status-indicator ${isSimulating ? 'running' : 'ready'}`}>
                                     <span className={`status-dot ${isSimulating ? 'pulsing' : 'green'}`} />
-                                    <span>{isSimulating ? 'AST Fuzzing in progress...' : 'Exploit Verified'}</span>
+                                    <span>
+                                        {isSimulating 
+                                            ? (simulationStage === 1 ? 'Validating contract...' : 'Fuzzing AST mutation...') 
+                                            : 'Exploit Verified'}
+                                    </span>
                                 </div>
                             </div>
                             <div className="simulator-action-group">
@@ -567,6 +604,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     className="btn-simulator-run"
                                     onClick={handleRunSimulation}
                                     disabled={isSimulating}
+                                    aria-label="Replay attack simulation"
                                 >
                                     {isSimulating ? (
                                         <>
@@ -574,7 +612,14 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                             <span>Fuzzing AST...</span>
                                         </>
                                     ) : (
-                                        '↻ Re-run Mutation'
+                                        <>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                <polyline points="1 4 1 10 7 10"></polyline>
+                                                <polyline points="23 20 23 14 17 14"></polyline>
+                                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+                                            </svg>
+                                            <span>Replay Attack</span>
+                                        </>
                                     )}
                                 </button>
                             </div>
@@ -583,7 +628,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         {/* Split Diff Playground */}
                         <div className="simulator-body-grid">
                             {/* Left: Original Request */}
-                            <div className="simulator-panel original-panel">
+                            <div className={`simulator-panel original-panel ${simulationStage === 1 ? 'stage-focused' : ''}`}>
                                 <div className="panel-title">
                                     <span className="panel-title-step">Baseline Schema Contract</span>
                                     <span className="panel-status-indicator normal">Valid Request</span>
@@ -600,18 +645,22 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         <pre className="code-json-body">{activeScenario.originalSpec.body}</pre>
                                     )}
                                 </div>
+                                <div className="pane-context-note">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                    <span>{activeScenario.originalSpec.description}</span>
+                                </div>
                             </div>
 
                             {/* Right: Swazz Mutated Payload */}
-                            <div className={`simulator-panel mutated-panel ${isSimulating ? 'simulating-panel' : ''}`}>
+                            <div className={`simulator-panel mutated-panel ${simulationStage === 2 ? 'stage-focused' : ''} ${isSimulating ? 'simulating-panel' : ''}`}>
                                 <div className="panel-title">
                                     <span className="panel-title-step">Swazz Attack Mutation</span>
                                     <span className="panel-status-indicator mutated">Payload Mutated</span>
                                 </div>
                                 <div className="panel-code-box">
-                                    <div className="mutation-diff-pill">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                                        <span>{activeScenario.mutatedPayload.mutationDiff}</span>
+                                    <div className="diff-highlight-line">
+                                        <span className="diff-tag-marker">+ MUTATION</span>
+                                        <span className="diff-text-content">{activeScenario.mutatedPayload.mutationDiff}</span>
                                     </div>
                                     <div className="headers-block">
                                         {Object.entries(activeScenario.mutatedPayload.headers).map(([k, v]) => (
@@ -624,34 +673,51 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         <pre className="code-json-body highlight-mutated">{activeScenario.mutatedPayload.body}</pre>
                                     )}
                                 </div>
+                                <div className="pane-context-note exploit-note">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                    <span>{activeScenario.exploitAction}</span>
+                                </div>
                             </div>
                         </div>
 
                         {/* Result / Detection Telemetry */}
-                        <div className="simulator-result-footer">
+                        <div className={`simulator-result-footer ${simulationStage === 3 ? 'stage-focused-result' : ''}`}>
                             <div className="result-status-header">
                                 <span className={`result-badge status-${String(activeScenario.detectionResult.status)[0]}xx`}>
                                     {activeScenario.detectionResult.statusText}
                                 </span>
                                 <strong className="result-finding-title">{activeScenario.detectionResult.findingTitle}</strong>
-                                <span className="result-cwe-tag">{activeScenario.owasp} • {activeScenario.cwe}</span>
                             </div>
                             <p className="result-summary-text">{activeScenario.detectionResult.findingSummary}</p>
                             <div className="result-details-row">
                                 <div className="result-impact-line">
                                     <span className="callout-icon impact-icon">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                                     </span>
-                                    <div><strong>Impact:</strong> {activeScenario.impact}</div>
+                                    <div><strong>Real-World Impact:</strong> {activeScenario.impact}</div>
                                 </div>
                                 <div className="result-remediation-box">
                                     <span className="callout-icon fix-icon">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                                     </span>
-                                    <div><strong className="remediation-label">Fix:</strong> {activeScenario.detectionResult.remediationTip}</div>
+                                    <div><strong className="remediation-label">Automated Fix:</strong> {activeScenario.detectionResult.remediationTip}</div>
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Simulator Action Call-to-Action */}
+                    <div className="simulator-bottom-cta">
+                        {onActionClick ? (
+                            <button type="button" onClick={onActionClick} className="btn-landing-primary">
+                                Run this scan against your API →
+                            </button>
+                        ) : (
+                            <a href="#solutions" className="btn-landing-primary">
+                                Try Swazz Free on Your API →
+                            </a>
+                        )}
+                        <span className="simulator-cta-subtext">Free native CLI scanner • Zero telemetry transmission • 100% local AST execution</span>
                     </div>
                 </div>
             </section>

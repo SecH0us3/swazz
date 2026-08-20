@@ -120,11 +120,14 @@ describe('LandingShowcase Component', () => {
         });
 
         // Test running mutation button
-        const runBtn = screen.getByRole('button', { name: /Re-run Mutation|Fuzzing AST/i });
+        const runBtn = screen.getByRole('button', { name: /Replay Attack|Fuzzing AST/i });
         act(() => {
             fireEvent.click(runBtn);
         });
-        expect(screen.getByText(/Fuzzing AST.../i)).toBeDefined();
+        expect(screen.getAllByText(/Fuzzing AST|Validating contract/i).length).toBeGreaterThan(0);
+
+        // Simulator CTA
+        expect(screen.getByText(/Try Swazz Free on Your API|Run this scan against your API/i)).toBeDefined();
     });
 
     it('renders Technical Benchmarks comparison matrix and methodology disclaimer', async () => {
