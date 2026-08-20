@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/deepseek-v4-pro:cloud",
+  "provider": {
+    "ollama": {
+      "models": {
+        "deepseek-v4-pro:cloud": {
+          "name": "deepseek-v4-pro:cloud",
+          "reasoning": true,
+          "variants": {
+            "none": { "reasoningEffort": "none" },
+            "medium": { "reasoningEffort": "medium" },
+            "max": { "reasoningEffort": "max" }
+          }
+        }
+      }
+    }
+  }
+}

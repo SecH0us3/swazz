@@ -58,7 +58,6 @@ coverage.out
 # AI Assistants Local Data
 .antigravitycli/
 .sofa/
-opencode.json
 
 # Auto-generated static files in frontend public directory
 packages/web/public/ai.txt
