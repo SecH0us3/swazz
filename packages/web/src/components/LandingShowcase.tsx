@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './LandingShowcase.css';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
@@ -11,6 +11,7 @@ const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 function ScanCounter() {
     const [count, setCount] = useState<number | null>(null);
     const [displayCount, setDisplayCount] = useState<number>(0);
+    const requestRef = useRef<number | null>(null);
 
     useEffect(() => {
         const fetchUrl = `${PROXY_URL}/api/telemetry/scans/count`;
@@ -29,42 +30,46 @@ function ScanCounter() {
                 }
             })
             .catch(err => {
-                console.error('Failed to fetch scan count:', err);
-                setCount(1000000); // fallback
+                console.error("Failed to fetch scan count:", err);
+                setCount(1000000);
             });
     }, []);
 
     useEffect(() => {
         if (count === null) return;
-        let startTimestamp: number | null = null;
-        let animationFrameId: number;
-        const duration = 2000;
-        
-        const step = (timestamp: number) => {
-            if (!startTimestamp) startTimestamp = timestamp;
-            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-            
-            // easeOutQuart
-            const ease = 1 - Math.pow(1 - progress, 4);
-            
-            setDisplayCount(Math.floor(ease * count));
-            
+        const duration = 1500;
+        const startTime = performance.now();
+
+        const animate = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            setDisplayCount(Math.floor(easeOut * count));
+
             if (progress < 1) {
-                animationFrameId = window.requestAnimationFrame(step);
-            } else {
-                setDisplayCount(count);
+                requestRef.current = requestAnimationFrame(animate);
             }
         };
-        
-        animationFrameId = window.requestAnimationFrame(step);
-        return () => window.cancelAnimationFrame(animationFrameId);
+
+        requestRef.current = requestAnimationFrame(animate);
+        return () => {
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        };
     }, [count]);
 
     if (count === null) {
-        return <>0+ Scans</>;
+        return <span className="scans-count-skeleton">...</span>;
     }
 
     return <>{displayCount.toLocaleString()}+ Scans</>;
+}
+
+export interface FeatureDetail {
+    title: string;
+    details: string;
+    goal: string;
+    benefit: string;
+    image: string;
 }
 
 export interface AttackScenario {
@@ -302,7 +307,7 @@ interface LandingShowcaseProps {
 }
 
 export function LandingShowcase({ onActionClick, actionText, showPricing = true }: LandingShowcaseProps) {
-    const [selectedFeature, setSelectedFeature] = useState<any>(null);
+    const [selectedFeature, setSelectedFeature] = useState<FeatureDetail | null>(null);
     const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
     const [activeDeploymentTab, setActiveDeploymentTab] = useState<'cli'|'docker'|'local'|'worker'>('cli');
     const [activeScenarioId, setActiveScenarioId] = useState<string>('bola');
@@ -314,11 +319,17 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
     const [waitlistName, setWaitlistName] = useState('');
     const [waitlistCompany, setWaitlistCompany] = useState('');
 
+    const simulationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const copyTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
     const activeScenario = SIMULATOR_SCENARIOS.find(s => s.id === activeScenarioId) || SIMULATOR_SCENARIOS[0];
 
     const handleRunSimulation = () => {
         setIsSimulating(true);
-        setTimeout(() => {
+        if (simulationTimerRef.current) {
+            clearTimeout(simulationTimerRef.current);
+        }
+        simulationTimerRef.current = setTimeout(() => {
             setIsSimulating(false);
         }, 600);
     };
@@ -326,9 +337,32 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
     const handleCopy = (text: string, id: string) => {
         navigator.clipboard.writeText(text);
         setCopiedStates(prev => ({ ...prev, [id]: true }));
-        setTimeout(() => {
+        if (copyTimersRef.current[id]) {
+            clearTimeout(copyTimersRef.current[id]);
+        }
+        copyTimersRef.current[id] = setTimeout(() => {
             setCopiedStates(prev => ({ ...prev, [id]: false }));
         }, 2000);
+    };
+
+    const handleScenarioKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const nextIndex = (currentIndex + 1) % SIMULATOR_SCENARIOS.length;
+            const nextScenario = SIMULATOR_SCENARIOS[nextIndex];
+            setActiveScenarioId(nextScenario.id);
+            handleRunSimulation();
+            const nextTab = document.getElementById(`scenario-tab-${nextScenario.id}`);
+            nextTab?.focus();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const prevIndex = (currentIndex - 1 + SIMULATOR_SCENARIOS.length) % SIMULATOR_SCENARIOS.length;
+            const prevScenario = SIMULATOR_SCENARIOS[prevIndex];
+            setActiveScenarioId(prevScenario.id);
+            handleRunSimulation();
+            const prevTab = document.getElementById(`scenario-tab-${prevScenario.id}`);
+            prevTab?.focus();
+        }
     };
 
     useEffect(() => {
@@ -344,7 +378,13 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
             }
         };
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            if (simulationTimerRef.current) {
+                clearTimeout(simulationTimerRef.current);
+            }
+            Object.values(copyTimersRef.current).forEach(clearTimeout);
+        };
     }, [fullscreenImageUrl, selectedFeature, showWaitlistModal]);
 
     return (
@@ -355,6 +395,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     src="/assets/cyber_futuristic_bg.jpg" 
                     alt="" 
                     className="cyber-backdrop-image"
+                    fetchPriority="high"
+                    decoding="async"
                 />
                 <div className="cyber-laser-scanner"></div>
                 <div className="cyber-grid-overlay"></div>
@@ -425,16 +467,20 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 <div className="simulator-container">
                     {/* Scenario Tabs */}
                     <div className="simulator-scenario-bar" role="tablist" aria-label="Simulator Scenarios">
-                        {SIMULATOR_SCENARIOS.map(scenario => (
+                        {SIMULATOR_SCENARIOS.map((scenario, idx) => (
                             <button
                                 key={scenario.id}
+                                id={`scenario-tab-${scenario.id}`}
                                 role="tab"
                                 aria-selected={activeScenarioId === scenario.id}
+                                aria-controls={`scenario-panel-${scenario.id}`}
+                                tabIndex={activeScenarioId === scenario.id ? 0 : -1}
                                 className={`scenario-tab-btn ${activeScenarioId === scenario.id ? 'active' : ''}`}
                                 onClick={() => {
                                     setActiveScenarioId(scenario.id);
                                     handleRunSimulation();
                                 }}
+                                onKeyDown={(e) => handleScenarioKeyDown(e, idx)}
                             >
                                 <span className={`severity-pill ${scenario.severity.toLowerCase()}`}>
                                     {scenario.severity}
@@ -445,7 +491,12 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
 
                     {/* Simulator Console Box */}
-                    <div className={`simulator-console ${isSimulating ? 'simulating' : ''}`}>
+                    <div 
+                        id={`scenario-panel-${activeScenario.id}`}
+                        role="tabpanel"
+                        aria-labelledby={`scenario-tab-${activeScenario.id}`}
+                        className={`simulator-console ${isSimulating ? 'simulating' : ''}`}
+                    >
                         {/* 3-Step Process Flow Ribbon */}
                         <div className="simulator-process-ribbon">
                             <div className="process-step active">
