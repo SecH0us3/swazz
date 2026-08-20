@@ -67,6 +67,167 @@ function ScanCounter() {
     return <>{displayCount.toLocaleString()}+ Scans</>;
 }
 
+export interface AttackScenario {
+    id: string;
+    name: string;
+    category: string;
+    cwe: string;
+    owasp: string;
+    severity: 'Critical' | 'High' | 'Medium';
+    endpoint: string;
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    originalSpec: {
+        headers: Record<string, string>;
+        body?: string;
+        description: string;
+    };
+    mutatedPayload: {
+        headers: Record<string, string>;
+        body?: string;
+        mutationDiff: string;
+    };
+    detectionResult: {
+        status: number;
+        statusText: string;
+        findingTitle: string;
+        findingSummary: string;
+        remediationTip: string;
+    };
+}
+
+export const SIMULATOR_SCENARIOS: AttackScenario[] = [
+    {
+        id: 'bola',
+        name: 'BOLA / ID Tampering',
+        category: 'Broken Object Level Auth',
+        owasp: 'API1:2023 BOLA',
+        cwe: 'CWE-639',
+        severity: 'Critical',
+        endpoint: '/api/v1/users/{id}/billing',
+        method: 'GET',
+        originalSpec: {
+            headers: {
+                'Authorization': 'Bearer user_token_1042',
+                'Accept': 'application/json'
+            },
+            description: 'Valid request: Accessing authenticated user ID 1042 profile.'
+        },
+        mutatedPayload: {
+            headers: {
+                'Authorization': 'Bearer user_token_1042',
+                'Accept': 'application/json'
+            },
+            mutationDiff: 'GET /api/v1/users/1043/billing  [Tampered path parameter to foreign ID 1043]'
+        },
+        detectionResult: {
+            status: 200,
+            statusText: '200 OK (Data Leak)',
+            findingTitle: 'Broken Object Level Authorization Detected',
+            findingSummary: 'User 1042 successfully accessed confidential billing records of User 1043 without tenant-level authorization checks.',
+            remediationTip: 'Enforce record-level ownership checks inside database queries using authenticated session context.'
+        }
+    },
+    {
+        id: 'sqli',
+        name: 'JSON SQL Injection',
+        category: 'Injection in Structured Body',
+        owasp: 'API8:2023 Security Misconfiguration',
+        cwe: 'CWE-89',
+        severity: 'Critical',
+        endpoint: '/api/v2/orders/search',
+        method: 'POST',
+        originalSpec: {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer live_token'
+            },
+            body: JSON.stringify({ category: 'hardware', limit: 20 }, null, 2),
+            description: 'Valid request: Filtering hardware orders with schema-compliant JSON body.'
+        },
+        mutatedPayload: {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer live_token'
+            },
+            body: JSON.stringify({ category: "hardware' OR 1=1;--", limit: 20 }, null, 2),
+            mutationDiff: 'category: "hardware\' OR 1=1;--" [Semantic AST mutation in nested JSON parameter]'
+        },
+        detectionResult: {
+            status: 500,
+            statusText: '500 SQL Syntax Error',
+            findingTitle: 'Unescaped SQL Query Execution in JSON Property',
+            findingSummary: 'Database driver returned raw SQL syntax error (PG::SyntaxError: unterminated quoted string).',
+            remediationTip: 'Always use parameterized SQL queries and ORM prepared statements for JSON payload fields.'
+        }
+    },
+    {
+        id: 'ssrf',
+        name: 'SSRF via Header Injection',
+        category: 'Server-Side Request Forgery',
+        owasp: 'API7:2023 SSRF',
+        cwe: 'CWE-918',
+        severity: 'High',
+        endpoint: '/api/v1/integrations/webhook/test',
+        method: 'POST',
+        originalSpec: {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Callback-URL': 'https://customer.app/events'
+            },
+            body: JSON.stringify({ event: 'ping' }, null, 2),
+            description: 'Valid request: Triggering external client webhook URL.'
+        },
+        mutatedPayload: {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Callback-URL': 'http://169.254.169.254/latest/meta-data/'
+            },
+            body: JSON.stringify({ event: 'ping' }, null, 2),
+            mutationDiff: 'X-Callback-URL: http://169.254.169.254/... [Cloud metadata link-local injection]'
+        },
+        detectionResult: {
+            status: 200,
+            statusText: '200 OK (Internal Metadata Leaked)',
+            findingTitle: 'SSRF against Cloud Instance Metadata Service',
+            findingSummary: 'Backend fetched AWS/GCP instance metadata endpoint and reflected internal security tokens.',
+            remediationTip: 'Activate Swazz SSRF Protection and disallow RFC 1918 & 169.254.0.0/16 private IP ranges in HTTP transport.'
+        }
+    },
+    {
+        id: 'mass_assignment',
+        name: 'Privilege Mass Assignment',
+        category: 'Mass Assignment / Property Escalation',
+        owasp: 'API6:2023 Unrestricted Flows',
+        cwe: 'CWE-915',
+        severity: 'High',
+        endpoint: '/api/v1/users/profile',
+        method: 'PATCH',
+        originalSpec: {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer member_token'
+            },
+            body: JSON.stringify({ display_name: 'Security Lead' }, null, 2),
+            description: 'Valid request: Updating self profile display name.'
+        },
+        mutatedPayload: {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer member_token'
+            },
+            body: JSON.stringify({ display_name: 'Security Lead', role: 'admin', is_superuser: true }, null, 2),
+            mutationDiff: '+ "role": "admin", + "is_superuser": true [Unfiltered schema property injection]'
+        },
+        detectionResult: {
+            status: 200,
+            statusText: '200 OK (Role Escalated)',
+            findingTitle: 'Privilege Escalation via Unrestricted Parameter Binding',
+            findingSummary: 'Object attributes were updated with elevated admin privileges without schema whitelisting.',
+            remediationTip: 'Explicitly define permitted DTO request fields and discard undeclared JSON keys in updates.'
+        }
+    }
+];
+
 export const FEATURE_DETAILS = {
     fuzzing: {
         title: "Discover Zero-Days",
@@ -128,13 +289,24 @@ interface LandingShowcaseProps {
 export function LandingShowcase({ onActionClick, actionText, showPricing = true }: LandingShowcaseProps) {
     const [selectedFeature, setSelectedFeature] = useState<any>(null);
     const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
-    const [activeDeploymentTab, setActiveDeploymentTab] = useState<'cloud'|'docker'|'local'|'worker'>('cloud');
+    const [activeDeploymentTab, setActiveDeploymentTab] = useState<'cli'|'docker'|'local'|'worker'>('cli');
+    const [activeScenarioId, setActiveScenarioId] = useState<string>('bola');
+    const [isSimulating, setIsSimulating] = useState<boolean>(false);
     const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
     const [showWaitlistModal, setShowWaitlistModal] = useState(false);
     const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
     const [waitlistEmail, setWaitlistEmail] = useState('');
     const [waitlistName, setWaitlistName] = useState('');
     const [waitlistCompany, setWaitlistCompany] = useState('');
+
+    const activeScenario = SIMULATOR_SCENARIOS.find(s => s.id === activeScenarioId) || SIMULATOR_SCENARIOS[0];
+
+    const handleRunSimulation = () => {
+        setIsSimulating(true);
+        setTimeout(() => {
+            setIsSimulating(false);
+        }, 600);
+    };
 
     const handleCopy = (text: string, id: string) => {
         navigator.clipboard.writeText(text);
@@ -151,60 +323,199 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     setFullscreenImageUrl(null);
                 } else if (selectedFeature) {
                     setSelectedFeature(null);
+                } else if (showWaitlistModal) {
+                    setShowWaitlistModal(false);
                 }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [fullscreenImageUrl, selectedFeature]);
+    }, [fullscreenImageUrl, selectedFeature, showWaitlistModal]);
 
     return (
         <main className="landing-main">
+            {/* AMBIENT FUTURISTIC CYBER BACKGROUND */}
+            <div className="cyber-ambient-backdrop" aria-hidden="true">
+                <img 
+                    src="/assets/future_quantum_resilience_bg.jpg" 
+                    alt="" 
+                    className="cyber-backdrop-image"
+                />
+                <div className="cyber-laser-scanner"></div>
+                <div className="cyber-grid-overlay"></div>
+            </div>
+
             {/* HERO SECTION */}
             <section className="landing-hero">
+                <div className="landing-hero-badge">
+                    <span className="badge-pulse-dot"></span>
+                    <span>Autonomous API Resilience &amp; Zero-Day Fuzzing</span>
+                </div>
                 <h1 className="landing-hero-title">Break Your APIs Before Hackers Do</h1>
                 <p className="landing-hero-subtitle">
-                    Automatically generate intelligent fuzzing payloads from your OpenAPI specs to uncover hidden logic flaws and injection vulnerabilities that standard scanners miss.
+                    Turn OpenAPI specs, GraphQL schemas, and HAR recordings into intelligent, context-aware fuzzing payloads. Uncover hidden business logic flaws, BOLA exploits, and injection vulnerabilities in seconds.
                 </p>
                 <div className="landing-hero-ctas">
                     {onActionClick && (
                         <button type="button" onClick={onActionClick} className="btn-landing-primary">
-                            Run a live demo scan
+                            {actionText || "Run a live demo scan"}
                         </button>
                     )}
-                    <a href="https://sech0us3.github.io/swazz/" target="_blank" rel="noopener noreferrer" className="btn-landing-secondary">
-                         Read the docs
+                    <a href="#simulator" className="btn-landing-secondary">
+                        Try live fuzzer simulator ↓
                     </a>
                 </div>
             </section>
 
-            {/* TRUST BAR (SOCIAL PROOF) */}
+            {/* TRUST BAR (SOCIAL PROOF & TELEMETRY) */}
             <section className="trust-bar">
-                <div className="trust-text">Trusted by modern security teams</div>
+                <div className="trust-text">Trusted for mission-critical API security</div>
                 <div className="trust-logos">
                     <div className="trust-logo-item">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
                         </svg>
                         <ScanCounter />
                     </div>
                     <div className="trust-logo-item">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                         </svg>
-                        OWASP Compliant
+                        OWASP API Top 10
                     </div>
                     <div className="trust-logo-item">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                         </svg>
                         PCI-DSS Compliant
                     </div>
+                    <div className="trust-logo-item">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                        </svg>
+                        BSL 1.1 Licensed
+                    </div>
                 </div>
             </section>
 
-            {/* DEMO VIDEO / CRYSTALLINE SHIELD */}
+            {/* LIVE FUZZING SIMULATOR PLAYGROUND */}
+            <section id="simulator" className="simulator-section">
+                <div className="landing-section-header">
+                    <div className="section-eyebrow">Interactive Attack Simulator</div>
+                    <h2>Experience Semantic Fuzzing in Action</h2>
+                    <p>Select an API attack vector below to see how Swazz parses valid contracts, mutates AST structures, and isolates root-cause vulnerabilities.</p>
+                </div>
+
+                <div className="simulator-container">
+                    {/* Scenario Tabs */}
+                    <div className="simulator-scenario-bar" role="tablist" aria-label="Simulator Scenarios">
+                        {SIMULATOR_SCENARIOS.map(scenario => (
+                            <button
+                                key={scenario.id}
+                                role="tab"
+                                aria-selected={activeScenarioId === scenario.id}
+                                className={`scenario-tab-btn ${activeScenarioId === scenario.id ? 'active' : ''}`}
+                                onClick={() => {
+                                    setActiveScenarioId(scenario.id);
+                                    handleRunSimulation();
+                                }}
+                            >
+                                <span className={`severity-pill ${scenario.severity.toLowerCase()}`}>
+                                    {scenario.severity}
+                                </span>
+                                <span className="scenario-tab-title">{scenario.name}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Simulator Console Box */}
+                    <div className={`simulator-console ${isSimulating ? 'simulating' : ''}`}>
+                        <div className="simulator-header-bar">
+                            <div className="simulator-endpoint-tag">
+                                <span className={`method-badge method-${activeScenario.method.toLowerCase()}`}>
+                                    {activeScenario.method}
+                                </span>
+                                <span className="endpoint-path-text">{activeScenario.endpoint}</span>
+                            </div>
+                            <div className="simulator-action-group">
+                                <span className="cwe-badge">{activeScenario.cwe} • {activeScenario.owasp}</span>
+                                <button 
+                                    type="button" 
+                                    className="btn-simulator-run"
+                                    onClick={handleRunSimulation}
+                                    disabled={isSimulating}
+                                >
+                                    {isSimulating ? 'Mutating Payload...' : '↻ Re-run Mutation'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Split Diff Playground */}
+                        <div className="simulator-body-grid">
+                            {/* Left: Original Request */}
+                            <div className="simulator-panel original-panel">
+                                <div className="panel-title">
+                                    <span>Original OpenAPI Contract</span>
+                                    <span className="panel-status-indicator normal">Valid Schema</span>
+                                </div>
+                                <div className="panel-code-box">
+                                    <div className="code-line-desc">{activeScenario.originalSpec.description}</div>
+                                    <div className="headers-block">
+                                        {Object.entries(activeScenario.originalSpec.headers).map(([k, v]) => (
+                                            <div key={k} className="header-line">
+                                                <span className="code-key">{k}:</span> <span className="code-val">{v}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {activeScenario.originalSpec.body && (
+                                        <pre className="code-json-body">{activeScenario.originalSpec.body}</pre>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right: Swazz Mutated Payload */}
+                            <div className="simulator-panel mutated-panel">
+                                <div className="panel-title">
+                                    <span>Swazz Semantic Mutation</span>
+                                    <span className="panel-status-indicator mutated">Payload Mutated</span>
+                                </div>
+                                <div className="panel-code-box">
+                                    <div className="mutation-diff-pill">
+                                        ⚡ {activeScenario.mutatedPayload.mutationDiff}
+                                    </div>
+                                    <div className="headers-block">
+                                        {Object.entries(activeScenario.mutatedPayload.headers).map(([k, v]) => (
+                                            <div key={k} className="header-line">
+                                                <span className="code-key">{k}:</span> <span className="code-val">{v}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {activeScenario.mutatedPayload.body && (
+                                        <pre className="code-json-body highlight-mutated">{activeScenario.mutatedPayload.body}</pre>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Result / Detection Telemetry */}
+                        <div className="simulator-result-footer">
+                            <div className="result-header">
+                                <span className={`result-status-badge status-${activeScenario.detectionResult.status >= 500 ? '500' : 'vuln'}`}>
+                                    {activeScenario.detectionResult.statusText}
+                                </span>
+                                <strong className="result-finding-title">{activeScenario.detectionResult.findingTitle}</strong>
+                            </div>
+                            <p className="result-summary-text">{activeScenario.detectionResult.findingSummary}</p>
+                            <div className="result-remediation-box">
+                                <span className="remediation-label">💡 Recommended Fix:</span> {activeScenario.detectionResult.remediationTip}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* DEMO VIDEO / SHOWCASE */}
             <section id="demo" className="landing-video-section">
                 <div className="glass-container">
                     <div className="glass-header">
@@ -221,13 +532,137 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 </div>
             </section>
 
+            {/* INTERACTIVE BENCHMARK & COMPARISON MATRIX */}
+            <section id="benchmarks" className="benchmark-section">
+                <div className="landing-section-header">
+                    <div className="section-eyebrow">Technical Benchmarks</div>
+                    <h2>How Swazz Outperforms Legacy Scanners</h2>
+                    <p>Traditional DAST tools fail against modern microservices because they lack schema awareness and flood developers with repetitive noise.</p>
+                </div>
+
+                <div className="benchmark-table-wrapper">
+                    <table className="benchmark-table">
+                        <thead>
+                            <tr>
+                                <th scope="col" className="col-capability">Capability</th>
+                                <th scope="col" className="col-swazz">
+                                    <div className="swazz-col-header">
+                                        <span className="swazz-brand-name">Swazz</span>
+                                        <span className="swazz-pill">Next-Gen</span>
+                                    </div>
+                                </th>
+                                <th scope="col" className="col-legacy">Legacy DAST (Burp / ZAP)</th>
+                                <th scope="col" className="col-generic">Generic Fuzzers (Schemathesis / AFL)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td className="cap-title">
+                                    <strong>Semantic Spec Awareness</strong>
+                                    <span>Parses OpenAPI, SOAP &amp; GraphQL parameter constraints and types.</span>
+                                </td>
+                                <td className="val-swazz">
+                                    <span className="check-icon">✓</span> Deep AST parsing &amp; smart mutation
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Blind regex &amp; string injection
+                                </td>
+                                <td className="val-other">
+                                    <span className="partial-icon">~</span> Basic schema checks only
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="cap-title">
+                                    <strong>Zero-Setup HAR Replay</strong>
+                                    <span>Replay real browser user journeys and authenticate traffic in 1 click.</span>
+                                </td>
+                                <td className="val-swazz">
+                                    <span className="check-icon">✓</span> Instant drag-and-drop &amp; Chrome Extension
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Heavy proxy &amp; manual certificate setup
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Unsupported
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="cap-title">
+                                    <strong>OWASP API Top 10 Classification</strong>
+                                    <span>Automatic mapping to BOLA, Broken Auth, and SSRF CWEs.</span>
+                                </td>
+                                <td className="val-swazz">
+                                    <span className="check-icon">✓</span> Native 2023 classification + remediation
+                                </td>
+                                <td className="val-other">
+                                    <span className="partial-icon">~</span> Generic web vulnerabilities only
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Raw HTTP status logs
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="cap-title">
+                                    <strong>Response Deduplication (Anti-Fatigue)</strong>
+                                    <span>Groups thousands of responses by structural root causes.</span>
+                                </td>
+                                <td className="val-swazz">
+                                    <span className="check-icon">✓</span> Automatic clustering (Zero alert fatigue)
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Endless duplicate alert lists
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Unprocessed stdout streams
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="cap-title">
+                                    <strong>Sub-Second Edge Execution &amp; CI/CD</strong>
+                                    <span>Runs natively in GitHub Actions and Cloudflare Edge Workers.</span>
+                                </td>
+                                <td className="val-swazz">
+                                    <span className="check-icon">✓</span> Blazing fast Go engine + Edge routing
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Multi-GB Java VM overhead
+                                </td>
+                                <td className="val-other">
+                                    <span className="partial-icon">~</span> Single-thread Python / CLI only
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="cap-title">
+                                    <strong>Native SARIF Export</strong>
+                                    <span>Surface security alerts directly in standard PR reviews and Jira.</span>
+                                </td>
+                                <td className="val-swazz">
+                                    <span className="check-icon">✓</span> Standard SARIF for GitHub Code Scanning
+                                </td>
+                                <td className="val-other">
+                                    <span className="partial-icon">~</span> Proprietary XML/HTML exports
+                                </td>
+                                <td className="val-other">
+                                    <span className="cross-icon">✗</span> Non-standard text output
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             {/* BENTO GRID */}
             <section id="features" className="landing-features">
-                <h2 className="landing-section-title">Everything You Need to Ship Secure APIs</h2>
+                <div className="landing-section-header">
+                    <div className="section-eyebrow">Enterprise Architecture</div>
+                    <h2>Everything You Need to Ship Secure APIs</h2>
+                    <p>Designed from the ground up for modern AppSec and DevSecOps engineering teams.</p>
+                </div>
+                
                 <div className="landing-bento-grid">
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.fuzzing)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                                 <polyline points="2 17 12 22 22 17"></polyline>
                                 <polyline points="2 12 12 17 22 12"></polyline>
@@ -238,7 +673,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.extension)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <line x1="2" y1="12" x2="22" y2="12"></line>
                                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
@@ -249,7 +684,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.har)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <circle cx="11" cy="11" r="8"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                             </svg>
@@ -259,7 +694,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.pipelines)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                             </svg>
                         </div>
@@ -268,7 +703,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.compliance)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                                 <polyline points="14 2 14 8 20 8"></polyline>
                                 <line x1="16" y1="13" x2="8" y2="13"></line>
@@ -280,7 +715,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.grouping)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                 <circle cx="9" cy="7" r="4"></circle>
                                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
@@ -292,7 +727,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                     </div>
                     <div className="bento-card" onClick={() => setSelectedFeature(FEATURE_DETAILS.integration)}>
                         <div className="bento-icon-wrapper">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                             </svg>
@@ -303,31 +738,38 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                 </div>
             </section>
 
-            {/* Frictionless Deployment (Solutions) */}
+            {/* QUICKSTART TERMINAL & DEPLOYMENT */}
             <section id="solutions" className="deployment-section">
                 <div className="landing-section-header">
-                    <h2>Frictionless Deployment</h2>
-                    <p>Deploy anywhere. From zero-setup cloud to secure on-premise execution.</p>
+                    <div className="section-eyebrow">Zero Friction</div>
+                    <h2>Deploy &amp; Run Anywhere</h2>
+                    <p>Run locally via CLI, deploy inside Docker, or automate seamlessly in CI/CD pipelines.</p>
                 </div>
                 
                 <div className="deployment-container">
-                    <div className="deployment-tabs">
+                    <div className="deployment-tabs" role="tablist" aria-label="Deployment Options">
                         <button 
                             type="button" 
-                            className={`deploy-tab-btn ${activeDeploymentTab === 'cloud' ? 'active' : ''}`}
-                            onClick={() => setActiveDeploymentTab('cloud')}
+                            role="tab"
+                            aria-selected={activeDeploymentTab === 'cli'}
+                            className={`deploy-tab-btn ${activeDeploymentTab === 'cli' ? 'active' : ''}`}
+                            onClick={() => setActiveDeploymentTab('cli')}
                         >
-                            Cloud (Hosted)
+                            CLI Quickstart
                         </button>
                         <button 
                             type="button" 
+                            role="tab"
+                            aria-selected={activeDeploymentTab === 'docker'}
                             className={`deploy-tab-btn ${activeDeploymentTab === 'docker' ? 'active' : ''}`}
                             onClick={() => setActiveDeploymentTab('docker')}
                         >
-                            Docker (Compose & CLI)
+                            Docker
                         </button>
                         <button 
                             type="button" 
+                            role="tab"
+                            aria-selected={activeDeploymentTab === 'local'}
                             className={`deploy-tab-btn ${activeDeploymentTab === 'local' ? 'active' : ''}`}
                             onClick={() => setActiveDeploymentTab('local')}
                         >
@@ -335,6 +777,8 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         </button>
                         <button 
                             type="button" 
+                            role="tab"
+                            aria-selected={activeDeploymentTab === 'worker'}
                             className={`deploy-tab-btn ${activeDeploymentTab === 'worker' ? 'active' : ''}`}
                             onClick={() => setActiveDeploymentTab('worker')}
                         >
@@ -342,29 +786,30 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                         </button>
                     </div>
                     <div className="deployment-content">
-                        {activeDeploymentTab === 'cloud' && (
-                            <div>
-                                <p className="deploy-marketing-text">No installation required. Run fuzzing scans instantly using our secure, hosted cloud infrastructure.</p>
-                                <ul className="deploy-features">
-                                    <li>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                        Zero-setup configuration
-                                    </li>
-                                    <li>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                        Secure edge routing
-                                    </li>
-                                    <li>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                        Free registration with community runner pools
-                                    </li>
-                                </ul>
+                        {activeDeploymentTab === 'cli' && (
+                            <div className="deployment-code-wrapper">
+                                <div className="code-header">
+                                    <span>Run Instant CLI Scan against OpenAPI Spec</span>
+                                    <button 
+                                        type="button"
+                                        className="deploy-copy-btn" 
+                                        onClick={() => handleCopy(`npx @swazz/cli start --spec https://petstore.swagger.io/v2/swagger.json`, 'cli-start')}
+                                    >
+                                        {copiedStates['cli-start'] ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                                <pre className="code-terminal">
+                                    <code>{`# Run Swazz CLI scanner instantly against any OpenAPI/Swagger URL
+npx @swazz/cli start --spec https://petstore.swagger.io/v2/swagger.json`}</code>
+                                </pre>
                             </div>
                         )}
                         {activeDeploymentTab === 'docker' && (
                             <div className="deployment-code-wrapper">
-                                <div className="code-header">Option A: Run Standalone Scanner (CLI)
+                                <div className="code-header">
+                                    <span>Option A: Run Standalone Scanner (CLI)</span>
                                     <button 
+                                        type="button"
                                         className="deploy-copy-btn" 
                                         onClick={() => handleCopy(`docker pull ghcr.io/sech0us3/swazz-cli:latest\ndocker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json`, 'docker-cli')}
                                     >
@@ -375,8 +820,10 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                     <code>{`docker pull ghcr.io/sech0us3/swazz-cli:latest\ndocker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json`}</code>
                                 </pre>
 
-                                <div className="code-header code-header-spaced">Option B: Run Full Local Stack (Compose)
+                                <div className="code-header code-header-spaced">
+                                    <span>Option B: Run Full Local Stack (Compose)</span>
                                     <button 
+                                        type="button"
                                         className="deploy-copy-btn" 
                                         onClick={() => handleCopy(`git clone https://github.com/SecH0us3/swazz.git\ncd swazz && docker compose up --build`, 'docker-compose')}
                                     >
@@ -392,8 +839,10 @@ cd swazz && docker compose up --build`}</code>
                         )}
                         {activeDeploymentTab === 'local' && (
                             <div className="deployment-code-wrapper">
-                                <div className="code-header">Run the Full Stack Locally (Without Docker)
+                                <div className="code-header">
+                                    <span>Run the Full Stack Locally (Without Docker)</span>
                                     <button 
+                                        type="button"
                                         className="deploy-copy-btn" 
                                         onClick={() => handleCopy(`git clone https://github.com/SecH0us3/swazz.git\ncd swazz && ./start-dev.sh`, 'local-nodocker')}
                                     >
@@ -412,8 +861,10 @@ cd swazz
                         )}
                         {activeDeploymentTab === 'worker' && (
                             <div className="deployment-code-wrapper">
-                                <div className="code-header">Bind to your own Cloudflare account
+                                <div className="code-header">
+                                    <span>Bind to your own Cloudflare account</span>
                                     <button 
+                                        type="button"
                                         className="deploy-copy-btn" 
                                         onClick={() => handleCopy(`export default {\n  async fetch(request, env) {\n    const url = new URL(request.url);\n    if (url.pathname.startsWith("/api/swazz")) {\n      return await env.SWAZZ_COORDINATOR.fetch(request);\n    }\n    return await fetch(request);\n  }\n}`, 'worker')}
                                     >
@@ -433,8 +884,9 @@ cd swazz
             {showPricing && (
                 <section id="pricing" className="pricing-section">
                     <div className="landing-section-header">
-                        <h2>Transparent Security Pricing & Licensing</h2>
-                        <p>Swazz is licensed under BSL 1.1 — Free for non-commercial use & businesses under $1M revenue. Commercial Enterprise licenses available for large teams.</p>
+                        <div className="section-eyebrow">Fair Licensing</div>
+                        <h2>Transparent Security Pricing</h2>
+                        <p>Swazz is licensed under BSL 1.1 — Free for non-commercial use &amp; businesses under $1M revenue. Commercial Enterprise licenses available for large teams.</p>
                     </div>
 
                     <div className="pricing-grid">
@@ -443,23 +895,23 @@ cd swazz
                             <div className="price">Free <span>(BSL 1.1)</span></div>
                             <ul className="pricing-features">
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Self-Hosted & Local CLI Fuzzer
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Self-Hosted &amp; Local CLI Fuzzer
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Private Dedicated & Shared Runners
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Private Dedicated &amp; Shared Runners
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    OpenAPI, HAR, SOAP & GraphQL Support
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    OpenAPI, HAR, SOAP &amp; GraphQL Support
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     14-Day Free Trial for Enterprise Features
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     Free for Revenue &lt; $1,000,000 / Open Source
                                 </li>
                             </ul>
@@ -470,28 +922,28 @@ cd swazz
                         
                         <div className="pricing-card featured">
                             <div className="pricing-badge">Commercial</div>
-                            <h3>Commercial & Enterprise</h3>
+                            <h3>Commercial &amp; Enterprise</h3>
                             <div className="price">Custom</div>
                             <ul className="pricing-features">
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     BSL 1.1 Enterprise Production Grant
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Enterprise SAML SSO & Okta Integration
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Enterprise SAML SSO &amp; Okta Integration
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    RBAC & Multi-Tenant Organizations
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    RBAC &amp; Multi-Tenant Organizations
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     Custom Compliance PDF Reports (PCI-DSS, SOC2)
                                 </li>
                                 <li>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    Jira & GitLab Security Center Integration
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Jira &amp; GitLab Security Center Integration
                                 </li>
                             </ul>
                             <button type="button" onClick={() => setShowWaitlistModal(true)} className="btn-pricing secondary">
@@ -506,7 +958,7 @@ cd swazz
             <footer className="landing-footer">
                 <div className="footer-logo">
                     <div className="logo-icon-container">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                         </svg>
                     </div>

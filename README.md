@@ -27,6 +27,7 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 ## 🚀 Key Features
 
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
+- **🎮 Interactive Live Simulator**: Zero-friction attack simulation playground on the web showcase exploring BOLA, JSON SQLi, SSRF, and Mass Assignment mutation diffs.
 - **🛰️ gRPC Microservice Fuzzing**: Direct fuzzing of gRPC microservices via live Server Reflection (`grpc://`, `grpcs://`) or `.proto` schema ingestion, with dynamic binary Protobuf wire serialization and specialized gRPC vulnerability analyzers.
 - **🔄 Zero-Setup HAR Replay**: Import browser `.har` files directly for instant fuzzing of undocumented APIs and real-world workflows without needing an OpenAPI spec.
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
