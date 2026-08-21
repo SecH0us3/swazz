@@ -49,6 +49,15 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     // 5. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    await expect(boundaryToggle).toBeVisible();
+    if (await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.click();
+    }
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     await startBtn.click();
 
     // 6. Verify run starts and completes (wait for the run to finish)

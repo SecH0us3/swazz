@@ -98,6 +98,15 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     // Click "Start Scan" (id="btn-start")
     const startFuzzBtn = page.locator('#btn-start');
     await expect(startFuzzBtn).toBeVisible();
+
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    await expect(boundaryToggle).toBeVisible();
+    if (await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.click();
+    }
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     await startFuzzBtn.click();
 
     // Wait for run to get active

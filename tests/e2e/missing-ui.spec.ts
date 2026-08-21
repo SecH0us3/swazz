@@ -336,6 +336,15 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    await expect(boundaryToggle).toBeVisible();
+    if (await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.click();
+    }
+    await expect(boundaryToggle).not.toHaveClass(/active/);
+
     await startBtn.click();
 
     // Wait for the scan to complete
