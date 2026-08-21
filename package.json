@@ -25,11 +25,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "concurrently": "^10.0.3",
-    "jsdom": "^30.0.1",
     "wrangler": "4.123.0"
-  },
-  "dependencies": {
-    "fake-indexeddb": "^6.2.5"
   },
   "overrides": {
     "esbuild": "0.28.2",
@@ -41,18 +37,8 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "esbuild@0.28.1": true,
-    "esbuild@0.21.5": true,
     "protobufjs@7.6.5": true,
     "sharp@0.35.2": true,
-    "sharp@0.34.5": true,
-    "fsevents@2.3.2": true,
-    "fsevents@2.3.3": true,
-    "workerd@1.20260701.1": true,
-    "workerd@1.20260704.1": true,
-    "workerd@1.20260721.1": true,
-    "workerd@1.20260730.1": true,
-    "workerd@1.20260811.1": true,
     "workerd@1.20260813.1": true
   }
 }
