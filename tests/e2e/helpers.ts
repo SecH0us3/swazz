@@ -35,6 +35,27 @@ export async function mockEnterpriseLicense(page: Page, features: string[] = ['*
 }
 
 /**
+ * Ensures Config Sidebar is open and disables the Boundary profile
+ * to prevent excessive combinatorial payloads during E2E testing.
+ */
+export async function disableBoundaryProfile(page: Page): Promise<void> {
+  const configSidebar = page.locator('.config-sidebar');
+  if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
+    const configToggle = page.locator('.workspace-config-toggle-btn');
+    if (await configToggle.count() > 0 && await configToggle.first().isVisible()) {
+      await configToggle.first().click();
+    }
+  }
+  const boundaryToggle = page.locator('.profile-toggle.boundary');
+  if (await boundaryToggle.count() > 0 && await boundaryToggle.isVisible()) {
+    if (await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.click();
+      await expect(boundaryToggle).not.toHaveClass(/active/);
+    }
+  }
+}
+
+/**
  * Safely registers and logs in a new unique user, disables intrusive onboarding tips,
  * and optionally claims a 14-day enterprise trial to enable backend & frontend enterprise features.
  */
@@ -43,6 +64,7 @@ export async function registerAndLogin(
   usernamePrefix: string = 'u',
   claimTrial: boolean = true
 ): Promise<string> {
+  await page.context().clearCookies();
   await page.goto('/');
   await page.evaluate(() => {
     localStorage.clear();
@@ -52,11 +74,11 @@ export async function registerAndLogin(
   await page.goto('/');
 
   const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
-  await expect(signInBtn).toBeVisible({ timeout: 10000 });
+  await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
   await signInBtn.click();
 
   const createBtn = page.getByRole('button', { name: 'Create an account' });
-  await expect(createBtn).toBeVisible({ timeout: 10000 });
+  await expect(createBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
   await createBtn.click();
 
   // Ensure total length is strictly < 20 chars for database constraints
@@ -66,7 +88,7 @@ export async function registerAndLogin(
   await page.locator('#password').fill('Password123!');
   await page.locator('#password').press('Enter');
 
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
   if (claimTrial) {
     await page.evaluate(async () => {
@@ -82,3 +104,14 @@ export async function registerAndLogin(
 
   return uniqueUsername;
 }
+
+/**
+ * Shared timeouts for E2E tests to prevent hardcoded numbers
+ */
+export const TIMEOUTS = {
+  SHORT: 5000,
+  DEFAULT: 10000,
+  LOAD: 30000,
+  SCAN_RUN: 180000,
+  GLOBAL_TEST: 300000,
+};

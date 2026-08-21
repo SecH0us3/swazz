@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Auth Sequence E2E Tests', () => {
   test('should configure Auth Sequence with a TOTP step', async ({ page }) => {
@@ -20,7 +21,7 @@ test.describe('Auth Sequence E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');

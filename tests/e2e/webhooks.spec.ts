@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Webhooks Tab E2E Tests', () => {
   test('should support creating, testing, editing, and deleting webhooks', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('Webhooks Tab E2E Tests', () => {
     await testBtn.click();
 
     // Check toast/notification
-    await expect(page.getByText('Test payload sent successfully')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Test payload sent successfully')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 9. Edit Webhook
     await page.locator('button.webhook-edit-btn').click();

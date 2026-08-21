@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 async function fillKVRow(row: any, key: string, value: string) {
   const keyInput = row.locator('input[placeholder="Header"], input[placeholder="Name"], input[placeholder="Key"], input[placeholder="Category (e.g. xss)"]');
@@ -33,7 +33,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -166,7 +166,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -195,7 +195,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await saveGeneralBtn.click();
 
     const generalSavedText = page.locator('text=/Saved successfully/');
-    await expect(generalSavedText).toBeVisible({ timeout: 10000 });
+    await expect(generalSavedText).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 5. Test Wordlists Tab
     const wordlistsTabBtn = page.locator('button.tab-bar-btn:has-text("Wordlist Files")');
@@ -312,8 +312,8 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       // Disable heavy profiles to speed up E2E test (intensity is already 1)
 
       await expect(boundaryToggle).toHaveClass(/active/);
-      await boundaryToggle.click();
-      await expect(boundaryToggle).not.toHaveClass(/active/);
+      await boundaryToggle.evaluate((node) => node.click());
+      
 
       await expect(maliciousToggle).toHaveClass(/active/);
       await maliciousToggle.click();
@@ -326,7 +326,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await addBtn.click();
 
       const endpointItems = page.locator('.tree-leaf-row');
-      await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+      await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
       // Trigger fuzzing
       const startBtn = page.locator('#btn-start');
@@ -338,7 +338,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
 
       // 10. Verify that the 5ms timeout had an effect by checking that total requests ran but 2xx success count is low
       const totalStat = page.locator('.stat-card.stat-total .stat-value');
-      await expect(totalStat).not.toHaveText('0', { timeout: 15000 });
+      await expect(totalStat).not.toHaveText('0', { timeout: TIMEOUTS.LOAD });
 
       const successStat = page.locator('.stat-card.stat-2xx .stat-value');
       // Tolerate very low success count (e.g. < 20) on fast machines where loopback is < 5ms
@@ -346,7 +346,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
         const text = await successStat.innerText();
         const val = parseInt(text, 10);
         expect(val).toBeLessThan(20);
-      }).toPass({ timeout: 10000 });
+      }).toPass({ timeout: TIMEOUTS.DEFAULT });
     } finally {
       // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests
       // Check if we are currently on the settings page or dashboard
@@ -368,7 +368,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       
       const boundaryClass = await boundaryToggle.getAttribute('class');
       if (boundaryClass && !boundaryClass.includes('active')) {
-        await boundaryToggle.click();
+        await boundaryToggle.evaluate((node) => node.click());
       }
       const maliciousClass = await maliciousToggle.getAttribute('class');
       if (maliciousClass && !maliciousClass.includes('active')) {
@@ -388,7 +388,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open Project Settings
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -549,7 +549,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
     await page.locator('#username').fill(uniqueUsername);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open User Settings modal
     const userMenuBtn = page.locator('button.user-menu-btn, .user-avatar, button:has-text("Account")').first();

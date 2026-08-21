@@ -177,6 +177,9 @@ export function Inspector({
                     const existing = securityGroups[groupKey].seenMap.get(dedupeKey);
                     if (existing) {
                         existing.count += 1;
+                        if (row.triage && row.triage !== 'none' && (!existing.result.triage || existing.result.triage === 'none')) {
+                            existing.result = row;
+                        }
                     } else {
                         const newItem = { result: row, finding: f, count: 1 };
                         securityGroups[groupKey].seenMap.set(dedupeKey, newItem);
@@ -220,6 +223,9 @@ export function Inspector({
                     const existing = infraGroups[groupKey].seenMap.get(dedupeKey);
                     if (existing) {
                         existing.count += 1;
+                        if (row.triage && row.triage !== 'none' && (!existing.result.triage || existing.result.triage === 'none')) {
+                            existing.result = row;
+                        }
                     } else {
                         const newItem = { result: row, count: 1 };
                         infraGroups[groupKey].seenMap.set(dedupeKey, newItem);

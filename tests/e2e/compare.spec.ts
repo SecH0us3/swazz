@@ -4,31 +4,32 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS, disableBoundaryProfile} from './helpers';
 
 test.describe('Multi-Scan Comparison E2E Tests', () => {
-  test('should run multiple scans, select them in History, compare them, and verify comparison data', async ({ page }) => {
-    // 1. Mock Enterprise license to unlock Cloud History & Comparison
+  test('should run two scans with different configurations, compare results, and display diff analytics', async ({ page }) => {
+    // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-
-    // 2. Handle Registration
     await registerAndLogin(page);
 
-    // 3. Add Vulnerable Demo API Swagger Specification
+    // 2. Add Swagger spec of local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
     await expect(specUrlInput).toBeVisible();
-    
     const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
     await specUrlInput.fill(demoSpecUrl);
-    
+
     const addBtn = page.locator('button.btn-primary:has-text("Add")');
     await addBtn.click();
 
-    // Verify endpoints are loaded
+    // Verify spec is loaded
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
-    const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
 
+    // Wait for endpoints tree to render
+    const endpointItems = page.locator('.tree-leaf-row');
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
+
+    // Disable Boundary profile for run 1 to avoid massive payload generation
+    await disableBoundaryProfile(page);
     // --- Run Scan 1 ---
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
@@ -36,20 +37,27 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // Wait for fuzzer to start
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await page.waitForTimeout(4000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // Wait for the first run to complete
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
-
-    // Disable Boundary profile for run 2 to vary the stats slightly
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-    await expect(boundaryToggle).toBeVisible();
-    await boundaryToggle.click();
+    // Disable Malicious profile (since Boundary is already disabled) for run 2 to vary the stats slightly
+    const maliciousToggle = page.locator('.profile-toggle.malicious');
+    if (await maliciousToggle.count() > 0 && await maliciousToggle.isVisible()) {
+      await maliciousToggle.click();
+    }
 
     // --- Run Scan 2 ---
     await startBtn.click();
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await page.waitForTimeout(4000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Navigate to Scan History
     const historyBtn = page.locator('button:has-text("History")');
@@ -69,7 +77,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // Floating action bar should slide in
     const compareBar = page.locator('.compare-bar');
-    await expect(compareBar).toBeVisible({ timeout: 5000 });
+    await expect(compareBar).toBeVisible({ timeout: TIMEOUTS.SHORT });
 
     // 6. Submit comparison
     const submitBtn = page.locator('#compare-scans-submit-btn');

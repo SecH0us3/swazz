@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Admin Logs Viewer E2E Tests', () => {
   test('Admin Logs Tab access and log viewing', async ({ page }) => {
@@ -46,7 +47,7 @@ test.describe('Admin Logs Viewer E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open the UserMenu dropdown in the header
     const accountBtn = page.locator('button[title="Account"]');

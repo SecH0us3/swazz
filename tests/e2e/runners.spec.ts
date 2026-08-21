@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
   test('should navigate to runners settings tab and verify active runner version', async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
 
     // 5. Verify the connected local runner (runner-*) is visible in the table
     const runnerNameEl = page.locator('.runner-name').first();
-    await expect(runnerNameEl).toBeVisible({ timeout: 15000 });
+    await expect(runnerNameEl).toBeVisible({ timeout: TIMEOUTS.LOAD });
     const nameText = await runnerNameEl.textContent();
     expect(nameText).toMatch(/^runner-/);
 
@@ -60,7 +60,7 @@ test.describe('Distributed Fuzzing Agents Version Display E2E Test', () => {
 
     // 5. Verify the connected local runner is visible
     const runnerNameEl = page.locator('.runner-name').first();
-    await expect(runnerNameEl).toBeVisible({ timeout: 15000 });
+    await expect(runnerNameEl).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 6. Assert that no "Restart" button is visible in the row for this runner
     const restartBtn = page.locator('button:has-text("Restart")');

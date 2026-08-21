@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS, disableBoundaryProfile } from './helpers';
 
 test.describe('Guest Login E2E Test', () => {
   test('should allow entering as guest, parsing a spec, starting fuzzing, and logging out', async ({ page }) => {
@@ -18,6 +19,7 @@ test.describe('Guest Login E2E Test', () => {
     });
 
     // 1. Navigate to the frontend dev server
+    await page.context().clearCookies();
     await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
@@ -26,7 +28,7 @@ test.describe('Guest Login E2E Test', () => {
     });
     await page.goto('/');
     const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
-    await expect(signInBtn).toBeVisible({ timeout: 10000 });
+    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await signInBtn.click();
 
     // 2. Click "Try as guest →"
@@ -35,7 +37,7 @@ test.describe('Guest Login E2E Test', () => {
     await guestBtn.click();
 
     // 3. Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Verify guest badge is shown in the header
     const guestBadge = page.locator('.guest-badge');
@@ -56,7 +58,7 @@ test.describe('Guest Login E2E Test', () => {
     // 6. Verify endpoints are populated in the sidebar (confirms /api/parse works!)
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 7. Verify target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -66,12 +68,14 @@ test.describe('Guest Login E2E Test', () => {
 
     // 8. Trigger fuzzing by clicking the Start button (confirms /api/runs works!)
     const startBtn = page.locator('#btn-start');
-    await expect(startBtn).toBeVisible();
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    await disableBoundaryProfile(page);
+
     await startBtn.click();
 
     // 9. Verify the run starts (Stop button becomes visible)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Stop fuzzing
     await stopBtn.click();
@@ -90,10 +94,12 @@ test.describe('Guest Login E2E Test', () => {
     const testUsername = `guest_${Date.now().toString().slice(-6)}`;
     await page.locator('input#username').fill(testUsername);
     await page.locator('input#password').fill('TestPassword123!');
+    const regPromise = page.waitForResponse(res => res.url().includes('/api/auth/register') && res.status() === 200);
     await page.locator('button.primary-submit-btn').click();
+    await regPromise;
 
     // 13. Verify modal closes and session upgrades to registered user
-    await expect(authModal).not.toBeVisible({ timeout: 10000 });
+    await expect(authModal).not.toBeVisible({ timeout: TIMEOUTS.LOAD });
     await expect(page.locator('.guest-badge')).not.toBeVisible();
   });
 });

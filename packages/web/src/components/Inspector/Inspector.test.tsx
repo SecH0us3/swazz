@@ -360,6 +360,69 @@ describe('Inspector Component', () => {
         expect(screen.getByText('HTTP 400 Error')).toBeTruthy();
         expect(screen.getByText('1 finding')).toBeTruthy();
     });
+
+    it('propagates triage status across deduplicated findings in the same cluster', async () => {
+        localStorage.clear();
+        const rows = [
+            {
+                id: '1',
+                timestamp: 2000,
+                method: 'GET',
+                endpoint: '/api/v1/resource',
+                resolvedPath: '/api/v1/resource',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+            },
+            {
+                id: '2',
+                timestamp: 1000,
+                method: 'GET',
+                endpoint: '/api/v1/resource',
+                resolvedPath: '/api/v1/resource',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 12,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Internal Server Error',
+                responseSize: 100,
+                triage: 'ignored',
+            }
+        ] as ResultSummary[];
+
+        mockQueryResults.mockResolvedValue({
+            rows,
+            total: 2
+        });
+
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+            />
+        );
+
+        // Click Expand All to render finding items
+        const expandAllBtn = await screen.findByRole('button', { name: /Expand All/i });
+        fireEvent.click(expandAllBtn);
+
+        // Should show Ignored badge even though the first row in rows array had no triage
+        await waitFor(() => {
+            expect(screen.getByText('Ignored')).toBeTruthy();
+        });
+    });
 });
 
 

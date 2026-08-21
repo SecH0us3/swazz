@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Project Lifecycle and Selection E2E Test', () => {
   test('should create a new project using dialog prompt and switch between projects', async ({ page }) => {
@@ -20,7 +21,7 @@ test.describe('Project Lifecycle and Selection E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Locate the Project Selector button (avoiding .first() by targeting its specific class)
     const projectSelectorBtn = page.locator('.sidebar-project-selector button.btn-ghost');

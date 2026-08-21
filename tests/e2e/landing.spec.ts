@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Landing Page', () => {
   test('should display the global scan count', async ({ page }) => {
@@ -21,6 +22,6 @@ test.describe('Landing Page', () => {
 
     // Wait for the formatted number to become visible on the page
     // Using a slightly longer timeout in case of counting animation (takes ~2s)
-    await expect(page.getByText('8,765,432+ Scans')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('8,765,432+ Scans')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });

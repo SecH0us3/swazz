@@ -4,53 +4,41 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
 
 test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
   test('should triage finding and check ignore rule scopes & auto cleanup', async ({ page }) => {
-    // 1. Navigate to frontend
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    // 1. Mock Enterprise license & register user
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
-    // 2. Register unique user (username matching length requirements)
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
-    await configPromise;
-
-    // 3. Add Vulnerable Demo API spec
+    // 2. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
     await expect(specUrlInput).toBeVisible();
-    
     const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
     await specUrlInput.fill(demoSpecUrl);
-    
+
     const addBtn = page.locator('button.btn-primary:has-text("Add")');
     await addBtn.click();
 
-    const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 15000 });
+    // Verify spec is loaded
+    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
 
-    // 4. Trigger fuzzing
+    // Wait for endpoints list to render
+    const endpointItems = page.locator('.tree-leaf-row');
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
+
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-    await expect(boundaryToggle).toBeVisible();
-    await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click();
-    await expect(boundaryToggle).not.toHaveClass(/active/);
+    await disableBoundaryProfile(page);
 
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
     await startBtn.click();
 
-    // Wait for the run to complete
-    await expect(startBtn).toBeVisible({ timeout: 120000 });
+    // Verify run starts and completes
+    const stopBtn = page.locator('button.btn-danger[title="Stop"]');
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -59,12 +47,12 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     // Click Expand All to render finding items
     const expandAllBtn = page.locator('button:has-text("Expand All")');
-    await expect(expandAllBtn).toBeVisible({ timeout: 10000 });
+    await expect(expandAllBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await expandAllBtn.click();
 
     // Select the first finding item
     const firstFinding = page.locator('.finding-item').first();
-    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await expect(firstFinding).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await firstFinding.click();
 
     // Verify detail panel and triage selector
@@ -82,15 +70,17 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await page.locator('input[name="ignore-scope"][value="all"]').click();
     const confirmBtn = page.locator('button.btn-primary:has-text("Ignore Finding")');
     await expect(confirmBtn).toBeVisible();
+    const triageResponsePromise = page.waitForResponse(res => res.url().includes('/config') && res.request().method() === 'POST');
     await confirmBtn.click();
+    await triageResponsePromise;
 
     // Modal should disappear
     await expect(modalTitle).not.toBeVisible();
 
-    // Verify opacity & IG badge on dashboard
-    await expect(firstFinding).toHaveCSS('opacity', '0.6');
+    // Verify IG badge and opacity on dashboard (wait up to 30s for React/IDB sync)
     const igBadge = firstFinding.locator('.badge:has-text("Ignored")');
-    await expect(igBadge).toBeVisible();
+    await expect(igBadge).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await expect(firstFinding).toHaveCSS('opacity', '0.6', { timeout: TIMEOUTS.LOAD });
 
     // Close the detail inspector panel
     const closeInspectorBtn = page.locator('button[aria-label="Close"]');
@@ -135,19 +125,22 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     await findingsTab.click();
     await expandAllBtn.click();
-    await firstFinding.click();
+    
+    const triagedFinding = page.locator('.finding-item:has(.badge:has-text("Ignored"))').first();
+    await expect(triagedFinding).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await triagedFinding.click();
 
+    const cleanupResponsePromise = page.waitForResponse(res => res.url().includes('/config') && res.request().method() === 'POST');
     await triageSelect.selectOption('none');
+    await cleanupResponsePromise;
 
     // Close the detail inspector panel
     await closeInspectorBtn.click();
 
-    // Opacity goes back to 1
-    await expect(firstFinding).toHaveCSS('opacity', '1');
-    await expect(igBadge).not.toBeVisible();
-
-    // Wait for the cleanup config sync to finish persisting to the backend API
-    await page.waitForTimeout(2000);
+    // Opacity goes back to 1 and Ignored badge is removed
+    const untriagedFinding = page.locator('.finding-item').first();
+    await expect(untriagedFinding).toHaveCSS('opacity', '1');
+    await expect(page.locator('.finding-item .badge:has-text("Ignored")')).toHaveCount(0);
 
     // Verify rule was automatically cleaned up from settings
     await moreSettingsBtn.click();

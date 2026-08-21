@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { registerAndLogin } from './helpers';
+import { registerAndLogin , TIMEOUTS} from './helpers';
 
 async function navigateToLicenseSettings(page: Page) {
   // Open UserMenu dropdown
@@ -22,7 +22,7 @@ async function navigateToLicenseSettings(page: Page) {
   await expect(licenseTab).toBeVisible();
   await licenseTab.click();
 
-  await expect(page.locator('h2:has-text("License & Subscription")')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('h2:has-text("License & Subscription")')).toBeVisible({ timeout: TIMEOUTS.SHORT });
 }
 
 test.describe('Trial License Self-Generation E2E Test', () => {
@@ -45,7 +45,7 @@ test.describe('Trial License Self-Generation E2E Test', () => {
     await claimBtn.click();
 
     // Verify success and active state
-    await expect(page.locator('.two-factor-success-alert')).toContainText('14-day free trial license activated successfully', { timeout: 10000 });
+    await expect(page.locator('.two-factor-success-alert')).toContainText('14-day free trial license activated successfully', { timeout: TIMEOUTS.DEFAULT });
     await expect(page.locator('.license-status-badge.active')).toContainText('Trial License Active');
     await expect(page.locator('.trial-days-badge')).toContainText('remaining');
     await expect(page.locator('.license-info-value', { hasText: 'Trial' })).toBeVisible();

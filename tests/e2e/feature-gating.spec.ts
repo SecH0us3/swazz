@@ -3,6 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 
 import { test, expect, Page } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 async function registerAndLogin(page: Page): Promise<string> {
   await page.goto('/');
@@ -16,13 +17,13 @@ async function registerAndLogin(page: Page): Promise<string> {
   await page.locator('#password').fill('Password123!');
   await page.locator('#password').press('Enter');
 
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   return uniqueUsername;
 }
 
 async function openProjectSettings(page: Page) {
   await page.locator('button:has-text("More Project Settings")').click();
-  await expect(page.locator('h1:has-text("Project Settings")')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('h1:has-text("Project Settings")')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 }
 
 test.describe('Feature Gating E2E', () => {
@@ -49,12 +50,12 @@ test.describe('Feature Gating E2E', () => {
 
     // Clicking a locked paid tab does not open it and shows a toast.
     await page.locator('#tab-webhooks').click();
-    await expect(page.locator('.toast', { hasText: 'requires a paid plan' })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.toast', { hasText: 'requires a paid plan' })).toBeVisible({ timeout: TIMEOUTS.SHORT });
     await expect(page.locator('.project-settings-content')).not.toContainText('Webhook');
 
     // Clicking a coming-soon tab shows the coming-soon toast.
     await page.locator('#tab-waf-analysis').click();
-    await expect(page.locator('.toast', { hasText: 'coming soon' })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.toast', { hasText: 'coming soon' })).toBeVisible({ timeout: TIMEOUTS.SHORT });
   });
 
   test('activating a license unlocks paid tabs', async ({ page }) => {
@@ -86,14 +87,14 @@ test.describe('Feature Gating E2E', () => {
 
     // Reload so the app fetches the (mocked) license status.
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     await openProjectSettings(page);
 
     // Webhooks tab is now unlocked — no lock badge, click opens the tab.
     await expect(page.locator('#tab-webhooks')).not.toContainText('🔒');
     await page.locator('#tab-webhooks').click();
-    await expect(page.locator('.project-settings-content')).toContainText('Webhook', { timeout: 5000 });
+    await expect(page.locator('.project-settings-content')).toContainText('Webhook', { timeout: TIMEOUTS.SHORT });
 
     // Coming-soon tabs stay locked regardless of license.
     await expect(page.locator('#tab-waf-analysis')).toContainText('⏳');
