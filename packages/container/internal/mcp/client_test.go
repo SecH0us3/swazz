@@ -184,7 +184,7 @@ func TestStdioClient_CrashOnCall(t *testing.T) {
 	}()
 
 	// Call tool that triggers exit 42
-	res, stderr, err := client.CallTool(ctx, "crash", nil)
+	res, _, err := client.CallTool(ctx, "crash", nil)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	assert.Contains(t, err.Error(), "exit status 42")
