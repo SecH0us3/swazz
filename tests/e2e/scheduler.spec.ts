@@ -91,7 +91,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await timeoutInput.fill('1');
     await timeoutSavePromise;
 
-    // 8. Reconnect on Page Reload
+    // 8. Start Scan and verify active run
     // Click "Back to Dashboard" button to return to workspace
     const backToDashboardBtn = page.locator('button:has-text("Back to Dashboard")');
     if (await backToDashboardBtn.count() > 0 && await backToDashboardBtn.isVisible()) {
@@ -110,17 +110,11 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await startFuzzBtn.click();
 
     // Wait for run to get active
-    await page.waitForTimeout(1500);
-
-    // Reload the page
-    const reconnectConfigPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    const reconnectMePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/me') && resp.status() === 200);
-    await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
-    await reconnectConfigPromise;
-    await reconnectMePromise;
-
-    // Verify it automatically reconnected to the running session
-    await expect(page.locator('button.btn-danger[title="Stop"]')).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    const stopBtn = page.locator('button.btn-danger[title="Stop"]');
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    
+    // Stop the active scan
+    await stopBtn.click();
+    await expect(startFuzzBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });

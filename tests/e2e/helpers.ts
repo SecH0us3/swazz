@@ -64,6 +64,7 @@ export async function registerAndLogin(
   usernamePrefix: string = 'u',
   claimTrial: boolean = true
 ): Promise<string> {
+  await page.context().clearCookies();
   await page.goto('/');
   await page.evaluate(() => {
     localStorage.clear();

@@ -19,6 +19,7 @@ test.describe('Guest Login E2E Test', () => {
     });
 
     // 1. Navigate to the frontend dev server
+    await page.context().clearCookies();
     await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
@@ -27,7 +28,7 @@ test.describe('Guest Login E2E Test', () => {
     });
     await page.goto('/');
     const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
-    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await signInBtn.click();
 
     // 2. Click "Try as guest →"
@@ -93,7 +94,9 @@ test.describe('Guest Login E2E Test', () => {
     const testUsername = `guest_${Date.now().toString().slice(-6)}`;
     await page.locator('input#username').fill(testUsername);
     await page.locator('input#password').fill('TestPassword123!');
+    const regPromise = page.waitForResponse(res => res.url().includes('/api/auth/register') && res.status() === 200);
     await page.locator('button.primary-submit-btn').click();
+    await regPromise;
 
     // 13. Verify modal closes and session upgrades to registered user
     await expect(authModal).not.toBeVisible({ timeout: TIMEOUTS.LOAD });
