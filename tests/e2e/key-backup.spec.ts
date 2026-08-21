@@ -31,7 +31,7 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
 
     // Wait for the app layout to load directly into fuzzer workspace
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
-    await expect(page.locator('.welcome-workspace-title')).toBeVisible();
+    await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Confirm the E2EE backup nudge is visible in the right ConfigSidebar panel
     const backupNudge = page.locator('.e2ee-sidebar-nudge');

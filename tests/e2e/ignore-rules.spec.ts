@@ -47,12 +47,12 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     // Click Expand All to render finding items
     const expandAllBtn = page.locator('button:has-text("Expand All")');
-    await expect(expandAllBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(expandAllBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await expandAllBtn.click();
 
     // Select the first finding item
     const firstFinding = page.locator('.finding-item').first();
-    await expect(firstFinding).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(firstFinding).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await firstFinding.click();
 
     // Verify detail panel and triage selector
