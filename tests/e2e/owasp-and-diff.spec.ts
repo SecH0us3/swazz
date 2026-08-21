@@ -89,8 +89,8 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await owaspTab.click();
 
     // Verify the default header is OWASP API Security Top 10 (2023)
-    const owaspTitle = page.locator('.owasp-title');
-    await expect(owaspTitle).toHaveText('OWASP API Security Top 10 (2023)', { timeout: TIMEOUTS.DEFAULT });
+    const owaspTitle = page.locator('.owasp-summary-title');
+    await expect(owaspTitle).toContainText('OWASP API Security Top 10 (2023)', { timeout: TIMEOUTS.DEFAULT });
 
     // Verify that at least one category card has findings
     const owaspCardWithFindings = page.locator('.owasp-card.has-findings').first();
@@ -111,6 +111,6 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await expect(webStandardBtn).toBeVisible();
     await webStandardBtn.click();
 
-    await expect(owaspTitle).toHaveText('OWASP Top 10 (2025)');
+    await expect(owaspTitle).toContainText('OWASP Top 10 (2025)');
   });
 });
