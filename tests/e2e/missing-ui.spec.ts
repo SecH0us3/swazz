@@ -356,7 +356,9 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
     await startBtn.click();
 
-    // Wait for the scan to complete
+    // Verify run starts and completes
+    const stopBtn = page.locator('button.btn-danger[title="Stop"]');
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 2. Go to request logs

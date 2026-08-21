@@ -17,7 +17,9 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
   test('should support background generation, backup download, and setting restore', async ({ page }) => {
     // 1. Navigate to main page and sign in
     await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    const signInBtn = page.getByRole('button', { name: 'Sign In' });
+    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await signInBtn.click();
 
     // 2. Register a unique user
     await page.getByRole('button', { name: 'Create an account' }).click();
