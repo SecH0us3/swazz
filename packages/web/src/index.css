@@ -11276,3 +11276,19 @@ kbd {
   font-size: 11px;
   color: var(--color-warning);
 }
+
+/* OWASP & Taxonomy Badges */
+.badge-owasp-api {
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+}
+
+.badge-cwe {
+  background: #0284c7;
+  color: #ffffff;
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+}
+

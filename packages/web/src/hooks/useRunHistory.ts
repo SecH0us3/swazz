@@ -257,6 +257,7 @@ export function getCweIds(ruleId: string, endpoint?: string, evidence?: string):
             else if (ruleId.includes('xss')) cwes.push('CWE-79');
             else if (ruleId.includes('xxe')) cwes.push('CWE-611');
             else if (ruleId.includes('ssti')) cwes.push('CWE-1336');
+            else if (ruleId.startsWith('swazz/status-5') || ruleId === 'swazz/network-error') cwes.push('CWE-755');
             else cwes.push('CWE-20');
         }
     }

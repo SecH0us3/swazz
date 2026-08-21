@@ -354,5 +354,6 @@ describe('useRunHistory', () => {
         expect(mdContent).toContain('**CWE:** CWE-639');
         expect(mdContent).toContain('**CWE:** CWE-770');
         expect(mdContent).toContain('**CWE:** CWE-89');
+        expect(mdContent).toContain('**CWE:** CWE-755');
     });
 });

@@ -177,7 +177,7 @@ const OWASPFindingRow: React.FC<OWASPFindingRowProps> = React.memo(({ result, fi
             </div>
             <div className="owasp-finding-right">
                 {finding?.cweIds?.[0] && (
-                    <span className="badge" style={{ background: '#0284c7', color: '#fff', fontSize: 'var(--font-size-2xs)' }}>
+                    <span className="badge badge-cwe">
                         {finding.cweIds[0]}
                     </span>
                 )}

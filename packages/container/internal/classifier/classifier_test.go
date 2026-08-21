@@ -187,11 +187,19 @@ func TestClassifier_OWASPCategory(t *testing.T) {
 	if !reflect.DeepEqual(finding.OWASPCategory, expectedOWASP) {
 		t.Errorf("Expected OWASPCategory %v, got %v", expectedOWASP, finding.OWASPCategory)
 	}
+	expectedAPI := []string{"API10:2023 Unsafe Consumption of APIs"}
+	if !reflect.DeepEqual(finding.OWASPAPICategory, expectedAPI) {
+		t.Errorf("Expected OWASPAPICategory %v, got %v", expectedAPI, finding.OWASPAPICategory)
+	}
+	expectedCWE := []string{"CWE-755"}
+	if !reflect.DeepEqual(finding.CWEIDs, expectedCWE) {
+		t.Errorf("Expected CWEIDs %v, got %v", expectedCWE, finding.CWEIDs)
+	}
 
 	// Test case 2: Response body analyzer finding
 	resAnalyzer := &swagger.FuzzResult{
 		Status:   200,
-		Endpoint: "/welcome",
+		Endpoint: "/users/{id}",
 		Method:   "GET",
 		AnalyzerFindings: []swagger.AnalysisFinding{
 			{
@@ -208,6 +216,14 @@ func TestClassifier_OWASPCategory(t *testing.T) {
 	expectedAnalyzerOWASP := []string{"A01:2025 Broken Access Control"}
 	if !reflect.DeepEqual(findings[0].OWASPCategory, expectedAnalyzerOWASP) {
 		t.Errorf("Expected OWASPCategory %v, got %v", expectedAnalyzerOWASP, findings[0].OWASPCategory)
+	}
+	expectedAnalyzerAPI := []string{"API1:2023 Broken Object Level Authorization"}
+	if !reflect.DeepEqual(findings[0].OWASPAPICategory, expectedAnalyzerAPI) {
+		t.Errorf("Expected OWASPAPICategory %v, got %v", expectedAnalyzerAPI, findings[0].OWASPAPICategory)
+	}
+	expectedAnalyzerCWE := []string{"CWE-639"}
+	if !reflect.DeepEqual(findings[0].CWEIDs, expectedAnalyzerCWE) {
+		t.Errorf("Expected CWEIDs %v, got %v", expectedAnalyzerCWE, findings[0].CWEIDs)
 	}
 }
 

@@ -557,12 +557,12 @@ export function RequestDetail({
                                     </span>
                                     <span>Vulnerability: {finding.ruleId}</span>
                                     {finding.owaspApiCategory?.map((cat, i) => (
-                                        <span key={i} className="badge" style={{ background: '#7c3aed', color: '#fff', marginLeft: 'var(--space-2)' }} title={cat}>
+                                        <span key={i} className="badge badge-owasp-api" title={cat}>
                                             {cat.split(' ')[0]}
                                         </span>
                                     ))}
                                     {finding.cweIds?.map((cwe, i) => (
-                                        <span key={i} className="badge" style={{ background: '#0284c7', color: '#fff', marginLeft: 'var(--space-2)' }}>
+                                        <span key={i} className="badge badge-cwe">
                                             {cwe}
                                         </span>
                                     ))}
