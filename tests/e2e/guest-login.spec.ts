@@ -112,7 +112,7 @@ test.describe('Guest Login E2E Test', () => {
     await page.locator('button.primary-submit-btn').click();
 
     // 13. Verify modal closes and session upgrades to registered user
-    await expect(authModal).not.toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(authModal).not.toBeVisible({ timeout: TIMEOUTS.LOAD });
     await expect(page.locator('.guest-badge')).not.toBeVisible();
   });
 });

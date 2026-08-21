@@ -143,19 +143,23 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     await findingsTab.click();
     await expandAllBtn.click();
-    await firstFinding.click();
+    
+    const triagedFinding = page.locator('.finding-item:has(.badge:has-text("Ignored"))').first();
+    await expect(triagedFinding).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await triagedFinding.click();
 
+    const cleanupResponsePromise = page.waitForResponse(res => res.url().includes('/config') && res.request().method() === 'POST');
     await triageSelect.selectOption('none');
 
     // Close the detail inspector panel
     await closeInspectorBtn.click();
 
     // Opacity goes back to 1
-    await expect(firstFinding).toHaveCSS('opacity', '1');
+    await expect(triagedFinding).toHaveCSS('opacity', '1');
     await expect(igBadge).not.toBeVisible();
 
     // Wait for the cleanup config sync to finish persisting to the backend API
-    await page.waitForTimeout(2000);
+    await cleanupResponsePromise;
 
     // Verify rule was automatically cleaned up from settings
     await moreSettingsBtn.click();
