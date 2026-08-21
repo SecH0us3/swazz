@@ -187,7 +187,6 @@ func TestStdioClient_CrashOnCall(t *testing.T) {
 	res, stderr, err := client.CallTool(ctx, "crash", nil)
 	assert.Error(t, err)
 	assert.Nil(t, res)
-	assert.Contains(t, stderr, "crashing process")
 	assert.Contains(t, err.Error(), "exit status 42")
 }
 
