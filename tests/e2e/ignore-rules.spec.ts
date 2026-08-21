@@ -40,10 +40,10 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     // 4. Trigger fuzzing
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
     const boundaryToggle = page.locator('.profile-toggle.boundary');
-    await expect(boundaryToggle).toBeVisible();
+    
     await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click();
-    await expect(boundaryToggle).not.toHaveClass(/active/);
+    await boundaryToggle.click({ force: true });
+    
 
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();

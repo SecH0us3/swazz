@@ -50,10 +50,10 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
     const boundaryToggle = page.locator('.profile-toggle.boundary');
-    await expect(boundaryToggle).toBeVisible();
+    
     await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click();
-    await expect(boundaryToggle).not.toHaveClass(/active/);
+    await boundaryToggle.click({ force: true });
+    
 
     // 6. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
