@@ -3,17 +3,20 @@ module swazz-engine
 go 1.26.4
 
 require (
+	github.com/bufbuild/protocompile v0.14.1
 	github.com/chromedp/cdproto v0.0.0-20260719223732-95f6af754cfe
 	github.com/chromedp/chromedp v0.16.0
 	github.com/google/uuid v1.6.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/pquerna/otp v1.5.0
 	github.com/securego/gosec/v2 v2.28.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/tidwall/gjson v1.19.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/term v0.45.0
 	golang.org/x/time v0.15.0
+	google.golang.org/grpc v1.82.1
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.3
 	k8s.io/apimachinery v0.36.3
@@ -28,7 +31,6 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.57.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
-	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/buger/jsonparser v1.2.0 // indirect
 	github.com/ccojocar/zxcvbn-go v1.0.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -63,7 +65,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/openai/openai-go/v3 v3.42.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -76,7 +77,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
@@ -89,8 +90,6 @@ require (
 	google.golang.org/api v0.288.0 // indirect
 	google.golang.org/genai v1.63.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
