@@ -113,4 +113,79 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
 
     await expect(owaspTitle).toContainText('OWASP Top 10 (2025)');
   });
+
+  test('should display OWASP API 2023 by default with CWE badges and switch between standards & view tabs', async ({ page }) => {
+    // 1. Mock Enterprise license and login
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
+
+    // 2. Load demo API Swagger spec
+    const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
+    await expect(specUrlInput).toBeVisible();
+    const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
+    await specUrlInput.fill(demoSpecUrl);
+    await page.locator('button.btn-primary:has-text("Add")').click();
+    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl, { timeout: TIMEOUTS.LOAD });
+
+    // Wait for tree leaf row
+    await expect(page.locator('.tree-leaf-row').first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await disableBoundaryProfile(page);
+
+    // 3. Run a quick scan to generate findings
+    const startBtn = page.locator('#btn-start');
+    await expect(startBtn).toBeVisible();
+    await startBtn.click();
+
+    const stopBtn = page.locator('button.btn-danger[title="Stop"]');
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await page.waitForTimeout(5000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
+
+    // 4. Navigate to OWASP Top 10 tab
+    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
+    await expect(owaspTab).toBeVisible();
+    await owaspTab.click();
+
+    // 5. Verify default is OWASP API Security (2023)
+    const owaspTitle = page.locator('.owasp-summary-title');
+    await expect(owaspTitle).toContainText('OWASP API Security Top 10 (2023)');
+
+    // Verify API-specific category cards exist (API1:2023 to API10:2023)
+    const apiCard = page.locator('.owasp-card').filter({ hasText: /API1:2023|API8:2023|API10:2023/ }).first();
+    await expect(apiCard).toBeVisible();
+
+    // 6. Test Findings view tab
+    const findingsTabBtn = page.locator('.owasp-nav-tabs button:has-text("Findings")');
+    await expect(findingsTabBtn).toBeVisible();
+    await findingsTabBtn.click();
+
+    // Check that finding items in list view show CWE badges
+    const cweBadge = page.locator('.badge-cwe').first();
+    if (await cweBadge.isVisible()) {
+      await expect(cweBadge).toHaveText(/CWE-\d+/);
+    }
+
+    // 7. Test switching back to Overview (Cards) and toggling to Web Top 10 (2025)
+    const overviewTabBtn = page.locator('.owasp-nav-tabs button:has-text("Overview")');
+    await overviewTabBtn.click();
+
+    const webBtn = page.locator('.owasp-standard-toggle button:has-text("Web Top 10 (2025)")');
+    await expect(webBtn).toBeVisible();
+    await webBtn.click();
+
+    // Header updates to Web Top 10 (2025)
+    await expect(owaspTitle).toContainText('OWASP Top 10 (2025)');
+
+    // Category cards update to A01:2025..A10:2025
+    const webCard = page.locator('.owasp-card').filter({ hasText: /A01:2025|A02:2025|A10:2025/ }).first();
+    await expect(webCard).toBeVisible();
+
+    // Toggle back to API Security (2023)
+    const apiBtn = page.locator('.owasp-standard-toggle button:has-text("API Security (2023)")');
+    await apiBtn.click();
+    await expect(owaspTitle).toContainText('OWASP API Security Top 10 (2023)');
+  });
 });
