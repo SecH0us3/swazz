@@ -71,7 +71,7 @@ describe('OWASPTop10 Component', () => {
         );
 
         // Verify API Security 2023 header is present by default
-        expect(await screen.findByText('OWASP API Security Top 10 (2023)')).toBeTruthy();
+        expect(await screen.findByText(/OWASP API Security Top 10 \(2023\)/)).toBeTruthy();
 
         // Verify API categories are rendered
         expect(screen.getAllByText(/Broken Object Level Authorization/)).toBeTruthy();
@@ -92,13 +92,13 @@ describe('OWASPTop10 Component', () => {
             />
         );
 
-        expect(await screen.findByText('OWASP API Security Top 10 (2023)')).toBeTruthy();
+        expect(await screen.findByText(/OWASP API Security Top 10 \(2023\)/)).toBeTruthy();
 
         // Click Web Top 10 button
         const webBtn = screen.getByRole('button', { name: /Web Top 10 \(2025\)/i });
         fireEvent.click(webBtn);
 
-        expect(await screen.findByText('OWASP Top 10 (2025)')).toBeTruthy();
+        expect(await screen.findByText(/OWASP Top 10 \(2025\)/)).toBeTruthy();
         expect(screen.getAllByText(/Broken Access Control/)).toBeTruthy();
     });
 

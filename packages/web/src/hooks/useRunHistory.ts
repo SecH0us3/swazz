@@ -660,6 +660,9 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
         .filters input, .filters select { flex: 1; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid var(--border); background: var(--bg); color: var(--fg); outline: none; }
         .filters input:focus, .filters select:focus { border-color: var(--primary); }
         .error-msg { color: var(--error); font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .noscript-warning {
+            background: var(--warning); color: #000; padding: 1rem; border-radius: 0.5rem; margin: 1rem auto; max-width: 1000px; font-weight: bold; text-align: center;
+        }
         @media print {
             body { background: white; color: black; }
             .filters, .owasp-section { display: none; }
@@ -672,6 +675,11 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
     </style>
 </head>
 <body>
+    <noscript>
+        <div class="noscript-warning">
+            ⚠️ JavaScript is disabled. Filters and interactive features are unavailable, but all raw findings are displayed below.
+        </div>
+    </noscript>
     <div class="container">
         <header>
             <h1>Swazz Scan Report</h1>

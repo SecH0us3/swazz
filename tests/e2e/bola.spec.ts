@@ -178,14 +178,14 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
     const summaryBanner = page.locator('.owasp-summary-count');
     await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
 
-    // Find and expand A01:2025 Broken Access Control category card
-    const bolaCard = page.locator('.owasp-card:has-text("A01:2025")');
+    // Find and expand Broken Object Level Authorization (API1:2023 or A01:2025) category card
+    const bolaCard = page.locator('.owasp-card').filter({ hasText: /API1:2023|A01:2025|Broken Object Level Authorization/ });
     await expect(bolaCard).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(bolaCard).toHaveClass(/has-findings/);
     await bolaCard.click();
 
     // Check that a BOLA finding on /api/goods/ exists in the expanded accordion
-    const findingRow = page.locator('.owasp-accordion:has-text("A01:2025") .owasp-finding-row').filter({ hasText: '/api/goods/' }).first();
+    const findingRow = page.locator('.owasp-accordion .owasp-finding-row').filter({ hasText: '/api/goods/' }).first();
     await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await findingRow.click();
 

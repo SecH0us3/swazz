@@ -389,16 +389,17 @@ export function OWASPTop10({ runId, queryResults, isRunning = false, onSelectRes
 
     return (
         <div className="owasp-container">
-            <div className="owasp-header">
-                <div>
-                    <h2 className="owasp-title">
-                        {standard === 'api_2023' ? 'OWASP API Security Top 10 (2023)' : 'OWASP Top 10 (2025)'}
-                    </h2>
-                    <p className="owasp-subtitle">
-                        {standard === 'api_2023'
-                            ? 'Vulnerabilities classified according to the OWASP API Security Top 10 standard.'
-                            : 'Vulnerabilities classified according to the OWASP Web Application Security Top 10 standard.'}
-                    </p>
+            <div className="owasp-summary-banner">
+                <div className="owasp-summary-title">
+                    {standard === 'api_2023' ? 'OWASP API Security Top 10 (2023) Coverage' : 'OWASP Top 10 (2025) Coverage'}
+                    <a 
+                        href={standard === 'api_2023' ? "https://owasp.org/API-Security/editions/2023/en/0x00-header/" : "https://owasp.org/Top10/2025/"} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="owasp-external-link"
+                    >
+                        Official Site ↗
+                    </a>
                 </div>
                 <div className="owasp-summary-actions">
                     <div className="owasp-standard-toggle">
@@ -415,6 +416,9 @@ export function OWASPTop10({ runId, queryResults, isRunning = false, onSelectRes
                             🌐 Web Top 10 (2025)
                         </button>
                     </div>
+                    <span className="owasp-summary-count">
+                        {totalFindingsCount} Finding{totalFindingsCount === 1 ? '' : 's'} Detected
+                    </span>
                     <div className="owasp-nav-tabs">
                         <button
                             className={`owasp-tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
