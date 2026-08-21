@@ -2,7 +2,7 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "outDir": "./dist",
-        "rootDir": "./src",
+        "rootDir": "../..",
         "jsx": "react-jsx",
         "lib": [
             "ES2022",
@@ -12,7 +12,10 @@
         "noEmit": true,
         "declaration": false,
         "declarationMap": false,
-        "types": ["vitest/globals"]
+        "types": ["vitest/globals"],
+        "paths": {
+            "@swazz/shared": ["../shared/src/features.ts"]
+        }
     },
     "include": [
         "src"
