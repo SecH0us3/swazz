@@ -82,7 +82,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await page.locator('input[name="ignore-scope"][value="all"]').click();
     const confirmBtn = page.locator('button.btn-primary:has-text("Ignore Finding")');
     await expect(confirmBtn).toBeVisible();
-    const triageResponsePromise = page.waitForResponse(res => res.url().includes('/triage/rule') && res.request().method() === 'POST');
+    const triageResponsePromise = page.waitForResponse(res => res.url().includes('/config') && res.request().method() === 'POST');
     await confirmBtn.click();
     await triageResponsePromise;
 
