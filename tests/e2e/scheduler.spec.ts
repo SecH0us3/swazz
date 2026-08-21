@@ -92,8 +92,13 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await timeoutSavePromise;
 
     // 8. Reconnect on Page Reload
-    // Press escape to close the settings modal
-    await page.keyboard.press('Escape');
+    // Click "Back to Dashboard" button to return to workspace
+    const backToDashboardBtn = page.locator('button:has-text("Back to Dashboard")');
+    if (await backToDashboardBtn.count() > 0 && await backToDashboardBtn.isVisible()) {
+      await backToDashboardBtn.click();
+    } else {
+      await page.keyboard.press('Escape');
+    }
 
     // Click "Start Scan" (id="btn-start")
     const startFuzzBtn = page.locator('#btn-start');

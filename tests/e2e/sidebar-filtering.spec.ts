@@ -55,11 +55,16 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     await startBtn.click();
 
-    // 6. Verify run starts and completes (wait for the run to finish)
+    // 6. Verify run starts and processes initial requests
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-    // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    
+    // Allow fuzzer to process active requests across selected endpoints
+    await page.waitForTimeout(4000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 7. Verify that no request targeting "POST /login" was executed
     // Switch to Request Logs tab

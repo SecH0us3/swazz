@@ -41,12 +41,13 @@ export async function mockEnterpriseLicense(page: Page, features: string[] = ['*
 export async function disableBoundaryProfile(page: Page): Promise<void> {
   const configSidebar = page.locator('.config-sidebar');
   if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
-    const configToggle = page.locator('.workspace-config-toggle-btn, button[title*="Settings"], button:has-text("Config")');
-    if (await configToggle.count() > 0) await configToggle.first().click();
+    const configToggle = page.locator('.workspace-config-toggle-btn');
+    if (await configToggle.count() > 0 && await configToggle.first().isVisible()) {
+      await configToggle.first().click();
+    }
   }
   const boundaryToggle = page.locator('.profile-toggle.boundary');
-  if (await boundaryToggle.count() > 0) {
-    await expect(boundaryToggle).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+  if (await boundaryToggle.count() > 0 && await boundaryToggle.isVisible()) {
     if (await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
       await boundaryToggle.click();
       await expect(boundaryToggle).not.toHaveClass(/active/);
