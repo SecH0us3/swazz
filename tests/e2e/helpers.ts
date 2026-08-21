@@ -52,11 +52,11 @@ export async function registerAndLogin(
   await page.goto('/');
 
   const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
-  await expect(signInBtn).toBeVisible({ timeout: 10000 });
+  await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
   await signInBtn.click();
 
   const createBtn = page.getByRole('button', { name: 'Create an account' });
-  await expect(createBtn).toBeVisible({ timeout: 10000 });
+  await expect(createBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
   await createBtn.click();
 
   // Ensure total length is strictly < 20 chars for database constraints
@@ -66,7 +66,7 @@ export async function registerAndLogin(
   await page.locator('#password').fill('Password123!');
   await page.locator('#password').press('Enter');
 
-  await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
   if (claimTrial) {
     await page.evaluate(async () => {
