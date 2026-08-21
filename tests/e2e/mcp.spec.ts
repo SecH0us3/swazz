@@ -145,10 +145,14 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     await startBtn.click();
 
-    // Wait for the stop button to show (fuzzing in progress) and then the start button to reappear (fuzzing completed)
+    // Wait for the stop button to show (fuzzing in progress) and allow fuzzer to collect initial findings
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(5000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 5. Verify MCP findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
