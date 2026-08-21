@@ -344,9 +344,15 @@ describe('useRunHistory', () => {
         });
 
         const mdContent = mockBlobConstructor.mock.calls[0]?.[0]?.[0] || '';
+        expect(mdContent).toContain('**OWASP API (2023):** API1:2023 Broken Object Level Authorization');
+        expect(mdContent).toContain('**OWASP API (2023):** API4:2023 Unrestricted Resource Consumption');
+        expect(mdContent).toContain('**OWASP API (2023):** API10:2023 Unsafe Consumption of APIs');
         expect(mdContent).toContain('**OWASP Category:** A01:2025 Broken Access Control');
         expect(mdContent).toContain('**OWASP Category:** A06:2025 Insecure Design');
         expect(mdContent).toContain('**OWASP Category:** A10:2025 Mishandling of Exceptional Conditions');
         expect(mdContent).toContain('**OWASP Category:** A05:2025 Injection');
+        expect(mdContent).toContain('**CWE:** CWE-639');
+        expect(mdContent).toContain('**CWE:** CWE-770');
+        expect(mdContent).toContain('**CWE:** CWE-89');
     });
 });

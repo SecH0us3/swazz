@@ -83,27 +83,34 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     // Close the inspector panel
     await closeBtn.click();
 
-    // 6. Verify OWASP Top 10 Mapping Accuracy
+    // 6. Verify OWASP Top 10 Mapping Accuracy (API 2023 & Web 2025)
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
     await expect(owaspTab).toBeVisible();
     await owaspTab.click();
 
-    // Verify the summary banner displays findings detected
-    const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
+    // Verify the default header is OWASP API Security Top 10 (2023)
+    const owaspTitle = page.locator('.owasp-title');
+    await expect(owaspTitle).toHaveText('OWASP API Security Top 10 (2023)', { timeout: TIMEOUTS.DEFAULT });
 
-    // Verify that at least one category card (e.g. A05:2025 Injection or A10:2025 Mishandling of Exceptional Conditions) has findings
+    // Verify that at least one category card has findings
     const owaspCardWithFindings = page.locator('.owasp-card.has-findings').first();
     await expect(owaspCardWithFindings).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Click on the category card with findings to expand its details accordion
     await owaspCardWithFindings.click();
 
-    // Verify the expanded accordion section shows the correct finding instances
+    // Verify the expanded accordion section shows finding instances
     const findingRow = page.locator('.owasp-finding-row').first();
     await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     const pathSpan = findingRow.locator('.owasp-finding-path').first();
     await expect(pathSpan).toHaveText(/.+/);
+
+    // Toggle standard to Web Top 10 (2025)
+    const webStandardBtn = page.locator('button.owasp-tab-btn:has-text("Web Top 10 (2025)")');
+    await expect(webStandardBtn).toBeVisible();
+    await webStandardBtn.click();
+
+    await expect(owaspTitle).toHaveText('OWASP Top 10 (2025)');
   });
 });

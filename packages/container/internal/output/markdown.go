@@ -79,8 +79,14 @@ func ToMarkdown(findings []*classifier.Finding, stats *swagger.RunStats, version
 			if f.Method != "" {
 				sb.WriteString(fmt.Sprintf("- **Method:** `%s`\n", f.Method))
 			}
+			if len(f.OWASPAPICategory) > 0 {
+				sb.WriteString(fmt.Sprintf("- **OWASP API (2023):** %s\n", strings.Join(f.OWASPAPICategory, ", ")))
+			}
 			if len(f.OWASPCategory) > 0 {
 				sb.WriteString(fmt.Sprintf("- **OWASP Category:** %s\n", strings.Join(f.OWASPCategory, ", ")))
+			}
+			if len(f.CWEIDs) > 0 {
+				sb.WriteString(fmt.Sprintf("- **CWE:** %s\n", strings.Join(f.CWEIDs, ", ")))
 			}
 			if f.Source != "" {
 				sb.WriteString(fmt.Sprintf("- **Source:** `%s`\n", f.Source))

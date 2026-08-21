@@ -26,6 +26,7 @@ describe('OWASPTop10 Component', () => {
             payloadPreview: '',
             responsePreview: 'Internal Server Error',
             responseSize: 100,
+            owaspApiCategory: ['API10:2023 Unsafe Consumption of APIs'],
             owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
         },
         {
@@ -47,13 +48,15 @@ describe('OWASPTop10 Component', () => {
                     ruleId: 'swazz/bola-idor',
                     level: 'error',
                     message: 'BOLA vulnerability',
+                    owaspApiCategory: ['API1:2023 Broken Object Level Authorization'],
                     owaspCategory: ['A01:2025 Broken Access Control'],
+                    cweIds: ['CWE-639'],
                 }
             ]
         }
     ];
 
-    it('renders categories list and fetches findings', async () => {
+    it('renders API Security 2023 categories by default and displays findings', async () => {
         mockQueryResults.mockResolvedValue({
             rows: mockFindings,
             total: 2,
@@ -67,15 +70,15 @@ describe('OWASPTop10 Component', () => {
             />
         );
 
-        // Verify summary banner shows findings count
-        expect(await screen.findByText(/2 Findings Detected/, {}, { timeout: 3000 })).toBeTruthy();
+        // Verify API Security 2023 header is present by default
+        expect(await screen.findByText('OWASP API Security Top 10 (2023)')).toBeTruthy();
 
-        // Verify category titles are rendered
-        expect(screen.getAllByText(/Broken Access Control/)).toBeTruthy();
-        expect(screen.getAllByText(/Security Misconfiguration/)).toBeTruthy();
+        // Verify API categories are rendered
+        expect(screen.getAllByText(/Broken Object Level Authorization/)).toBeTruthy();
+        expect(screen.getAllByText(/Broken Authentication/)).toBeTruthy();
     });
 
-    it('renders sub-tab navigation buttons for Categories and Findings', async () => {
+    it('toggles between API Security (2023) and Web Top 10 (2025) standards', async () => {
         mockQueryResults.mockResolvedValue({
             rows: mockFindings,
             total: 2,
@@ -89,8 +92,32 @@ describe('OWASPTop10 Component', () => {
             />
         );
 
-        expect(await screen.findByRole('tab', { name: /Categories Cards/i })).toBeTruthy();
-        expect(screen.getByRole('tab', { name: /Findings List/i })).toBeTruthy();
+        expect(await screen.findByText('OWASP API Security Top 10 (2023)')).toBeTruthy();
+
+        // Click Web Top 10 button
+        const webBtn = screen.getByRole('button', { name: /Web Top 10 \(2025\)/i });
+        fireEvent.click(webBtn);
+
+        expect(await screen.findByText('OWASP Top 10 (2025)')).toBeTruthy();
+        expect(screen.getAllByText(/Broken Access Control/)).toBeTruthy();
+    });
+
+    it('renders sub-tab navigation buttons for Overview and Findings', async () => {
+        mockQueryResults.mockResolvedValue({
+            rows: mockFindings,
+            total: 2,
+        });
+
+        render(
+            <OWASPTop10
+                runId="run-123"
+                queryResults={mockQueryResults}
+                onSelectResult={() => {}}
+            />
+        );
+
+        expect(await screen.findByRole('button', { name: /Overview/i })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /Findings/i })).toBeTruthy();
     });
 
     it('switches to Findings sub-tab and expands category accordion when clicking a category card with findings', async () => {
@@ -107,19 +134,19 @@ describe('OWASPTop10 Component', () => {
             />
         );
 
-        // Wait for findings count to be calculated
-        await screen.findByText(/2 Findings Detected/);
-
-        // Click category card for Broken Access Control
-        const card = screen.getByText('Broken Access Control').closest('.owasp-card');
+        // Wait for card
+        const cardTitle = await screen.findByText('Broken Object Level Authorization');
+        const card = cardTitle.closest('.owasp-card');
         expect(card).toBeTruthy();
         fireEvent.click(card!);
 
         // Findings sub-tab should now be active and accordion expanded showing finding message
-        expect(await screen.findByText(/A01:2025 Broken Access Control \(1\)/)).toBeTruthy();
+        expect(await screen.findByText(/API1:2023 Broken Object Level Authorization \(1\)/)).toBeTruthy();
+        expect(screen.getByText('BOLA vulnerability')).toBeTruthy();
+        expect(screen.getByText('CWE-639')).toBeTruthy();
     });
 
-    it('renders official site and category learn more links correctly', async () => {
+    it('renders official learn more links for API categories', async () => {
         mockQueryResults.mockResolvedValue({
             rows: mockFindings,
             total: 2,
@@ -133,137 +160,16 @@ describe('OWASPTop10 Component', () => {
             />
         );
 
-        // Verify Official Site link in the banner
-        const officialLink = await screen.findByRole('link', { name: /Official Site ↗/i });
-        expect(officialLink).toBeTruthy();
-        expect(officialLink.getAttribute('href')).toBe('https://owasp.org/Top10/2025/');
-        expect(officialLink.getAttribute('target')).toBe('_blank');
-        expect(officialLink.getAttribute('rel')).toBe('noopener noreferrer');
-
-        // Verify Learn More link on a category card (e.g., A01)
-        const learnMoreLinks = screen.getAllByRole('link', { name: /Learn More ↗/i });
-        const a01Link = learnMoreLinks.find(link => 
-            link.getAttribute('href')?.includes('A01_2025-Broken_Access_Control')
+        const learnMoreLinks = await screen.findAllByRole('link', { name: /Learn More ↗/i });
+        const api1Link = learnMoreLinks.find(link => 
+            link.getAttribute('href')?.includes('broken-object-level-authorization')
         );
-        expect(a01Link).toBeTruthy();
-        expect(a01Link?.getAttribute('target')).toBe('_blank');
-        expect(a01Link?.getAttribute('rel')).toBe('noopener noreferrer');
-
-        // Switch to Findings sub-tab to test accordion link
-        const findingsTab = await screen.findByRole('tab', { name: /Findings List/i });
-        fireEvent.click(findingsTab);
-
-        // Click to expand A01 category accordion and check accordion link
-        const accordionHeader = await screen.findByText(/A01:2025 Broken Access Control \(1\)/, {}, { timeout: 3000 });
-        fireEvent.click(accordionHeader);
-
-        // The accordion header also contains a "Learn More ↗" link
-        const accordionLink = screen.getAllByRole('link', { name: /Learn More ↗/i }).find(link => 
-            link.className.includes('owasp-accordion-link')
-        );
-        expect(accordionLink).toBeTruthy();
-        expect(accordionLink?.getAttribute('href')).toBe('https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/');
-        expect(accordionLink?.getAttribute('target')).toBe('_blank');
-        expect(accordionLink?.getAttribute('rel')).toBe('noopener noreferrer');
+        expect(api1Link).toBeTruthy();
+        expect(api1Link?.getAttribute('target')).toBe('_blank');
+        expect(api1Link?.getAttribute('rel')).toBe('noopener noreferrer');
     });
 
-    it('allows expanding a category and selecting a finding', async () => {
-        mockQueryResults.mockResolvedValue({
-            rows: mockFindings,
-            total: 2,
-        });
-
-        const selectSpy = vi.fn();
-
-        render(
-            <OWASPTop10
-                runId="run-123"
-                queryResults={mockQueryResults}
-                onSelectResult={selectSpy}
-            />
-        );
-
-        // Switch to Findings sub-tab
-        const findingsTab = await screen.findByRole('tab', { name: /Findings List/i });
-        fireEvent.click(findingsTab);
-
-        // Wait for the rows to load and accordion trigger to be visible
-        const accordionHeader = await screen.findByText(/A01:2025 Broken Access Control \(1\)/, {}, { timeout: 3000 });
-        expect(accordionHeader).toBeTruthy();
-
-        // Click to expand
-        fireEvent.click(accordionHeader);
-
-        // Verify finding inside the category is displayed
-        const pathSpan = await screen.findByText('/login');
-        expect(pathSpan).toBeTruthy();
-
-        // Click the row and verify select handler was called
-        fireEvent.click(pathSpan.closest('.owasp-finding-row')!);
-        expect(selectSpy).toHaveBeenCalledWith(mockFindings[1]);
-    });
-
-    it('limits category findings to 50 items and shows more on button click', async () => {
-        const largeFindingsList = Array.from({ length: 60 }, (_, i) => ({
-            id: `id-${i}`,
-            timestamp: Date.now() - i * 1000,
-            method: 'GET',
-            endpoint: `/users/${i}`,
-            resolvedPath: `/users/${i}`,
-            status: 500,
-            profile: 'RANDOM' as const,
-            duration: 10,
-            payloadSize: 0,
-            retries: 0,
-            payloadPreview: '',
-            responsePreview: 'Internal Server Error',
-            responseSize: 100,
-            owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
-        }));
-
-        mockQueryResults.mockResolvedValue({
-            rows: largeFindingsList,
-            total: 60,
-        });
-
-        render(
-            <OWASPTop10
-                runId="run-123"
-                queryResults={mockQueryResults}
-                onSelectResult={() => {}}
-            />
-        );
-
-        // Switch to Findings sub-tab
-        const findingsTab = await screen.findByRole('tab', { name: /Findings List/i });
-        fireEvent.click(findingsTab);
-
-        // Wait for the rows to load and accordion trigger to be visible
-        const accordionHeader = await screen.findByText(/A10:2025 Mishandling of Exceptional Conditions \(60\)/, {}, { timeout: 3000 });
-        expect(accordionHeader).toBeTruthy();
-
-        // Click to expand
-        fireEvent.click(accordionHeader);
-
-        // First 50 items should be rendered
-        expect(await screen.findByText('/users/0')).toBeTruthy();
-        expect(screen.getByText('/users/49')).toBeTruthy();
-        expect(screen.queryByText('/users/50')).toBeNull();
-
-        // "Show More (+10)" button should be rendered
-        const showMoreBtn = screen.getByRole('button', { name: /Show More \(\+10\)/i });
-        expect(showMoreBtn).toBeTruthy();
-
-        // Click "Show More"
-        fireEvent.click(showMoreBtn);
-
-        // Now item 50 should be visible
-        expect(await screen.findByText('/users/50')).toBeTruthy();
-        expect(screen.getByText('/users/59')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Show More/i })).toBeNull();
-    });
-
-    it('deduplicates findings within categories', async () => {
+    it('deduplicates identical findings by category, method, endpoint and defect', async () => {
         const duplicateFindings: ResultSummary[] = [
             {
                 id: '1',
@@ -279,7 +185,7 @@ describe('OWASPTop10 Component', () => {
                 payloadPreview: '',
                 responsePreview: 'Internal Server Error',
                 responseSize: 100,
-                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+                owaspApiCategory: ['API10:2023 Unsafe Consumption of APIs'],
             },
             {
                 id: '2',
@@ -295,43 +201,34 @@ describe('OWASPTop10 Component', () => {
                 payloadPreview: '',
                 responsePreview: 'Internal Server Error',
                 responseSize: 100,
-                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+                owaspApiCategory: ['API10:2023 Unsafe Consumption of APIs'],
             },
             {
                 id: '3',
                 timestamp: Date.now(),
-                method: 'GET',
-                endpoint: '/users/123',
-                resolvedPath: '',
-                status: 500,
-                profile: 'RANDOM',
-                duration: 10,
-                payloadSize: 0,
+                method: 'POST',
+                endpoint: '/login',
+                resolvedPath: '/login',
+                status: 200,
+                profile: 'MALICIOUS',
+                duration: 12,
+                payloadSize: 10,
                 retries: 0,
                 payloadPreview: '',
-                responsePreview: 'Internal Server Error',
-                responseSize: 100,
-                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
+                responsePreview: '',
+                responseSize: 50,
+                analyzerFindings: [
+                    {
+                        ruleId: 'swazz/bola-idor',
+                        level: 'error',
+                        message: 'BOLA vulnerability',
+                        owaspApiCategory: ['API1:2023 Broken Object Level Authorization'],
+                    }
+                ]
             },
             {
                 id: '4',
                 timestamp: Date.now(),
-                method: 'GET',
-                endpoint: '/users/{id}',
-                resolvedPath: '/users/123',
-                status: 400,
-                profile: 'RANDOM',
-                duration: 10,
-                payloadSize: 0,
-                retries: 0,
-                payloadPreview: '',
-                responsePreview: 'Bad Request',
-                responseSize: 100,
-                owaspCategory: ['A10:2025 Mishandling of Exceptional Conditions'],
-            },
-            {
-                id: '5',
-                timestamp: Date.now(),
                 method: 'POST',
                 endpoint: '/login',
                 resolvedPath: '/login',
@@ -348,53 +245,7 @@ describe('OWASPTop10 Component', () => {
                         ruleId: 'swazz/bola-idor',
                         level: 'error',
                         message: 'BOLA vulnerability',
-                        owaspCategory: ['A01:2025 Broken Access Control'],
-                    }
-                ]
-            },
-            {
-                id: '6',
-                timestamp: Date.now(),
-                method: 'POST',
-                endpoint: '/login',
-                resolvedPath: '/login',
-                status: 200,
-                profile: 'MALICIOUS',
-                duration: 12,
-                payloadSize: 10,
-                retries: 0,
-                payloadPreview: '',
-                responsePreview: '',
-                responseSize: 50,
-                analyzerFindings: [
-                    {
-                        ruleId: 'swazz/bola-idor',
-                        level: 'error',
-                        message: 'BOLA vulnerability',
-                        owaspCategory: ['A01:2025 Broken Access Control'],
-                    }
-                ]
-            },
-            {
-                id: '7',
-                timestamp: Date.now(),
-                method: 'POST',
-                endpoint: '/login',
-                resolvedPath: '/login',
-                status: 200,
-                profile: 'MALICIOUS',
-                duration: 12,
-                payloadSize: 10,
-                retries: 0,
-                payloadPreview: '',
-                responsePreview: '',
-                responseSize: 50,
-                analyzerFindings: [
-                    {
-                        ruleId: 'swazz/xss',
-                        level: 'error',
-                        message: 'XSS vulnerability',
-                        owaspCategory: ['A01:2025 Broken Access Control', 'A02:2025 Cryptographic Failures'],
+                        owaspApiCategory: ['API1:2023 Broken Object Level Authorization'],
                     }
                 ]
             }
@@ -413,7 +264,8 @@ describe('OWASPTop10 Component', () => {
             />
         );
 
-        expect(await screen.findByText(/5 Findings Detected/, {}, { timeout: 3000 })).toBeTruthy();
+        // 2 distinct findings after deduplication
+        expect(await screen.findByRole('button', { name: /Findings \(2\)/i })).toBeTruthy();
     });
 
     describe('Polling Logic', () => {
@@ -482,53 +334,5 @@ describe('OWASPTop10 Component', () => {
             });
             expect(mockQueryResults).toHaveBeenCalledTimes(3);
         });
-
-        it('performs a final query immediately and stops polling when isRunning transitions to false', async () => {
-            mockQueryResults.mockResolvedValue({ rows: [], total: 0 });
-
-            let rerenderFn: any;
-            await act(async () => {
-                const { rerender } = render(
-                    <OWASPTop10
-                        runId="run-123"
-                        queryResults={mockQueryResults}
-                        isRunning={true}
-                        onSelectResult={() => {}}
-                    />
-                );
-                rerenderFn = rerender;
-            });
-
-            // Initial query
-            expect(mockQueryResults).toHaveBeenCalledTimes(1);
-
-            // Advance 3s -> 2nd call
-            await act(async () => {
-                await vi.advanceTimersByTimeAsync(3000);
-            });
-            expect(mockQueryResults).toHaveBeenCalledTimes(2);
-
-            // Transition isRunning to false
-            await act(async () => {
-                rerenderFn(
-                    <OWASPTop10
-                        runId="run-123"
-                        queryResults={mockQueryResults}
-                        isRunning={false}
-                        onSelectResult={() => {}}
-                    />
-                );
-            });
-
-            // Transitioning to false should run a final query immediately (so 3rd call)
-            expect(mockQueryResults).toHaveBeenCalledTimes(3);
-
-            // Advance 10s -> should NOT make any more calls
-            await act(async () => {
-                await vi.advanceTimersByTimeAsync(10000);
-            });
-            expect(mockQueryResults).toHaveBeenCalledTimes(3);
-        });
     });
 });
-

@@ -94,6 +94,8 @@ export interface ResultSummary {
     analyzerFindings?: AnalysisFinding[];
     identity?: string;
     owaspCategory?: string[];
+    owaspApiCategory?: string[];
+    cweIds?: string[];
     triage?: 'false_positive' | 'ignored' | 'acknowledged' | 'none';
 }
 
@@ -120,6 +122,8 @@ export function toSummary(r: any): ResultSummary {
         analyzerFindings: r.analyzerFindings || [],
         identity: r.identity,
         owaspCategory: r.owaspCategory || [],
+        owaspApiCategory: r.owaspApiCategory || [],
+        cweIds: r.cweIds || [],
         triage: r.triage,
     };
 }

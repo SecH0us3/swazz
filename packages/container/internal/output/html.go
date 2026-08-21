@@ -86,6 +86,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 
 	// Count findings by OWASP category
 	owaspCounts := make(map[string]int)
+	owaspAPICounts := make(map[string]int)
 	for _, f := range findings {
 		if len(f.OWASPCategory) > 0 {
 			for _, cat := range f.OWASPCategory {
@@ -94,6 +95,38 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 		} else {
 			owaspCounts["Unmapped / Other"]++
 		}
+		if len(f.OWASPAPICategory) > 0 {
+			for _, cat := range f.OWASPAPICategory {
+				owaspAPICounts[cat]++
+			}
+		}
+	}
+
+	owaspAPICategories := []string{
+		"API1:2023 Broken Object Level Authorization",
+		"API2:2023 Broken Authentication",
+		"API3:2023 Broken Object Property Level Authorization",
+		"API4:2023 Unrestricted Resource Consumption",
+		"API5:2023 Broken Function Level Authorization",
+		"API6:2023 Unrestricted Access to Sensitive Business Flows",
+		"API7:2023 Server Side Request Forgery",
+		"API8:2023 Security Misconfiguration",
+		"API9:2023 Improper Assets Management",
+		"API10:2023 Unsafe Consumption of APIs",
+	}
+
+	var owaspAPIGrid strings.Builder
+	for _, cat := range owaspAPICategories {
+		count := owaspAPICounts[cat]
+		cardClass := "no-findings"
+		if count > 0 {
+			cardClass = "has-findings"
+		}
+		owaspAPIGrid.WriteString(fmt.Sprintf(`
+            <div class="owasp-card %s">
+                <span class="owasp-name">%s</span>
+                <span class="owasp-count">%d</span>
+            </div>`, cardClass, html.EscapeString(cat), count))
 	}
 
 	owaspCategories := []string{
@@ -210,17 +243,27 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
                     </div>`, html.EscapeString(display))
 			}
 
+			owaspBadges := ""
+			for _, cat := range f.OWASPAPICategory {
+				parts := strings.SplitN(cat, " ", 2)
+				owaspBadges += fmt.Sprintf(`<span class="badge" style="background:#7c3aed;color:#fff;">%s</span> `, html.EscapeString(parts[0]))
+			}
+			for _, cwe := range f.CWEIDs {
+				owaspBadges += fmt.Sprintf(`<span class="badge" style="background:#0284c7;color:#fff;">%s</span> `, html.EscapeString(cwe))
+			}
+
 			findingRows.WriteString(fmt.Sprintf(`
                 <div class="finding-item level-%s" data-status="%d" data-profile="%s">
                     <div class="finding-meta">
                         <span class="badge profile-%s">%s</span>
+                        %s
                         <span class="status">HTTP %d</span>
                         <span class="duration">%dms</span>
                     </div>
                     %s
                     %s
                 </div>`,
-				f.Level, f.Status, f.Profile, f.Profile, f.Profile, f.Status, f.Duration, payloadHTML, responseHTML))
+				f.Level, f.Status, f.Profile, f.Profile, f.Profile, owaspBadges, f.Status, f.Duration, payloadHTML, responseHTML))
 		}
 
 		findingRows.WriteString(`</div></div>`)
@@ -314,6 +357,13 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
             <div class="stat-card"><span class="stat-value">%d</span><span class="stat-label">Endpoints</span></div>
         </div>
 
+        <h2>OWASP API Security Top 10 (2023)</h2>
+        <div class="owasp-section">
+            <div class="owasp-grid">
+                %s
+            </div>
+        </div>
+
         <h2>OWASP Top 10 (2025) Summary</h2>
         <div class="owasp-section">
             <div class="owasp-grid">
@@ -341,7 +391,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
     </script>
 </body>
 </html>`,
-		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, owaspGrid.String(), statusOptions.String(), profileOptions.String(), findingsContent)
+		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, owaspAPIGrid.String(), owaspGrid.String(), statusOptions.String(), profileOptions.String(), findingsContent)
 	return strings.ReplaceAll(tmpl, placeholder, reportJS)
 }
 

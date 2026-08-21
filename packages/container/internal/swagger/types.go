@@ -254,12 +254,14 @@ func DefaultSettings() Settings {
 }
 
 type AnalysisFinding struct {
-	ID            string   `json:"id,omitempty"`
-	RuleID        string   `json:"ruleId"`
-	Level         string   `json:"level"` // "error", "warning", "note"
-	Message       string   `json:"message"`
-	Evidence      string   `json:"evidence,omitempty"`
-	OWASPCategory []string `json:"owaspCategory,omitempty"`
+	ID               string   `json:"id,omitempty"`
+	RuleID           string   `json:"ruleId"`
+	Level            string   `json:"level"` // "error", "warning", "note"
+	Message          string   `json:"message"`
+	Evidence         string   `json:"evidence,omitempty"`
+	OWASPCategory    []string `json:"owaspCategory,omitempty"`
+	OWASPAPICategory []string `json:"owaspApiCategory,omitempty"`
+	CWEIDs           []string `json:"cweIds,omitempty"`
 }
 
 type RequestLog struct {
@@ -293,6 +295,8 @@ type FuzzResult struct {
 	AnalyzerFindings []AnalysisFinding `json:"analyzerFindings,omitempty"`
 	Identity         string            `json:"identity,omitempty"`
 	OWASPCategory    []string          `json:"owaspCategory,omitempty"`
+	OWASPAPICategory []string          `json:"owaspApiCategory,omitempty"`
+	CWEIDs           []string          `json:"cweIds,omitempty"`
 }
 
 // FuzzResultSSE is the lightweight version sent over SSE to the browser.
@@ -319,6 +323,8 @@ type FuzzResultSSE struct {
 	AnalyzerFindings   []AnalysisFinding `json:"analyzerFindings,omitempty"`
 	Identity           string            `json:"identity,omitempty"`
 	OWASPCategory      []string          `json:"owaspCategory,omitempty"`
+	OWASPAPICategory   []string          `json:"owaspApiCategory,omitempty"`
+	CWEIDs             []string          `json:"cweIds,omitempty"`
 }
 
 // RunStats tracks live statistics during a fuzzing run.
