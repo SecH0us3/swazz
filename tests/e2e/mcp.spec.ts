@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('MCP and API Key Hashing E2E Tests', () => {
   test('should display masked key, support rotation and show plain-text key once', async ({ page }) => {
@@ -60,7 +60,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     // 8. Reload page to verify that the key returns to being masked
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Navigate back to Profile Settings
     await accountBtn.click();
@@ -134,7 +134,7 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // Verify spec is loaded and endpoints list is visible
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Click Start
     const startBtn = page.locator('#btn-start');
@@ -148,8 +148,8 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     // Wait for the stop button to show (fuzzing in progress) and then the start button to reappear (fuzzing completed)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 5. Verify MCP findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
@@ -158,16 +158,16 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
 
     // Verify summary count reflects finding(s)
     const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: 10000 });
+    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
 
     // Verify A10:2025 Mishandling of Exceptional Conditions category card has findings (our mcp server crash finding)
     const mcpCrashCard = page.locator('.owasp-card:has-text("A10:2025")');
-    await expect(mcpCrashCard).toBeVisible({ timeout: 10000 });
+    await expect(mcpCrashCard).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(mcpCrashCard).toHaveClass(/has-findings/);
     await mcpCrashCard.click();
 
     // Check that a finding for /mcp/sse or mcp://tool/query_db exists
     const findingRow = page.locator('.owasp-accordion:has-text("A10:2025") .owasp-finding-row').filter({ hasText: 'mcp://tool/query_db' }).first();
-    await expect(findingRow).toBeVisible({ timeout: 10000 });
+    await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
   });
 });

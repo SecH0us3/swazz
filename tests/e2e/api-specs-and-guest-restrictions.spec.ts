@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense } from './helpers';
+import { mockEnterpriseLicense , TIMEOUTS} from './helpers';
 
 test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
   
@@ -21,13 +21,13 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     });
     await page.goto('/');
     const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
-    await expect(signInBtn).toBeVisible({ timeout: 10000 });
+    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await signInBtn.click();
     const guestBtn = page.getByRole('button', { name: 'Try as guest →' });
     await expect(guestBtn).toBeVisible();
     await guestBtn.click();
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 180000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 2. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -68,7 +68,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 180000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 2. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -98,11 +98,11 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Verify it appeared in the list
     const firstUrlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json")').first();
-    await expect(firstUrlItem).toBeVisible({ timeout: 10000 });
+    await expect(firstUrlItem).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Verify status badge and method count
     const statusBadge = page.locator('.specs-status-badge.status-success').first();
-    await expect(statusBadge).toBeVisible({ timeout: 10000 });
+    await expect(statusBadge).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(statusBadge).toHaveText('✓ Active');
 
     const methodStats = page.locator('.specs-stats').first();
@@ -119,7 +119,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Wait for the second URL to appear in the list
     const secondUrlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json?dup=1")');
-    await expect(secondUrlItem).toBeVisible({ timeout: 10000 });
+    await expect(secondUrlItem).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(refreshAllBtn).not.toBeVisible();
 
     // Add third URL to trigger "Refresh All" button visibility (> 2 URLs)
@@ -128,7 +128,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Wait for the third URL to appear in the list
     const thirdUrlItem = page.locator('.specs-url-text:has-text("http://127.0.0.1:8788/swagger.json?dup=2")');
-    await expect(thirdUrlItem).toBeVisible({ timeout: 10000 });
+    await expect(thirdUrlItem).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Verify "Refresh All" button is now visible
     await expect(refreshAllBtn).toBeVisible();
@@ -136,7 +136,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Wait for the Refresh All operation to complete
     const successToast = page.locator('.toast:has-text("Refreshed all specs")');
-    await expect(successToast).toBeVisible({ timeout: 180000 });
+    await expect(successToast).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 6. Test file upload functionality
     const filePayload = {
@@ -162,7 +162,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // Verify the new endpoint has been parsed and loaded in the sidebar
     const uploadedEndpointItem = page.locator('.tree-leaf-row:has-text("/test-fuzz-e2e-upload")');
-    await expect(uploadedEndpointItem).toBeVisible({ timeout: 180000 });
+    await expect(uploadedEndpointItem).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
   });
 
 });

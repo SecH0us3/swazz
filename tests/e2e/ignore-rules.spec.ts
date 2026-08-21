@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
   test('should triage finding and check ignore rule scopes & auto cleanup', async ({ page }) => {
@@ -21,7 +22,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await configPromise;
 
     // 3. Add Vulnerable Demo API spec
@@ -35,7 +36,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await addBtn.click();
 
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Trigger fuzzing
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
@@ -50,7 +51,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the run to complete
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -59,12 +60,12 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
 
     // Click Expand All to render finding items
     const expandAllBtn = page.locator('button:has-text("Expand All")');
-    await expect(expandAllBtn).toBeVisible({ timeout: 10000 });
+    await expect(expandAllBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expandAllBtn.click();
 
     // Select the first finding item
     const firstFinding = page.locator('.finding-item').first();
-    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await expect(firstFinding).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await firstFinding.click();
 
     // Verify detail panel and triage selector

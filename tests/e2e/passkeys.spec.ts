@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Passkeys E2E Tests', () => {
   test('should allow registering a passkey and signing in with it', async ({ page, context }) => {
@@ -36,7 +37,7 @@ test.describe('Passkeys E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Navigate to Profile Settings > Security (2FA)
     const accountBtn = page.locator('button[title="Account"]');
@@ -67,7 +68,7 @@ test.describe('Passkeys E2E Tests', () => {
 
     // Verify the passkey appears in the list
     const passkeyItem = page.locator('.passkey-item').first();
-    await expect(passkeyItem).toBeVisible({ timeout: 10000 });
+    await expect(passkeyItem).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 5. Log out
     await accountBtn.click();
@@ -86,6 +87,6 @@ test.describe('Passkeys E2E Tests', () => {
     await passkeyLoginBtn.click();
 
     // Verify successful login
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });

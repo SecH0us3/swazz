@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
   test('should import a HAR file, extract endpoints, and successfully run fuzzing', async ({ page }) => {
@@ -21,7 +22,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Fill the Swagger URL input with the mock HAR endpoint
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -42,9 +43,9 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     const usersLeaf = page.locator('.tree-leaf-row:has-text("GET"):has-text("/users")');
     const goodsLeaf = page.locator('.tree-leaf-row:has-text("GET"):has-text("goods")');
 
-    await expect(welcomeLeaf).toBeVisible({ timeout: 30000 });
-    await expect(usersLeaf).toBeVisible({ timeout: 30000 });
-    await expect(goodsLeaf).toBeVisible({ timeout: 30000 });
+    await expect(welcomeLeaf).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await expect(usersLeaf).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await expect(goodsLeaf).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Click the Start button to run the fuzzer on the imported HAR endpoints
     const startBtn = page.locator('#btn-start');
@@ -60,7 +61,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await expect(startBtn).toBeHidden();
 
     // Wait for the fuzzer to complete (timeout of 60s max since it's a small mock HAR)
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 5. Navigate to "Request Logs" tab to verify requests were sent
     const requestLogsTab = page.locator('button:has-text("Request Logs")');
@@ -74,17 +75,17 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     // Verify /welcome requests
     await searchInput.fill('/welcome');
     const welcomeLog = page.locator('.log-path:has-text("/welcome")').first();
-    await expect(welcomeLog).toBeVisible({ timeout: 10000 });
+    await expect(welcomeLog).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Verify /users requests
     await searchInput.fill('/users');
     const usersLog = page.locator('.log-path:has-text("/users")').first();
-    await expect(usersLog).toBeVisible({ timeout: 10000 });
+    await expect(usersLog).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Verify /api/goods requests
     await searchInput.fill('/api/goods');
     const goodsLog = page.locator('.log-path:has-text("/api/goods")').first();
-    await expect(goodsLog).toBeVisible({ timeout: 10000 });
+    await expect(goodsLog).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
   });
 
   test('should display toast error message when attempting to load an invalid HAR/spec URL', async ({ page }) => {
@@ -101,7 +102,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Fill the Swagger URL input with a non-existent endpoint
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -115,7 +116,7 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
 
     // 4. Verify that the detailed parsing error modal is displayed and the page does not crash
     const modal = page.locator('.parsing-error-dialog');
-    await expect(modal).toBeVisible({ timeout: 10000 });
+    await expect(modal).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(modal.locator('h3')).toHaveText('Specification Parsing Failure');
 
     // 5. Click the dismiss button to close it

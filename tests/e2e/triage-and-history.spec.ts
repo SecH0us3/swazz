@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () => {
   test('should complete scan, triage a finding, reload page, restore from history, and verify triage state is persisted', async ({ page }) => {
@@ -29,7 +29,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Wait for endpoints list to render to ensure spec is loaded
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Verify target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -50,10 +50,10 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Wait for the stop button to appear (scan has started)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Wait for the run to complete (Start button "Run" is visible again)
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -62,12 +62,12 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Click Expand All to render finding items
     const expandAllBtn = page.locator('button:has-text("Expand All")');
-    await expect(expandAllBtn).toBeVisible({ timeout: 10000 });
+    await expect(expandAllBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expandAllBtn.click();
 
     // Select the first finding item
     const firstFinding = page.locator('.finding-item').first();
-    await expect(firstFinding).toBeVisible({ timeout: 10000 });
+    await expect(firstFinding).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await firstFinding.click();
 
     // Verify side panel / inspector is open and triage selector is visible
@@ -79,7 +79,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Confirm the ignore rule modal
     const confirmBtn = page.locator('button.btn-primary:has-text("Ignore Finding")');
-    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await expect(confirmBtn).toBeVisible({ timeout: TIMEOUTS.SHORT });
     await confirmBtn.click();
 
     // Assert that the item's opacity fades out and the FP badge is applied instantly
@@ -89,13 +89,13 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
 
     // Close the detail inspector panel
     const closeInspectorBtn = page.locator('button[aria-label="Close"]');
-    await expect(closeInspectorBtn).toBeVisible({ timeout: 10000 });
+    await expect(closeInspectorBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await closeInspectorBtn.click();
 
     // 7. Reload the page
     const configPromiseReload = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await configPromiseReload;
 
     // 8. Navigate to Scan History in the sidebar

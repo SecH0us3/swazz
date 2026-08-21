@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 async function expandSection(page: any, sectionTitle: string) {
   const sectionHeader = page.locator(`.sidebar-section:has-text("${sectionTitle}") >> .sidebar-section-header`).first();
@@ -49,7 +50,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
         }
       }
       return false;
-    }, { timeout: 30000 });
+    }, { timeout: TIMEOUTS.LOAD });
 
     // Go to More Project Settings to set intensity
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -155,7 +156,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 6. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
@@ -164,9 +165,9 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
 
     // Verify run starts and completes
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 7. Verify BOLA findings under OWASP Top 10 tab
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
@@ -175,22 +176,22 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
 
     // Verify summary count reflects finding(s)
     const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: 10000 });
+    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
 
     // Find and expand A01:2025 Broken Access Control category card
     const bolaCard = page.locator('.owasp-card:has-text("A01:2025")');
-    await expect(bolaCard).toBeVisible({ timeout: 10000 });
+    await expect(bolaCard).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(bolaCard).toHaveClass(/has-findings/);
     await bolaCard.click();
 
     // Check that a BOLA finding on /api/goods/ exists in the expanded accordion
     const findingRow = page.locator('.owasp-accordion:has-text("A01:2025") .owasp-finding-row').filter({ hasText: '/api/goods/' }).first();
-    await expect(findingRow).toBeVisible({ timeout: 10000 });
+    await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await findingRow.click();
 
     // Inspect the right side-panel (Request Detail) for BOLA details
     const closeBtn = page.locator('button[aria-label="Close"]');
-    await expect(closeBtn).toBeVisible({ timeout: 10000 });
+    await expect(closeBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Close the inspector panel
     await closeBtn.click();

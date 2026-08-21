@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Config Sidebar Contextual Toggle E2E Tests', () => {
   test('should toggle the configuration sidebar using the control bar gear and sidebar close button', async ({ page }) => {
@@ -19,7 +20,7 @@ test.describe('Config Sidebar Contextual Toggle E2E Tests', () => {
     await guestBtn.click();
 
     // 2. Wait for main layout
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     const sidebar = page.locator('.config-sidebar');
     const closeBtn = page.locator('.config-sidebar-close');

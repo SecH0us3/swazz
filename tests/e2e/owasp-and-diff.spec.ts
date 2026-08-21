@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', () => {
   test('should run scan, verify request mutation visual diff, and verify OWASP mapping', async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
     const boundaryToggle = page.locator('.profile-toggle.boundary');
@@ -45,9 +45,9 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
 
     // Verify run starts and completes
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 5. Verify Request Mutation Visual Diff
     // Switch to Request Logs tab
@@ -64,12 +64,12 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const fuzzedPostRow = page.locator('.log-row')
       .filter({ hasText: /MALICIOUS|BOUNDARY/ })
       .first();
-    await expect(fuzzedPostRow).toBeVisible({ timeout: 10000 });
+    await expect(fuzzedPostRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await fuzzedPostRow.click();
 
     // Inspect the right side-panel (Request Detail) and check Mutation Diff
     const closeBtn = page.locator('button[aria-label="Close"]');
-    await expect(closeBtn).toBeVisible({ timeout: 10000 });
+    await expect(closeBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Verify the visual diff comparisons/highlightings (like diff-mutated-malicious or diff-mutated-boundary) are visible
     const mutationDiffBtn = page.locator('button.detail-toggle-btn:has-text("Mutation Diff")');
@@ -77,7 +77,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     
     // Check that diff highlights are present
     const highlightedElement = page.locator('.diff-mutated-malicious, .diff-mutated-boundary').first();
-    await expect(highlightedElement).toBeVisible({ timeout: 10000 });
+    await expect(highlightedElement).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Close the inspector panel
     await closeBtn.click();
@@ -89,18 +89,18 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
 
     // Verify the summary banner displays findings detected
     const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: 10000 });
+    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
 
     // Verify that at least one category card (e.g. A05:2025 Injection or A10:2025 Mishandling of Exceptional Conditions) has findings
     const owaspCardWithFindings = page.locator('.owasp-card.has-findings').first();
-    await expect(owaspCardWithFindings).toBeVisible({ timeout: 10000 });
+    await expect(owaspCardWithFindings).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Click on the category card with findings to expand its details accordion
     await owaspCardWithFindings.click();
 
     // Verify the expanded accordion section shows the correct finding instances
     const findingRow = page.locator('.owasp-finding-row').first();
-    await expect(findingRow).toBeVisible({ timeout: 10000 });
+    await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     const pathSpan = findingRow.locator('.owasp-finding-path').first();
     await expect(pathSpan).toHaveText(/.+/);

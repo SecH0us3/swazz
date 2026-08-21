@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Additional UI Coverage E2E Tests', () => {
   // Helper to register and log in before each test case
@@ -28,7 +28,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
     // Wait for endpoints list to render to ensure spec is loaded
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Blur any active element (like the search/input fields) to ensure keyboard shortcuts fire on window
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
@@ -261,7 +261,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
       await fileChooser.setFiles(tempReportPath);
 
       // Successfully importing a CLI report should redirect to main dashboard/heatmap view
-      await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible({ timeout: 30000 });
+      await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
       // Verify that imported run's findings are populated in Grouped Errors
       const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
@@ -312,7 +312,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
       await deleteBtn.click();
 
       // Verify history row disappears
-      await expect(deleteBtn).toBeHidden({ timeout: 10000 });
+      await expect(deleteBtn).toBeHidden({ timeout: TIMEOUTS.DEFAULT });
     } finally {
       if (fs.existsSync(tempReportPath)) {
         fs.unlinkSync(tempReportPath);
@@ -332,7 +332,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await addBtn.click();
 
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
@@ -346,7 +346,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await startBtn.click();
 
     // Wait for the scan to complete
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 2. Go to request logs
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
@@ -384,7 +384,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(replayBtn).toHaveText(/Replay|Sending/);
     
     // Wait for replay to complete (Replay button is enabled again)
-    await expect(replayBtn).not.toBeDisabled({ timeout: 30000 });
+    await expect(replayBtn).not.toBeDisabled({ timeout: TIMEOUTS.LOAD });
 
     // Close the panel
     await closeBtn.click();

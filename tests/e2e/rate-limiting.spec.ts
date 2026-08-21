@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
   test('should detect rate limits and report them in findings', async ({ page }) => {
@@ -75,7 +75,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
 
       // Wait for endpoints list to render
       const endpointItems = page.locator('.tree-leaf-row');
-      await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+      await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
       // Run fuzzer
       const startBtn = page.locator('#btn-start');
@@ -86,7 +86,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       await expect(startBtn).toBeHidden();
 
       // Wait for the fuzzer to complete (timeout of 120s max)
-      await expect(startBtn).toBeVisible({ timeout: 180000 });
+      await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
       // 4. Verify that 'Missing Rate Limiting' (swazz/no-rate-limit) Finding was detected on /users
       const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
@@ -100,7 +100,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
 
       // Click on the rate limit log row (indicated by RATE-LIMIT profile)
       const rateLimitLogRow = page.locator('.log-row').filter({ hasText: 'RATE-LIMIT' }).first();
-      await expect(rateLimitLogRow).toBeVisible({ timeout: 30000 });
+      await expect(rateLimitLogRow).toBeVisible({ timeout: TIMEOUTS.LOAD });
       await rateLimitLogRow.click();
 
       // Verify the details sidebar contains "swazz/no-rate-limit"
@@ -111,7 +111,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       await page.getByRole('tab', { name: /Alerts & Findings/ }).click();
 
       const findingBanner = page.locator('.alert-banner-header:has-text("swazz/no-rate-limit")');
-      await expect(findingBanner).toBeVisible({ timeout: 10000 });
+      await expect(findingBanner).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
       const closeBtn = page.locator('button[aria-label="Close"]');
       await closeBtn.click();

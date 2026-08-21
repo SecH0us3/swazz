@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
   test('should display beta slots banner and handle regular registration when under limit', async ({ page }) => {
@@ -33,11 +34,11 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     await page.locator('button.login-btn').click();
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Verify the app loaded into the fuzzer workspace (the header beta badge
     // was removed in 02cc7e8; the beta status is shown in the auth modal only)
-    await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 
   test('should require invite code and enforce limits when beta limit is reached', async ({ page }) => {
@@ -107,6 +108,6 @@ test.describe('Closed Beta Launch & Capacity Control E2E Tests', () => {
     await page.locator('button.login-btn').click();
 
     // Wait for layout to load successfully
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });

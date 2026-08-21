@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
   // Common login/registration helper
@@ -18,7 +19,7 @@ test.describe('Keyboard Shortcuts and Modals Dismissals E2E Tests', () => {
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 
   test('Keyboard Shortcuts Modal - Open by ? and Close by Escape', async ({ page }) => {

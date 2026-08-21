@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Multi-Scan Comparison E2E Tests', () => {
   test('should run multiple scans, select them in History, compare them, and verify comparison data', async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     // Verify endpoints are loaded
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // --- Run Scan 1 ---
     const startBtn = page.locator('#btn-start');
@@ -44,10 +44,10 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // Wait for fuzzer to start
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Wait for the first run to complete
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // Disable Malicious profile (since Boundary is already disabled) for run 2 to vary the stats slightly
     const maliciousToggle = page.locator('.profile-toggle.malicious');
@@ -56,8 +56,8 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // --- Run Scan 2 ---
     await startBtn.click();
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 4. Navigate to Scan History
     const historyBtn = page.locator('button:has-text("History")');
@@ -77,7 +77,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // Floating action bar should slide in
     const compareBar = page.locator('.compare-bar');
-    await expect(compareBar).toBeVisible({ timeout: 5000 });
+    await expect(compareBar).toBeVisible({ timeout: TIMEOUTS.SHORT });
 
     // 6. Submit comparison
     const submitBtn = page.locator('#compare-scans-submit-btn');

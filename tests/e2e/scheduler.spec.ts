@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Scan Scheduler & Timeout E2E Tests', () => {
   test('should restrict scheduling to Supporter Plan, allow saving valid cron, reject fast cron, support scan timeout, and reconnect on refresh', async ({ page }) => {
@@ -35,7 +35,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await configPromise2;
 
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 2. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -114,11 +114,11 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     const reconnectConfigPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     const reconnectMePromise = page.waitForResponse(resp => resp.url().includes('/api/auth/me') && resp.status() === 200);
     await page.reload();
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await reconnectConfigPromise;
     await reconnectMePromise;
 
     // Verify it automatically reconnected to the running session
-    await expect(page.locator('button.btn-danger[title="Stop"]')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('button.btn-danger[title="Stop"]')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });

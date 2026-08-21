@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Payload Settings Modal Interaction', () => {
   test('should navigate tabs and toggle payload categories', async ({ page }) => {
@@ -20,7 +21,7 @@ test.describe('Payload Settings Modal Interaction', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open the "Payload Settings" modal via the Customize Payloads button
     const customizePayloadsBtn = page.getByRole('button', { name: 'Customize Payloads' });
@@ -37,7 +38,7 @@ test.describe('Payload Settings Modal Interaction', () => {
 
     // Wait for the catalog grid to load
     const catalogGrid = page.locator('.catalog-grid');
-    await expect(catalogGrid).toBeVisible({ timeout: 10000 });
+    await expect(catalogGrid).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 4. Verify the tab navigation ('Random', 'Boundary', 'Malicious')
     const randomTab = page.getByRole('button', { name: 'Random', exact: true });

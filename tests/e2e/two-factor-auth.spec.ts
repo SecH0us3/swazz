@@ -5,6 +5,7 @@
 
 import { test, expect } from '@playwright/test';
 import { webcrypto } from 'crypto';
+import { TIMEOUTS } from './helpers';
 
 // Base32 Alphabet
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -87,7 +88,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Navigate to Profile Settings
     const accountBtn = page.locator('button[title="Account"]');
@@ -162,7 +163,7 @@ test.describe('Two-Factor Authentication (2FA) E2E Tests', () => {
     await verifyLoginBtn.click();
 
     // Wait for main dashboard to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 8. Go back to Profile Settings to disable 2FA
     await accountBtn.click();

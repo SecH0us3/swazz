@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
   test('should correctly filter fuzzer request logs by status and path', async ({ page }) => {
@@ -20,7 +21,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -36,7 +37,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
     const boundaryToggle = page.locator('.profile-toggle.boundary');
@@ -53,9 +54,9 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
 
     // 5. Verify run starts and completes
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 6. Switch to Request Logs tab
     const requestLogsTab = page.locator('button:has-text("Request Logs")');
@@ -64,7 +65,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
 
     // Wait for logs list to render
     const logPaths = page.locator('.log-path');
-    await expect(logPaths.first()).toBeVisible({ timeout: 10000 });
+    await expect(logPaths.first()).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Store original total count of requests
     const countIndicator = page.locator('text=/\\d+ req(s)?/').first();

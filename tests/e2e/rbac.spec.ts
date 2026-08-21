@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('RBAC and Project Invitations E2E Tests', () => {
   test('should create custom roles, validate inputs, invite a user, and accept invitation', async ({ page, context }) => {
@@ -68,7 +68,7 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     await submitRoleBtn.click();
 
     // Verify custom role is added to the list
-    await expect(page.locator(`.rbac-role-card:has-text("${customRoleName}")`)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(`.rbac-role-card:has-text("${customRoleName}")`)).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 6. Invite User B with the custom role
     const membersBtn = page.locator('.rbac-tab-btn:has-text("Members")');
@@ -119,14 +119,14 @@ test.describe('RBAC and Project Invitations E2E Tests', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main dashboard to load for User B
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 9. Navigate to the invitation URL (using the token query parameter) to trigger invitation acceptance
     // User B is already logged in, so the app auto-accepts the invitation on load
     await page.goto(`/?token=${inviteToken}`);
 
     // Wait for toast notification confirming invitation acceptance
-    await expect(page.locator('.toast:has-text("Invitation accepted successfully")')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.toast:has-text("Invitation accepted successfully")')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Switch to the invited project (which is the older project in the list)
     await page.locator('.sidebar-project-selector button.btn-ghost').click();

@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
   test('should exclude checked-out endpoints from fuzzing scope', async ({ page }) => {
@@ -26,7 +26,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Search for the /login endpoint in the sidebar endpoint tree
     const searchInput = page.locator('input[placeholder="Search endpoints..."]');
@@ -60,9 +60,9 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // 6. Verify run starts and completes (wait for the run to finish)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 7. Verify that no request targeting "POST /login" was executed
     // Switch to Request Logs tab
@@ -72,7 +72,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Check all log rows under Request Logs tab
     const logPaths = page.locator('.log-path');
-    await expect(logPaths.first()).toBeVisible({ timeout: 10000 });
+    await expect(logPaths.first()).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     const logCount = await logPaths.count();
     
     // Ensure we have fuzzed other endpoints (there are logs present)
@@ -104,7 +104,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Locate "Included Only" toggle button (aria-label: "Filter included endpoints only")
     const includedOnlyBtn = page.getByRole('button', { name: /Filter included endpoints/i });

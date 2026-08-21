@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect, Download } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Audit Trail E2E', () => {
   test('should record action and display in audit trail tab', async ({ page }) => {
@@ -16,7 +17,7 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Navigate to Project Settings
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
@@ -24,7 +25,7 @@ test.describe('Audit Trail E2E', () => {
       .or(page.locator('button', { hasText: 'Settings' }))
       .first();
     await settingsBtn.click();
-    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Perform a mutation: update project name (triggers PATCH /api/projects/:id)
     const generalTab = page.locator('.tab-bar-btn', { hasText: 'General' });
@@ -42,7 +43,7 @@ test.describe('Audit Trail E2E', () => {
 
     // Open Audit Trail tab
     const auditTab = page.locator('#tab-audit-trail');
-    await expect(auditTab).toBeVisible({ timeout: 5000 });
+    await expect(auditTab).toBeVisible({ timeout: TIMEOUTS.SHORT });
     await auditTab.click();
 
     // Wait for content to load
@@ -50,7 +51,7 @@ test.describe('Audit Trail E2E', () => {
 
     // Verify the audit trail table or empty state is visible
     const tableOrEmpty = page.locator('.audit-trail-table, .audit-trail-empty-state');
-    await expect(tableOrEmpty).toBeVisible({ timeout: 8000 });
+    await expect(tableOrEmpty).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // If table is present, verify at least one row
     const hasTable = await page.locator('.audit-trail-table').isVisible();
@@ -77,14 +78,14 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
       .or(page.locator('[data-tab="settings"]'))
       .or(page.locator('button', { hasText: 'Settings' }))
       .first();
     await settingsBtn.click();
-    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     const auditTab = page.locator('#tab-audit-trail');
     await auditTab.click();
@@ -92,12 +93,12 @@ test.describe('Audit Trail E2E', () => {
 
     // Source filter: select 'api_key' — should show empty state or filtered results (not crash)
     const sourceSelect = page.locator('#audit-trail-source-filter');
-    await expect(sourceSelect).toBeVisible({ timeout: 5000 });
+    await expect(sourceSelect).toBeVisible({ timeout: TIMEOUTS.SHORT });
     await sourceSelect.selectOption('api_key');
     await page.waitForTimeout(800);
 
     const tableOrEmpty = page.locator('.audit-trail-table, .audit-trail-empty-state');
-    await expect(tableOrEmpty).toBeVisible({ timeout: 5000 });
+    await expect(tableOrEmpty).toBeVisible({ timeout: TIMEOUTS.SHORT });
 
     // Reset filter
     await sourceSelect.selectOption('');
@@ -112,21 +113,21 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
       .or(page.locator('[data-tab="settings"]'))
       .or(page.locator('button', { hasText: 'Settings' }))
       .first();
     await settingsBtn.click();
-    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     const auditTab = page.locator('#tab-audit-trail');
     await auditTab.click();
     await page.waitForTimeout(1200);
 
     const searchInput = page.locator('#audit-trail-search');
-    await expect(searchInput).toBeVisible({ timeout: 5000 });
+    await expect(searchInput).toBeVisible({ timeout: TIMEOUTS.SHORT });
 
     // Search for something that won't match → should show empty state
     await searchInput.fill('xyznonexistentterm123456');
@@ -152,7 +153,7 @@ test.describe('Audit Trail E2E', () => {
     await page.locator('#username').fill(username);
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Trigger some action first so there's something to export
     const settingsBtn = page.locator('.tab-bar-btn', { hasText: 'Project Settings' })
@@ -160,14 +161,14 @@ test.describe('Audit Trail E2E', () => {
       .or(page.locator('button', { hasText: 'Settings' }))
       .first();
     await settingsBtn.click();
-    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.project-settings-layout')).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     const auditTab = page.locator('#tab-audit-trail');
     await auditTab.click();
     await page.waitForTimeout(1500);
 
     const exportBtn = page.locator('#audit-trail-export-btn');
-    await expect(exportBtn).toBeVisible({ timeout: 5000 });
+    await expect(exportBtn).toBeVisible({ timeout: TIMEOUTS.SHORT });
 
     const hasTable = await page.locator('.audit-trail-table').isVisible();
     if (hasTable) {

@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('UI/UX Right Column Cleanup Verification', () => {
   test('Verify streamlined ConfigSidebar and moved controls', async ({ page }) => {
@@ -18,7 +19,7 @@ test.describe('UI/UX Right Column Cleanup Verification', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 2. Verify ConfigSidebar right column exists and is streamlined
     const sidebar = page.locator('.config-sidebar');

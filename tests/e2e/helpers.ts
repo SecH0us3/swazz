@@ -82,3 +82,14 @@ export async function registerAndLogin(
 
   return uniqueUsername;
 }
+
+/**
+ * Shared timeouts for E2E tests to prevent hardcoded numbers
+ */
+export const TIMEOUTS = {
+  SHORT: 5000,
+  DEFAULT: 10000,
+  LOAD: 30000,
+  SCAN_RUN: 180000,
+  GLOBAL_TEST: 300000,
+};

@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
-import { mockEnterpriseLicense, registerAndLogin } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
 
 test.describe('Swazz Integration E2E Test', () => {
   test('should load dashboard, add vulnerable demo spec, trigger fuzzing, and verify results', async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe('Swazz Integration E2E Test', () => {
     
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 5. Verify the target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -63,14 +63,14 @@ test.describe('Swazz Integration E2E Test', () => {
     // 7. Verify the run starts and logs / heatmap cells are populated
     // Wait for progress logs or stats to change, indicating active execution
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Wait for the heatmap or status codes to start rendering
     const heatmapGrid = page.locator('.heatmap-grid');
-    await expect(heatmapGrid).toBeVisible({ timeout: 180000 });
+    await expect(heatmapGrid).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // Wait for the run to complete (Stop button goes away, or starts showing "Run" again)
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 8. Assert that findings are populated
     // Switch to Grouped Errors tab to view findings
@@ -80,12 +80,12 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // Click Expand All to render finding items
     const expandAllBtn = page.locator('button:has-text("Expand All")');
-    await expect(expandAllBtn).toBeVisible({ timeout: 10000 });
+    await expect(expandAllBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expandAllBtn.click();
 
     // Ensure we see findings like reflected XSS or SQL Injection
     const inspectorItems = page.locator('.finding-item');
-    await expect(inspectorItems.first()).toBeVisible({ timeout: 10000 });
+    await expect(inspectorItems.first()).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 9. Download HTML export report
     const downloadTab = page.locator('button.tab-bar-btn:has-text("Download")');
@@ -128,7 +128,7 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // 3. Verify endpoints are populated in the sidebar
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Verify target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
@@ -136,12 +136,12 @@ test.describe('Swazz Integration E2E Test', () => {
 
     // 5. Verify the run starts and click Stop to finish the test quickly
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 30000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await stopBtn.click();
 
     // Verify fuzzer has stopped
     const startBtn = page.locator('#btn-start');
-    await expect(startBtn).toBeVisible({ timeout: 30000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });
 

@@ -6,6 +6,7 @@
 import { test, expect } from '@playwright/test';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
   let secondAgent: ChildProcess | null = null;
@@ -37,7 +38,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await configPromise;
 
     // 3. Spawn a second runner agent process
@@ -71,7 +72,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
 
     // Verify both our primary agent and the new runner-failover-agent are listed
     const secondRunnerRow = page.locator(`.runner-name:has-text("${agentName}")`);
-    await expect(secondRunnerRow).toBeVisible({ timeout: 30000 });
+    await expect(secondRunnerRow).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 5. Go back to Dashboard
     const backBtn = page.locator('button:has-text("Back to Dashboard")');
@@ -90,7 +91,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 7. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
@@ -103,13 +104,13 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await startBtn.click();
 
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: 10000 });
+    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Wait for logs tab to start showing fuzzer request logs count (indicating active scanning)
     const logsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
     await expect(logsTab).toBeVisible();
     // Wait until there is at least one digit in the count
-    await expect(logsTab).toContainText(/[1-9]\d*/, { timeout: 30000 });
+    await expect(logsTab).toContainText(/[1-9]\d*/, { timeout: TIMEOUTS.LOAD });
 
     // 8. Kill the second runner agent midway!
     console.log(`Killing second agent runner: ${agentName}`);
@@ -117,7 +118,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     secondAgent = null;
 
     // 9. Wait for the fuzzer to complete (Start button becomes visible again)
-    await expect(startBtn).toBeVisible({ timeout: 180000 });
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 10. Verify scan completed successfully and we have findings
     const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
@@ -125,6 +126,6 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await owaspTab.click();
 
     const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: 10000 });
+    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
   });
 });

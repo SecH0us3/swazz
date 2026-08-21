@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Session Expiration and Authentication Flow E2E Test', () => {
   test('should redirect to login screen when session token becomes invalid or expired (401)', async ({ page }) => {
@@ -20,7 +21,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Programmatically corrupt/expire the session token in localStorage
     await page.evaluate(() => {
@@ -35,7 +36,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     // (open the auth modal; the landing page is shown after logout)
     await page.getByRole('button', { name: 'Sign In' }).click();
     const loginHeader = page.locator('h2:has-text("Welcome back")');
-    await expect(loginHeader).toBeVisible({ timeout: 30000 });
+    await expect(loginHeader).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 6. Assert that localStorage token is cleaned up
     const token = await page.evaluate(() => localStorage.getItem('swazz_token'));
@@ -56,7 +57,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Open Project Settings page
     const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
@@ -74,7 +75,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
 
     // 6. Wait for the "Saved successfully" indicator
     const savedIndicator = page.locator('span:has-text("Saved successfully")');
-    await expect(savedIndicator).toBeVisible({ timeout: 10000 });
+    await expect(savedIndicator).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // 7. Tamper with token iat in localStorage to make it 2 hours old and re-sign it with test secret
     await page.evaluate(async () => {
@@ -133,7 +134,7 @@ test.describe('Session Expiration and Authentication Flow E2E Test', () => {
     // (open the auth modal; the landing page is shown after logout)
     await page.getByRole('button', { name: 'Sign In' }).click();
     const loginHeader = page.locator('h2:has-text("Welcome back")');
-    await expect(loginHeader).toBeVisible({ timeout: 30000 });
+    await expect(loginHeader).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 10. Verify that localStorage token was cleared
     const token = await page.evaluate(() => localStorage.getItem('swazz_token'));

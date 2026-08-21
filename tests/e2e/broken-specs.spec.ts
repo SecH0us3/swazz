@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Input Validation & Error Handling (Broken Specs) E2E Test', () => {
   test('should display validation error toast when adding an invalid or nonexistent Swagger spec URL', async ({ page }) => {
@@ -22,7 +23,7 @@ test.describe('Input Validation & Error Handling (Broken Specs) E2E Test', () =>
     await page.locator('#password').press('Enter');
 
     // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await configPromise;
 
     // 3. Find the spec URL input and fill it with a malformed/nonexistent spec URL
@@ -39,7 +40,7 @@ test.describe('Input Validation & Error Handling (Broken Specs) E2E Test', () =>
 
     // 5. Verify that the detailed parsing error modal is displayed and the page does not crash
     const modal = page.locator('.parsing-error-dialog');
-    await expect(modal).toBeVisible({ timeout: 10000 });
+    await expect(modal).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(modal.locator('h3')).toHaveText('Specification Parsing Failure');
 
     // 6. Click the dismiss button to close it

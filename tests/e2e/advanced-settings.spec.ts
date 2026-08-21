@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
+import { TIMEOUTS } from './helpers';
 
 test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () => {
   // Helper to register and log in before each test case
@@ -22,7 +23,7 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
     await page.locator('#password').fill('Password123!');
     await page.locator('#password').press('Enter');
 
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 
   test('should configure anomalies, validate invalid ignore status codes, and update ignore rules', async ({ page }) => {
@@ -243,7 +244,7 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
 
     // Wait for endpoints list to render to ensure spec is loaded
     const endpointItems = page.locator('.tree-leaf-row');
-    await expect(endpointItems.first()).toBeVisible({ timeout: 30000 });
+    await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Focus on the endpoints search input field
     const searchEndpointsInput = page.locator('input[placeholder="Search endpoints..."]');
