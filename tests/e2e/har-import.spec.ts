@@ -88,17 +88,17 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     // Verify /welcome requests
     await searchInput.fill('/welcome');
     const welcomeLog = page.locator('.log-path:has-text("/welcome")').first();
-    await expect(welcomeLog).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(welcomeLog).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Verify /users requests
     await searchInput.fill('/users');
     const usersLog = page.locator('.log-path:has-text("/users")').first();
-    await expect(usersLog).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(usersLog).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Verify /api/goods requests
     await searchInput.fill('/api/goods');
     const goodsLog = page.locator('.log-path:has-text("/api/goods")').first();
-    await expect(goodsLog).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(goodsLog).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 
   test('should display toast error message when attempting to load an invalid HAR/spec URL', async ({ page }) => {

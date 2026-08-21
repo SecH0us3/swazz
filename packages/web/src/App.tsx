@@ -432,8 +432,8 @@ export default function App() {
             newRule.endpoint = '**';
         }
 
-        // Clean payload if present and short enough
-        if (triagePrompt.payload && triagePrompt.payload.length > 0 && triagePrompt.payload.length < 150) {
+        // Clean payload if present, short enough, and scope is finding
+        if (triageScope === 'finding' && triagePrompt.payload && triagePrompt.payload.length > 0 && triagePrompt.payload.length < 150) {
             let cleanPayload = triagePrompt.payload.trim();
             if (cleanPayload.includes('…')) {
                 cleanPayload = cleanPayload.split('…')[0].trim();
@@ -447,7 +447,7 @@ export default function App() {
                         }
                     } catch { /* */ }
                 }
-                if (typeof cleanPayload === 'string' && cleanPayload.trim().length > 0) {
+                if (typeof cleanPayload === 'string' && cleanPayload.trim().length > 0 && cleanPayload !== 'null' && cleanPayload !== 'undefined') {
                     newRule.payload = cleanPayload;
                 }
             }
@@ -513,8 +513,8 @@ export default function App() {
                     const currentIgnoreRules = config.rules?.ignore_rules || [];
                     const filteredRules = currentIgnoreRules.filter(r => 
                         !(r.rule_id === ruleId && 
-                          (r.endpoint === current.endpoint || r.endpoint === '**') && 
-                          (r.method === current.method || !r.method))
+                          (r.endpoint === current.endpoint || r.endpoint === '**' || !r.endpoint) && 
+                          (r.method === current.method || !r.method || r.endpoint === '**'))
                     );
                     if (filteredRules.length !== currentIgnoreRules.length) {
                         updateConfig({
