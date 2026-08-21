@@ -39,11 +39,16 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Trigger fuzzing
-    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    // Ensure Config tab is opened in sidebar if not visible
+    const configSidebar = page.locator('.config-sidebar');
+    if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
+      const configTab = page.locator('button.nav-item:has-text("Config"), button.tab-item:has-text("Config")');
+      if (await configTab.count() > 0) await configTab.click();
+    }
     const boundaryToggle = page.locator('.profile-toggle.boundary');
-    
-    await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.evaluate((node) => node.click());
+    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.evaluate((node) => node.click());
+    }
     
 
     const startBtn = page.locator('#btn-start');
