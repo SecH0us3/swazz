@@ -90,10 +90,10 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     // Modal should disappear
     await expect(modalTitle).not.toBeVisible();
 
-    // Verify opacity & IG badge on dashboard
-    await expect(firstFinding).toHaveCSS('opacity', '0.6');
+    // Verify IG badge and opacity on dashboard (wait up to 30s for React/IDB sync)
     const igBadge = firstFinding.locator('.badge:has-text("Ignored")');
-    await expect(igBadge).toBeVisible();
+    await expect(igBadge).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await expect(firstFinding).toHaveCSS('opacity', '0.6', { timeout: TIMEOUTS.LOAD });
 
     // Close the detail inspector panel
     const closeInspectorBtn = page.locator('button[aria-label="Close"]');
