@@ -13,10 +13,12 @@ test.describe('Config Sidebar Contextual Toggle E2E Tests', () => {
 
     // 1. Navigate to dashboard and log in as guest
     await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    const signInBtn = page.getByRole('button', { name: 'Sign In' }).first();
+    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    await signInBtn.click();
 
     const guestBtn = page.getByRole('button', { name: 'Try as guest →' });
-    await expect(guestBtn).toBeVisible();
+    await expect(guestBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await guestBtn.click();
 
     // 2. Wait for main layout

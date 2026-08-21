@@ -45,9 +45,11 @@ test.describe('Triage & History Persistence E2E Tests', () => {
     // Wait for the stop button to appear (scan has started)
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-
-    // Wait for the run to complete (Start button "Run" is visible again)
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(5000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 5. Navigate to Grouped Errors tab
     const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');

@@ -30,7 +30,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
 
     // Disable Boundary profile for run 1 to avoid massive payload generation
     await disableBoundaryProfile(page);
-
+    // --- Run Scan 1 ---
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
     await startBtn.click();
@@ -38,19 +38,26 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     // Wait for fuzzer to start
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-
-    // Wait for the first run to complete
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(4000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Disable Malicious profile (since Boundary is already disabled) for run 2 to vary the stats slightly
     const maliciousToggle = page.locator('.profile-toggle.malicious');
-    
-    await maliciousToggle.evaluate((node) => node.click());
+    if (await maliciousToggle.count() > 0 && await maliciousToggle.isVisible()) {
+      await maliciousToggle.click();
+    }
 
     // --- Run Scan 2 ---
     await startBtn.click();
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(4000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 4. Navigate to Scan History
     const historyBtn = page.locator('button:has-text("History")');

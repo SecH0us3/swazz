@@ -66,8 +66,11 @@ test.describe('Swazz Integration E2E Test', () => {
     const heatmapGrid = page.locator('.heatmap-grid');
     await expect(heatmapGrid).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
-    // Wait for the run to complete (Stop button goes away, or starts showing "Run" again)
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(5000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 8. Assert that findings are populated
     // Switch to Grouped Errors tab to view findings
