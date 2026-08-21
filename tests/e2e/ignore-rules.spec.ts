@@ -42,7 +42,7 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     const boundaryToggle = page.locator('.profile-toggle.boundary');
     
     await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click({ force: true });
+    await boundaryToggle.evaluate((node) => node.click());
     
 
     const startBtn = page.locator('#btn-start');

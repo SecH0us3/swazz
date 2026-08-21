@@ -35,7 +35,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     const boundaryToggle = page.locator('.profile-toggle.boundary');
     
     if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-      await boundaryToggle.click({ force: true });
+      await boundaryToggle.evaluate((node) => node.click());
     }
     
 
@@ -52,7 +52,7 @@ test.describe('Multi-Scan Comparison E2E Tests', () => {
     // Disable Malicious profile (since Boundary is already disabled) for run 2 to vary the stats slightly
     const maliciousToggle = page.locator('.profile-toggle.malicious');
     
-    await maliciousToggle.click({ force: true });
+    await maliciousToggle.evaluate((node) => node.click());
 
     // --- Run Scan 2 ---
     await startBtn.click();

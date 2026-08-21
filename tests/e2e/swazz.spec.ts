@@ -52,7 +52,7 @@ test.describe('Swazz Integration E2E Test', () => {
     const boundaryToggle = page.locator('.profile-toggle.boundary');
     
     await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click({ force: true });
+    await boundaryToggle.evaluate((node) => node.click());
     
 
     // 6. Trigger fuzzing by clicking the Start button

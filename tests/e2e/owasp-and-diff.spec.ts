@@ -34,7 +34,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const boundaryToggle = page.locator('.profile-toggle.boundary');
     
     if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-      await boundaryToggle.click({ force: true });
+      await boundaryToggle.evaluate((node) => node.click());
     }
     
 

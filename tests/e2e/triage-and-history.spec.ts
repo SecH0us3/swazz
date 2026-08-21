@@ -40,7 +40,7 @@ test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () 
     const boundaryToggle = page.locator('.profile-toggle.boundary');
     
     await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click({ force: true });
+    await boundaryToggle.evaluate((node) => node.click());
     
 
     // 4. Trigger fuzzing by clicking the Start/Run button

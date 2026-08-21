@@ -312,7 +312,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       // Disable heavy profiles to speed up E2E test (intensity is already 1)
 
       await expect(boundaryToggle).toHaveClass(/active/);
-      await boundaryToggle.click({ force: true });
+      await boundaryToggle.evaluate((node) => node.click());
       
 
       await expect(maliciousToggle).toHaveClass(/active/);
@@ -368,7 +368,7 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       
       const boundaryClass = await boundaryToggle.getAttribute('class');
       if (boundaryClass && !boundaryClass.includes('active')) {
-        await boundaryToggle.click({ force: true });
+        await boundaryToggle.evaluate((node) => node.click());
       }
       const maliciousClass = await maliciousToggle.getAttribute('class');
       if (maliciousClass && !maliciousClass.includes('active')) {

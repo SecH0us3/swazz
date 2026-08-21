@@ -61,7 +61,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
 
     try {
       // Disable boundary and malicious profiles
-      await boundaryToggle.click({ force: true });
+      await boundaryToggle.evaluate((node) => node.click());
       
 
       await maliciousToggle.click();
@@ -124,7 +124,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       if (await backBtn.isVisible()) {
         const boundaryClass = await boundaryToggle.getAttribute('class');
         if (boundaryClass && !boundaryClass.includes('active')) {
-          await boundaryToggle.click({ force: true });
+          await boundaryToggle.evaluate((node) => node.click());
         }
         const maliciousClass = await maliciousToggle.getAttribute('class');
         if (maliciousClass && !maliciousClass.includes('active')) {

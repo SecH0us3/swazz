@@ -53,7 +53,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
     const boundaryToggle = page.locator('.profile-toggle.boundary');
     if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-      await boundaryToggle.click({ force: true });
+      await boundaryToggle.evaluate((node) => node.click());
     }
 
     await startBtn.click();

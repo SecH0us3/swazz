@@ -90,7 +90,7 @@ test.describe('BOLA / Multi-Identity vulnerability testing E2E Test', () => {
 
     const boundaryToggle = profilesSection.locator('.profile-toggle.boundary');
     await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.click({ force: true });
+    await boundaryToggle.evaluate((node) => node.click());
     
 
     const maliciousToggle = profilesSection.locator('.profile-toggle.malicious');
