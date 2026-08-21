@@ -141,12 +141,10 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     await expect(startBtn).toBeVisible();
     // Open Config Sidebar to ensure Boundary toggle is mounted
 
-    if (await page.locator('.config-sidebar').count() === 0) {
-
-      const configTab = page.locator('.sidebar-nav-item:has-text("Config")');
-
-      if (await configTab.count() > 0) await configTab.click();
-
+    const configSidebar = page.locator('.config-sidebar');
+    if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
+      const configToggle = page.locator('.workspace-config-toggle-btn, button[title*="Settings"], button:has-text("Config")');
+      if (await configToggle.count() > 0) await configToggle.first().click();
     }
 
     const boundaryToggle = page.locator('.profile-toggle.boundary');
