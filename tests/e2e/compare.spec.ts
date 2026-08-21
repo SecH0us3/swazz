@@ -4,51 +4,34 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
+import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS, disableBoundaryProfile} from './helpers';
 
 test.describe('Multi-Scan Comparison E2E Tests', () => {
-  test('should run multiple scans, select them in History, compare them, and verify comparison data', async ({ page }) => {
-    // 1. Mock Enterprise license to unlock Cloud History & Comparison
+  test('should run two scans with different configurations, compare results, and display diff analytics', async ({ page }) => {
+    // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-
-    // 2. Handle Registration
     await registerAndLogin(page);
 
-    // 3. Add Vulnerable Demo API Swagger Specification
+    // 2. Add Swagger spec of local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
     await expect(specUrlInput).toBeVisible();
-    
     const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
     await specUrlInput.fill(demoSpecUrl);
-    
+
     const addBtn = page.locator('button.btn-primary:has-text("Add")');
     await addBtn.click();
 
-    // Verify endpoints are loaded
+    // Verify spec is loaded
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
+
+    // Wait for endpoints tree to render
     const endpointItems = page.locator('.tree-leaf-row');
     await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // --- Run Scan 1 ---
-    const startBtn = page.locator('#btn-start');
     // Disable Boundary profile for run 1 to avoid massive payload generation
-    // Open Config Sidebar to ensure Boundary toggle is mounted
+    await disableBoundaryProfile(page);
 
-    const configSidebar = page.locator('.config-sidebar');
-    if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
-      const configToggle = page.locator('.workspace-config-toggle-btn, button[title*="Settings"], button:has-text("Config")');
-      if (await configToggle.count() > 0) await configToggle.first().click();
-    }
-
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-
-    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-
-      await boundaryToggle.evaluate((node) => node.click());
-
-    }
-    
-
+    const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
     await startBtn.click();
 

@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
 
 test.describe('Scan Scheduler & Timeout E2E Tests', () => {
   test('should restrict scheduling to Supporter Plan, allow saving valid cron, reject fast cron, support scan timeout, and reconnect on refresh', async ({ page }) => {
@@ -100,21 +100,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await expect(startFuzzBtn).toBeVisible();
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
-    // Open Config Sidebar to ensure Boundary toggle is mounted
-
-    const configSidebar = page.locator('.config-sidebar');
-    if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
-      const configToggle = page.locator('.workspace-config-toggle-btn, button[title*="Settings"], button:has-text("Config")');
-      if (await configToggle.count() > 0) await configToggle.first().click();
-    }
-
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-
-    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-
-      await boundaryToggle.evaluate((node) => node.click());
-
-    }
+    await disableBoundaryProfile(page);
 
     await startFuzzBtn.click();
 

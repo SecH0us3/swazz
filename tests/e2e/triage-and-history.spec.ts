@@ -4,43 +4,37 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
 
-test.describe('Vulnerability Triage and Scan History Persistence E2E Tests', () => {
-  test('should complete scan, triage a finding, reload page, restore from history, and verify triage state is persisted', async ({ page }) => {
-    // 1. Mock Enterprise license to unlock Cloud History & Triage
+test.describe('Triage & History Persistence E2E Tests', () => {
+  test('should persist triage state and historical runs in IndexedDB and restore across reload', async ({ page }) => {
+    // 1. Mock Enterprise license & register user
     await mockEnterpriseLicense(page);
-
-    // 2. Handle Login/Registration: Register a unique user
     await registerAndLogin(page);
 
-    // 3. Add Vulnerable Demo API spec
+    // 2. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
     await expect(specUrlInput).toBeVisible();
-    
     const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
     await specUrlInput.fill(demoSpecUrl);
-    
+
     const addBtn = page.locator('button.btn-primary:has-text("Add")');
     await addBtn.click();
 
-    // Verify endpoints are populated in the sidebar
+    // Verify spec is loaded
     await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
 
-    // Wait for endpoints list to render to ensure spec is loaded
+    // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
     await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // Verify target base URL input is populated in the header
+    // 3. Verify the target base URL input is populated in the header
     const targetInput = page.locator('input.header-target-input');
     await expect(targetInput).toBeVisible();
     await expect(targetInput).toHaveValue(/127\.0\.0\.1:8788/);
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-    
-    await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.evaluate((node) => node.click());
+    await disableBoundaryProfile(page);
     
 
     // 4. Trigger fuzzing by clicking the Start/Run button

@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
-import { mockEnterpriseLicense, registerAndLogin , TIMEOUTS} from './helpers';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
 
 test.describe('Swazz Integration E2E Test', () => {
   test('should load dashboard, add vulnerable demo spec, trigger fuzzing, and verify results', async ({ page }) => {
@@ -49,10 +49,7 @@ test.describe('Swazz Integration E2E Test', () => {
     expect(targetVal).toContain('127.0.0.1:8788');
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-    
-    await expect(boundaryToggle).toHaveClass(/active/);
-    await boundaryToggle.evaluate((node) => node.click());
+    await disableBoundaryProfile(page);
     
 
     // 6. Trigger fuzzing by clicking the Start button

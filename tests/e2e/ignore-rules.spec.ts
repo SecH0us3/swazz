@@ -4,52 +4,32 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { TIMEOUTS } from './helpers';
+import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfile } from './helpers';
 
 test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
   test('should triage finding and check ignore rule scopes & auto cleanup', async ({ page }) => {
-    // 1. Navigate to frontend
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    // 1. Mock Enterprise license & register user
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
-    // 2. Register unique user (username matching length requirements)
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-
-    const configPromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
-    await page.locator('#password').press('Enter');
-
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
-    await configPromise;
-
-    // 3. Add Vulnerable Demo API spec
+    // 2. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
     await expect(specUrlInput).toBeVisible();
-    
     const demoSpecUrl = 'http://127.0.0.1:8788/swagger.json';
     await specUrlInput.fill(demoSpecUrl);
-    
+
     const addBtn = page.locator('button.btn-primary:has-text("Add")');
     await addBtn.click();
 
+    // Verify spec is loaded
+    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
+
+    // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
     await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // 4. Trigger fuzzing
-    // Ensure Config tab is opened in sidebar if not visible
-    const configSidebar = page.locator('.config-sidebar');
-    if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
-      const configTab = page.locator('button.nav-item:has-text("Config"), button.tab-item:has-text("Config")');
-      if (await configTab.count() > 0) await configTab.click();
-    }
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-      await boundaryToggle.evaluate((node) => node.click());
-    }
-    
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    await disableBoundaryProfile(page);
 
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();

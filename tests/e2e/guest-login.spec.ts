@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { TIMEOUTS } from './helpers';
+import { TIMEOUTS, disableBoundaryProfile } from './helpers';
 
 test.describe('Guest Login E2E Test', () => {
   test('should allow entering as guest, parsing a spec, starting fuzzing, and logging out', async ({ page }) => {
@@ -67,22 +67,8 @@ test.describe('Guest Login E2E Test', () => {
 
     // 8. Trigger fuzzing by clicking the Start button (confirms /api/runs works!)
     const startBtn = page.locator('#btn-start');
-    await expect(startBtn).toBeVisible();
-    // Open Config Sidebar to ensure Boundary toggle is mounted
-
-    const configSidebar = page.locator('.config-sidebar');
-    if (await configSidebar.count() > 0 && !(await configSidebar.isVisible())) {
-      const configToggle = page.locator('.workspace-config-toggle-btn, button[title*="Settings"], button:has-text("Config")');
-      if (await configToggle.count() > 0) await configToggle.first().click();
-    }
-
-    const boundaryToggle = page.locator('.profile-toggle.boundary');
-
-    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
-
-      await boundaryToggle.evaluate((node) => node.click());
-
-    }
+    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    await disableBoundaryProfile(page);
 
     await startBtn.click();
 
