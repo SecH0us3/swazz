@@ -55,20 +55,20 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		if query, ok := req["query"].(string); ok && strings.ContainsAny(query, "'\";-") {
+			resp := map[string]string{
+				"error": "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '" + query + "'",
+			}
+			b, _ := json.Marshal(resp)
+			c.Write(r.Context(), websocket.MessageText, b)
+			continue
+		}
+
 		action, _ := req["action"].(string)
 
 		switch action {
 		case "search", "query":
-			query, _ := req["query"].(string)
-			if strings.ContainsAny(query, "'\";-") {
-				resp := map[string]string{
-					"error": "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '" + query + "'",
-				}
-				b, _ := json.Marshal(resp)
-				c.Write(r.Context(), websocket.MessageText, b)
-			} else {
-				c.Write(r.Context(), websocket.MessageText, []byte(`{"result": "ok"}`))
-			}
+			c.Write(r.Context(), websocket.MessageText, []byte(`{"result": "ok"}`))
 
 		case "update", "user":
 			id, _ := req["id"].(float64)
