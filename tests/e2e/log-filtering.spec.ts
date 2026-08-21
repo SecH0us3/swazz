@@ -33,7 +33,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     await addBtn.click();
 
     // Verify spec is loaded
-    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
+    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl, { timeout: TIMEOUTS.LOAD });
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');

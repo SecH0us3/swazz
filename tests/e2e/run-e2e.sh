@@ -60,23 +60,45 @@ check_port() {
   nc -z 127.0.0.1 "$1" >/dev/null 2>&1 || nc -z localhost "$1" >/dev/null 2>&1
 }
 
-# Helper function to wait dynamically for a port to open
+# Helper function to check HTTP health for HTTP services
+check_service() {
+  local port="$1"
+  if ! check_port "$port"; then
+    return 1
+  fi
+  if [ "$port" = "8787" ]; then
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 "http://127.0.0.1:8787/api/auth/session" 2>/dev/null || echo "000")
+    if [ "$code" = "502" ] || [ "$code" = "503" ] || [ "$code" = "504" ] || [ "$code" = "000" ]; then
+      return 1
+    fi
+  elif [ "$port" = "8788" ]; then
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 "http://127.0.0.1:8788/swagger.json" 2>/dev/null || echo "000")
+    if [ "$code" = "502" ] || [ "$code" = "503" ] || [ "$code" = "504" ] || [ "$code" = "000" ]; then
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# Helper function to wait dynamically for a service to become healthy
 wait_for_port() {
   local port="$1"
   local name="$2"
   for i in {1..30}; do
-    if check_port "$port"; then
+    if check_service "$port"; then
       return 0
     fi
     sleep 1
   done
-  echo "✗ Error: $name on port $port failed to start within 30 seconds."
+  echo "✗ Error: $name on port $port failed to start or become healthy within 30 seconds."
   exit 1
 }
 
-# Watchdog: restarts a wrangler dev process if it dies mid-session.
-# wrangler dev (miniflare) can crash with "Network connection lost" on some
-# versions; the watchdog keeps the service alive so E2E runs are not flaky.
+# Watchdog: restarts a wrangler dev process if it dies or returns 502/503 mid-session.
+# wrangler dev (miniflare/workerd) can crash with 502 Bad Gateway under heavy load;
+# the watchdog keeps the service alive and recovers from zombie states so E2E runs are not flaky.
 # Usage: start_watchdog <port> <name> <logfile> <command...>
 start_watchdog() {
   local port="$1"
@@ -85,13 +107,15 @@ start_watchdog() {
   shift 3
   (
     while true; do
-      if ! check_port "$port"; then
-        echo "[watchdog] $name down on port $port — restarting..." >> "$logfile"
+      if ! check_service "$port"; then
+        echo "[watchdog] $name down or unhealthy on port $port — restarting..." >> "$logfile"
+        lsof -ti :"$port" | xargs kill -9 2>/dev/null || true
+        sleep 1
         "$@" >> "$logfile" 2>&1 &
         local child=$!
-        # Wait until the port comes up or the child exits
+        # Wait until the service comes up healthy or the child exits
         for i in {1..30}; do
-          if check_port "$port"; then
+          if check_service "$port"; then
             break
           fi
           if ! kill -0 "$child" 2>/dev/null; then
@@ -194,8 +218,8 @@ fi
 # Double check services are up
 echo "Checking service connectivity..."
 for port in 8788 8787 5173; do
-  if ! check_port "$port"; then
-    echo "✗ Error: Service on port $port is not accessible."
+  if ! check_service "$port"; then
+    echo "✗ Error: Service on port $port is not accessible or healthy."
     exit 1
   fi
 done

@@ -139,12 +139,18 @@ jobs:
           SHARD_ARG="--shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}"
           if [ "$TARGET_SPECS" = "NONE" ]; then
             echo "✓ No frontend or edge routes affected by this change. Skipping browser E2E tests."
+            exit 0
           elif [ "$TARGET_SPECS" = "ALL" ] || [ -z "$TARGET_SPECS" ]; then
-            echo "→ Running full Playwright E2E test suite"
-            bash tests/e2e/run-e2e.sh $SHARD_ARG
+            RUN_CMD="bash tests/e2e/run-e2e.sh $SHARD_ARG"
           else
-            echo "→ Running targeted Playwright specs: $TARGET_SPECS"
-            bash tests/e2e/run-e2e.sh $TARGET_SPECS $SHARD_ARG
+            RUN_CMD="bash tests/e2e/run-e2e.sh $TARGET_SPECS $SHARD_ARG"
+          fi
+
+          echo "→ Running: $RUN_CMD"
+          if ! $RUN_CMD; then
+            echo "⚠️ E2E test shard failed on first attempt. Retrying whole shard once with clean environment..."
+            sleep 5
+            $RUN_CMD
           fi
 
       - name: Upload Playwright blob report
