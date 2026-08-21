@@ -139,6 +139,11 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // 4. Click Start
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.evaluate((node) => node.click());
+    }
+
     await startBtn.click();
 
     // Wait for the stop button to show (fuzzing in progress) and then the start button to reappear (fuzzing completed)

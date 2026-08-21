@@ -67,6 +67,11 @@ test.describe('Guest Login E2E Test', () => {
     // 8. Trigger fuzzing by clicking the Start button (confirms /api/runs works!)
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.evaluate((node) => node.click());
+    }
+
     await startBtn.click();
 
     // 9. Verify the run starts (Stop button becomes visible)

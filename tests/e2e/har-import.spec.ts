@@ -49,6 +49,11 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     // 4. Click the Start button to run the fuzzer on the imported HAR endpoints
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.evaluate((node) => node.click());
+    }
+
     await startBtn.click();
 
     // Wait for the fuzzer to start (button becomes hidden)

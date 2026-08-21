@@ -95,6 +95,11 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     // 7. Trigger fuzzing by clicking the Start button
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+    const boundaryToggle = page.locator('.profile-toggle.boundary');
+    if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+      await boundaryToggle.evaluate((node) => node.click());
+    }
+
     await startBtn.click();
 
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
