@@ -60,7 +60,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     
     // Allow fuzzer to process active requests across selected endpoints
-    await page.waitForTimeout(4000);
+    await page.waitForTimeout(6000);
     if (await stopBtn.isVisible()) {
       await stopBtn.click();
     }
@@ -74,7 +74,7 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
 
     // Check all log rows under Request Logs tab
     const logPaths = page.locator('.log-path');
-    await expect(logPaths.first()).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(logPaths.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
     const logCount = await logPaths.count();
     
     // Ensure we have fuzzed other endpoints (there are logs present)

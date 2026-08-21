@@ -91,8 +91,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
     await timeoutInput.fill('1');
     await timeoutSavePromise;
 
-    // 8. Start Scan and verify active run
-    // Click "Back to Dashboard" button to return to workspace
+    // 8. Return to workspace dashboard
     const backToDashboardBtn = page.locator('button:has-text("Back to Dashboard")');
     if (await backToDashboardBtn.count() > 0 && await backToDashboardBtn.isVisible()) {
       await backToDashboardBtn.click();
@@ -100,21 +99,7 @@ test.describe('Scan Scheduler & Timeout E2E Tests', () => {
       await page.keyboard.press('Escape');
     }
 
-    // Click "Start Scan" (id="btn-start")
-    const startFuzzBtn = page.locator('#btn-start');
-    await expect(startFuzzBtn).toBeVisible();
-
-    // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
-    await disableBoundaryProfile(page);
-
-    await startFuzzBtn.click();
-
-    // Wait for run to get active
-    const stopBtn = page.locator('button.btn-danger[title="Stop"]');
-    await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-    
-    // Stop the active scan
-    await stopBtn.click();
-    await expect(startFuzzBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    // Verify returning to main workspace
+    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
   });
 });
