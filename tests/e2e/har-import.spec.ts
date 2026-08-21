@@ -50,9 +50,22 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     // 4. Click the Start button to run the fuzzer on the imported HAR endpoints
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+    // Open Config Sidebar to ensure Boundary toggle is mounted
+
+    if (await page.locator('.config-sidebar').count() === 0) {
+
+      const configTab = page.locator('.sidebar-nav-item:has-text("Config")');
+
+      if (await configTab.count() > 0) await configTab.click();
+
+    }
+
     const boundaryToggle = page.locator('.profile-toggle.boundary');
+
     if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+
       await boundaryToggle.evaluate((node) => node.click());
+
     }
 
     await startBtn.click();

@@ -139,9 +139,22 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     // 4. Click Start
     const startBtn = page.locator('#btn-start');
     await expect(startBtn).toBeVisible();
+    // Open Config Sidebar to ensure Boundary toggle is mounted
+
+    if (await page.locator('.config-sidebar').count() === 0) {
+
+      const configTab = page.locator('.sidebar-nav-item:has-text("Config")');
+
+      if (await configTab.count() > 0) await configTab.click();
+
+    }
+
     const boundaryToggle = page.locator('.profile-toggle.boundary');
+
     if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+
       await boundaryToggle.evaluate((node) => node.click());
+
     }
 
     await startBtn.click();

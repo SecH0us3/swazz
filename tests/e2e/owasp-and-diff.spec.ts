@@ -31,10 +31,22 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await expect(endpointItems.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // Disable Boundary profile to avoid sending huge stress-test strings during E2E tests
+    // Open Config Sidebar to ensure Boundary toggle is mounted
+
+    if (await page.locator('.config-sidebar').count() === 0) {
+
+      const configTab = page.locator('.sidebar-nav-item:has-text("Config")');
+
+      if (await configTab.count() > 0) await configTab.click();
+
+    }
+
     const boundaryToggle = page.locator('.profile-toggle.boundary');
-    
+
     if (await boundaryToggle.count() > 0 && await boundaryToggle.evaluate((node) => node.classList.contains('active'))) {
+
       await boundaryToggle.evaluate((node) => node.click());
+
     }
     
 
