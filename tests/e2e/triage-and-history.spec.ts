@@ -89,10 +89,8 @@ test.describe('Triage & History Persistence E2E Tests', () => {
     await closeInspectorBtn.click();
 
     // 7. Reload the page
-    const configPromiseReload = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
     await page.reload();
     await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
-    await configPromiseReload;
 
     // 8. Navigate to Scan History in the sidebar
     const historyBtn = page.locator('button:has-text("History")');

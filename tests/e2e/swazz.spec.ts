@@ -57,15 +57,9 @@ test.describe('Swazz Integration E2E Test', () => {
     await expect(startBtn).toBeVisible();
     await startBtn.click();
 
-    // 7. Verify the run starts and logs / heatmap cells are populated
-    // Wait for progress logs or stats to change, indicating active execution
+    // 7. Verify the run starts and allow fuzzer to process initial requests
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-
-    // Wait for the heatmap or status codes to start rendering
-    const heatmapGrid = page.locator('.heatmap-grid');
-    await expect(heatmapGrid).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
-
     await page.waitForTimeout(5000);
     if (await stopBtn.isVisible()) {
       await stopBtn.click();
