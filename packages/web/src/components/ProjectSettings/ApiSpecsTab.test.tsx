@@ -57,13 +57,12 @@ describe('ApiSpecsTab', () => {
         const input = screen.getByPlaceholderText('https://bbad.secmy.app/swagger.json');
         const addBtn = screen.getByText('Add URL');
         
-        vi.mocked(swaggerService.detectMcpServer).mockResolvedValueOnce({ isMcp: false } as any);
-        vi.mocked(swaggerService.loadSwaggerUrl).mockResolvedValueOnce('mock-yaml-content');
-        vi.mocked(swaggerService.parseRawSpec).mockResolvedValueOnce({
-            info: { title: 'Test API', version: '1.0' },
-            servers: [],
-            paths: {}
-        } as any);
+        vi.mocked(swaggerService.detectMcpServer).mockResolvedValueOnce(null as any);
+        vi.mocked(swaggerService.loadSwaggerUrl).mockResolvedValueOnce({
+            basePath: '',
+            endpointCount: 1,
+            endpoints: []
+        });
 
         fireEvent.change(input, { target: { value: 'http://test.com/openapi.yaml' } });
         fireEvent.click(addBtn);
