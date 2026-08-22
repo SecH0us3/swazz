@@ -8,6 +8,52 @@
     --shadow-card: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
+/* ─── Syntax Highlighting — Dark Theme Harmonized ──────────── */
+
+.code-json-body .token.comment,
+.code-terminal .token.comment {
+    color: #64748B;
+    font-style: italic;
+}
+
+.code-json-body .token.punctuation,
+.code-terminal .token.punctuation {
+    color: #94A3B8;
+}
+
+.code-json-body .token.property,
+.code-json-body .token.boolean,
+.code-json-body .token.number,
+.code-json-body .token.null,
+.code-terminal .token.property,
+.code-terminal .token.boolean,
+.code-terminal .token.number,
+.code-terminal .token.null {
+    color: #F472B6;
+}
+
+.code-json-body .token.string,
+.code-terminal .token.string {
+    color: #4ADE80;
+}
+
+.code-json-body .token.operator,
+.code-json-body .token.url,
+.code-terminal .token.operator,
+.code-terminal .token.url {
+    color: #38BDF8;
+}
+
+.code-json-body .token.keyword,
+.code-terminal .token.keyword {
+    color: #38BDF8;
+}
+
+.code-json-body .token.function,
+.code-terminal .token.function {
+    color: #FBBF24;
+}
+
 .landing-page-container {
     width: 100%;
     height: 100vh;
