@@ -2744,8 +2744,30 @@ body.resizing .sidebar-resizer {
 }
 
 @media (max-width: 1024px) {
-  .stats-bar {
-    grid-template-columns: repeat(3, 1fr) !important;
+  .stats-bar-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .stats-bar-row .stat-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-bar-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .stat-card {
+    padding: var(--space-2) var(--space-3);
+  }
+  .stat-card .stat-value {
+    font-size: var(--font-size-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-bar-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -2839,13 +2861,6 @@ body.resizing .sidebar-resizer {
     height: auto;
   }
 
-  .stats-bar {
-    grid-template-columns: repeat(2, 1fr) !important;
-    padding: var(--space-4) !important;
-  }
-
-
-
   .sidebar-resizer {
     display: none !important;
   }
@@ -2865,18 +2880,179 @@ body.resizing .sidebar-resizer {
   .logo-box span {
     display: none; /* Hide 'swazz' text on very small screens if logo is present */
   }
+
+  /* ── Compact request log ─────────────────────────────── */
+  .log-row,
+  .log-header {
+    grid-template-columns: 62px 44px 1fr 48px 40px;
+    gap: var(--space-1-5);
+    padding: 0 var(--space-2);
+    height: 32px;
+  }
+  .log-row .log-payload,
+  .log-header span:nth-child(4) {
+    display: none;
+  }
+  .log-row .log-size,
+  .log-header span:nth-child(7) {
+    display: none;
+  }
+  .log-row .log-duration,
+  .log-header span:nth-child(8) {
+    display: none;
+  }
+  .log-header {
+    height: 28px;
+  }
+  .log-timestamp {
+    font-size: 9px;
+  }
+
+  /* ── Compact Inspector header ─────────────────────────── */
+  .inspector-header {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+  .inspector-header .inspector-tabs {
+    order: 1;
+    width: 100%;
+  }
+  .inspector-header > div:last-child {
+    order: 2;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .inspector-search {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+  .inspector-header .btn-ghost.btn-sm {
+    white-space: nowrap;
+  }
+
+  /* ── Compact Heatmap ─────────────────────────────────── */
+  .heatmap {
+    padding: var(--space-2);
+  }
+  .heatmap-header {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+  .heatmap-header > div {
+    margin-left: 0 !important;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .heatmap-search {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+  .heatmap-cell {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+  }
+  .heatmap-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .heatmap-code-label {
+    width: 18px;
+  }
+  .heatmap-label {
+    font-size: 10px;
+  }
+  .heatmap-label .method {
+    min-width: 38px;
+    height: 16px;
+  }
+
+  /* ── Settings & project settings: stack nav above content ── */
+  .settings-body,
+  .project-settings-body {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  .settings-nav,
+  .project-settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .settings-nav::-webkit-scrollbar,
+  .project-settings-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .settings-nav-btn,
+  .project-settings-nav .tab-bar-btn {
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── Compact header right side ────────────────────────── */
+  .header-right {
+    gap: var(--space-1-5) !important;
+  }
+  .header-logo-text {
+    display: none;
+  }
+
+  /* ── Fullscreen detail modal ──────────────────────────── */
+  .modal-content {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+  }
+  .modal-split {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .modal-pane {
+    overflow-y: visible;
+  }
+  .modal-pane:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .modal-header {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+  .request-detail-meta-row {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 480px) {
-  .stats-bar {
-    grid-template-columns: 1fr !important;
-  }
-  
   .header-url-bar {
     display: flex; /* Keep it visible as it has its own row now */
   }
-  
-  /* Show URL bar if needed, or just let it shrink */
+
+  .stats-bar-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Compact guest pill on small phones */
+  .header-guest-pill-text,
+  .header-guest-divider,
+  .header-guest-action {
+    display: none;
+  }
+  .header-guest-unified-btn {
+    padding: 0 10px !important;
+  }
+  .header-guest-unified-btn .guest-alert-dot {
+    margin: 0;
+  }
 }
 
 /* Base style for mobile toggles */

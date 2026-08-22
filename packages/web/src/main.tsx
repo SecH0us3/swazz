@@ -36,6 +36,13 @@ console.log(
     'font-size: 14px; color: #a1a1aa; line-height: 1.5;'
 );
 
+// Landing page (no active session) is always dark — set it before first paint to avoid a light flash
+const hasSession = typeof localStorage !== 'undefined' && !!localStorage.getItem('swazz_token');
+const isGuestSession = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('swazz_guest') === 'true';
+if (!hasSession && !isGuestSession) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+}
+
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
         <App />
