@@ -4,6 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { useState, useEffect, useRef } from 'react';
+import { HighlightedCode } from './Shared/HighlightedCode.js';
 import './LandingShowcase.css';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
@@ -642,7 +643,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         ))}
                                     </div>
                                     {activeScenario.originalSpec.body && (
-                                        <pre className="code-json-body">{activeScenario.originalSpec.body}</pre>
+                                        <pre className="code-json-body"><HighlightedCode code={activeScenario.originalSpec.body} language="json" /></pre>
                                     )}
                                 </div>
                                 <div className="pane-context-note">
@@ -670,7 +671,7 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         ))}
                                     </div>
                                     {activeScenario.mutatedPayload.body && (
-                                        <pre className="code-json-body highlight-mutated">{activeScenario.mutatedPayload.body}</pre>
+                                        <pre className="code-json-body highlight-mutated"><HighlightedCode code={activeScenario.mutatedPayload.body} language="json" /></pre>
                                     )}
                                 </div>
                                 <div className="pane-context-note exploit-note">
@@ -1078,11 +1079,9 @@ export function LandingShowcase({ onActionClick, actionText, showPricing = true 
                                         {copiedStates['cli-start'] ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
-                                <pre className="code-terminal">
-                                    <code>{`# Install Swazz native CLI engine and start instant scan against any OpenAPI URL
+                                <pre className="code-terminal"><HighlightedCode code={`# Install Swazz native CLI engine and start instant scan against any OpenAPI URL
 curl -sSfL https://raw.githubusercontent.com/SecH0us3/swazz/main/install.sh | sh
-swazz scan --spec https://petstore.swagger.io/v2/swagger.json`}</code>
-                                </pre>
+swazz scan --spec https://petstore.swagger.io/v2/swagger.json`} language="bash" /></pre>
                             </div>
                         )}
                         {activeDeploymentTab === 'docker' && (
@@ -1097,9 +1096,7 @@ swazz scan --spec https://petstore.swagger.io/v2/swagger.json`}</code>
                                         {copiedStates['docker-cli'] ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
-                                <pre className="code-terminal">
-                                    <code>{`docker pull ghcr.io/sech0us3/swazz-cli:latest\ndocker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json`}</code>
-                                </pre>
+                                <pre className="code-terminal"><HighlightedCode code={`docker pull ghcr.io/sech0us3/swazz-cli:latest\ndocker run --rm -it -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:latest --config /app/swazz.config.json`} language="bash" /></pre>
 
                                 <div className="code-header code-header-spaced">
                                     <span>Option B: Run Full Local Stack (Compose)</span>
@@ -1111,11 +1108,9 @@ swazz scan --spec https://petstore.swagger.io/v2/swagger.json`}</code>
                                         {copiedStates['docker-compose'] ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
-                                <pre className="code-terminal">
-                                    <code>{`# Clone the repository and start all services (Dashboard, Coordinator, and Runner Agent)
+                                <pre className="code-terminal"><HighlightedCode code={`# Clone the repository and start all services (Dashboard, Coordinator, and Runner Agent)
 git clone https://github.com/SecH0us3/swazz.git
-cd swazz && docker compose up --build`}</code>
-                                </pre>
+cd swazz && docker compose up --build`} language="bash" /></pre>
                             </div>
                         )}
                         {activeDeploymentTab === 'local' && (
@@ -1130,14 +1125,12 @@ cd swazz && docker compose up --build`}</code>
                                         {copiedStates['local-nodocker'] ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
-                                <pre className="code-terminal">
-                                    <code>{`# Clone the repository
+                                <pre className="code-terminal"><HighlightedCode code={`# Clone the repository
 git clone https://github.com/SecH0us3/swazz.git
 cd swazz
 
 # Install dependencies and start all dev servers + Go Runner Agent
-./start-dev.sh`}</code>
-                                </pre>
+./start-dev.sh`} language="bash" /></pre>
                             </div>
                         )}
                         {activeDeploymentTab === 'worker' && (
@@ -1152,9 +1145,7 @@ cd swazz
                                         {copiedStates['worker'] ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
-                                <pre className="code-terminal">
-                                    <code>{`export default {\n  async fetch(request, env) {\n    const url = new URL(request.url);\n    if (url.pathname.startsWith("/api/swazz")) {\n      return await env.SWAZZ_COORDINATOR.fetch(request);\n    }\n    return await fetch(request);\n  }\n}`}</code>
-                                </pre>
+                                <pre className="code-terminal"><HighlightedCode code={`export default {\n  async fetch(request, env) {\n    const url = new URL(request.url);\n    if (url.pathname.startsWith("/api/swazz")) {\n      return await env.SWAZZ_COORDINATOR.fetch(request);\n    }\n    return await fetch(request);\n  }\n}`} language="bash" /></pre>
                             </div>
                         )}
                     </div>
