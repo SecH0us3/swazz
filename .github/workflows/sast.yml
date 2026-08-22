@@ -47,7 +47,7 @@ jobs:
           gosec -conf ../../.gosec.conf -exclude=G404 -fmt sarif -out gosec.sarif ./...
       - name: Upload SARIF to GitHub Code Scanning
         if: always()  # upload findings even when gosec exits with code 1
-        # v4.35.5
+        # v4.37.7
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
         with:
           sarif_file: packages/container/gosec.sarif
@@ -72,7 +72,7 @@ jobs:
           go-version: '1.26.6'
           cache-dependency-path: packages/container/go.sum
       - name: Initialize CodeQL
-        # v4.35.5
+        # v4.37.7
         uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
         with:
           languages: ${{ matrix.language }}
@@ -80,7 +80,7 @@ jobs:
         working-directory: packages/container
         run: go build ./...
       - name: Perform CodeQL Analysis
-        # v4.37.0
-        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3
+        # v4.37.7
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
         with:
           category: "${{ matrix.language }}-analysis"
