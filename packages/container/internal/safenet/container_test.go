@@ -29,3 +29,8 @@ func TestContainerIndicators_NotEmpty(t *testing.T) {
 	assert.Contains(t, containerIndicators, "containerd")
 	assert.Contains(t, containerIndicators, "kubepods")
 }
+
+func TestAssertRunningInContainer_Bypass(t *testing.T) {
+	// Should not panic or exit because bypass is true
+	AssertRunningInContainer(true)
+}

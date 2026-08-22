@@ -58,5 +58,40 @@ func TestOOBStore(t *testing.T) {
 	if GlobalStore == nil {
 		t.Error("Expected GlobalStore not to be nil")
 	}
+
+	// Test Size
+	store.RegisterUUID("test-uuid-4", ctx)
+	store.RegisterUUID("test-uuid-5", ctx)
+	if size := store.Size(); size != 2 {
+		t.Errorf("Expected Size to be 2, got %d", size)
+	}
+
+	// Test ClearSession
+	ctxSession1 := &OOBContext{SessionID: "sess-1", Endpoint: "ep-1"}
+	ctxSession2 := &OOBContext{SessionID: "sess-2", Endpoint: "ep-2"}
+	
+	store.RegisterUUID("uuid-s1-a", ctxSession1)
+	store.RegisterUUID("uuid-s1-b", ctxSession1)
+	store.RegisterUUID("uuid-s2-a", ctxSession2)
+	
+	if size := store.Size(); size != 5 {
+		t.Errorf("Expected Size to be 5, got %d", size)
+	}
+	
+	store.ClearSession("sess-1")
+	
+	if size := store.Size(); size != 3 {
+		t.Errorf("Expected Size to be 3 after clearing sess-1, got %d", size)
+	}
+	
+	_, okS1 := store.GetAndRemoveUUID("uuid-s1-a")
+	if okS1 {
+		t.Errorf("Expected uuid-s1-a to be removed by ClearSession")
+	}
+	
+	_, okS2 := store.GetAndRemoveUUID("uuid-s2-a")
+	if !okS2 {
+		t.Errorf("Expected uuid-s2-a to remain after clearing sess-1")
+	}
 }
 

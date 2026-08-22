@@ -222,3 +222,152 @@ func TestDefaultCrawlerConfig(t *testing.T) {
 	assert.NotNil(t, cfg.Headers)
 }
 
+
+func TestSniffer_OnResponseReceived_EdgeCases(t *testing.T) {
+	sniffer := NewSniffer()
+	
+	// Test nil events
+	sniffer.OnResponseReceived(nil)
+	sniffer.OnResponseReceived(&network.EventResponseReceived{Response: nil})
+	
+	// Test IsNoise true
+	reqEvt := &network.EventRequestWillBeSent{
+		RequestID: network.RequestID("req-noise"),
+		Request: &network.Request{
+			URL:    "http://example.com/style.css",
+			Method: "GET",
+		},
+	}
+	sniffer.OnRequestWillBeSent(reqEvt)
+	
+	respEvt := &network.EventResponseReceived{
+		RequestID: network.RequestID("req-noise"),
+		Response: &network.Response{
+			URL:      "http://example.com/style.css",
+			MimeType: "text/css",
+		},
+	}
+	sniffer.OnResponseReceived(respEvt)
+	
+	endpoints := sniffer.GetEndpoints()
+	assert.Len(t, endpoints, 0)
+}
+
+func TestSniffer_GetEndpoints_Sorting(t *testing.T) {
+	sniffer := NewSniffer()
+	
+	sniffer.AddEndpoint(DiscoveredEndpoint{URL: "http://example.com/b", Method: "POST"})
+	sniffer.AddEndpoint(DiscoveredEndpoint{URL: "http://example.com/a", Method: "GET"})
+	sniffer.AddEndpoint(DiscoveredEndpoint{URL: "http://example.com/b", Method: "GET"})
+	
+	endpoints := sniffer.GetEndpoints()
+	require.Len(t, endpoints, 3)
+	assert.Equal(t, "http://example.com/a", endpoints[0].URL)
+	assert.Equal(t, "GET", endpoints[0].Method)
+	
+	assert.Equal(t, "http://example.com/b", endpoints[1].URL)
+	assert.Equal(t, "GET", endpoints[1].Method)
+	
+	assert.Equal(t, "http://example.com/b", endpoints[2].URL)
+	assert.Equal(t, "POST", endpoints[2].Method)
+}
+
+func TestSniffer_IsAllowedContentType_Extra(t *testing.T) {
+	assert.True(t, IsAllowedContentType("text/xml"))
+	assert.True(t, IsAllowedContentType("application/x-www-form-urlencoded"))
+	assert.True(t, IsAllowedContentType("form-data"))
+	assert.True(t, IsAllowedContentType(""))
+}
+
+func TestSniffer_Exports_EdgeCases(t *testing.T) {
+	sniffer := NewSniffer()
+	
+	ep1 := DiscoveredEndpoint{
+		URL:    "http://example.com", // empty path
+		Method: "",                   // empty method
+	}
+	ep2 := DiscoveredEndpoint{
+		URL:         ":://invalid-url",
+		Method:      "POST",
+		BodySample:  "some-body",
+		ContentType: "", // should default to application/json in ToOpenAPI, but it's not valid JSON
+	}
+	
+	sniffer.AddEndpoint(ep1)
+	sniffer.AddEndpoint(ep2)
+	
+	openAPIRaw, err := sniffer.ToOpenAPI()
+	require.NoError(t, err)
+	assert.Contains(t, string(openAPIRaw), "openapi")
+	
+	harRaw, err := sniffer.ToHAR()
+	require.NoError(t, err)
+	assert.Contains(t, string(harRaw), "log")
+}
+
+func TestSniffer_IsNoise_EdgeCases(t *testing.T) {
+	// invalid URLs
+	assert.False(t, IsStaticBlacklist(":\x00://invalid"))
+	assert.False(t, IsAnalyticsDomain(":\x00://invalid"))
+}
+
+func TestSniffer_IsAllowedContentType_Blacklist(t *testing.T) {
+	assert.False(t, IsAllowedContentType("application/x-javascript"))
+	assert.False(t, IsAllowedContentType("text/javascript"))
+	assert.False(t, IsAllowedContentType("image/png"))
+	assert.False(t, IsAllowedContentType("font/woff2"))
+	assert.False(t, IsAllowedContentType("audio/mp3"))
+	assert.False(t, IsAllowedContentType("video/mp4"))
+	// unknown type is allowed
+	assert.True(t, IsAllowedContentType("application/unknown"))
+}
+
+func TestSniffer_OnRequestWillBeSent_EdgeCases(t *testing.T) {
+	sniffer := NewSniffer()
+	
+	sniffer.OnRequestWillBeSent(nil)
+	sniffer.OnRequestWillBeSent(&network.EventRequestWillBeSent{Request: nil})
+	
+	sniffer.OnRequestWillBeSent(&network.EventRequestWillBeSent{
+		Request: &network.Request{
+			URL:    ":\x00://invalid",
+			Method: "GET",
+		},
+	})
+	
+	sniffer.OnRequestWillBeSent(&network.EventRequestWillBeSent{
+		Request: &network.Request{
+			URL:    "/relative-path-no-host",
+			Method: "GET",
+		},
+	})
+}
+
+func TestSniffer_OnResponseReceived_BecomesNoise(t *testing.T) {
+	sniffer := NewSniffer()
+	
+	reqEvt := &network.EventRequestWillBeSent{
+		RequestID: network.RequestID("req-late-noise"),
+		Request: &network.Request{
+			URL:    "http://example.com/unknown-endpoint",
+			Method: "GET",
+		},
+	}
+	// Initially not noise (no mime type, not in blacklist)
+	sniffer.OnRequestWillBeSent(reqEvt)
+	
+	// Ensure it was added
+	assert.Len(t, sniffer.GetEndpoints(), 1)
+	
+	respEvt := &network.EventResponseReceived{
+		RequestID: network.RequestID("req-late-noise"),
+		Response: &network.Response{
+			URL:      "http://example.com/unknown-endpoint",
+			MimeType: "text/css", // Makes it noise
+		},
+	}
+	sniffer.OnResponseReceived(respEvt)
+	
+	// Should have been deleted
+	assert.Len(t, sniffer.GetEndpoints(), 0)
+}
