@@ -322,3 +322,231 @@ func TestGenerate_BooleanAndDateAndHeaderIterations(t *testing.T) {
 	_ = gBound.SecurityHeaderIterations()
 }
 
+
+func TestGenerateNumber_BoundaryAndMalicious(t *testing.T) {
+	settings := swagger.Settings{
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileBoundary: {payloads.CatBoundaryIntegers, payloads.CatBoundaryNumbers},
+			swagger.ProfileMalicious: {payloads.CatMaliciousNumbers},
+		},
+	}
+	
+	// Boundary Integer
+	gBoundary := New(nil, swagger.ProfileBoundary, settings)
+	valInt := gBoundary.generateNumber("integer")
+	if valInt == nil {
+		t.Errorf("generateNumber(integer) returned nil for boundary")
+	}
+
+	// Boundary Float/Number
+	valNum := gBoundary.generateNumber("number")
+	if valNum == nil {
+		t.Errorf("generateNumber(number) returned nil for boundary")
+	}
+
+	// Malicious
+	gMalicious := New(nil, swagger.ProfileMalicious, settings)
+	valMal := gMalicious.generateNumber("integer")
+	if valMal == nil {
+		t.Errorf("generateNumber(integer) returned nil for malicious")
+	}
+}
+
+func TestGenerateString_BoundaryAndMalicious(t *testing.T) {
+	settings := swagger.Settings{
+		OOBServerURL: "http://example.com/oob",
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileBoundary: {payloads.CatBoundaryStrings},
+			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
+		},
+	}
+	
+	// Boundary
+	gBoundary := New(nil, swagger.ProfileBoundary, settings)
+	valStr := gBoundary.generateString("", "test_prop")
+	if valStr == nil {
+		t.Errorf("generateString returned nil for boundary")
+	}
+
+	// Malicious
+	gMalicious := New(nil, swagger.ProfileMalicious, settings)
+	// Force it to have active malicious strings cached
+	valMal := gMalicious.generateString("", "test_prop")
+	if valMal == nil {
+		t.Errorf("generateString returned nil for malicious")
+	}
+	
+	// UUID
+	valUUID := gBoundary.generateString("uuid", "id")
+	if valUUID == nil {
+		t.Errorf("generateString(uuid) returned nil")
+	}
+}
+
+func TestMaxInt(t *testing.T) {
+	if maxInt(1, 5, 3) != 5 {
+		t.Errorf("maxInt failed")
+	}
+	if maxInt(-1, -5) != 0 {
+		t.Errorf("maxInt failed for negatives (defaults to 0)")
+	}
+}
+
+func TestSecurityHeaderIterations(t *testing.T) {
+	settings := swagger.Settings{
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileMalicious: {payloads.CatHostInjection},
+		},
+	}
+	
+	gMalicious := New(nil, swagger.ProfileMalicious, settings)
+	count := gMalicious.SecurityHeaderIterations()
+	if count <= 0 {
+		t.Errorf("SecurityHeaderIterations should be > 0, got %d", count)
+	}
+
+	gRandom := New(nil, swagger.ProfileRandom, settings)
+	if gRandom.SecurityHeaderIterations() != 0 {
+		t.Errorf("SecurityHeaderIterations should be 0 for random profile")
+	}
+}
+
+func TestBodyIterations(t *testing.T) {
+	settings := swagger.Settings{
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileBoundary: {payloads.CatBoundaryIntegers},
+			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
+		},
+	}
+	
+	gBoundary := New(nil, swagger.ProfileBoundary, settings)
+	if gBoundary.BodyIterations() != 0 { // Boundary doesn't have body iterations method
+		t.Errorf("BodyIterations should be 0 for boundary")
+	}
+	
+	gMalicious := New(nil, swagger.ProfileMalicious, settings)
+	if gMalicious.BodyIterations() <= 0 {
+		t.Errorf("BodyIterations should be > 0")
+	}
+}
+
+func TestRandomizeAndRegisterSSTI(t *testing.T) {
+	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	
+	res := g.randomizeAndRegisterSSTI("{{7*7}}")
+	if res == "{{7*7}}" {
+		t.Errorf("SSTI should be randomized")
+	}
+
+	res2 := g.randomizeAndRegisterSSTI("no-ssti-here")
+	if res2 != "no-ssti-here" {
+		t.Errorf("Should not modify string without 7*7")
+	}
+}
+
+func TestGenerateSemanticValue(t *testing.T) {
+	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	
+	em := g.GenerateSemanticValue("email", "test")
+	if em == "test" { // it wraps, so shouldn't equal
+		t.Errorf("GenerateSemanticValue failed for email")
+	}
+
+	uri := g.GenerateSemanticValue("url", "test")
+	if uri == "test" {
+		t.Errorf("GenerateSemanticValue failed for url")
+	}
+	
+	uuidVal := g.GenerateSemanticValue("uuid", "test")
+	if uuidVal == "test" {
+		t.Errorf("GenerateSemanticValue failed for uuid")
+	}
+
+	phoneVal := g.GenerateSemanticValue("phone", "test")
+	if phoneVal == "test" {
+		t.Errorf("GenerateSemanticValue failed for phone")
+	}
+	
+	dtVal := g.GenerateSemanticValue("date-time", "test")
+	if dtVal == "test" {
+		t.Errorf("GenerateSemanticValue failed for date-time")
+	}
+
+	un := g.GenerateSemanticValue("unknown-format", "test")
+	if un != "test" {
+		t.Errorf("Should return vector unmodified for unknown format")
+	}
+}
+
+func TestMinIterationsNeeded(t *testing.T) {
+	settings := swagger.Settings{
+		PayloadCategories: map[swagger.FuzzingProfile][]string{
+			swagger.ProfileBoundary: {string(payloads.CatBoundaryStrings)},
+		},
+	}
+	
+	countBoundary := MinIterationsNeeded(swagger.ProfileBoundary, settings)
+	if countBoundary <= 0 {
+		t.Errorf("MinIterationsNeeded failed for boundary")
+	}
+
+	countMalicious := MinIterationsNeeded(swagger.ProfileMalicious, settings)
+	if countMalicious <= 0 { // Default falls back to all active if not provided
+		t.Errorf("MinIterationsNeeded failed for malicious")
+	}
+
+	countRandom := MinIterationsNeeded(swagger.ProfileRandom, settings)
+	if countRandom != 0 {
+		t.Errorf("MinIterationsNeeded should be 0 for random")
+	}
+}
+
+func TestGenerateAndBuildObject(t *testing.T) {
+	settings := swagger.Settings{}
+	
+	dictionaries := map[string][]any{"user_role": {"admin", "guest"}}
+	g := New(dictionaries, swagger.ProfileRandom, settings)
+	
+	// Test enum
+	enumSchema := &swagger.SchemaProperty{Type: "string", Enum: []any{"a", "b"}}
+	valEnum := g.Generate("foo", enumSchema)
+	if valEnum != "a" && valEnum != "b" {
+		t.Errorf("Generate enum failed")
+	}
+
+	// Test dictionary
+	strSchema := &swagger.SchemaProperty{Type: "string"}
+	valDict := g.Generate("user_role", strSchema)
+	if valDict != "admin" && valDict != "guest" {
+		t.Errorf("Generate dictionary failed")
+	}
+
+	// Test BuildObject
+	objSchema := &swagger.SchemaProperty{
+		Type: "object",
+		Properties: map[string]*swagger.SchemaProperty{
+			"id":   {Type: "integer"},
+			"name": {Type: "string"},
+		},
+	}
+	
+	obj := g.BuildObject(objSchema)
+	if obj == nil || len(obj) == 0 {
+		t.Errorf("BuildObject failed")
+	}
+
+	// Test array through BuildObject
+	objWithArr := &swagger.SchemaProperty{
+		Type: "object",
+		Properties: map[string]*swagger.SchemaProperty{
+			"tags": {
+				Type: "array",
+				Items: &swagger.SchemaProperty{Type: "string"},
+			},
+		},
+	}
+	resObj := g.BuildObject(objWithArr)
+	if _, ok := resObj["tags"].([]any); !ok {
+		t.Errorf("BuildObject array failed")
+	}
+}
