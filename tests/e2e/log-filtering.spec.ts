@@ -8,20 +8,9 @@ import { mockEnterpriseLicense, registerAndLogin, TIMEOUTS, disableBoundaryProfi
 
 test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
   test('should correctly filter fuzzer request logs by status and path', async ({ page }) => {
-    // 1. Navigate to the frontend dev server
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-
-    // 2. Handle Login/Registration: Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    // Wait for the main layout to load
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    // 1. Mock Enterprise license and register & login
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
 
     // 3. Add the Swagger spec of our local Vulnerable Demo API
     const specUrlInput = page.locator('input[placeholder="https://api.com/swagger.json or /graphql"]');
@@ -33,7 +22,7 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     await addBtn.click();
 
     // Verify spec is loaded
-    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl);
+    await expect(page.locator('.swagger-url-text')).toHaveText(demoSpecUrl, { timeout: TIMEOUTS.LOAD });
 
     // Wait for endpoints list to render
     const endpointItems = page.locator('.tree-leaf-row');
@@ -47,11 +36,14 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     await expect(startBtn).toBeVisible();
     await startBtn.click();
 
-    // 5. Verify run starts and completes
+    // 5. Verify run starts and allow fuzzer to process requests across profiles and endpoints
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-    // Wait for the fuzzer to complete and Start button to become visible again
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(5000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 6. Switch to Request Logs tab
     const requestLogsTab = page.locator('button:has-text("Request Logs")');

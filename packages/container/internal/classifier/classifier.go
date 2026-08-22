@@ -26,21 +26,23 @@ const (
 
 // Finding is a classified fuzz result that is reportable.
 type Finding struct {
-	ID            string                 `json:"id"`
-	RuleID        string                 `json:"ruleId"`
-	Level         Severity               `json:"level"`
-	Endpoint      string                 `json:"endpoint"`
-	ResolvedPath  string                 `json:"resolvedPath"`
-	Method        string                 `json:"method"`
-	Profile       swagger.FuzzingProfile `json:"profile"`
-	Status        int                    `json:"status"`
-	Duration      int64                  `json:"duration"`
-	Payload       any                    `json:"payload"`
-	ResponseBody  any                    `json:"responseBody,omitempty"`
-	Error         string                 `json:"error,omitempty"`
-	Timestamp     int64                  `json:"timestamp"`
-	Source        string                 `json:"source"`
-	OWASPCategory []string               `json:"owaspCategory,omitempty"`
+	ID               string                 `json:"id"`
+	RuleID           string                 `json:"ruleId"`
+	Level            Severity               `json:"level"`
+	Endpoint         string                 `json:"endpoint"`
+	ResolvedPath     string                 `json:"resolvedPath"`
+	Method           string                 `json:"method"`
+	Profile          swagger.FuzzingProfile `json:"profile"`
+	Status           int                    `json:"status"`
+	Duration         int64                  `json:"duration"`
+	Payload          any                    `json:"payload"`
+	ResponseBody     any                    `json:"responseBody,omitempty"`
+	Error            string                 `json:"error,omitempty"`
+	Timestamp        int64                  `json:"timestamp"`
+	Source           string                 `json:"source"`
+	OWASPCategory    []string               `json:"owaspCategory,omitempty"`
+	OWASPAPICategory []string               `json:"owaspApiCategory,omitempty"`
+	CWEIDs           []string               `json:"cweIds,omitempty"`
 }
 
 // RulesConfig configures how results are classified.
@@ -134,21 +136,23 @@ func (c *Classifier) Classify(result *swagger.FuzzResult) *Finding {
 
 	ruleID := RuleIDForResult(result)
 	return &Finding{
-		ID:            result.ID,
-		RuleID:        ruleID,
-		Level:         level,
-		Endpoint:      result.Endpoint,
-		ResolvedPath:  result.ResolvedPath,
-		Method:        result.Method,
-		Profile:       result.Profile,
-		Status:        result.Status,
-		Duration:      result.Duration,
-		Payload:       result.Payload,
-		ResponseBody:  result.ResponseBody,
-		Error:         result.Error,
-		Timestamp:     result.Timestamp,
-		Source:        "status_code",
-		OWASPCategory: OWASPCategories(ruleID),
+		ID:               result.ID,
+		RuleID:           ruleID,
+		Level:            level,
+		Endpoint:         result.Endpoint,
+		ResolvedPath:     result.ResolvedPath,
+		Method:           result.Method,
+		Profile:          result.Profile,
+		Status:           result.Status,
+		Duration:         result.Duration,
+		Payload:          result.Payload,
+		ResponseBody:     result.ResponseBody,
+		Error:            result.Error,
+		Timestamp:        result.Timestamp,
+		Source:           "status_code",
+		OWASPCategory:    OWASPCategories(ruleID),
+		OWASPAPICategory: OWASPAPICategories(ruleID, result.Method, result.Endpoint, result.Error),
+		CWEIDs:           CWEIdentifiers(ruleID, result.Method, result.Endpoint, result.Error),
 	}
 }
 
@@ -186,21 +190,23 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 				source = "access_control"
 			}
 			f := &Finding{
-				ID:            r.ID,
-				RuleID:        af.RuleID,
-				Level:         Severity(af.Level),
-				Endpoint:      r.Endpoint,
-				ResolvedPath:  r.ResolvedPath,
-				Method:        r.Method,
-				Profile:       r.Profile,
-				Status:        r.Status,
-				Duration:      r.Duration,
-				Payload:       r.Payload,
-				ResponseBody:  r.ResponseBody,
-				Error:         af.Evidence, // Store evidence matched fragment here
-				Timestamp:     r.Timestamp,
-				Source:        source,
-				OWASPCategory: OWASPCategories(af.RuleID),
+				ID:               r.ID,
+				RuleID:           af.RuleID,
+				Level:            Severity(af.Level),
+				Endpoint:         r.Endpoint,
+				ResolvedPath:     r.ResolvedPath,
+				Method:           r.Method,
+				Profile:          r.Profile,
+				Status:           r.Status,
+				Duration:         r.Duration,
+				Payload:          r.Payload,
+				ResponseBody:     r.ResponseBody,
+				Error:            af.Evidence, // Store evidence matched fragment here
+				Timestamp:        r.Timestamp,
+				Source:           source,
+				OWASPCategory:    OWASPCategories(af.RuleID),
+				OWASPAPICategory: OWASPAPICategories(af.RuleID, r.Method, r.Endpoint, af.Evidence),
+				CWEIDs:           CWEIdentifiers(af.RuleID, r.Method, r.Endpoint, af.Evidence),
 			}
 
 			if IsIgnored(f, c.ignoreRules) {

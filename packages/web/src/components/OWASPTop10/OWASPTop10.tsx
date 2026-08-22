@@ -7,9 +7,80 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding } from '../../types.js';
+import { getOwaspApiCategories, getCweIds } from '../../hooks/useRunHistory.js';
 import './OWASPTop10.css';
 
-const OWASP_CATEGORIES_METADATA = [
+export interface OWASPCategoryMeta {
+    id: string;
+    title: string;
+    desc: string;
+    link: string;
+}
+
+export const OWASP_API_CATEGORIES_METADATA_2023: OWASPCategoryMeta[] = [
+    {
+        id: 'API1:2023',
+        title: 'API1:2023 Broken Object Level Authorization',
+        desc: 'Attackers manipulate object identifiers (e.g. IDOR) in API requests to access or modify unauthorized objects belonging to other users.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/',
+    },
+    {
+        id: 'API2:2023',
+        title: 'API2:2023 Broken Authentication',
+        desc: 'Authentication mechanisms are implemented incorrectly, allowing attackers to compromise tokens, bypass login requirements, or impersonate other users.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/',
+    },
+    {
+        id: 'API3:2023',
+        title: 'API3:2023 Broken Object Property Level Authorization',
+        desc: 'Endpoints expose excessive data in responses or allow unauthorized mass assignment modification of object properties.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/',
+    },
+    {
+        id: 'API4:2023',
+        title: 'API4:2023 Unrestricted Resource Consumption',
+        desc: 'Satisfying API requests requires resources such as network bandwidth, CPU, and memory without proper rate limits or size caps, leading to Denial of Service.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/',
+    },
+    {
+        id: 'API5:2023',
+        title: 'API5:2023 Broken Function Level Authorization',
+        desc: 'Flaws in authorization allow regular users to execute administrative or privileged functions across different hierarchy levels.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/',
+    },
+    {
+        id: 'API6:2023',
+        title: 'API6:2023 Unrestricted Access to Sensitive Business Flows',
+        desc: 'APIs vulnerable to this risk expose business flows (like login, checkout, password resets) without mitigating automated execution abuse.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/',
+    },
+    {
+        id: 'API7:2023',
+        title: 'API7:2023 Server Side Request Forgery',
+        desc: 'The API backend fetches a remote resource without validating the user-supplied URI, allowing attackers to coerce the server into connecting to internal/arbitrary hosts.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/',
+    },
+    {
+        id: 'API8:2023',
+        title: 'API8:2023 Security Misconfiguration',
+        desc: 'Insecure default configs, unpatched flaws, permissive CORS headers, or verbose error responses disclosing internal components.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa8-security-misconfiguration/',
+    },
+    {
+        id: 'API9:2023',
+        title: 'API9:2023 Improper Assets Management',
+        desc: 'APIs tend to expose more endpoints than traditional web applications (debug, beta, old versions), creating shadow or unmanaged attack surfaces.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xa9-improper-assets-management/',
+    },
+    {
+        id: 'API10:2023',
+        title: 'API10:2023 Unsafe Consumption of APIs',
+        desc: 'Developers tend to trust data received from third-party or internal APIs more than user inputs, resulting in SQLi, command injection, XXE, or parser crashes.',
+        link: 'https://owasp.org/API-Security/editions/2023/en/0xaa-unsafe-consumption-of-apis/',
+    },
+];
+
+export const OWASP_CATEGORIES_METADATA: OWASPCategoryMeta[] = [
     {
         id: 'A01:2025',
         title: 'A01:2025 Broken Access Control',
@@ -69,7 +140,7 @@ const OWASP_CATEGORIES_METADATA = [
         title: 'A10:2025 Mishandling of Exceptional Conditions',
         desc: 'Failures in gracefully handling errors, exceptions, timeouts, or network drops, exposing detailed stack traces or database/network leaks.',
         link: 'https://owasp.org/Top10/2025/A10_2025-Mishandling_of_Exceptional_Conditions/',
-    }
+    },
 ];
 
 interface OWASPFindingRowProps {
@@ -105,6 +176,11 @@ const OWASPFindingRow: React.FC<OWASPFindingRowProps> = React.memo(({ result, fi
                 </div>
             </div>
             <div className="owasp-finding-right">
+                {finding?.cweIds?.[0] && (
+                    <span className="badge badge-cwe">
+                        {finding.cweIds[0]}
+                    </span>
+                )}
                 {result.identity && (
                     <span className="owasp-finding-identity">
                         {result.identity}
@@ -133,7 +209,7 @@ interface Props {
     onUpdateCount?: (count: number) => void;
 }
 
-export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = false, onSelectResult, onUpdateCount }: Props) {
+export function OWASPTop10({ runId, queryResults, isRunning = false, onSelectResult, onUpdateCount }: Props) {
     const onSelectResultRef = useRef(onSelectResult);
     onSelectResultRef.current = onSelectResult;
 
@@ -146,6 +222,8 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
     rowsRef.current = rows;
 
     const [isLoading, setIsLoading] = useState(false);
+    const [standard, setStandard] = useState<'api_2023' | 'web_2025'>('api_2023');
+    const [activeTab, setActiveTab] = useState<'cards' | 'findings'>('cards');
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
     const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>({});
 
@@ -189,9 +267,13 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
         };
     }, [runId, queryResults, isRunning]);
 
+    const activeMetadata = useMemo(() => {
+        return standard === 'api_2023' ? OWASP_API_CATEGORIES_METADATA_2023 : OWASP_CATEGORIES_METADATA;
+    }, [standard]);
+
     const groupedData = useMemo(() => {
         const groups: Record<string, { result: ResultSummary; finding?: AnalysisFinding }[]> = {};
-        for (const meta of OWASP_CATEGORIES_METADATA) {
+        for (const meta of activeMetadata) {
             groups[meta.title] = [];
         }
         groups['Unmapped / Other'] = [];
@@ -202,7 +284,17 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
             let placed = false;
             if (row.analyzerFindings && row.analyzerFindings.length > 0) {
                 for (const f of row.analyzerFindings) {
-                    const cats = f.owaspCategory || [];
+                    let cats: string[] = [];
+                    if (standard === 'api_2023') {
+                        cats = (f.owaspApiCategory && f.owaspApiCategory.length > 0)
+                            ? f.owaspApiCategory
+                            : getOwaspApiCategories(f.ruleId, row.method, row.endpoint, f.evidence);
+                    } else {
+                        cats = (f.owaspCategory && f.owaspCategory.length > 0)
+                            ? f.owaspCategory
+                            : [];
+                    }
+
                     if (cats.length > 0) {
                         for (const c of cats) {
                             if (!groups[c]) {
@@ -220,7 +312,17 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
             }
 
             if (!placed) {
-                const cats = row.owaspCategory || [];
+                let cats: string[] = [];
+                if (standard === 'api_2023') {
+                    cats = (row.owaspApiCategory && row.owaspApiCategory.length > 0)
+                        ? row.owaspApiCategory
+                        : getOwaspApiCategories(row.status === 0 ? 'swazz/timeout' : `swazz/status-${row.status}`, row.method, row.endpoint, row.error);
+                } else {
+                    cats = (row.owaspCategory && row.owaspCategory.length > 0)
+                        ? row.owaspCategory
+                        : [];
+                }
+
                 if (cats.length > 0) {
                     for (const c of cats) {
                         if (!groups[c]) {
@@ -246,139 +348,108 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
         }
 
         return groups;
-    }, [rows]);
+    }, [rows, activeMetadata, standard]);
 
     const totalFindingsCount = useMemo(() => {
-        return Object.values(groupedData).reduce((sum, list) => sum + list.length, 0);
+        return Object.values(groupedData).reduce((acc, list) => acc + list.length, 0);
     }, [groupedData]);
 
+    const onUpdateCountRef = useRef(onUpdateCount);
+    onUpdateCountRef.current = onUpdateCount;
+
     useEffect(() => {
-        if (onUpdateCount) {
-            onUpdateCount(totalFindingsCount);
+        if (onUpdateCountRef.current) {
+            onUpdateCountRef.current(totalFindingsCount);
         }
-    }, [totalFindingsCount, onUpdateCount]);
-
-    const handleExportOwaspReport = () => {
-        const reportData = {
-            runId,
-            timestamp: new Date().toISOString(),
-            totalFindings: totalFindingsCount,
-            categories: Object.entries(groupedData)
-                .filter(([_, items]) => items.length > 0)
-                .map(([category, items]) => ({
-                    category,
-                    count: items.length,
-                    findings: items.map(item => ({
-                        method: item.result.method,
-                        endpoint: item.result.endpoint,
-                        resolvedPath: item.result.resolvedPath,
-                        status: item.result.status,
-                        identity: item.result.identity,
-                        message: item.finding?.message || `HTTP ${item.result.status} Status Code Error`,
-                        severity: item.finding?.level || (item.result.status >= 500 ? 'error' : 'warning')
-                    }))
-                }))
-        };
-
-        const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `swazz-owasp-report-${runId || 'live'}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
+    }, [totalFindingsCount]);
 
     const methodColors: Record<string, string> = {
-        GET: 'var(--method-get)',
-        POST: 'var(--method-post)',
-        PUT: 'var(--method-put)',
-        PATCH: 'var(--method-patch)',
-        DELETE: 'var(--method-delete)',
+        GET: 'var(--color-primary)',
+        POST: 'var(--color-success)',
+        PUT: 'var(--color-warning)',
+        DELETE: 'var(--color-error)',
+        PATCH: '#a855f7',
+        WS: '#8b5cf6',
+        CALL: '#06b6d4',
+        MCP: '#06b6d4',
     };
 
-    const [activeTab, setActiveTab] = useState<'cards' | 'findings'>('cards');
-
     const handleCardClick = (title: string, count: number) => {
-        if (count > 0) {
-            setExpandedCategory(title);
-            setActiveTab('findings');
-            setTimeout(() => {
-                const el = document.getElementById(`accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`);
-                if (el && typeof el.scrollIntoView === 'function') {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 50);
-        }
+        if (count === 0) return;
+        setExpandedCategory(title);
+        setActiveTab('findings');
+        setTimeout(() => {
+            const elementId = `accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
     };
 
     return (
         <div className="owasp-container">
             <div className="owasp-summary-banner">
-                 <div className="owasp-summary-title">
-                     OWASP Top 10 (2025) Coverage
-                     <a 
-                         href="https://owasp.org/Top10/2025/" 
-                         target="_blank" 
-                         rel="noopener noreferrer"
-                         className="owasp-external-link"
-                     >
-                         Official Site ↗
-                     </a>
-                 </div>
-                <div className="owasp-summary-actions">
-                    <div className="owasp-summary-count">
-                        {totalFindingsCount} {totalFindingsCount === 1 ? 'Finding' : 'Findings'} Detected
-                    </div>
-                    <button
-                        onClick={handleExportOwaspReport}
-                        className="btn btn-ghost btn-sm btn-owasp-export"
-                        disabled={totalFindingsCount === 0}
+                <div className="owasp-summary-title">
+                    {standard === 'api_2023' ? 'OWASP API Security Top 10 (2023) Coverage' : 'OWASP Top 10 (2025) Coverage'}
+                    <a 
+                        href={standard === 'api_2023' ? "https://owasp.org/API-Security/editions/2023/en/0x00-header/" : "https://owasp.org/Top10/2025/"} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="owasp-external-link"
                     >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="export-icon">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Export Report
-                    </button>
+                        Official Site ↗
+                    </a>
                 </div>
-            </div>
-
-            <div className="owasp-nav-tabs" role="tablist">
-                <button
-                    role="tab"
-                    aria-selected={activeTab === 'cards'}
-                    className={`owasp-tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('cards')}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
-                        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-                    </svg>
-                    Categories Cards
-                </button>
-                <button
-                    role="tab"
-                    aria-selected={activeTab === 'findings'}
-                    className={`owasp-tab-btn ${activeTab === 'findings' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('findings')}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
-                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    Findings List ({totalFindingsCount})
-                </button>
+                <div className="owasp-summary-actions">
+                    <div className="owasp-standard-toggle">
+                        <button
+                            className={`owasp-tab-btn ${standard === 'api_2023' ? 'active' : ''}`}
+                            onClick={() => { setStandard('api_2023'); setExpandedCategory(null); }}
+                        >
+                            🛡️ API Security (2023)
+                        </button>
+                        <button
+                            className={`owasp-tab-btn ${standard === 'web_2025' ? 'active' : ''}`}
+                            onClick={() => { setStandard('web_2025'); setExpandedCategory(null); }}
+                        >
+                            🌐 Web Top 10 (2025)
+                        </button>
+                    </div>
+                    <span className="owasp-summary-count">
+                        {totalFindingsCount} Finding{totalFindingsCount === 1 ? '' : 's'} Detected
+                    </span>
+                    <div className="owasp-nav-tabs">
+                        <button
+                            className={`owasp-tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('cards')}
+                        >
+                            📊 Overview
+                        </button>
+                        <button
+                            className={`owasp-tab-btn ${activeTab === 'findings' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('findings')}
+                        >
+                            🔍 Findings ({totalFindingsCount})
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {isLoading && rows.length === 0 ? (
                 <div className="owasp-loading-state">
-                    <span className="text-muted">Loading findings and categorizing...</span>
+                    <div className="loading-spinner" />
+                    <span>Loading OWASP findings...</span>
+                </div>
+            ) : totalFindingsCount === 0 ? (
+                <div className="owasp-empty-state">
+                    <p>No vulnerabilities classified in this scan run.</p>
                 </div>
             ) : (
                 <>
                     {activeTab === 'cards' && (
                         <div className="owasp-grid">
-                            {OWASP_CATEGORIES_METADATA.map(meta => {
+                            {activeMetadata.map(meta => {
                                 const count = groupedData[meta.title]?.length || 0;
                                 const hasFindings = count > 0;
                                 const isActive = expandedCategory === meta.title;
@@ -416,86 +487,86 @@ export function OWASPTop10({ runId, queryResults, liveCount = 0, isRunning = fal
 
                     {activeTab === 'findings' && (
                         <div className="owasp-details-section">
-                        {Object.entries(groupedData)
-                            .filter(([_, items]) => items.length > 0)
-                            .map(([title, items]) => {
-                                const isExpanded = expandedCategory === title;
-                                const elementId = `accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
-                                const meta = OWASP_CATEGORIES_METADATA.find(m => m.title === title);
+                            {Object.entries(groupedData)
+                                .filter(([_, items]) => items.length > 0)
+                                .map(([title, items]) => {
+                                    const isExpanded = expandedCategory === title;
+                                    const elementId = `accordion-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                                    const meta = activeMetadata.find(m => m.title === title);
 
-                                return (
-                                    <div key={title} id={elementId} className="owasp-accordion">
-                                        <div
-                                            className="owasp-accordion-header"
-                                            onClick={() => setExpandedCategory(isExpanded ? null : title)}
-                                        >
-                                            <div className="owasp-accordion-title">
-                                                {title} ({items.length})
-                                                {meta?.link && (
-                                                    <a
-                                                        href={meta.link}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="owasp-accordion-link"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        Learn More ↗
-                                                    </a>
-                                                )}
-                                            </div>
-                                            <svg
-                                                width="16"
-                                                height="16"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                className={`owasp-accordion-chevron ${isExpanded ? 'expanded' : ''}`}
+                                    return (
+                                        <div key={title} id={elementId} className="owasp-accordion">
+                                            <div
+                                                className="owasp-accordion-header"
+                                                onClick={() => setExpandedCategory(isExpanded ? null : title)}
                                             >
-                                                <polyline points="6 9 12 15 18 9" />
-                                            </svg>
-                                        </div>
+                                                <div className="owasp-accordion-title">
+                                                    {title} ({items.length})
+                                                    {meta?.link && (
+                                                        <a
+                                                            href={meta.link}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="owasp-accordion-link"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            Learn More ↗
+                                                        </a>
+                                                    )}
+                                                </div>
+                                                <svg
+                                                    width="16"
+                                                    height="16"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    className={`owasp-accordion-chevron ${isExpanded ? 'expanded' : ''}`}
+                                                >
+                                                    <polyline points="6 9 12 15 18 9" />
+                                                </svg>
+                                            </div>
 
-                                        {isExpanded && (() => {
-                                             const categoryLimit = categoryLimits[title] || 50;
-                                             const visibleItems = items.slice(0, categoryLimit);
-                                             return (
-                                                 <div className="owasp-accordion-items">
-                                                      {visibleItems.map(({ result, finding }, idx) => {
-                                                          const methodColor = methodColors[result.method] || 'var(--text-muted)';
-                                                          return (
-                                                              <OWASPFindingRow
-                                                                  key={`${result.id}-${idx}`}
-                                                                  result={result}
-                                                                  finding={finding}
-                                                                  methodColor={methodColor}
-                                                                  onSelect={handleSelectResultStable}
-                                                              />
-                                                          );
-                                                      })}
-                                                     {items.length > categoryLimit && (
-                                                         <button
-                                                             className="btn btn-ghost btn-sm load-more-findings"
-                                                             onClick={(e) => {
-                                                                 e.stopPropagation();
-                                                                 setCategoryLimits(prev => ({
-                                                                     ...prev,
-                                                                     [title]: categoryLimit + 50
-                                                                 }));
-                                                             }}
-                                                         >
-                                                             Show More (+{Math.min(50, items.length - categoryLimit)})
-                                                         </button>
-                                                     )}
-                                                 </div>
-                                             );
-                                         })()}
-                                    </div>
-                                );
-                            })}
-                    </div>
+                                            {isExpanded && (() => {
+                                                const categoryLimit = categoryLimits[title] || 50;
+                                                const visibleItems = items.slice(0, categoryLimit);
+                                                return (
+                                                    <div className="owasp-accordion-items">
+                                                        {visibleItems.map(({ result, finding }, idx) => {
+                                                            const methodColor = methodColors[result.method] || 'var(--text-muted)';
+                                                            return (
+                                                                <OWASPFindingRow
+                                                                    key={`${result.id}-${idx}`}
+                                                                    result={result}
+                                                                    finding={finding}
+                                                                    methodColor={methodColor}
+                                                                    onSelect={handleSelectResultStable}
+                                                                />
+                                                            );
+                                                        })}
+                                                        {items.length > categoryLimit && (
+                                                            <button
+                                                                className="btn btn-ghost btn-sm load-more-findings"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setCategoryLimits(prev => ({
+                                                                        ...prev,
+                                                                        [title]: categoryLimit + 50,
+                                                                    }));
+                                                                }}
+                                                            >
+                                                                Show More (+{Math.min(50, items.length - categoryLimit)})
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    );
+                                })}
+                        </div>
                     )}
                 </>
             )}

@@ -556,6 +556,16 @@ export function RequestDetail({
                                         {finding.level}
                                     </span>
                                     <span>Vulnerability: {finding.ruleId}</span>
+                                    {finding.owaspApiCategory?.map((cat, i) => (
+                                        <span key={i} className="badge badge-owasp-api" title={cat}>
+                                            {cat.split(' ')[0]}
+                                        </span>
+                                    ))}
+                                    {finding.cweIds?.map((cwe, i) => (
+                                        <span key={i} className="badge badge-cwe">
+                                            {cwe}
+                                        </span>
+                                    ))}
                                 </div>
                                 <div className="alert-banner-message">{finding.message}</div>
                                 {finding.evidence && (

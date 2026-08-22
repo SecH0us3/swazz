@@ -56,6 +56,16 @@ export const FindingItem: React.FC<FindingItemProps> = React.memo(({ item, group
                 <div className="finding-item-endpoint">
                     <span className={`method method-${item.result.method.toLowerCase()}`}>{item.result.method}</span>
                     <span className="finding-item-path">{item.result.endpoint}</span>
+                    {item.finding?.owaspApiCategory?.[0] && (
+                        <span className="badge badge-owasp-api" title={item.finding.owaspApiCategory[0]}>
+                            {item.finding.owaspApiCategory[0].split(' ')[0]}
+                        </span>
+                    )}
+                    {item.finding?.cweIds?.[0] && (
+                        <span className="badge badge-cwe" title={item.finding.cweIds[0]}>
+                            {item.finding.cweIds[0]}
+                        </span>
+                    )}
                     {triageBadge}
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>

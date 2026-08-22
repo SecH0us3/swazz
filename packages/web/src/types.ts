@@ -48,6 +48,8 @@ export interface AnalysisFinding {
     message: string;
     evidence?: string;
     owaspCategory?: string[];
+    owaspApiCategory?: string[];
+    cweIds?: string[];
     ai_status?: 'pending' | 'completed' | 'failed';
     ai_relevance?: boolean;
     ai_explanation?: string;
@@ -228,6 +230,8 @@ export interface FuzzResult {
     analyzerFindings?: AnalysisFinding[];
     identity?: string;
     owaspCategory?: string[];
+    owaspApiCategory?: string[];
+    cweIds?: string[];
     triage?: 'false_positive' | 'ignored' | 'acknowledged' | 'none';
 }
 

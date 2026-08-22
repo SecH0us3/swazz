@@ -165,6 +165,8 @@ interface ClientFinding {
     timestamp: number;
     source: string;
     owaspCategory: string[];
+    owaspApiCategory: string[];
+    cweIds: string[];
 }
 
 function escapeHtml(str: string): string {
@@ -185,6 +187,81 @@ function formatDateTime(date: Date): string {
     const min = String(date.getMinutes()).padStart(2, '0');
     const ss = String(date.getSeconds()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+}
+
+export function getOwaspApiCategories(ruleId: string, method?: string, endpoint?: string, evidence?: string): string[] {
+    const ep = (endpoint || '').toLowerCase();
+    const ev = (evidence || '').toLowerCase();
+    const isAuth = /\/(auth|login|signin|register|signup|password|reset|otp|2fa|token|payment|checkout|transfer|billing|order|session)/i.test(ep);
+    const isAdmin = /\/(admin|internal|manage|system|config|root|roles|permissions|superuser)/i.test(ep);
+    const isAsset = /\/(v[0-9]+\/|beta|legacy|old|deprecated|debug|actuator|metrics|swagger|graphi?ql)/i.test(ep);
+
+    if (ruleId === 'swazz/bola-idor' || ruleId === 'swazz/tenant-isolation-bypass') {
+        return ['API1:2023 Broken Object Level Authorization'];
+    }
+    if (ruleId === 'swazz/unauthorized-access' || ruleId === 'swazz/weak-token') {
+        if (isAdmin) {
+            return ['API5:2023 Broken Function Level Authorization', 'API2:2023 Broken Authentication'];
+        }
+        return ['API2:2023 Broken Authentication'];
+    }
+    if (ruleId === 'swazz/sensitive-data-leak') {
+        if (ev.includes('jwt') || ev.includes('token') || ev.includes('key') || ev.includes('secret')) {
+            return ['API2:2023 Broken Authentication', 'API3:2023 Broken Object Property Level Authorization'];
+        }
+        return ['API3:2023 Broken Object Property Level Authorization'];
+    }
+    if (ruleId === 'swazz/stack-trace-leak' || ruleId === 'swazz/null-pointer-exception' || ruleId === 'swazz/server-header-leak' || ruleId === 'swazz/x-powered-by-leak' || ruleId === 'swazz/x-aspnet-version-leak') {
+        return ['API3:2023 Broken Object Property Level Authorization'];
+    }
+    if (ruleId === 'swazz/no-rate-limit' || ruleId === 'swazz/rate-limit-active') {
+        if (isAuth) {
+            return ['API6:2023 Unrestricted Access to Sensitive Business Flows', 'API4:2023 Unrestricted Resource Consumption'];
+        }
+        return ['API4:2023 Unrestricted Resource Consumption'];
+    }
+    if (ruleId === 'swazz/timeout' || ruleId === 'swazz/response-size-anomaly' || ruleId === 'swazz/ws-timeout') {
+        return ['API4:2023 Unrestricted Resource Consumption'];
+    }
+    if (ruleId === 'swazz/oob-interaction' || ruleId === 'swazz/ssrf-out-of-band') {
+        return ['API7:2023 Server Side Request Forgery'];
+    }
+    if (ruleId === 'swazz/cors-misconfig' || ruleId.startsWith('swazz/csp-') || ruleId.startsWith('swazz/hsts-') || ruleId.startsWith('swazz/x-frame-') || ruleId.startsWith('swazz/x-content-type-') || ruleId === 'swazz/crlf-injection' || ruleId === 'swazz/header-injection') {
+        return ['API8:2023 Security Misconfiguration'];
+    }
+    if (ruleId === 'swazz/deprecated-api-leak' || (isAsset && ruleId.startsWith('swazz/status-2'))) {
+        return ['API9:2023 Improper Assets Management'];
+    }
+    if (ruleId === 'swazz/sql-error-leak' || ruleId === 'swazz/time-based-sqli' || ruleId === 'swazz/cmdi-leak' || ruleId === 'swazz/time-based-cmdi' || ruleId === 'swazz/rce-leak' || ruleId === 'swazz/reflected-xss' || ruleId === 'swazz/ssti-leak' || ruleId === 'swazz/xxe-leak' || ruleId.startsWith('swazz/mcp-') || ruleId.startsWith('swazz/ws-') || ruleId.startsWith('swazz/status-5') || ruleId === 'swazz/network-error') {
+        return ['API10:2023 Unsafe Consumption of APIs'];
+    }
+    return [];
+}
+
+export function getCweIds(ruleId: string, endpoint?: string, evidence?: string): string[] {
+    const cats = getOwaspApiCategories(ruleId, undefined, endpoint, evidence);
+    const cwes: string[] = [];
+    for (const cat of cats) {
+        if (cat.startsWith('API1:')) cwes.push('CWE-639');
+        else if (cat.startsWith('API2:')) cwes.push('CWE-287');
+        else if (cat.startsWith('API3:')) cwes.push('CWE-213');
+        else if (cat.startsWith('API4:')) cwes.push('CWE-770');
+        else if (cat.startsWith('API5:')) cwes.push('CWE-285');
+        else if (cat.startsWith('API6:')) cwes.push('CWE-799');
+        else if (cat.startsWith('API7:')) cwes.push('CWE-918');
+        else if (cat.startsWith('API8:')) cwes.push('CWE-16');
+        else if (cat.startsWith('API9:')) cwes.push('CWE-1059');
+        else if (cat.startsWith('API10:')) {
+            if (ruleId.includes('sql')) cwes.push('CWE-89');
+            else if (ruleId.includes('cmd') || ruleId.includes('rce')) cwes.push('CWE-78');
+            else if (ruleId.includes('xss')) cwes.push('CWE-79');
+            else if (ruleId.includes('xxe')) cwes.push('CWE-611');
+            else if (ruleId.includes('ssti')) cwes.push('CWE-1336');
+            else if (ruleId.startsWith('swazz/status-5') || ruleId === 'swazz/network-error') cwes.push('CWE-755');
+            else cwes.push('CWE-20');
+        }
+    }
+    return Array.from(new Set(cwes));
 }
 
 function getOwaspCategories(ruleId: string): string[] {
@@ -260,6 +337,8 @@ function classifyResults(rows: ResultSummary[]): ClientFinding[] {
                     timestamp: r.timestamp,
                     source,
                     owaspCategory: af.owaspCategory || getOwaspCategories(af.ruleId),
+                    owaspApiCategory: (af.owaspApiCategory && af.owaspApiCategory.length > 0) ? af.owaspApiCategory : getOwaspApiCategories(af.ruleId, r.method, r.endpoint, af.evidence),
+                    cweIds: (af.cweIds && af.cweIds.length > 0) ? af.cweIds : getCweIds(af.ruleId, r.endpoint, af.evidence),
                 });
             }
         } else {
@@ -298,7 +377,9 @@ function classifyResults(rows: ResultSummary[]): ClientFinding[] {
                         error: errorMsg,
                         timestamp: r.timestamp,
                         source: 'status_code',
-                        owaspCategory: getOwaspCategories(ruleId),
+                        owaspCategory: r.owaspCategory?.length ? r.owaspCategory : getOwaspCategories(ruleId),
+                        owaspApiCategory: (r.owaspApiCategory && r.owaspApiCategory.length > 0) ? r.owaspApiCategory : getOwaspApiCategories(ruleId, r.method, r.endpoint, errorMsg),
+                        cweIds: (r.cweIds && r.cweIds.length > 0) ? r.cweIds : getCweIds(ruleId, r.endpoint, errorMsg),
                     });
                 }
             }
@@ -325,6 +406,7 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
     }
 
     const owaspCounts: Record<string, number> = {};
+    const owaspAPICounts: Record<string, number> = {};
     for (const f of findings) {
         if (f.owaspCategory && f.owaspCategory.length > 0) {
             for (const cat of f.owaspCategory) {
@@ -333,6 +415,35 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
         } else {
             owaspCounts["Unmapped / Other"] = (owaspCounts["Unmapped / Other"] || 0) + 1;
         }
+        if (f.owaspApiCategory && f.owaspApiCategory.length > 0) {
+            for (const cat of f.owaspApiCategory) {
+                owaspAPICounts[cat] = (owaspAPICounts[cat] || 0) + 1;
+            }
+        }
+    }
+
+    const owaspAPICategories = [
+        "API1:2023 Broken Object Level Authorization",
+        "API2:2023 Broken Authentication",
+        "API3:2023 Broken Object Property Level Authorization",
+        "API4:2023 Unrestricted Resource Consumption",
+        "API5:2023 Broken Function Level Authorization",
+        "API6:2023 Unrestricted Access to Sensitive Business Flows",
+        "API7:2023 Server Side Request Forgery",
+        "API8:2023 Security Misconfiguration",
+        "API9:2023 Improper Assets Management",
+        "API10:2023 Unsafe Consumption of APIs",
+    ];
+
+    let owaspAPIGrid = '';
+    for (const cat of owaspAPICategories) {
+        const count = owaspAPICounts[cat] || 0;
+        const cardClass = count > 0 ? "has-findings" : "no-findings";
+        owaspAPIGrid += `
+            <div class="owasp-card ${cardClass}">
+                <span class="owasp-name">${escapeHtml(cat)}</span>
+                <span class="owasp-count">${count}</span>
+            </div>`;
     }
 
     const owaspCategories = [
@@ -397,21 +508,19 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
     }
     const totalRequests = stats?.totalRequests || 0;
 
-    let findingsContent = '';
+    let findingRows = '';
     for (const key of groupOrder) {
         const group = groups[key];
-        const firstSpace = key.indexOf(' ');
-        const method = key.substring(0, firstSpace);
-        const path = key.substring(firstSpace + 1);
+        const [method, path] = key.split(' ');
 
-        findingsContent += `
+        findingRows += `
             <div class="finding-group" data-endpoint="${escapeHtml(path)}">
                 <h3><span class="method">${escapeHtml(method)}</span> ${escapeHtml(path)} <span class="count">${group.length}</span></h3>
                 <div class="group-items">`;
 
         for (const f of group) {
             let payloadHTML = '';
-            if (f.payloadPreview) {
+            if (f.payloadPreview && f.payloadPreview.trim() && f.payloadPreview !== '<nil>') {
                 payloadHTML = `
                     <div class="payload-block">
                         <h4>Payload</h4>
@@ -420,88 +529,85 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
             }
 
             let responseHTML = '';
-            if (f.responsePreview) {
+            if (f.responsePreview && f.responsePreview.trim() && f.responsePreview !== '<nil>') {
                 responseHTML = `
                     <div class="payload-block">
-                        <h4>Response Body</h4>
+                        <h4>Response Preview</h4>
                         <pre><code>${escapeHtml(f.responsePreview)}</code></pre>
                     </div>`;
             }
 
-            let errorHTML = '';
-            if (f.error) {
-                errorHTML = `
-                    <div style="margin-top: 8px; font-size: 0.875rem; color: #94a3b8;">
-                        <strong>Description:</strong> ${escapeHtml(f.error)}
-                    </div>`;
+            let owaspBadges = '';
+            for (const cat of f.owaspApiCategory || []) {
+                owaspBadges += `<span class="badge" style="background:#7c3aed;color:#fff;">${escapeHtml(cat.split(' ')[0])}</span> `;
+            }
+            for (const cwe of f.cweIds || []) {
+                owaspBadges += `<span class="badge" style="background:#0284c7;color:#fff;">${escapeHtml(cwe)}</span> `;
             }
 
-            findingsContent += `
+            findingRows += `
                 <div class="finding-item level-${f.level}" data-status="${f.status}" data-profile="${f.profile}">
                     <div class="finding-meta">
                         <span class="badge profile-${f.profile}">${f.profile}</span>
+                        ${owaspBadges}
                         <span class="status">HTTP ${f.status}</span>
                         <span class="duration">${f.duration}ms</span>
                     </div>
-                    ${errorHTML}
+                    ${f.error ? `<div class="error-msg">${escapeHtml(f.error)}</div>` : ''}
                     ${payloadHTML}
                     ${responseHTML}
                 </div>`;
         }
-        findingsContent += `</div></div>`;
+
+        findingRows += `</div></div>`;
     }
 
-    if (!findingsContent) {
-        findingsContent = `<p>No findings discovered. ✨</p>`;
-    }
+    const findingsContent = findingRows || `<p>No findings discovered. ✨</p>`;
 
-    const reportJS = `document.addEventListener("DOMContentLoaded", () => {
-    const epFilter = document.getElementById('endpointFilter');
-    const statusFilter = document.getElementById('statusFilter');
-    const profileFilter = document.getElementById('profileFilter');
+    const reportJS = `
+        document.addEventListener('DOMContentLoaded', () => {
+            const endpointFilter = document.getElementById('endpointFilter');
+            const statusFilter = document.getElementById('statusFilter');
+            const profileFilter = document.getElementById('profileFilter');
 
-    function filterFindings() {
-        const epValue = epFilter ? epFilter.value.toLowerCase() : "";
-        const statusValue = statusFilter ? statusFilter.value : "";
-        const profileValue = profileFilter ? profileFilter.value : "";
+            function applyFilters() {
+                const epVal = endpointFilter.value.toLowerCase();
+                const statusVal = statusFilter.value;
+                const profileVal = profileFilter.value;
 
-        document.querySelectorAll('.finding-group').forEach(group => {
-            const endpoint = (group.getAttribute('data-endpoint') || "").toLowerCase();
-            const items = group.querySelectorAll('.finding-item');
-            let visibleItems = 0;
+                document.querySelectorAll('.finding-group').forEach(group => {
+                    const ep = group.getAttribute('data-endpoint').toLowerCase();
+                    let groupVisible = ep.includes(epVal);
 
-            items.forEach(item => {
-                const status = item.getAttribute('data-status') || "";
-                const profile = item.getAttribute('data-profile') || "";
+                    let visibleItems = 0;
+                    group.querySelectorAll('.finding-item').forEach(item => {
+                        const status = item.getAttribute('data-status');
+                        const profile = item.getAttribute('data-profile');
 
-                const epMatch = endpoint.includes(epValue);
-                const statusMatch = !statusValue || status === statusValue;
-                const profileMatch = !profileValue || profile === profileValue;
+                        const matchesStatus = !statusVal || status === statusVal;
+                        const matchesProfile = !profileVal || profile === profileVal;
 
-                if (epMatch && statusMatch && profileMatch) {
-                    item.style.display = 'block';
-                    visibleItems++;
-                } else {
-                    item.style.display = 'none';
-                }
-            });
+                        if (matchesStatus && matchesProfile) {
+                            item.style.display = '';
+                            visibleItems++;
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
 
-            if (visibleItems > 0) {
-                group.style.display = 'block';
-                const countSpan = group.querySelector('.count');
-                if (countSpan) {
-                    countSpan.textContent = visibleItems;
-                }
-            } else {
-                group.style.display = 'none';
+                    if (groupVisible && visibleItems > 0) {
+                        group.style.display = '';
+                    } else {
+                        group.style.display = 'none';
+                    }
+                });
             }
-        });
-    }
 
-    if (epFilter) epFilter.addEventListener('input', filterFindings);
-    if (statusFilter) statusFilter.addEventListener('change', filterFindings);
-    if (profileFilter) profileFilter.addEventListener('change', filterFindings);
-});`;
+            endpointFilter.addEventListener('input', applyFilters);
+            statusFilter.addEventListener('change', applyFilters);
+            profileFilter.addEventListener('change', applyFilters);
+        });
+    `;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -553,6 +659,10 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
         .filters { display: flex; gap: 1rem; margin-bottom: 2rem; background: var(--card); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }
         .filters input, .filters select { flex: 1; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid var(--border); background: var(--bg); color: var(--fg); outline: none; }
         .filters input:focus, .filters select:focus { border-color: var(--primary); }
+        .error-msg { color: var(--error); font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .noscript-warning {
+            background: var(--warning); color: #000; padding: 1rem; border-radius: 0.5rem; margin: 1rem auto; max-width: 1000px; font-weight: bold; text-align: center;
+        }
         @media print {
             body { background: white; color: black; }
             .filters, .owasp-section { display: none; }
@@ -561,9 +671,6 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
             .finding-item { break-inside: avoid; }
             .payload-block pre { background: #f8fafc; color: black; border: 1px solid #ccc; white-space: pre-wrap; word-wrap: break-word; }
             .stat-card { border-color: #ccc; }
-        }
-        .noscript-warning {
-            background: var(--warning); color: #000; padding: 1rem; border-radius: 0.5rem; margin: 1rem auto; max-width: 1000px; font-weight: bold; text-align: center;
         }
     </style>
 </head>
@@ -583,6 +690,13 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
             <div class="stat-card"><span class="stat-value" style="color: var(--error)">${errors}</span><span class="stat-label">Errors</span></div>
             <div class="stat-card"><span class="stat-value" style="color: var(--warning)">${warnings}</span><span class="stat-label">Warnings</span></div>
             <div class="stat-card"><span class="stat-value">${totalEndpoints}</span><span class="stat-label">Endpoints</span></div>
+        </div>
+
+        <h2>OWASP API Security Top 10 (2023)</h2>
+        <div class="owasp-section">
+            <div class="owasp-grid">
+                ${owaspAPIGrid}
+            </div>
         </div>
 
         <h2>OWASP Top 10 (2025) Summary</h2>
@@ -607,9 +721,7 @@ function generateHTMLReport(findings: ClientFinding[], stats: RunStats | null, s
         <h2>Findings</h2>
         <div class="findings-list">${findingsContent}</div>
     </div>
-    <script>
-${reportJS}
-    </script>
+    <script>${reportJS}</script>
 </body>
 </html>`;
 }
@@ -667,8 +779,14 @@ function generateMarkdownReport(findings: ClientFinding[], stats: RunStats | nul
             if (f.method) {
                 sb += `- **Method:** \`${f.method}\`\n`;
             }
+            if (f.owaspApiCategory && f.owaspApiCategory.length > 0) {
+                sb += `- **OWASP API (2023):** ${f.owaspApiCategory.join(', ')}\n`;
+            }
             if (f.owaspCategory && f.owaspCategory.length > 0) {
                 sb += `- **OWASP Category:** ${f.owaspCategory.join(', ')}\n`;
+            }
+            if (f.cweIds && f.cweIds.length > 0) {
+                sb += `- **CWE:** ${f.cweIds.join(', ')}\n`;
             }
             if (f.source) {
                 sb += `- **Source:** \`${f.source}\`\n`;
@@ -679,12 +797,12 @@ function generateMarkdownReport(findings: ClientFinding[], stats: RunStats | nul
 
             if (f.payloadPreview && f.payloadPreview.trim() && f.payloadPreview !== '<nil>') {
                 sb += `- **Sent Payload:**\n`;
-                sb += `  \`\`\`json\n  ${f.payloadPreview.split('\n').join('\n  ')}\n  \`\`\`\n`;
+                sb += `  \`\`\`json\n  ${f.payloadPreview}\n  \`\`\`\n`;
             }
 
             if (f.responsePreview && f.responsePreview.trim() && f.responsePreview !== '<nil>') {
                 sb += `- **Response Preview:**\n`;
-                sb += `  \`\`\`text\n  ${f.responsePreview.split('\n').join('\n  ')}\n  \`\`\`\n`;
+                sb += `  \`\`\`text\n  ${f.responsePreview}\n  \`\`\`\n`;
             }
             sb += `\n`;
         }

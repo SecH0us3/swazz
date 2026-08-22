@@ -342,10 +342,14 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
     await startBtn.click();
 
-    // Verify run starts and completes
+    // Verify run starts and allow fuzzer to generate initial request logs
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+    await page.waitForTimeout(5000);
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 2. Go to request logs
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');

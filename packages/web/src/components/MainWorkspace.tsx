@@ -79,7 +79,7 @@ function getOwaspFindingsCount(rows: ResultSummary[]): number {
         let placed = false;
         if (row.analyzerFindings && row.analyzerFindings.length > 0) {
             for (const f of row.analyzerFindings) {
-                const cats = f.owaspCategory || [];
+                const cats = (f.owaspApiCategory && f.owaspApiCategory.length > 0) ? f.owaspApiCategory : (f.owaspCategory || []);
                 if (cats.length > 0) {
                     for (const c of cats) {
                         const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:${f.ruleId || ''}`;
@@ -93,7 +93,7 @@ function getOwaspFindingsCount(rows: ResultSummary[]): number {
             }
         }
         if (!placed) {
-            const cats = row.owaspCategory || [];
+            const cats = (row.owaspApiCategory && row.owaspApiCategory.length > 0) ? row.owaspApiCategory : (row.owaspCategory || []);
             if (cats.length > 0) {
                 for (const c of cats) {
                     const key = `${c}:${row.method}:${row.resolvedPath || row.endpoint}:status-${row.status}`;

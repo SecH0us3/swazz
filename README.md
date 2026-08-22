@@ -31,7 +31,7 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 - **🛰️ gRPC Microservice Fuzzing**: Direct fuzzing of gRPC microservices via live Server Reflection (`grpc://`, `grpcs://`) or `.proto` schema ingestion, with dynamic binary Protobuf wire serialization and specialized gRPC vulnerability analyzers.
 - **🔄 Zero-Setup HAR Replay**: Import browser `.har` files directly for instant fuzzing of undocumented APIs and real-world workflows without needing an OpenAPI spec.
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
-- **🛡️ Compliance Mapping**: Automatically map all discovered vulnerabilities to the **OWASP Top 10 (2025)** standard in reports and the Web Dashboard.
+- **🛡️ Compliance & Taxonomy Mapping**: Automatically map all discovered vulnerabilities to both the **OWASP API Security Top 10 (2023)** and **OWASP Web Top 10 (2025)** standards, along with standard **CWE** identifiers, in reports and the Web Dashboard.
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
 - **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
 - **🔄 Multi-Scan Comparison**: Side-by-side analysis of scan runs to compare coverage metrics, HTTP status code distributions, and findings diffs (New, Fixed, and Common vulnerabilities).

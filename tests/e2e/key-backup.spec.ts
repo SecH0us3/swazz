@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { test, expect } from '@playwright/test';
-import { TIMEOUTS } from './helpers';
+import { registerAndLogin, TIMEOUTS } from './helpers';
 
 test.describe('E2EE Key Backup & Recovery E2E Test', () => {
   const mockPrivateJwk = {
@@ -15,22 +15,8 @@ test.describe('E2EE Key Backup & Recovery E2E Test', () => {
   };
 
   test('should support background generation, backup download, and setting restore', async ({ page }) => {
-    // 1. Navigate to main page and sign in
-    await page.goto('/');
-    const signInBtn = page.getByRole('button', { name: 'Sign In' });
-    await expect(signInBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
-    await signInBtn.click();
-
-    // 2. Register a unique user
-    await page.getByRole('button', { name: 'Create an account' }).click();
-
-    const uniqueUsername = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
-    await page.locator('#username').fill(uniqueUsername);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#password').press('Enter');
-
-    // Wait for the app layout to load directly into fuzzer workspace
-    await expect(page.locator('.app-layout')).toBeVisible({ timeout: TIMEOUTS.LOAD });
+    // 1. Register a unique user and log in cleanly
+    await registerAndLogin(page);
     await expect(page.locator('.welcome-workspace-title')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 3. Confirm the E2EE backup nudge is visible in the right ConfigSidebar panel
