@@ -48,6 +48,21 @@ export default function App() {
     const setParsingError = useAppStore(state => state.setParsingError);
     const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
+    // Landing page (pre-auth) is always dark — pin the theme while it is visible
+    useEffect(() => {
+        if (token || isGuest) return;
+        const root = document.documentElement;
+        const previous = root.getAttribute('data-theme');
+        root.setAttribute('data-theme', 'dark');
+        return () => {
+            if (previous) {
+                root.setAttribute('data-theme', previous);
+            } else {
+                root.removeAttribute('data-theme');
+            }
+        };
+    }, [token, isGuest]);
+
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const error = urlParams.get('error');

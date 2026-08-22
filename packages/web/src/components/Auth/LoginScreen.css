@@ -477,6 +477,12 @@
     .landing-hero-title {
         font-size: 2.25rem;
     }
+
+    .auth-modal {
+        padding: var(--space-6);
+        max-width: 100%;
+        border-radius: var(--radius-lg);
+    }
     
     .landing-hero-subtitle {
         font-size: var(--font-size-md);
@@ -494,11 +500,13 @@
         grid-template-columns: 1fr;
         gap: var(--space-4);
     }
-    
+}
+
+@media (max-width: 480px) {
     .auth-modal {
-        padding: var(--space-6);
-        max-width: 100%;
-        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        max-height: 94vh;
+        overflow-y: auto;
     }
 }
 

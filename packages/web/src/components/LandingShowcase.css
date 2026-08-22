@@ -2089,6 +2089,119 @@
     }
 }
 
+@media (max-width: 480px) {
+    .landing-nav {
+        padding: 0 var(--space-3);
+        height: 60px;
+    }
+    .landing-main {
+        padding: 0 var(--space-3);
+    }
+    .landing-hero {
+        padding: 2.5rem 0 2rem 0;
+    }
+    .landing-hero-badge {
+        font-size: 0.6875rem;
+        padding: 0.3rem 0.75rem;
+    }
+    .landing-hero-title {
+        font-size: 1.875rem;
+    }
+    .landing-hero-subtitle {
+        font-size: 0.9375rem;
+    }
+    .landing-hero-ctas {
+        width: 100%;
+        flex-direction: column;
+    }
+    .landing-hero-ctas .btn-landing-primary,
+    .landing-hero-ctas .btn-landing-secondary {
+        width: 100%;
+    }
+    .trust-bar {
+        padding: 1.5rem 0 2rem 0;
+        margin-bottom: 2.5rem;
+    }
+    .trust-logos {
+        gap: 1rem;
+        flex-direction: column;
+    }
+    .landing-section-header h2 {
+        font-size: 1.5rem;
+    }
+    .landing-section-header p {
+        font-size: 0.9375rem;
+    }
+    .simulator-container {
+        padding: 0;
+    }
+    .simulator-scenario-bar {
+        grid-template-columns: 1fr;
+    }
+    .simulator-header-bar {
+        padding: 0.75rem;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .simulator-action-group {
+        justify-content: flex-end;
+    }
+    .simulator-process-ribbon {
+        padding: 0.625rem 0.75rem;
+    }
+    .process-step {
+        font-size: 0.6875rem;
+        gap: 0.25rem;
+    }
+    .process-step .step-num {
+        width: 18px;
+        height: 18px;
+        font-size: 0.625rem;
+    }
+    .process-arrow {
+        display: none;
+    }
+    .simulator-process-ribbon {
+        justify-content: space-between;
+    }
+    .simulator-panel {
+        padding: 1rem;
+    }
+    .simulator-result-footer {
+        padding: 1rem;
+    }
+    .result-finding-title {
+        font-size: 0.875rem;
+    }
+    .bento-card {
+        padding: 1.25rem;
+    }
+    .pricing-card {
+        padding: 2rem 1.25rem;
+    }
+    .deployment-content {
+        padding: 1.25rem;
+    }
+    .code-terminal {
+        padding: 0.875rem;
+        font-size: 0.75rem;
+    }
+    .code-header {
+        font-size: 0.6875rem;
+    }
+    .benchmark-table-wrapper {
+        border-radius: 12px;
+    }
+    .benchmark-table th,
+    .benchmark-table td {
+        padding: 0.75rem;
+        font-size: 0.8125rem;
+    }
+    .benchmark-disclaimer {
+        font-size: 0.75rem;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .simulator-scan-progress-bar,
     .scan-progress-glow,
