@@ -41,7 +41,7 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
 
     // 4. Verify guest warning banner is visible
     const warningBanner = page.locator('.rbac-warning-banner');
-    await expect(warningBanner).toBeVisible();
+    await expect(warningBanner).toBeVisible({ timeout: TIMEOUTS.LOAD });
     await expect(warningBanner).toContainText('Guest accounts are permitted to view existing access rights, but cannot invite members, edit roles, or modify permissions.');
 
     // 5. Verify invite member button is disabled
