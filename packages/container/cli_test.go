@@ -51,11 +51,11 @@ message HelloReply {
 
 func TestBuildRunnerConfig_GRPCURL(t *testing.T) {
 	cliCfg := &CliConfig{
-		SwaggerURLs: []string{"grpc://127.0.0.1:50051"},
+		SwaggerURLs: []string{"grpc://127.0.0.1:59999"},
 	}
 
-	// Since 127.0.0.1:50051 is not running in this test, it should return error discovering via reflection
+	// Since 127.0.0.1:59999 is not running, it should return error discovering via reflection
 	_, err := BuildRunnerConfig(cliCfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to discover gRPC service via reflection")
 }
