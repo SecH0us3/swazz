@@ -505,7 +505,7 @@ func TestGenerateAndBuildObject(t *testing.T) {
 	settings := swagger.Settings{}
 	
 	dictionaries := map[string][]any{"user_role": {"admin", "guest"}}
-	g := New(dictionaries, swagger.ProfileRandom, settings)
+	g := New(dictionaries, swagger.ProfileBoundary, settings)
 	
 	// Test enum
 	enumSchema := &swagger.SchemaProperty{Type: "string", Enum: []any{"a", "b"}}
