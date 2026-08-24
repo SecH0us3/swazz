@@ -30,6 +30,7 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
+      edge: ${{ steps.filter.outputs.edge }}
       e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       # v6.0.2
@@ -46,6 +47,11 @@ jobs:
               - '.github/workflows/ci.yml'
             backend:
               - 'packages/container/**'
+              - '.github/workflows/ci.yml'
+            edge:
+              - 'packages/edge/**'
+              - 'package.json'
+              - 'package-lock.json'
               - '.github/workflows/ci.yml'
             e2e:
               - 'packages/web/**'
@@ -105,6 +111,55 @@ jobs:
           git add frontend-coverage.svg
           git commit -m "chore: update frontend coverage badge [skip ci]" || echo "No changes"
           git push origin badges || git push -u origin badges
+
+  test-edge:
+    name: Test Edge
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.edge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Node.js
+        # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '25.9.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Run tests
+        run: npm test --workspace=packages/edge -- --coverage
+
+      - name: Update Edge Coverage Badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          cd packages/edge
+          COVERAGE=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('coverage/coverage-summary.json')); console.log(data.total.statements.pct)")
+          echo "Edge coverage: $COVERAGE"
+          
+          COLOR="red"
+          if (( $(echo "$COVERAGE >= 80" | bc -l) )); then COLOR="success";
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then COLOR="yellow";
+          fi
+          
+          curl -s "https://img.shields.io/badge/edge--coverage-${COVERAGE}%25-${COLOR}" -o edge-coverage.svg
+          
+          git fetch origin badges || git branch badges
+          git checkout badges || git checkout -b badges
+          cp edge-coverage.svg ../../edge-coverage.svg
+          cd ../..
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add edge-coverage.svg
+          git commit -m "chore: update edge coverage badge [skip ci]" || echo "No changes"
+          git push origin badges || git push -u origin badges
+
   test-backend:
     name: Test Backend
     needs: changes
