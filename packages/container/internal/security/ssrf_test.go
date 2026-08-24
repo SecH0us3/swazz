@@ -7,6 +7,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,7 +55,9 @@ func TestNewSSRFProtectedTransport(t *testing.T) {
 	_, err = tr.DialContext(context.Background(), "tcp", "localhost.localdomain:80")
 	// depending on system, it might resolve to loopback or fail to resolve
 	if err != nil {
-		assert.Contains(t, err.Error(), "no such host") // or other error
+		if !strings.Contains(err.Error(), "no such host") && !strings.Contains(err.Error(), "blocked by SSRF policy") {
+			t.Errorf("Unexpected error: %v", err)
+		}
 	}
 }
 
