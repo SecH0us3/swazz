@@ -318,7 +318,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                 <div className="landing-nav-left">
                     <div className="landing-logo">
                         <div className="logo-icon-container">
-                            <Logo size={20} />
+                            <Logo size={24} />
                         </div>
                         <span className="landing-logo-text">Swazz</span>
                     </div>

@@ -1231,7 +1231,7 @@ cd swazz
             <footer className="landing-footer">
                 <div className="footer-logo">
                     <div className="logo-icon-container">
-                        <Logo size={20} />
+                        <Logo size={24} />
                     </div>
                     <span className="footer-logo-text">Swazz</span>
                 </div>

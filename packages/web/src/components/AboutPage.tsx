@@ -11,7 +11,7 @@ export function AboutPage() {
         <div className="about-container">
             <div className="about-hero">
                 <div className="about-logo-icon">
-                    <Logo size={64} withBackground rx={16} />
+                    <Logo size={64} />
                 </div>
                 <h1 className="about-title">Swazz API Fuzzer</h1>
                 <p className="about-subtitle">A high-performance smart fuzzer for REST APIs and OpenAPI specifications.</p>

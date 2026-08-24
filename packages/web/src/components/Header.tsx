@@ -174,7 +174,7 @@ export function Header({
                     onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
                 >
                     <div className="header-logo-icon">
-                        <Logo size={20} theme={theme} />
+                        <Logo size={24} theme={theme} />
                     </div>
                     <span className="header-logo-text">Swazz</span>
                 </div>
