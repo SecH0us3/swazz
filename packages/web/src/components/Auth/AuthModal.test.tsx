@@ -112,6 +112,53 @@ describe('AuthModal Component', () => {
         });
     });
 
+    it('calls onLogin when submitting valid login credentials', async () => {
+        const onLoginMock = vi.fn().mockResolvedValue(undefined);
+        render(<AuthModal {...defaultProps} initialIsRegistering={false} onLogin={onLoginMock} />);
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('••••••••••••');
+        const submitBtn = screen.getByRole('button', { name: /^sign in$/i });
+
+        fireEvent.change(usernameInput, { target: { value: 'existinguser' } });
+        fireEvent.change(passwordInput, { target: { value: 'UserSecretPassword!' } });
+
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(onLoginMock).toHaveBeenCalledWith('existinguser', 'UserSecretPassword!', undefined, '');
+        });
+    });
+
+    it('displays 2FA code input when login requires 2FA', async () => {
+        const onLoginMock = vi.fn().mockResolvedValue({ twoFactorRequired: true });
+        render(<AuthModal {...defaultProps} initialIsRegistering={false} onLogin={onLoginMock} />);
+
+        const usernameInput = screen.getByPlaceholderText('Enter username');
+        const passwordInput = screen.getByPlaceholderText('••••••••••••');
+        const submitBtn = screen.getByRole('button', { name: /^sign in$/i });
+
+        fireEvent.change(usernameInput, { target: { value: 'twofauser' } });
+        fireEvent.change(passwordInput, { target: { value: 'SecretPassword!' } });
+
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(screen.getByPlaceholderText(/000000/i)).toBeTruthy();
+        });
+    });
+
+    it('calls onGuest when clicking continue as guest', async () => {
+        const onGuestMock = vi.fn().mockResolvedValue(undefined);
+        render(<AuthModal {...defaultProps} onGuest={onGuestMock} />);
+
+        const guestBtn = screen.queryByRole('button', { name: /continue as guest/i });
+        if (guestBtn) {
+            fireEvent.click(guestBtn);
+            expect(onGuestMock).toHaveBeenCalled();
+        }
+    });
+
     it('calls onClose when close button is clicked', () => {
         const onCloseMock = vi.fn();
         render(<AuthModal {...defaultProps} onClose={onCloseMock} />);

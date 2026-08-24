@@ -33,7 +33,7 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 Swazz is divided into multiple packages across the stack. The coverage is continuously tracked for core components:
 
 | Package / Module | Line Coverage / Status | Description |
-| :--- | :---: | :--- |
+| :--- | ---: | :--- |
 | [**`packages/container`**](packages/container) | [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Core Go Fuzzing Engine, Triage Workers, Classifiers |
 | [**`packages/web`**](packages/web) | [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | React Frontend, Interactive Dashboard, Settings UI |
 | [**`packages/edge`**](packages/edge) | [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Cloudflare Workers API Gateway, Auth, Database Migrations |

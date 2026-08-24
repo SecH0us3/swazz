@@ -83,18 +83,84 @@ describe('ApiSpecsTab', () => {
             _swagger_urls: []
         }));
     });
+
+    it('refreshes an existing url', async () => {
+        mockConfig = {
+            _swagger_urls: ['http://example.com/swagger.json'],
+            endpoints: []
+        };
+        vi.mocked(swaggerService.loadSwaggerUrl).mockResolvedValueOnce({
+            basePath: 'http://example.com',
+            endpointCount: 5,
+            endpoints: [{ method: 'GET', path: '/api/v1/users' } as any]
+        });
+
+        render(<ApiSpecsTab />);
+        const refreshBtn = screen.getByRole('button', { name: /Refresh/i });
+        fireEvent.click(refreshBtn);
+
+        await waitFor(() => {
+            expect(mockUpdateConfig).toHaveBeenCalledWith(expect.objectContaining({
+                base_url: 'http://example.com',
+                endpoints: [{ method: 'GET', path: '/api/v1/users' }]
+            }));
+        });
+    });
+
+    it('handles parsing errors gracefully when adding a url', async () => {
+        render(<ApiSpecsTab />);
+        const input = screen.getByPlaceholderText('https://bbad.secmy.app/swagger.json');
+        const addBtn = screen.getByText('Add URL');
+        
+        vi.mocked(swaggerService.detectMcpServer).mockResolvedValueOnce(null as any);
+        vi.mocked(swaggerService.loadSwaggerUrl).mockRejectedValueOnce(new Error('Network failure'));
+
+        fireEvent.change(input, { target: { value: 'http://bad-spec.com/swagger.json' } });
+        fireEvent.click(addBtn);
+
+        await waitFor(() => {
+            expect(mockUpdateConfig).toHaveBeenCalledWith(expect.objectContaining({
+                _swagger_urls: ['http://example.com/swagger.json', 'http://bad-spec.com/swagger.json']
+            }));
+        });
+    });
     
-    it('toggles MCP server', async () => {
+    it('toggles and updates MCP server settings', async () => {
+        mockConfig = {
+            _swagger_urls: [],
+            mcp_server: {
+                type: 'stdio',
+                command: 'node',
+                args: ['demo/mcp.js']
+            }
+        };
+
         render(<ApiSpecsTab />);
         const toggleBtn = screen.getByLabelText(/Enable MCP Server Fuzzing/i);
         fireEvent.click(toggleBtn);
         
         expect(mockUpdateConfig).toHaveBeenCalledWith({
-            mcp_server: {
-                type: 'stdio',
-                command: 'node',
-                args: ['demo/mcp-stdio.js']
-            }
+            mcp_server: undefined
+        });
+    });
+
+    it('detects MCP server on URL input and enables MCP fuzzing automatically', async () => {
+        render(<ApiSpecsTab />);
+        const input = screen.getByPlaceholderText('https://bbad.secmy.app/swagger.json');
+        const addBtn = screen.getByText('Add URL');
+        
+        vi.mocked(swaggerService.detectMcpServer).mockResolvedValueOnce('sse' as any);
+
+        fireEvent.change(input, { target: { value: 'http://localhost:8080/mcp/sse' } });
+        fireEvent.click(addBtn);
+
+        await waitFor(() => {
+            expect(mockUpdateConfig).toHaveBeenCalledWith({
+                mcp_server: {
+                    type: 'sse',
+                    url: 'http://localhost:8080/mcp/sse'
+                }
+            });
         });
     });
 });

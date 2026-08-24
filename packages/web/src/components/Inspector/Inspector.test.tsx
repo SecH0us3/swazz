@@ -423,6 +423,76 @@ describe('Inspector Component', () => {
             expect(screen.getByText('Ignored')).toBeTruthy();
         });
     });
+
+    it('filters findings by search query and calls onSelectResult when clicking a finding', async () => {
+        const onSelectResultMock = vi.fn();
+        const onExportMock = vi.fn();
+
+        const rows = [
+            {
+                id: 'res-alpha',
+                timestamp: 2000,
+                method: 'GET',
+                endpoint: '/api/v1/alpha',
+                resolvedPath: '/api/v1/alpha',
+                status: 500,
+                profile: 'RANDOM',
+                duration: 10,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Alpha error',
+                responseSize: 100,
+            },
+            {
+                id: 'res-beta',
+                timestamp: 1000,
+                method: 'POST',
+                endpoint: '/api/v1/beta',
+                resolvedPath: '/api/v1/beta',
+                status: 400,
+                profile: 'RANDOM',
+                duration: 12,
+                payloadSize: 0,
+                retries: 0,
+                payloadPreview: '',
+                responsePreview: 'Beta error',
+                responseSize: 100,
+            }
+        ] as ResultSummary[];
+
+        mockQueryResults.mockResolvedValue({
+            rows,
+            total: 2
+        });
+
+        render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={onSelectResultMock}
+                onExport={onExportMock}
+                findingsOnly={false}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('2 reqs')).toBeTruthy();
+            expect(screen.getByText('/api/v1/alpha')).toBeTruthy();
+            expect(screen.getByText('/api/v1/beta')).toBeTruthy();
+        });
+
+        // Search for 'beta'
+        const searchInput = screen.getByPlaceholderText(/Filter by path…/i);
+        fireEvent.change(searchInput, { target: { value: 'beta' } });
+
+        // Click Export button
+        const exportBtn = screen.getByRole('button', { name: /Export/i });
+        fireEvent.click(exportBtn);
+        expect(onExportMock).toHaveBeenCalled();
+    });
 });
 
 

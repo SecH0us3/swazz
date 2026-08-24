@@ -819,17 +819,20 @@ export function RequestDetail({
                                                         )}
                                                     </span>
                                                     <span className="detail-header-value">
-                                                        {values.map((val, idx) => {
-                                                            const injected = isInjectedHeader(key, val);
-                                                            return (
-                                                                <span 
-                                                                    key={idx}
-                                                                    className={injected ? 'detail-header-value-injected' : ''}
-                                                                >
-                                                                    {val}{idx < values.length - 1 ? ',' : ''}
-                                                                </span>
-                                                            );
-                                                        })}
+                                                        {(() => {
+                                                            const valList = Array.isArray(values) ? values : [values];
+                                                            return valList.map((val, idx) => {
+                                                                const injected = isInjectedHeader(key, val);
+                                                                return (
+                                                                    <span 
+                                                                        key={idx}
+                                                                        className={injected ? 'detail-header-value-injected' : ''}
+                                                                    >
+                                                                        {val}{idx < valList.length - 1 ? ',' : ''}
+                                                                    </span>
+                                                                );
+                                                            });
+                                                        })()}
                                                     </span>
                                                 </div>
                                             );

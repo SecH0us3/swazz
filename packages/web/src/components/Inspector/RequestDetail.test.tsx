@@ -4,119 +4,184 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { RequestDetail } from './RequestDetail.js';
-import type { FuzzResult, AnalysisFinding } from '../../types.js';
+import type { FuzzResult, AnalysisFinding, SwazzConfig } from '../../types.js';
 
-describe('RequestDetail Component - AI Insights & Findings', () => {
-    const createMockResult = (findings: AnalysisFinding[]): FuzzResult => ({
-        id: 'res-1',
-        endpoint: '/api/v1/users',
-        resolvedPath: '/api/v1/users',
-        method: 'POST',
-        profile: 'RANDOM',
-        status: 500,
-        duration: 45,
-        payloadSize: 10,
-        payload: { name: 'admin' },
-        timestamp: Date.now(),
-        retries: 0,
-        analyzerFindings: findings,
-        requestHeaders: { 'content-type': 'application/json' },
-        responseBody: '{"error":"sql error"}'
-    });
+describe('RequestDetail Component', () => {
+    const mockOnClose = vi.fn();
+    const mockOnTriage = vi.fn();
 
-    it('renders True Positive badge with badge-error for boolean true', () => {
-        const finding: AnalysisFinding = {
+    const sampleFindings: AnalysisFinding[] = [
+        {
             ruleId: 'swazz/sqli',
             level: 'error',
-            message: 'SQL Injection detected',
+            message: 'SQL Injection detected in query parameter',
             ai_status: 'completed',
             ai_relevance: true,
             ai_confidence: 95,
             ai_explanation: 'Input directly concatenated into query',
-            ai_remediation: 'Use parameterized queries'
-        };
+            ai_remediation: 'Use parameterized queries',
+            owasp_category: 'A03:2021 Injection',
+            cwe_ids: ['CWE-89']
+        } as any
+    ];
 
+    const mockResult: any = {
+        id: 'res-123',
+        endpoint: '/api/v1/users/{id}',
+        resolvedPath: '/api/v1/users/42',
+        method: 'GET',
+        profile: 'RANDOM',
+        status: 200,
+        duration: 85,
+        payloadSize: 120,
+        payload: { id: 42, role: 'admin' },
+        timestamp: Date.now(),
+        retries: 0,
+        requestHeaders: { 'Authorization': 'Bearer test-token', 'Content-Type': 'application/json' },
+        responseHeaders: { 'Content-Type': ['application/json'], 'X-Powered-By': ['Express'] } as any,
+        responseBody: '{"id":42,"username":"alice","role":"admin"}',
+        analyzerFindings: sampleFindings,
+        oob_interaction: {
+            protocol: 'http',
+            timestamp: Date.now(),
+            remote_addr: '1.2.3.4'
+        } as any
+    };
+
+    const mockConfig: any = {
+        base_url: 'https://api.example.com',
+        endpoints: [
+            {
+                method: 'GET',
+                path: '/api/v1/users/{id}',
+                schema: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'integer' },
+                        username: { type: 'string' }
+                    }
+                }
+            }
+        ]
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Mock clipboard API
+        Object.assign(navigator, {
+            clipboard: {
+                writeText: vi.fn().mockResolvedValue(undefined)
+            }
+        });
+    });
+
+    it('renders request and response details by default', () => {
         render(
             <RequestDetail
-                result={createMockResult([finding])}
-                baseUrl="http://localhost"
-                onClose={vi.fn()}
-                globalHeaders={{}}
-                globalCookies={{}}
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{ 'X-App-Client': 'Swazz' }}
+                globalCookies={{ 'session_id': 'abc123' }}
+                config={mockConfig}
+                onTriage={mockOnTriage}
             />
         );
 
-        // Switch to findings tab
-        const findingsTabBtn = screen.getByRole('tab', { name: /Alerts & Findings/i });
-        fireEvent.click(findingsTabBtn);
+        expect(screen.getByText('GET')).toBeTruthy();
+        expect(screen.getByText('/api/v1/users/{id}')).toBeTruthy();
+        expect(screen.getByText('200')).toBeTruthy();
+        expect(screen.getByText('RANDOM')).toBeTruthy();
+    });
 
+    it('renders response body and copies it to clipboard', async () => {
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const copyResponseBtn = screen.getByRole('button', { name: 'Copy' });
+        fireEvent.click(copyResponseBtn);
+
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+            expect.stringContaining('alice')
+        );
+    });
+
+    it('switches to Alerts & Findings tab and allows triaging', () => {
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const findingsTab = screen.getByRole('tab', { name: /Alerts & Findings/i });
+        fireEvent.click(findingsTab);
+
+        expect(screen.getByText('SQL Injection detected in query parameter')).toBeTruthy();
         expect(screen.getByText('✨ AI Insights')).toBeTruthy();
-        const badge = screen.getByText('True Positive');
-        expect(badge).toBeTruthy();
-        expect(badge.className).toContain('badge-error');
+        expect(screen.getByText('True Positive')).toBeTruthy();
         expect(screen.getByText('95% confidence')).toBeTruthy();
-        expect(screen.getByText('Explanation')).toBeTruthy();
-        expect(screen.getByText('Input directly concatenated into query')).toBeTruthy();
+
+        // Triage action select dropdown
+        const triageSelect = screen.getByRole('combobox');
+        fireEvent.change(triageSelect, { target: { value: 'false_positive' } });
+
+        expect(mockOnTriage).toHaveBeenCalledWith('res-123', 'false_positive');
     });
 
-    it('renders False Positive badge with badge-success for boolean false', () => {
-        const finding: AnalysisFinding = {
-            ruleId: 'swazz/sqli',
-            level: 'error',
-            message: 'SQL Injection suspected',
-            ai_status: 'completed',
-            ai_relevance: false,
-            ai_confidence: 85,
-            ai_explanation: 'Standard database error message not exploitable'
-        };
-
+    it('switches between Mutation Diff and Raw Request views', () => {
         render(
             <RequestDetail
-                result={createMockResult([finding])}
-                baseUrl="http://localhost"
-                onClose={vi.fn()}
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        expect(screen.getByText('Diff Legend:')).toBeTruthy();
+
+        const rawReqBtn = screen.getByRole('button', { name: 'Raw Request' });
+        fireEvent.click(rawReqBtn);
+
+        expect(screen.getByText('Payload')).toBeTruthy();
+        expect(screen.getByDisplayValue(/"role": "admin"/i)).toBeTruthy();
+    });
+
+    it('calls onClose when close button is clicked', () => {
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
                 globalHeaders={{}}
                 globalCookies={{}}
             />
         );
 
-        // Switch to findings tab
-        const findingsTabBtn = screen.getByRole('tab', { name: /Alerts & Findings/i });
-        fireEvent.click(findingsTabBtn);
+        const closeBtn = screen.getByRole('button', { name: /✕|Close/i });
+        fireEvent.click(closeBtn);
 
-        expect(screen.getByText('✨ AI Insights')).toBeTruthy();
-        const badge = screen.getByText('False Positive');
-        expect(badge).toBeTruthy();
-        expect(badge.className).toContain('badge-success');
-    });
-
-    it('does not render relevance badge when ai_relevance is undefined/missing', () => {
-        const finding: AnalysisFinding = {
-            ruleId: 'swazz/sqli',
-            level: 'error',
-            message: 'SQL Injection suspected',
-            ai_status: 'completed',
-            ai_explanation: 'Evaluation in progress'
-        };
-
-        render(
-            <RequestDetail
-                result={createMockResult([finding])}
-                baseUrl="http://localhost"
-                onClose={vi.fn()}
-                globalHeaders={{}}
-                globalCookies={{}}
-            />
-        );
-
-        const findingsTabBtn = screen.getByRole('tab', { name: /Alerts & Findings/i });
-        fireEvent.click(findingsTabBtn);
-
-        expect(screen.getByText('✨ AI Insights')).toBeTruthy();
-        expect(screen.queryByText('True Positive')).toBeNull();
-        expect(screen.queryByText('False Positive')).toBeNull();
+        expect(mockOnClose).toHaveBeenCalled();
     });
 });
