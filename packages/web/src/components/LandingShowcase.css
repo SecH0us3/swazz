@@ -159,13 +159,14 @@
 .logo-icon-container {
     width: 32px;
     height: 32px;
-    background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 100%);
+    background: #0F172A;
+    border: 1px solid rgba(56, 189, 248, 0.3);
     color: #ffffff;
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 16px var(--accent-glow);
+    box-shadow: 0 0 15px rgba(2, 132, 199, 0.25);
 }
 
 .landing-logo-text {
