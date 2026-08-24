@@ -12,6 +12,8 @@
  * localStorage is always used, regardless of the Node version.
  */
 
+import '@testing-library/jest-dom';
+
 // If localStorage is missing or broken in this environment, install a simple in-memory mock.
 function isLocalStorageFunctional(): boolean {
     try {
