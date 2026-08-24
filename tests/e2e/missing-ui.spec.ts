@@ -185,7 +185,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await backBtn.click();
     
     // Assert that we are back on the main empty-state dashboard page
-    await expect(page.locator('text=Ready to fuzz')).toBeVisible();
+    await expect(page.locator('text=Ready to swazz')).toBeVisible();
   });
 
   test('Project Selector additional checks - switch tab via Project Settings option', async ({ page }) => {
