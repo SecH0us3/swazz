@@ -6,6 +6,8 @@
 </p>
 
 [![CI](https://github.com/SecH0us3/swazz/actions/workflows/ci.yml/badge.svg)](https://github.com/SecH0us3/swazz/actions)
+[![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
+[![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://mariadb.com/bsl11/)
 [![Docs](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://SecH0us3.github.io/swazz/)

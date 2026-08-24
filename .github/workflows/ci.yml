@@ -25,6 +25,8 @@ env:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -61,6 +63,8 @@ jobs:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       # v6.0.2
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -76,13 +80,37 @@ jobs:
         run: npm install --ignore-scripts
 
       - name: Run tests
-        run: npm test --workspace=packages/web
+        run: npm test --workspace=packages/web -- --coverage
 
+      - name: Update Frontend Coverage Badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          cd packages/web
+          COVERAGE=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('coverage/coverage-summary.json')); console.log(data.total.statements.pct)")
+          echo "Frontend coverage: $COVERAGE"
+          
+          COLOR="red"
+          if (( $(echo "$COVERAGE >= 80" | bc -l) )); then COLOR="success";
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then COLOR="yellow";
+          fi
+          
+          curl -s "https://img.shields.io/badge/frontend--coverage-${COVERAGE}%25-${COLOR}" -o frontend-coverage.svg
+          
+          git fetch origin badges || git branch badges
+          git checkout badges || git checkout -b badges
+          cp frontend-coverage.svg .
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend-coverage.svg
+          git commit -m "chore: update frontend coverage badge [skip ci]" || echo "No changes"
+          git push origin badges || git push -u origin badges
   test-backend:
     name: Test Backend
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       # v6.0.2
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -95,7 +123,30 @@ jobs:
           cache-dependency-path: packages/container/go.sum
 
       - name: Run tests
-        run: cd packages/container && go test -v ./...
+        run: cd packages/container && go test -coverprofile=coverage.out ./...
+
+      - name: Update Backend Coverage Badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          cd packages/container
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Backend coverage: $COVERAGE"
+          
+          COLOR="red"
+          if (( $(echo "$COVERAGE >= 80" | bc -l) )); then COLOR="success";
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then COLOR="yellow";
+          fi
+          
+          curl -s "https://img.shields.io/badge/backend--coverage-${COVERAGE}%25-${COLOR}" -o backend-coverage.svg
+          
+          git fetch origin badges || git branch badges
+          git checkout badges || git checkout -b badges
+          cp backend-coverage.svg .
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend-coverage.svg
+          git commit -m "chore: update backend coverage badge [skip ci]" || echo "No changes"
+          git push origin badges || git push -u origin badges
 
   test-e2e:
     name: Test E2E (Playwright) - Shard ${{ matrix.shardIndex }} of ${{ matrix.shardTotal }}
@@ -103,6 +154,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
     continue-on-error: true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -168,6 +221,8 @@ jobs:
     if: always()
     needs: [test-e2e]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
