@@ -13,6 +13,9 @@ export default defineConfig({
         globals: true,
         environment: 'jsdom',
         setupFiles: ['./src/vitest.setup.ts'],
+        coverage: {
+            reporter: ['text', 'json-summary']
+        }
     },
     server: {
         port: 5173,
