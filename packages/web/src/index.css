@@ -387,15 +387,9 @@ body.resizing .sidebar-resizer {
 }
 
 .header-logo-icon {
-  width: 32px;
-  height: 32px;
-  background: #0284C7;
-  color: #ffffff;
-  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
 }
 
 .header-logo-text {
@@ -7924,9 +7918,10 @@ kbd {
 }
 
 .about-logo-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  text-shadow: 0 0 24px var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
 .about-title {
@@ -11131,20 +11126,10 @@ kbd {
 }
 
 .welcome-logo-container {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-xl);
-  background: radial-gradient(100% 100% at 50% 0%, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.02) 100%);
-  border: 1px solid rgba(139, 92, 246, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--space-3);
-  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.05);
-}
-
-.welcome-fuzzer-logo {
-  filter: drop-shadow(0 0 12px rgba(139, 92, 246, 0.4));
+  margin-bottom: var(--space-4);
 }
 
 .welcome-workspace-title {

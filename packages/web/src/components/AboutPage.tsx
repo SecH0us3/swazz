@@ -4,12 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import React from 'react';
+import { Logo } from './Common/Logo.js';
 
 export function AboutPage() {
     return (
         <div className="about-container">
             <div className="about-hero">
-                <div className="about-logo-icon">⚡</div>
+                <div className="about-logo-icon">
+                    <Logo size={64} />
+                </div>
                 <h1 className="about-title">Swazz API Fuzzer</h1>
                 <p className="about-subtitle">A high-performance smart fuzzer for REST APIs and OpenAPI specifications.</p>
             </div>

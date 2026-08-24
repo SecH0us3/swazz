@@ -17,6 +17,7 @@ import { HistoryPage } from './HistoryPage.js';
 import { LandingShowcase } from './LandingShowcase.js';
 import { ComparePage } from './ComparePage.js';
 import { AboutPage } from './AboutPage.js';
+import { Logo } from './Common/Logo.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
 import type { QueryOptions } from '../hooks/useDb.js';
@@ -537,18 +538,9 @@ export function MainWorkspace({
                             <div className="welcome-workspace-container">
                                 <div className="welcome-workspace-header">
                                     <div className="welcome-logo-container">
-                                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="welcome-fuzzer-logo">
-                                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="url(#shield-grad)" stroke="var(--accent)"/>
-                                            <path d="m13 7-5 6h4v4l5-6h-4V7z" fill="var(--accent-light)"/>
-                                            <defs>
-                                                <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                    <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3"/>
-                                                    <stop offset="100%" stopColor="var(--accent-light)" stopOpacity="0.05"/>
-                                                </linearGradient>
-                                            </defs>
-                                        </svg>
+                                        <Logo size={64} />
                                     </div>
-                                    <h2 className="welcome-workspace-title">Ready to fuzz</h2>
+                                    <h2 className="welcome-workspace-title">Ready to swazz</h2>
                                     <p className="welcome-workspace-subtitle">Choose a scan mode below to begin discovering vulnerabilities</p>
                                 </div>
 

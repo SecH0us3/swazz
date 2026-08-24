@@ -3,8 +3,11 @@ layout: home
 
 hero:
   name: Swazz
-  text: Smart API Fuzzer ⚡️
+  text: Smart API Fuzzer
   tagline: Find crashes, logic flaws, and security vulnerabilities before your users do.
+  image:
+    src: /assets/logo-dark.svg
+    alt: Swazz Logo
   actions:
     - theme: brand
       text: Get Started 🚀

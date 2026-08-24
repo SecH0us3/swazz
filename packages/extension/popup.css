@@ -79,9 +79,9 @@ body {
     gap: 6px;
 }
 
-.logo-icon {
-    font-size: 18px;
-    filter: drop-shadow(0 0 8px var(--accent));
+.logo-icon-svg {
+    display: block;
+    filter: drop-shadow(0 0 6px rgba(2, 132, 199, 0.4));
 }
 
 .logo-title {

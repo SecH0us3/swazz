@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/appStore.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { LandingShowcase } from '../LandingShowcase.js';
 import { AuthModal } from './AuthModal.js';
+import { Logo } from '../Common/Logo.js';
 import './LoginScreen.css';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
@@ -317,9 +318,7 @@ export function LoginScreen({ onLogin, onRegister, onGuest }: LoginScreenProps) 
                 <div className="landing-nav-left">
                     <div className="landing-logo">
                         <div className="logo-icon-container">
-                            <svg className="landing-logo-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                            </svg>
+                            <Logo size={24} />
                         </div>
                         <span className="landing-logo-text">Swazz</span>
                     </div>
