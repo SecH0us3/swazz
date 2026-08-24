@@ -32,8 +32,8 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 
 | Package / Module | Line Coverage | Description |
 | :--- | :---: | :--- |
-| [**`packages/container`**](packages/container) | `65.6%` 🟡 | Core Go Fuzzing Engine, Triage Workers, Classifiers |
-| [**`packages/web`**](packages/web) | `60.5%` 🟡 | React Frontend, Interactive Dashboard, Settings UI |
+| [**`packages/container`**](packages/container) | [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Core Go Fuzzing Engine, Triage Workers, Classifiers |
+| [**`packages/web`**](packages/web) | [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | React Frontend, Interactive Dashboard, Settings UI |
 | [**`packages/edge`**](packages/edge) | `Untracked` | Cloudflare Workers API Gateway |
 
 ---
