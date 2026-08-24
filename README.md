@@ -26,6 +26,18 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 
 ---
 
+## 🧪 Test Coverage & Status
+
+Swazz is divided into multiple packages across the stack. The coverage is continuously tracked for core components:
+
+| Package / Module | Line Coverage | Description |
+| :--- | :---: | :--- |
+| [**`packages/container`**](packages/container) | `65.6%` 🟡 | Core Go Fuzzing Engine, Triage Workers, Classifiers |
+| [**`packages/web`**](packages/web) | `60.5%` 🟡 | React Frontend, Interactive Dashboard, Settings UI |
+| [**`packages/edge`**](packages/edge) | `Untracked` | Cloudflare Workers API Gateway |
+
+---
+
 ## 🚀 Key Features
 
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
