@@ -9,6 +9,7 @@
 [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
+[![E2E: Playwright](https://img.shields.io/badge/e2e-44%20specs-brightgreen?logo=playwright)](tests/e2e)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://mariadb.com/bsl11/)
 [![Docs](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://SecH0us3.github.io/swazz/)
@@ -31,11 +32,12 @@ Watch **Swazz** in action as it registers a new user, loads an OpenAPI schema, f
 
 Swazz is divided into multiple packages across the stack. The coverage is continuously tracked for core components:
 
-| Package / Module | Line Coverage | Description |
+| Package / Module | Line Coverage / Status | Description |
 | :--- | :---: | :--- |
 | [**`packages/container`**](packages/container) | [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Core Go Fuzzing Engine, Triage Workers, Classifiers |
 | [**`packages/web`**](packages/web) | [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | React Frontend, Interactive Dashboard, Settings UI |
 | [**`packages/edge`**](packages/edge) | [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Cloudflare Workers API Gateway, Auth, Database Migrations |
+| [**`tests/e2e`**](tests/e2e) | [![E2E Tests](https://img.shields.io/badge/playwright-44%20suites-brightgreen?logo=playwright)](tests/e2e) | End-to-End browser test suite across 8 parallel shards |
 
 ---
 
