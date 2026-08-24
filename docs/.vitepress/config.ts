@@ -15,6 +15,11 @@ export default withMermaid(defineConfig({
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/swazz/favicon.svg' }]
   ],
   themeConfig: {
+    logo: {
+      light: '/assets/logo-light.svg',
+      dark: '/assets/logo-dark.svg',
+      alt: 'Swazz Logo'
+    },
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/installation' },

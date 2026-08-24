@@ -1,6 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#0284C7"/>
-  <g transform="translate(4, 4)">
-    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="22" fill="#0F172A"/>
+
+  <!-- Line 1: 3W -->
+  <rect x="15" y="25" width="10" height="30" rx="3" fill="#0284C7"/>
+
+  <!-- Line 2: 4W + 1W -->
+  <rect x="30" y="15" width="10" height="40" rx="3" fill="#38BDF8"/>
+  <rect x="30" y="75" width="10" height="10" rx="3" fill="#0284C7"/>
+
+  <!-- Line 3: 2W + 1W (Red Core) + 2W -->
+  <rect x="45" y="15" width="10" height="20" rx="3" fill="#FFFFFF"/>
+  <rect x="45" y="45" width="10" height="10" rx="3" fill="#f43f5e"/>
+  <rect x="45" y="65" width="10" height="20" rx="3" fill="#0284C7"/>
+
+  <!-- Line 4: 1W + 4W -->
+  <rect x="60" y="15" width="10" height="10" rx="3" fill="#FFFFFF"/>
+  <rect x="60" y="45" width="10" height="40" rx="3" fill="#38BDF8"/>
+
+  <!-- Line 5: 3W -->
+  <rect x="75" y="45" width="10" height="30" rx="3" fill="#0284C7"/>
 </svg>

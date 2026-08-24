@@ -389,13 +389,14 @@ body.resizing .sidebar-resizer {
 .header-logo-icon {
   width: 32px;
   height: 32px;
-  background: #0284C7;
+  background: #0F172A;
+  border: 1px solid rgba(56, 189, 248, 0.3);
   color: #ffffff;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
+  box-shadow: 0 0 15px rgba(2, 132, 199, 0.25);
 }
 
 .header-logo-text {
@@ -7924,9 +7925,10 @@ kbd {
 }
 
 .about-logo-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  text-shadow: 0 0 24px var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
 .about-title {

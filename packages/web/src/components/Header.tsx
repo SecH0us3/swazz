@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './UserMenu.js';
 import { useToast } from '../hooks/useToast.js';
 import { sanitizeTargetUrl } from '../utils/url.js';
+import { Logo } from './Common/Logo.js';
 
 interface Props {
     onToggleSidebar?: () => void;
@@ -173,9 +174,7 @@ export function Header({
                     onClick={() => useAppStore.setState({ activeTab: 'heatmap' })}
                 >
                     <div className="header-logo-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                        </svg>
+                        <Logo size={20} theme={theme} />
                     </div>
                     <span className="header-logo-text">Swazz</span>
                 </div>

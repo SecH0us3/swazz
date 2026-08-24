@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { HighlightedCode } from './Shared/HighlightedCode.js';
+import { Logo } from './Common/Logo.js';
 import './LandingShowcase.css';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
@@ -1230,9 +1231,7 @@ cd swazz
             <footer className="landing-footer">
                 <div className="footer-logo">
                     <div className="logo-icon-container">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                        </svg>
+                        <Logo size={20} />
                     </div>
                     <span className="footer-logo-text">Swazz</span>
                 </div>
