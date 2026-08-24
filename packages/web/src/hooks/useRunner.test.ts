@@ -181,4 +181,62 @@ describe('useRunner', () => {
         expect(useAppStore.getState().isRunning).toBe(false);
         expect(onComplete).toHaveBeenCalledWith('final_stats');
     });
+
+    it('should send proxy request using sendRequest', async () => {
+        (globalThis.fetch as any).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ status: 200, body: '{"ok":true}', duration: 15 })
+        });
+
+        const { result } = renderHook(() => useRunner(proxyUrl));
+        const res = await result.current.sendRequest({
+            url: 'http://example.com/api',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            cookies: {},
+            body: { test: true }
+        });
+
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+            `${proxyUrl}/api/proxy`,
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({
+                    url: 'http://example.com/api',
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    cookies: {},
+                    body: { test: true }
+                })
+            })
+        );
+        expect(res.status).toBe(200);
+    });
+
+    it('should connect to existing run via websocket using connectToExisting', async () => {
+        let wsInstance: any = null;
+        (globalThis as any).WebSocket = vi.fn().mockImplementation(function() {
+            wsInstance = {
+                close: vi.fn(),
+                send: vi.fn(),
+            };
+            return wsInstance;
+        });
+
+        const { result } = renderHook(() => useRunner(proxyUrl));
+        const onResult = vi.fn();
+        const onComplete = vi.fn();
+
+        await act(async () => {
+            await result.current.connectToExisting('existing-run-123', onResult, onComplete);
+        });
+
+        expect(useAppStore.getState().isRunning).toBe(true);
+        expect(wsInstance).not.toBeNull();
+
+        act(() => {
+            wsInstance.onmessage({ data: JSON.stringify({ type: 'result', data: { status: 200 } }) });
+        });
+        expect(onResult).toHaveBeenCalled();
+    });
 });

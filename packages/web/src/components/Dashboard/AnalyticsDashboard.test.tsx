@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AnalyticsDashboard } from './AnalyticsDashboard.js';
 import { vi, describe, it, expect } from 'vitest';
 import React from 'react';
@@ -41,5 +41,26 @@ describe('AnalyticsDashboard Component', () => {
     expect(screen.getByRole('button', { name: '30d' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '12w' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '12m' })).toBeTruthy();
+
+    // Click period button
+    const btn24h = screen.getByRole('button', { name: '24h' });
+    fireEvent.click(btn24h);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('period=24h'),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('renders error message when fetch fails', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error loading analytics'));
+
+    render(<AnalyticsDashboard projectId="test-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Network error loading analytics/i)).toBeTruthy();
+    });
   });
 });

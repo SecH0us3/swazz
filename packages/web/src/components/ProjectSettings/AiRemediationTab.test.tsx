@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { AiRemediationTab } from './AiRemediationTab.js';
@@ -112,20 +112,39 @@ describe('AiRemediationTab Component', () => {
         expect(triageTextarea.value).toContain('=== Rule: swazz/bola-idor ===');
     });
 
-    it('supports Mistral Vibe CLI option and updates commands across Triage and Remediation sub-tabs', () => {
+    it('supports Google Antigravity CLI (agy) tool option', () => {
         render(<AiRemediationTab />);
 
         const toolSelect = screen.getByLabelText('Preferred AI Tool:') as HTMLSelectElement;
-        fireEvent.change(toolSelect, { target: { value: 'vibe' } });
+        fireEvent.change(toolSelect, { target: { value: 'agy' } });
 
         // Switch to Triage tab
         fireEvent.click(screen.getByRole('tab', { name: /Triage Model \(Pass 1\)/i }));
         const pass1Input = screen.getByLabelText('CLI Execution Command & Model') as HTMLInputElement;
-        expect(pass1Input.value).toBe('vibe -p - --auto-approve --trust');
+        expect(pass1Input.value).toContain('agy -m gemini');
+    });
 
-        // Switch to Remediation tab
-        fireEvent.click(screen.getByRole('tab', { name: /Remediation Model \(Pass 2\)/i }));
-        const pass2Input = screen.getByLabelText('CLI Execution Command & Model') as HTMLInputElement;
-        expect(pass2Input.value).toBe('vibe -p - --auto-approve --trust');
+    it('saves AI settings to backend on form submit', async () => {
+        const mockFetch = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true })
+        });
+        global.fetch = mockFetch;
+
+        render(<AiRemediationTab />);
+
+        const mappingsInput = screen.getByLabelText('URL to Repository Mappings');
+        fireEvent.change(mappingsInput, { target: { value: '{"/api/*":"git@github.com:org/backend.git"}' } });
+
+        const saveBtn = screen.getByRole('button', { name: /Save AI Settings/i });
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/projects/test-project-1'),
+                expect.objectContaining({ method: 'PATCH' })
+            );
+            expect(screen.getByText(/✓ Saved successfully/i)).toBeTruthy();
+        });
     });
 });

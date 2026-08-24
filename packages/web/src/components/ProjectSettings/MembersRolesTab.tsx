@@ -489,7 +489,7 @@ export function MembersRolesTab() {
                                         else if (p.startsWith('post:') || p.startsWith('put:') || p.startsWith('patch:')) pillClass = 'rbac-permission-pill-edit';
                                         return (
                                             <span key={p} className={`rbac-permission-pill ${pillClass}`} title={p}>
-                                                {permissions[p] || p}
+                                                {(permissions || {})[p] || p}
                                             </span>
                                         );
                                     })}
@@ -754,7 +754,7 @@ export function MembersRolesTab() {
                                 />
                             </div>
                             <div className="rbac-permissions-checkbox-grid">
-                                {Object.entries(permissions)
+                                {Object.entries(permissions || {})
                                     .filter(([key, desc]) => 
                                         desc.toLowerCase().includes(permissionSearch.toLowerCase()) || 
                                         key.toLowerCase().includes(permissionSearch.toLowerCase())
@@ -780,7 +780,7 @@ export function MembersRolesTab() {
                                         </label>
                                     ))
                                 }
-                                {Object.entries(permissions).filter(([key, desc]) => 
+                                {Object.entries(permissions || {}).filter(([key, desc]) => 
                                     desc.toLowerCase().includes(permissionSearch.toLowerCase()) || 
                                     key.toLowerCase().includes(permissionSearch.toLowerCase())
                                 ).length === 0 && (

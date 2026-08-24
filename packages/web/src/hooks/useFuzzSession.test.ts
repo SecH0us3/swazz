@@ -139,4 +139,56 @@ describe('useFuzzSession hook', () => {
         expect(mockStart).not.toHaveBeenCalled();
         expect(mockShowToast).toHaveBeenCalledWith('No active endpoints to fuzz', 'error');
     });
+
+    it('should connect to an existing running scan and handle completion', async () => {
+        mockConnectToExisting.mockImplementation(async (runId, onResult, onComplete) => {
+            onResult({ endpoint: '/api/v1/test', status: 200, duration: 25 });
+            onComplete({ total: 1, errors: 0, anomalies: 0 });
+        });
+
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleConnectToExisting('existing-run-999', Date.now() - 5000, 'https://api.example.com', 'manual', 'running');
+        });
+
+        expect(mockConnectToExisting).toHaveBeenCalledWith(
+            'existing-run-999',
+            expect.any(Function),
+            expect.any(Function)
+        );
+        expect(mockSaveRun).toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Scan complete'), 'success');
+    });
+
+    it('should handle start error when runner is already in progress', async () => {
+        mockStart.mockRejectedValueOnce(new Error('scan is already in progress'));
+
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleStart();
+        });
+
+        expect(mockShowToast).toHaveBeenCalledWith(
+            expect.stringContaining('Server is busy'),
+            'error'
+        );
+    });
 });

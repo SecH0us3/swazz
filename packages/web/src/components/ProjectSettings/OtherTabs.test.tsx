@@ -6,7 +6,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { useAppStore } from '../../store/appStore.js';
@@ -20,12 +20,25 @@ import { PerformanceTab } from './PerformanceTab.js';
 import { RawConfigTab } from './RawConfigTab.js';
 import { ScheduleTab } from './ScheduleTab.js';
 import { WordlistsTab } from './WordlistsTab.js';
+import { GeneralTab } from './GeneralTab.js';
+import { RunnersTab } from './RunnersTab.js';
 import { Section, KVEditor } from '../Sidebar/Shared.js';
 import { ChainingRulesEditor } from '../Sidebar/ChainingRulesEditor.js';
 
 describe('Other ProjectSettings components', () => {
+    let mockFetch: any;
+
     beforeEach(() => {
-        globalThis.fetch = vi.fn((url) => {
+        mockFetch = vi.fn((url: string, opts?: any) => {
+            if (url.includes('/config')) {
+                return Promise.resolve(new Response(JSON.stringify({
+                    cron_schedule: '0 0 * * *',
+                    last_run_at: '2026-08-24T12:00:00Z'
+                }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+            }
+            if (url.includes('/version')) {
+                return Promise.resolve(new Response(JSON.stringify({ version: '1.2.3' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+            }
             return Promise.resolve(new Response(JSON.stringify({
                 permissions: [],
                 roles: [],
@@ -33,6 +46,10 @@ describe('Other ProjectSettings components', () => {
                 projects: []
             }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
         });
+
+        globalThis.fetch = mockFetch;
+        localStorage.clear();
+        localStorage.setItem('swazz_token', 'test-token');
 
         // Mock IndexedDB for KeysTab/E2EE usage
         const mockIDB = {
@@ -68,7 +85,12 @@ describe('Other ProjectSettings components', () => {
                 auto_fix_rules: JSON.stringify([]),
                 propose_fixes: 0
             },
-            projects: [{ id: 'test-project-1', name: 'Test Proj', description: 'desc' }]
+            projects: [{ id: 'test-project-1', name: 'Test Proj', description: 'desc' }],
+            userProfile: {
+                username: 'alice',
+                apiKey: 'key-123',
+                publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...'
+            }
         });
     });
 
@@ -125,18 +147,110 @@ describe('Other ProjectSettings components', () => {
         });
     });
 
-    it('renders RawConfigTab', async () => {
+    it('renders and interacts with RawConfigTab', async () => {
+        Object.assign(navigator, {
+            clipboard: {
+                writeText: vi.fn().mockResolvedValue(undefined)
+            }
+        });
+
         render(<RawConfigTab />);
         await waitFor(() => {
             expect(screen.getByText("Raw JSON Configuration")).toBeTruthy();
         });
+
+        // Test Copy
+        const copyBtn = screen.getByRole('button', { name: /^Copy$/i });
+        fireEvent.click(copyBtn);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+
+        // Test invalid JSON error display
+        const textarea = screen.getByRole('textbox');
+        fireEvent.change(textarea, { target: { value: '{"invalid_json": ' } });
+        expect(screen.getByText(/Invalid JSON:/i)).toBeTruthy();
+
+        // Fix JSON and save
+        fireEvent.change(textarea, { target: { value: '{"base_url":"http://new.example.com"}' } });
+        const saveBtn = screen.getByRole('button', { name: /Save Configuration/i });
+        fireEvent.click(saveBtn);
     });
 
-    it('renders ScheduleTab', async () => {
+    it('renders and saves GeneralTab', async () => {
+        render(<GeneralTab />);
+        await waitFor(() => {
+            expect(screen.getByDisplayValue('Test Proj')).toBeTruthy();
+        });
+
+        const nameInput = screen.getByDisplayValue('Test Proj');
+        fireEvent.change(nameInput, { target: { value: 'Updated Project Name' } });
+
+        const saveBtn = screen.getByRole('button', { name: /Save General Info/i });
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/projects/test-project-1'),
+                expect.objectContaining({ method: 'PATCH' })
+            );
+        });
+    });
+
+    it('renders and updates ScheduleTab', async () => {
         render(<ScheduleTab />);
         await waitFor(() => {
             expect(screen.getByText(/Auto-Scan Scheduler/i)).toBeTruthy();
         });
+
+        const select = screen.getByRole('combobox');
+        fireEvent.change(select, { target: { value: 'daily' } });
+
+        const saveBtn = screen.getByRole('button', { name: /Save Schedule/i });
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/projects/test-project-1/schedule'),
+                expect.objectContaining({ method: 'POST' })
+            );
+        });
+    });
+
+    it('renders RunnersTab and switches runner modes', async () => {
+        const mockRunners = [
+            {
+                connectionId: 'conn-1',
+                name: 'runner-node-1',
+                publicKey: 'pubkey-1',
+                status: 'connected' as const,
+                isMine: true,
+                isShared: false,
+                version: '1.2.3'
+            }
+        ];
+
+        render(
+            <RunnersTab
+                runners={mockRunners}
+                isLoadingRunners={false}
+                runnerError=""
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('runner-node-1')).toBeTruthy();
+            expect(screen.getByText('connected')).toBeTruthy();
+        });
+
+        const sharedBtn = screen.getByRole('button', { name: /Shared Runner/i });
+        fireEvent.click(sharedBtn);
+
+        expect(screen.getByText(/Shared Mode:/i)).toBeTruthy();
+
+        // Switch back to private
+        const privateBtn = screen.getByRole('button', { name: /Private Runner/i });
+        fireEvent.click(privateBtn);
+
+        expect(screen.getByText(/Private Mode:/i)).toBeTruthy();
     });
 
     it('renders WordlistsTab', async () => {

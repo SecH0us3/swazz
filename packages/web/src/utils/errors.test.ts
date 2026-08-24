@@ -145,5 +145,41 @@ describe('errors utility', () => {
             expect(result?.title).toBe('ContractValidation: Transaction with ID <guid> not found.');
             expect(result?.key).toBe('contractvalidation_transaction_with_id_guid_not_found_');
         });
+
+        it('should extract MCP error with code and message', () => {
+            const preview = JSON.stringify({
+                isError: true,
+                content: [{ type: 'text', text: 'MCP error -32602: Invalid parameter name' }]
+            });
+            const result = extractErrorSubtype(preview);
+            expect(result).not.toBeNull();
+            expect(result?.title).toBe('MCP Error -32602: Invalid parameter name');
+            expect(result?.key).toContain('mcp_error_-32602');
+        });
+
+        it('should extract ASP.NET Core validation errors from body.errors', () => {
+            const preview = JSON.stringify({
+                errors: {
+                    Email: ['The Email field is required.']
+                }
+            });
+            const result = extractErrorSubtype(preview);
+            expect(result).not.toBeNull();
+            expect(result?.title).toBe('Validation Error: Email');
+            expect(result?.key).toBe('val_err_email');
+        });
+
+        it('should extract body.title and body.error', () => {
+            const preview1 = JSON.stringify({ title: 'Unauthorized Access' });
+            expect(extractErrorSubtype(preview1)?.title).toBe('Unauthorized Access');
+
+            const preview2 = JSON.stringify({ error: 'Rate limit exceeded' });
+            expect(extractErrorSubtype(preview2)?.title).toBe('Rate limit exceeded');
+        });
+
+        it('should detect Python and JS null/undefined errors', () => {
+            expect(extractErrorSubtype("TypeError: 'NoneType' object is not subscriptable")?.title).toBe('Null Reference Exception');
+            expect(extractErrorSubtype("TypeError: Cannot read properties of undefined (reading 'map')")?.title).toBe('Null Reference Exception');
+        });
     });
 });

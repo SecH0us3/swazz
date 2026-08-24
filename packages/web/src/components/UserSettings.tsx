@@ -157,7 +157,7 @@ export function UserSettings() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setPasskeys(data.credentials || data || []);
+                setPasskeys(Array.isArray(data?.credentials) ? data.credentials : (Array.isArray(data) ? data : []));
             }
         } catch (e) {
             console.error('Failed to fetch passkeys', e);
