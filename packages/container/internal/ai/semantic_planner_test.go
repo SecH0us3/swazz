@@ -6,7 +6,13 @@
 package ai
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/swagger"
 )
 
@@ -102,4 +108,72 @@ func TestParseGatewayResponse(t *testing.T) {
 		t.Errorf("expected error on invalid JSON")
 	}
 }
+
+func TestSemanticPlanner_GeneratePreScanPayloads(t *testing.T) {
+	// 1. Success with OpenAI format
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"choices": [{
+				"message": {
+					"content": "[\"test_payload_1\", \"test_payload_2\"]"
+				}
+			}]
+		}`))
+	}))
+	defer ts.Close()
+
+	planner := NewSemanticPlanner(ts.URL, "cf-token", "key")
+	payloads, err := planner.GeneratePreScanPayloads(context.Background(), "title: Test API")
+	require.NoError(t, err)
+	assert.Len(t, payloads, 2)
+	assert.Equal(t, "test_payload_1", payloads[0])
+
+	// 2. Empty gateway URL
+	emptyPlanner := NewSemanticPlanner("", "", "")
+	_, err = emptyPlanner.GeneratePreScanPayloads(context.Background(), "schema")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ai_gateway_url is empty")
+
+	// 3. Error response from Gateway
+	errTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":{"message":"gateway offline"}}`))
+	}))
+	defer errTS.Close()
+
+	errPlanner := NewSemanticPlanner(errTS.URL, "token", "key")
+	_, err = errPlanner.GeneratePreScanPayloads(context.Background(), "schema")
+	assert.Error(t, err)
+}
+
+func TestSemanticPlanner_ExtractSemanticFormats_All(t *testing.T) {
+	planner := NewSemanticPlanner("http://localhost:8080", "token", "key")
+	cfg := &swagger.Config{
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/items",
+				Method: "POST",
+				HeaderParams: map[string]*swagger.SchemaProperty{
+					"X-Trace-ID": {Type: "string", Format: "uuid"},
+				},
+				Schema: swagger.SchemaProperty{
+					Properties: map[string]*swagger.SchemaProperty{
+						"created_at": {Type: "string", Format: "date-time"},
+						"website":    {Type: "string", Format: "uri"},
+					},
+				},
+			},
+		},
+	}
+	formats := planner.ExtractSemanticFormats(cfg)
+	assert.Equal(t, "uuid", formats["X-Trace-ID"])
+	assert.Equal(t, "date-time", formats["created_at"])
+	assert.Equal(t, "uri", formats["website"])
+
+	// nil config returns empty map
+	assert.Empty(t, planner.ExtractSemanticFormats(nil))
+}
+
 

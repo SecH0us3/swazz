@@ -479,7 +479,12 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 				runCfg.Settings.OOBServerURL = inferOOBServerURL(coordinatorURL)
 			}
 
-			client := safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
+			var client *http.Client
+			if runCfg.Security.AllowPrivateIPs || safenet.AllowLocalNetwork {
+				client = &http.Client{Timeout: time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond}
+			} else {
+				client = safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
+			}
 			r := runner.New(runCfg, client)
 
 			activeRunnersMu.Lock()

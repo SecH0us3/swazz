@@ -12,8 +12,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"swazz-engine/internal/swagger"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"swazz-engine/internal/swagger"
 )
 
 func TestBOLA_HeuristicIDHarvesting(t *testing.T) {
@@ -792,6 +795,82 @@ func TestBOLALowLevelHelpers(t *testing.T) {
 		t.Errorf("expected cloned map, got %v", mCopy)
 	}
 }
+
+func TestCandidateHelpers(t *testing.T) {
+	// 1. candidateParamName
+	epWithPath := swagger.EndpointConfig{Path: "/api/users/{userId}"}
+	assert.Equal(t, "userId", candidateParamName(epWithPath, true, nil))
+
+	epWithBody := swagger.EndpointConfig{Path: "/api/users"}
+	assert.Equal(t, "user_id", candidateParamName(epWithBody, false, map[string]any{"user_id": "123"}))
+	assert.Equal(t, "", candidateParamName(epWithBody, false, map[string]any{"other_field": "val"}))
+
+	// 2. buildCandidatePath
+	assert.Equal(t, "/api/users", buildCandidatePath("/api/users", false, nil, 0))
+	assert.Equal(t, "/api/users/99", buildCandidatePath("/api/users/{id}", true, []string{"99"}, 0))
+	assert.Equal(t, "/api/users/1", buildCandidatePath("/api/users/{id}", true, nil, 0))
+
+	// 3. buildCandidatePayload
+	epGET := swagger.EndpointConfig{Method: "GET"}
+	payload, qp := buildCandidatePayload(epGET, map[string]any{"id": "old"}, "id", []string{"new_id"}, 0)
+	assert.Nil(t, payload)
+	assert.Equal(t, "new_id", qp["id"])
+
+	epPOST := swagger.EndpointConfig{Method: "POST"}
+	payloadPOST, qpPOST := buildCandidatePayload(epPOST, map[string]any{"id": "old"}, "id", []string{"new_id"}, 0)
+	assert.Nil(t, qpPOST)
+	assert.Equal(t, "new_id", payloadPOST.(map[string]any)["id"])
+
+	// Example fallback
+	epExample := swagger.EndpointConfig{Method: "POST", Example: map[string]any{"foo": "bar"}}
+	payloadEx, _ := buildCandidatePayload(epExample, nil, "", nil, 0)
+	assert.Equal(t, map[string]any{"foo": "bar"}, payloadEx)
+}
+
+func TestRunner_GlobalHeadersAndMissingCandidates(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer ts.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: ts.URL,
+		GlobalHeaders: map[string]string{
+			"X-Global": "1",
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/v1/user/{id}",
+				Method: "GET",
+			},
+		},
+		Settings: swagger.Settings{
+			BOLATesting: true,
+			TimeoutMs:   1000,
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	r := New(cfg, &http.Client{})
+	defer r.Close()
+
+	// 1. globalHeadersWithGenerated
+	merged := r.globalHeadersWithGenerated(map[string]string{"X-Extra": "2"})
+	assert.Equal(t, "1", merged["X-Global"])
+	assert.Equal(t, "2", merged["X-Extra"])
+
+	// 2. generateMissingCandidates
+	ctx, err := r.initRun(context.Background())
+	require.NoError(t, err)
+
+	candidates := r.generateMissingCandidates(ctx, map[string]bool{})
+	r.finaliseRun()
+	assert.NotEmpty(t, candidates)
+}
+
 
 
 

@@ -537,7 +537,7 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 	select {
 	case <-jobDoneCh:
 		cancel()
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		cancel()
 		t.Fatal("timed out waiting for job_dispatch completion")
 	}

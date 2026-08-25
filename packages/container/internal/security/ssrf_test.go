@@ -104,6 +104,12 @@ func TestWrapWithSSRFProtection(t *testing.T) {
 	_, _ = wrapped.DialContext(context.Background(), "tcp", "8.8.8.8:53")
 	assert.True(t, origDialCalled)
 
+	// test DialContext without origDial
+	wrappedNilDial := WrapWithSSRFProtection(&http.Transport{}, false).(*http.Transport)
+	_, err = wrappedNilDial.DialContext(context.Background(), "tcp", "127.0.0.1:80")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
+
 	// test non-standard RoundTripper
 	nonStd := WrapWithSSRFProtection(&dummyRT{}, false).(*http.Transport)
 	assert.NotNil(t, nonStd.DialContext)
