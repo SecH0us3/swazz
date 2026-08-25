@@ -1,0 +1,34 @@
+--- packages/container/agent_dispatcher.go
++++ packages/container/agent_dispatcher.go
+@@ -107,6 +107,7 @@
+ 	logEmitter      chan string
+ 	telemetryClient *http.Client
+ 	activeRunnersMu sync.RWMutex
++	parseReqSem     chan struct{}
+ }
+ 
+ // NewAgentDispatcher creates a configured dispatcher.
+@@ -118,6 +119,7 @@
+ 		logEmitter:      logEmitter,
+ 		telemetryClient: &http.Client{Timeout: 5 * time.Second},
+ 		activeRunners:   make(map[string]*Runner),
++		parseReqSem:     make(chan struct{}, 10), // Limit concurrent parse requests
+ 	}
+ }
+ 
+@@ -423,6 +425,12 @@
+ 	reqID := wsMsg.ReqID
+ 
+ 	logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v", reqPayload.URL, reqPayload.RawSpec != "")
++	
++	select {
++	case d.parseReqSem <- struct{}{}:
++	default:
++		logWarn("[Parser] Dropping parse request due to high concurrency")
++		return
++	}
++
+ 	go func() { // #nosec G118 -- parse request handles asynchronous spec fetching
++		defer func() { <-d.parseReqSem }()
+ 		var result interface{}
+ 		var data []byte

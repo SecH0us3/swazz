@@ -71,6 +71,7 @@ type AgentDispatcher struct {
 	outChan          chan<- interface{}
 	activeRunners    map[string]*runner.Runner
 	activeRunnersMu  sync.Mutex
+	parseReqSem      chan struct{}
 }
 
 // NewAgentDispatcher creates a new dispatcher instance.
@@ -81,6 +82,7 @@ func NewAgentDispatcher(coordinatorURL, token string, disableTelemetry bool, out
 		disableTelemetry: disableTelemetry,
 		outChan:          outChan,
 		activeRunners:    make(map[string]*runner.Runner),
+		parseReqSem:      make(chan struct{}, 10),
 	}
 }
 
@@ -423,7 +425,16 @@ func (d *AgentDispatcher) handleParseRequest(wsMsg WSMessageIn) {
 	reqID := wsMsg.ReqID
 
 	logInfo("[Parser] Received parse request. URL: %s, Has RawSpec: %v", reqPayload.URL, reqPayload.RawSpec != "")
+
+	select {
+	case d.parseReqSem <- struct{}{}:
+	default:
+		logWarn("[Parser] Dropping parse request %s due to high concurrency", reqID)
+		return
+	}
+
 	go func() { // #nosec G118 -- parse request handles asynchronous spec fetching
+		defer func() { <-d.parseReqSem }()
 		var result interface{}
 		var data []byte
 		var err error

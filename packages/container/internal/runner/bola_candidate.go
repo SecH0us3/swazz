@@ -232,7 +232,7 @@ func candidateParamName(ep swagger.EndpointConfig, hasPathParams bool, body map[
 
 // buildCandidatePath returns a concrete path for attempt i.
 // If harvested IDs are available they are injected into {id}-like segments;
-// otherwise the fallback value "1" is used.
+// otherwise a fallback UUID is used.
 func buildCandidatePath(templatePath string, hasPathParams bool, harvested []string, i int) string {
 	if !hasPathParams {
 		return templatePath
@@ -240,8 +240,8 @@ func buildCandidatePath(templatePath string, hasPathParams bool, harvested []str
 	if len(harvested) > 0 && i < len(harvested) {
 		return substituteIDInPath(templatePath, harvested[i])
 	}
-	// No harvested IDs — use a safe fallback.
-	return substituteIDInPath(templatePath, "1")
+	// No harvested IDs — use a safe UUID fallback.
+	return substituteIDInPath(templatePath, "00000000-0000-4000-8000-000000000000")
 }
 
 // buildCandidatePayload assembles the body / query params for one candidate
