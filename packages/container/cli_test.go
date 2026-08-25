@@ -6,6 +6,7 @@
 package main
 
 import (
+	"swazz-engine/internal/config"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -44,12 +45,12 @@ message HelloReply {
 `
 	require.NoError(t, os.WriteFile(protoPath, []byte(protoSrc), 0600))
 
-	cliCfg := &CliConfig{
+	cliCfg := &config.CliConfig{
 		BaseURL:     "grpc://localhost:50051",
 		SwaggerURLs: []string{protoPath},
 	}
 
-	cfg, err := BuildRunnerConfig(cliCfg)
+	cfg, err := config.BuildRunnerConfig(cliCfg)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	assert.Equal(t, "grpc://localhost:50051", cfg.BaseURL)
@@ -59,12 +60,12 @@ message HelloReply {
 }
 
 func TestBuildRunnerConfig_GRPCURL(t *testing.T) {
-	cliCfg := &CliConfig{
+	cliCfg := &config.CliConfig{
 		SwaggerURLs: []string{"grpc://127.0.0.1:59999"},
 	}
 
 	// Since 127.0.0.1:59999 is not running, it should return error discovering via reflection
-	_, err := BuildRunnerConfig(cliCfg)
+	_, err := config.BuildRunnerConfig(cliCfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to discover gRPC service via reflection")
 }
@@ -93,12 +94,12 @@ func TestRunCLIErr_ConfigValidation(t *testing.T) {
 
 func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 	// 1. Missing swagger_urls, endpoint_definitions, and mcp_server
-	_, err := BuildRunnerConfig(&CliConfig{BaseURL: "http://example.com"})
+	_, err := config.BuildRunnerConfig(&config.CliConfig{BaseURL: "http://example.com"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "config must specify at least one swagger_url")
 
 	// 2. EndpointDefinitions fast path
-	cfg, err := BuildRunnerConfig(&CliConfig{
+	cfg, err := config.BuildRunnerConfig(&config.CliConfig{
 		BaseURL: "http://example.com",
 		EndpointDefinitions: []swagger.EndpointConfig{
 			{Path: "/test", Method: "GET"},
@@ -111,7 +112,7 @@ func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 	assert.Equal(t, "1", cfg.GlobalHeaders["X-Global"])
 
 	// 3. MCPServer validation
-	_, err = BuildRunnerConfig(&CliConfig{
+	_, err = config.BuildRunnerConfig(&config.CliConfig{
 		BaseURL: "http://example.com",
 		MCPServer: &swagger.MCPServerConfig{
 			Type: "invalid_type",
@@ -120,7 +121,7 @@ func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid mcp_server type")
 
-	_, err = BuildRunnerConfig(&CliConfig{
+	_, err = config.BuildRunnerConfig(&config.CliConfig{
 		BaseURL: "http://example.com",
 		MCPServer: &swagger.MCPServerConfig{
 			Type:    "stdio",
@@ -130,7 +131,7 @@ func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mcp_server command cannot be empty")
 
-	_, err = BuildRunnerConfig(&CliConfig{
+	_, err = config.BuildRunnerConfig(&config.CliConfig{
 		BaseURL: "http://example.com",
 		MCPServer: &swagger.MCPServerConfig{
 			Type: "http",
@@ -144,14 +145,14 @@ func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 func TestCliConfig_UnmarshalAndValidate(t *testing.T) {
 	// 1. Unmarshal array endpoints
 	arrayJSON := `{"base_url":"http://example.com","endpoints":[{"path":"/api/users","method":"GET"}]}`
-	var cfg1 CliConfig
+	var cfg1 config.CliConfig
 	require.NoError(t, json.Unmarshal([]byte(arrayJSON), &cfg1))
 	assert.Len(t, cfg1.EndpointDefinitions, 1)
 	assert.Nil(t, cfg1.Endpoints)
 
 	// 2. Unmarshal filter object endpoints
 	filterJSON := `{"base_url":"http://example.com","endpoints":{"include":["/api/*"],"exclude":["/api/admin"]}}`
-	var cfg2 CliConfig
+	var cfg2 config.CliConfig
 	require.NoError(t, json.Unmarshal([]byte(filterJSON), &cfg2))
 	require.NotNil(t, cfg2.Endpoints)
 	assert.Equal(t, []string{"/api/*"}, cfg2.Endpoints.Include)
@@ -159,7 +160,7 @@ func TestCliConfig_UnmarshalAndValidate(t *testing.T) {
 
 	// 3. Validate base URL and settings
 	assert.NoError(t, cfg1.Validate())
-	invalidBase := CliConfig{BaseURL: "not-a-valid-url"}
+	invalidBase := config.CliConfig{BaseURL: "not-a-valid-url"}
 	assert.Error(t, invalidBase.Validate())
 }
 
@@ -204,7 +205,7 @@ func TestBuildRunnerConfig_MultiFormatsAndFilters(t *testing.T) {
 	require.NoError(t, os.WriteFile(harFile, []byte(harSrc), 0600))
 
 	// 3. Build runner config with aliases, cookies, filters, and rules
-	cliCfg := &CliConfig{
+	cliCfg := &config.CliConfig{
 		BaseURL:          "http://api.example.com",
 		SwaggerURLs:      []string{postmanFile},
 		SwaggerURLsAlias: []string{harFile},
@@ -223,7 +224,7 @@ func TestBuildRunnerConfig_MultiFormatsAndFilters(t *testing.T) {
 		},
 	}
 
-	cfg, err := BuildRunnerConfig(cliCfg)
+	cfg, err := config.BuildRunnerConfig(cliCfg)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	assert.NotEmpty(t, cfg.Endpoints)

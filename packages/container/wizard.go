@@ -6,6 +6,7 @@
 package main
 
 import (
+	swzconfig "swazz-engine/internal/config"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,7 +81,7 @@ func runWizard() {
 	fmt.Println("This wizard will help you configure advanced settings for the API fuzzer.")
 	fmt.Println()
 
-	var config CliConfig
+	var config swzconfig.CliConfig
 	configPath := "swazz.config.json"
 
 	// Continuation by Default
@@ -104,12 +105,12 @@ func runWizard() {
 			data, err := os.ReadFile(configPath)
 			if err != nil {
 				fmt.Printf("\033[31mError reading existing config: %v. Starting fresh.\033[0m\n", err)
-				config = CliConfig{Settings: swagger.DefaultSettings()}
+				config = swzconfig.CliConfig{Settings: swagger.DefaultSettings()}
 			} else {
 				data = swagger.StripJSONC(data)
 				if err := json.Unmarshal(data, &config); err != nil {
 					fmt.Printf("\033[31mError parsing existing config: %v. Starting fresh.\033[0m\n", err)
-					config = CliConfig{Settings: swagger.DefaultSettings()}
+					config = swzconfig.CliConfig{Settings: swagger.DefaultSettings()}
 				} else {
 					fmt.Println("\033[32mSuccessfully loaded existing configuration.\033[0m")
 					defaultSettings := swagger.DefaultSettings()
@@ -128,10 +129,10 @@ func runWizard() {
 				}
 			}
 		} else {
-			config = CliConfig{Settings: swagger.DefaultSettings()}
+			config = swzconfig.CliConfig{Settings: swagger.DefaultSettings()}
 		}
 	} else {
-		config = CliConfig{Settings: swagger.DefaultSettings()}
+		config = swzconfig.CliConfig{Settings: swagger.DefaultSettings()}
 	}
 
 	// Initialize maps if nil
@@ -201,7 +202,7 @@ func runWizard() {
 	}
 }
 
-func configureBaseSettings(config *CliConfig) {
+func configureBaseSettings(config *swzconfig.CliConfig) {
 	fmt.Println("\n\033[1;36m--- Base Settings ---\033[0m")
 
 	// 1. Swagger URLs
@@ -317,7 +318,7 @@ func configureBaseSettings(config *CliConfig) {
 	}
 }
 
-func configureAuthAndIdentity(config *CliConfig) {
+func configureAuthAndIdentity(config *swzconfig.CliConfig) {
 	for {
 		fmt.Println("\n\033[1;36m--- Authentication & Multi-Identity ---\033[0m")
 		prompt := promptui.Select{
@@ -562,7 +563,7 @@ func configureAuthSteps(steps []swagger.AuthStep) []swagger.AuthStep {
 	return steps
 }
 
-func configureSecurityPolicy(config *CliConfig) {
+func configureSecurityPolicy(config *swzconfig.CliConfig) {
 	fmt.Println("\n\033[1;36m--- Security Policy ---\033[0m")
 	currentStatus := "BLOCKED"
 	if config.Security.AllowPrivateIPs {
@@ -586,7 +587,7 @@ func configureSecurityPolicy(config *CliConfig) {
 	fmt.Println("Security policy updated.")
 }
 
-func configureFuzzingControls(config *CliConfig) {
+func configureFuzzingControls(config *swzconfig.CliConfig) {
 	for {
 		fmt.Println("\n\033[1;36m--- Fuzzing Controls ---\033[0m")
 		fmt.Printf("  Concurrency:            %d\n", config.Settings.Concurrency)
@@ -784,7 +785,7 @@ func configureFuzzingControls(config *CliConfig) {
 	}
 }
 
-func configureFilePathsAndFilters(config *CliConfig) {
+func configureFilePathsAndFilters(config *swzconfig.CliConfig) {
 	for {
 		fmt.Println("\n\033[1;36m--- File Paths & Endpoint Filters ---\033[0m")
 		includeStr := "all"
@@ -939,7 +940,7 @@ func configureFilePathsAndFilters(config *CliConfig) {
 	}
 }
 
-func saveConfig(path string, config *CliConfig) bool {
+func saveConfig(path string, config *swzconfig.CliConfig) bool {
 	tmpPath := path + ".tmp"
 	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G304
 	if err != nil {

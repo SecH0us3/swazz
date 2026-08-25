@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package main
+package agent
 
 import (
 	"bytes"
@@ -83,7 +83,7 @@ func deriveTelemetryURL(coordURL string) string {
 	return u.String()
 }
 
-func incrementGlobalScanTelemetry(telemetryURL string, disableTelemetry bool) {
+func IncrementGlobalScanTelemetry(telemetryURL string, disableTelemetry bool) {
 	if disableTelemetry {
 		return
 	}

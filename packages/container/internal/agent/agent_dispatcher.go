@@ -3,9 +3,10 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package main
+package agent
 
 import (
+	"swazz-engine/internal/config"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -49,7 +50,7 @@ type WSMessageIn struct {
 
 type JobDispatchPayload struct {
 	RunID  string    `json:"runId"`
-	Config CliConfig `json:"config"`
+	Config config.CliConfig `json:"config"`
 }
 
 type WSEventOut struct {
@@ -224,7 +225,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		}
 	}
 
-	runCfg, err := BuildRunnerConfig(&dispatch.Config)
+	runCfg, err := config.BuildRunnerConfig(&dispatch.Config)
 	if err != nil {
 		logError("Failed to build runner config: %v", err)
 		errMsg := fmt.Sprintf("[Runner] Cannot start scan: %v. Please import an OpenAPI/Swagger schema, capture endpoints, or set a target URL with spec.", err)
@@ -372,7 +373,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 			sendRunnerLog("info", msg)
 		}
 		tURL := deriveTelemetryURL(d.coordinatorURL)
-		incrementGlobalScanTelemetry(tURL, d.disableTelemetry)
+		IncrementGlobalScanTelemetry(tURL, d.disableTelemetry)
 		if err := r.Start(ctx); err != nil {
 			logError("Runner failed: %v", err)
 			d.SendWSError(runID, err.Error())

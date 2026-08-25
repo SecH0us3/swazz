@@ -3,9 +3,10 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package main
+package agent
 
 import (
+	"swazz-engine/internal/config"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -107,7 +108,7 @@ func TestIncrementGlobalScanTelemetry(t *testing.T) {
 	defer server.Close()
 
 	// Test case 1: disableTelemetry = true
-	incrementGlobalScanTelemetry(server.URL, true)
+	IncrementGlobalScanTelemetry(server.URL, true)
 	select {
 	case <-calledChan:
 		t.Fatal("telemetry should have been disabled")
@@ -116,7 +117,7 @@ func TestIncrementGlobalScanTelemetry(t *testing.T) {
 	}
 
 	// Test case 2: disableTelemetry = false
-	incrementGlobalScanTelemetry(server.URL, false)
+	IncrementGlobalScanTelemetry(server.URL, false)
 	select {
 	case <-calledChan:
 		time.Sleep(50 * time.Millisecond)
@@ -471,7 +472,7 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 		// Send job_dispatch
 		dispatchPayload := JobDispatchPayload{
 			RunID: "run_test_job_1",
-			Config: CliConfig{
+			Config: config.CliConfig{
 				BaseURL:  targetServer.URL,
 				Security: swagger.SecurityConfig{AllowPrivateIPs: true},
 				EndpointDefinitions: []swagger.EndpointConfig{

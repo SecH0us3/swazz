@@ -6,6 +6,7 @@
 package main
 
 import (
+	"swazz-engine/internal/config"
 	"errors"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ func TestSaveConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "swazz.config.json")
 
-	cfg := &CliConfig{
+	cfg := &config.CliConfig{
 		BaseURL: "http://example.com",
 		Settings: swagger.Settings{
 			Concurrency: 10,

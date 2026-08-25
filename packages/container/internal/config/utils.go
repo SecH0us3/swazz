@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package main
+package config
 
 import (
 	"encoding/json"
@@ -52,7 +52,7 @@ func matchesAny(key, path string, patterns []string) bool {
 	return false
 }
 
-func writeJSON(path string, data any) error {
+func WriteJSON(path string, data any) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G302 G304 G306
 	if err != nil {
 		return err

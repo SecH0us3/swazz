@@ -119,10 +119,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		case "crash":
 			return // drops connection, client sees EOF/1006
-			
+
 		default:
 			c.Write(r.Context(), websocket.MessageText, []byte(`{"error": "unknown action"}`))
 		}
 	}
 }
-

@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package main
+package agent
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 )
 
 // startAgent parses the arguments and connects to the coordinator
-func startAgent(args []string) {
+func StartAgent(args []string) {
 	var coordinatorURL, token, name, keyPathOrHex, logLevelStr, logFilterStr string
 	var dangerousNoContainer bool
 	var hasQuiet, hasLogLevel bool
@@ -73,7 +73,7 @@ func startAgent(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			printHelp()
+			fmt.Println("Usage: swazz-engine run-agent [options]")
 			os.Exit(0)
 		}
 	}
@@ -117,7 +117,7 @@ func startAgent(args []string) {
 	if coordinatorURL == "" {
 		fmt.Println("Error: --coordinator is required for run-agent.")
 		fmt.Println()
-		printHelp()
+		fmt.Println("Usage: swazz-engine run-agent [options]")
 		os.Exit(1)
 	}
 
@@ -145,7 +145,7 @@ func startAgent(args []string) {
 		if token == "" {
 			fmt.Println("Error: --coordinator and either --token or a private key are required for run-agent.")
 			fmt.Println()
-			printHelp()
+			fmt.Println("Usage: swazz-engine run-agent [options]")
 			os.Exit(1)
 		}
 	}
@@ -165,7 +165,7 @@ func startAgent(args []string) {
 	}
 	q := u.Query()
 	q.Set("name", name)
-	agentVer := Version
+	agentVer := "dev"
 	if agentVer == "dev" {
 		agentVer = "v1.0.0"
 	}

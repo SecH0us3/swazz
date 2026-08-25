@@ -6,6 +6,7 @@
 package main
 
 import (
+	"swazz-engine/internal/config"
 	"context"
 	"encoding/json"
 	"flag"
@@ -49,7 +50,7 @@ func runSpiderCLIErr(args []string) error {
 		return fmt.Errorf("usage: swazz spider <target_url> [options]")
 	}
 
-	var cliCfg CliConfig
+	var cliCfg config.CliConfig
 	if *configPath != "" {
 		configData, err := os.ReadFile(*configPath)
 		if err != nil {
@@ -81,7 +82,7 @@ func runSpiderCLIErr(args []string) error {
 	cookies := make(map[string]string)
 	headers := make(map[string]string)
 	if len(cliCfg.AuthSequence) > 0 {
-		runCfg, err := BuildRunnerConfig(&cliCfg)
+		runCfg, err := config.BuildRunnerConfig(&cliCfg)
 		if err == nil {
 			r := runner.New(runCfg, nil)
 			if authHeaders, authCookies, errAuth := r.ExecuteAuthSequence(ctx, cliCfg.AuthSequence, cliCfg.Headers, cliCfg.Cookies); errAuth == nil {
