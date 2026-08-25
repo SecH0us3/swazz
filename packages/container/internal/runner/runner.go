@@ -144,11 +144,11 @@ type Runner struct {
 	latestStats atomic.Pointer[swagger.RunStats]
 	statsDone   chan struct{}
 
-	// SSE event pipeline (lock-free MPSCQueue + RW-guarded subscriber set).
-	subsMu     sync.RWMutex
-	subs       map[chan Event]struct{}
-	eventQueue *MPSCQueue
-	doneCh     chan struct{}
+	subsMu        sync.RWMutex
+	subs          map[chan Event]struct{}
+	eventQueue    *MPSCQueue
+	doneCh        chan struct{}
+	broadcastDone chan struct{}
 
 	// Config variable substitution — written once per config reload.
 	configMu    sync.RWMutex
@@ -244,6 +244,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		subs:          make(map[chan Event]struct{}),
 		eventQueue:    NewMPSCQueue(),
 		doneCh:        make(chan struct{}),
+		broadcastDone: make(chan struct{}),
 		statsChan:     make(chan statsMsg, 4096),
 		statsDone:     make(chan struct{}),
 		analyzer:      analyzer.NewRegistry(),
@@ -280,7 +281,17 @@ func (r *Runner) Close() {
 	}
 	r.lifecycle.mu.Unlock()
 	if r.doneCh != nil {
-		close(r.doneCh)
+		select {
+		case <-r.doneCh:
+		default:
+			close(r.doneCh)
+		}
+	}
+	if r.broadcastDone != nil {
+		select {
+		case <-r.broadcastDone:
+		case <-time.After(1 * time.Second):
+		}
 	}
 	if r.client != nil {
 		r.client.CloseIdleConnections()
