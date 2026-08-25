@@ -41,6 +41,7 @@ import (
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/runner/bola"
 )
 
 var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
@@ -151,6 +152,7 @@ type Runner struct {
 	gate          license.Gate
 
 	analyzer *analyzer.AnalyzerRegistry
+	detector *bola.Detector
 
 	mcpClient      mcp.Client
 	mcpMutex       sync.Mutex
@@ -236,6 +238,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency, gate.ConcurrencyCeiling())
 	r.pause.cond = sync.NewCond(&r.pause.mu)
 	r.updateReplacer()
+	r.detector = bola.NewDetector(r)
 
 	empty := newEmptyStats()
 	r.latestStats.Store(&empty)
@@ -391,7 +394,8 @@ func (r *Runner) Start(ctx context.Context) error {
 	copy(candidates, r.allResults)
 	r.resultsMu.Unlock()
 
-	_ = r.bolaPhase(runCtx, candidates)
+	detector := bola.NewDetector(r)
+	_ = detector.BolaPhase(runCtx, candidates)
 	r.rateLimitPhase(runCtx)
 
 	// Wait a brief grace period for any late OOB network interactions to complete
@@ -482,3 +486,50 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 
 	wg.Wait()
 }
+
+// RunnerContext implementation for bola.Detector
+func (r *Runner) RLockConfig() { r.configMu.RLock() }
+func (r *Runner) RUnlockConfig() { r.configMu.RUnlock() }
+func (r *Runner) LockConfig() { r.configMu.Lock() }
+func (r *Runner) UnlockConfig() {
+	r.configMu.Unlock()
+	r.updateReplacer()
+	r.detector = bola.NewDetector(r)
+}
+
+func (r *Runner) LockResults() { r.resultsMu.Lock() }
+func (r *Runner) UnlockResults() { r.resultsMu.Unlock() }
+
+func (r *Runner) LogDebug(format string, args ...any) { r.logDebug(format, args...) }
+func (r *Runner) LogInfo(format string, args ...any) { r.logInfo(format, args...) }
+func (r *Runner) LogWarn(format string, args ...any) { r.logWarn(format, args...) }
+func (r *Runner) LogError(format string, args ...any) { r.logError(format, args...) }
+
+func (r *Runner) BroadcastProgress() { r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()}) }
+func (r *Runner) BroadcastResult(res *swagger.FuzzResult) { r.Broadcast(Event{Type: EventResult, Data: res}) }
+
+func (r *Runner) UpdateProgressProfile(profile string) { r.progress.currentProfile.Store(profile) }
+func (r *Runner) UpdateProgressEndpoint(epKey string) { r.progress.currentEndpoint.Store(epKey) }
+func (r *Runner) AddTotalEndpoints(n int32) { r.progress.totalEndpoints.Add(n) }
+func (r *Runner) AddCompletedEndpoints(n int32) { r.progress.completedEndpoints.Add(n) }
+func (r *Runner) AddTotalPlanned(n int64) { r.progress.totalPlanned.Add(n) }
+
+func (r *Runner) SendStat(res *swagger.FuzzResult, currentIteration, totalIterations int) {
+	r.statsChan <- statsMsg{
+		result:           res,
+		currentIteration: currentIteration,
+		totalIterations:  totalIterations,
+	}
+}
+
+func (r *Runner) ExecuteRequest(ctx context.Context, baseURL, resolvedPath, epPath, method string,
+	globalHeaders map[string]string, globalCookies map[string]string,
+	body any, profile swagger.FuzzingProfile, queryParams map[string]any,
+	headers map[string]string, contentType string) *swagger.FuzzResult {
+	return r.executeRequest(ctx, baseURL, resolvedPath, epPath, method, globalHeaders, globalCookies, body, profile, queryParams, headers, contentType)
+}
+
+func (r *Runner) SetLimiterTarget(concurrency int) { r.limiter.SetTarget(concurrency) }
+func (r *Runner) LimiterAcquire(ctx context.Context) error { return r.limiter.Acquire(ctx) }
+func (r *Runner) LimiterRelease() { r.limiter.Release() }
+
