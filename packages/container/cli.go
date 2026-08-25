@@ -251,10 +251,15 @@ func runCLIErr(args []string) error {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 	go func() {
-		<-sigCh
-		fmt.Println("\nStopping fuzzing run...")
-		r.Stop()
+		select {
+		case <-sigCh:
+			fmt.Println("\nStopping fuzzing run...")
+			r.Stop()
+		case <-ctx.Done():
+			return
+		}
 	}()
 
 	// Run auth sequence if present

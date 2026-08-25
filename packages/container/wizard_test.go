@@ -49,3 +49,49 @@ func TestSaveConfig(t *testing.T) {
 	okInvalid := saveConfig(filepath.Join(tmpDir, "nonexistent_dir", "sub", "config.json"), cfg)
 	assert.False(t, okInvalid)
 }
+
+func TestValidatePositiveInt(t *testing.T) {
+	assert.NoError(t, validatePositiveInt("10"))
+	assert.NoError(t, validatePositiveInt(" 1 "))
+	assert.Error(t, validatePositiveInt("0"))
+	assert.Error(t, validatePositiveInt("-5"))
+	assert.Error(t, validatePositiveInt("abc"))
+	assert.Error(t, validatePositiveInt(""))
+}
+
+func TestValidateJSONBody(t *testing.T) {
+	assert.NoError(t, validateJSONBody(""))
+	assert.NoError(t, validateJSONBody("   "))
+	assert.NoError(t, validateJSONBody(`{"key":"value"}`))
+	assert.NoError(t, validateJSONBody(`[1, 2, 3]`))
+	assert.Error(t, validateJSONBody(`{invalid-json`))
+}
+
+func TestValidateHeaderName(t *testing.T) {
+	assert.NoError(t, validateHeaderName("Authorization"))
+	assert.NoError(t, validateHeaderName("X-Custom-Header"))
+	assert.Error(t, validateHeaderName(""))
+	assert.Error(t, validateHeaderName("   "))
+}
+
+func TestValidateSwaggerURLInput(t *testing.T) {
+	tmpDir := t.TempDir()
+	localFile := filepath.Join(tmpDir, "swagger.json")
+	require.NoError(t, os.WriteFile(localFile, []byte(`{}`), 0600))
+
+	// Valid HTTP & HTTPS
+	assert.NoError(t, validateSwaggerURLInput("https://example.com/openapi.json"))
+	assert.NoError(t, validateSwaggerURLInput("http://example.com/swagger.json, https://api.com/spec"))
+
+	// Valid Local File
+	assert.NoError(t, validateSwaggerURLInput(localFile))
+
+	// Invalid empty
+	assert.Error(t, validateSwaggerURLInput(""))
+	assert.Error(t, validateSwaggerURLInput("   "))
+
+	// Inaccessible local file
+	assert.Error(t, validateSwaggerURLInput(filepath.Join(tmpDir, "nonexistent_spec.json")))
+}
+
+
