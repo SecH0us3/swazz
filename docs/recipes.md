@@ -143,3 +143,38 @@ Fuzz a target gRPC service using Server Reflection without needing local `.proto
 ```bash
 swazz-engine start --config swazz.config.grpc.json --sarif grpc-findings.sarif --html grpc-report.html
 ```
+
+---
+
+## 🤖 Recipe 7: Fuzzing & Auditing Target Model Context Protocol (MCP) Servers
+
+Audit a target MCP server across tool arguments, prototype pollution in tool names, and confirmation contracts:
+
+1. **Inspect and verify tool confirmation contracts safely**:
+   ```bash
+   swazz-engine start -config swazz.config.mcp.json -mcp-list-tools
+   ```
+
+2. **Configure `swazz.config.mcp.json`**:
+   ```jsonc
+   {
+     "mcp_server": {
+       "type": "http",
+       "url": "http://127.0.0.1:8000/mcp"
+     },
+     "global_headers": {
+       "Authorization": "Bearer token-user-a"
+     },
+     "settings": {
+       "enable_mcp_method_fuzzing": true,
+       "bola_testing": true,
+       "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
+     }
+   }
+   ```
+
+3. **Run fuzzing with method & tool dispatch security checks**:
+   ```bash
+   swazz-engine start -config swazz.config.mcp.json -mcp-fuzz-methods --sarif mcp-findings.sarif
+   ```
+

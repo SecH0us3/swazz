@@ -33,4 +33,14 @@ func TestContainerIndicators_NotEmpty(t *testing.T) {
 func TestAssertRunningInContainer_Bypass(t *testing.T) {
 	// Should not panic or exit because bypass is true
 	AssertRunningInContainer(true)
+
+	// SWAZZ_DEV bypass
+	t.Setenv("SWAZZ_DEV", "1")
+	AssertRunningInContainer(false)
 }
+
+func TestIsRunningInContainer_CloudflareEnv(t *testing.T) {
+	t.Setenv("CLOUDFLARE_APPLICATION_ID", "cf-app-123")
+	assert.True(t, IsRunningInContainer())
+}
+

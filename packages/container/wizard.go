@@ -26,6 +26,55 @@ func isPromptCanceled(err error) bool {
 	return errors.Is(err, promptui.ErrInterrupt) || errors.Is(err, promptui.ErrEOF)
 }
 
+func validatePositiveInt(s string) error {
+	val, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || val <= 0 {
+		return errors.New("must be a valid positive integer")
+	}
+	return nil
+}
+
+func validateJSONBody(s string) error {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return nil
+	}
+	var js any
+	if err := json.Unmarshal([]byte(trimmed), &js); err != nil {
+		return fmt.Errorf("invalid JSON body: %v", err)
+	}
+	return nil
+}
+
+func validateHeaderName(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("header name cannot be empty")
+	}
+	return nil
+}
+
+func validateSwaggerURLInput(input string) error {
+	if strings.TrimSpace(input) == "" {
+		return errors.New("Swagger URL cannot be empty")
+	}
+	for _, u := range strings.Split(input, ",") {
+		trimmed := strings.TrimSpace(u)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+			if _, err := url.ParseRequestURI(trimmed); err != nil {
+				return fmt.Errorf("invalid URL format: %v", err)
+			}
+		} else {
+			if _, err := os.Stat(trimmed); err != nil {
+				return fmt.Errorf("local file does not exist or is inaccessible: %s", trimmed)
+			}
+		}
+	}
+	return nil
+}
+
 func runWizard() {
 	fmt.Println("\033[1;34m⚡ Welcome to the Upgraded SWAZZ Configuration Wizard! ⚡\033[0m")
 	fmt.Println("This wizard will help you configure advanced settings for the API fuzzer.")
@@ -157,31 +206,10 @@ func configureBaseSettings(config *CliConfig) {
 
 	// 1. Swagger URLs
 	currentSwagger := strings.Join(config.SwaggerURLs, ", ")
-	valSwagger := func(input string) error {
-		if strings.TrimSpace(input) == "" {
-			return errors.New("Swagger URL cannot be empty")
-		}
-		for _, u := range strings.Split(input, ",") {
-			trimmed := strings.TrimSpace(u)
-			if trimmed == "" {
-				continue
-			}
-			if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-				if _, err := url.ParseRequestURI(trimmed); err != nil {
-					return fmt.Errorf("invalid URL format: %v", err)
-				}
-			} else {
-				if _, err := os.Stat(trimmed); err != nil {
-					return fmt.Errorf("local file does not exist or is inaccessible: %s", trimmed)
-				}
-			}
-		}
-		return nil
-	}
 	promptSwagger := promptui.Prompt{
 		Label:    "Swagger/OpenAPI or GraphQL URLs (comma-separated)",
 		Default:  currentSwagger,
-		Validate: valSwagger,
+		Validate: validateSwaggerURLInput,
 	}
 	swaggerStr, err := promptSwagger.Run()
 	if err != nil {
@@ -252,13 +280,8 @@ func configureBaseSettings(config *CliConfig) {
 
 		if idx == 0 {
 			promptK := promptui.Prompt{
-				Label: "Header Name",
-				Validate: func(s string) error {
-					if strings.TrimSpace(s) == "" {
-						return errors.New("Header name cannot be empty")
-					}
-					return nil
-				},
+				Label:    "Header Name",
+				Validate: validateHeaderName,
 			}
 			k, err := promptK.Run()
 			if err != nil {
@@ -474,18 +497,8 @@ func configureAuthSteps(steps []swagger.AuthStep) []swagger.AuthStep {
 
 			if m == "POST" || m == "PUT" {
 				promptBody := promptui.Prompt{
-					Label: "Request JSON Body (optional, press Enter to skip)",
-					Validate: func(s string) error {
-						trimmed := strings.TrimSpace(s)
-						if trimmed == "" {
-							return nil
-						}
-						var js any
-						if err := json.Unmarshal([]byte(trimmed), &js); err != nil {
-							return fmt.Errorf("Invalid JSON body: %v", err)
-						}
-						return nil
-					},
+					Label:    "Request JSON Body (optional, press Enter to skip)",
+					Validate: validateJSONBody,
 				}
 				b, err := promptBody.Run()
 				if err == nil && strings.TrimSpace(b) != "" {
@@ -574,14 +587,6 @@ func configureSecurityPolicy(config *CliConfig) {
 }
 
 func configureFuzzingControls(config *CliConfig) {
-	validateInt := func(s string) error {
-		val, err := strconv.Atoi(s)
-		if err != nil || val <= 0 {
-			return errors.New("must be a valid positive integer")
-		}
-		return nil
-	}
-
 	for {
 		fmt.Println("\n\033[1;36m--- Fuzzing Controls ---\033[0m")
 		fmt.Printf("  Concurrency:            %d\n", config.Settings.Concurrency)
@@ -616,7 +621,7 @@ func configureFuzzingControls(config *CliConfig) {
 				promptC := promptui.Prompt{
 					Label:    "Concurrency (number of parallel worker routines)",
 					Default:  strconv.Itoa(config.Settings.Concurrency),
-					Validate: validateInt,
+					Validate: validatePositiveInt,
 				}
 				val, err := promptC.Run()
 				if err == nil {
@@ -727,7 +732,7 @@ func configureFuzzingControls(config *CliConfig) {
 			promptI := promptui.Prompt{
 				Label:    "Iterations per profile",
 				Default:  strconv.Itoa(config.Settings.IterationsPerProfile),
-				Validate: validateInt,
+				Validate: validatePositiveInt,
 			}
 			val, err := promptI.Run()
 			if err == nil {
@@ -738,7 +743,7 @@ func configureFuzzingControls(config *CliConfig) {
 			promptT := promptui.Prompt{
 				Label:    "Timeout (ms)",
 				Default:  strconv.Itoa(config.Settings.TimeoutMs),
-				Validate: validateInt,
+				Validate: validatePositiveInt,
 			}
 			val, err := promptT.Run()
 			if err == nil {
@@ -766,7 +771,7 @@ func configureFuzzingControls(config *CliConfig) {
 					promptBurst := promptui.Prompt{
 						Label:    "Burst size (requests sent in rapid succession)",
 						Default:  strconv.Itoa(config.Settings.RateLimitBurstSize),
-						Validate: validateInt,
+						Validate: validatePositiveInt,
 					}
 					bVal, err := promptBurst.Run()
 					if err == nil {

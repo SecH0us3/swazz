@@ -130,7 +130,7 @@ describe('UserSettings Component', () => {
         const codeInput = screen.getByPlaceholderText('000000');
         fireEvent.change(codeInput, { target: { value: '123456' } });
 
-        const verifyBtn = screen.getByRole('button', { name: /Verify & Enable/i });
+        const verifyBtn = await screen.findByRole('button', { name: /Verify & Enable/i });
         fireEvent.click(verifyBtn);
 
         await waitFor(() => {

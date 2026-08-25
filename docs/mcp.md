@@ -181,3 +181,115 @@ If you are running the Swazz RAG server locally for context-aware code search, c
 1. **Secure API Key Storage**: API keys are one-way hashed using **SHA-256** before being saved to the database. Plain text keys are never stored, protecting them against database breaches.
 2. **Access Control & RBAC**: Every incoming MCP action is forwarded to the cloud coordinator, which translates it into internal Hono REST requests. All standard project memberships, permissions, and session rules are strictly enforced (e.g. users cannot query findings or trigger scans for projects they do not own or have permission to access).
 3. **One-Time Key Exposure**: When you rotate your API key in the UI, the plain text token is returned **exactly once** for you to copy. On subsequent page loads, the UI only displays a masked token (`swazz_live_••••••••••••••••••••••••`).
+
+---
+
+## 🛡️ Auditing & Fuzzing Target MCP Servers
+
+Swazz is not only an MCP server for AI clients — it is also a comprehensive security scanner and fuzzer for **auditing third-party MCP servers and AI agent tools**.
+
+### Supported Transports
+- **`stdio`**: Runs and fuzzes a local MCP subprocess via standard I/O (e.g. `node server.js`, `python -m mcp_server`).
+- **`sse`**: Connects to an HTTP Server-Sent Events MCP endpoint (e.g. `http://localhost:8788/mcp/sse`).
+- **`http`**: Connects to streamable HTTP JSON-RPC MCP endpoints (e.g. `http://localhost:8000/mcp`), with full support for per-request identity header overrides.
+
+---
+
+### Step 1: Tool Introspection & Safety Contracts (`-mcp-list-tools`)
+
+Before launching a fuzzing run against an unknown MCP server, run the read-only introspection command to list all exposed tools and inspect their confirmation requirements:
+
+```bash
+swazz start -config swazz.config.json -mcp-list-tools
+```
+
+#### Example Output:
+```text
+MCP server: http://127.0.0.1:8000/mcp (http)
+3 tool(s)
+
+IN SCOPE  CONFIRM  2FA    DECLARED IN  TOOL
+--------  -------  ---    -----------  ----
+yes       false    false  (nothing)    search_cards
+yes       true     true   _meta        transfer_funds
+-         false    false  annotations  read_logs
+
+2 of 3 tool(s) are in scope. Only these are fuzzed.
+
+!! In scope but declaring a confirmation requirement: transfer_funds
+!! The server itself says these need explicit user confirmation, which
+!! means they change state. Remove them unless you meant it.
+
+endpoint_definitions entries for the 1 tool(s) not yet in scope:
+
+"endpoint_definitions": [
+  { "path": "mcp://tool/read_logs", "method": "CALL", "contentType": "application/json" }
+],
+```
+
+#### Safety Contracts & Confirmation Flags
+Swazz reads both vendor-specific `_meta` and official `annotations` blocks:
+- `requires_confirmation: true`: The server declares that the tool changes system state and requires human confirmation.
+- `requires_2fa_confirmation: true`: The tool requires step-up two-factor authentication.
+- Swazz alerts the operator before fuzzing state-modifying tools, preventing accidental data corruption.
+
+---
+
+### Step 2: Method & Tool Name Dispatch Security Fuzzing (`-mcp-fuzz-methods`)
+
+MCP servers often dynamically dispatch tool names using reflection (e.g. Python `getattr(self, tool_name)` or JavaScript `tools[toolName]`), creating critical vulnerabilities in routing logic.
+
+Enable method fuzzing via CLI flag or config:
+```bash
+swazz start -config swazz.config.json -mcp-fuzz-methods
+```
+
+#### What It Probes:
+1. **Prototype Pollution**: Tests `__proto__`, `constructor`, `prototype` for global prototype mutation or Node.js crashes.
+2. **Python Dunder / Reflection**: Probes `__class__`, `__dict__`, `__globals__` to detect unrestricted attribute access.
+3. **Path Traversal in Tool Names**: Injects `../../../etc/passwd` and `..\..\windows\win.ini` to check if servers dynamically load plugins from disk unsafely.
+4. **Hidden / Administrative RPC Methods**: Probes for undocumented debug and system methods (`debug/eval`, `admin/config`, `system/exec`, `rpc.discover`).
+5. **Injection Vectors**: Probes tool dispatchers with SQLi, CMDi, and null-bytes (`tool\x00inject`, `' OR '1'='1`, `; id ;`).
+
+---
+
+### Step 3: Multi-Identity BOLA/IDOR Testing on MCP Tools
+
+For HTTP and SSE transports, Swazz can automatically test tools for Broken Object Level Authorization (BOLA/IDOR) by replaying tool calls as a secondary identity:
+
+```jsonc
+{
+  "base_url": "http://127.0.0.1:8000",
+  "mcp_server": {
+    "type": "http",
+    "url": "http://127.0.0.1:8000/mcp"
+  },
+  "global_headers": {
+    "Authorization": "Bearer token-user-a"
+  },
+  "settings": {
+    "bola_testing": true,
+    "enable_mcp_method_fuzzing": true
+  },
+  "auth_identities": {
+    "attacker": {
+      "headers": {
+        "Authorization": "Bearer token-user-b"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Dedicated MCP Security Findings
+
+| Rule ID | Severity | Description |
+| :--- | :--- | :--- |
+| `swazz/mcp-server-crash` | `error` | Server subprocess terminated, crashed, or dropped connection during tool execution. |
+| `swazz/mcp-tool-exception` | `error` | Unhandled Python traceback, JavaScript TypeError/UnhandledRejection, or Go/Rust panic. |
+| `swazz/mcp-secret-leak` | `critical` | Tool output exposed private keys, JWT tokens, AWS credentials, or database connection strings. |
+| `swazz/mcp-resource-leak` | `critical` | Resource URI read exposed local system files (`/etc/passwd`, `win.ini`) or cloud instance metadata. |
+| `swazz/mcp-prompt-injection-reflection` | `warning` | Injected prompt manipulation directives (`IGNORE PREVIOUS INSTRUCTIONS`) were reflected unescaped. |
+

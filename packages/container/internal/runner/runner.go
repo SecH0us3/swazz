@@ -54,6 +54,24 @@ import (
 
 var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
 
+var mcpMethodProbes = []string{
+	"__proto__",
+	"constructor",
+	"prototype",
+	"__class__",
+	"__dict__",
+	"__globals__",
+	"../../../etc/passwd",
+	"..\\..\\..\\windows\\win.ini",
+	"debug/eval",
+	"admin/config",
+	"system/exec",
+	"rpc.discover",
+	"tool\x00inject",
+	"' OR '1'='1",
+	"; id ;",
+}
+
 var scanDurationUnit = time.Minute
 
 const (
@@ -235,24 +253,13 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		regexCache:    make(map[string]*regexp.Regexp),
 	}
 	if config.MCPServer != nil {
-		mcpHeaders := make(map[string]string)
-		for k, v := range config.GlobalHeaders {
-			mcpHeaders[k] = v
-		}
-		if len(config.Cookies) > 0 {
-			var cookieParts []string
-			for k, v := range config.Cookies {
-				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
-			}
-			mcpHeaders["Cookie"] = strings.Join(cookieParts, "; ")
-		}
-
-		if config.MCPServer.Type == "stdio" {
-			r.mcpClient = mcp.NewStdioClient(config.MCPServer.Command, config.MCPServer.Args)
-		} else if config.MCPServer.Type == "sse" {
-			r.mcpClient = mcp.NewSSEClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders, nil)
-		} else if config.MCPServer.Type == "http" {
-			r.mcpClient = mcp.NewHTTPClient(config.MCPServer.URL, config.Security.AllowPrivateIPs, mcpHeaders)
+		client, err := mcp.NewClientFromConfig(
+			config.MCPServer, config.GlobalHeaders, config.Cookies,
+			config.Security.AllowPrivateIPs, nil)
+		if err != nil {
+			logger.Error("[Runner] %v", err)
+		} else {
+			r.mcpClient = client
 		}
 	}
 	r.limiter = NewConcurrencyLimiter(config.Settings.Concurrency, gate.ConcurrencyCeiling())
@@ -287,12 +294,17 @@ func (r *Runner) Close() {
 		return true
 	})
 	r.wsClients.Range(func(key, value any) bool {
-		// we will import ws package in runner.go if we need to assert, but we can just use an interface or import it.
 		if c, ok := value.(interface{ Close() error }); ok {
 			_ = c.Close()
 		}
 		return true
 	})
+	r.subsMu.Lock()
+	for ch := range r.subs {
+		delete(r.subs, ch)
+		close(ch)
+	}
+	r.subsMu.Unlock()
 }
 
 func (r *Runner) getGRPCClient(addr string, isTLS bool, md map[string]string) *swazzGrpc.Client {
@@ -957,6 +969,7 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 		}
 
 		logger.Info("[Runner] Found %d MCP Tools", len(tools))
+		var skipped []string
 		for _, tool := range tools {
 			toolPath := "mcp://tool/" + tool.Name
 
@@ -984,6 +997,107 @@ func (r *Runner) initRun(parentCtx context.Context) (context.Context, error) {
 					ContentType: "application/json",
 				}
 				r.config.Endpoints = append(r.config.Endpoints, ep)
+			} else {
+				// The config names its own MCP tools, so this one is deliberately
+				// out of scope. Say so by name — a silent skip looks identical to
+				// a tool that does not exist, which is how a typo in the allowlist
+				// turns into "the scan passed".
+				skipped = append(skipped, tool.Name)
+			}
+		}
+
+		if len(skipped) > 0 {
+			logger.Info("[Runner] Skipping %d MCP tool(s) not in the config allowlist: %s",
+				len(skipped), strings.Join(skipped, ", "))
+		}
+
+		resources, resErr := r.mcpClient.ListResources(ctx)
+		if resErr == nil && len(resources) > 0 {
+			logger.Info("[Runner] Found %d MCP Resources", len(resources))
+			for _, res := range resources {
+				resPath := "mcp://resource/" + res.URI
+				if !hasAnyMcpInConfig {
+					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+						Path:        resPath,
+						Method:      "READ",
+						Schema:      swagger.SchemaProperty{Type: "object"},
+						ContentType: "application/json",
+					})
+				}
+			}
+		}
+
+		prompts, promptErr := r.mcpClient.ListPrompts(ctx)
+		if promptErr == nil && len(prompts) > 0 {
+			logger.Info("[Runner] Found %d MCP Prompts", len(prompts))
+			for _, pr := range prompts {
+				promptPath := "mcp://prompt/" + pr.Name
+				if !hasAnyMcpInConfig {
+					props := make(map[string]*swagger.SchemaProperty, len(pr.Arguments))
+					var required []string
+					for _, arg := range pr.Arguments {
+						props[arg.Name] = &swagger.SchemaProperty{
+							Type: "string",
+						}
+						if arg.Required {
+							required = append(required, arg.Name)
+						}
+					}
+					r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+						Path:   promptPath,
+						Method: "PROMPT",
+						Schema: swagger.SchemaProperty{
+							Type:       "object",
+							Properties: props,
+							Required:   required,
+						},
+						ContentType: "application/json",
+					})
+				}
+			}
+		}
+
+		if r.config.Settings.MCPMethodFuzzingEnabled() {
+			logger.Info("[Runner] MCP Method & Tool Name Fuzzing enabled: appending %d dispatch probe endpoints", len(mcpMethodProbes))
+			for _, probe := range mcpMethodProbes {
+				toolPath := "mcp://tool/" + probe
+				r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+					Path:        toolPath,
+					Method:      "CALL",
+					Schema:      swagger.SchemaProperty{Type: "object"},
+					ContentType: "application/json",
+				})
+			}
+			// Resource traversal and SSRF probes
+			resourceProbes := []string{
+				"file:///etc/passwd",
+				"file:///etc/shadow",
+				"file:///C:/Windows/win.ini",
+				"http://169.254.169.254/latest/meta-data/",
+				"internal://secrets/config",
+			}
+			for _, rp := range resourceProbes {
+				r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+					Path:        "mcp://resource/" + rp,
+					Method:      "READ",
+					Schema:      swagger.SchemaProperty{Type: "object"},
+					ContentType: "application/json",
+				})
+			}
+			// Prompt injection and reflection probes
+			promptProbes := []string{
+				"__proto__",
+				"__class__",
+				"system/prompt",
+				"debug/instructions",
+			}
+			for _, pp := range promptProbes {
+				r.config.Endpoints = append(r.config.Endpoints, swagger.EndpointConfig{
+					Path:        "mcp://prompt/" + pp,
+					Method:      "PROMPT",
+					Schema:      swagger.SchemaProperty{Type: "object"},
+					ContentType: "application/json",
+				})
 			}
 		}
 	}

@@ -15,13 +15,24 @@ import (
 )
 
 func TestIsPrivateIP(t *testing.T) {
+	// IPv4 Private / Loopback / Unspecified
 	assert.True(t, IsPrivateIP(net.ParseIP("127.0.0.1")))
 	assert.True(t, IsPrivateIP(net.ParseIP("10.1.2.3")))
+	assert.True(t, IsPrivateIP(net.ParseIP("172.16.0.1")))
 	assert.True(t, IsPrivateIP(net.ParseIP("192.168.1.1")))
 	assert.True(t, IsPrivateIP(net.ParseIP("0.0.0.0")))
-	
+	assert.True(t, IsPrivateIP(net.ParseIP("169.254.169.254"))) // link-local / cloud metadata
+
+	// IPv6 Private / Loopback / Link-local / Unique local
+	assert.True(t, IsPrivateIP(net.ParseIP("::1")))
+	assert.True(t, IsPrivateIP(net.ParseIP("fe80::1")))
+	assert.True(t, IsPrivateIP(net.ParseIP("fc00::1")))
+	assert.True(t, IsPrivateIP(net.ParseIP("::")))
+
+	// Public IPs
 	assert.False(t, IsPrivateIP(net.ParseIP("8.8.8.8")))
 	assert.False(t, IsPrivateIP(net.ParseIP("1.1.1.1")))
+	assert.False(t, IsPrivateIP(net.ParseIP("2001:4860:4860::8888")))
 }
 
 func TestConfigureTransport(t *testing.T) {
@@ -53,7 +64,6 @@ func TestNewSSRFProtectedTransport(t *testing.T) {
 
 	// Test unresolvable
 	_, err = tr.DialContext(context.Background(), "tcp", "localhost.localdomain:80")
-	// depending on system, it might resolve to loopback or fail to resolve
 	if err != nil {
 		if !strings.Contains(err.Error(), "no such host") && !strings.Contains(err.Error(), "blocked by SSRF policy") {
 			t.Errorf("Unexpected error: %v", err)
@@ -65,13 +75,22 @@ func TestWrapWithSSRFProtection(t *testing.T) {
 	trAllowed := WrapWithSSRFProtection(nil, true)
 	assert.Nil(t, trAllowed)
 
+	dummy := &dummyRT{}
+	assert.Equal(t, dummy, WrapWithSSRFProtection(dummy, true))
+
 	trDefault := WrapWithSSRFProtection(nil, false).(*http.Transport)
 	assert.NotNil(t, trDefault.DialContext)
 
-	origTr := &http.Transport{}
+	// origTr with custom DialContext
+	origDialCalled := false
+	origTr := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			origDialCalled = true
+			return nil, nil
+		},
+	}
 	wrapped := WrapWithSSRFProtection(origTr, false).(*http.Transport)
 	assert.NotNil(t, wrapped.DialContext)
-	// wrapped.DialContext is overriding origTr.DialContext (which is nil here)
 	
 	// test DialContext with literal
 	_, err := wrapped.DialContext(context.Background(), "tcp", "127.0.0.1:80")
@@ -80,6 +99,16 @@ func TestWrapWithSSRFProtection(t *testing.T) {
 	
 	_, err = wrapped.DialContext(context.Background(), "tcp", "10.0.0.1:80")
 	assert.Error(t, err)
+
+	// test DialContext with public IP literal triggering origDial
+	_, _ = wrapped.DialContext(context.Background(), "tcp", "8.8.8.8:53")
+	assert.True(t, origDialCalled)
+
+	// test DialContext without origDial
+	wrappedNilDial := WrapWithSSRFProtection(&http.Transport{}, false).(*http.Transport)
+	_, err = wrappedNilDial.DialContext(context.Background(), "tcp", "127.0.0.1:80")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
 
 	// test non-standard RoundTripper
 	nonStd := WrapWithSSRFProtection(&dummyRT{}, false).(*http.Transport)

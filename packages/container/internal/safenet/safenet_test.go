@@ -68,11 +68,17 @@ func TestSafeDialContext_Allowed(t *testing.T) {
 	_ = importErrors
 	// we just want to ensure it's not a blocked error
 	_, ok := err.(*ErrBlockedAddress)
-	assert.False(t, ok, "Should not be a blocked error")
+	assert.False(t, ok)
 }
 
-func TestSafeDialContext_InvalidAddress(t *testing.T) {
+func TestSafeDialContext_InvalidAddressAndDNS(t *testing.T) {
+	orig := AllowLocalNetwork
+	AllowLocalNetwork = false
+	defer func() { AllowLocalNetwork = orig }()
+
 	dialer := SafeDialContext(5 * time.Second)
+
+	// 1. Invalid address format
 	_, err := dialer(context.Background(), "tcp", "invalid-address-without-port")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing port")

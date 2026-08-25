@@ -91,9 +91,15 @@ func parseDiscoverFlags(args []string) (*discoverOptions, error) {
 }
 
 func runDiscover(args []string) {
+	if err := runDiscoverCLIErr(args); err != nil {
+		log.Fatalf("%v", err)
+	}
+}
+
+func runDiscoverCLIErr(args []string) error {
 	opts, err := parseDiscoverFlags(args)
 	if err != nil {
-		log.Fatalf("Failed to parse discover flags: %v", err)
+		return fmt.Errorf("failed to parse discover flags: %w", err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -102,11 +108,11 @@ func runDiscover(args []string) {
 	// 1. Build K8s client (in-cluster config)
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatalf("Failed to get in-cluster K8s config (are you running inside a K8s pod?): %v", err)
+		return fmt.Errorf("failed to get in-cluster K8s config (are you running inside a K8s pod?): %w", err)
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Failed to create K8s client: %v", err)
+		return fmt.Errorf("failed to create K8s client: %w", err)
 	}
 
 	// 2. Discover MCP services
@@ -117,13 +123,13 @@ func runDiscover(args []string) {
 		LabelSelector:    opts.LabelSelector,
 	})
 	if err != nil {
-		log.Fatalf("Discovery failed: %v", err)
+		return fmt.Errorf("discovery failed: %w", err)
 	}
 	fmt.Printf("   Found %d MCP-annotated services\n", len(services))
 
 	if len(services) == 0 {
 		fmt.Println("✅ No MCP services found. Nothing to scan.")
-		return
+		return nil
 	}
 
 	// 3. Probe each service
@@ -143,7 +149,7 @@ func runDiscover(args []string) {
 
 	if len(validServers) == 0 {
 		fmt.Println("⚠️  No valid MCP servers found after probing.")
-		return
+		return nil
 	}
 
 	// 4. Generate configs
@@ -151,11 +157,11 @@ func runDiscover(args []string) {
 	reportDir := filepath.Join(opts.OutputDir, "reports")
 	if err := os.MkdirAll(configDir, 0o750); err != nil {
 		fmt.Printf("   ⚠️  Failed to create config directory %s: %v\n", configDir, err)
-		return
+		return nil
 	}
 	if err := os.MkdirAll(reportDir, 0o750); err != nil {
 		fmt.Printf("   ⚠️  Failed to create report directory %s: %v\n", reportDir, err)
-		return
+		return nil
 	}
 
 	fmt.Println("📝 Generating scan configs...")
@@ -177,7 +183,7 @@ func runDiscover(args []string) {
 
 	if opts.DryRun {
 		fmt.Println("\n🏁 Dry run complete. Generated configs are in:", configDir)
-		return
+		return nil
 	}
 
 	// 5. Run fuzzing for each generated config
@@ -225,6 +231,7 @@ func runDiscover(args []string) {
 	}
 
 	fmt.Printf("\n🏁 Discovery scan complete. Reports in: %s\n", reportDir)
+	return nil
 }
 
 func makeK8sSecretResolver(ctx context.Context, clientset kubernetes.Interface) discovery.SecretResolver {

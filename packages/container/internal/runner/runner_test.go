@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/swagger"
 )
 
@@ -990,3 +992,99 @@ func TestCheckpointWatermark(t *testing.T) {
 	close(r.statsChan)
 	<-r.statsDone
 }
+
+func TestInitRun_MCPMethodFuzzing(t *testing.T) {
+	enabled := true
+	cfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  "http://127.0.0.1:8788/mcp",
+		},
+		Settings: swagger.Settings{
+			EnableMCPMethodFuzzing: &enabled,
+		},
+	}
+	r := New(cfg, &http.Client{})
+	defer r.Close()
+	r.mcpClient = &fakeMCPClient{}
+
+	ctx, err := r.initRun(context.Background())
+	if err != nil {
+		t.Fatalf("initRun failed: %v", err)
+	}
+	defer r.finaliseRun()
+	_ = ctx
+
+	// Verify that probe endpoints are present
+	hasProtoProbe := false
+	hasTraversalProbe := false
+	for _, ep := range r.config.Endpoints {
+		if ep.Path == "mcp://tool/__proto__" {
+			hasProtoProbe = true
+		}
+		if ep.Path == "mcp://tool/../../../etc/passwd" {
+			hasTraversalProbe = true
+		}
+	}
+	if !hasProtoProbe {
+		t.Errorf("expected mcp://tool/__proto__ probe endpoint in config")
+	}
+	if !hasTraversalProbe {
+		t.Errorf("expected mcp://tool/../../../etc/passwd probe endpoint in config")
+	}
+}
+
+func TestRunner_RunPreScanLLM(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"choices": [{
+				"message": {
+					"content": "[\"ai_injected_sqli\", \"ai_injected_xss\"]"
+				}
+			}]
+		}`))
+	}))
+	defer ts.Close()
+
+	t.Setenv("GOOGLE_API_KEY", "test-key")
+
+	cfg := &swagger.Config{
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/v1/search",
+				Method: "GET",
+				QueryParams: map[string]*swagger.SchemaProperty{
+					"q": {Type: "string"},
+				},
+				PathParams: map[string]*swagger.SchemaProperty{
+					"id": {Type: "integer"},
+				},
+				HeaderParams: map[string]*swagger.SchemaProperty{
+					"X-Auth": {Type: "string"},
+				},
+				Schema: swagger.SchemaProperty{
+					Properties: map[string]*swagger.SchemaProperty{
+						"filter": {Type: "string"},
+					},
+				},
+			},
+		},
+		Settings: swagger.Settings{
+			UseLLMPrepass: true,
+			AIGatewayURL:  ts.URL,
+			CFAigToken:    "test-token",
+		},
+	}
+
+	r := New(cfg, &http.Client{})
+	defer r.Close()
+
+	r.runPreScanLLM(context.Background())
+
+	require.NotNil(t, r.config.Dictionaries)
+	require.Len(t, r.config.Dictionaries["custom_llm"], 2)
+	assert.Equal(t, "ai_injected_sqli", r.config.Dictionaries["custom_llm"][0])
+}
+

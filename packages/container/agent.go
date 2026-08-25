@@ -260,20 +260,28 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 	// Increase read limit to 50MB to support large HAR payloads from the browser extension
 	c.SetReadLimit(50 * 1024 * 1024)
 
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
 	// Add graceful shutdown handler to prevent abrupt WebSocket closures
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 	go func() {
-		<-sigCh
-		logInfo("Received termination signal, shutting down agent gracefully...")
-		activeRunnersMu.Lock()
-		for _, r := range activeRunners {
-			r.Stop()
+		select {
+		case <-sigCh:
+			logInfo("Received termination signal, shutting down agent gracefully...")
+			activeRunnersMu.Lock()
+			for _, r := range activeRunners {
+				r.Stop()
+			}
+			activeRunnersMu.Unlock()
+			time.Sleep(500 * time.Millisecond)
+			_ = c.Close(websocket.StatusNormalClosure, "agent shutting down")
+			os.Exit(0)
+		case <-connCtx.Done():
+			return
 		}
-		activeRunnersMu.Unlock()
-		time.Sleep(500 * time.Millisecond)
-		_ = c.Close(websocket.StatusNormalClosure, "agent shutting down")
-		os.Exit(0)
 	}()
 
 	defer c.Close(websocket.StatusInternalError, "internal error")
@@ -329,26 +337,34 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 	// Write loop
 	outChan := make(chan interface{}, 50000)
 	go func() {
-		for msg := range outChan {
-			b, err := json.Marshal(msg)
-			if err != nil {
-				logError("Failed to marshal WS message: %v", err)
-				continue
-			}
-			if len(b) > 1*1024*1024 {
-				payloadType := "unknown"
-				if eventOut, ok := msg.(WSEventOut); ok {
-					payloadType = fmt.Sprintf("%T", eventOut.Payload)
-					if eventPayload, ok := eventOut.Payload.(WSEventPayload); ok {
-						payloadType = fmt.Sprintf("WSEventPayload with Data: %T", eventPayload.Data)
-					}
+		for {
+			select {
+			case msg, ok := <-outChan:
+				if !ok {
+					return
 				}
-				logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
-				continue
-			}
-			if err := c.Write(ctx, websocket.MessageText, b); err != nil {
-				logError("Failed to write to WS: %v", err)
-				_ = c.Close(websocket.StatusInternalError, "write error")
+				b, err := json.Marshal(msg)
+				if err != nil {
+					logError("Failed to marshal WS message: %v", err)
+					continue
+				}
+				if len(b) > 1*1024*1024 {
+					payloadType := "unknown"
+					if eventOut, ok := msg.(WSEventOut); ok {
+						payloadType = fmt.Sprintf("%T", eventOut.Payload)
+						if eventPayload, ok := eventOut.Payload.(WSEventPayload); ok {
+							payloadType = fmt.Sprintf("WSEventPayload with Data: %T", eventPayload.Data)
+						}
+					}
+					logError("WS message is too large: %d bytes. Payload type: %s. Dropping message to prevent WebSocket close.", len(b), payloadType)
+					continue
+				}
+				if err := c.Write(connCtx, websocket.MessageText, b); err != nil {
+					logError("Failed to write to WS: %v", err)
+					_ = c.Close(websocket.StatusInternalError, "write error")
+					return
+				}
+			case <-connCtx.Done():
 				return
 			}
 		}
@@ -463,7 +479,12 @@ func runAgentConnection(ctx context.Context, urlWithParams string, opts *websock
 				runCfg.Settings.OOBServerURL = inferOOBServerURL(coordinatorURL)
 			}
 
-			client := safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
+			var client *http.Client
+			if runCfg.Security.AllowPrivateIPs || safenet.AllowLocalNetwork {
+				client = &http.Client{Timeout: time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond}
+			} else {
+				client = safenet.NewSafeHTTPClient(time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond)
+			}
 			r := runner.New(runCfg, client)
 
 			activeRunnersMu.Lock()

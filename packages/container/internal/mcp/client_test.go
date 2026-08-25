@@ -106,6 +106,69 @@ func TestHelperProcess(t *testing.T) {
 					Message: "Method not found",
 				}
 			}
+
+		case "resources/list":
+			resources := []Resource{
+				{
+					URI:         "file:///etc/config.json",
+					Name:        "config",
+					Description: "Server configuration",
+					MIMEType:    "application/json",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"resources": resources})
+			response.Result = resBytes
+
+		case "resources/read":
+			var readArgs struct {
+				URI string `json:"uri"`
+			}
+			_ = json.Unmarshal(req.Params, &readArgs)
+			result := ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:      readArgs.URI,
+						MIMEType: "text/plain",
+						Text:     "sample content",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "prompts/list":
+			prompts := []Prompt{
+				{
+					Name:        "review_code",
+					Description: "Reviews code",
+					Arguments: []PromptArgument{
+						{Name: "code", Description: "code snippet", Required: true},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"prompts": prompts})
+			response.Result = resBytes
+
+		case "prompts/get":
+			var getArgs struct {
+				Name      string         `json:"name"`
+				Arguments map[string]any `json:"arguments"`
+			}
+			_ = json.Unmarshal(req.Params, &getArgs)
+			result := GetPromptResult{
+				Description: "Code review prompt",
+				Messages: []PromptMessage{
+					{
+						Role: "user",
+						Content: PromptContent{
+							Type: "text",
+							Text: "Please review: " + fmt.Sprintf("%v", getArgs.Arguments["code"]),
+						},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
 		}
 
 		respBytes, _ := json.Marshal(response)
@@ -138,10 +201,34 @@ func TestStdioClient_Success(t *testing.T) {
 	tools, err := client.ListTools(ctx)
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
+
+	// Test ListResources
+	resources, err := client.ListResources(ctx)
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+	assert.Equal(t, "file:///etc/config.json", resources[0].URI)
+
+	// Test ReadResource
+	readRes, _, err := client.ReadResource(ctx, "file:///etc/config.json", nil)
+	require.NoError(t, err)
+	require.Len(t, readRes.Contents, 1)
+	assert.Equal(t, "sample content", readRes.Contents[0].Text)
+
+	// Test ListPrompts
+	prompts, err := client.ListPrompts(ctx)
+	require.NoError(t, err)
+	require.Len(t, prompts, 1)
+	assert.Equal(t, "review_code", prompts[0].Name)
+
+	// Test GetPrompt
+	promptRes, _, err := client.GetPrompt(ctx, "review_code", map[string]any{"code": "foo()"}, nil)
+	require.NoError(t, err)
+	require.Len(t, promptRes.Messages, 1)
+	assert.Contains(t, promptRes.Messages[0].Content.Text, "foo()")
 	assert.Equal(t, "get_weather", tools[0].Name)
 
 	// Test CallTool
-	res, stderr, err := client.CallTool(ctx, "get_weather", map[string]any{"city": "Paris"})
+	res, stderr, err := client.CallTool(ctx, "get_weather", map[string]any{"city": "Paris"}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
@@ -184,10 +271,23 @@ func TestStdioClient_CrashOnCall(t *testing.T) {
 	}()
 
 	// Call tool that triggers exit 42
-	res, _, err := client.CallTool(ctx, "crash", nil)
+	res, _, err := client.CallTool(ctx, "crash", nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	assert.Contains(t, err.Error(), "exit status 42")
+
+	// Test extraHeaders rejection for Stdio transport
+	_, _, err = client.CallTool(ctx, "get_weather", nil, map[string]string{"Auth": "token"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot switch identity")
+
+	_, _, err = client.ReadResource(ctx, "file:///test", map[string]string{"Auth": "token"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot switch identity")
+
+	_, _, err = client.GetPrompt(ctx, "test_prompt", nil, map[string]string{"Auth": "token"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot switch identity")
 }
 
 type mockSSEServer struct {
@@ -306,6 +406,51 @@ func (s *mockSSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Message: "Method not found",
 				}
 			}
+
+		case "resources/list":
+			resources := []Resource{
+				{
+					URI:  "file:///etc/sse.conf",
+					Name: "sse_conf",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"resources": resources})
+			response.Result = resBytes
+
+		case "resources/read":
+			result := ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:  "file:///etc/sse.conf",
+						Text: "sse-content",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "prompts/list":
+			prompts := []Prompt{
+				{
+					Name:        "sse_prompt",
+					Description: "SSE prompt",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"prompts": prompts})
+			response.Result = resBytes
+
+		case "prompts/get":
+			result := GetPromptResult{
+				Description: "SSE prompt description",
+				Messages: []PromptMessage{
+					{
+						Role:    "user",
+						Content: PromptContent{Type: "text", Text: "rendered sse prompt"},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
 		}
 
 		respBytes, _ := json.Marshal(response)
@@ -343,12 +488,36 @@ func TestSSEClient_Success(t *testing.T) {
 	assert.Equal(t, "sse_tool", tools[0].Name)
 
 	// Test CallTool
-	res, stderr, err := client.CallTool(ctx, "sse_tool", map[string]any{"arg": 123})
+	res, stderr, err := client.CallTool(ctx, "sse_tool", map[string]any{"arg": 123}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
 	assert.Equal(t, "text", res.Content[0].Type)
 	assert.Equal(t, "SSE Success", res.Content[0].Text)
+
+	// Test ListResources
+	resources, err := client.ListResources(ctx)
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+	assert.Equal(t, "file:///etc/sse.conf", resources[0].URI)
+
+	// Test ReadResource
+	readRes, _, err := client.ReadResource(ctx, "file:///etc/sse.conf", map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, readRes.Contents, 1)
+	assert.Equal(t, "sse-content", readRes.Contents[0].Text)
+
+	// Test ListPrompts
+	prompts, err := client.ListPrompts(ctx)
+	require.NoError(t, err)
+	require.Len(t, prompts, 1)
+	assert.Equal(t, "sse_prompt", prompts[0].Name)
+
+	// Test GetPrompt
+	promptRes, _, err := client.GetPrompt(ctx, "sse_prompt", map[string]any{"key": "val"}, map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, promptRes.Messages, 1)
+	assert.Equal(t, "rendered sse prompt", promptRes.Messages[0].Content.Text)
 }
 
 func TestSSEClient_FallbackWriteURL(t *testing.T) {
@@ -446,6 +615,51 @@ func TestHTTPClient_Success(t *testing.T) {
 			}
 			resBytes, _ := json.Marshal(result)
 			response.Result = resBytes
+
+		case "resources/list":
+			resources := []Resource{
+				{
+					URI:  "file:///etc/http.conf",
+					Name: "http_conf",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"resources": resources})
+			response.Result = resBytes
+
+		case "resources/read":
+			result := ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:  "file:///etc/http.conf",
+						Text: "http-content",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "prompts/list":
+			prompts := []Prompt{
+				{
+					Name:        "http_prompt",
+					Description: "HTTP prompt",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"prompts": prompts})
+			response.Result = resBytes
+
+		case "prompts/get":
+			result := GetPromptResult{
+				Description: "HTTP prompt description",
+				Messages: []PromptMessage{
+					{
+						Role:    "user",
+						Content: PromptContent{Type: "text", Text: "rendered http prompt"},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
 		}
 
 		respBytes, _ := json.Marshal(response)
@@ -469,12 +683,156 @@ func TestHTTPClient_Success(t *testing.T) {
 	require.Len(t, tools, 1)
 	assert.Equal(t, "http_tool", tools[0].Name)
 
-	res, stderr, err := client.CallTool(ctx, "http_tool", map[string]any{"x": "y"})
+	res, stderr, err := client.CallTool(ctx, "http_tool", map[string]any{"x": "y"}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
 	assert.Equal(t, "HTTP Success", res.Content[0].Text)
 
+	// Test ListResources
+	resources, err := client.ListResources(ctx)
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+	assert.Equal(t, "file:///etc/http.conf", resources[0].URI)
+
+	// Test ReadResource
+	readRes, _, err := client.ReadResource(ctx, "file:///etc/http.conf", map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, readRes.Contents, 1)
+	assert.Equal(t, "http-content", readRes.Contents[0].Text)
+
+	// Test ListPrompts
+	prompts, err := client.ListPrompts(ctx)
+	require.NoError(t, err)
+	require.Len(t, prompts, 1)
+	assert.Equal(t, "http_prompt", prompts[0].Name)
+
+	// Test GetPrompt
+	promptRes, _, err := client.GetPrompt(ctx, "http_prompt", map[string]any{"key": "val"}, map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, promptRes.Messages, 1)
+	assert.Equal(t, "rendered http prompt", promptRes.Messages[0].Content.Text)
+
 	err = client.Close()
 	require.NoError(t, err)
 }
+
+func TestHTTPClient_Errors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		var req Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		var resp Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else {
+			resp.Error = &RPCError{
+				Code:    -32600,
+				Message: "Simulated error: " + req.Method,
+			}
+		}
+
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	client := NewHTTPClient(ts.URL+"/mcp", true, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, client.Connect(ctx))
+	defer func() { _ = client.Close() }()
+
+	_, err := client.ListResources(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.ReadResource(ctx, "file:///test", nil)
+	assert.Error(t, err)
+
+	_, err = client.ListPrompts(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
+	assert.Error(t, err)
+}
+
+func TestSSEClient_Errors(t *testing.T) {
+	writeChan := make(chan string, 10)
+	defer close(writeChan)
+
+	// override handler to return errors for requests
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, "event: endpoint\ndata: /message\n\n")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			for {
+				select {
+				case msg, ok := <-writeChan:
+					if !ok {
+						return
+					}
+					_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				case <-r.Context().Done():
+					return
+				}
+			}
+		}
+
+		var req Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		var resp Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else if req.Method == "notifications/initialized" {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		} else {
+			resp.Error = &RPCError{
+				Code:    -32600,
+				Message: "Simulated error: " + req.Method,
+			}
+		}
+
+		b, _ := json.Marshal(resp)
+		writeChan <- string(b)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, client.Connect(ctx))
+	defer func() { _ = client.Close() }()
+
+	_, err := client.ListResources(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.ReadResource(ctx, "file:///test", nil)
+	assert.Error(t, err)
+
+	_, err = client.ListPrompts(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
+	assert.Error(t, err)
+}
+

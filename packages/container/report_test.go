@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 )
@@ -52,3 +53,89 @@ func TestPrintProgressClean(t *testing.T) {
 		t.Errorf("Expected output to contain:\n%q\nBut got:\n%q", expected, output)
 	}
 }
+
+func TestPrintProgress_ANSI(t *testing.T) {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	logger.SetLevelByName("info")
+
+	stats := swagger.RunStats{
+		TotalRequests:  50,
+		TotalPlanned:   100,
+		RequestsPerSec: 25.0,
+		Concurrency:    5,
+		StatusByProfile: map[swagger.FuzzingProfile]map[int]int64{
+			swagger.ProfileBoundary: {
+				200: 10,
+				301: 2,
+				400: 15,
+				500: 3,
+			},
+		},
+	}
+	stats.Progress.CurrentEndpoint = "POST /api/v1/cards"
+	stats.Progress.CurrentProfile = "BOUNDARY"
+	stats.Progress.CurrentIteration = 10
+	stats.Progress.TotalIterations = 20
+
+	printProgress(stats)
+	w.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if !strings.Contains(output, "SWAZZ ENGINE") {
+		t.Errorf("Expected SWAZZ ENGINE in output, got: %s", output)
+	}
+}
+
+func TestPrintSummary(t *testing.T) {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	logger.SetLevelByName("info")
+
+	stats := &swagger.RunStats{
+		TotalRequests:  100,
+		RequestsPerSec: 50.0,
+		StartTime:      1000,
+		StatusCounts: map[int]int64{
+			200: 80,
+			400: 15,
+			500: 5,
+		},
+	}
+
+	findings := []*classifier.Finding{
+		{Level: classifier.SeverityError, RuleID: "swazz/sql-injection"},
+		{Level: classifier.SeverityWarning, RuleID: "swazz/stacktrace"},
+		{Level: classifier.SeverityNote, RuleID: "swazz/info-leak"},
+	}
+
+	printSummary(findings, stats)
+	w.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if !strings.Contains(output, "swazz scan complete") {
+		t.Errorf("Expected 'swazz scan complete' in summary, got: %s", output)
+	}
+	if !strings.Contains(output, "errors:   1") {
+		t.Errorf("Expected 'errors:   1' in summary, got: %s", output)
+	}
+}
+

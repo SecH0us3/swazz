@@ -6,10 +6,16 @@
 package runner
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/generator"
+	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 )
 
@@ -154,4 +160,161 @@ func TestBuildMutatedPayload(t *testing.T) {
 	if mutated.body["age"] != 30 {
 		t.Errorf("buildMutatedPayload changed non-target property: expected 30, got %v", mutated.body["age"])
 	}
+
+	// 2. Query param mutation
+	queryField := targetField{
+		Location: "query",
+		Path:     []string{"search"},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedQuery := buildMutatedPayload(baseline, queryField, gen)
+	if mutatedQuery.queryParams["search"] == nil {
+		t.Error("expected queryParams.search to be populated")
+	}
+
+	// 3. Header param mutation
+	headerField := targetField{
+		Location: "header",
+		Path:     []string{"X-Custom"},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedHeader := buildMutatedPayload(baseline, headerField, gen)
+	if mutatedHeader.headers["X-Custom"] == "" {
+		t.Error("expected headers.X-Custom to be populated")
+	}
+
+	// 4. Path param mutation
+	pathField := targetField{
+		Location: "path",
+		Path:     []string{"userId"},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedPath := buildMutatedPayload(baseline, pathField, gen)
+	if mutatedPath.pathParams["userId"] == "" {
+		t.Error("expected pathParams.userId to be populated")
+	}
 }
+
+func TestHashPayload(t *testing.T) {
+	p1 := generatedPayload{
+		body: map[string]any{"a": 1},
+	}
+	p2 := generatedPayload{
+		body: map[string]any{"a": 1},
+	}
+	p3 := generatedPayload{
+		body: map[string]any{"a": 2},
+	}
+
+	h1 := hashPayload(p1)
+	h2 := hashPayload(p2)
+	h3 := hashPayload(p3)
+
+	if h1 != h2 {
+		t.Errorf("expected h1 == h2, got %d != %d", h1, h2)
+	}
+	if h1 == h3 {
+		t.Errorf("expected h1 != h3 for different payloads")
+	}
+}
+
+func TestCloneSlice_Nested(t *testing.T) {
+	orig := []any{
+		"simple",
+		map[string]any{"nestedKey": "val"},
+		[]any{1, 2, 3},
+	}
+	cloned := cloneSlice(orig)
+	assert.Len(t, cloned, 3)
+
+	// Mutate nested map
+	clonedMap := cloned[1].(map[string]any)
+	clonedMap["nestedKey"] = "mutated"
+	origMap := orig[1].(map[string]any)
+	assert.Equal(t, "val", origMap["nestedKey"])
+
+	// Mutate nested slice
+	clonedSubSlice := cloned[2].([]any)
+	clonedSubSlice[0] = 999
+	origSubSlice := orig[2].([]any)
+	assert.Equal(t, 1, origSubSlice[0])
+}
+
+func TestSetNestedValue_EdgeCases(t *testing.T) {
+	m := map[string]any{}
+	setNestedValue(m, nil, "val")
+	assert.Empty(t, m)
+
+	setNestedValue(m, []string{"a", "b", "c"}, 123)
+	assert.Equal(t, 123, m["a"].(map[string]any)["b"].(map[string]any)["c"])
+}
+
+func TestRunActiveParameterFuzzing_Execution(t *testing.T) {
+	safenet.AllowLocalNetwork = true
+	defer func() { safenet.AllowLocalNetwork = false }()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer ts.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: ts.URL,
+		Endpoints: []swagger.EndpointConfig{
+			{
+				Path:   "/api/v1/user/{id}",
+				Method: "POST",
+				PathParams: map[string]*swagger.SchemaProperty{
+					"id": {Type: "string"},
+				},
+				QueryParams: map[string]*swagger.SchemaProperty{
+					"role": {Type: "string"},
+				},
+				Schema: swagger.SchemaProperty{
+					Type: "object",
+					Properties: map[string]*swagger.SchemaProperty{
+						"name": {Type: "string"},
+					},
+				},
+			},
+		},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 2,
+			Concurrency:          2,
+			TimeoutMs:            1000,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	r := New(cfg, &http.Client{})
+	defer r.Close()
+
+	ctx, err := r.initRun(context.Background())
+	require.NoError(t, err)
+
+	gen := generator.New(nil, swagger.ProfileRandom, cfg.Settings)
+	safeGen := generator.New(nil, swagger.ProfileRandom, cfg.Settings)
+	fields := collectTargetFields(&cfg.Endpoints[0])
+
+	r.runActiveParameterFuzzing(
+		ctx,
+		0,
+		swagger.ProfileRandom,
+		0,
+		cfg.Endpoints[0],
+		gen,
+		safeGen,
+		fields,
+		0,
+	)
+
+	r.finaliseRun()
+	stats := r.GetStats()
+	assert.Greater(t, stats.TotalRequests, int64(0))
+}
+
+
