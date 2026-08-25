@@ -6,6 +6,7 @@
 package main
 
 import (
+	"swazz-engine/internal/config"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -51,7 +52,7 @@ func TestSpiderCLI_FlagsAndConfigParsing(t *testing.T) {
 
 	configData = swagger.StripJSONC(configData)
 
-	var cliCfg CliConfig
+	var cliCfg config.CliConfig
 	err = json.Unmarshal(configData, &cliCfg)
 	require.NoError(t, err)
 

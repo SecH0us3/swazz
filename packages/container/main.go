@@ -1,6 +1,7 @@
 package main
 
 import (
+	"swazz-engine/internal/agent"
 	"crypto/ed25519"
 	_ "embed"
 	"encoding/hex"
@@ -259,7 +260,7 @@ func printHelp() {
 
 func runAgent(args []string) {
 	// Implementation will go to agent package
-	startAgent(args)
+	agent.StartAgent(args)
 }
 
 func runGenerateKeys() {

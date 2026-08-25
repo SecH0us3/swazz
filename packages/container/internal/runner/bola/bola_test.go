@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package runner
+package bola
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/swagger"
 )
 
@@ -28,8 +27,8 @@ func TestBOLA_HeuristicIDHarvesting(t *testing.T) {
 			},
 		},
 	}
-	r := New(cfg, nil)
-	defer r.Close()
+	r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 	// Test GET response with ids
 	respBody := map[string]any{
@@ -45,10 +44,10 @@ func TestBOLA_HeuristicIDHarvesting(t *testing.T) {
 		},
 	}
 
-	r.harvestFromResponse("/api/goods", "GET", 200, respBody)
+	d.HarvestFromResponse("/api/goods", "GET", 200, respBody)
 
 	// Verify that IDs are harvested under prefix "/api/goods"
-	val, ok := r.harvestedIDs.Load("/api/goods")
+	val, ok := d.harvestedIDs.Load("/api/goods")
 	if !ok {
 		t.Fatalf("Expected harvested IDs for /api/goods to exist")
 	}
@@ -86,8 +85,8 @@ func TestBOLA_ExplicitMapping(t *testing.T) {
 			},
 		},
 	}
-	r := New(cfg, nil)
-	defer r.Close()
+	r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 	respBody := map[string]any{
 		"goods": []any{
@@ -98,7 +97,7 @@ func TestBOLA_ExplicitMapping(t *testing.T) {
 		},
 	}
 
-	r.harvestFromResponse("/api/goods", "GET", 200, respBody)
+	d.HarvestFromResponse("/api/goods", "GET", 200, respBody)
 
 	// Verify target_id variable is extracted
 	val := r.config.Variables["target_id"]
@@ -170,8 +169,8 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 		},
 	}
 
-	r := New(cfg, nil)
-	defer r.Close()
+	r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 	// Simulate successful result for User A (Authorization is missing in this test structure, but we pretend it was successful)
 	results := []*swagger.FuzzResult{
@@ -187,10 +186,10 @@ func TestBOLA_BOLAIDORCheck(t *testing.T) {
 		},
 	}
 
-	bolaResults := r.bolaPhase(context.Background(), results)
+	bolaResults := d.BolaPhase(context.Background(), results)
 
 	if len(bolaResults) != 1 {
-		t.Fatalf("Expected 1 BOLA vulnerability finding, got %d", len(bolaResults))
+		t.Fatalf("Expected 1 BOLA vulnerability finding, got %d, bolaResults: %+v", len(bolaResults), bolaResults)
 	}
 
 	res := bolaResults[0]
@@ -254,8 +253,8 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 		},
 	}
 
-	r := New(cfg, nil)
-	defer r.Close()
+	r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 	results := []*swagger.FuzzResult{
 		{
@@ -270,7 +269,7 @@ func TestBOLA_AnonymousAccessCheck(t *testing.T) {
 		},
 	}
 
-	bolaResults := r.bolaPhase(context.Background(), results)
+	bolaResults := d.BolaPhase(context.Background(), results)
 
 	if len(bolaResults) != 1 {
 		t.Fatalf("Expected 1 anonymous vulnerability finding, got %d", len(bolaResults))
@@ -319,8 +318,8 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 			},
 		}
 
-		r := New(cfg, nil)
-		defer r.Close()
+		r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 		// Candidate with baseline body
 		results := []*swagger.FuzzResult{
@@ -340,7 +339,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 			},
 		}
 
-		bolaResults := r.bolaPhase(context.Background(), results)
+		bolaResults := d.BolaPhase(context.Background(), results)
 
 		// Anonymous check runs, replayed GET returns the unauthorized JSON.
 		// Since it has low similarity to candidate, it should NOT be flagged.
@@ -377,8 +376,8 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 			},
 		}
 
-		r := New(cfg, nil)
-		defer r.Close()
+		r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 		results := []*swagger.FuzzResult{
 			{
@@ -397,7 +396,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 			},
 		}
 
-		bolaResults := r.bolaPhase(context.Background(), results)
+		bolaResults := d.BolaPhase(context.Background(), results)
 
 		// Anonymous check runs, replayed GET returns high-similarity JSON.
 		// It should be flagged.
@@ -462,14 +461,14 @@ func Test_arePrefixesRelated(t *testing.T) {
 }
 
 func TestIdentifyCandidates(t *testing.T) {
-	r := &Runner{}
+	d := &Detector{}
 	results := []*swagger.FuzzResult{
 		{Status: 200, Method: "GET", Endpoint: "/api/test", ResolvedPath: "/api/test"},
 		{Status: 404, Method: "POST", Endpoint: "/api/test", ResolvedPath: "/api/test"},
 		{Status: 204, Method: "DELETE", Endpoint: "/api/test/{id}", ResolvedPath: "/api/test/1"},
 	}
 
-	candidates, hasSuccess := r.identifyCandidates(results)
+	candidates, hasSuccess := d.identifyCandidates(results)
 
 	if len(candidates) != 2 {
 		t.Fatalf("Expected 2 candidates, got %d", len(candidates))
@@ -487,9 +486,9 @@ func TestIdentifyCandidates(t *testing.T) {
 }
 
 func TestBuildPathsToTest(t *testing.T) {
-	r := &Runner{}
+	d := &Detector{}
 	// Mock harvested IDs
-	r.harvestedIDs.Store("/api/test", []string{"harvest1", "harvest2"})
+	d.harvestedIDs.Store("/api/test", []string{"harvest1", "harvest2"})
 
 	cand := &swagger.FuzzResult{
 		Endpoint:     "/api/test/{id}",
@@ -497,7 +496,7 @@ func TestBuildPathsToTest(t *testing.T) {
 		Method:       "GET",
 	}
 
-	targets, paramName := r.buildPathsToTest(cand)
+	targets, paramName := d.buildPathsToTest(cand)
 
 	if paramName != "id" {
 		t.Errorf("Expected paramName 'id', got '%s'", paramName)
@@ -530,13 +529,13 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 	t.Run("endpoint with path param is not skipped", func(t *testing.T) {
 		// A candidate with a path parameter like {id} should proceed to BOLA replay.
 		// buildPathsToTest returns a non-empty paramName for /api/goods/{id}.
-		r := &Runner{}
+		d := &Detector{}
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/goods/{id}",
 			ResolvedPath: "/api/goods/123",
 			Method:       "GET",
 		}
-		_, paramName := r.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand)
 		if paramName == "" {
 			t.Errorf("Expected non-empty paramName for endpoint with path param, got empty")
 		}
@@ -545,14 +544,14 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 	t.Run("health endpoint with no params is skipped", func(t *testing.T) {
 		// A candidate with no path params and empty payload should be skipped.
 		// buildPathsToTest returns empty paramName for /api/health.
-		r := &Runner{}
+		d := &Detector{}
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/health",
 			ResolvedPath: "/api/health",
 			Method:       "GET",
 			Payload:      nil,
 		}
-		_, paramName := r.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand)
 		if paramName != "" {
 			t.Errorf("Expected empty paramName for health endpoint, got %q", paramName)
 		}
@@ -561,7 +560,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 	t.Run("no path params but body has id field is not skipped", func(t *testing.T) {
 		// A candidate with no path params but an ID field in the body payload
 		// should still proceed — the body field is the substituable identifier.
-		r := &Runner{}
+		d := &Detector{}
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/orders",
 			ResolvedPath: "/api/orders",
@@ -571,7 +570,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 				"total": 99.99,
 			},
 		}
-		_, paramName := r.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand)
 		if paramName == "" {
 			t.Errorf("Expected non-empty paramName for payload with id field, got empty")
 		}
@@ -580,7 +579,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 	t.Run("no path params and payload has no id field is skipped", func(t *testing.T) {
 		// A candidate with no path params and a payload without any ID-like field
 		// should be skipped — there is nothing to substitute between identities.
-		r := &Runner{}
+		d := &Detector{}
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/ping",
 			ResolvedPath: "/api/ping",
@@ -589,7 +588,7 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 				"name": "foo",
 			},
 		}
-		_, paramName := r.buildPathsToTest(cand)
+		_, paramName := d.buildPathsToTest(cand)
 		if paramName != "" {
 			t.Errorf("Expected empty paramName for payload with no id field, got %q", paramName)
 		}
@@ -600,14 +599,14 @@ func TestBOLA_SkipNoResourceIdentifier(t *testing.T) {
 // auth credentials, but is NOT skipped if auth credentials are present (even without resource ID parameters).
 func TestBOLA_SkipNoAuth(t *testing.T) {
 	t.Run("skipped when no auth is present", func(t *testing.T) {
-		r := &Runner{}
+		d := &Detector{}
 		cfg := &swagger.Config{
 			Settings: swagger.Settings{
 				BOLATesting:         true,
 				AnalyzeResponseBody: true,
 			},
 		}
-		r.config = cfg
+		d = NewDetector(NewMock(cfg, nil))
 
 		cand := &swagger.FuzzResult{
 			Endpoint:       "/api/health",
@@ -618,7 +617,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		r.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
 
 		if len(bolaResults) != 0 {
 			t.Errorf("Expected 0 results (skipped BOLA), got %d", len(bolaResults))
@@ -650,8 +649,8 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 			},
 		}
 
-		r := New(cfg, nil)
-		defer r.Close()
+		r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 		cand := &swagger.FuzzResult{
 			Endpoint:       "/api/admin/dashboard",
@@ -664,7 +663,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		r.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
 
 		// Should not be skipped, but since there's no other identities and no anonymous bypass (both mock server and anonymous return similarity 1.0 which is >= 0.75 threshold),
 		// it should produce an anonymous finding!
@@ -674,14 +673,14 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 	})
 
 	t.Run("skipped when Cookie header has unrelated cookies with auth keywords as values or substrings", func(t *testing.T) {
-		r := &Runner{}
+		d := &Detector{}
 		cfg := &swagger.Config{
 			Settings: swagger.Settings{
 				BOLATesting:         true,
 				AnalyzeResponseBody: true,
 			},
 		}
-		r.config = cfg
+		d = NewDetector(NewMock(cfg, nil))
 
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/health",
@@ -693,7 +692,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		r.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, swagger.EndpointConfig{}, nil, nil, &bolaMu, &bolaResults)
 
 		if len(bolaResults) != 0 {
 			t.Errorf("Expected 0 results (skipped BOLA since no auth cookies matched exactly), got %d", len(bolaResults))
@@ -724,8 +723,8 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 			},
 		}
 
-		r := New(cfg, nil)
-		defer r.Close()
+		r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/admin/dashboard",
@@ -739,7 +738,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 
 		var bolaResults []*swagger.FuzzResult
 		var bolaMu sync.Mutex
-		r.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
+		d.replayCandidate(context.Background(), cand, cfg.Endpoints[0], nil, nil, &bolaMu, &bolaResults)
 
 		if len(bolaResults) != 1 {
 			t.Errorf("Expected 1 result (not skipped, anonymous bypass flagged), got %d", len(bolaResults))
@@ -797,18 +796,18 @@ func TestBOLALowLevelHelpers(t *testing.T) {
 }
 
 func TestCandidateHelpers(t *testing.T) {
-	// 1. candidateParamName
+	// 1. CandidateParamName
 	epWithPath := swagger.EndpointConfig{Path: "/api/users/{userId}"}
-	assert.Equal(t, "userId", candidateParamName(epWithPath, true, nil))
+	assert.Equal(t, "userId", CandidateParamName(epWithPath, true, nil))
 
 	epWithBody := swagger.EndpointConfig{Path: "/api/users"}
-	assert.Equal(t, "user_id", candidateParamName(epWithBody, false, map[string]any{"user_id": "123"}))
-	assert.Equal(t, "", candidateParamName(epWithBody, false, map[string]any{"other_field": "val"}))
+	assert.Equal(t, "user_id", CandidateParamName(epWithBody, false, map[string]any{"user_id": "123"}))
+	assert.Equal(t, "", CandidateParamName(epWithBody, false, map[string]any{"other_field": "val"}))
 
-	// 2. buildCandidatePath
-	assert.Equal(t, "/api/users", buildCandidatePath("/api/users", false, nil, 0))
-	assert.Equal(t, "/api/users/99", buildCandidatePath("/api/users/{id}", true, []string{"99"}, 0))
-	assert.Equal(t, "/api/users/1", buildCandidatePath("/api/users/{id}", true, nil, 0))
+	// 2. BuildCandidatePath
+	assert.Equal(t, "/api/users", BuildCandidatePath("/api/users", false, nil, 0))
+	assert.Equal(t, "/api/users/99", BuildCandidatePath("/api/users/{id}", true, []string{"99"}, 0))
+	assert.Equal(t, "/api/users/00000000-0000-4000-8000-000000000000", BuildCandidatePath("/api/users/{id}", true, nil, 0))
 
 	// 3. buildCandidatePayload
 	epGET := swagger.EndpointConfig{Method: "GET"}
@@ -854,20 +853,18 @@ func TestRunner_GlobalHeadersAndMissingCandidates(t *testing.T) {
 		},
 	}
 
-	r := New(cfg, &http.Client{})
-	defer r.Close()
+	r := NewMock(cfg, nil)
+	d := NewDetector(r)
 
 	// 1. globalHeadersWithGenerated
-	merged := r.globalHeadersWithGenerated(map[string]string{"X-Extra": "2"})
+	merged := d.globalHeadersWithGenerated(map[string]string{"X-Extra": "2"})
 	assert.Equal(t, "1", merged["X-Global"])
 	assert.Equal(t, "2", merged["X-Extra"])
 
 	// 2. generateMissingCandidates
-	ctx, err := r.initRun(context.Background())
-	require.NoError(t, err)
+	ctx := context.Background()
 
-	candidates := r.generateMissingCandidates(ctx, map[string]bool{})
-	r.finaliseRun()
+	candidates := d.generateMissingCandidates(ctx, map[string]bool{})
 	assert.NotEmpty(t, candidates)
 }
 
