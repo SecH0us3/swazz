@@ -77,6 +77,14 @@ func TestMCPStatusAnalyzer(t *testing.T) {
 	}
 	findingsREST := analyzer.Analyze(inputREST)
 	assert.Empty(t, findingsREST)
+
+	// Test 7: Empty response body returns nil
+	inputEmpty := &AnalysisInput{
+		Method:       "CALL",
+		Endpoint:     "mcp://tool/empty_tool",
+		ResponseBody: []byte(""),
+	}
+	assert.Empty(t, analyzer.Analyze(inputEmpty))
 }
 
 func TestRegistry_MCPAnalyzer(t *testing.T) {

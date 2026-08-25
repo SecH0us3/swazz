@@ -53,6 +53,11 @@ func TestTool_ConfirmationFlags(t *testing.T) {
 			raw:         `{"name":"t","_meta":{"requires_confirmation":true},"annotations":{"requires_confirmation":false}}`,
 			wantConfirm: true, wantSource: "_meta",
 		},
+		{
+			name:       "invalid _meta JSON skips to annotations or default",
+			raw:        `{"name":"t","_meta":"invalid-non-object"}`,
+			wantSource: "",
+		},
 	}
 
 	for _, tt := range tests {

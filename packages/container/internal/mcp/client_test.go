@@ -275,6 +275,19 @@ func TestStdioClient_CrashOnCall(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	assert.Contains(t, err.Error(), "exit status 42")
+
+	// Test extraHeaders rejection for Stdio transport
+	_, _, err = client.CallTool(ctx, "get_weather", nil, map[string]string{"Auth": "token"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot switch identity")
+
+	_, _, err = client.ReadResource(ctx, "file:///test", map[string]string{"Auth": "token"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot switch identity")
+
+	_, _, err = client.GetPrompt(ctx, "test_prompt", nil, map[string]string{"Auth": "token"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot switch identity")
 }
 
 type mockSSEServer struct {
@@ -703,3 +716,123 @@ func TestHTTPClient_Success(t *testing.T) {
 	err = client.Close()
 	require.NoError(t, err)
 }
+
+func TestHTTPClient_Errors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		var req Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		var resp Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else {
+			resp.Error = &RPCError{
+				Code:    -32600,
+				Message: "Simulated error: " + req.Method,
+			}
+		}
+
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	client := NewHTTPClient(ts.URL+"/mcp", true, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, client.Connect(ctx))
+	defer func() { _ = client.Close() }()
+
+	_, err := client.ListResources(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.ReadResource(ctx, "file:///test", nil)
+	assert.Error(t, err)
+
+	_, err = client.ListPrompts(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
+	assert.Error(t, err)
+}
+
+func TestSSEClient_Errors(t *testing.T) {
+	writeChan := make(chan string, 10)
+	defer close(writeChan)
+
+	// override handler to return errors for requests
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, "event: endpoint\ndata: /message\n\n")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			for {
+				select {
+				case msg, ok := <-writeChan:
+					if !ok {
+						return
+					}
+					_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				case <-r.Context().Done():
+					return
+				}
+			}
+		}
+
+		var req Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		var resp Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else if req.Method == "notifications/initialized" {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		} else {
+			resp.Error = &RPCError{
+				Code:    -32600,
+				Message: "Simulated error: " + req.Method,
+			}
+		}
+
+		b, _ := json.Marshal(resp)
+		writeChan <- string(b)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer ts.Close()
+
+	client := NewSSEClient(ts.URL, true, nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, client.Connect(ctx))
+	defer func() { _ = client.Close() }()
+
+	_, err := client.ListResources(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.ReadResource(ctx, "file:///test", nil)
+	assert.Error(t, err)
+
+	_, err = client.ListPrompts(ctx)
+	assert.Error(t, err)
+
+	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
+	assert.Error(t, err)
+}
+

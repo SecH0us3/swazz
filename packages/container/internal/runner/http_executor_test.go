@@ -7,6 +7,7 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -156,9 +157,12 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 // fakeMCPClient records the extraHeaders it was called with, to prove the BOLA
 // phase's second-identity headers actually reach the wire.
 type fakeMCPClient struct {
-	lastTool     string
-	lastHeaders  map[string]string
-	resourceText string // overrides the text returned by ReadResource when non-empty
+	lastTool       string
+	lastHeaders    map[string]string
+	resourceText   string // overrides the text returned by ReadResource when non-empty
+	callToolResult *mcp.CallToolResult
+	callToolStderr string
+	callToolErr    error
 }
 
 func (f *fakeMCPClient) Connect(context.Context) error       { return nil }
@@ -167,6 +171,9 @@ func (f *fakeMCPClient) Close() error                        { return nil }
 func (f *fakeMCPClient) CallTool(_ context.Context, name string, _ map[string]any, extraHeaders map[string]string) (*mcp.CallToolResult, string, error) {
 	f.lastTool = name
 	f.lastHeaders = extraHeaders
+	if f.callToolResult != nil || f.callToolErr != nil || f.callToolStderr != "" {
+		return f.callToolResult, f.callToolStderr, f.callToolErr
+	}
 	return &mcp.CallToolResult{Content: []mcp.Content{{Type: "text", Text: "ok"}}}, "", nil
 }
 func (f *fakeMCPClient) ListResources(context.Context) ([]mcp.Resource, error) { return nil, nil }
@@ -299,3 +306,83 @@ func TestExecuteMCPRequest_ResourceLeakAnalyzerFires(t *testing.T) {
 	}
 	assert.True(t, found, "swazz/mcp-resource-leak must fire for READ responses with /etc/passwd content")
 }
+
+func TestExecuteMCPRequest_ClientNil(t *testing.T) {
+	r := &Runner{
+		client: &http.Client{},
+		config: &swagger.Config{},
+	}
+	res := r.executeMCPRequest(context.Background(), "mcp://tool/test", nil, swagger.ProfileRandom, nil, nil)
+	assert.Equal(t, 500, res.Status)
+	assert.Contains(t, res.Error, "MCP client is not initialized")
+}
+
+func TestExecuteMCPRequest_StructPayload(t *testing.T) {
+	fake := &fakeMCPClient{}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    &swagger.Config{},
+		mcpClient: fake,
+	}
+	type customPayload struct {
+		Query string `json:"query"`
+	}
+	res := r.executeMCPRequest(context.Background(), "mcp://tool/search", customPayload{Query: "test"}, swagger.ProfileRandom, nil, nil)
+	assert.Equal(t, 200, res.Status)
+}
+
+func TestExecuteMCPRequest_ToolErrorAndCrash(t *testing.T) {
+	// 1. Tool execution error with crash message
+	fakeCrash := &fakeMCPClient{
+		callToolErr:    fmt.Errorf("exit status 1: process terminated unexpectedly"),
+		callToolStderr: "fatal panic in MCP server",
+	}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    &swagger.Config{},
+		mcpClient: fakeCrash,
+	}
+	res := r.executeMCPRequest(context.Background(), "mcp://tool/crash_tool", nil, swagger.ProfileRandom, nil, nil)
+	assert.Equal(t, 500, res.Status)
+	assert.Contains(t, res.ResponseBody, "fatal panic")
+	var foundCrash bool
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/mcp-server-crash" {
+			foundCrash = true
+			break
+		}
+	}
+	assert.True(t, foundCrash, "swazz/mcp-server-crash finding must be generated on process exit")
+
+	// 3. Error without stderr
+	fakeErrNoStderr := &fakeMCPClient{
+		callToolErr: fmt.Errorf("simple error"),
+	}
+	rNoStderr := &Runner{
+		client:    &http.Client{},
+		config:    &swagger.Config{},
+		mcpClient: fakeErrNoStderr,
+	}
+	resNoStderr := rNoStderr.executeMCPRequest(context.Background(), "mcp://tool/err_no_stderr", nil, swagger.ProfileRandom, nil, nil)
+	assert.Equal(t, 500, resNoStderr.Status)
+	assert.Contains(t, resNoStderr.ResponseBody, "Error: simple error")
+
+	// 4. Rate limiter rejection
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rl := mcp.NewRateLimiter(1, 1)
+	// drain limiter burst
+	for i := 0; i < 15; i++ {
+		_ = rl.Allow(context.Background())
+	}
+	rRL := &Runner{
+		client:         &http.Client{},
+		config:         &swagger.Config{},
+		mcpClient:      &fakeMCPClient{},
+		mcpRateLimiter: rl,
+	}
+	resRL := rRL.executeMCPRequest(cancelledCtx, "mcp://tool/rate_limited", nil, swagger.ProfileRandom, nil, nil)
+	assert.Equal(t, 429, resRL.Status)
+	assert.Contains(t, resRL.Error, "Rate limit exceeded")
+}
+

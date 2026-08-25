@@ -114,7 +114,7 @@ func TestListMCPTools(t *testing.T) {
 	err := listMCPTools(&swagger.Config{})
 	assert.Error(t, err)
 
-	// 2. Mock HTTP MCP server
+	// 2. Mock HTTP MCP server with timeout and empty allowlist warning
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		var req mcp.Request
@@ -154,6 +154,9 @@ func TestListMCPTools(t *testing.T) {
 		Endpoints: []swagger.EndpointConfig{
 			{Path: "mcp://tool/transfer_funds", Method: "CALL"},
 		},
+		Settings: swagger.Settings{
+			TimeoutMs: 5000,
+		},
 		Security: swagger.SecurityConfig{
 			AllowPrivateIPs: true,
 		},
@@ -162,7 +165,20 @@ func TestListMCPTools(t *testing.T) {
 	err = listMCPTools(cfg)
 	assert.NoError(t, err)
 
-	// 3. Empty tool list
+	// 3. Test when no tools are in scope (len(allowed) == 0)
+	noScopeCfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  ts.URL + "/mcp",
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+	err = listMCPTools(noScopeCfg)
+	assert.NoError(t, err)
+
+	// 4. Empty tool list
 	emptyMux := http.NewServeMux()
 	emptyMux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		var req mcp.Request
@@ -191,4 +207,47 @@ func TestListMCPTools(t *testing.T) {
 	}
 	err = listMCPTools(emptyCfg)
 	assert.NoError(t, err)
+
+	// 5. Connect failure
+	failConnCfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  "http://127.0.0.1:1/mcp",
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+	err = listMCPTools(failConnCfg)
+	assert.Error(t, err)
+
+	// 6. ListTools failure
+	errMux := http.NewServeMux()
+	errMux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		var req mcp.Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		var resp mcp.Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else if req.Method == "tools/list" {
+			resp.Error = &mcp.RPCError{Code: -32603, Message: "internal error"}
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+	errTs := httptest.NewServer(errMux)
+	defer errTs.Close()
+
+	errListCfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  errTs.URL + "/mcp",
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+	err = listMCPTools(errListCfg)
+	assert.Error(t, err)
 }

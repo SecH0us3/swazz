@@ -237,6 +237,17 @@ func TestSchemaProperty_UnmarshalJSON_Polymorphic(t *testing.T) {
 			assert.Equal(t, tt.wantType, got.Type)
 		})
 	}
+
+	// Invalid JSON
+	var sp SchemaProperty
+	assert.Error(t, json.Unmarshal([]byte(`{invalid`), &sp))
+
+	// Invalid type field (number instead of string/array)
+	assert.Error(t, json.Unmarshal([]byte(`{"type": 123}`), &sp))
+
+	// Invalid IgnoreRule JSON
+	var ir IgnoreRule
+	assert.Error(t, json.Unmarshal([]byte(`{invalid`), &ir))
 }
 
 func TestSettings_GettersAndDefaults(t *testing.T) {
