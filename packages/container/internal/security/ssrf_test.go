@@ -1,17 +1,21 @@
 // Copyright (c) 2026 Swazz Authors
 // This file is part of Swazz
+// Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 
 package security
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsPrivateIP(t *testing.T) {
@@ -58,6 +62,11 @@ func TestNewSSRFProtectedTransport(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSRF policy")
 
+	// Test blocked IP literal without port
+	_, err = tr.DialContext(context.Background(), "tcp", "127.0.0.1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
+
 	// Test invalid host (trigger error)
 	_, err = tr.DialContext(context.Background(), "tcp", "invalid-domain-that-does-not-exist.local:80")
 	assert.Error(t, err)
@@ -69,6 +78,20 @@ func TestNewSSRFProtectedTransport(t *testing.T) {
 			t.Errorf("Unexpected error: %v", err)
 		}
 	}
+
+	// Test with a local test server listening on loopback (should be blocked)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), "GET", ts.URL, nil)
+	require.NoError(t, err)
+
+	client := &http.Client{Transport: tr}
+	_, err = client.Do(req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "blocked by SSRF policy")
 }
 
 func TestWrapWithSSRFProtection(t *testing.T) {
@@ -86,29 +109,45 @@ func TestWrapWithSSRFProtection(t *testing.T) {
 	origTr := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			origDialCalled = true
-			return nil, nil
+			return nil, fmt.Errorf("mock dial called")
 		},
 	}
 	wrapped := WrapWithSSRFProtection(origTr, false).(*http.Transport)
 	assert.NotNil(t, wrapped.DialContext)
-	
-	// test DialContext with literal
+
+	// test DialContext with literal private
 	_, err := wrapped.DialContext(context.Background(), "tcp", "127.0.0.1:80")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSRF policy")
-	
+
 	_, err = wrapped.DialContext(context.Background(), "tcp", "10.0.0.1:80")
 	assert.Error(t, err)
 
 	// test DialContext with public IP literal triggering origDial
-	_, _ = wrapped.DialContext(context.Background(), "tcp", "8.8.8.8:53")
+	_, err = wrapped.DialContext(context.Background(), "tcp", "8.8.8.8:53")
+	assert.Error(t, err)
 	assert.True(t, origDialCalled)
+
+	// test DialContext with literal without port
+	_, err = wrapped.DialContext(context.Background(), "tcp", "10.0.0.1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSRF policy")
 
 	// test DialContext without origDial
 	wrappedNilDial := WrapWithSSRFProtection(&http.Transport{}, false).(*http.Transport)
 	_, err = wrappedNilDial.DialContext(context.Background(), "tcp", "127.0.0.1:80")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSRF policy")
+
+	// test DialContext with domain resolving to private IP
+	_, err = wrappedNilDial.DialContext(context.Background(), "tcp", "localhost:80")
+	if err != nil {
+		assert.True(t, strings.Contains(err.Error(), "SSRF policy") || strings.Contains(err.Error(), "no such host"))
+	}
+
+	// test DialContext with unresolvable domain
+	_, err = wrappedNilDial.DialContext(context.Background(), "tcp", "domain.that.does.not.exist.invalid:80")
+	assert.Error(t, err)
 
 	// test non-standard RoundTripper
 	nonStd := WrapWithSSRFProtection(&dummyRT{}, false).(*http.Transport)
@@ -124,4 +163,10 @@ func TestNewSSRFProtectedClient(t *testing.T) {
 	assert.NotNil(t, c)
 	assert.Equal(t, 5*time.Second, c.Timeout)
 	assert.NotNil(t, c.Transport)
+
+	cAllowed := NewSSRFProtectedClient(10*time.Second, true)
+	assert.NotNil(t, cAllowed)
+	assert.Equal(t, 10*time.Second, cAllowed.Timeout)
+	assert.Equal(t, http.DefaultTransport, cAllowed.Transport)
 }
+

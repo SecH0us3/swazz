@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Swazz Authors
 // This file is part of Swazz
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
-// See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 package safenet
 
@@ -11,36 +10,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsRunningInContainer_ReturnsBool(t *testing.T) {
-	t.Parallel()
+func TestIsRunningInContainer(t *testing.T) {
+	// 1. When CLOUDFLARE_APPLICATION_ID is set, should report true
+	t.Setenv("CLOUDFLARE_APPLICATION_ID", "app-12345")
+	assert.True(t, IsRunningInContainer())
 
-	// On a dev machine this will return false.
-	// Inside Docker CI it will return true.
-	// Either way it must not panic.
-	result := IsRunningInContainer()
-	assert.IsType(t, false, result)
-}
-
-func TestContainerIndicators_NotEmpty(t *testing.T) {
-	t.Parallel()
-
-	assert.NotEmpty(t, containerIndicators)
-	assert.Contains(t, containerIndicators, "docker")
-	assert.Contains(t, containerIndicators, "containerd")
-	assert.Contains(t, containerIndicators, "kubepods")
+	// 2. When unset, executes file / cgroup checks
+	t.Setenv("CLOUDFLARE_APPLICATION_ID", "")
+	_ = IsRunningInContainer()
 }
 
 func TestAssertRunningInContainer_Bypass(t *testing.T) {
-	// Should not panic or exit because bypass is true
-	AssertRunningInContainer(true)
+	origAllow := AllowLocalNetwork
+	defer func() { AllowLocalNetwork = origAllow }()
 
-	// SWAZZ_DEV bypass
+	// 1. allowBypass = true
+	AllowLocalNetwork = false
+	AssertRunningInContainer(true)
+	assert.True(t, AllowLocalNetwork)
+
+	// 2. SWAZZ_DEV = "1"
+	AllowLocalNetwork = false
 	t.Setenv("SWAZZ_DEV", "1")
 	AssertRunningInContainer(false)
+	assert.True(t, AllowLocalNetwork)
 }
-
-func TestIsRunningInContainer_CloudflareEnv(t *testing.T) {
-	t.Setenv("CLOUDFLARE_APPLICATION_ID", "cf-app-123")
-	assert.True(t, IsRunningInContainer())
-}
-

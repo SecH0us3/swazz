@@ -943,5 +943,19 @@ func TestMaybeReauthenticateWithProbe(t *testing.T) {
 	assert.Equal(t, "valid-token", newH2["Authorization"])
 	assert.Equal(t, 1, authCount)
 	assert.Equal(t, 2, probeCount)
+
+	// 3. Auth sequence fails -> error
+	rFailSeq := New(&swagger.Config{
+		BaseURL: "http://127.0.0.1:1/invalid",
+		AuthSequence: []swagger.AuthStep{
+			{Method: "GET", URL: "/unreachable"},
+		},
+		Settings: swagger.Settings{AuthHeaders: []string{"Auth"}},
+	}, nil)
+	defer rFailSeq.Close()
+	_, _, _, errFail := rFailSeq.MaybeReauthenticate(context.Background(), nil, nil)
+	assert.Error(t, errFail)
+	assert.Contains(t, errFail.Error(), "re-authentication failed")
 }
+
 

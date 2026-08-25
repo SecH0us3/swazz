@@ -6,6 +6,7 @@
 package grpc
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -305,43 +306,122 @@ message MapMsg {
 
 func TestScalarConversions(t *testing.T) {
 	// toInt32
-	i32, ok := toInt32(int32(10))
-	assert.True(t, ok)
-	assert.Equal(t, int32(10), i32)
-	_, ok = toInt32("invalid")
-	assert.False(t, ok)
-	_, ok = toInt32(struct{}{})
-	assert.False(t, ok)
+	testsI32 := []struct {
+		val      any
+		expected int32
+		ok       bool
+	}{
+		{int32(10), 10, true},
+		{int(20), 20, true},
+		{int64(30), 30, true},
+		{float64(40), 40, true},
+		{float32(50), 50, true},
+		{"60", 60, true},
+		{int64(math.MaxInt32 + 100), 0, false},
+		{float64(math.MaxInt32 + 100), 0, false},
+		{"invalid", 0, false},
+		{struct{}{}, 0, false},
+	}
+	for _, tt := range testsI32 {
+		res, ok := toInt32(tt.val)
+		assert.Equal(t, tt.ok, ok)
+		if ok {
+			assert.Equal(t, tt.expected, res)
+		}
+	}
 
 	// toUint32
-	u32, ok := toUint32(uint32(20))
-	assert.True(t, ok)
-	assert.Equal(t, uint32(20), u32)
-	_, ok = toUint32(-5)
-	assert.False(t, ok)
-	_, ok = toUint32("invalid")
-	assert.False(t, ok)
+	testsU32 := []struct {
+		val      any
+		expected uint32
+		ok       bool
+	}{
+		{uint32(10), 10, true},
+		{uint64(20), 20, true},
+		{uint(30), 30, true},
+		{int(40), 40, true},
+		{int64(50), 50, true},
+		{float64(60), 60, true},
+		{float32(70), 70, true},
+		{"80", 80, true},
+		{-5, 0, false},
+		{int64(-5), 0, false},
+		{uint64(math.MaxUint32 + 100), 0, false},
+		{float64(-1.0), 0, false},
+		{"invalid", 0, false},
+	}
+	for _, tt := range testsU32 {
+		res, ok := toUint32(tt.val)
+		assert.Equal(t, tt.ok, ok)
+		if ok {
+			assert.Equal(t, tt.expected, res)
+		}
+	}
 
 	// toInt64
-	i64, ok := toInt64(int64(30))
-	assert.True(t, ok)
-	assert.Equal(t, int64(30), i64)
-	_, ok = toInt64("invalid")
-	assert.False(t, ok)
+	testsI64 := []struct {
+		val      any
+		expected int64
+		ok       bool
+	}{
+		{int64(10), 10, true},
+		{int(20), 20, true},
+		{int32(30), 30, true},
+		{float64(40), 40, true},
+		{float32(50), 50, true},
+		{"60", 60, true},
+		{"invalid", 0, false},
+	}
+	for _, tt := range testsI64 {
+		res, ok := toInt64(tt.val)
+		assert.Equal(t, tt.ok, ok)
+		if ok {
+			assert.Equal(t, tt.expected, res)
+		}
+	}
 
 	// toUint64
-	u64, ok := toUint64(uint64(40))
-	assert.True(t, ok)
-	assert.Equal(t, uint64(40), u64)
-	_, ok = toUint64(-10)
-	assert.False(t, ok)
+	testsU64 := []struct {
+		val      any
+		expected uint64
+		ok       bool
+	}{
+		{uint64(10), 10, true},
+		{uint32(20), 20, true},
+		{int(30), 30, true},
+		{float64(40), 40, true},
+		{float32(50), 50, true},
+		{"60", 60, true},
+		{-10, 0, false},
+		{float64(-10), 0, false},
+		{"invalid", 0, false},
+	}
+	for _, tt := range testsU64 {
+		res, ok := toUint64(tt.val)
+		assert.Equal(t, tt.ok, ok)
+		if ok {
+			assert.Equal(t, tt.expected, res)
+		}
+	}
 
 	// toFloat64
-	f64, ok := toFloat64(float32(1.5))
-	assert.True(t, ok)
-	assert.InDelta(t, 1.5, f64, 0.001)
-	_, ok = toFloat64("invalid")
-	assert.False(t, ok)
+	testsF64 := []struct {
+		val      any
+		expected float64
+		ok       bool
+	}{
+		{float64(1.5), 1.5, true},
+		{float32(2.5), 2.5, true},
+		{int(3), 3.0, true},
+		{int64(4), 4.0, true},
+		{"5.5", 5.5, true},
+		{"invalid", 0, false},
+	}
+	for _, tt := range testsF64 {
+		res, ok := toFloat64(tt.val)
+		assert.Equal(t, tt.ok, ok)
+		if ok {
+			assert.InDelta(t, tt.expected, res, 0.001)
+		}
+	}
 }
-
-

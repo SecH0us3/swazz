@@ -290,6 +290,23 @@ func TestStdioClient_CrashOnCall(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot switch identity")
 }
 
+func TestStdioClient_ClosedOperations(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	cmdPath := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	client := NewStdioClient(cmdPath, args)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, client.Connect(ctx))
+	assert.NoError(t, client.Close())
+	assert.NoError(t, client.Close()) // Idempotent close
+
+	_, err := client.sendRequest(context.Background(), "test", nil, nil)
+	assert.Equal(t, io.ErrClosedPipe, err)
+}
+
 type mockSSEServer struct {
 	mu         sync.Mutex
 	writeChan  chan string
@@ -762,6 +779,19 @@ func TestHTTPClient_Errors(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestHTTPClient_ServerErrors(t *testing.T) {
+	// Server returning 500
+	tsErr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("internal error"))
+	}))
+	defer tsErr.Close()
+
+	client := NewHTTPClient(tsErr.URL+"/mcp", true, nil)
+	err := client.Connect(context.Background())
+	assert.Error(t, err)
+}
+
 func TestSSEClient_Errors(t *testing.T) {
 	writeChan := make(chan string, 10)
 	defer close(writeChan)
@@ -835,4 +865,3 @@ func TestSSEClient_Errors(t *testing.T) {
 	_, _, err = client.GetPrompt(ctx, "test", nil, nil)
 	assert.Error(t, err)
 }
-

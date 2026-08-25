@@ -34,6 +34,10 @@ func TestValidatePprofAddr(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "127.0.0.1:6060", addr)
 
+	addr, err = validatePprofAddr(":6060")
+	assert.NoError(t, err)
+	assert.Equal(t, "127.0.0.1:6060", addr)
+
 	addr, err = validatePprofAddr("[::1]:6060")
 	assert.NoError(t, err)
 	assert.Equal(t, "[::1]:6060", addr)
@@ -112,6 +116,43 @@ func TestRunLicenseCommand_AllStates(t *testing.T) {
 
 	t.Setenv("SWAZZ_LICENSE_KEY", token)
 	runLicenseCommand()
+
+	// 4. Expiring soon token (1 day remaining)
+	licExpiring := &license.License{
+		Company:        "Acme Corp",
+		ExpiresAt:      time.Now().Add(24 * time.Hour),
+		Features:       []string{license.FeatureReportExports},
+		MaxUsers:       1,
+		MaxConcurrency: 5,
+	}
+	tokenExpiring, err := license.GenerateToken(privKey, licExpiring)
+	require.NoError(t, err)
+	t.Setenv("SWAZZ_LICENSE_KEY", tokenExpiring)
+	runLicenseCommand()
+
+	// 5. Unlimited scans feature with MaxConcurrency == 0
+	licUnlimited := &license.License{
+		Company:   "Scaled Corp",
+		ExpiresAt: time.Now().Add(100 * time.Hour),
+		Features:  []string{"unlimited_scans"},
+		MaxUsers:  0,
+	}
+	tokenUnlimited, err := license.GenerateToken(privKey, licUnlimited)
+	require.NoError(t, err)
+	t.Setenv("SWAZZ_LICENSE_KEY", tokenUnlimited)
+	runLicenseCommand()
+
+	// 6. Default concurrency with MaxConcurrency == 0 and no unlimited_scans
+	licDefault := &license.License{
+		Company:   "Free Enterprise",
+		ExpiresAt: time.Now().Add(100 * time.Hour),
+		Features:  []string{license.FeatureReportExports},
+		MaxUsers:  0,
+	}
+	tokenDefault, err := license.GenerateToken(privKey, licDefault)
+	require.NoError(t, err)
+	t.Setenv("SWAZZ_LICENSE_KEY", tokenDefault)
+	runLicenseCommand()
 }
 
 func TestRunGenerateKeys_FileCreation(t *testing.T) {
@@ -130,4 +171,9 @@ func TestRunGenerateKeys_FileCreation(t *testing.T) {
 	pubData, err := os.ReadFile(filepath.Join(tmpDir, "swazz_runner.pub"))
 	require.NoError(t, err)
 	assert.NotEmpty(t, pubData)
+}
+
+func TestStartPprof(t *testing.T) {
+	// Empty addr should be a clean no-op without launching background goroutines
+	startPprof("")
 }

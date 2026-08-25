@@ -6,7 +6,12 @@
 package main
 
 import (
+	"context"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,4 +63,43 @@ func TestRunDiscoverCLIErr_NotInCluster(t *testing.T) {
 	err := runDiscoverCLIErr([]string{"-dry-run"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get in-cluster K8s config")
+}
+
+func TestMakeK8sSecretResolver(t *testing.T) {
+	clientset := fake.NewSimpleClientset(
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "token-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{
+				"token": []byte("bearer-secret-token"),
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "notoken-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{
+				"api-key": []byte("api-secret-key"),
+			},
+		},
+	)
+
+	resolver := makeK8sSecretResolver(context.Background(), clientset)
+
+	// 1. token key present
+	val, err := resolver("default", "token-secret")
+	require.NoError(t, err)
+	assert.Equal(t, "bearer-secret-token", val)
+
+	// 2. token key missing
+	_, err = resolver("default", "notoken-secret")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has no 'token' key")
+
+	// 3. non-existent secret
+	_, err = resolver("default", "missing-secret")
+	assert.Error(t, err)
 }

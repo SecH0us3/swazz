@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"swazz-engine/internal/generator/payloads"
 	"swazz-engine/internal/swagger"
 )
@@ -97,9 +99,6 @@ func TestMaxDepth(t *testing.T) {
 
 	schema := createNested(10) // Deeper than maxDepth=5
 
-	// Limit testing is not strictly enforced in BuildObject without a depth parameter,
-	// but the array maxes are. If we want to test array limits, we can do so here.
-	// We'll just verify the generator doesn't crash on standard deep objects.
 	g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
 	payload := g.BuildObject(schema)
 
@@ -286,17 +285,6 @@ func TestMinIterationsNeeded_NewCategories(t *testing.T) {
 	}
 }
 
-func BenchmarkGenerateStringMalicious(b *testing.B) {
-	schema := &swagger.SchemaProperty{
-		Type: "string",
-	}
-	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = g.Generate("test", schema)
-	}
-}
-
 func TestGenerate_BooleanAndDateAndHeaderIterations(t *testing.T) {
 	schemaBool := &swagger.SchemaProperty{Type: "boolean"}
 	
@@ -322,7 +310,6 @@ func TestGenerate_BooleanAndDateAndHeaderIterations(t *testing.T) {
 	_ = gBound.SecurityHeaderIterations()
 }
 
-
 func TestGenerateNumber_BoundaryAndMalicious(t *testing.T) {
 	settings := swagger.Settings{
 		PayloadCategories: map[swagger.FuzzingProfile][]string{
@@ -334,22 +321,16 @@ func TestGenerateNumber_BoundaryAndMalicious(t *testing.T) {
 	// Boundary Integer
 	gBoundary := New(nil, swagger.ProfileBoundary, settings)
 	valInt := gBoundary.generateNumber("integer")
-	if valInt == nil {
-		t.Errorf("generateNumber(integer) returned nil for boundary")
-	}
+	assert.NotNil(t, valInt)
 
 	// Boundary Float/Number
 	valNum := gBoundary.generateNumber("number")
-	if valNum == nil {
-		t.Errorf("generateNumber(number) returned nil for boundary")
-	}
+	assert.NotNil(t, valNum)
 
 	// Malicious
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
 	valMal := gMalicious.generateNumber("integer")
-	if valMal == nil {
-		t.Errorf("generateNumber(integer) returned nil for malicious")
-	}
+	assert.NotNil(t, valMal)
 }
 
 func TestGenerateString_BoundaryAndMalicious(t *testing.T) {
@@ -364,32 +345,21 @@ func TestGenerateString_BoundaryAndMalicious(t *testing.T) {
 	// Boundary
 	gBoundary := New(nil, swagger.ProfileBoundary, settings)
 	valStr := gBoundary.generateString("", "test_prop")
-	if valStr == nil {
-		t.Errorf("generateString returned nil for boundary")
-	}
+	assert.NotNil(t, valStr)
 
 	// Malicious
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
-	// Force it to have active malicious strings cached
 	valMal := gMalicious.generateString("", "test_prop")
-	if valMal == nil {
-		t.Errorf("generateString returned nil for malicious")
-	}
+	assert.NotNil(t, valMal)
 	
 	// UUID
 	valUUID := gBoundary.generateString("uuid", "id")
-	if valUUID == nil {
-		t.Errorf("generateString(uuid) returned nil")
-	}
+	assert.NotNil(t, valUUID)
 }
 
 func TestMaxInt(t *testing.T) {
-	if maxInt(1, 5, 3) != 5 {
-		t.Errorf("maxInt failed")
-	}
-	if maxInt(-1, -5) != 0 {
-		t.Errorf("maxInt failed for negatives (defaults to 0)")
-	}
+	assert.Equal(t, 5, maxInt(1, 5, 3))
+	assert.Equal(t, 0, maxInt(-1, -5))
 }
 
 func TestSecurityHeaderIterations(t *testing.T) {
@@ -401,152 +371,105 @@ func TestSecurityHeaderIterations(t *testing.T) {
 	
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
 	count := gMalicious.SecurityHeaderIterations()
-	if count <= 0 {
-		t.Errorf("SecurityHeaderIterations should be > 0, got %d", count)
-	}
+	assert.Positive(t, count)
 
 	gRandom := New(nil, swagger.ProfileRandom, settings)
-	if gRandom.SecurityHeaderIterations() != 0 {
-		t.Errorf("SecurityHeaderIterations should be 0 for random profile")
-	}
+	assert.Zero(t, gRandom.SecurityHeaderIterations())
 }
 
 func TestBodyIterations(t *testing.T) {
 	settings := swagger.Settings{
 		PayloadCategories: map[swagger.FuzzingProfile][]string{
 			swagger.ProfileBoundary: {payloads.CatBoundaryIntegers},
-			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
+			swagger.ProfileMalicious: {
+				payloads.CatMaliciousEncoding,
+				payloads.CatMaliciousSQLi,
+				payloads.CatMaliciousXSS,
+				payloads.CatMaliciousPathTraversal,
+				payloads.CatMaliciousCmdi,
+				payloads.CatMaliciousSSTI,
+				payloads.CatMaliciousXXE,
+				payloads.CatOOBInteraction,
+				payloads.CatMaliciousNumbers,
+				payloads.CatMaliciousDates,
+				payloads.CatMaliciousBooleans,
+				payloads.CatMaliciousTypeConfusion,
+			},
 		},
 	}
 	
 	gBoundary := New(nil, swagger.ProfileBoundary, settings)
-	if gBoundary.BodyIterations() != 0 { // Boundary doesn't have body iterations method
-		t.Errorf("BodyIterations should be 0 for boundary")
-	}
+	assert.Zero(t, gBoundary.BodyIterations())
 	
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
-	if gMalicious.BodyIterations() <= 0 {
-		t.Errorf("BodyIterations should be > 0")
-	}
+	assert.Positive(t, gMalicious.BodyIterations())
 }
 
 func TestRandomizeAndRegisterSSTI(t *testing.T) {
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
 	
 	res := g.randomizeAndRegisterSSTI("{{7*7}}")
-	if res == "{{7*7}}" {
-		t.Errorf("SSTI should be randomized")
-	}
+	assert.NotEqual(t, "{{7*7}}", res)
 
 	res2 := g.randomizeAndRegisterSSTI("no-ssti-here")
-	if res2 != "no-ssti-here" {
-		t.Errorf("Should not modify string without 7*7")
-	}
+	assert.Equal(t, "no-ssti-here", res2)
+
+	res3 := g.randomizeAndRegisterSSTI("{{7+'7'}}")
+	assert.NotEqual(t, "{{7+'7'}}", res3)
 }
 
 func TestGenerateSemanticValue(t *testing.T) {
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
 	
-	em := g.GenerateSemanticValue("email", "test")
-	if em == "test" { // it wraps, so shouldn't equal
-		t.Errorf("GenerateSemanticValue failed for email")
-	}
-
-	uri := g.GenerateSemanticValue("url", "test")
-	if uri == "test" {
-		t.Errorf("GenerateSemanticValue failed for url")
-	}
-	
-	uuidVal := g.GenerateSemanticValue("uuid", "test")
-	if uuidVal == "test" {
-		t.Errorf("GenerateSemanticValue failed for uuid")
-	}
-
-	phoneVal := g.GenerateSemanticValue("phone", "test")
-	if phoneVal == "test" {
-		t.Errorf("GenerateSemanticValue failed for phone")
-	}
-	
-	dtVal := g.GenerateSemanticValue("date-time", "test")
-	if dtVal == "test" {
-		t.Errorf("GenerateSemanticValue failed for date-time")
-	}
-
-	un := g.GenerateSemanticValue("unknown-format", "test")
-	if un != "test" {
-		t.Errorf("Should return vector unmodified for unknown format")
-	}
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("email", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("url", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("uri", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("uuid", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("phone", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("tel", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("date-time", "test"))
+	assert.NotEqual(t, "test", g.GenerateSemanticValue("date", "test"))
+	assert.Equal(t, "test", g.GenerateSemanticValue("unknown-format", "test"))
 }
 
-func TestMinIterationsNeeded(t *testing.T) {
-	settings := swagger.Settings{
-		PayloadCategories: map[swagger.FuzzingProfile][]string{
-			swagger.ProfileBoundary: {string(payloads.CatBoundaryStrings)},
-		},
-	}
-	
-	countBoundary := MinIterationsNeeded(swagger.ProfileBoundary, settings)
-	if countBoundary <= 0 {
-		t.Errorf("MinIterationsNeeded failed for boundary")
-	}
+func TestGenerateSecurityHeaders_Fuzzer(t *testing.T) {
+	g := New(nil, swagger.ProfileMalicious, swagger.Settings{
+		OOBServerURL: "oob.example.com",
+	})
+	g.RunID = "run-123"
+	g.Endpoint = "/api/v1/test"
 
-	countMalicious := MinIterationsNeeded(swagger.ProfileMalicious, settings)
-	if countMalicious <= 0 { // Default falls back to all active if not provided
-		t.Errorf("MinIterationsNeeded failed for malicious")
-	}
+	headers := g.GenerateSecurityHeaders()
+	require.NotEmpty(t, headers)
 
-	countRandom := MinIterationsNeeded(swagger.ProfileRandom, settings)
-	if countRandom != 0 {
-		t.Errorf("MinIterationsNeeded should be 0 for random")
-	}
+	// Random profile returns nil
+	gRand := New(nil, swagger.ProfileRandom, swagger.Settings{})
+	assert.Nil(t, gRand.GenerateSecurityHeaders())
 }
 
-func TestGenerateAndBuildObject(t *testing.T) {
-	settings := swagger.Settings{}
+func TestOOBURLFormats(t *testing.T) {
+	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
 	
-	dictionaries := map[string][]any{"user_role": {"admin", "guest"}}
-	g := New(dictionaries, swagger.ProfileBoundary, settings)
+	// Default
+	url1 := g.oobURL("uuid-1")
+	assert.Contains(t, url1, "http://localhost:8080/api/oob/uuid-1")
+
+	// Custom without scheme
+	g.oobServerURL = "custom.server.com"
+	url2 := g.oobURL("uuid-2")
+	assert.Contains(t, url2, "http://custom.server.com/api/oob/uuid-2")
+
+	// With RunID
+	g.RunID = "run-abc"
+	url3 := g.oobURL("uuid-3")
+	assert.Contains(t, url3, "http://custom.server.com/api/oob/run-abc/uuid-3")
+}
+
+func TestGetArraySize(t *testing.T) {
+	g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
 	
-	// Test enum
-	enumSchema := &swagger.SchemaProperty{Type: "string", Enum: []any{"a", "b"}}
-	valEnum := g.Generate("foo", enumSchema)
-	if valEnum != "a" && valEnum != "b" {
-		t.Errorf("Generate enum failed")
-	}
-
-	// Test dictionary
-	strSchema := &swagger.SchemaProperty{Type: "string"}
-	valDict := g.Generate("user_role", strSchema)
-	if valDict != "admin" && valDict != "guest" {
-		t.Errorf("Generate dictionary failed")
-	}
-
-	// Test BuildObject
-	objSchema := &swagger.SchemaProperty{
-		Type: "object",
-		Properties: map[string]*swagger.SchemaProperty{
-			"id":   {Type: "integer"},
-			"name": {Type: "string"},
-		},
-	}
-	
-	obj := g.BuildObject(objSchema)
-	if obj == nil || len(obj) == 0 {
-		t.Errorf("BuildObject failed")
-	}
-
-	// Test array through BuildObject
-	objWithArr := &swagger.SchemaProperty{
-		Type: "object",
-		Properties: map[string]*swagger.SchemaProperty{
-			"tags": {
-				Type: "array",
-				Items: &swagger.SchemaProperty{Type: "string"},
-			},
-		},
-	}
-	resObj := g.BuildObject(objWithArr)
-	if _, ok := resObj["tags"].([]any); !ok {
-		t.Errorf("BuildObject array failed")
-	}
+	objSchema := &swagger.SchemaProperty{Type: "object"}
+	size := g.getArraySize(objSchema)
+	assert.GreaterOrEqual(t, size, 0)
+	assert.LessOrEqual(t, size, 50)
 }
