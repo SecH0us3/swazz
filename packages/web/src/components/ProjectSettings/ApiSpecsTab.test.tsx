@@ -136,11 +136,66 @@ describe('ApiSpecsTab', () => {
         };
 
         render(<ApiSpecsTab />);
+        expect(screen.getByText('Tool Safety & Confirmation Contracts')).toBeInTheDocument();
+        expect(screen.getByText(/requires_confirmation: true/i)).toBeInTheDocument();
+
         const toggleBtn = screen.getByLabelText(/Enable MCP Server Fuzzing/i);
         fireEvent.click(toggleBtn);
         
         expect(mockUpdateConfig).toHaveBeenCalledWith({
             mcp_server: undefined
+        });
+    });
+
+    it('switches transport to HTTP and updates URL', async () => {
+        mockConfig = {
+            _swagger_urls: [],
+            mcp_server: {
+                type: 'http',
+                url: 'http://localhost:8000/mcp'
+            }
+        };
+
+        render(<ApiSpecsTab />);
+        const select = screen.getByRole('combobox');
+        expect(select).toHaveValue('http');
+        expect(screen.getByPlaceholderText('e.g. http://localhost:8000/mcp')).toBeInTheDocument();
+        expect(screen.getByText(/Supports per-call identity header switching for BOLA \/ IDOR fuzzing/i)).toBeInTheDocument();
+
+        const urlInput = screen.getByPlaceholderText('e.g. http://localhost:8000/mcp');
+        fireEvent.change(urlInput, { target: { value: 'http://localhost:9000/mcp' } });
+
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            mcp_server: {
+                type: 'http',
+                url: 'http://localhost:9000/mcp'
+            }
+        });
+    });
+
+    it('toggles enable_mcp_method_fuzzing setting in project config', async () => {
+        mockConfig = {
+            _swagger_urls: [],
+            mcp_server: {
+                type: 'stdio',
+                command: 'node',
+                args: ['demo/mcp.js']
+            },
+            settings: {
+                enable_mcp_method_fuzzing: true
+            }
+        };
+
+        render(<ApiSpecsTab />);
+        const methodToggle = screen.getByLabelText(/Fuzz Method & Tool Names/i);
+        expect(methodToggle).toBeChecked();
+
+        fireEvent.click(methodToggle);
+
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            settings: {
+                enable_mcp_method_fuzzing: false
+            }
         });
     });
 

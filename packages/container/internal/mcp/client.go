@@ -197,7 +197,7 @@ func (c *StdioClient) initializeHandshake(ctx context.Context) error {
 		return err
 	}
 
-	resp, err := c.sendRequest(ctx, "initialize", paramsBytes)
+	resp, err := c.sendRequest(ctx, "initialize", paramsBytes, nil)
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,10 @@ func (c *StdioClient) initializeHandshake(ctx context.Context) error {
 	return err
 }
 
-func (c *StdioClient) sendRequest(ctx context.Context, method string, params json.RawMessage) (*Response, error) {
+// extraHeaders is accepted for interface symmetry with the HTTP/SSE transports
+// and ignored: a stdio subprocess has no request headers. CallTool already
+// refuses a non-nil identity override before reaching here.
+func (c *StdioClient) sendRequest(ctx context.Context, method string, params json.RawMessage, _ map[string]string) (*Response, error) {
 	c.pendingMu.Lock()
 	if c.isClosed {
 		c.pendingMu.Unlock()
@@ -362,7 +365,7 @@ func (c *StdioClient) waitProcess() {
 
 // ListTools retrieves the list of tools from the subprocess.
 func (c *StdioClient) ListTools(ctx context.Context) ([]Tool, error) {
-	resp, err := c.sendRequest(ctx, "tools/list", nil)
+	resp, err := c.sendRequest(ctx, "tools/list", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +383,13 @@ func (c *StdioClient) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 // CallTool invokes a tool on the subprocess.
-func (c *StdioClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResult, string, error) {
+func (c *StdioClient) CallTool(ctx context.Context, name string, arguments map[string]any, extraHeaders map[string]string) (*CallToolResult, string, error) {
+	// A stdio server is one spawned process with one identity; there are no
+	// per-call headers to vary. Refuse rather than silently ignore, so a BOLA
+	// run against a stdio target does not look like it tested a second identity.
+	if len(extraHeaders) > 0 {
+		return nil, "", fmt.Errorf("stdio MCP transport cannot switch identity per call")
+	}
 	params := map[string]any{
 		"name":      name,
 		"arguments": arguments,
@@ -393,7 +402,7 @@ func (c *StdioClient) CallTool(ctx context.Context, name string, arguments map[s
 		return nil, stderrLogs, err
 	}
 
-	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes)
+	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes, nil)
 	c.stderrMu.Lock()
 	stderrLogs := c.stderrBuf.String()
 	c.stderrMu.Unlock()
@@ -408,6 +417,115 @@ func (c *StdioClient) CallTool(ctx context.Context, name string, arguments map[s
 	var result CallToolResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, stderrLogs, fmt.Errorf("failed to unmarshal tools/call result: %w", err)
+	}
+	return &result, stderrLogs, nil
+}
+
+// ListResources retrieves the list of resources from the subprocess.
+func (c *StdioClient) ListResources(ctx context.Context) ([]Resource, error) {
+	resp, err := c.sendRequest(ctx, "resources/list", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("resources/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Resources []Resource `json:"resources"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal resources/list result: %w", err)
+	}
+	return result.Resources, nil
+}
+
+// ReadResource reads a resource by URI from the subprocess.
+func (c *StdioClient) ReadResource(ctx context.Context, uri string, extraHeaders map[string]string) (*ReadResourceResult, string, error) {
+	if len(extraHeaders) > 0 {
+		return nil, "", fmt.Errorf("stdio MCP transport cannot switch identity per call")
+	}
+	params := map[string]any{"uri": uri}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		c.stderrMu.Lock()
+		stderrLogs := c.stderrBuf.String()
+		c.stderrMu.Unlock()
+		return nil, stderrLogs, err
+	}
+
+	resp, err := c.sendRequest(ctx, "resources/read", paramsBytes, nil)
+	c.stderrMu.Lock()
+	stderrLogs := c.stderrBuf.String()
+	c.stderrMu.Unlock()
+
+	if err != nil {
+		return nil, stderrLogs, err
+	}
+	if resp.Error != nil {
+		return nil, stderrLogs, fmt.Errorf("resources/read error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result ReadResourceResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, stderrLogs, fmt.Errorf("failed to unmarshal resources/read result: %w", err)
+	}
+	return &result, stderrLogs, nil
+}
+
+// ListPrompts retrieves the list of prompts from the subprocess.
+func (c *StdioClient) ListPrompts(ctx context.Context) ([]Prompt, error) {
+	resp, err := c.sendRequest(ctx, "prompts/list", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("prompts/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Prompts []Prompt `json:"prompts"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prompts/list result: %w", err)
+	}
+	return result.Prompts, nil
+}
+
+// GetPrompt fetches/renders a prompt by name with arguments from the subprocess.
+func (c *StdioClient) GetPrompt(ctx context.Context, name string, arguments map[string]any, extraHeaders map[string]string) (*GetPromptResult, string, error) {
+	if len(extraHeaders) > 0 {
+		return nil, "", fmt.Errorf("stdio MCP transport cannot switch identity per call")
+	}
+	params := map[string]any{
+		"name": name,
+	}
+	if len(arguments) > 0 {
+		params["arguments"] = arguments
+	}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		c.stderrMu.Lock()
+		stderrLogs := c.stderrBuf.String()
+		c.stderrMu.Unlock()
+		return nil, stderrLogs, err
+	}
+
+	resp, err := c.sendRequest(ctx, "prompts/get", paramsBytes, nil)
+	c.stderrMu.Lock()
+	stderrLogs := c.stderrBuf.String()
+	c.stderrMu.Unlock()
+
+	if err != nil {
+		return nil, stderrLogs, err
+	}
+	if resp.Error != nil {
+		return nil, stderrLogs, fmt.Errorf("prompts/get error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result GetPromptResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, stderrLogs, fmt.Errorf("failed to unmarshal prompts/get result: %w", err)
 	}
 	return &result, stderrLogs, nil
 }
@@ -604,7 +722,7 @@ func (c *SSEClient) initializeHandshake(ctx context.Context) error {
 		return err
 	}
 
-	resp, err := c.sendRequest(ctx, "initialize", paramsBytes)
+	resp, err := c.sendRequest(ctx, "initialize", paramsBytes, nil)
 	if err != nil {
 		return err
 	}
@@ -638,7 +756,7 @@ func (c *SSEClient) initializeHandshake(ctx context.Context) error {
 	return nil
 }
 
-func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.RawMessage) (*Response, error) {
+func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.RawMessage, extraHeaders map[string]string) (*Response, error) {
 	c.pendingMu.Lock()
 	if c.isClosed {
 		c.pendingMu.Unlock()
@@ -675,6 +793,10 @@ func (c *SSEClient) sendRequest(ctx context.Context, method string, params json.
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	for k, v := range c.headers {
+		httpReq.Header.Set(k, v)
+	}
+	// Per-call identity overrides win over the client's base headers.
+	for k, v := range extraHeaders {
 		httpReq.Header.Set(k, v)
 	}
 
@@ -787,7 +909,7 @@ func (c *SSEClient) handleSSEEvent(event SSEEvent) {
 
 // ListTools retrieves the list of tools from the SSE-connected server.
 func (c *SSEClient) ListTools(ctx context.Context) ([]Tool, error) {
-	resp, err := c.sendRequest(ctx, "tools/list", nil)
+	resp, err := c.sendRequest(ctx, "tools/list", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +927,7 @@ func (c *SSEClient) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 // CallTool invokes a tool on the SSE-connected server.
-func (c *SSEClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResult, string, error) {
+func (c *SSEClient) CallTool(ctx context.Context, name string, arguments map[string]any, extraHeaders map[string]string) (*CallToolResult, string, error) {
 	params := map[string]any{
 		"name":      name,
 		"arguments": arguments,
@@ -815,7 +937,7 @@ func (c *SSEClient) CallTool(ctx context.Context, name string, arguments map[str
 		return nil, "", err
 	}
 
-	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes)
+	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes, extraHeaders)
 	if err != nil {
 		return nil, "", err
 	}
@@ -826,6 +948,95 @@ func (c *SSEClient) CallTool(ctx context.Context, name string, arguments map[str
 	var result CallToolResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal tools/call result: %w", err)
+	}
+	return &result, "", nil
+}
+
+// ListResources retrieves the list of resources from the SSE-connected server.
+func (c *SSEClient) ListResources(ctx context.Context) ([]Resource, error) {
+	resp, err := c.sendRequest(ctx, "resources/list", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("resources/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Resources []Resource `json:"resources"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal resources/list result: %w", err)
+	}
+	return result.Resources, nil
+}
+
+// ReadResource reads a resource by URI from the SSE-connected server.
+func (c *SSEClient) ReadResource(ctx context.Context, uri string, extraHeaders map[string]string) (*ReadResourceResult, string, error) {
+	params := map[string]any{"uri": uri}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := c.sendRequest(ctx, "resources/read", paramsBytes, extraHeaders)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.Error != nil {
+		return nil, "", fmt.Errorf("resources/read error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result ReadResourceResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal resources/read result: %w", err)
+	}
+	return &result, "", nil
+}
+
+// ListPrompts retrieves the list of prompts from the SSE-connected server.
+func (c *SSEClient) ListPrompts(ctx context.Context) ([]Prompt, error) {
+	resp, err := c.sendRequest(ctx, "prompts/list", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("prompts/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Prompts []Prompt `json:"prompts"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prompts/list result: %w", err)
+	}
+	return result.Prompts, nil
+}
+
+// GetPrompt fetches/renders a prompt by name with arguments from the SSE-connected server.
+func (c *SSEClient) GetPrompt(ctx context.Context, name string, arguments map[string]any, extraHeaders map[string]string) (*GetPromptResult, string, error) {
+	params := map[string]any{
+		"name": name,
+	}
+	if len(arguments) > 0 {
+		params["arguments"] = arguments
+	}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := c.sendRequest(ctx, "prompts/get", paramsBytes, extraHeaders)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.Error != nil {
+		return nil, "", fmt.Errorf("prompts/get error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result GetPromptResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal prompts/get result: %w", err)
 	}
 	return &result, "", nil
 }
@@ -892,7 +1103,7 @@ func (c *HTTPClient) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json.RawMessage) (*Response, error) {
+func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json.RawMessage, extraHeaders map[string]string) (*Response, error) {
 	id := atomic.AddUint64(&c.nextID, 1)
 	reqObj := Request{
 		JSONRPC: "2.0",
@@ -913,6 +1124,10 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
+	// Per-call identity overrides win over the client's base headers.
+	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
 	}
 
@@ -974,7 +1189,7 @@ func (c *HTTPClient) initializeHandshake(ctx context.Context) error {
 		return err
 	}
 
-	resp, err := c.sendRequest(ctx, "initialize", paramsBytes)
+	resp, err := c.sendRequest(ctx, "initialize", paramsBytes, nil)
 	if err != nil {
 		return err
 	}
@@ -986,7 +1201,7 @@ func (c *HTTPClient) initializeHandshake(ctx context.Context) error {
 
 // ListTools retrieves the list of tools from the HTTP JSON-RPC server.
 func (c *HTTPClient) ListTools(ctx context.Context) ([]Tool, error) {
-	resp, err := c.sendRequest(ctx, "tools/list", nil)
+	resp, err := c.sendRequest(ctx, "tools/list", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1004,7 +1219,7 @@ func (c *HTTPClient) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 // CallTool invokes a tool on the HTTP JSON-RPC server.
-func (c *HTTPClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResult, string, error) {
+func (c *HTTPClient) CallTool(ctx context.Context, name string, arguments map[string]any, extraHeaders map[string]string) (*CallToolResult, string, error) {
 	params := map[string]any{
 		"name":      name,
 		"arguments": arguments,
@@ -1014,7 +1229,7 @@ func (c *HTTPClient) CallTool(ctx context.Context, name string, arguments map[st
 		return nil, "", err
 	}
 
-	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes)
+	resp, err := c.sendRequest(ctx, "tools/call", paramsBytes, extraHeaders)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1025,6 +1240,95 @@ func (c *HTTPClient) CallTool(ctx context.Context, name string, arguments map[st
 	var result CallToolResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal tools/call result: %w", err)
+	}
+	return &result, "", nil
+}
+
+// ListResources retrieves the list of resources from the HTTP JSON-RPC server.
+func (c *HTTPClient) ListResources(ctx context.Context) ([]Resource, error) {
+	resp, err := c.sendRequest(ctx, "resources/list", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("resources/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Resources []Resource `json:"resources"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal resources/list result: %w", err)
+	}
+	return result.Resources, nil
+}
+
+// ReadResource reads a resource by URI from the HTTP JSON-RPC server.
+func (c *HTTPClient) ReadResource(ctx context.Context, uri string, extraHeaders map[string]string) (*ReadResourceResult, string, error) {
+	params := map[string]any{"uri": uri}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := c.sendRequest(ctx, "resources/read", paramsBytes, extraHeaders)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.Error != nil {
+		return nil, "", fmt.Errorf("resources/read error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result ReadResourceResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal resources/read result: %w", err)
+	}
+	return &result, "", nil
+}
+
+// ListPrompts retrieves the list of prompts from the HTTP JSON-RPC server.
+func (c *HTTPClient) ListPrompts(ctx context.Context) ([]Prompt, error) {
+	resp, err := c.sendRequest(ctx, "prompts/list", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("prompts/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result struct {
+		Prompts []Prompt `json:"prompts"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prompts/list result: %w", err)
+	}
+	return result.Prompts, nil
+}
+
+// GetPrompt fetches/renders a prompt by name with arguments from the HTTP JSON-RPC server.
+func (c *HTTPClient) GetPrompt(ctx context.Context, name string, arguments map[string]any, extraHeaders map[string]string) (*GetPromptResult, string, error) {
+	params := map[string]any{
+		"name": name,
+	}
+	if len(arguments) > 0 {
+		params["arguments"] = arguments
+	}
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := c.sendRequest(ctx, "prompts/get", paramsBytes, extraHeaders)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.Error != nil {
+		return nil, "", fmt.Errorf("prompts/get error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var result GetPromptResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal prompts/get result: %w", err)
 	}
 	return &result, "", nil
 }

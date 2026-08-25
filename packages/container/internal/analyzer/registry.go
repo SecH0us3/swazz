@@ -33,6 +33,7 @@ func NewRegistry() *AnalyzerRegistry {
 			&XXEAnalyzer{},
 			&GRPCStatusAnalyzer{},
 			NewWSStatusAnalyzer(),
+			&MCPStatusAnalyzer{},
 		},
 	}
 }

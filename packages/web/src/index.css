@@ -8164,6 +8164,68 @@ kbd {
   margin-top: 8px;
 }
 
+.specs-mcp-safety-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-md, 6px);
+  margin-top: 4px;
+}
+
+.specs-mcp-safety-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f59e0b;
+}
+
+.specs-mcp-safety-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.specs-mcp-safety-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.specs-mcp-safety-list li {
+  margin-bottom: 4px;
+}
+
+.specs-mcp-safety-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #ffffff);
+}
+
+.specs-mcp-toggle-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.specs-mcp-subtext {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  margin-top: 2px;
+  font-weight: normal;
+}
+
 .settings-field-full {
   width: 100%;
 }

@@ -990,3 +990,44 @@ func TestCheckpointWatermark(t *testing.T) {
 	close(r.statsChan)
 	<-r.statsDone
 }
+
+func TestInitRun_MCPMethodFuzzing(t *testing.T) {
+	enabled := true
+	cfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  "http://127.0.0.1:8788/mcp",
+		},
+		Settings: swagger.Settings{
+			EnableMCPMethodFuzzing: &enabled,
+		},
+	}
+	r := New(cfg, &http.Client{})
+	defer r.Close()
+	r.mcpClient = &fakeMCPClient{}
+
+	ctx, err := r.initRun(context.Background())
+	if err != nil {
+		t.Fatalf("initRun failed: %v", err)
+	}
+	defer r.finaliseRun()
+	_ = ctx
+
+	// Verify that probe endpoints are present
+	hasProtoProbe := false
+	hasTraversalProbe := false
+	for _, ep := range r.config.Endpoints {
+		if ep.Path == "mcp://tool/__proto__" {
+			hasProtoProbe = true
+		}
+		if ep.Path == "mcp://tool/../../../etc/passwd" {
+			hasTraversalProbe = true
+		}
+	}
+	if !hasProtoProbe {
+		t.Errorf("expected mcp://tool/__proto__ probe endpoint in config")
+	}
+	if !hasTraversalProbe {
+		t.Errorf("expected mcp://tool/../../../etc/passwd probe endpoint in config")
+	}
+}

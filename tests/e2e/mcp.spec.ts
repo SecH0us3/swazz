@@ -169,4 +169,57 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     const findingRow = page.locator('.owasp-accordion .owasp-finding-row').filter({ hasText: 'mcp://tool/query_db' }).first();
     await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
   });
+
+  test('should configure MCP server via API Specifications UI tab with HTTP transport and safety contracts', async ({ page }) => {
+    await mockEnterpriseLicense(page);
+    await registerAndLogin(page);
+
+    // Open More Project Settings
+    const moreSettingsBtn = page.locator('button:has-text("More Project Settings")');
+    await expect(moreSettingsBtn).toBeVisible();
+    await moreSettingsBtn.click();
+
+    // Go to API Specifications tab
+    const apiSpecsTabBtn = page.locator('button.tab-bar-btn:has-text("API Specifications")');
+    await expect(apiSpecsTabBtn).toBeVisible();
+    await apiSpecsTabBtn.click();
+
+    // Check Enable MCP Server Fuzzing
+    const enableMcpCheckbox = page.locator('.specs-mcp-checkbox-label input[type="checkbox"]');
+    await expect(enableMcpCheckbox).toBeVisible();
+    await enableMcpCheckbox.check();
+
+    // Verify Safety & Confirmation Contracts card is visible
+    const safetyCard = page.locator('.specs-mcp-safety-card');
+    await expect(safetyCard).toBeVisible();
+    await expect(safetyCard).toContainText('Tool Safety & Confirmation Contracts');
+    await expect(safetyCard).toContainText('requires_confirmation: true');
+
+    // Select HTTP Transport
+    const transportSelect = page.locator('.specs-mcp-config-box select');
+    await expect(transportSelect).toBeVisible();
+    await transportSelect.selectOption('http');
+
+    // Verify HTTP URL field and guidance
+    const urlInput = page.locator('.specs-mcp-config-box input[placeholder="e.g. http://localhost:8000/mcp"]');
+    await expect(urlInput).toBeVisible();
+    await urlInput.fill('http://127.0.0.1:9000/mcp');
+
+    const helpText = page.locator('.specs-mcp-config-box .settings-field-help');
+    await expect(helpText).toContainText('Streamable JSON-RPC endpoint. Supports per-call identity header switching for BOLA / IDOR fuzzing.');
+
+    // Switch back to Dashboard and verify settings persist in raw config
+    const rawConfigTabBtn = page.locator('button.tab-bar-btn:has-text("Raw JSON Config")');
+    await expect(rawConfigTabBtn).toBeVisible();
+    await rawConfigTabBtn.click();
+
+    const textarea = page.locator('textarea.textarea');
+    await expect(textarea).toBeVisible();
+    const configText = await textarea.inputValue();
+    const parsedConfig = JSON.parse(configText);
+
+    expect(parsedConfig.mcp_server).toBeDefined();
+    expect(parsedConfig.mcp_server.type).toBe('http');
+    expect(parsedConfig.mcp_server.url).toBe('http://127.0.0.1:9000/mcp');
+  });
 });

@@ -141,6 +141,8 @@ func runCLIErr(args []string) error {
 	qFlag := flags.Bool("q", false, "Silence all progress output (alias of -quiet)")
 	progressOnChangeFlag := flags.Bool("progress-on-change", false, "Only print progress when the active endpoint changes")
 	disableTelemetry := flags.Bool("disable-telemetry", false, "Disable reporting anonymous global scan count telemetry")
+	mcpListTools := flags.Bool("mcp-list-tools", false, "List the target MCP server's tools and exit without fuzzing")
+	mcpFuzzMethods := flags.Bool("mcp-fuzz-methods", false, "Fuzz MCP server method/tool name dispatching for reflection, traversal and prototype pollution vulnerabilities")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -225,9 +227,18 @@ func runCLIErr(args []string) error {
 	}
 	gate := license.GateFromLicense(activeLicense)
 
+	if *mcpFuzzMethods {
+		b := true
+		cliCfg.Settings.EnableMCPMethodFuzzing = &b
+	}
+
 	runCfg, err := BuildRunnerConfig(&cliCfg)
 	if err != nil {
 		log.Fatalf("Failed to build runner config: %v", err)
+	}
+
+	if *mcpListTools {
+		return listMCPTools(runCfg)
 	}
 
 	// 4. Initialize and start runner

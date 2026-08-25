@@ -481,10 +481,11 @@ export function ApiSpecsTab() {
                                 <select
                                     className="input settings-field-input settings-field-full"
                                     value={mcpType}
-                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse')}
+                                    onChange={(e) => handleUpdateMcpField('type', e.target.value as 'stdio' | 'sse' | 'http')}
                                 >
-                                    <option value="stdio">Stdio (Local Process / Command)</option>
+                                    <option value="stdio">Stdio (Local Process / Command Subprocess)</option>
                                     <option value="sse">SSE (HTTP Server-Sent Events)</option>
+                                    <option value="http">HTTP (Streamable JSON-RPC Endpoint)</option>
                                 </select>
                             </div>
 
@@ -514,17 +515,64 @@ export function ApiSpecsTab() {
                             ) : (
                                 <div className="settings-field-group">
                                     <label className="settings-field-label">
-                                        SSE Server URL
+                                        {mcpType === 'http' ? 'HTTP Endpoint URL' : 'SSE Server URL'}
                                     </label>
                                     <input
                                         type="text"
                                         className="input settings-field-input settings-field-full"
-                                        placeholder="e.g. http://localhost:8788/mcp/sse"
+                                        placeholder={mcpType === 'http' ? 'e.g. http://localhost:8000/mcp' : 'e.g. http://localhost:8788/mcp/sse'}
                                         value={mcpUrl}
                                         onChange={(e) => handleUpdateMcpField('url', e.target.value)}
                                     />
+                                    <span className="settings-field-help">
+                                        {mcpType === 'http'
+                                            ? 'Streamable JSON-RPC endpoint. Supports per-call identity header switching for BOLA / IDOR fuzzing.'
+                                            : 'SSE endpoint. Maintains open event stream for tool invocation and telemetry.'}
+                                    </span>
                                 </div>
                             )}
+
+                            <div className="specs-mcp-toggle-row">
+                                <label className="premium-checkbox-label specs-mcp-checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        className="premium-checkbox"
+                                        checked={config.settings?.enable_mcp_method_fuzzing !== false}
+                                        onChange={(e) => {
+                                            updateConfig({
+                                                settings: {
+                                                    ...(config.settings || {}),
+                                                    enable_mcp_method_fuzzing: e.target.checked
+                                                }
+                                            });
+                                        }}
+                                    />
+                                    <span className="specs-mcp-label-text">
+                                        <strong>Fuzz Method & Tool Names (Dispatch Security)</strong>
+                                        <span className="specs-mcp-subtext">
+                                            Probes for Prototype Pollution (__proto__), Python Dunder/Reflection Injection (__class__), Path Traversal, and Hidden RPC Methods.
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div className="specs-mcp-safety-card">
+                                <div className="specs-mcp-safety-header">
+                                    <span>⚠️</span>
+                                    <span>Tool Safety & Confirmation Contracts</span>
+                                </div>
+                                <p className="specs-mcp-safety-desc">
+                                    Swazz inspects server metadata (<span className="specs-mcp-safety-code">_meta</span> and <span className="specs-mcp-safety-code">annotations</span>) to detect high-risk or state-modifying tools:
+                                </p>
+                                <ul className="specs-mcp-safety-list">
+                                    <li>
+                                        <strong>Confirmation Flags:</strong> Tools declaring <span className="specs-mcp-safety-code">requires_confirmation: true</span> or <span className="specs-mcp-safety-code">requires_2fa_confirmation: true</span> are flagged as state-changing.
+                                    </li>
+                                    <li>
+                                        <strong>Scope Control:</strong> Use <span className="specs-mcp-safety-code">endpoint_definitions</span> in Project Config or run <span className="specs-mcp-safety-code">-mcp-list-tools</span> via CLI to inspect the tool catalogue and restrict active tools.
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     )}
                 </div>

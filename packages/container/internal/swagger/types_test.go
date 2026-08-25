@@ -147,3 +147,94 @@ func TestSettingsSerialization(t *testing.T) {
 	assert.True(t, s2.RandomizeUserAgent)
 	assert.True(t, s2.EnableAdaptiveRateLimit)
 }
+
+func TestSchemaProperty_UnmarshalJSON_TypeUnion(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantType string
+		wantErr  bool
+	}{
+		{name: "plain string type", input: `{"type":"string"}`, wantType: "string"},
+		{name: "nullable union", input: `{"type":["string","null"]}`, wantType: "string"},
+		{name: "null first", input: `{"type":["null","integer"]}`, wantType: "integer"},
+		{name: "all null", input: `{"type":["null"]}`, wantType: ""},
+		{name: "absent type", input: `{"format":"uuid"}`, wantType: ""},
+		{name: "number in union", input: `{"type":["number","null"]}`, wantType: "number"},
+		{name: "invalid type shape", input: `{"type":42}`, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got SchemaProperty
+			err := json.Unmarshal([]byte(tt.input), &got)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantType, got.Type)
+		})
+	}
+}
+
+func TestSchemaProperty_UnmarshalJSON_KeepsSiblingsAndNesting(t *testing.T) {
+	// The union lives on a nested property: this is the shape that broke tools/list.
+	raw := `{
+		"type": "object",
+		"required": ["walletId"],
+		"properties": {
+			"walletId": {"type": ["string", "null"], "format": "uuid"},
+			"tags":     {"type": "array", "items": {"type": ["string", "null"]}}
+		}
+	}`
+
+	var got SchemaProperty
+	assert.NoError(t, json.Unmarshal([]byte(raw), &got))
+
+	assert.Equal(t, "object", got.Type)
+	assert.Equal(t, []string{"walletId"}, got.Required)
+
+	wallet := got.Properties["walletId"]
+	assert.NotNil(t, wallet)
+	assert.Equal(t, "string", wallet.Type)
+	assert.Equal(t, "uuid", wallet.Format, "sibling fields must survive the custom unmarshaller")
+
+	tags := got.Properties["tags"]
+	assert.NotNil(t, tags)
+	assert.Equal(t, "array", tags.Type)
+	assert.NotNil(t, tags.Items)
+	assert.Equal(t, "string", tags.Items.Type, "union must resolve inside items too")
+}
+
+func TestSchemaProperty_UnmarshalJSON_Polymorphic(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantType string
+	}{
+		{
+			name:     "anyOf with scalar and null",
+			input:    `{"anyOf":[{"type":"string","format":"email"},{"type":"null"}]}`,
+			wantType: "string",
+		},
+		{
+			name:     "oneOf with object",
+			input:    `{"oneOf":[{"type":"integer"}]}`,
+			wantType: "integer",
+		},
+		{
+			name:     "allOf nested properties",
+			input:    `{"allOf":[{"type":"object","properties":{"id":{"type":"string"}}}]}`,
+			wantType: "object",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got SchemaProperty
+			assert.NoError(t, json.Unmarshal([]byte(tt.input), &got))
+			assert.Equal(t, tt.wantType, got.Type)
+		})
+	}
+}

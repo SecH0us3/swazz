@@ -97,6 +97,7 @@ export interface SwazzSettings {
     randomize_user_agent?: boolean;
     enable_adaptive_rate_limit?: boolean;
     enable_semantic_mutation?: boolean;
+    enable_mcp_method_fuzzing?: boolean;
     use_llm_prepass?: boolean;
     enable_smart_triage?: boolean;
     max_triage_per_scan?: number;
@@ -158,6 +159,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     randomize_user_agent: false,
     enable_adaptive_rate_limit: false,
     enable_semantic_mutation: true,
+    enable_mcp_method_fuzzing: true,
     use_llm_prepass: false,
     ai_gateway_url: '',
     cf_aig_token: '',

@@ -103,8 +103,8 @@ func (r *Runner) executeRequest(
 	generatedHeaders map[string]string,
 	contentType string,
 ) *swagger.FuzzResult {
-	if strings.HasPrefix(originalPath, "mcp://tool/") {
-		return r.executeMCPRequest(ctx, originalPath, payload, profile)
+	if strings.HasPrefix(originalPath, "mcp://") {
+		return r.executeMCPRequest(ctx, originalPath, payload, profile, headers, cookies)
 	}
 	if method == "GRPC" || strings.HasPrefix(baseURL, "grpc://") || strings.HasPrefix(baseURL, "grpcs://") {
 		return r.executeGRPCRequest(ctx, baseURL, resolvedPath, originalPath, payload, profile, generatedHeaders)
@@ -640,6 +640,8 @@ func (r *Runner) executeMCPRequest(
 	originalPath string,
 	payload any,
 	profile swagger.FuzzingProfile,
+	identityHeaders map[string]string,
+	identityCookies map[string]string,
 ) *swagger.FuzzResult {
 	if r.mcpClient == nil {
 		return &swagger.FuzzResult{
@@ -656,7 +658,6 @@ func (r *Runner) executeMCPRequest(
 		}
 	}
 
-	toolName := strings.TrimPrefix(originalPath, "mcp://tool/")
 	var args map[string]any
 	if payload != nil {
 		if m, ok := payload.(map[string]any); ok {
@@ -683,16 +684,21 @@ func (r *Runner) executeMCPRequest(
 	reqCtx, reqCancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer reqCancel()
 
-	// Initialize result early for potential early returns
+	// Initialize result early for potential early returns.
+	// RequestHeaders records the identity this call actually went out with. The
+	// BOLA phase reads it to decide whether a result is worth replaying (a call
+	// with no auth header is skipped as unauthenticated), so an MCP result must
+	// carry its auth header or BOLA never replays MCP tools under a second identity.
 	result := &swagger.FuzzResult{
-		ID:           uuid.New().String(),
-		Endpoint:     originalPath,
-		ResolvedPath: originalPath,
-		Method:       "CALL",
-		Profile:      profile,
-		Payload:      args,
-		PayloadSize:  payloadSize,
-		Timestamp:    time.Now().UnixMilli(),
+		ID:             uuid.New().String(),
+		Endpoint:       originalPath,
+		ResolvedPath:   originalPath,
+		Method:         "CALL",
+		Profile:        profile,
+		Payload:        args,
+		PayloadSize:    payloadSize,
+		RequestHeaders: identityHeaders,
+		Timestamp:      time.Now().UnixMilli(),
 	}
 
 	// Apply rate limiting to prevent DoS
@@ -709,7 +715,75 @@ func (r *Runner) executeMCPRequest(
 	}
 
 	startTime := time.Now()
-	res, stderr, err := r.mcpClient.CallTool(reqCtx, toolName, args)
+	// Per-call identity: the BOLA phase replays a tool as a second identity by
+	// passing that identity's headers/cookies here. In the main phase these equal
+	// the client's base headers, so applying them again is a harmless no-op. Build
+	// a fresh map — identityHeaders may be the shared config.GlobalHeaders.
+	var extraHeaders map[string]string
+	if len(identityHeaders) > 0 || len(identityCookies) > 0 {
+		extraHeaders = make(map[string]string, len(identityHeaders)+1)
+		for k, v := range identityHeaders {
+			extraHeaders[k] = r.subStateVars(v)
+		}
+		if len(identityCookies) > 0 {
+			var parts []string
+			for k, v := range identityCookies {
+				parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+			}
+			extraHeaders["Cookie"] = strings.Join(parts, "; ")
+		}
+	}
+
+	var methodType string = "CALL"
+	var resBytes []byte
+	var isError bool
+	var stderr string
+	var err error
+
+	if strings.HasPrefix(originalPath, "mcp://resource/") {
+		methodType = "READ"
+		uri := strings.TrimPrefix(originalPath, "mcp://resource/")
+		if args != nil {
+			if u, ok := args["uri"].(string); ok && u != "" {
+				uri = u
+			}
+		}
+		var readRes *mcp.ReadResourceResult
+		readRes, stderr, err = r.mcpClient.ReadResource(reqCtx, uri, extraHeaders)
+		if readRes != nil {
+			resBytes, _ = json.Marshal(readRes)
+		}
+	} else if strings.HasPrefix(originalPath, "mcp://prompt/") {
+		methodType = "PROMPT"
+		promptName := strings.TrimPrefix(originalPath, "mcp://prompt/")
+		var promptRes *mcp.GetPromptResult
+		promptRes, stderr, err = r.mcpClient.GetPrompt(reqCtx, promptName, args, extraHeaders)
+		if promptRes != nil {
+			resBytes, _ = json.Marshal(promptRes)
+		}
+	} else {
+		methodType = "CALL"
+		toolName := strings.TrimPrefix(originalPath, "mcp://tool/")
+		var callRes *mcp.CallToolResult
+		callRes, stderr, err = r.mcpClient.CallTool(reqCtx, toolName, args, extraHeaders)
+		if callRes != nil {
+			isError = callRes.IsError
+			resBytes, _ = json.Marshal(callRes)
+			if isError {
+				for _, content := range callRes.Content {
+					if content.Type == "text" {
+						textLower := strings.ToLower(content.Text)
+						if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "crash") || strings.Contains(textLower, "panic") {
+							isError = true
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	result.Method = methodType
+
 	duration := time.Since(startTime)
 
 	// Update result with call details
@@ -717,7 +791,7 @@ func (r *Runner) executeMCPRequest(
 
 	if err != nil {
 		result.Status = 500
-		result.Error = fmt.Sprintf("MCP Call failed: %v", err)
+		result.Error = fmt.Sprintf("MCP execution failed: %v", err)
 		if stderr != "" {
 			result.ResponseBody = fmt.Sprintf("Error: %v\nStderr: %s", err, stderr)
 		} else {
@@ -729,38 +803,20 @@ func (r *Runner) executeMCPRequest(
 			strings.Contains(errMsg, "channel closed") || strings.Contains(errMsg, "broken pipe") ||
 			strings.Contains(errMsg, "signal") || strings.Contains(errMsg, "killed")
 		if isCrash {
-			// Mask sensitive data in evidence - args not included to prevent sensitive info leak
 			result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
 				RuleID:   "swazz/mcp-server-crash",
 				Level:    "error",
-				Message:  "The MCP server crashed or returned a server error during the tool invocation.",
-				Evidence: fmt.Sprintf("Tool: %s\nError: %s\nStderr: %s", toolName, err.Error(), stderr),
+				Message:  "The MCP server crashed or returned a server error during invocation.",
+				Evidence: fmt.Sprintf("Endpoint: %s\nError: %s\nStderr: %s", originalPath, err.Error(), stderr),
 			})
 		}
 		return result
 	}
 
-	if res != nil && res.IsError {
+	if isError {
 		result.Status = 400
-		hasCrash := false
-		for _, content := range res.Content {
-			if content.Type == "text" {
-				textLower := strings.ToLower(content.Text)
-				if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "crash") || strings.Contains(textLower, "panic") {
-					hasCrash = true
-					break
-				}
-			}
-		}
-		if hasCrash {
-			result.Status = 500
-		}
 	} else {
 		result.Status = 200
-	}
-	var resBytes []byte
-	if res != nil {
-		resBytes, _ = json.Marshal(res)
 	}
 	result.ResponseBody = string(resBytes)
 	result.ResponseSize = int64(len(resBytes))
@@ -772,7 +828,7 @@ func (r *Runner) executeMCPRequest(
 			Duration:        duration.Milliseconds(),
 			Profile:         profile,
 			Endpoint:        originalPath,
-			Method:          "CALL",
+			Method:          methodType,
 			ResponseSize:    result.ResponseSize,
 			BaselineSize:    0,
 			SizeMultiplier:  5.0,
@@ -780,22 +836,6 @@ func (r *Runner) executeMCPRequest(
 			TimeThresholdMs: 0,
 		}
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
-
-		if res != nil {
-			for _, content := range res.Content {
-				if content.Type == "text" {
-					textLower := strings.ToLower(content.Text)
-					if strings.Contains(textLower, "exception") || strings.Contains(textLower, "stacktrace") || strings.Contains(textLower, "sql syntax") {
-						result.AnalyzerFindings = append(result.AnalyzerFindings, swagger.AnalysisFinding{
-							RuleID:   "swazz/mcp-tool-error-reflection",
-							Level:    "error",
-							Message:  fmt.Sprintf("The tool returned an error or exception signature in its content: %s", content.Text),
-							Evidence: fmt.Sprintf("Tool: %s\nText: %s", toolName, content.Text),
-						})
-					}
-				}
-			}
-		}
 	}
 
 	return result

@@ -33,6 +33,89 @@ type SchemaProperty struct {
 	Required   []string                   `json:"required,omitempty"`
 }
 
+// UnmarshalJSON accepts both spellings of JSON Schema's "type": a single string
+// ("string") and a union array (["string","null"]).
+//
+// The union form is not exotic — it is how JSON Schema expresses a nullable field,
+// and MCP tool schemas use it routinely. Without this, a single nullable property
+// anywhere in a tool's inputSchema fails the whole tools/list decode and the scan
+// never starts.
+//
+// A union collapses to its first non-"null" member, which is what the payload
+// generator needs to pick a strategy. Nullability itself is not retained, so a
+// re-serialised schema spells the type as a plain string.
+func (s *SchemaProperty) UnmarshalJSON(data []byte) error {
+	type alias SchemaProperty
+	var aux struct {
+		*alias
+		Type json.RawMessage `json:"type,omitempty"`
+	}
+	aux.alias = (*alias)(s)
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.Type = ""
+	if len(aux.Type) > 0 {
+		var single string
+		if err := json.Unmarshal(aux.Type, &single); err == nil {
+			s.Type = single
+		} else {
+			var union []string
+			if err := json.Unmarshal(aux.Type, &union); err != nil {
+				return fmt.Errorf("schema \"type\" must be a string or an array of strings, got %s", aux.Type)
+			}
+			for _, t := range union {
+				if t != "null" {
+					s.Type = t
+					break
+				}
+			}
+		}
+	}
+
+	// Polymorphic schema resolution: anyOf, oneOf, allOf
+	if s.Type == "" && (s.Properties == nil || len(s.Properties) == 0) {
+		var polymorphic struct {
+			AnyOf []*SchemaProperty `json:"anyOf,omitempty"`
+			OneOf []*SchemaProperty `json:"oneOf,omitempty"`
+			AllOf []*SchemaProperty `json:"allOf,omitempty"`
+		}
+		if err := json.Unmarshal(data, &polymorphic); err == nil {
+			candidates := polymorphic.AnyOf
+			if len(candidates) == 0 {
+				candidates = polymorphic.OneOf
+			}
+			if len(candidates) == 0 {
+				candidates = polymorphic.AllOf
+			}
+			for _, cand := range candidates {
+				if cand != nil && (cand.Type != "" || cand.Properties != nil || cand.Items != nil) {
+					if s.Type == "" && cand.Type != "" {
+						s.Type = cand.Type
+					}
+					if s.Format == "" && cand.Format != "" {
+						s.Format = cand.Format
+					}
+					if len(s.Enum) == 0 && len(cand.Enum) > 0 {
+						s.Enum = cand.Enum
+					}
+					if s.Properties == nil && cand.Properties != nil {
+						s.Properties = cand.Properties
+					}
+					if s.Items == nil && cand.Items != nil {
+						s.Items = cand.Items
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // EndpointConfig describes a single API endpoint extracted from the spec.
 type EndpointConfig struct {
 	Path             string                     `json:"path"`
@@ -193,6 +276,7 @@ type Settings struct {
 	RandomizeUserAgent            bool                        `json:"randomize_user_agent,omitempty"`
 	EnableAdaptiveRateLimit       bool                        `json:"enable_adaptive_rate_limit,omitempty"`
 	EnableSemanticMutation        *bool                       `json:"enable_semantic_mutation,omitempty"`
+	EnableMCPMethodFuzzing        *bool                       `json:"enable_mcp_method_fuzzing,omitempty"`
 	UseLLMPrepass                 bool                        `json:"use_llm_prepass,omitempty"`
 	AIGatewayURL                  string                      `json:"ai_gateway_url,omitempty"`
 	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
@@ -207,6 +291,15 @@ func (s Settings) SemanticMutationEnabled() bool {
 		return true
 	}
 	return *s.EnableSemanticMutation
+}
+
+// MCPMethodFuzzingEnabled returns true if method and tool name fuzzing is enabled for MCP servers.
+// Defaults to true when nil to proactively test MCP dispatch security when an MCP server is configured.
+func (s Settings) MCPMethodFuzzingEnabled() bool {
+	if s.EnableMCPMethodFuzzing == nil {
+		return true
+	}
+	return *s.EnableMCPMethodFuzzing
 }
 
 // GetMaxTriagePerScan returns the configured max triage limit,

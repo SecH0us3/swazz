@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"swazz-engine/internal/analyzer"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
@@ -150,4 +151,151 @@ func TestExecuteGRPCRequest_LiveServerAndAnalyzer(t *testing.T) {
 		}
 	}
 	assert.True(t, foundGrpcInternal, "expected finding swazz/grpc-internal-error to be captured")
+}
+
+// fakeMCPClient records the extraHeaders it was called with, to prove the BOLA
+// phase's second-identity headers actually reach the wire.
+type fakeMCPClient struct {
+	lastTool     string
+	lastHeaders  map[string]string
+	resourceText string // overrides the text returned by ReadResource when non-empty
+}
+
+func (f *fakeMCPClient) Connect(context.Context) error       { return nil }
+func (f *fakeMCPClient) ListTools(context.Context) ([]mcp.Tool, error) { return nil, nil }
+func (f *fakeMCPClient) Close() error                        { return nil }
+func (f *fakeMCPClient) CallTool(_ context.Context, name string, _ map[string]any, extraHeaders map[string]string) (*mcp.CallToolResult, string, error) {
+	f.lastTool = name
+	f.lastHeaders = extraHeaders
+	return &mcp.CallToolResult{Content: []mcp.Content{{Type: "text", Text: "ok"}}}, "", nil
+}
+func (f *fakeMCPClient) ListResources(context.Context) ([]mcp.Resource, error) { return nil, nil }
+func (f *fakeMCPClient) ReadResource(_ context.Context, uri string, extraHeaders map[string]string) (*mcp.ReadResourceResult, string, error) {
+	f.lastTool = uri
+	f.lastHeaders = extraHeaders
+	text := "resource data"
+	if f.resourceText != "" {
+		text = f.resourceText
+	}
+	return &mcp.ReadResourceResult{Contents: []mcp.ResourceContent{{URI: uri, Text: text}}}, "", nil
+}
+func (f *fakeMCPClient) ListPrompts(context.Context) ([]mcp.Prompt, error) { return nil, nil }
+func (f *fakeMCPClient) GetPrompt(_ context.Context, name string, _ map[string]any, extraHeaders map[string]string) (*mcp.GetPromptResult, string, error) {
+	f.lastTool = name
+	f.lastHeaders = extraHeaders
+	return &mcp.GetPromptResult{Description: name, Messages: []mcp.PromptMessage{{Role: "user", Content: mcp.PromptContent{Type: "text", Text: "prompt data"}}}}, "", nil
+}
+
+func TestExecuteMCPRequest_ForwardsIdentityHeaders(t *testing.T) {
+	fake := &fakeMCPClient{}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    &swagger.Config{Settings: swagger.Settings{TimeoutMs: 5000}},
+		mcpClient: fake,
+	}
+
+	// Simulate the BOLA phase replaying a tool as identity B.
+	identityB := map[string]string{"Authorization": "Bearer token-B"}
+	cookiesB := map[string]string{"sess": "b-sess"}
+
+	res := r.executeMCPRequest(
+		context.Background(),
+		"mcp://tool/listTransactions",
+		map[string]any{"startDate": "2026-01-01"},
+		swagger.FuzzingProfile("BOLA"),
+		identityB, cookiesB,
+	)
+
+	assert.Equal(t, 200, res.Status)
+	assert.Equal(t, "listTransactions", fake.lastTool)
+	assert.Equal(t, "Bearer token-B", fake.lastHeaders["Authorization"],
+		"identity B's token must reach CallTool, else BOLA on MCP tests nothing")
+	assert.Equal(t, "sess=b-sess", fake.lastHeaders["Cookie"])
+}
+
+func TestExecuteMCPRequest_NoIdentityMeansNoOverride(t *testing.T) {
+	fake := &fakeMCPClient{}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    &swagger.Config{Settings: swagger.Settings{TimeoutMs: 5000}},
+		mcpClient: fake,
+	}
+
+	// Main phase with no per-identity headers: nothing overrides the client's base.
+	r.executeMCPRequest(context.Background(), "mcp://tool/getCardDetails", nil,
+		swagger.ProfileRandom, nil, nil)
+
+	assert.Nil(t, fake.lastHeaders, "no identity headers => no per-call override map")
+}
+
+func TestExecuteMCPRequest_ResourcesAndPrompts(t *testing.T) {
+	fake := &fakeMCPClient{}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    &swagger.Config{Settings: swagger.Settings{TimeoutMs: 5000}},
+		mcpClient: fake,
+	}
+
+	// Resource read
+	resRes := r.executeMCPRequest(
+		context.Background(),
+		"mcp://resource/file:///etc/hosts",
+		map[string]any{"uri": "file:///etc/hosts"},
+		swagger.ProfileRandom,
+		nil, nil,
+	)
+	assert.Equal(t, 200, resRes.Status)
+	assert.Equal(t, "READ", resRes.Method)
+	assert.Contains(t, resRes.ResponseBody, "resource data")
+
+	// Prompt evaluation
+	promptRes := r.executeMCPRequest(
+		context.Background(),
+		"mcp://prompt/summarize_code",
+		map[string]any{"code": "func main() {}"},
+		swagger.ProfileRandom,
+		nil, nil,
+	)
+	assert.Equal(t, 200, promptRes.Status)
+	assert.Equal(t, "PROMPT", promptRes.Method)
+	assert.Contains(t, promptRes.ResponseBody, "prompt data")
+}
+
+// TestExecuteMCPRequest_ResourceLeakAnalyzerFires verifies the fix for the bug where
+// AnalysisInput.Method was hardcoded to "CALL" for all MCP calls.
+// With the fix, READ requests carry method="READ", enabling isMCPEndpoint() to match
+// and swazz/mcp-resource-leak to fire when the response contains /etc/passwd content.
+func TestExecuteMCPRequest_ResourceLeakAnalyzerFires(t *testing.T) {
+	fake := &fakeMCPClient{}
+	// Return /etc/passwd content to trigger the swazz/mcp-resource-leak rule.
+	fake.resourceText = "root:x:0:0:root:/root:/bin/bash"
+
+	reg := analyzer.NewRegistry()
+	r := &Runner{
+		client: &http.Client{},
+		config: &swagger.Config{Settings: swagger.Settings{
+			TimeoutMs:           5000,
+			AnalyzeResponseBody: true,
+		}},
+		mcpClient: fake,
+		analyzer:  reg,
+	}
+
+	res := r.executeMCPRequest(
+		context.Background(),
+		"mcp://resource/file:///etc/passwd",
+		map[string]any{"uri": "file:///etc/passwd"},
+		swagger.ProfileRandom,
+		nil, nil,
+	)
+
+	assert.Equal(t, "READ", res.Method)
+	var found bool
+	for _, f := range res.AnalyzerFindings {
+		if f.RuleID == "swazz/mcp-resource-leak" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "swazz/mcp-resource-leak must fire for READ responses with /etc/passwd content")
 }

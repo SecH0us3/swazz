@@ -106,6 +106,69 @@ func TestHelperProcess(t *testing.T) {
 					Message: "Method not found",
 				}
 			}
+
+		case "resources/list":
+			resources := []Resource{
+				{
+					URI:         "file:///etc/config.json",
+					Name:        "config",
+					Description: "Server configuration",
+					MIMEType:    "application/json",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"resources": resources})
+			response.Result = resBytes
+
+		case "resources/read":
+			var readArgs struct {
+				URI string `json:"uri"`
+			}
+			_ = json.Unmarshal(req.Params, &readArgs)
+			result := ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:      readArgs.URI,
+						MIMEType: "text/plain",
+						Text:     "sample content",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "prompts/list":
+			prompts := []Prompt{
+				{
+					Name:        "review_code",
+					Description: "Reviews code",
+					Arguments: []PromptArgument{
+						{Name: "code", Description: "code snippet", Required: true},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"prompts": prompts})
+			response.Result = resBytes
+
+		case "prompts/get":
+			var getArgs struct {
+				Name      string         `json:"name"`
+				Arguments map[string]any `json:"arguments"`
+			}
+			_ = json.Unmarshal(req.Params, &getArgs)
+			result := GetPromptResult{
+				Description: "Code review prompt",
+				Messages: []PromptMessage{
+					{
+						Role: "user",
+						Content: PromptContent{
+							Type: "text",
+							Text: "Please review: " + fmt.Sprintf("%v", getArgs.Arguments["code"]),
+						},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
 		}
 
 		respBytes, _ := json.Marshal(response)
@@ -138,10 +201,34 @@ func TestStdioClient_Success(t *testing.T) {
 	tools, err := client.ListTools(ctx)
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
+
+	// Test ListResources
+	resources, err := client.ListResources(ctx)
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+	assert.Equal(t, "file:///etc/config.json", resources[0].URI)
+
+	// Test ReadResource
+	readRes, _, err := client.ReadResource(ctx, "file:///etc/config.json", nil)
+	require.NoError(t, err)
+	require.Len(t, readRes.Contents, 1)
+	assert.Equal(t, "sample content", readRes.Contents[0].Text)
+
+	// Test ListPrompts
+	prompts, err := client.ListPrompts(ctx)
+	require.NoError(t, err)
+	require.Len(t, prompts, 1)
+	assert.Equal(t, "review_code", prompts[0].Name)
+
+	// Test GetPrompt
+	promptRes, _, err := client.GetPrompt(ctx, "review_code", map[string]any{"code": "foo()"}, nil)
+	require.NoError(t, err)
+	require.Len(t, promptRes.Messages, 1)
+	assert.Contains(t, promptRes.Messages[0].Content.Text, "foo()")
 	assert.Equal(t, "get_weather", tools[0].Name)
 
 	// Test CallTool
-	res, stderr, err := client.CallTool(ctx, "get_weather", map[string]any{"city": "Paris"})
+	res, stderr, err := client.CallTool(ctx, "get_weather", map[string]any{"city": "Paris"}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
@@ -184,7 +271,7 @@ func TestStdioClient_CrashOnCall(t *testing.T) {
 	}()
 
 	// Call tool that triggers exit 42
-	res, _, err := client.CallTool(ctx, "crash", nil)
+	res, _, err := client.CallTool(ctx, "crash", nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	assert.Contains(t, err.Error(), "exit status 42")
@@ -343,7 +430,7 @@ func TestSSEClient_Success(t *testing.T) {
 	assert.Equal(t, "sse_tool", tools[0].Name)
 
 	// Test CallTool
-	res, stderr, err := client.CallTool(ctx, "sse_tool", map[string]any{"arg": 123})
+	res, stderr, err := client.CallTool(ctx, "sse_tool", map[string]any{"arg": 123}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
@@ -469,7 +556,7 @@ func TestHTTPClient_Success(t *testing.T) {
 	require.Len(t, tools, 1)
 	assert.Equal(t, "http_tool", tools[0].Name)
 
-	res, stderr, err := client.CallTool(ctx, "http_tool", map[string]any{"x": "y"})
+	res, stderr, err := client.CallTool(ctx, "http_tool", map[string]any{"x": "y"}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
