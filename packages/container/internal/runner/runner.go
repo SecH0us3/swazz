@@ -294,12 +294,17 @@ func (r *Runner) Close() {
 		return true
 	})
 	r.wsClients.Range(func(key, value any) bool {
-		// we will import ws package in runner.go if we need to assert, but we can just use an interface or import it.
 		if c, ok := value.(interface{ Close() error }); ok {
 			_ = c.Close()
 		}
 		return true
 	})
+	r.subsMu.Lock()
+	for ch := range r.subs {
+		delete(r.subs, ch)
+		close(ch)
+	}
+	r.subsMu.Unlock()
 }
 
 func (r *Runner) getGRPCClient(addr string, isTLS bool, md map[string]string) *swazzGrpc.Client {
