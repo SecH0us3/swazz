@@ -469,7 +469,7 @@ func (r *Runner) executeRequest(
 		}
 
 		if profile != swagger.FuzzingProfile("BOLA") {
-			r.harvestFromResponse(originalPath, method, resp.StatusCode, respBody)
+			r.detector.HarvestFromResponse(originalPath, method, resp.StatusCode, respBody)
 		}
 
 		if r.config.Settings.AnalyzeResponseBody {
