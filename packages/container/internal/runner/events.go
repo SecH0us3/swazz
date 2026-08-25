@@ -77,6 +77,9 @@ func (r *Runner) Broadcast(evt Event) {
 }
 
 func (r *Runner) broadcastLoop() {
+	if r.broadcastDone != nil {
+		defer close(r.broadcastDone)
+	}
 	stalledSubs := make(map[chan Event]bool)
 
 	for {
