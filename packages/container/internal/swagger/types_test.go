@@ -238,3 +238,34 @@ func TestSchemaProperty_UnmarshalJSON_Polymorphic(t *testing.T) {
 		})
 	}
 }
+
+func TestSettings_GettersAndDefaults(t *testing.T) {
+	// 1. Default (nil pointers)
+	s := Settings{}
+	assert.True(t, s.SemanticMutationEnabled())
+	assert.True(t, s.MCPMethodFuzzingEnabled())
+	assert.Equal(t, 30, s.GetMaxTriagePerScan())
+
+	// 2. Explicitly false
+	f := false
+	sFalse := Settings{
+		EnableSemanticMutation: &f,
+		EnableMCPMethodFuzzing: &f,
+		MaxTriagePerScan:       10,
+	}
+	assert.False(t, sFalse.SemanticMutationEnabled())
+	assert.False(t, sFalse.MCPMethodFuzzingEnabled())
+	assert.Equal(t, 10, sFalse.GetMaxTriagePerScan())
+
+	// 3. Explicitly true
+	tr := true
+	sTrue := Settings{
+		EnableSemanticMutation: &tr,
+		EnableMCPMethodFuzzing: &tr,
+		MaxTriagePerScan:       50,
+	}
+	assert.True(t, sTrue.SemanticMutationEnabled())
+	assert.True(t, sTrue.MCPMethodFuzzingEnabled())
+	assert.Equal(t, 50, sTrue.GetMaxTriagePerScan())
+}
+

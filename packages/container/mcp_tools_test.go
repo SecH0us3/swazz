@@ -7,6 +7,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -105,4 +107,88 @@ func TestToolConfirmationFlags(t *testing.T) {
 			assert.Equal(t, tt.wantSource, source)
 		})
 	}
+}
+
+func TestListMCPTools(t *testing.T) {
+	// 1. Error when no MCP server config
+	err := listMCPTools(&swagger.Config{})
+	assert.Error(t, err)
+
+	// 2. Mock HTTP MCP server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		var req mcp.Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		var resp mcp.Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+
+		switch req.Method {
+		case "initialize":
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"test-server","version":"1.0.0"}}`)
+		case "tools/list":
+			tools := []mcp.Tool{
+				{
+					Name: "transfer_funds",
+					Meta: json.RawMessage(`{"requires_confirmation":true,"requires_2fa_confirmation":true}`),
+				},
+				{
+					Name: "search_cards",
+				},
+			}
+			data, _ := json.Marshal(map[string]any{"tools": tools})
+			resp.Result = data
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  ts.URL + "/mcp",
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{Path: "mcp://tool/transfer_funds", Method: "CALL"},
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+
+	err = listMCPTools(cfg)
+	assert.NoError(t, err)
+
+	// 3. Empty tool list
+	emptyMux := http.NewServeMux()
+	emptyMux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		var req mcp.Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		var resp mcp.Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else if req.Method == "tools/list" {
+			resp.Result = json.RawMessage(`{"tools":[]}`)
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+	emptyTs := httptest.NewServer(emptyMux)
+	defer emptyTs.Close()
+
+	emptyCfg := &swagger.Config{
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  emptyTs.URL + "/mcp",
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+	}
+	err = listMCPTools(emptyCfg)
+	assert.NoError(t, err)
 }

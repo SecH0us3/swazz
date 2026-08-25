@@ -393,6 +393,51 @@ func (s *mockSSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Message: "Method not found",
 				}
 			}
+
+		case "resources/list":
+			resources := []Resource{
+				{
+					URI:  "file:///etc/sse.conf",
+					Name: "sse_conf",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"resources": resources})
+			response.Result = resBytes
+
+		case "resources/read":
+			result := ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:  "file:///etc/sse.conf",
+						Text: "sse-content",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "prompts/list":
+			prompts := []Prompt{
+				{
+					Name:        "sse_prompt",
+					Description: "SSE prompt",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"prompts": prompts})
+			response.Result = resBytes
+
+		case "prompts/get":
+			result := GetPromptResult{
+				Description: "SSE prompt description",
+				Messages: []PromptMessage{
+					{
+						Role:    "user",
+						Content: PromptContent{Type: "text", Text: "rendered sse prompt"},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
 		}
 
 		respBytes, _ := json.Marshal(response)
@@ -436,6 +481,30 @@ func TestSSEClient_Success(t *testing.T) {
 	require.Len(t, res.Content, 1)
 	assert.Equal(t, "text", res.Content[0].Type)
 	assert.Equal(t, "SSE Success", res.Content[0].Text)
+
+	// Test ListResources
+	resources, err := client.ListResources(ctx)
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+	assert.Equal(t, "file:///etc/sse.conf", resources[0].URI)
+
+	// Test ReadResource
+	readRes, _, err := client.ReadResource(ctx, "file:///etc/sse.conf", map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, readRes.Contents, 1)
+	assert.Equal(t, "sse-content", readRes.Contents[0].Text)
+
+	// Test ListPrompts
+	prompts, err := client.ListPrompts(ctx)
+	require.NoError(t, err)
+	require.Len(t, prompts, 1)
+	assert.Equal(t, "sse_prompt", prompts[0].Name)
+
+	// Test GetPrompt
+	promptRes, _, err := client.GetPrompt(ctx, "sse_prompt", map[string]any{"key": "val"}, map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, promptRes.Messages, 1)
+	assert.Equal(t, "rendered sse prompt", promptRes.Messages[0].Content.Text)
 }
 
 func TestSSEClient_FallbackWriteURL(t *testing.T) {
@@ -533,6 +602,51 @@ func TestHTTPClient_Success(t *testing.T) {
 			}
 			resBytes, _ := json.Marshal(result)
 			response.Result = resBytes
+
+		case "resources/list":
+			resources := []Resource{
+				{
+					URI:  "file:///etc/http.conf",
+					Name: "http_conf",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"resources": resources})
+			response.Result = resBytes
+
+		case "resources/read":
+			result := ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:  "file:///etc/http.conf",
+						Text: "http-content",
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
+
+		case "prompts/list":
+			prompts := []Prompt{
+				{
+					Name:        "http_prompt",
+					Description: "HTTP prompt",
+				},
+			}
+			resBytes, _ := json.Marshal(map[string]any{"prompts": prompts})
+			response.Result = resBytes
+
+		case "prompts/get":
+			result := GetPromptResult{
+				Description: "HTTP prompt description",
+				Messages: []PromptMessage{
+					{
+						Role:    "user",
+						Content: PromptContent{Type: "text", Text: "rendered http prompt"},
+					},
+				},
+			}
+			resBytes, _ := json.Marshal(result)
+			response.Result = resBytes
 		}
 
 		respBytes, _ := json.Marshal(response)
@@ -561,6 +675,30 @@ func TestHTTPClient_Success(t *testing.T) {
 	assert.Empty(t, stderr)
 	require.Len(t, res.Content, 1)
 	assert.Equal(t, "HTTP Success", res.Content[0].Text)
+
+	// Test ListResources
+	resources, err := client.ListResources(ctx)
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+	assert.Equal(t, "file:///etc/http.conf", resources[0].URI)
+
+	// Test ReadResource
+	readRes, _, err := client.ReadResource(ctx, "file:///etc/http.conf", map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, readRes.Contents, 1)
+	assert.Equal(t, "http-content", readRes.Contents[0].Text)
+
+	// Test ListPrompts
+	prompts, err := client.ListPrompts(ctx)
+	require.NoError(t, err)
+	require.Len(t, prompts, 1)
+	assert.Equal(t, "http_prompt", prompts[0].Name)
+
+	// Test GetPrompt
+	promptRes, _, err := client.GetPrompt(ctx, "http_prompt", map[string]any{"key": "val"}, map[string]string{"X-Test": "1"})
+	require.NoError(t, err)
+	require.Len(t, promptRes.Messages, 1)
+	assert.Equal(t, "rendered http prompt", promptRes.Messages[0].Content.Text)
 
 	err = client.Close()
 	require.NoError(t, err)
