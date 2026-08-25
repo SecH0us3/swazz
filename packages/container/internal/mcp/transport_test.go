@@ -110,3 +110,16 @@ func TestNewClientFromConfig(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, cInvalid)
 }
+
+func TestIDToKey(t *testing.T) {
+	assert.Equal(t, "", idToKey(nil))
+	assert.Equal(t, "s:req-123", idToKey("req-123"))
+	assert.Equal(t, "f:42", idToKey(int(42)))
+	assert.Equal(t, "f:100", idToKey(int64(100)))
+	assert.Equal(t, "f:200", idToKey(uint64(200)))
+	assert.Equal(t, "f:300", idToKey(int32(300)))
+	assert.Equal(t, "f:400", idToKey(uint32(400)))
+	assert.Equal(t, "f:12.34", idToKey(float64(12.34)))
+	assert.Equal(t, "f:5.5", idToKey(float32(5.5)))
+	assert.Equal(t, "v:true", idToKey(true))
+}
