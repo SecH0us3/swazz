@@ -3,13 +3,11 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-package main
+package swagger
 
 import (
 	"encoding/json"
 	"testing"
-
-	"swazz-engine/internal/swagger"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -99,7 +97,7 @@ func TestStripJSONC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stripped := swagger.StripJSONC([]byte(tt.input))
+			stripped := StripJSONC([]byte(tt.input))
 
 			// Verify that line numbers/byte offsets remain identical
 			assert.Equal(t, len(tt.input), len(stripped), "Length of stripped content must match input to preserve byte offsets")

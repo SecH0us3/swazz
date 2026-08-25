@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -385,4 +386,88 @@ func TestExecuteMCPRequest_ToolErrorAndCrash(t *testing.T) {
 	assert.Equal(t, 429, resRL.Status)
 	assert.Contains(t, resRL.Error, "Rate limit exceeded")
 }
+
+func TestExtractChainingVariables(t *testing.T) {
+	r := &Runner{
+		config: &swagger.Config{
+			Settings: swagger.Settings{
+				ChainingRules: []swagger.ChainingRule{
+					{
+						SourceEndpoint: "POST /auth/login",
+						ExtractType:    "json",
+						ExtractPath:    "token",
+						VariableName:   "AUTH_TOKEN",
+					},
+					{
+						SourceEndpoint: "POST /auth/login",
+						ExtractType:    "header",
+						ExtractPath:    "X-Session-ID",
+						VariableName:   "SESSION_ID",
+					},
+					{
+						SourceEndpoint: "POST /auth/login",
+						ExtractType:    "regex",
+						ExtractPath:    `user_id=(\d+)`,
+						VariableName:   "USER_ID",
+					},
+				},
+			},
+		},
+		state:      make(map[string]string),
+		regexCache: make(map[string]*regexp.Regexp),
+	}
+
+	assert.True(t, r.hasChainingRuleFor("POST /auth/login"))
+	assert.False(t, r.hasChainingRuleFor("GET /other"))
+
+	resp := &http.Response{
+		Header: http.Header{"X-Session-Id": []string{"sess_12345"}},
+	}
+	rawBody := []byte(`{"token": "jwt_secret_token", "info": "user_id=98765"}`)
+
+	r.extractChainingVariables("POST /auth/login", resp, rawBody)
+
+	r.stateMu.RLock()
+	defer r.stateMu.RUnlock()
+	assert.Equal(t, "jwt_secret_token", r.state["AUTH_TOKEN"])
+	assert.Equal(t, "sess_12345", r.state["SESSION_ID"])
+	assert.Equal(t, "98765", r.state["USER_ID"])
+}
+
+func TestExecuteWebSocketRequest(t *testing.T) {
+	r := &Runner{
+		config: &swagger.Config{},
+	}
+
+	// Non-listening WS endpoint to test error capture and payload serialization
+	res := r.executeWebSocketRequest(
+		context.Background(),
+		"ws://127.0.0.1:59998",
+		"/chat",
+		"/chat",
+		map[string]string{"message": "hello"},
+		swagger.ProfileRandom,
+		nil,
+		map[string]string{"X-Test": "1"},
+	)
+
+	assert.Equal(t, "WS", res.Method)
+	assert.Contains(t, res.Endpoint, "ws://127.0.0.1:59998/chat")
+	assert.NotEmpty(t, res.Error)
+}
+
+func TestGetNextProxy(t *testing.T) {
+	proxies := []string{"http://proxy1:8080", "http://proxy2:8080"}
+
+	p1 := getNextProxy(proxies)
+	p2 := getNextProxy(proxies)
+	p3 := getNextProxy(proxies)
+
+	assert.NotEmpty(t, p1)
+	assert.NotEmpty(t, p2)
+	assert.NotEmpty(t, p3)
+	assert.Equal(t, "", getNextProxy(nil))
+}
+
+
 

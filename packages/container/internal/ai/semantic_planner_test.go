@@ -37,3 +37,69 @@ func TestSemanticPlanner_ExtractSemanticFormats(t *testing.T) {
 		t.Errorf("expected user_uuid format to be 'uuid', got %s", formats["user_uuid"])
 	}
 }
+
+func TestParseGatewayError(t *testing.T) {
+	// 1. Array format error
+	errArray := []byte(`{"error": [{"message": "rate limit exceeded"}]}`)
+	err := parseGatewayError(429, errArray)
+	if err == nil || err.Error() != "AI Gateway error 429: rate limit exceeded" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+
+	// 2. Object format error
+	errObj := []byte(`{"error": {"message": "invalid api key"}}`)
+	err = parseGatewayError(401, errObj)
+	if err == nil || err.Error() != "AI Gateway error 401: invalid api key" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+
+	// 3. Raw string error
+	errRaw := []byte(`Internal Server Error`)
+	err = parseGatewayError(500, errRaw)
+	if err == nil || err.Error() != "AI Gateway error 500: Internal Server Error" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestParseGatewayResponse(t *testing.T) {
+	// 1. Gemini format
+	geminiResp := []byte(`{
+		"candidates": [{
+			"content": {
+				"parts": [{
+					"text": "[\"admin' OR 1=1--\", \"<script>alert(1)</script>\"]"
+				}]
+			}
+		}]
+	}`)
+	payloads, err := parseGatewayResponse(geminiResp, true)
+	if err != nil {
+		t.Fatalf("unexpected error parsing gemini response: %v", err)
+	}
+	if len(payloads) != 2 {
+		t.Fatalf("expected 2 payloads, got %d", len(payloads))
+	}
+
+	// 2. OpenAI format
+	openAIResp := []byte(`{
+		"choices": [{
+			"message": {
+				"content": "[\"{{7*7}}\", \"../../../etc/passwd\"]"
+			}
+		}]
+	}`)
+	payloadsOA, err := parseGatewayResponse(openAIResp, false)
+	if err != nil {
+		t.Fatalf("unexpected error parsing openai response: %v", err)
+	}
+	if len(payloadsOA) != 2 {
+		t.Fatalf("expected 2 payloads, got %d", len(payloadsOA))
+	}
+
+	// 3. Invalid JSON
+	_, err = parseGatewayResponse([]byte(`{invalid`), false)
+	if err == nil {
+		t.Errorf("expected error on invalid JSON")
+	}
+}
+

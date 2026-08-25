@@ -303,3 +303,45 @@ message MapMsg {
 	require.NotNil(t, parsed["counts"])
 }
 
+func TestScalarConversions(t *testing.T) {
+	// toInt32
+	i32, ok := toInt32(int32(10))
+	assert.True(t, ok)
+	assert.Equal(t, int32(10), i32)
+	_, ok = toInt32("invalid")
+	assert.False(t, ok)
+	_, ok = toInt32(struct{}{})
+	assert.False(t, ok)
+
+	// toUint32
+	u32, ok := toUint32(uint32(20))
+	assert.True(t, ok)
+	assert.Equal(t, uint32(20), u32)
+	_, ok = toUint32(-5)
+	assert.False(t, ok)
+	_, ok = toUint32("invalid")
+	assert.False(t, ok)
+
+	// toInt64
+	i64, ok := toInt64(int64(30))
+	assert.True(t, ok)
+	assert.Equal(t, int64(30), i64)
+	_, ok = toInt64("invalid")
+	assert.False(t, ok)
+
+	// toUint64
+	u64, ok := toUint64(uint64(40))
+	assert.True(t, ok)
+	assert.Equal(t, uint64(40), u64)
+	_, ok = toUint64(-10)
+	assert.False(t, ok)
+
+	// toFloat64
+	f64, ok := toFloat64(float32(1.5))
+	assert.True(t, ok)
+	assert.InDelta(t, 1.5, f64, 0.001)
+	_, ok = toFloat64("invalid")
+	assert.False(t, ok)
+}
+
+

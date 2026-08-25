@@ -59,4 +59,29 @@ func TestSpiderCLI_FlagsAndConfigParsing(t *testing.T) {
 	assert.Equal(t, "http://example.com/api/login", cliCfg.AuthSequence[0].URL)
 }
 
+func TestRunSpiderCLIErr_ValidationAndErrors(t *testing.T) {
+	// 1. Missing target URL and config
+	err := runSpiderCLIErr([]string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage:")
 
+	// 2. Non-existent config file
+	err = runSpiderCLIErr([]string{"-config", "nonexistent.json"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read config")
+
+	// 3. Invalid JSON config
+	tmpDir := t.TempDir()
+	invalidCfg := filepath.Join(tmpDir, "invalid.json")
+	require.NoError(t, os.WriteFile(invalidCfg, []byte(`{invalid`), 0600))
+	err = runSpiderCLIErr([]string{"-config", invalidCfg})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid config JSON")
+
+	// 4. Config without base_url and no URL arg
+	emptyCfg := filepath.Join(tmpDir, "empty.json")
+	require.NoError(t, os.WriteFile(emptyCfg, []byte(`{}`), 0600))
+	err = runSpiderCLIErr([]string{"-config", emptyCfg})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no target URL specified")
+}

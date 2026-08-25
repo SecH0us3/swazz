@@ -154,4 +154,61 @@ func TestBuildMutatedPayload(t *testing.T) {
 	if mutated.body["age"] != 30 {
 		t.Errorf("buildMutatedPayload changed non-target property: expected 30, got %v", mutated.body["age"])
 	}
+
+	// 2. Query param mutation
+	queryField := targetField{
+		Location: "query",
+		Path:     []string{"search"},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedQuery := buildMutatedPayload(baseline, queryField, gen)
+	if mutatedQuery.queryParams["search"] == nil {
+		t.Error("expected queryParams.search to be populated")
+	}
+
+	// 3. Header param mutation
+	headerField := targetField{
+		Location: "header",
+		Path:     []string{"X-Custom"},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedHeader := buildMutatedPayload(baseline, headerField, gen)
+	if mutatedHeader.headers["X-Custom"] == "" {
+		t.Error("expected headers.X-Custom to be populated")
+	}
+
+	// 4. Path param mutation
+	pathField := targetField{
+		Location: "path",
+		Path:     []string{"userId"},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedPath := buildMutatedPayload(baseline, pathField, gen)
+	if mutatedPath.pathParams["userId"] == "" {
+		t.Error("expected pathParams.userId to be populated")
+	}
 }
+
+func TestHashPayload(t *testing.T) {
+	p1 := generatedPayload{
+		body: map[string]any{"a": 1},
+	}
+	p2 := generatedPayload{
+		body: map[string]any{"a": 1},
+	}
+	p3 := generatedPayload{
+		body: map[string]any{"a": 2},
+	}
+
+	h1 := hashPayload(p1)
+	h2 := hashPayload(p2)
+	h3 := hashPayload(p3)
+
+	if h1 != h2 {
+		t.Errorf("expected h1 == h2, got %d != %d", h1, h2)
+	}
+	if h1 == h3 {
+		t.Errorf("expected h1 != h3 for different payloads")
+	}
+}
+

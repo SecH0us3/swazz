@@ -122,3 +122,72 @@ func TestAgent_GRPCAndProtoDetection(t *testing.T) {
 	assert.False(t, swagger.IsGRPCURL("http://localhost:8080"))
 	assert.False(t, swagger.IsGRPCURL("https://api.example.com"))
 }
+
+func TestFilterSensitiveData(t *testing.T) {
+	raw := `{"password": "secret123", "token": "jwt-token-456", "safe": "value"}`
+	filtered := filterSensitiveData(raw)
+	assert.NotContains(t, filtered, "password")
+	assert.NotContains(t, filtered, "secret")
+	assert.NotContains(t, filtered, "token")
+	assert.Contains(t, filtered, "[FILTERED]")
+	assert.Contains(t, filtered, "safe")
+}
+
+func TestPruneSchema(t *testing.T) {
+	// 1. Nil safety
+	pruneSchema(nil, 0, 3)
+
+	// 2. Deeply nested schema
+	schema := &swagger.SchemaProperty{
+		Type: "object",
+		Properties: map[string]*swagger.SchemaProperty{
+			"level1": {
+				Type: "object",
+				Properties: map[string]*swagger.SchemaProperty{
+					"level2": {
+						Type: "object",
+						Properties: map[string]*swagger.SchemaProperty{
+							"level3": {Type: "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pruneSchema(schema, 0, 1)
+	assert.Nil(t, schema.Properties["level1"].Properties)
+}
+
+func TestLoadPrivateKey(t *testing.T) {
+	// 1. Valid 32-byte seed in hex
+	seedHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	key, err := loadPrivateKey(seedHex)
+	assert.NoError(t, err)
+	assert.NotNil(t, key)
+
+	// 2. Invalid hex
+	_, err = loadPrivateKey("not-hex-string")
+	assert.Error(t, err)
+
+	// 3. Invalid key size
+	_, err = loadPrivateKey("0123456789abcdef")
+	assert.Error(t, err)
+}
+
+func TestDeriveHTTPBaseURL(t *testing.T) {
+	assert.Equal(t, "https://swazz.secmy.app", deriveHTTPBaseURL("wss://swazz.secmy.app/api/runners/connect"))
+	assert.Equal(t, "http://localhost:8080", deriveHTTPBaseURL("ws://localhost:8080/api/runners/connect"))
+	assert.Equal(t, "https://api.example.com", deriveHTTPBaseURL("https://api.example.com/api/scans"))
+	assert.Equal(t, "https://api.example.com/sub", deriveHTTPBaseURL("https://api.example.com/sub"))
+	assert.Equal(t, "", deriveHTTPBaseURL(""))
+}
+
+func TestLoggingHelpers(t *testing.T) {
+	// ensure no panics
+	logDebug("test %s", "debug")
+	logInfo("test %s", "info")
+	logWarn("test %s", "warn")
+	logError("test %s", "error")
+}
+

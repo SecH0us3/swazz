@@ -21,7 +21,14 @@ import (
 )
 
 func runSpiderCLI(args []string) {
-	flags := flag.NewFlagSet("spider", flag.ExitOnError)
+	if err := runSpiderCLIErr(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func runSpiderCLIErr(args []string) error {
+	flags := flag.NewFlagSet("spider", flag.ContinueOnError)
 	configPath := flags.String("config", "", "Path to config file (optional)")
 	outPath := flags.String("out", "openapi.json", "Output file path (openapi.json or crawler.har)")
 	format := flags.String("format", "openapi", "Output format (openapi|har)")
@@ -33,26 +40,24 @@ func runSpiderCLI(args []string) {
 	yes := flags.Bool("yes", false, "Skip interactive warning prompt")
 
 	if err := flags.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
 	targetURL := flags.Arg(0)
 	if targetURL == "" && *configPath == "" {
-		fmt.Fprintln(os.Stderr, "Usage: swazz spider <target_url> [options]")
 		flags.PrintDefaults()
-		os.Exit(1)
+		return fmt.Errorf("usage: swazz spider <target_url> [options]")
 	}
 
 	var cliCfg CliConfig
 	if *configPath != "" {
 		configData, err := os.ReadFile(*configPath)
 		if err != nil {
-			log.Fatalf("Failed to read config file %s: %v", *configPath, err)
+			return fmt.Errorf("failed to read config file %s: %w", *configPath, err)
 		}
 		configData = swagger.StripJSONC(configData)
 		if err := json.Unmarshal(configData, &cliCfg); err != nil {
-			log.Fatalf("Invalid config JSON: %v", err)
+			return fmt.Errorf("invalid config JSON: %w", err)
 		}
 		if targetURL == "" {
 			targetURL = cliCfg.BaseURL
@@ -60,14 +65,13 @@ func runSpiderCLI(args []string) {
 	}
 
 	if targetURL == "" {
-		log.Fatalf("No target URL specified. Please provide a URL argument or a config with base_url.")
+		return fmt.Errorf("no target URL specified. Please provide a URL argument or a config with base_url")
 	}
 
 	// Safety prompt check if interactive terminal and --yes flag not passed
 	if term.IsTerminal(int(os.Stdin.Fd())) && !*yes {
 		if !crawler.ConfirmDestructiveActions(os.Stdin, os.Stdout) {
-			fmt.Println("Aborted by user.")
-			os.Exit(0)
+			return fmt.Errorf("aborted by user")
 		}
 	}
 
@@ -107,7 +111,7 @@ func runSpiderCLI(args []string) {
 	fmt.Printf("🕷️  Starting Headless Spider against %s ...\n", targetURL)
 	res, err := c.Crawl(ctx, targetURL)
 	if err != nil {
-		log.Fatalf("Spider failed: %v", err)
+		return fmt.Errorf("spider failed: %w", err)
 	}
 
 	fmt.Printf("✓ Spider finished! Discovered %d endpoints across %d pages in %dms.\n",
@@ -121,12 +125,13 @@ func runSpiderCLI(args []string) {
 	}
 
 	if err != nil {
-		log.Fatalf("Failed to export crawler results: %v", err)
+		return fmt.Errorf("failed to export crawler results: %w", err)
 	}
 
 	if err := os.WriteFile(*outPath, outputData, 0600); err != nil {
-		log.Fatalf("Failed to write output to %s: %v", *outPath, err)
+		return fmt.Errorf("failed to write output to %s: %w", *outPath, err)
 	}
 
 	fmt.Printf("💾 Discovered API specification exported to: %s\n", *outPath)
+	return nil
 }

@@ -59,3 +59,26 @@ func TestBuildRunnerConfig_GRPCURL(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to discover gRPC service via reflection")
 }
+
+func TestRunCLIErr_ConfigValidation(t *testing.T) {
+	// 1. Missing config file
+	err := runCLIErr([]string{"-config", "nonexistent_config_file_123.json"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read config file")
+
+	// 2. Invalid JSON in config
+	tmpDir := t.TempDir()
+	invalidCfg := filepath.Join(tmpDir, "invalid.json")
+	require.NoError(t, os.WriteFile(invalidCfg, []byte(`{invalid-json`), 0600))
+
+	err = runCLIErr([]string{"-config", invalidCfg})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid config JSON")
+
+	// 3. MCP list tools via CLI flag
+	mcpCfg := filepath.Join(tmpDir, "mcp.json")
+	require.NoError(t, os.WriteFile(mcpCfg, []byte(`{"base_url":"http://localhost:8080","mcp_server":{"type":"http","url":"http://127.0.0.1:1/mcp"}}`), 0600))
+	err = runCLIErr([]string{"-config", mcpCfg, "-mcp-list-tools", "-debug", "-allow-private-ips=true"})
+	assert.Error(t, err) // connection error to 127.0.0.1:1 proves listMCPTools was reached
+}
+
