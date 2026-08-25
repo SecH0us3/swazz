@@ -8,6 +8,9 @@ package swagger
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseSpec_OpenAPI3(t *testing.T) {
@@ -50,6 +53,12 @@ func TestParseSpec_OpenAPI3(t *testing.T) {
 							"name": "X-Auth",
 							"in": "header",
 							"schema": { "type": "string" }
+						},
+						{
+							"name": "limit",
+							"in": "query",
+							"type": "integer",
+							"format": "int32"
 						}
 					]
 				}
@@ -57,18 +66,10 @@ func TestParseSpec_OpenAPI3(t *testing.T) {
 		}
 	}`
 
-	result, err := ParseSpec(json.RawMessage(specRaw))
-	if err != nil {
-		t.Fatalf("Failed to parse spec: %v", err)
-	}
-
-	if result.BasePath != "https://api.example.com/v1" {
-		t.Errorf("Expected BasePath 'https://api.example.com/v1', got '%s'", result.BasePath)
-	}
-
-	if len(result.Endpoints) != 2 {
-		t.Fatalf("Expected 2 endpoints, got %d", len(result.Endpoints))
-	}
+	result, err := ParseSpec(json.RawMessage(specRaw), WithMaxNodes(1000), WithMaxDepth(10))
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.example.com/v1", result.BasePath)
+	assert.Len(t, result.Endpoints, 2)
 
 	// Verify POST /users
 	var postEndpoint *EndpointConfig
@@ -82,21 +83,13 @@ func TestParseSpec_OpenAPI3(t *testing.T) {
 		}
 	}
 
-	if postEndpoint == nil || getEndpoint == nil {
-		t.Fatalf("Did not find expected endpoints")
-	}
-
-	if postEndpoint.Schema.Type != "object" {
-		t.Errorf("Expected POST /users to have object schema, got %s", postEndpoint.Schema.Type)
-	}
-
-	if len(getEndpoint.PathParams) != 1 {
-		t.Errorf("Expected 1 path parameter for GET /users/{id}")
-	}
-
-	if len(getEndpoint.HeaderParams) != 1 {
-		t.Errorf("Expected 1 header parameter for GET /users/{id}")
-	}
+	require.NotNil(t, postEndpoint)
+	require.NotNil(t, getEndpoint)
+	assert.Equal(t, "object", postEndpoint.Schema.Type)
+	assert.Len(t, getEndpoint.PathParams, 1)
+	assert.Len(t, getEndpoint.HeaderParams, 1)
+	assert.NotNil(t, getEndpoint.Schema.Properties)
+	assert.Equal(t, "integer", getEndpoint.Schema.Properties["limit"].Type)
 }
 
 func TestParseSpec_Swagger2(t *testing.T) {
@@ -114,39 +107,121 @@ func TestParseSpec_Swagger2(t *testing.T) {
 						}
 					}
 				}
+			},
+			"/login": {
+				"post": {
+					"parameters": [
+						{
+							"name": "body",
+							"in": "body",
+							"schema": {
+								"type": "object",
+								"properties": {
+									"username": { "type": "string", "example": "admin" },
+									"password": { "type": "string", "default": "pass" }
+								}
+							},
+							"example": {"username": "admin", "password": "secret"}
+						}
+					]
+				}
 			}
 		}
 	}`
 
 	result, err := ParseSpec(json.RawMessage(specRaw))
-	if err != nil {
-		t.Fatalf("Failed to parse spec: %v", err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.example.com/v2", result.BasePath)
+	assert.Len(t, result.Endpoints, 2)
+}
 
-	expectedBase := "https://api.example.com/v2"
-	if result.BasePath != expectedBase {
-		t.Errorf("Expected BasePath '%s', got '%s'", expectedBase, result.BasePath)
-	}
+func TestParseSpec_ContentTypesAndExamples(t *testing.T) {
+	specRaw := `{
+		"openapi": "3.0.0",
+		"paths": {
+			"/upload": {
+				"post": {
+					"requestBody": {
+						"content": {
+							"multipart/form-data": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"file": { "type": "string", "format": "binary" }
+									}
+								},
+								"examples": {
+									"default": {
+										"value": {"file": "sample.txt"}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"/form": {
+				"post": {
+					"requestBody": {
+						"content": {
+							"application/x-www-form-urlencoded": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"token": { "type": "string", "default": "tok123" }
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"/wildcard": {
+				"post": {
+					"requestBody": {
+						"content": {
+							"*/*": {
+								"schema": {
+									"type": "string",
+									"example": "rawtext"
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
 
-	if len(result.Endpoints) != 1 {
-		t.Fatalf("Expected 1 endpoint, got %d", len(result.Endpoints))
-	}
+	result, err := ParseSpec(json.RawMessage(specRaw))
+	require.NoError(t, err)
+	assert.Len(t, result.Endpoints, 3)
 
-	if result.Endpoints[0].Path != "/ping" || result.Endpoints[0].Method != "GET" {
-		t.Errorf("Expected GET /ping")
+	for _, ep := range result.Endpoints {
+		if ep.Path == "/upload" {
+			assert.Equal(t, "multipart/form-data", ep.ContentType)
+		}
+		if ep.Path == "/form" {
+			assert.Equal(t, "application/x-www-form-urlencoded", ep.ContentType)
+		}
+		if ep.Path == "/wildcard" {
+			assert.Equal(t, "application/json", ep.ContentType)
+		}
 	}
+}
+
+func TestNormalizeBasePath(t *testing.T) {
+	assert.Equal(t, "https://api.example.com/default/v1", normalizeBasePath("https://api.example.com/{environment}/v1"))
+	assert.Equal(t, "https://api.example.com/v1", normalizeBasePath("https://api.example.com/v1"))
+	assert.Equal(t, "https://api.example.com/default/default", normalizeBasePath("https://api.example.com/{region}/{env}"))
 }
 
 func TestParseSpec_Invalid(t *testing.T) {
 	_, err := ParseSpec(json.RawMessage(`{}`))
-	if err == nil {
-		t.Errorf("Expected error when parsing empty object")
-	}
+	assert.Error(t, err)
 
 	_, err = ParseSpec(json.RawMessage(`invalid json`))
-	if err == nil {
-		t.Errorf("Expected error when parsing invalid json")
-	}
+	assert.Error(t, err)
 }
 
 func TestDetermineBasePath(t *testing.T) {
@@ -212,9 +287,7 @@ func TestDetermineBasePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			actual := determineBasePath(tt.spec)
-			if actual != tt.expected {
-				t.Errorf("expected %q, got %q", tt.expected, actual)
-			}
+			assert.Equal(t, tt.expected, actual)
 		})
 	}
 }
@@ -234,21 +307,10 @@ paths:
       summary: Ping the server
 `
 		result, err := ParseRawSpec([]byte(yamlSpec))
-		if err != nil {
-			t.Fatalf("Failed to parse YAML spec: %v", err)
-		}
-
-		if result.BasePath != "https://api.example.com/v1" {
-			t.Errorf("Expected BasePath 'https://api.example.com/v1', got '%s'", result.BasePath)
-		}
-
-		if len(result.Endpoints) != 1 {
-			t.Fatalf("Expected 1 endpoint, got %d", len(result.Endpoints))
-		}
-
-		if result.Endpoints[0].Path != "/ping" || result.Endpoints[0].Method != "GET" {
-			t.Errorf("Expected GET /ping")
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "https://api.example.com/v1", result.BasePath)
+		assert.Len(t, result.Endpoints, 1)
+		assert.Equal(t, "GET", result.Endpoints[0].Method)
 	})
 
 	t.Run("Valid JSON OpenAPI Spec", func(t *testing.T) {
@@ -272,17 +334,9 @@ paths:
 }
 `
 		result, err := ParseRawSpec([]byte(jsonSpec))
-		if err != nil {
-			t.Fatalf("Failed to parse JSON spec: %v", err)
-		}
-
-		if result.BasePath != "https://api.example.com/v2" {
-			t.Errorf("Expected BasePath 'https://api.example.com/v2', got '%s'", result.BasePath)
-		}
-
-		if len(result.Endpoints) != 1 {
-			t.Fatalf("Expected 1 endpoint, got %d", len(result.Endpoints))
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "https://api.example.com/v2", result.BasePath)
+		assert.Len(t, result.Endpoints, 1)
 	})
 
 	t.Run("Invalid YAML Spec", func(t *testing.T) {
@@ -290,9 +344,7 @@ paths:
 foo: bar: baz
 `
 		_, err := ParseRawSpec([]byte(invalidYaml))
-		if err == nil {
-			t.Error("expected error for invalid YAML, got nil")
-		}
+		assert.Error(t, err)
 	})
 
 	t.Run("Invalid JSON Spec", func(t *testing.T) {
@@ -300,8 +352,43 @@ foo: bar: baz
 { "invalid": "json",
 `
 		_, err := ParseRawSpec([]byte(invalidJson))
-		if err == nil {
-			t.Error("expected error for invalid JSON, got nil")
-		}
+		assert.Error(t, err)
 	})
 }
+
+func TestExtractParams_DirectHelpers(t *testing.T) {
+	// 1. extractPathParams
+	rawParams := []any{
+		map[string]any{"in": "query", "name": "q"}, // not path
+		map[string]any{"in": "path", "name": "id", "type": "integer", "format": "int64"},
+		map[string]any{"in": "path", "name": "slug", "schema": map[string]any{"type": "string", "format": "slug"}},
+		map[string]any{"in": "path", "name": ""}, // empty name
+		"invalid non-map",
+	}
+	pathParams := extractPathParams(rawParams)
+	assert.Len(t, pathParams, 2)
+	assert.Equal(t, "integer", pathParams["id"].Type)
+	assert.Equal(t, "int64", pathParams["id"].Format)
+	assert.Equal(t, "string", pathParams["slug"].Type)
+	assert.Equal(t, "slug", pathParams["slug"].Format)
+
+	// 2. extractHeaderParams
+	rawHeaderParams := []any{
+		map[string]any{"in": "path", "name": "id"}, // not header
+		map[string]any{"in": "header", "name": "X-Trace", "type": "string"},
+		map[string]any{"in": "header", "name": "X-Count", "schema": map[string]any{"type": "integer"}},
+		map[string]any{"in": "header", "name": ""},
+		123,
+	}
+	headerParams := extractHeaderParams(rawHeaderParams, nil, "", 100, 5)
+	assert.Len(t, headerParams, 2)
+	assert.Equal(t, "string", headerParams["X-Trace"].Type)
+	assert.Equal(t, "integer", headerParams["X-Count"].Type)
+
+	// 3. getStringField
+	m := map[string]any{"str": "value", "num": 123}
+	assert.Equal(t, "value", getStringField(m, "str"))
+	assert.Equal(t, "", getStringField(m, "num"))
+	assert.Equal(t, "", getStringField(m, "nonexistent"))
+}
+

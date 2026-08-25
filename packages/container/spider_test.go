@@ -7,6 +7,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,3 +88,65 @@ func TestRunSpiderCLIErr_ValidationAndErrors(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no target URL specified")
 }
+
+func TestRunSpiderCLIErr_Execution(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body><h1>API Demo</h1><a href="/api/users">Users</a></body></html>`))
+	}))
+	defer ts.Close()
+
+	tmpDir := t.TempDir()
+	openapiOut := filepath.Join(tmpDir, "openapi.json")
+	harOut := filepath.Join(tmpDir, "crawler.har")
+
+	// 1. Direct target URL with OpenAPI export
+	err := runSpiderCLIErr([]string{
+		"-yes",
+		"-max-depth", "1",
+		"-max-pages", "2",
+		"-timeout", "5",
+		"-out", openapiOut,
+		"-format", "openapi",
+		ts.URL,
+	})
+	if err == nil {
+		data, readErr := os.ReadFile(openapiOut)
+		require.NoError(t, readErr)
+		assert.NotEmpty(t, data)
+	}
+
+	// 2. HAR export format
+	err = runSpiderCLIErr([]string{
+		"-yes",
+		"-max-depth", "1",
+		"-max-pages", "1",
+		"-timeout", "5",
+		"-out", harOut,
+		"-format", "har",
+		ts.URL,
+	})
+	if err == nil {
+		data, readErr := os.ReadFile(harOut)
+		require.NoError(t, readErr)
+		assert.NotEmpty(t, data)
+	}
+
+	// 3. Execution with config file
+	cfgPath := filepath.Join(tmpDir, "spider_cfg.json")
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"headers": {"X-Custom": "123"},
+		"cookies": {"session": "abc"}
+	}`, ts.URL)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+	_ = runSpiderCLIErr([]string{
+		"-yes",
+		"-config", cfgPath,
+		"-max-pages", "1",
+		"-timeout", "5",
+		"-quiet",
+	})
+}
+

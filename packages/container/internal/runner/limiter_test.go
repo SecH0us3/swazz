@@ -106,17 +106,34 @@ func TestConcurrencyLimiter_Ceiling(t *testing.T) {
 		assert.Equal(t, 5, l.GetCeiling())
 	})
 
-	t.Run("SetTarget clamps to ceiling", func(t *testing.T) {
+	t.Run("constructor boundary clamps", func(t *testing.T) {
+		l1 := NewConcurrencyLimiter(-5)
+		assert.Equal(t, 5, l1.GetTarget())
+
+		l2 := NewConcurrencyLimiter(5000)
+		assert.Equal(t, 1000, l2.GetTarget())
+	})
+
+	t.Run("SetTarget clamps to ceiling and boundaries", func(t *testing.T) {
 		l := NewConcurrencyLimiter(2, 5)
 		l.SetTarget(100)
 		assert.Equal(t, 5, l.GetTarget())
+
+		l.SetTarget(-1)
+		assert.Equal(t, 1, l.GetTarget())
+
+		l.SetTarget(5000)
+		assert.Equal(t, 5, l.GetTarget())
 	})
 
-	t.Run("SetCeiling re-clamps current target", func(t *testing.T) {
+	t.Run("SetCeiling re-clamps current target and handles <= 0", func(t *testing.T) {
 		l := NewConcurrencyLimiter(10, 20)
 		assert.Equal(t, 10, l.GetTarget())
 		l.SetCeiling(8)
 		assert.Equal(t, 8, l.GetTarget())
+
+		l.SetCeiling(-1)
+		assert.Equal(t, license.MaxConcurrencyCeiling, l.GetCeiling())
 	})
 
 	t.Run("no ceiling defaults to absolute max", func(t *testing.T) {
@@ -158,6 +175,10 @@ func TestRunnerGate(t *testing.T) {
 		defer r.Close()
 		assert.False(t, r.Gate().Has(license.FeatureReportExports))
 		assert.Equal(t, license.FreeConcurrencyCeiling, r.Gate().ConcurrencyCeiling())
+		assert.Equal(t, 5, r.GetConcurrency())
+
+		r.SetConcurrency(3)
+		assert.Equal(t, 3, r.GetConcurrency())
 	})
 
 	t.Run("accepts injected gate", func(t *testing.T) {
@@ -167,5 +188,8 @@ func TestRunnerGate(t *testing.T) {
 		defer r.Close()
 		assert.True(t, r.Gate().Has(license.FeatureReportExports))
 		assert.Equal(t, license.MaxConcurrencyCeiling, r.Gate().ConcurrencyCeiling())
+
+		r.SetConcurrency(10)
+		assert.Equal(t, 10, r.GetConcurrency())
 	})
 }

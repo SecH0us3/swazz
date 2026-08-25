@@ -10,16 +10,22 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
 	"time"
 )
 
+var printMu sync.Mutex
+
 func printProgress(stats swagger.RunStats) {
 	if logger.GetLevel() >= logger.LevelError {
 		return
 	}
+
+	printMu.Lock()
+	defer printMu.Unlock()
 
 	pct := 0
 	if stats.TotalPlanned > 0 {
@@ -104,6 +110,9 @@ func printProgressClean(stats swagger.RunStats) {
 		return
 	}
 
+	printMu.Lock()
+	defer printMu.Unlock()
+
 	pct := 0
 	if stats.TotalPlanned > 0 {
 		pct = int(float64(stats.TotalRequests) / float64(stats.TotalPlanned) * 100)
@@ -129,6 +138,9 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 	if logger.GetLevel() >= logger.LevelError {
 		return
 	}
+
+	printMu.Lock()
+	defer printMu.Unlock()
 
 	if numLinesPrinted > 0 {
 		// Clear lines downwards

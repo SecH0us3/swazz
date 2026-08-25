@@ -270,8 +270,10 @@ func runCLIErr(args []string) error {
 	resultsCh := r.Subscribe()
 	var results []*swagger.FuzzResult
 	var resultsMu sync.Mutex
+	resultsDone := make(chan struct{})
 
 	go func() {
+		defer close(resultsDone)
 		var lastEndpoint string
 		var lastProfile string
 		for evt := range resultsCh {
@@ -375,6 +377,7 @@ func runCLIErr(args []string) error {
 
 	restoreTerm()
 	r.Unsubscribe(resultsCh)
+	<-resultsDone
 	logger.Info("Run complete.")
 
 	// 5. Generate outputs

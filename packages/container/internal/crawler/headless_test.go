@@ -6,21 +6,29 @@
 package crawler
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
+
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCheckChromeExecutable(t *testing.T) {
-	// This might return a path or an error depending on the CI environment.
-	// We just want to ensure it doesn't panic and executes the code.
 	path, err := CheckChromeExecutable()
 	if err == nil {
 		assert.NotEmpty(t, path)
 	} else {
 		assert.Error(t, err)
 	}
+}
+
+func TestConfirmDestructiveActions_Headless(t *testing.T) {
+	var buf bytes.Buffer
+	assert.True(t, ConfirmDestructiveActions(strings.NewReader("yes\n"), &buf))
+	assert.False(t, ConfirmDestructiveActions(strings.NewReader("no\n"), &buf))
+	assert.False(t, ConfirmDestructiveActions(strings.NewReader("\n"), &buf))
 }
 
 func TestNewCrawler(t *testing.T) {
@@ -36,11 +44,6 @@ func TestInjectCookies(t *testing.T) {
 	sniffer := NewSniffer()
 	crawler := NewCrawler(cfg, sniffer)
 	assert.NotNil(t, crawler)
-	
-	// We cannot easily test real chromedp execution without an actual Chrome instance,
-	// but we can test that the function returns without panicking if we pass nil context (though it will panic or error).
-	// Actually, let's just leave real execution tests out of unit testing for now to avoid flakes,
-	// or we can test hashState which is a pure function.
 }
 
 func TestHashState(t *testing.T) {
@@ -71,12 +74,10 @@ func TestCrawl_ContextTimeout(t *testing.T) {
 	cfg.Headless = true
 	crawler := NewCrawler(cfg, NewSniffer())
 	
-	// Fast timeout so it doesn't do much
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 	
 	_, err := crawler.Crawl(ctx, "http://example.com")
-	// Might return an error, but that's fine, we just want to hit some lines in Crawl.
 	if err != nil {
 		t.Logf("Crawl error: %v", err)
 	}

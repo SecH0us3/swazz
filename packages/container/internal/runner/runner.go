@@ -302,7 +302,10 @@ func (r *Runner) Close() {
 	r.subsMu.Lock()
 	for ch := range r.subs {
 		delete(r.subs, ch)
-		close(ch)
+		func() {
+			defer func() { _ = recover() }()
+			close(ch)
+		}()
 	}
 	r.subsMu.Unlock()
 }

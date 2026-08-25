@@ -1088,3 +1088,58 @@ func TestRunner_RunPreScanLLM(t *testing.T) {
 	assert.Equal(t, "ai_injected_sqli", r.config.Dictionaries["custom_llm"][0])
 }
 
+func TestRunner_GetGRPCClient_Caching(t *testing.T) {
+	r := &Runner{}
+	defer r.Close()
+
+	c1 := r.getGRPCClient("127.0.0.1:50051", false, nil)
+	require.NotNil(t, c1)
+
+	c2 := r.getGRPCClient("127.0.0.1:50051", false, nil)
+	assert.Same(t, c1, c2)
+}
+
+func TestRunner_Start_AlreadyRunning(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		Endpoints: []swagger.EndpointConfig{
+			{Path: "/test", Method: "GET"},
+		},
+		Settings: swagger.Settings{
+			IterationsPerProfile: 50,
+			Concurrency:          1,
+			Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
+		},
+	}
+	r := New(cfg, nil)
+	defer r.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = r.Start(context.Background())
+	}()
+
+	// Wait for runner to start
+	time.Sleep(20 * time.Millisecond)
+
+	// Second start should fail
+	err := r.Start(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already running")
+
+	r.Stop()
+	wg.Wait()
+}
+
+

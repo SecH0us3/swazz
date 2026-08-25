@@ -193,6 +193,24 @@ func TestBuildMutatedPayload(t *testing.T) {
 	if mutatedPath.pathParams["userId"] == "" {
 		t.Error("expected pathParams.userId to be populated")
 	}
+
+	// 5. Primitive body mutation (len(Path) == 0)
+	primField := targetField{
+		Location: "body",
+		Path:     []string{},
+		Schema:   &swagger.SchemaProperty{Type: "integer"},
+	}
+	mutatedPrim := buildMutatedPayload(baseline, primField, gen)
+	assert.NotNil(t, mutatedPrim.body)
+
+	// 6. Non-body with empty path
+	emptyField := targetField{
+		Location: "query",
+		Path:     []string{},
+		Schema:   &swagger.SchemaProperty{Type: "string"},
+	}
+	mutatedEmpty := buildMutatedPayload(baseline, emptyField, gen)
+	assert.NotNil(t, mutatedEmpty)
 }
 
 func TestHashPayload(t *testing.T) {

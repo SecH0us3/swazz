@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 )
 
@@ -32,9 +34,7 @@ func TestMapWSCloseCodeToHTTPStatus(t *testing.T) {
 		{websocket.StatusCode(4000), 500}, // unknown code
 	}
 	for _, tc := range tests {
-		if got := MapWSCloseCodeToHTTPStatus(tc.code); got != tc.expected {
-			t.Errorf("MapWSCloseCodeToHTTPStatus(%v) = %d, expected %d", tc.code, got, tc.expected)
-		}
+		assert.Equal(t, tc.expected, MapWSCloseCodeToHTTPStatus(tc.code))
 	}
 }
 
@@ -68,27 +68,35 @@ func TestClient_SendMessage(t *testing.T) {
 
 	client := NewClient()
 
+	t.Run("close nil", func(t *testing.T) {
+		assert.NoError(t, client.Close())
+	})
+
 	t.Run("success", func(t *testing.T) {
 		msg, status, err := client.SendMessage(context.Background(), wsURL, []byte("hello"), nil)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if status != 200 {
-			t.Errorf("expected status 200, got %d", status)
-		}
-		if string(msg) != "hello" {
-			t.Errorf("expected msg 'hello', got %q", string(msg))
-		}
+		require.NoError(t, err)
+		assert.Equal(t, 200, status)
+		assert.Equal(t, "hello", string(msg))
 	})
 
 	t.Run("crash returns 500", func(t *testing.T) {
 		_, status, err := client.SendMessage(context.Background(), wsURL, []byte("crash"), nil)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if status != 500 {
-			t.Errorf("expected status 500, got %d", status)
-		}
+		assert.Error(t, err)
+		assert.Equal(t, 500, status)
+	})
+
+	t.Run("dial error non-existent endpoint", func(t *testing.T) {
+		_, status, err := client.SendMessage(context.Background(), "ws://127.0.0.1:1/invalid", []byte("test"), nil)
+		assert.Error(t, err)
+		assert.NotEqual(t, 200, status)
+	})
+
+	t.Run("timeout context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, status, err := client.SendMessage(ctx, wsURL, []byte("test"), nil)
+		assert.Error(t, err)
+		assert.NotEqual(t, 200, status)
 	})
 
 	t.Run("custom handshake headers", func(t *testing.T) {
@@ -115,14 +123,8 @@ func TestClient_SendMessage(t *testing.T) {
 		hWsURL := "ws" + strings.TrimPrefix(headerServer.URL, "http")
 		headers := map[string]string{"X-Custom-Auth": "secret-token-123"}
 		msg, status, err := client.SendMessage(context.Background(), hWsURL, []byte("ping"), headers)
-		if err != nil {
-			t.Fatalf("expected no error with auth header, got %v", err)
-		}
-		if status != 200 {
-			t.Errorf("expected status 200, got %d", status)
-		}
-		if string(msg) != "ping" {
-			t.Errorf("expected msg 'ping', got %q", string(msg))
-		}
+		require.NoError(t, err)
+		assert.Equal(t, 200, status)
+		assert.Equal(t, "ping", string(msg))
 	})
 }

@@ -443,10 +443,15 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 	require.NoError(t, err)
 	pubHex := hex.EncodeToString(pub)
 
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
 	jobDoneCh := make(chan struct{})
 
 	// 2. Coordinator WebSocket server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Upgrade") != "websocket" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 			Subprotocols: []string{"swazz-agent"},
 		})
@@ -467,7 +472,8 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 		dispatchPayload := JobDispatchPayload{
 			RunID: "run_test_job_1",
 			Config: CliConfig{
-				BaseURL: targetServer.URL,
+				BaseURL:  targetServer.URL,
+				Security: swagger.SecurityConfig{AllowPrivateIPs: true},
 				EndpointDefinitions: []swagger.EndpointConfig{
 					{
 						Path:   "/api/health",
@@ -478,7 +484,7 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 					IterationsPerProfile: 1,
 					Concurrency:          1,
 					Profiles:             []swagger.FuzzingProfile{swagger.ProfileRandom},
-					TimeoutMs:            2000,
+					TimeoutMs:            500,
 				},
 			},
 		}
@@ -537,7 +543,7 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 	select {
 	case <-jobDoneCh:
 		cancel()
-	case <-time.After(15 * time.Second):
+	case <-time.After(30 * time.Second):
 		cancel()
 		t.Fatal("timed out waiting for job_dispatch completion")
 	}

@@ -62,12 +62,14 @@ func (r *Runner) Subscribe() chan Event {
 // Unsubscribe removes a subscriber channel safely, avoiding double-close panic.
 func (r *Runner) Unsubscribe(ch chan Event) {
 	r.subsMu.Lock()
-	_, exists := r.subs[ch]
-	if exists {
+	defer r.subsMu.Unlock()
+	if _, exists := r.subs[ch]; exists {
 		delete(r.subs, ch)
-		close(ch)
+		func() {
+			defer func() { _ = recover() }()
+			close(ch)
+		}()
 	}
-	r.subsMu.Unlock()
 }
 
 func (r *Runner) Broadcast(evt Event) {
@@ -95,17 +97,13 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 	}
 
 	r.subsMu.RLock()
-	subs := make([]chan Event, 0, len(r.subs))
-	for ch := range r.subs {
-		subs = append(subs, ch)
-	}
-	r.subsMu.RUnlock()
+	defer r.subsMu.RUnlock()
 
 	for nodes != nil {
 		evt := nodes.Value
 		nodes = nodes.Next
 
-		for _, ch := range subs {
+		for ch := range r.subs {
 			if stalledSubs[ch] {
 				continue
 			}
@@ -113,9 +111,8 @@ func (r *Runner) processEvents(nodes *EventNode, stalledSubs map[chan Event]bool
 			if evt.Type == EventResult || evt.Type == EventComplete || evt.Type == EventError || evt.Type == EventCheckpoint {
 				// Critical events MUST be delivered, but with a timeout to prevent OOM
 				// if a client stalls indefinitely.
-				if !safeSend(ch, evt, 5*time.Second) {
+				if !safeSend(ch, evt, 2*time.Second) {
 					stalledSubs[ch] = true
-					r.Unsubscribe(ch)
 				}
 			} else {
 				// Non-critical events (like progress stats) can be dropped if the client is too slow.

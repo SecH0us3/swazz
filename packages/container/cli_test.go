@@ -8,6 +8,7 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -128,9 +129,110 @@ func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mcp_server command cannot be empty")
+
+	_, err = BuildRunnerConfig(&CliConfig{
+		BaseURL: "http://example.com",
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  "ftp://invalid",
+		},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "mcp_server url must start with http://")
+}
+
+func TestCliConfig_UnmarshalAndValidate(t *testing.T) {
+	// 1. Unmarshal array endpoints
+	arrayJSON := `{"base_url":"http://example.com","endpoints":[{"path":"/api/users","method":"GET"}]}`
+	var cfg1 CliConfig
+	require.NoError(t, json.Unmarshal([]byte(arrayJSON), &cfg1))
+	assert.Len(t, cfg1.EndpointDefinitions, 1)
+	assert.Nil(t, cfg1.Endpoints)
+
+	// 2. Unmarshal filter object endpoints
+	filterJSON := `{"base_url":"http://example.com","endpoints":{"include":["/api/*"],"exclude":["/api/admin"]}}`
+	var cfg2 CliConfig
+	require.NoError(t, json.Unmarshal([]byte(filterJSON), &cfg2))
+	require.NotNil(t, cfg2.Endpoints)
+	assert.Equal(t, []string{"/api/*"}, cfg2.Endpoints.Include)
+	assert.Equal(t, []string{"/api/admin"}, cfg2.Endpoints.Exclude)
+
+	// 3. Validate base URL and settings
+	assert.NoError(t, cfg1.Validate())
+	invalidBase := CliConfig{BaseURL: "not-a-valid-url"}
+	assert.Error(t, invalidBase.Validate())
+}
+
+func TestBuildRunnerConfig_MultiFormatsAndFilters(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Postman Collection
+	postmanSrc := `{
+		"info": {"name": "Test Collection", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+		"item": [
+			{
+				"name": "GetUser",
+				"request": {
+					"method": "GET",
+					"url": {"raw": "http://api.example.com/users/123", "host": ["api", "example", "com"], "path": ["users", "123"]}
+				}
+			}
+		]
+	}`
+	postmanFile := filepath.Join(tmpDir, "postman.json")
+	require.NoError(t, os.WriteFile(postmanFile, []byte(postmanSrc), 0600))
+
+	// 2. HAR file
+	harSrc := `{
+		"log": {
+			"version": "1.2",
+			"entries": [
+				{
+					"request": {
+						"method": "POST",
+						"url": "http://api.example.com/api/items",
+						"headers": [],
+						"queryString": [],
+						"postData": {"mimeType": "application/json", "text": "{\"name\":\"item1\"}"}
+					},
+					"response": {"status": 201}
+				}
+			]
+		}
+	}`
+	harFile := filepath.Join(tmpDir, "sample.har")
+	require.NoError(t, os.WriteFile(harFile, []byte(harSrc), 0600))
+
+	// 3. Build runner config with aliases, cookies, filters, and rules
+	cliCfg := &CliConfig{
+		BaseURL:          "http://api.example.com",
+		SwaggerURLs:      []string{postmanFile},
+		SwaggerURLsAlias: []string{harFile},
+		Cookies:          map[string]string{"sid": "12345"},
+		Headers:          map[string]string{"X-App": "Test"},
+		Endpoints: &struct {
+			Include []string `json:"include"`
+			Exclude []string `json:"exclude"`
+		}{
+			Include: []string{"**"},
+			Exclude: []string{"DELETE *"},
+		},
+		Rules: &swagger.RulesConfig{
+			Severity: map[string]string{"swazz/reflected-xss": "error"},
+			Defaults: map[string]string{"swazz/stack-trace-leak": "warning"},
+		},
+	}
+
+	cfg, err := BuildRunnerConfig(cliCfg)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.NotEmpty(t, cfg.Endpoints)
+	assert.Equal(t, "http://api.example.com", cfg.BaseURL)
+	assert.Equal(t, "12345", cfg.Cookies["sid"])
 }
 
 func TestRunCLIErr_FullScanAndReports(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
 	pubKey, privKey, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
 	pubKeyHex := hex.EncodeToString(pubKey)
@@ -185,6 +287,8 @@ func TestRunCLIErr_FullScanAndReports(t *testing.T) {
 		"-quiet",
 		"-allow-private-ips=true",
 		"-disable-telemetry",
+		"-mcp-fuzz-methods",
+		"-log-level", "info",
 	})
 	assert.NoError(t, err)
 
@@ -196,4 +300,87 @@ func TestRunCLIErr_FullScanAndReports(t *testing.T) {
 	}
 }
 
+func TestRunCLIErr_LicenseExportGating(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
+	// Community mode (no report export feature)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer ts.Close()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config_free.json")
+	sarifPath := filepath.Join(tmpDir, "report.sarif")
+
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"endpoint_definitions": [
+			{"path": "/api/ping", "method": "GET"}
+		],
+		"settings": {
+			"iterations_per_profile": 1,
+			"concurrency": 1,
+			"timeout_ms": 1000,
+			"profiles": ["RANDOM"]
+		}
+	}`, ts.URL)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+
+	err := runCLIErr([]string{
+		"-config", cfgPath,
+		"-sarif", sarifPath,
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a paid plan")
+}
+
+func TestRunCLIErr_SeverityAndFlags(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer ts.Close()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config_flags.json")
+
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"endpoint_definitions": [
+			{"path": "/api/ping", "method": "GET"}
+		],
+		"settings": {
+			"iterations_per_profile": 1,
+			"concurrency": 1,
+			"timeout_ms": 1000,
+			"profiles": ["RANDOM"]
+		}
+	}`, ts.URL)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+
+	// 1. none severity with progress-on-change and -q
+	err := runCLIErr([]string{
+		"-config", cfgPath,
+		"-fail-on-severity", "none",
+		"-progress-on-change",
+		"-q",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	assert.NoError(t, err)
+
+	// 2. error severity threshold
+	err = runCLIErr([]string{
+		"-config", cfgPath,
+		"-fail-on-severity", "error",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	assert.NoError(t, err)
+}
 
