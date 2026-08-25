@@ -146,7 +146,7 @@ func TestCandidate_ParamNameAndPathBuilding(t *testing.T) {
 	assert.Equal(t, "/api/orgs", buildCandidatePath("/api/orgs", false, nil, 0))
 	assert.Equal(t, "/api/orgs/org-100", buildCandidatePath("/api/orgs/{id}", true, []string{"org-100", "org-200"}, 0))
 	assert.Equal(t, "/api/orgs/org-200", buildCandidatePath("/api/orgs/{id}", true, []string{"org-100", "org-200"}, 1))
-	assert.Equal(t, "/api/orgs/1", buildCandidatePath("/api/orgs/{id}", true, nil, 0))
+	assert.Equal(t, "/api/orgs/00000000-0000-4000-8000-000000000000", buildCandidatePath("/api/orgs/{id}", true, nil, 0))
 }
 
 func TestCandidate_BuildPayload(t *testing.T) {

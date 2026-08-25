@@ -808,7 +808,7 @@ func TestCandidateHelpers(t *testing.T) {
 	// 2. buildCandidatePath
 	assert.Equal(t, "/api/users", buildCandidatePath("/api/users", false, nil, 0))
 	assert.Equal(t, "/api/users/99", buildCandidatePath("/api/users/{id}", true, []string{"99"}, 0))
-	assert.Equal(t, "/api/users/1", buildCandidatePath("/api/users/{id}", true, nil, 0))
+	assert.Equal(t, "/api/users/00000000-0000-4000-8000-000000000000", buildCandidatePath("/api/users/{id}", true, nil, 0))
 
 	// 3. buildCandidatePayload
 	epGET := swagger.EndpointConfig{Method: "GET"}
