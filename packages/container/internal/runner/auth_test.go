@@ -8,11 +8,14 @@ package runner
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"swazz-engine/internal/swagger"
@@ -21,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 )
 
 func TestRunAuthSequence(t *testing.T) {
@@ -957,5 +959,257 @@ func TestMaybeReauthenticateWithProbe(t *testing.T) {
 	assert.Error(t, errFail)
 	assert.Contains(t, errFail.Error(), "re-authentication failed")
 }
+
+func TestPKCEBuiltinFunctions(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+
+	// 1. Test pkceVerifier generation
+	verifier1, err := r.callBuiltin("pkceVerifier", nil)
+	require.NoError(t, err)
+	assert.Len(t, verifier1, 43, "Base64URL of 32 bytes should be exactly 43 characters")
+
+	verifier2, err := r.callBuiltin("pkceVerifier", nil)
+	require.NoError(t, err)
+	assert.NotEqual(t, verifier1, verifier2, "pkceVerifier must generate non-deterministic unique strings")
+
+	// 2. Test pkceChallenge calculation
+	challenge1, err := r.callBuiltin("pkceChallenge", []string{verifier1})
+	require.NoError(t, err)
+	assert.NotEmpty(t, challenge1)
+
+	// Verify math manually
+	h := sha256.Sum256([]byte(verifier1))
+	expectedChallenge := base64.RawURLEncoding.EncodeToString(h[:])
+	assert.Equal(t, expectedChallenge, challenge1)
+
+	// 3. Error cases
+	_, err = r.callBuiltin("pkceVerifier", []string{"unexpected"})
+	assert.Error(t, err)
+	_, err = r.callBuiltin("pkceChallenge", nil)
+	assert.Error(t, err)
+}
+
+func TestURLQueryBuiltinFunction(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+
+	testURL := "https://antigravity.google/oauth-callback?state=my_state_123&code=auth-code-456&scope=mcp"
+
+	codeVal, err := r.callBuiltin("urlQuery", []string{testURL, "code"})
+	require.NoError(t, err)
+	assert.Equal(t, "auth-code-456", codeVal)
+
+	stateVal, err := r.callBuiltin("urlQuery", []string{testURL, "state"})
+	require.NoError(t, err)
+	assert.Equal(t, "my_state_123", stateVal)
+
+	missingVal, err := r.callBuiltin("urlQuery", []string{testURL, "nonexistent"})
+	require.NoError(t, err)
+	assert.Equal(t, "", missingVal)
+
+	// Error cases
+	_, err = r.callBuiltin("urlQuery", []string{testURL})
+	assert.Error(t, err)
+}
+
+func TestRegexExtractBuiltinFunction(t *testing.T) {
+	r := New(&swagger.Config{}, nil)
+	defer r.Close()
+
+	input := "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"
+
+	// Default group 1
+	tokenVal, err := r.callBuiltin("regexExtract", []string{input, `Bearer\s+([A-Za-z0-9._-]+)`})
+	require.NoError(t, err)
+	assert.Equal(t, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature", tokenVal)
+
+	// Specific group
+	subMatch, err := r.callBuiltin("regexExtract", []string{"key=123&val=abc", `key=(\d+)&val=(\w+)`, "2"})
+	require.NoError(t, err)
+	assert.Equal(t, "abc", subMatch)
+
+	// No match
+	noMatch, err := r.callBuiltin("regexExtract", []string{input, `invalid_pattern_(\d+)`})
+	require.NoError(t, err)
+	assert.Equal(t, "", noMatch)
+}
+
+func TestExpressionParserStringLiterals(t *testing.T) {
+	r := New(&swagger.Config{
+		Variables: map[string]any{
+			"redirectUrl": "https://callback.com?code=secretCode123",
+		},
+	}, nil)
+	defer r.Close()
+
+	cache := make(map[string]string)
+
+	// Single quotes
+	node1, err := parseExpression("urlQuery(redirectUrl, 'code')")
+	require.NoError(t, err)
+	val1, err := r.evalExpr(node1, cache)
+	require.NoError(t, err)
+	assert.Equal(t, "secretCode123", val1)
+
+	// Double quotes
+	node2, err := parseExpression(`urlQuery(redirectUrl, "code")`)
+	require.NoError(t, err)
+	val2, err := r.evalExpr(node2, cache)
+	require.NoError(t, err)
+	assert.Equal(t, "secretCode123", val2)
+}
+
+func TestAuthSequence_SetHeadersAndRawStringBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+			b, _ := io.ReadAll(r.Body)
+			bodyStr := string(b)
+			assert.Contains(t, bodyStr, "grant_type=authorization_code")
+			assert.Contains(t, bodyStr, "code=sample-code-789")
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "bearer-jwt-token-999",
+				"token_type":   "Bearer",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		Variables: map[string]any{
+			"my_code": "sample-code-789",
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Method: "POST",
+				URL:    "/token",
+				Headers: map[string]string{
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				Body: "grant_type=authorization_code&code={{my_code}}",
+				ExtractVariables: map[string]string{
+					"access_token": "token_val",
+				},
+				SetHeaders: map[string]string{
+					"Authorization": "Bearer {{token_val}}",
+					"X-Custom-Auth": "Custom-{{token_val}}",
+				},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+
+	err := r.RunAuthSequence(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "Bearer bearer-jwt-token-999", cfg.GlobalHeaders["Authorization"])
+	assert.Equal(t, "Custom-bearer-jwt-token-999", cfg.GlobalHeaders["X-Custom-Auth"])
+}
+
+func TestAuthSequence_FullPKCEOAuthFlow(t *testing.T) {
+	var storedChallenge string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth/confirm":
+			storedChallenge = r.URL.Query().Get("code_challenge")
+			assert.NotEmpty(t, storedChallenge)
+			assert.Equal(t, "S256", r.URL.Query().Get("code_challenge_method"))
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"redirectUri": "https://antigravity.google/oauth-callback?code=mock-auth-code-12345",
+			})
+
+		case "/oauth/token":
+			b, _ := io.ReadAll(r.Body)
+			bodyStr := string(b)
+			assert.Contains(t, bodyStr, "code=mock-auth-code-12345")
+
+			// Extract verifier from form body
+			parts := strings.Split(bodyStr, "&")
+			var verifier string
+			for _, p := range parts {
+				kv := strings.SplitN(p, "=", 2)
+				if len(kv) == 2 && kv[0] == "code_verifier" {
+					verifier, _ = url.QueryUnescape(kv[1])
+				}
+			}
+			require.NotEmpty(t, verifier)
+
+			// Verify PKCE match
+			h := sha256.Sum256([]byte(verifier))
+			computedChallenge := base64.RawURLEncoding.EncodeToString(h[:])
+			assert.Equal(t, storedChallenge, computedChallenge, "PKCE challenge must match SHA256 of verifier")
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "final-oauth-jwt-access-token",
+				"token_type":   "Bearer",
+			})
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: server.URL,
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Method: "GET",
+				URL:    "/oauth/confirm?client_id=test-client&code_challenge={{pkce_c}}&code_challenge_method=S256",
+				SetVariables: map[string]string{
+					"pkce_v": "pkceVerifier()",
+					"pkce_c": "pkceChallenge(pkce_v)",
+				},
+				ExtractVariables: map[string]string{
+					"redirectUri": "oauth_redirect",
+				},
+			},
+			{
+				Method: "POST",
+				URL:    "/oauth/token",
+				Headers: map[string]string{
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				SetVariables: map[string]string{
+					"extracted_code": "urlQuery(oauth_redirect, 'code')",
+				},
+				Body: "grant_type=authorization_code&code={{extracted_code}}&code_verifier={{pkce_v}}",
+				ExtractVariables: map[string]string{
+					"access_token": "token_val",
+				},
+				SetHeaders: map[string]string{
+					"Authorization": "Bearer {{token_val}}",
+				},
+			},
+		},
+	}
+
+	r := New(cfg, nil)
+	defer r.Close()
+
+	err := r.RunAuthSequence(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "Bearer final-oauth-jwt-access-token", cfg.GlobalHeaders["Authorization"])
+}
+
 
 

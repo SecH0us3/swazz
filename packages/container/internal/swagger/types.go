@@ -235,6 +235,7 @@ type AuthStep struct {
 	ExtractJSON      map[string]string `json:"extract_json,omitempty"`      // Map JSON field name (or simple path) to Global Header name
 	ExtractVariables map[string]string `json:"extract_variables,omitempty"` // Map JSON field name to template variable name
 	SetVariables     map[string]string `json:"set_variables,omitempty"`     // Map variable name to expression
+	SetHeaders       map[string]string `json:"set_headers,omitempty"`       // Map header name to template string (e.g. "Authorization": "Bearer {{token}}")
 }
 
 // AuthIdentity represents an authentication context (like User B).

@@ -7,11 +7,13 @@ package runner
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,8 +22,9 @@ import (
 )
 
 type exprNode struct {
-	name string
-	args []*exprNode
+	name      string
+	args      []*exprNode
+	isLiteral bool
 }
 
 type exprParser struct {
@@ -58,7 +61,7 @@ func (p *exprParser) consume() byte {
 }
 
 func (p *exprParser) skipWS() {
-	for p.pos < len(p.src) && (p.src[p.pos] == ' ' || p.src[p.pos] == '	') {
+	for p.pos < len(p.src) && (p.src[p.pos] == ' ' || p.src[p.pos] == '\t') {
 		p.pos++
 	}
 }
@@ -79,9 +82,23 @@ func (p *exprParser) readIdent() string {
 
 func (p *exprParser) parseExpr() (*exprNode, error) {
 	p.skipWS()
+	if p.peek() == '"' || p.peek() == '\'' {
+		quote := p.consume()
+		start := p.pos
+		for p.pos < len(p.src) && p.src[p.pos] != quote {
+			p.pos++
+		}
+		if p.pos >= len(p.src) {
+			return nil, fmt.Errorf("unclosed string literal starting at pos %d", start)
+		}
+		val := p.src[start:p.pos]
+		p.consume() // closing quote
+		return &exprNode{name: val, isLiteral: true}, nil
+	}
+
 	name := p.readIdent()
 	if name == "" {
-		return nil, fmt.Errorf("expected identifier at pos %d", p.pos)
+		return nil, fmt.Errorf("expected identifier or literal at pos %d", p.pos)
 	}
 	p.skipWS()
 	if p.peek() != '(' {
@@ -138,14 +155,18 @@ func looksLikeFuncCall(s string) bool {
 // nondeterministicBuiltins lists functions whose output changes between calls
 // even with identical arguments (e.g. uuid()). These must NOT be cached.
 var nondeterministicBuiltins = map[string]bool{
-	"uuid": true,
+	"uuid":         true,
+	"pkceVerifier": true,
 }
 
 // evalExpr вычисляет AST-узел и возвращает строковый результат.
 // cache — результаты детерминированных функций в рамках одного шага,
 // гарантирует что solvePoW(x, y) с одинаковыми аргументами не вычисляется дважды.
-// Non-deterministic functions (uuid) are never cached.
+// Non-deterministic functions (uuid, pkceVerifier) are never cached.
 func (r *Runner) evalExpr(node *exprNode, cache map[string]string) (string, error) {
+	if node.isLiteral {
+		return node.name, nil
+	}
 	if node.args == nil {
 		// varRef: читаем из cfg.Variables
 		r.configMu.RLock()
@@ -208,6 +229,23 @@ func (r *Runner) callBuiltin(name string, args []string) (string, error) {
 			return "", fmt.Errorf("uuid() takes 0 arguments, got %d", len(args))
 		}
 		return uuid.New().String(), nil
+
+	case "pkceVerifier":
+		if len(args) != 0 {
+			return "", fmt.Errorf("pkceVerifier() takes 0 arguments, got %d", len(args))
+		}
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return "", fmt.Errorf("pkceVerifier(): entropy error: %w", err)
+		}
+		return base64.RawURLEncoding.EncodeToString(b), nil
+
+	case "pkceChallenge":
+		if len(args) != 1 {
+			return "", fmt.Errorf("pkceChallenge() takes 1 argument (verifier), got %d", len(args))
+		}
+		h := sha256.Sum256([]byte(args[0]))
+		return base64.RawURLEncoding.EncodeToString(h[:]), nil
 
 	// ── Crypto ──────────────────────────────────────────────────
 
@@ -293,6 +331,39 @@ func (r *Runner) callBuiltin(name string, args []string) (string, error) {
 			return "", nil
 		}
 		return s[start:end], nil
+
+	case "urlQuery":
+		if len(args) != 2 {
+			return "", fmt.Errorf("urlQuery() takes 2 arguments (url, paramName), got %d", len(args))
+		}
+		u, err := url.Parse(args[0])
+		if err != nil {
+			return "", fmt.Errorf("urlQuery(): invalid URL %q: %w", args[0], err)
+		}
+		return u.Query().Get(args[1]), nil
+
+	case "regexExtract":
+		if len(args) < 2 || len(args) > 3 {
+			return "", fmt.Errorf("regexExtract() takes 2 or 3 arguments (string, pattern, [groupIndex]), got %d", len(args))
+		}
+		re, err := regexp.Compile(args[1])
+		if err != nil {
+			return "", fmt.Errorf("regexExtract(): invalid regex %q: %w", args[1], err)
+		}
+		matches := re.FindStringSubmatch(args[0])
+		if len(matches) == 0 {
+			return "", nil
+		}
+		group := 1
+		if len(args) == 3 {
+			if g, err := strconv.Atoi(args[2]); err == nil {
+				group = g
+			}
+		}
+		if group < len(matches) {
+			return matches[group], nil
+		}
+		return matches[0], nil
 
 	// ── JSON ────────────────────────────────────────────────────
 

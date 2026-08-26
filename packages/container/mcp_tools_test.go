@@ -251,3 +251,68 @@ func TestListMCPTools(t *testing.T) {
 	err = listMCPTools(errListCfg)
 	assert.Error(t, err)
 }
+
+func TestListMCPTools_WithAuthSequence(t *testing.T) {
+	var gotAuthHeader string
+	var gotCookie string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: "session-12345"})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"token": "secret-jwt-token",
+		})
+	})
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		gotAuthHeader = r.Header.Get("Authorization")
+		if c, err := r.Cookie("session"); err == nil {
+			gotCookie = c.Value
+		}
+
+		var req mcp.Request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		var resp mcp.Response
+		resp.JSONRPC = "2.0"
+		resp.ID = req.ID
+		if req.Method == "initialize" {
+			resp.Result = json.RawMessage(`{"protocolVersion":"2024-11-05"}`)
+		} else if req.Method == "tools/list" {
+			resp.Result = json.RawMessage(`{"tools":[{"name":"auth_tool","inputSchema":{"type":"object"}}]}`)
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cfg := &swagger.Config{
+		BaseURL: ts.URL,
+		MCPServer: &swagger.MCPServerConfig{
+			Type: "http",
+			URL:  ts.URL + "/mcp",
+		},
+		Security: swagger.SecurityConfig{
+			AllowPrivateIPs: true,
+		},
+		AuthSequence: []swagger.AuthStep{
+			{
+				Method: "POST",
+				URL:    "/login",
+				ExtractVariables: map[string]string{
+					"token": "tok",
+				},
+				SetHeaders: map[string]string{
+					"Authorization": "Bearer {{tok}}",
+				},
+				ExtractCookies: []string{"session"},
+			},
+		},
+	}
+
+	err := listMCPTools(cfg)
+	assert.NoError(t, err)
+	assert.Equal(t, "Bearer secret-jwt-token", gotAuthHeader)
+	assert.Equal(t, "session-12345", gotCookie)
+}
+

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"swazz-engine/internal/mcp"
+	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
 )
 
@@ -27,6 +28,21 @@ const mcpToolPathPrefix = "mcp://tool/"
 //
 // Read-only by construction: initialize + tools/list, never tools/call.
 func listMCPTools(runCfg *swagger.Config) error {
+	timeout := 30 * time.Second
+	if runCfg.Settings.TimeoutMs > 0 {
+		timeout = time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if len(runCfg.AuthSequence) > 0 {
+		r := runner.New(runCfg, nil)
+		defer r.Close()
+		if err := r.RunAuthSequence(ctx); err != nil {
+			return fmt.Errorf("auth_sequence failed: %w", err)
+		}
+	}
+
 	client, err := mcp.NewClientFromConfig(
 		runCfg.MCPServer, runCfg.GlobalHeaders, runCfg.Cookies,
 		runCfg.Security.AllowPrivateIPs, nil)
@@ -34,13 +50,6 @@ func listMCPTools(runCfg *swagger.Config) error {
 		return fmt.Errorf("-mcp-list-tools: %w", err)
 	}
 	defer func() { _ = client.Close() }()
-
-	timeout := 30 * time.Second
-	if runCfg.Settings.TimeoutMs > 0 {
-		timeout = time.Duration(runCfg.Settings.TimeoutMs) * time.Millisecond
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 
 	if err := client.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect to MCP server: %w", err)
