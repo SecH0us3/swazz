@@ -212,6 +212,10 @@ func MinIterationsNeeded(profile swagger.FuzzingProfile, settings swagger.Settin
 // Generate produces a value for a single property.
 // Priority: enum → dictionary → format-aware → profile-based.
 func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty) any {
+	if schema == nil {
+		return nil
+	}
+
 	// 1. Enum — respect explicit values, allow bypass in security profiles
 	if len(schema.Enum) > 0 {
 		shouldBypass := (g.profile == swagger.ProfileMalicious) && rand.Float64() < 0.3 // #nosec G404 -- non-security randomness for fuzzer
@@ -232,7 +236,7 @@ func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty
 
 // BuildObject recursively builds a full object from JSON Schema.
 func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
-	if schema.Type != "object" || schema.Properties == nil {
+	if schema == nil || schema.Type != "object" || schema.Properties == nil {
 		return map[string]any{}
 	}
 
