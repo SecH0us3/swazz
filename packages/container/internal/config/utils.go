@@ -70,6 +70,7 @@ func matchesAny(key, path string, patterns []string) bool {
 			if strings.EqualFold(p, key) || strings.EqualFold(p, path) {
 				return true
 			}
+			continue // no wildcard → skip regex entirely
 		}
 		rx := getGlobRegex(p)
 		if rx.MatchString(key) || rx.MatchString(path) {
