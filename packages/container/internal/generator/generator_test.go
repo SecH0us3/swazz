@@ -473,3 +473,60 @@ func TestGetArraySize(t *testing.T) {
 	assert.GreaterOrEqual(t, size, 0)
 	assert.LessOrEqual(t, size, 50)
 }
+
+func TestGenerateNumber_AllProfiles(t *testing.T) {
+	for _, profile := range []swagger.FuzzingProfile{swagger.ProfileBoundary, swagger.ProfileMalicious, swagger.ProfileRandom} {
+		g := New(nil, profile, swagger.Settings{})
+		
+		intVal := g.generateNumber("integer")
+		require.NotNil(t, intVal)
+
+		numVal := g.generateNumber("number")
+		require.NotNil(t, numVal)
+	}
+}
+
+func TestGenerateBoolean_AllProfiles(t *testing.T) {
+	gRand := New(nil, swagger.ProfileRandom, swagger.Settings{})
+	b1 := gRand.generateBoolean()
+	_, isBool1 := b1.(bool)
+	assert.True(t, isBool1)
+
+	gBound := New(nil, swagger.ProfileBoundary, swagger.Settings{})
+	b2 := gBound.generateBoolean()
+	_, isBool2 := b2.(bool)
+	assert.True(t, isBool2)
+
+	gMal := New(nil, swagger.ProfileMalicious, swagger.Settings{})
+	b3 := gMal.generateBoolean()
+	assert.NotNil(t, b3)
+}
+
+func TestGenerateUUIDAndDate(t *testing.T) {
+	g := New(nil, swagger.ProfileRandom, swagger.Settings{})
+	
+	uuidStr := g.generateUUID()
+	assert.Len(t, uuidStr, 36)
+
+	dateStr := g.generateDate()
+	assert.NotEmpty(t, dateStr)
+}
+
+func TestGenerate_ArrayAndNull(t *testing.T) {
+	g := New(nil, swagger.ProfileRandom, swagger.Settings{})
+	
+	// Nil schema
+	assert.Nil(t, g.Generate("nil_key", nil))
+
+	// Array schema
+	arrSchema := &swagger.SchemaProperty{
+		Type: "array",
+		Items: &swagger.SchemaProperty{
+			Type: "string",
+		},
+	}
+	arrVal := g.Generate("arr_key", arrSchema)
+	assert.NotNil(t, arrVal)
+}
+
+

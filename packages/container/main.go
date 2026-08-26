@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"swazz-engine/internal/license"
+	"swazz-engine/internal/wizard"
 )
 
 //go:embed LICENSE
@@ -159,7 +160,7 @@ func main() {
 	case "spider":
 		runSpiderCLI(os.Args[2:])
 	case "wizard":
-		runWizard()
+		wizard.RunWizard(runCLI)
 	case "generate-keys":
 		runGenerateKeys()
 	case "discover":
