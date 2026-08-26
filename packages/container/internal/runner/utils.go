@@ -422,11 +422,16 @@ func subVarsRecursive(v any, replacer *strings.Replacer) any {
 
 // toString converts basic types to strings without heavy reflection allocation.
 func toString(v any) string {
+	if v == nil {
+		return ""
+	}
 	switch val := v.(type) {
 	case string:
 		return val
 	case int:
 		return strconv.Itoa(val)
+	case int64:
+		return strconv.FormatInt(val, 10)
 	case float64:
 		return strconv.FormatFloat(val, 'f', -1, 64)
 	case bool:
@@ -435,6 +440,6 @@ func toString(v any) string {
 		}
 		return "false"
 	default:
-		return toString(v)
+		return fmt.Sprintf("%v", v)
 	}
 }

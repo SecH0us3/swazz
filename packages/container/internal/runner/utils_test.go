@@ -154,3 +154,29 @@ func TestToSSE(t *testing.T) {
 		assert.True(t, strings.HasSuffix(vs[0], "… [truncated]"))
 	}
 }
+
+func TestToString(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+	}{
+		{"nil", nil, ""},
+		{"string", "hello", "hello"},
+		{"int", 123, "123"},
+		{"int64", int64(456), "456"},
+		{"float64", 3.1415, "3.1415"},
+		{"bool true", true, "true"},
+		{"bool false", false, "false"},
+		{"custom struct", struct{ A int }{A: 1}, "{1}"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toString(tt.input)
+			if got != tt.expected {
+				t.Errorf("toString(%v) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
