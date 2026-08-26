@@ -73,6 +73,11 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 		return nil
 	}
 
+	// Fast pre-filter: skip scanning if no stack trace / exception indicators are present in response body
+	if !containsAnyFoldASCII(input.ResponseBody, "exception", "traceback", "trace", "panic", "error", "nil", "none", "null", "undefined", "cannot", "goroutine", "stack", "at ", "fatal", "line ", "server error", "laravel", "illuminate", "django", "actionpack", "rails", "node_modules", "gems") {
+		return nil
+	}
+
 	var findings []swagger.AnalysisFinding
 
 	// 1. Check for Null Reference / Pointer Exceptions first (higher priority/severity)

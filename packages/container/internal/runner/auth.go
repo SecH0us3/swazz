@@ -459,8 +459,8 @@ func (r *Runner) extractAndSaveCSRFToken(resp *http.Response, bodyBytes []byte) 
 		}
 	}
 
-	// 3. Check HTML body meta tags or inputs
-	if token == "" && len(bodyBytes) > 0 {
+	// 3. Check HTML body meta tags or inputs (fast path: only if body mentions csrf/xsrf)
+	if token == "" && len(bodyBytes) > 0 && (containsFoldASCII(bodyBytes, "csrf") || containsFoldASCII(bodyBytes, "xsrf")) {
 		if matches := csrfMetaRegex.FindSubmatch(bodyBytes); len(matches) > 0 {
 			for i := 1; i < len(matches); i++ {
 				if len(matches[i]) > 0 {

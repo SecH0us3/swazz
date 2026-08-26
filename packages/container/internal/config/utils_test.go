@@ -157,3 +157,54 @@ func TestMatchesAny_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestMatchesAny_LiteralFastPathDoesNotPopulateRegexCache(t *testing.T) {
+	literalPattern := "/api/v1/specific-literal-path"
+
+	// Ensure the cache is clean for this test pattern
+	globRegexMu.Lock()
+	delete(globRegexCache, literalPattern)
+	globRegexMu.Unlock()
+
+	// 1. Test non-matching literal pattern (mismatch)
+	matched := matchesAny("GET /api/v1/other", "/api/v1/other", []string{literalPattern})
+	if matched {
+		t.Errorf("expected no match for /api/v1/other against %q", literalPattern)
+	}
+
+	// Verify that globRegexCache was NOT populated with literalPattern on mismatch
+	globRegexMu.RLock()
+	_, inCache := globRegexCache[literalPattern]
+	globRegexMu.RUnlock()
+
+	if inCache {
+		t.Errorf("fast-path regression: literal pattern %q was compiled and cached in regex cache during mismatch", literalPattern)
+	}
+
+	// 2. Test matching literal pattern
+	matched = matchesAny("GET /api/v1/specific-literal-path", "/api/v1/specific-literal-path", []string{literalPattern})
+	if !matched {
+		t.Errorf("expected match for %q against %q", literalPattern, literalPattern)
+	}
+
+	// Verify again that it was NOT compiled into regex cache on exact match either
+	globRegexMu.RLock()
+	_, inCache = globRegexCache[literalPattern]
+	globRegexMu.RUnlock()
+
+	if inCache {
+		t.Errorf("fast-path regression: literal pattern %q was compiled into regex cache on exact match", literalPattern)
+	}
+
+	// 3. Wildcard pattern MUST be cached
+	wildcardPattern := "/api/v1/wildcard-test/*"
+	_ = matchesAny("GET /api/v1/wildcard-test/foo", "/api/v1/wildcard-test/foo", []string{wildcardPattern})
+
+	globRegexMu.RLock()
+	_, inCache = globRegexCache[wildcardPattern]
+	globRegexMu.RUnlock()
+
+	if !inCache {
+		t.Errorf("expected wildcard pattern %q to be compiled and cached in globRegexCache", wildcardPattern)
+	}
+}
+

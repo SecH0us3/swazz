@@ -45,6 +45,11 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 		return nil
 	}
 
+	// Fast pre-filter: skip scanning if no secret/key indicators are present in response body
+	if !containsAnyFoldASCII(input.ResponseBody, "akia", "private key", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
+		return nil
+	}
+
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range secretSignatures {

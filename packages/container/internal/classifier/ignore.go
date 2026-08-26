@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"swazz-engine/internal/swagger"
 )
@@ -41,10 +42,35 @@ func endpointGlobToRegex(p string) string {
 	return b.String()
 }
 
+var (
+	endpointRegexMu    sync.RWMutex
+	endpointRegexCache = make(map[string]*regexp.Regexp)
+)
+
+func getEndpointRegex(p string) *regexp.Regexp {
+	endpointRegexMu.RLock()
+	re, ok := endpointRegexCache[p]
+	endpointRegexMu.RUnlock()
+	if ok {
+		return re
+	}
+
+	endpointRegexMu.Lock()
+	defer endpointRegexMu.Unlock()
+	if re, ok = endpointRegexCache[p]; ok {
+		return re
+	}
+	re = regexp.MustCompile(endpointGlobToRegex(p))
+	endpointRegexCache[p] = re
+	return re
+}
+
 // endpointMatches reports whether a glob pattern matches an endpoint string.
 func endpointMatches(pattern, endpoint string) bool {
-	matched, _ := regexp.MatchString(endpointGlobToRegex(pattern), endpoint)
-	return matched
+	if !strings.ContainsRune(pattern, '*') {
+		return strings.EqualFold(pattern, endpoint)
+	}
+	return getEndpointRegex(pattern).MatchString(endpoint)
 }
 
 // IgnoreRule defines matching criteria to suppress false positive or noise findings.

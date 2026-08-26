@@ -443,3 +443,51 @@ func toString(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
+
+// containsFoldASCII checks if haystack contains needle (ASCII case-insensitive) without heap allocations.
+func containsFoldASCII(haystack []byte, needle string) bool {
+	nLen := len(needle)
+	hLen := len(haystack)
+	if nLen == 0 {
+		return true
+	}
+	if hLen < nLen {
+		return false
+	}
+
+	firstLower := needle[0]
+	firstUpper := firstLower
+	if firstLower >= 'a' && firstLower <= 'z' {
+		firstUpper = firstLower - 32
+	} else if firstLower >= 'A' && firstLower <= 'Z' {
+		firstLower = firstLower + 32
+	}
+
+	limit := hLen - nLen
+	for i := 0; i <= limit; i++ {
+		c := haystack[i]
+		if c == firstLower || c == firstUpper {
+			match := true
+			for j := 1; j < nLen; j++ {
+				hc := haystack[i+j]
+				nc := needle[j]
+				if hc != nc {
+					if hc >= 'A' && hc <= 'Z' {
+						hc += 32
+					}
+					if nc >= 'A' && nc <= 'Z' {
+						nc += 32
+					}
+					if hc != nc {
+						match = false
+						break
+					}
+				}
+			}
+			if match {
+				return true
+			}
+		}
+	}
+	return false
+}
