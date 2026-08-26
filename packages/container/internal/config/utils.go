@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // globToRegex converts a glob pattern into a full-match regular expression.
@@ -39,13 +40,39 @@ func globToRegex(p string) string {
 	return b.String()
 }
 
+var (
+	globRegexMu    sync.RWMutex
+	globRegexCache = make(map[string]*regexp.Regexp)
+)
+
+func getGlobRegex(p string) *regexp.Regexp {
+	globRegexMu.RLock()
+	re, ok := globRegexCache[p]
+	globRegexMu.RUnlock()
+	if ok {
+		return re
+	}
+
+	globRegexMu.Lock()
+	defer globRegexMu.Unlock()
+	if re, ok = globRegexCache[p]; ok {
+		return re
+	}
+	re = regexp.MustCompile(globToRegex(p))
+	globRegexCache[p] = re
+	return re
+}
+
 func matchesAny(key, path string, patterns []string) bool {
 	for _, p := range patterns {
-		regexPat := globToRegex(p)
-		if matched, _ := regexp.MatchString(regexPat, key); matched {
-			return true
+		// Fast path: if pattern has no wildcard, direct case-insensitive match
+		if !strings.ContainsRune(p, '*') {
+			if strings.EqualFold(p, key) || strings.EqualFold(p, path) {
+				return true
+			}
 		}
-		if matched, _ := regexp.MatchString(regexPat, path); matched {
+		rx := getGlobRegex(p)
+		if rx.MatchString(key) || rx.MatchString(path) {
 			return true
 		}
 	}

@@ -46,6 +46,11 @@ func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		return nil
 	}
 
+	// Fast pre-filter: skip scanning if no SQL error indicators are present in response body
+	if !containsAnyFoldASCII(input.ResponseBody, "syntax", "error", "sql", "mysql", "psql", "sqlite", "ora-", "quoted", "driver", "oledb", "sqlstate", "npgsql") {
+		return nil
+	}
+
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range dbSignatures {
