@@ -25,6 +25,7 @@ import (
 	"net/url"
 
 	"github.com/pquerna/otp/totp"
+	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/swagger"
 )
 
@@ -91,36 +92,51 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 			}
 			r.configMu.Unlock()
 
-			for varName, expr := range step.SetVariables {
-				var result string
-				var err error
+			pending := maps.Clone(step.SetVariables)
+			for len(pending) > 0 {
+				progress := false
+				var lastErr error
+				var lastVar string
 
-				expr = strings.TrimSpace(expr)
-				if looksLikeFuncCall(expr) {
-					node, parseErr := parseExpression(expr)
-					if parseErr != nil {
-						return nil, nil, fmt.Errorf("auth step %d: set_variables[%q]: parse error: %w",
-							i+1, varName, parseErr)
+				for varName, expr := range pending {
+					var result string
+					var err error
+
+					expr = strings.TrimSpace(expr)
+					if looksLikeFuncCall(expr) {
+						node, parseErr := parseExpression(expr)
+						if parseErr != nil {
+							return nil, nil, fmt.Errorf("auth step %d: set_variables[%q]: parse error: %w",
+								i+1, varName, parseErr)
+						}
+						result, err = r.evalExpr(node, cache)
+					} else {
+						r.configMu.RLock()
+						result = r.subVarsLocked(expr)
+						r.configMu.RUnlock()
 					}
-					result, err = r.evalExpr(node, cache)
+
 					if err != nil {
-						return nil, nil, fmt.Errorf("auth step %d: set_variables[%q]: eval error: %w",
-							i+1, varName, err)
+						lastErr = err
+						lastVar = varName
+						continue
 					}
-				} else {
-					r.configMu.RLock()
-					result = r.subVarsLocked(expr)
-					r.configMu.RUnlock()
+
+					r.configMu.Lock()
+					cfg.Variables[varName] = result
+					r.configMu.Unlock()
+					r.updateReplacer()
+
+					r.logDebug("[Auth] set_variables: {{%s}} = %q", varName, result)
+					delete(pending, varName)
+					progress = true
 				}
 
-				r.configMu.Lock()
-				cfg.Variables[varName] = result
-				r.configMu.Unlock()
-
-				r.logDebug("[Auth] set_variables: {{%s}} = %q", varName, result)
+				if !progress {
+					return nil, nil, fmt.Errorf("auth step %d: set_variables[%q]: eval error: %w",
+						i+1, lastVar, lastErr)
+				}
 			}
-
-			r.updateReplacer()
 		}
 
 		fullURL := r.subVars(step.URL)
@@ -133,11 +149,15 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 			r.configMu.RLock()
 			subBody := r.substituteInObject(step.Body)
 			r.configMu.RUnlock()
-			b, err := json.Marshal(subBody)
-			if err != nil {
-				return nil, nil, fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
+			if strBody, ok := subBody.(string); ok {
+				bodyReader = strings.NewReader(strBody)
+			} else {
+				b, err := json.Marshal(subBody)
+				if err != nil {
+					return nil, nil, fmt.Errorf("auth step %d: failed to marshal body: %w", i+1, err)
+				}
+				bodyReader = bytes.NewReader(b)
 			}
-			bodyReader = bytes.NewReader(b)
 		}
 
 		req, err := http.NewRequestWithContext(reqCtx, step.Method, fullURL, bodyReader)
@@ -261,6 +281,15 @@ func (r *Runner) ExecuteAuthSequence(ctx context.Context, sequence []swagger.Aut
 				r.updateReplacer()
 			}
 		}
+
+		if len(step.SetHeaders) > 0 {
+			r.configMu.RLock()
+			for hName, hValExpr := range step.SetHeaders {
+				headers[hName] = r.subVarsLocked(hValExpr)
+				r.logDebug("[Auth] Set Header %s = %q", hName, headers[hName])
+			}
+			r.configMu.RUnlock()
+		}
 	}
 
 	r.logInfo("Authentication sequence complete.")
@@ -279,6 +308,14 @@ func (r *Runner) RunAuthSequence(ctx context.Context) error {
 	r.config.GlobalHeaders = headers
 	r.config.Cookies = cookies
 	r.configMu.Unlock()
+
+	if r.config.MCPServer != nil {
+		if cli, err := mcp.NewClientFromConfig(
+			r.config.MCPServer, headers, cookies,
+			r.config.Security.AllowPrivateIPs, nil); err == nil {
+			r.mcpClient = cli
+		}
+	}
 	return nil
 }
 

@@ -77,7 +77,7 @@ func (c *HTTPClient) sendRequest(ctx context.Context, method string, params json
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	for k, v := range c.headers {
 		req.Header.Set(k, v)
 	}
