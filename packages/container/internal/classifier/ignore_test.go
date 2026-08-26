@@ -405,3 +405,52 @@ func TestIsIgnored_StatusMatching(t *testing.T) {
 		}
 	})
 }
+
+func TestEndpointMatches_LiteralFastPathDoesNotPopulateRegexCache(t *testing.T) {
+	literalPattern := "/api/v1/users/admin"
+
+	// Ensure cache is clean for test pattern
+	endpointRegexMu.Lock()
+	delete(endpointRegexCache, literalPattern)
+	endpointRegexMu.Unlock()
+
+	// 1. Mismatch
+	matched := endpointMatches(literalPattern, "/api/v1/other")
+	if matched {
+		t.Errorf("expected no match")
+	}
+
+	endpointRegexMu.RLock()
+	_, inCache := endpointRegexCache[literalPattern]
+	endpointRegexMu.RUnlock()
+
+	if inCache {
+		t.Errorf("literal pattern was placed in regex cache on mismatch")
+	}
+
+	// 2. Match
+	matched = endpointMatches(literalPattern, "/api/v1/users/admin")
+	if !matched {
+		t.Errorf("expected match")
+	}
+
+	endpointRegexMu.RLock()
+	_, inCache = endpointRegexCache[literalPattern]
+	endpointRegexMu.RUnlock()
+
+	if inCache {
+		t.Errorf("literal pattern was placed in regex cache on exact match")
+	}
+
+	// 3. Wildcard
+	wildcardPattern := "/api/v1/admin/*"
+	_ = endpointMatches(wildcardPattern, "/api/v1/admin/users")
+
+	endpointRegexMu.RLock()
+	_, inCache = endpointRegexCache[wildcardPattern]
+	endpointRegexMu.RUnlock()
+
+	if !inCache {
+		t.Errorf("expected wildcard pattern to be cached")
+	}
+}
