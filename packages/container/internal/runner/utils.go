@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/generator"
@@ -27,7 +28,7 @@ func (r *Runner) updateReplacer() {
 
 	args := make([]string, 0, len(vars)*2)
 	for k, v := range vars {
-		args = append(args, "{{"+k+"}}", fmt.Sprintf("%v", v))
+		args = append(args, "{{"+k+"}}", toString(v))
 	}
 
 	r.configMu.Lock()
@@ -86,18 +87,18 @@ func fillPathParams(path string, pathParams map[string]*swagger.SchemaProperty, 
 			break
 		}
 		start += searchStart
-		
+
 		// Check for double brace
 		if start+1 < len(result) && result[start+1] == '{' {
 			searchStart = start + 2
 			continue
 		}
-		
+
 		end := strings.IndexByte(result[start:], '}')
 		if end < 0 {
 			break
 		}
-		
+
 		fallbackSchema := &swagger.SchemaProperty{Type: "string"}
 		val := capPathParam(gen.Generate("id", fallbackSchema))
 		result = result[:start] + url.PathEscape(val) + result[start+end+1:]
@@ -129,18 +130,18 @@ func fillPathParamsFromMap(path string, params map[string]string) string {
 			break
 		}
 		start += searchStart
-		
+
 		// Check for double brace
 		if start+1 < len(result) && result[start+1] == '{' {
 			searchStart = start + 2
 			continue
 		}
-		
+
 		end := strings.IndexByte(result[start:], '}')
 		if end < 0 {
 			break
 		}
-		
+
 		if gen == nil {
 			gen = generator.New(nil, swagger.ProfileRandom, swagger.DefaultSettings())
 		}
@@ -156,7 +157,7 @@ func fillPathParamsFromMap(path string, params map[string]string) string {
 // Practical limit: ~256 chars — beyond that the value doesn't add testing value
 // and breaks URL parsers / logging infrastructure.
 func capPathParam(v any) string {
-	s := fmt.Sprintf("%v", v)
+	s := toString(v)
 	const maxPathParamLen = 256
 	if len(s) > maxPathParamLen {
 		return s[:maxPathParamLen]
@@ -416,5 +417,24 @@ func subVarsRecursive(v any, replacer *strings.Replacer) any {
 		return res
 	default:
 		return v
+	}
+}
+
+// toString converts basic types to strings without heavy reflection allocation.
+func toString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case int:
+		return strconv.Itoa(val)
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case bool:
+		if val {
+			return "true"
+		}
+		return "false"
+	default:
+		return toString(v)
 	}
 }

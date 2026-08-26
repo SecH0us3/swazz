@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -201,8 +200,11 @@ func (r *Runner) buildFuzzIteration(
 			continue
 		}
 
-		payloadStr := strings.TrimSuffix(buf.String(), "\n")
-		hash = payloads.HashStr(payloadStr)
+		b := buf.Bytes()
+		if len(b) > 0 && b[len(b)-1] == '\n' {
+			b = b[:len(b)-1]
+		}
+		hash = payloads.HashBytes(b)
 		bufPool.Put(buf)
 
 		if enableDedup && seenHashes[hash] {

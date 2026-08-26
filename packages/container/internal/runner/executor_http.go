@@ -69,7 +69,7 @@ func (r *Runner) executeRequest(
 			break
 		}
 	}
-	
+
 	randomizeUA := r.config.Settings.RandomizeUserAgent
 	proxyList := r.config.Settings.ProxyList
 	enableAdaptiveRateLimit := r.config.Settings.EnableAdaptiveRateLimit
@@ -111,7 +111,7 @@ func (r *Runner) executeRequest(
 		if parsedURL, err := url.Parse(rawURL); err == nil {
 			query := parsedURL.Query()
 			for k, v := range queryParams {
-				query.Set(k, r.subStateVars(fmt.Sprintf("%v", v)))
+				query.Set(k, r.subStateVars(toString(v)))
 			}
 			parsedURL.RawQuery = query.Encode()
 			rawURL = parsedURL.String()
@@ -177,7 +177,7 @@ func (r *Runner) executeRequest(
 				if m, ok := payload.(map[string]any); ok {
 					vals := url.Values{}
 					for k, v := range m {
-						vals.Set(k, fmt.Sprintf("%v", v))
+						vals.Set(k, toString(v))
 					}
 					bodyReader = strings.NewReader(vals.Encode())
 					payloadSize = len(vals.Encode())
@@ -200,11 +200,18 @@ func (r *Runner) executeRequest(
 		}
 
 		if len(cookies) > 0 {
-			var cookieParts []string
+			var sb strings.Builder
+			i := 0
 			for k, v := range cookies {
-				cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", k, v))
+				if i > 0 {
+					sb.WriteString("; ")
+				}
+				sb.WriteString(k)
+				sb.WriteByte('=')
+				sb.WriteString(v)
+				i++
 			}
-			mergedHeaders["Cookie"] = strings.Join(cookieParts, "; ")
+			mergedHeaders["Cookie"] = sb.String()
 		}
 
 		req, err := http.NewRequestWithContext(reqCtx, method, rawURL, bodyReader)
@@ -431,7 +438,7 @@ func (r *Runner) executeRequest(
 					if parsedURL, err := url.Parse(rawURL); err == nil {
 						query := parsedURL.Query()
 						for k, v := range queryParams {
-							query.Set(k, r.subStateVars(fmt.Sprintf("%v", v)))
+							query.Set(k, r.subStateVars(toString(v)))
 						}
 						parsedURL.RawQuery = query.Encode()
 						rawURL = parsedURL.String()
