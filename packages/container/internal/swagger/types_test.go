@@ -285,4 +285,22 @@ func TestDefaultSettings_MaxPayloadSizeBytes(t *testing.T) {
 	assert.Equal(t, 10485760, defaults.MaxPayloadSizeBytes, "default max payload size must be 10MB")
 }
 
+func TestMCPSettingsDefaults(t *testing.T) {
+	s := Settings{}
+	assert.True(t, s.MCPFuzzToolsEnabled(), "MCPFuzzTools should default to true when nil")
+	assert.True(t, s.MCPFuzzResourcesEnabled(), "MCPFuzzResources should default to true when nil")
+	assert.True(t, s.MCPFuzzPromptsEnabled(), "MCPFuzzPrompts should default to true when nil")
+
+	f := false
+	tr := true
+	sExplicit := Settings{
+		MCPFuzzTools:     &f,
+		MCPFuzzResources: &tr,
+		MCPFuzzPrompts:   &f,
+	}
+	assert.False(t, sExplicit.MCPFuzzToolsEnabled())
+	assert.True(t, sExplicit.MCPFuzzResourcesEnabled())
+	assert.False(t, sExplicit.MCPFuzzPromptsEnabled())
+}
+
 

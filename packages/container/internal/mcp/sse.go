@@ -413,6 +413,7 @@ func (c *SSEClient) CallTool(ctx context.Context, name string, arguments map[str
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal tools/call result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, "", nil
 }
 
@@ -455,6 +456,7 @@ func (c *SSEClient) ReadResource(ctx context.Context, uri string, extraHeaders m
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal resources/read result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, "", nil
 }
 
@@ -502,6 +504,7 @@ func (c *SSEClient) GetPrompt(ctx context.Context, name string, arguments map[st
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal prompts/get result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, "", nil
 }
 

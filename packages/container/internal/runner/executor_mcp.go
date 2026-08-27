@@ -43,19 +43,22 @@ func (r *Runner) executeMCPRequest(
 	}
 
 	var args map[string]any
+	payloadSize := 0
 	if payload != nil {
 		if m, ok := payload.(map[string]any); ok {
 			args = m
+		} else if b, ok := payload.([]byte); ok {
+			_ = json.Unmarshal(b, &args)
+			payloadSize = len(b)
+		} else if s, ok := payload.(string); ok {
+			_ = json.Unmarshal([]byte(s), &args)
+			payloadSize = len(s)
 		} else {
 			if b, err := json.Marshal(payload); err == nil {
 				_ = json.Unmarshal(b, &args)
+				payloadSize = len(b)
 			}
 		}
-	}
-
-	payloadSize := 0
-	if b, err := json.Marshal(args); err == nil {
-		payloadSize = len(b)
 	}
 
 	timeoutMs := 10000
@@ -130,7 +133,11 @@ func (r *Runner) executeMCPRequest(
 		var readRes *mcp.ReadResourceResult
 		readRes, stderr, err = r.mcpClient.ReadResource(reqCtx, uri, extraHeaders)
 		if readRes != nil {
-			resBytes, _ = json.Marshal(readRes)
+			if len(readRes.RawJSON) > 0 {
+				resBytes = readRes.RawJSON
+			} else {
+				resBytes, _ = json.Marshal(readRes)
+			}
 		}
 	} else if strings.HasPrefix(originalPath, "mcp://prompt/") {
 		methodType = "PROMPT"
@@ -138,7 +145,11 @@ func (r *Runner) executeMCPRequest(
 		var promptRes *mcp.GetPromptResult
 		promptRes, stderr, err = r.mcpClient.GetPrompt(reqCtx, promptName, args, extraHeaders)
 		if promptRes != nil {
-			resBytes, _ = json.Marshal(promptRes)
+			if len(promptRes.RawJSON) > 0 {
+				resBytes = promptRes.RawJSON
+			} else {
+				resBytes, _ = json.Marshal(promptRes)
+			}
 		}
 	} else {
 		methodType = "CALL"
@@ -147,7 +158,11 @@ func (r *Runner) executeMCPRequest(
 		callRes, stderr, err = r.mcpClient.CallTool(reqCtx, toolName, args, extraHeaders)
 		if callRes != nil {
 			isError = callRes.IsError
-			resBytes, _ = json.Marshal(callRes)
+			if len(callRes.RawJSON) > 0 {
+				resBytes = callRes.RawJSON
+			} else {
+				resBytes, _ = json.Marshal(callRes)
+			}
 			if isError {
 				for _, content := range callRes.Content {
 					if content.Type == "text" {

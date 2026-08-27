@@ -15,11 +15,13 @@ type StackTraceAnalyzer struct{}
 
 type stackSignature struct {
 	language string
+	guards   []string
 	pattern  *regexp.Regexp
 }
 
 type nullPointerSignature struct {
 	language string
+	guards   []string
 	pattern  *regexp.Regexp
 }
 
@@ -29,40 +31,44 @@ var nullPointerSignatures []nullPointerSignature
 func init() {
 	signatures := []struct {
 		language string
+		guards   []string
 		pattern  string
 	}{
-		{"Java", `(?m)(at\s+java\.|at\s+sun\.|at\s+org\.springframework\.|.+\.java:\d+\)|org\.apache\.catalina|at\s+spring\.)`},
-		{"Python", `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+|django\.core\.|flask/app\.py)`},
-		{"Go", `(?m)(goroutine\s+\d+\s+\[|panic:|runtime\s+error:)`},
-		{"NodeJS", `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/|@nestjs/core|express/lib/router)`},
-		{".NET", `(?m)(at\s+System\..+\sin\s.+:\w+\s\d+|System\.\w+Exception:|Server\s+Error\s+in\s+)`},
-		{"PHP", `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/|Laravel\\Framework|Illuminate\\Routing)`},
-		{"Ruby", `(?m)(actionpack|active_record|action_controller|bin/rails|/gems/|at\s+.+\.rb:\d+)`},
+		{"Java", []string{"at java.", "at sun.", "at org.spring", ".java:", "org.apache.catalina", "at spring."}, `(?m)(at\s+java\.|at\s+sun\.|at\s+org\.springframework\.|.+\.java:\d+\)|org\.apache\.catalina|at\s+spring\.)`},
+		{"Python", []string{"traceback (most recent", "file \"", "django.core", "flask/app.py"}, `(?m)(Traceback\s+\(most\s+recent\s+call\s+last\)|File\s+".+",\s+line\s+\d+|django\.core\.|flask/app\.py)`},
+		{"Go", []string{"goroutine ", "panic:", "runtime error:"}, `(?m)(goroutine\s+\d+\s+\[|panic:|runtime\s+error:)`},
+		{"NodeJS", []string{"at object.<anonymous>", "at module._compile", "node_modules/", "@nestjs/core", "express/lib/router"}, `(?m)(at\s+Object\.<anonymous>|at\s+Module\._compile|node_modules/|@nestjs/core|express/lib/router)`},
+		{".NET", []string{"at system.", "exception:", "server error in "}, `(?m)(at\s+System\..+\sin\s.+:\w+\s\d+|System\.\w+Exception:|Server\s+Error\s+in\s+)`},
+		{"PHP", []string{"fatal error:", "stack trace:", "/var/www/", "laravel\\framework", "illuminate\\routing"}, `(?m)(Fatal\s+error:|Stack\s+trace:|in\s+/var/www/|Laravel\\Framework|Illuminate\\Routing)`},
+		{"Ruby", []string{"actionpack", "active_record", "action_controller", "bin/rails", "/gems/", ".rb:"}, `(?m)(actionpack|active_record|action_controller|bin/rails|/gems/|at\s+.+\.rb:\d+)`},
 	}
 
 	for _, sig := range signatures {
 		stackSignatures = append(stackSignatures, stackSignature{
 			language: sig.language,
+			guards:   sig.guards,
 			pattern:  regexp.MustCompile(sig.pattern),
 		})
 	}
 
 	npeSignatures := []struct {
 		language string
+		guards   []string
 		pattern  string
 	}{
-		{".NET", `(?i)System\.NullReferenceException`},
-		{"Java", `(?i)java\.lang\.NullPointerException|NullPointerException|Cannot invoke \".+\" because \".+\" is null`},
-		{"Go", `(?i)nil pointer dereference`},
-		{"Python", `(?i)AttributeError: 'NoneType' object|TypeError: 'NoneType' object`},
-		{"NodeJS", `(?i)Cannot read propert(y|ies) of (null|undefined)`},
-		{"PHP", `(?i)Call to a member function .+\(\) on null|Attempt to read property .+\s+on null|member function on null`},
-		{"Ruby", `(?i)undefined method .* for nil:NilClass`},
+		{".NET", []string{"nullreferenceexception"}, `(?i)System\.NullReferenceException`},
+		{"Java", []string{"nullpointerexception", "is null"}, `(?i)java\.lang\.NullPointerException|NullPointerException|Cannot invoke \".+\" because \".+\" is null`},
+		{"Go", []string{"nil pointer dereference"}, `(?i)nil pointer dereference`},
+		{"Python", []string{"'nonetype' object"}, `(?i)AttributeError: 'NoneType' object|TypeError: 'NoneType' object`},
+		{"NodeJS", []string{"cannot read propert"}, `(?i)Cannot read propert(y|ies) of (null|undefined)`},
+		{"PHP", []string{"on null"}, `(?i)Call to a member function .+\(\) on null|Attempt to read property .+\s+on null|member function on null`},
+		{"Ruby", []string{"nil:nilclass"}, `(?i)undefined method .* for nil:NilClass`},
 	}
 
 	for _, sig := range npeSignatures {
 		nullPointerSignatures = append(nullPointerSignatures, nullPointerSignature{
 			language: sig.language,
+			guards:   sig.guards,
 			pattern:  regexp.MustCompile(sig.pattern),
 		})
 	}
@@ -82,6 +88,10 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	// 1. Check for Null Reference / Pointer Exceptions first (higher priority/severity)
 	for _, sig := range nullPointerSignatures {
+		if !containsAnyFoldASCII(input.ResponseBody, sig.guards...) {
+			continue
+		}
+
 		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])
@@ -111,6 +121,10 @@ func (a *StackTraceAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFin
 
 	// 2. Generic language stack traces
 	for _, sig := range stackSignatures {
+		if !containsAnyFoldASCII(input.ResponseBody, sig.guards...) {
+			continue
+		}
+
 		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])

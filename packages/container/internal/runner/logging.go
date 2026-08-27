@@ -226,7 +226,44 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 	r.logInfo("🚀 Swazz Fuzzing Scan Starting")
 	r.logInfo("⚙️  Runtime & Engine:     Go %s (%s/%s) | %s | SSRF: %s",
 		runtime.Version(), runtime.GOOS, runtime.GOARCH, r.getLicenseSummary(), r.getSSRFSummary())
-	r.logInfo("🎯 Target:               %s (%d endpoint(s))", target, len(r.config.Endpoints))
+	if isMCP {
+		var toolCount, resCount, promptCount int
+		for _, ep := range r.config.Endpoints {
+			switch ep.Method {
+			case "CALL":
+				toolCount++
+			case "READ":
+				resCount++
+			case "PROMPT":
+				promptCount++
+			default:
+				if strings.HasPrefix(ep.Path, "mcp://tool/") {
+					toolCount++
+				} else if strings.HasPrefix(ep.Path, "mcp://resource/") {
+					resCount++
+				} else if strings.HasPrefix(ep.Path, "mcp://prompt/") {
+					promptCount++
+				}
+			}
+		}
+		var breakdown []string
+		if toolCount > 0 {
+			breakdown = append(breakdown, fmt.Sprintf("%d tool(s)", toolCount))
+		}
+		if resCount > 0 {
+			breakdown = append(breakdown, fmt.Sprintf("%d resource(s)", resCount))
+		}
+		if promptCount > 0 {
+			breakdown = append(breakdown, fmt.Sprintf("%d prompt(s)", promptCount))
+		}
+		if len(breakdown) > 0 {
+			r.logInfo("🎯 Target:               %s (%s)", target, strings.Join(breakdown, ", "))
+		} else {
+			r.logInfo("🎯 Target:               %s (%d endpoint(s))", target, len(r.config.Endpoints))
+		}
+	} else {
+		r.logInfo("🎯 Target:               %s (%d endpoint(s))", target, len(r.config.Endpoints))
+	}
 	r.logInfo("🧬 Profiles:             %s", strings.Join(profileNames, ", "))
 	r.logInfo("📊 Planned Requests:     ~%d requests (%d iter/profile) | ⏱️ ETA: %s", plannedTotal, r.config.Settings.IterationsPerProfile, etaStr)
 	r.logInfo("⚡ Concurrency & Limits:  %d workers | Timeout: %dms | Delay: %dms | Max Payload: %s",
@@ -338,8 +375,16 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 	if r.config.Settings.SemanticMutationEnabled() {
 		modules = append(modules, "SemanticMutation (RFC email, uuid, date-time, phone, url)")
 	}
-	if r.config.MCPServer != nil && r.config.Settings.MCPMethodFuzzingEnabled() {
-		modules = append(modules, "MCPMethodFuzz")
+	if r.config.MCPServer != nil {
+		if r.config.Settings.MCPMethodFuzzingEnabled() {
+			modules = append(modules, "MCPMethodFuzz")
+		}
+		if r.config.Settings.MCPFuzzResourcesEnabled() {
+			modules = append(modules, "MCPResourceFuzz")
+		}
+		if r.config.Settings.MCPFuzzPromptsEnabled() {
+			modules = append(modules, "MCPPromptFuzz")
+		}
 	}
 	if r.config.Settings.OOBServerURL != "" {
 		modules = append(modules, fmt.Sprintf("OOB (%s)", r.config.Settings.OOBServerURL))

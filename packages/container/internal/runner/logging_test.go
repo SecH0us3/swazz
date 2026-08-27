@@ -206,6 +206,8 @@ func TestLogStartupSummary(t *testing.T) {
 			},
 			Endpoints: []swagger.EndpointConfig{
 				{Method: "CALL", Path: "mcp://tool/echo"},
+				{Method: "READ", Path: "mcp://resource/file:///config.json"},
+				{Method: "PROMPT", Path: "mcp://prompt/review"},
 			},
 			Settings: swagger.Settings{
 				IterationsPerProfile: 5,
@@ -243,8 +245,9 @@ func TestLogStartupSummary(t *testing.T) {
 		}
 
 		fullOutput := strings.Join(receivedMsgs, "\n")
-		assert.Contains(t, fullOutput, "MCP stdio (npx -y @modelcontextprotocol/server-everything) (1 endpoint(s))")
+		assert.Contains(t, fullOutput, "MCP stdio (npx -y @modelcontextprotocol/server-everything) (1 tool(s), 1 resource(s), 1 prompt(s))")
 		assert.Contains(t, fullOutput, "2 workers | Timeout: 3000ms | Delay: 0ms | Max Payload: 2.0 MB (2097152 B)")
+		assert.Contains(t, fullOutput, "MCPMethodFuzz, MCPResourceFuzz, MCPPromptFuzz")
 		assert.Contains(t, fullOutput, "Resuming Checkpoint:  Profile=RANDOM | Endpoint=CALL mcp://tool/echo | Iteration=3")
 	})
 
