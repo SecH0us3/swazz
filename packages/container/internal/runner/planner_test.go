@@ -125,12 +125,20 @@ func TestCalcMaxPayloadSize(t *testing.T) {
 		expected int
 	}{
 		{
-			name:    "default limit when unset",
+			name:    "default limit when unset for random profile",
 			profile: swagger.ProfileRandom,
 			settings: swagger.Settings{
 				MaxPayloadSizeBytes: 0,
 			},
 			expected: defaultMaxPayloadBytes,
+		},
+		{
+			name:    "default limit when unset for boundary profile",
+			profile: swagger.ProfileBoundary,
+			settings: swagger.Settings{
+				MaxPayloadSizeBytes: 0,
+			},
+			expected: boundaryMaxPayloadBytes,
 		},
 		{
 			name:    "custom limit for standard profile",
@@ -141,15 +149,23 @@ func TestCalcMaxPayloadSize(t *testing.T) {
 			expected: 2048,
 		},
 		{
-			name:    "boundary profile boosts small limit to boundary max",
+			name:    "boundary profile honors explicit small limit without overriding to floor",
 			profile: swagger.ProfileBoundary,
 			settings: swagger.Settings{
 				MaxPayloadSizeBytes: 2048,
 			},
-			expected: boundaryMaxPayloadBytes,
+			expected: 2048,
 		},
 		{
-			name:    "boundary profile keeps limit if already larger than boundary max",
+			name:    "boundary profile honors explicit 2.4MB limit",
+			profile: swagger.ProfileBoundary,
+			settings: swagger.Settings{
+				MaxPayloadSizeBytes: 2400000,
+			},
+			expected: 2400000,
+		},
+		{
+			name:    "boundary profile honors limit if larger than boundary max default",
 			profile: swagger.ProfileBoundary,
 			settings: swagger.Settings{
 				MaxPayloadSizeBytes: boundaryMaxPayloadBytes + 1024,

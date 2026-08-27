@@ -56,15 +56,16 @@ func calcEffectiveIterations(
 }
 
 // calcMaxPayloadSize returns the per-profile payload size ceiling in bytes.
+// If settings.MaxPayloadSizeBytes is explicitly set (> 0), it is honored for all profiles.
+// Otherwise, defaults to boundaryMaxPayloadBytes for BOUNDARY profile and defaultMaxPayloadBytes for others.
 func calcMaxPayloadSize(profile swagger.FuzzingProfile, settings swagger.Settings) int {
-	limit := settings.MaxPayloadSizeBytes
-	if limit <= 0 {
-		limit = defaultMaxPayloadBytes
+	if settings.MaxPayloadSizeBytes > 0 {
+		return settings.MaxPayloadSizeBytes
 	}
-	if profile == swagger.ProfileBoundary && limit < boundaryMaxPayloadBytes {
-		limit = boundaryMaxPayloadBytes
+	if profile == swagger.ProfileBoundary {
+		return boundaryMaxPayloadBytes
 	}
-	return limit
+	return defaultMaxPayloadBytes
 }
 
 func endpointRequests(profile swagger.FuzzingProfile, settings swagger.Settings, ep *swagger.EndpointConfig) int {
