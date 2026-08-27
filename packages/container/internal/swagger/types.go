@@ -278,6 +278,9 @@ type Settings struct {
 	EnableAdaptiveRateLimit       bool                        `json:"enable_adaptive_rate_limit,omitempty"`
 	EnableSemanticMutation        *bool                       `json:"enable_semantic_mutation,omitempty"`
 	EnableMCPMethodFuzzing        *bool                       `json:"enable_mcp_method_fuzzing,omitempty"`
+	MCPFuzzTools                  *bool                       `json:"mcp_fuzz_tools,omitempty"`
+	MCPFuzzResources              *bool                       `json:"mcp_fuzz_resources,omitempty"`
+	MCPFuzzPrompts                *bool                       `json:"mcp_fuzz_prompts,omitempty"`
 	UseLLMPrepass                 bool                        `json:"use_llm_prepass,omitempty"`
 	AIGatewayURL                  string                      `json:"ai_gateway_url,omitempty"`
 	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
@@ -301,6 +304,30 @@ func (s Settings) MCPMethodFuzzingEnabled() bool {
 		return true
 	}
 	return *s.EnableMCPMethodFuzzing
+}
+
+// MCPFuzzToolsEnabled returns true if MCP tools fuzzing is enabled (default: true).
+func (s Settings) MCPFuzzToolsEnabled() bool {
+	if s.MCPFuzzTools == nil {
+		return true
+	}
+	return *s.MCPFuzzTools
+}
+
+// MCPFuzzResourcesEnabled returns true if MCP resources fuzzing is enabled (default: true).
+func (s Settings) MCPFuzzResourcesEnabled() bool {
+	if s.MCPFuzzResources == nil {
+		return true
+	}
+	return *s.MCPFuzzResources
+}
+
+// MCPFuzzPromptsEnabled returns true if MCP prompts fuzzing is enabled (default: true).
+func (s Settings) MCPFuzzPromptsEnabled() bool {
+	if s.MCPFuzzPrompts == nil {
+		return true
+	}
+	return *s.MCPFuzzPrompts
 }
 
 // GetMaxTriagePerScan returns the configured max triage limit,
