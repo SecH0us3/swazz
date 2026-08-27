@@ -271,6 +271,7 @@ func (r *Runner) finaliseRun() {
 	final.Progress.CurrentProfile = ""
 	r.latestStats.Store(&final)
 	r.Broadcast(Event{Type: EventComplete, Data: final})
+	r.logCompletionSummary(final)
 
 	if r.mcpClient != nil {
 		_ = r.mcpClient.Close()
