@@ -50,6 +50,7 @@ type Resource struct {
 // ReadResourceResult represents the result of a resources/read call.
 type ReadResourceResult struct {
 	Contents []ResourceContent `json:"contents"`
+	RawJSON  []byte            `json:"-"`
 }
 
 // ResourceContent represents the content payload of a read resource.
@@ -78,6 +79,7 @@ type PromptArgument struct {
 type GetPromptResult struct {
 	Description string          `json:"description,omitempty"`
 	Messages    []PromptMessage `json:"messages"`
+	RawJSON     []byte          `json:"-"`
 }
 
 // PromptMessage represents a message returned in a prompt template.
@@ -185,6 +187,7 @@ func NewClientFromConfig(
 type CallToolResult struct {
 	Content []Content `json:"content"`
 	IsError bool      `json:"isError,omitempty"`
+	RawJSON []byte    `json:"-"`
 }
 
 // Content defines a single item in the CallToolResult content array.

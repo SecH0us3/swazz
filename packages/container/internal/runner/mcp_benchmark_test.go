@@ -45,6 +45,7 @@ func (b *benchMCPClient) GetPrompt(ctx context.Context, name string, args map[st
 func BenchmarkExecuteMCPRequest_ToolCall(b *testing.B) {
 	fake := &benchMCPClient{
 		toolResult: &mcp.CallToolResult{
+			RawJSON: []byte(`{"status":"ok","account":{"id":"123","balance":100.50}}`),
 			Content: []mcp.Content{
 				{Type: "text", Text: `{"status":"ok","account":{"id":"123","balance":100.50}}`},
 			},
@@ -82,6 +83,7 @@ func BenchmarkExecuteMCPRequest_ToolCall(b *testing.B) {
 func BenchmarkExecuteMCPRequest_ResourceRead(b *testing.B) {
 	fake := &benchMCPClient{
 		resourceResult: &mcp.ReadResourceResult{
+			RawJSON: []byte(`{"contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost\n::1 localhost"}]}`),
 			Contents: []mcp.ResourceContent{
 				{URI: "file:///etc/hosts", Text: "127.0.0.1 localhost\n::1 localhost"},
 			},
@@ -117,6 +119,7 @@ func BenchmarkExecuteMCPRequest_ResourceRead(b *testing.B) {
 func BenchmarkExecuteMCPRequest_PromptGet(b *testing.B) {
 	fake := &benchMCPClient{
 		promptResult: &mcp.GetPromptResult{
+			RawJSON:     []byte(`{"description":"Review code","messages":[{"role":"user","content":{"type":"text","text":"Please review: func main() {}"}}]}`),
 			Description: "Review code",
 			Messages: []mcp.PromptMessage{
 				{Role: "user", Content: mcp.PromptContent{Type: "text", Text: "Please review: func main() {}"}},
@@ -153,6 +156,7 @@ func BenchmarkExecuteMCPRequest_PromptGet(b *testing.B) {
 func BenchmarkExecuteMCPRequest_ToolCall_Boundary(b *testing.B) {
 	fake := &benchMCPClient{
 		toolResult: &mcp.CallToolResult{
+			RawJSON: []byte(`{"status":"ok","account":{"id":"123","balance":100.50}}`),
 			Content: []mcp.Content{
 				{Type: "text", Text: `{"status":"ok","account":{"id":"123","balance":100.50}}`},
 			},
@@ -190,6 +194,7 @@ func BenchmarkExecuteMCPRequest_ToolCall_Boundary(b *testing.B) {
 func BenchmarkExecuteMCPRequest_ResourceRead_Boundary(b *testing.B) {
 	fake := &benchMCPClient{
 		resourceResult: &mcp.ReadResourceResult{
+			RawJSON: []byte(`{"contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost\n::1 localhost"}]}`),
 			Contents: []mcp.ResourceContent{
 				{URI: "file:///etc/hosts", Text: "127.0.0.1 localhost\n::1 localhost"},
 			},
@@ -225,6 +230,7 @@ func BenchmarkExecuteMCPRequest_ResourceRead_Boundary(b *testing.B) {
 func BenchmarkExecuteMCPRequest_PromptGet_Boundary(b *testing.B) {
 	fake := &benchMCPClient{
 		promptResult: &mcp.GetPromptResult{
+			RawJSON:     []byte(`{"description":"Review code","messages":[{"role":"user","content":{"type":"text","text":"Please review: func main() {}"}}]}`),
 			Description: "Review code",
 			Messages: []mcp.PromptMessage{
 				{Role: "user", Content: mcp.PromptContent{Type: "text", Text: "Please review: func main() {}"}},

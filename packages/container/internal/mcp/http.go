@@ -196,6 +196,7 @@ func (c *HTTPClient) CallTool(ctx context.Context, name string, arguments map[st
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal tools/call result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, "", nil
 }
 
@@ -238,6 +239,7 @@ func (c *HTTPClient) ReadResource(ctx context.Context, uri string, extraHeaders 
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal resources/read result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, "", nil
 }
 
@@ -285,6 +287,7 @@ func (c *HTTPClient) GetPrompt(ctx context.Context, name string, arguments map[s
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal prompts/get result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, "", nil
 }
 

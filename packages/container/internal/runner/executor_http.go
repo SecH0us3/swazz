@@ -194,7 +194,7 @@ func (r *Runner) executeRequest(
 
 			if bodyReader == nil {
 				b, _ := json.Marshal(payload)
-				bodyReader = strings.NewReader(string(b))
+				bodyReader = bytes.NewReader(b)
 				payloadSize = len(b)
 			}
 		}

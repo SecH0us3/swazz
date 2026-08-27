@@ -356,6 +356,7 @@ func (c *StdioClient) CallTool(ctx context.Context, name string, arguments map[s
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, stderrLogs, fmt.Errorf("failed to unmarshal tools/call result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, stderrLogs, nil
 }
 
@@ -408,6 +409,7 @@ func (c *StdioClient) ReadResource(ctx context.Context, uri string, extraHeaders
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, stderrLogs, fmt.Errorf("failed to unmarshal resources/read result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, stderrLogs, nil
 }
 
@@ -465,6 +467,7 @@ func (c *StdioClient) GetPrompt(ctx context.Context, name string, arguments map[
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, stderrLogs, fmt.Errorf("failed to unmarshal prompts/get result: %w", err)
 	}
+	result.RawJSON = resp.Result
 	return &result, stderrLogs, nil
 }
 
