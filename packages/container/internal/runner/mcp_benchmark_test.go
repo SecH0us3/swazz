@@ -149,3 +149,111 @@ func BenchmarkExecuteMCPRequest_PromptGet(b *testing.B) {
 		_ = r.executeMCPRequest(ctx, "mcp://prompt/reviewCode", payload, swagger.ProfileMalicious, nil, nil)
 	}
 }
+
+func BenchmarkExecuteMCPRequest_ToolCall_Boundary(b *testing.B) {
+	fake := &benchMCPClient{
+		toolResult: &mcp.CallToolResult{
+			Content: []mcp.Content{
+				{Type: "text", Text: `{"status":"ok","account":{"id":"123","balance":100.50}}`},
+			},
+		},
+	}
+	reg := analyzer.NewRegistry()
+	cfg := &swagger.Config{
+		Settings: swagger.Settings{
+			TimeoutMs:           5000,
+			AnalyzeResponseBody: true,
+		},
+	}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    cfg,
+		mcpClient: fake,
+		analyzer:  reg,
+	}
+
+	payload := map[string]any{
+		"accountId": "999999999999999999999999999999999999",
+		"amount":    -9223372036854775808,
+		"currency":  "",
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	ctx := context.Background()
+
+	for i := 0; i < b.N; i++ {
+		_ = r.executeMCPRequest(ctx, "mcp://tool/transferFunds", payload, swagger.ProfileBoundary, nil, nil)
+	}
+}
+
+func BenchmarkExecuteMCPRequest_ResourceRead_Boundary(b *testing.B) {
+	fake := &benchMCPClient{
+		resourceResult: &mcp.ReadResourceResult{
+			Contents: []mcp.ResourceContent{
+				{URI: "file:///etc/hosts", Text: "127.0.0.1 localhost\n::1 localhost"},
+			},
+		},
+	}
+	reg := analyzer.NewRegistry()
+	cfg := &swagger.Config{
+		Settings: swagger.Settings{
+			TimeoutMs:           5000,
+			AnalyzeResponseBody: true,
+		},
+	}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    cfg,
+		mcpClient: fake,
+		analyzer:  reg,
+	}
+
+	payload := map[string]any{
+		"uri": "file:///" + string(make([]byte, 8192)),
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	ctx := context.Background()
+
+	for i := 0; i < b.N; i++ {
+		_ = r.executeMCPRequest(ctx, "mcp://resource/file:///etc/hosts", payload, swagger.ProfileBoundary, nil, nil)
+	}
+}
+
+func BenchmarkExecuteMCPRequest_PromptGet_Boundary(b *testing.B) {
+	fake := &benchMCPClient{
+		promptResult: &mcp.GetPromptResult{
+			Description: "Review code",
+			Messages: []mcp.PromptMessage{
+				{Role: "user", Content: mcp.PromptContent{Type: "text", Text: "Please review: func main() {}"}},
+			},
+		},
+	}
+	reg := analyzer.NewRegistry()
+	cfg := &swagger.Config{
+		Settings: swagger.Settings{
+			TimeoutMs:           5000,
+			AnalyzeResponseBody: true,
+		},
+	}
+	r := &Runner{
+		client:    &http.Client{},
+		config:    cfg,
+		mcpClient: fake,
+		analyzer:  reg,
+	}
+
+	payload := map[string]any{
+		"code": string(make([]byte, 16384)),
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	ctx := context.Background()
+
+	for i := 0; i < b.N; i++ {
+		_ = r.executeMCPRequest(ctx, "mcp://prompt/reviewCode", payload, swagger.ProfileBoundary, nil, nil)
+	}
+}
