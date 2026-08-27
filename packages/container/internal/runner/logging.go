@@ -146,12 +146,16 @@ func isSensitiveHeader(name string) bool {
 	return false
 }
 
-// estimateScanDuration estimates overall scan duration.
-func estimateScanDuration(totalPlanned int64, concurrency int, delayMs int) string {
+// estimateScanDuration estimates overall scan duration taking target latency characteristics into account.
+func estimateScanDuration(totalPlanned int64, concurrency int, delayMs int, isMCP bool) string {
 	if totalPlanned <= 0 || concurrency <= 0 {
 		return "<1s"
 	}
-	estimatedPerReqMs := int64(40 + delayMs)
+	baseLatencyMs := int64(40)
+	if isMCP {
+		baseLatencyMs = 200
+	}
+	estimatedPerReqMs := baseLatencyMs + int64(delayMs)
 	totalEstMs := (totalPlanned * estimatedPerReqMs) / int64(concurrency)
 	if totalEstMs < 1000 {
 		return "<1s"
@@ -185,7 +189,8 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 	}
 
 	target := r.config.BaseURL
-	if target == "" && r.config.MCPServer != nil {
+	isMCP := r.config.MCPServer != nil
+	if target == "" && isMCP {
 		if r.config.MCPServer.URL != "" {
 			target = fmt.Sprintf("MCP %s (%s)", r.config.MCPServer.Type, r.config.MCPServer.URL)
 		} else if r.config.MCPServer.Command != "" {
@@ -212,7 +217,7 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 
 	payloadSizeStr := formatBytes(r.config.Settings.MaxPayloadSizeBytes)
 	plannedTotal := r.progress.totalPlanned.Load()
-	etaStr := estimateScanDuration(plannedTotal, r.config.Settings.Concurrency, r.config.Settings.DelayBetweenRequestMs)
+	etaStr := estimateScanDuration(plannedTotal, r.config.Settings.Concurrency, r.config.Settings.DelayBetweenRequestMs, isMCP)
 	if r.config.Settings.MaxScanDurationMin > 0 {
 		etaStr = fmt.Sprintf("%s (Max Limit: %dm)", etaStr, r.config.Settings.MaxScanDurationMin)
 	}
@@ -230,15 +235,20 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 	// Auth & Context summary
 	var authDetails []string
 	if len(r.config.GlobalHeaders) > 0 {
+		var headerKeys []string
+		for k := range r.config.GlobalHeaders {
+			headerKeys = append(headerKeys, k)
+		}
+		sort.Strings(headerKeys)
 		var headerList []string
-		for k, v := range r.config.GlobalHeaders {
+		for _, k := range headerKeys {
+			v := r.config.GlobalHeaders[k]
 			if isSensitiveHeader(k) {
 				headerList = append(headerList, fmt.Sprintf("%s: %s", k, maskSensitiveString(v)))
 			} else {
 				headerList = append(headerList, k)
 			}
 		}
-		sort.Strings(headerList)
 		authDetails = append(authDetails, fmt.Sprintf("Headers (%d: %s)", len(r.config.GlobalHeaders), strings.Join(headerList, ", ")))
 	}
 	if len(r.config.Cookies) > 0 {
@@ -267,19 +277,27 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 	// Dictionaries & Custom Wordlists summary
 	var dictDetails []string
 	if len(r.config.Dictionaries) > 0 {
-		var dictNames []string
-		for k, v := range r.config.Dictionaries {
-			dictNames = append(dictNames, fmt.Sprintf("%s (%d entries)", k, len(v)))
+		var dictKeys []string
+		for k := range r.config.Dictionaries {
+			dictKeys = append(dictKeys, k)
 		}
-		sort.Strings(dictNames)
+		sort.Strings(dictKeys)
+		var dictNames []string
+		for _, k := range dictKeys {
+			dictNames = append(dictNames, fmt.Sprintf("%s (%d entries)", k, len(r.config.Dictionaries[k])))
+		}
 		dictDetails = append(dictDetails, fmt.Sprintf("Dictionaries (%d: %s)", len(r.config.Dictionaries), strings.Join(dictNames, ", ")))
 	}
 	if len(r.config.WordlistFiles) > 0 {
-		var wfNames []string
-		for k, v := range r.config.WordlistFiles {
-			wfNames = append(wfNames, fmt.Sprintf("%s=%s", k, filepath.Base(v)))
+		var wfKeys []string
+		for k := range r.config.WordlistFiles {
+			wfKeys = append(wfKeys, k)
 		}
-		sort.Strings(wfNames)
+		sort.Strings(wfKeys)
+		var wfNames []string
+		for _, k := range wfKeys {
+			wfNames = append(wfNames, fmt.Sprintf("%s=%s", k, filepath.Base(r.config.WordlistFiles[k])))
+		}
 		dictDetails = append(dictDetails, fmt.Sprintf("Wordlists (%d: %s)", len(r.config.WordlistFiles), strings.Join(wfNames, ", ")))
 	}
 	if len(dictDetails) > 0 {
@@ -318,7 +336,7 @@ func (r *Runner) logStartupSummary(profiles []swagger.FuzzingProfile) {
 		modules = append(modules, "ActiveParamFuzz")
 	}
 	if r.config.Settings.SemanticMutationEnabled() {
-		modules = append(modules, "SemanticMutation")
+		modules = append(modules, "SemanticMutation (RFC email, uuid, date-time, phone, url)")
 	}
 	if r.config.MCPServer != nil && r.config.Settings.MCPMethodFuzzingEnabled() {
 		modules = append(modules, "MCPMethodFuzz")

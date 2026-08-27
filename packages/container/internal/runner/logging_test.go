@@ -82,9 +82,10 @@ func TestIsSensitiveHeader(t *testing.T) {
 }
 
 func TestEstimateScanDuration(t *testing.T) {
-	assert.Equal(t, "<1s", estimateScanDuration(0, 5, 0))
-	assert.Equal(t, "<1s", estimateScanDuration(10, 0, 0))
-	assert.Equal(t, "~2s", estimateScanDuration(100, 2, 0))
+	assert.Equal(t, "<1s", estimateScanDuration(0, 5, 0, false))
+	assert.Equal(t, "<1s", estimateScanDuration(10, 0, 0, false))
+	assert.Equal(t, "~2s", estimateScanDuration(100, 2, 0, false))
+	assert.Equal(t, "~10s", estimateScanDuration(100, 2, 0, true))
 }
 
 func TestLogStartupSummary(t *testing.T) {
