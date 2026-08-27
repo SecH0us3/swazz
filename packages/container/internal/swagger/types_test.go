@@ -280,3 +280,9 @@ func TestSettings_GettersAndDefaults(t *testing.T) {
 	assert.Equal(t, 50, sTrue.GetMaxTriagePerScan())
 }
 
+func TestDefaultSettings_MaxPayloadSizeBytes(t *testing.T) {
+	defaults := DefaultSettings()
+	assert.Equal(t, 10485760, defaults.MaxPayloadSizeBytes, "default max payload size must be 10MB")
+}
+
+
