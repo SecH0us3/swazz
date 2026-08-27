@@ -8,9 +8,11 @@ package logger
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,13 +25,38 @@ const (
 	LevelError
 )
 
+type crlfWriter struct {
+	out io.Writer
+}
+
 var (
-	currentLevel = LevelInfo
-	logFilter    = ""
-	isJSONFormat = false
+	currentLevel  = LevelInfo
+	logFilter     = ""
+	isJSONFormat  = false
+	isRawTerminal atomic.Bool
 )
 
+// SetRawTerminal enables or disables CRLF translation for terminal raw mode.
+func SetRawTerminal(raw bool) {
+	isRawTerminal.Store(raw)
+}
+
+func (w *crlfWriter) Write(p []byte) (n int, err error) {
+	if !isRawTerminal.Load() {
+		return w.out.Write(p)
+	}
+	str := string(p)
+	str = strings.ReplaceAll(str, "\r\n", "\n")
+	str = strings.ReplaceAll(str, "\n", "\r\n")
+	_, err = w.out.Write([]byte(str))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 func init() {
+	log.SetOutput(&crlfWriter{out: os.Stderr})
 	if os.Getenv("SWAZZ_LOG_FORMAT") == "json" {
 		SetJSONFormat(true)
 	}

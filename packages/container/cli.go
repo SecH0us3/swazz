@@ -220,10 +220,12 @@ func runCLIErr(args []string) error {
 	if state, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
 		oldState = state
 		isRaw = true
+		logger.SetRawTerminal(true)
 	}
 
 	restoreTerm := func() {
 		if isRaw && oldState != nil {
+			logger.SetRawTerminal(false)
 			_ = term.Restore(int(os.Stdin.Fd()), oldState)
 			isRaw = false
 		}
@@ -277,13 +279,6 @@ func runCLIErr(args []string) error {
 	}
 	agent.IncrementGlobalScanTelemetry(telemetryURL, disableTelemetryVal)
 
-	logger.Info("Starting fuzz run on %d endpoints across %d profiles...", len(runCfg.Endpoints), len(runCfg.Settings.Profiles))
-	if runCfg.Settings.UseLLMPrepass {
-		logger.Info("[AI] 🤖 Pre-Scan LLM Batching enabled (Gateway: %s)", runCfg.Settings.AIGatewayURL)
-	}
-	if runCfg.Settings.SemanticMutationEnabled() {
-		logger.Info("[Semantic] 🧬 Semantic Format Wrappers enabled (RFC email, uuid, date-time, phone, url)")
-	}
 	if err := r.Start(ctx); err != nil {
 		restoreTerm()
 		log.Fatalf("Run failed: %v", err)
