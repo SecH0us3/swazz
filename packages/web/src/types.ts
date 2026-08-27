@@ -137,7 +137,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     iterations_per_profile: 10,
     concurrency: 2,
     timeout_ms: 2000,
-    max_payload_size_bytes: 1048576, // 1MB
+    max_payload_size_bytes: 10485760, // 10MB
     delay_between_requests_ms: 0,
     profiles: ['RANDOM', 'BOUNDARY', 'MALICIOUS'],
     analyze_response_body: true,

@@ -325,7 +325,7 @@ func DefaultSettings() Settings {
 		IterationsPerProfile:          20,
 		Concurrency:                   5,
 		TimeoutMs:                     10000,
-		MaxPayloadSizeBytes:           134217728, // 128MB (to allow large boundary strings)
+		MaxPayloadSizeBytes:           10485760, // 10MB
 		DelayBetweenRequestMs:         0,
 		Profiles:                      []FuzzingProfile{ProfileRandom, ProfileBoundary, ProfileMalicious},
 		AnalyzeResponseBody:           true,

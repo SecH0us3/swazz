@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	defaultMaxPayloadBytes  = 1 << 20 // 1 MiB
-	boundaryMaxPayloadBytes = 1 << 29 // 512 MiB
+	defaultMaxPayloadBytes  = 10 << 20 // 10 MiB
+	boundaryMaxPayloadBytes = 10 << 20 // 10 MiB
 )
 
 // getOrderedProfiles returns configured profiles with boundary testing last,
