@@ -46,7 +46,7 @@ describe('AuthService Integration', () => {
 
   describe('User Registration & Login', () => {
     it('should register a new user with a valid username and password', async () => {
-      const username = `testuser_${Date.now()}`;
+      const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
       const res = await authServices.register({
         username: username,
         password: 'securepassword123'
@@ -59,7 +59,7 @@ describe('AuthService Integration', () => {
     });
 
     it('should fail to register a user that already exists', async () => {
-      const username = `dupuser_${Date.now()}`;
+      const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
       
       // First registration
       await authServices.register({
@@ -75,7 +75,7 @@ describe('AuthService Integration', () => {
     });
 
     it('should login an existing user', async () => {
-      const username = `loginuser_${Date.now()}`;
+      const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
       const password = 'securepassword123';
 
       // Register first
@@ -96,7 +96,7 @@ describe('AuthService Integration', () => {
     });
 
     it('should lock out a user after too many failed attempts', async () => {
-      const username = `lockout_${Date.now()}`;
+      const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
       const password = 'securepassword123';
 
       await authServices.register({
@@ -159,7 +159,7 @@ describe('AuthService Integration', () => {
 
   describe('User Deletion', () => {
     it('should schedule user deletion and cancel it', async () => {
-      const username = `deluser_${Date.now()}`;
+      const username = `u${Date.now().toString().slice(-6)}_${Math.floor(Math.random() * 1000)}`;
       const reg = await authServices.register({
         username: username,
         password: 'securepassword123'

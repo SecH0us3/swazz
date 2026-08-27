@@ -28,6 +28,13 @@ var BoundaryStrings = []any{
 	strings.Repeat("🔥", 2500),        // 4-byte emoji sequence
 	strings.Repeat("A", 262_144),     // 256KB string (stress test)
 	strings.Repeat("A", 524_288),     // 512KB string
+	strings.Repeat("A", 1_048_576),   // 1MB string
+	strings.Repeat("A", 2_097_152),   // 2MB string
+	strings.Repeat("A", 5_242_880),   // 5MB string
+	strings.Repeat("A", 10_485_760),  // 10MB string
+	strings.Repeat("A", 20_971_520),  // 20MB string
+	strings.Repeat("A", 52_428_800),  // 50MB string
+	strings.Repeat("A", 104_857_600), // 100MB string
 }
 
 // ─── Integer boundaries ─────────────────────────────────
@@ -92,10 +99,15 @@ var BoundaryUUIDs = []any{
 var BoundaryArraySizes = []any{
 	0,
 	1,
+	2,
+	5,
+	10,
+	50,
 	100,
+	500,
 	1000,
+	5000,
 	10000,
-	100000,
 }
 
 // ─── Boolean boundaries ─────────────────────────────────

@@ -16,7 +16,7 @@ type CSPAnalyzer struct{}
 
 // Analyze parses Content-Security-Policy headers and checks for missing or insecure directives.
 func (a *CSPAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	if input == nil || input.ResponseHeaders == nil {
+	if input == nil || input.ResponseHeaders == nil || !input.Settings.SecurityHeadersAnalysisEnabled() {
 		return nil
 	}
 

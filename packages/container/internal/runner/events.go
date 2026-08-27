@@ -38,6 +38,18 @@ var bufPool = sync.Pool{
 	},
 }
 
+// PutBuffer safely resets and returns a buffer to the pool if its capacity is reasonable (<= 64KB),
+// preventing oversized buffers from pinning memory indefinitely in the heap.
+func PutBuffer(buf *bytes.Buffer) {
+	if buf == nil {
+		return
+	}
+	if buf.Cap() <= 64*1024 {
+		buf.Reset()
+		bufPool.Put(buf)
+	}
+}
+
 // JSON serializes the event data.
 func (e *Event) JSON() string {
 	b, err := json.Marshal(e.Data)

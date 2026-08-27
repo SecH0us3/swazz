@@ -8,6 +8,8 @@ package analyzer
 import (
 	"net/http"
 	"testing"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestCSPAnalyzer(t *testing.T) {
@@ -122,10 +124,16 @@ func TestCSPAnalyzer(t *testing.T) {
 		},
 	}
 
+	tr := true
+	enabledSettings := swagger.Settings{
+		EnableSecurityHeadersAnalysis: &tr,
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := &AnalysisInput{
 				ResponseHeaders: tt.headers,
+				Settings:        enabledSettings,
 			}
 			findings := a.Analyze(input)
 
@@ -140,6 +148,17 @@ func TestCSPAnalyzer(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Disabled by default", func(t *testing.T) {
+		input := &AnalysisInput{
+			ResponseHeaders: http.Header{
+				"Content-Type": []string{"text/html"},
+			},
+		}
+		if findings := a.Analyze(input); findings != nil {
+			t.Errorf("expected nil findings when security headers analysis is disabled by default, got %v", findings)
+		}
+	})
 
 	t.Run("Nil checks", func(t *testing.T) {
 		if findings := a.Analyze(nil); findings != nil {

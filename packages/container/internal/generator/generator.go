@@ -236,7 +236,11 @@ func (g *Generator) Generate(propertyName string, schema *swagger.SchemaProperty
 
 // BuildObject recursively builds a full object from JSON Schema.
 func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
-	if schema == nil || schema.Type != "object" || schema.Properties == nil {
+	return g.buildObjectWithDepth(schema, 0)
+}
+
+func (g *Generator) buildObjectWithDepth(schema *swagger.SchemaProperty, depth int) map[string]any {
+	if schema == nil || schema.Type != "object" || schema.Properties == nil || depth > 6 {
 		return map[string]any{}
 	}
 
@@ -247,6 +251,9 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 	payload := make(map[string]any, len(schema.Properties))
 
 	for key, propSchema := range schema.Properties {
+		if propSchema == nil {
+			continue
+		}
 		isRequired := false
 		for _, r := range schema.Required {
 			if r == key {
@@ -268,15 +275,23 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 		}
 
 		if propSchema.Type == "object" && propSchema.Properties != nil {
-			payload[key] = g.BuildObject(propSchema)
+			if depth < 6 {
+				payload[key] = g.buildObjectWithDepth(propSchema, depth+1)
+			} else {
+				payload[key] = map[string]any{}
+			}
 		} else if propSchema.Type == "array" && propSchema.Items != nil {
 			count := g.getArraySize(propSchema.Items)
 			arr := make([]any, count)
 			for i := range arr {
 				if propSchema.Items.Type == "object" {
-					arr[i] = g.BuildObject(propSchema.Items)
+					if depth < 6 {
+						arr[i] = g.buildObjectWithDepth(propSchema.Items, depth+1)
+					} else {
+						arr[i] = map[string]any{}
+					}
 				} else {
-					arr[i] = g.Generate(key, propSchema.Items)
+					arr[i] = g.GenerateArrayItem(key, propSchema.Items)
 				}
 			}
 			payload[key] = arr
@@ -286,6 +301,24 @@ func (g *Generator) BuildObject(schema *swagger.SchemaProperty) map[string]any {
 	}
 
 	return payload
+}
+
+// GenerateArrayItem produces a value for an array item, with safety caps to prevent OOM when multiplying large boundary strings across array lengths.
+func (g *Generator) GenerateArrayItem(propertyName string, schema *swagger.SchemaProperty) any {
+	if schema == nil {
+		return nil
+	}
+	if schema.Type == "string" {
+		formatLower := strings.ToLower(schema.Format)
+		if formatLower == "date-time" {
+			return g.generateDate()
+		}
+		if formatLower == "uuid" {
+			return g.generateUUID()
+		}
+		return g.generateStringArrayItem(formatLower, propertyName)
+	}
+	return g.Generate(propertyName, schema)
 }
 
 // GenerateSecurityHeaders returns a map of header name → fuzz value for

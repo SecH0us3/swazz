@@ -33,6 +33,14 @@ var maliciousStringCategories = []struct {
 }
 
 func (g *Generator) generateString(format, propName string) any {
+	return g.generateStringInternal(format, propName, false)
+}
+
+func (g *Generator) generateStringArrayItem(format, propName string) any {
+	return g.generateStringInternal(format, propName, true)
+}
+
+func (g *Generator) generateStringInternal(format, propName string, inArray bool) any {
 	if g.profile == swagger.ProfileRandom {
 		return g.fallbackRandom(propName)
 	}
@@ -44,7 +52,20 @@ func (g *Generator) generateString(format, propName string) any {
 	switch g.profile {
 	case swagger.ProfileBoundary:
 		if g.isCategoryEnabled(payloads.CatBoundaryStrings) {
-			return seqPick(&g.mu, payloads.BoundaryStrings, &g.bStrIdx)
+			val := seqPick(&g.mu, payloads.BoundaryStrings, &g.bStrIdx)
+			if strVal, ok := val.(string); ok {
+				maxAllowed := 104_857_600 // 100MB default ceiling
+				if inArray {
+					maxAllowed = 1024 // 1KB per item in arrays to prevent OOM
+				} else if g.settings.MaxPayloadSizeBytes > 0 {
+					maxAllowed = g.settings.MaxPayloadSizeBytes
+				}
+				if len(strVal) > maxAllowed {
+					return strVal[:maxAllowed]
+				}
+				return strVal
+			}
+			return val
 		}
 	case swagger.ProfileMalicious:
 		if g.hasActiveMaliciousStrings {

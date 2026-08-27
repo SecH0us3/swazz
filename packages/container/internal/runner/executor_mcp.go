@@ -47,6 +47,9 @@ func (r *Runner) executeMCPRequest(
 	if payload != nil {
 		if m, ok := payload.(map[string]any); ok {
 			args = m
+			if b, err := json.Marshal(m); err == nil {
+				payloadSize = len(b)
+			}
 		} else if b, ok := payload.([]byte); ok {
 			_ = json.Unmarshal(b, &args)
 			payloadSize = len(b)
@@ -212,7 +215,11 @@ func (r *Runner) executeMCPRequest(
 	} else {
 		result.Status = 200
 	}
-	result.ResponseBody = string(resBytes)
+	if len(resBytes) > 65536 {
+		result.ResponseBody = string(resBytes[:65536]) + "\n... [TRUNCATED]"
+	} else {
+		result.ResponseBody = string(resBytes)
+	}
 	result.ResponseSize = int64(len(resBytes))
 
 	if r.config.Settings.AnalyzeResponseBody {
@@ -228,6 +235,7 @@ func (r *Runner) executeMCPRequest(
 			SizeMultiplier:  5.0,
 			BaselineTimeMs:  0,
 			TimeThresholdMs: 0,
+			Settings:        r.config.Settings,
 		}
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
 	}

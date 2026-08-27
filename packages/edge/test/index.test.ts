@@ -105,7 +105,8 @@ const testEnv = {
   TURNSTILE_SECRET: undefined,
   GITHUB_CLIENT_ID: undefined,
   GITHUB_CLIENT_SECRET: undefined,
-  SWAZZ_LICENSE_PUBKEY: undefined
+  SWAZZ_LICENSE_PUBKEY: undefined,
+  PASSWORD_AUTH_ENABLED: 'true',
 } as unknown as Env;
 
 describe("Swazz Worker (Hono)", () => {

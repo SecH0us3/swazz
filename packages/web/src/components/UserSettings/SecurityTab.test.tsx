@@ -96,7 +96,7 @@ describe('SecurityTab Component', () => {
         const codeInput = screen.getByLabelText(/Enter the 6-digit code/i);
         fireEvent.change(codeInput, { target: { value: '123456' } });
 
-        const verifyBtn = screen.getByRole('button', { name: /Verify & Enable/i });
+        const verifyBtn = await screen.findByRole('button', { name: /Verify & Enable/i });
         fireEvent.click(verifyBtn);
 
         await waitFor(() => {

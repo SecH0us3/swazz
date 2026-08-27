@@ -256,6 +256,10 @@ For a full set of examples (including BOLA testing, Multi-step Auth, and Petstor
       "body": { "user": "admin", "pass": "secret", "totp": "{{totp_code}}" }
     }
   ],
+  "settings": {
+    "enable_differential_analysis": true, // AST structural diffing & cross-identity BOLA chains
+    "enable_security_headers_analysis": false // Set true to inspect passive HTTP headers (HSTS, CSP, XCTO)
+  },
   "rules": {
     "ignore": [404],
     "severity": {

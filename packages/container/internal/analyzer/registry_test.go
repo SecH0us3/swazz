@@ -8,6 +8,8 @@ package analyzer
 import (
 	"net/http"
 	"testing"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestNewRegistry(t *testing.T) {
@@ -34,16 +36,32 @@ func TestNewRegistry(t *testing.T) {
 
 func TestRegistry_Analyze(t *testing.T) {
 	r := NewRegistry()
-	
-	// Test running with empty input (should execute all analyzers and not crash)
-	input := &AnalysisInput{
+
+	// 1. Disabled by default
+	inputDefault := &AnalysisInput{
 		ResponseHeaders: http.Header{
 			"Content-Type": []string{"text/html"},
 		},
 	}
-	
-	findings := r.Analyze(input)
-	// We expect at least the CSP analyzer to find missing CSP header
+	findingsDefault := r.Analyze(inputDefault)
+	for _, f := range findingsDefault {
+		if f.RuleID == "swazz/csp-missing" || f.RuleID == "swazz/x-content-type-options-missing" {
+			t.Errorf("did not expect %s when security headers analysis is disabled by default", f.RuleID)
+		}
+	}
+
+	// 2. Explicitly enabled
+	tr := true
+	inputEnabled := &AnalysisInput{
+		ResponseHeaders: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Settings: swagger.Settings{
+			EnableSecurityHeadersAnalysis: &tr,
+		},
+	}
+
+	findings := r.Analyze(inputEnabled)
 	foundCSPMissing := false
 	for _, f := range findings {
 		if f.RuleID == "swazz/csp-missing" {
@@ -52,6 +70,6 @@ func TestRegistry_Analyze(t *testing.T) {
 		}
 	}
 	if !foundCSPMissing {
-		t.Error("expected swazz/csp-missing finding from registry execution")
+		t.Error("expected swazz/csp-missing finding from registry execution when enabled")
 	}
 }

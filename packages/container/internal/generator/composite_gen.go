@@ -16,11 +16,55 @@ import (
 func (g *Generator) getArraySize(itemSchema *swagger.SchemaProperty) int {
 	if g.profile == swagger.ProfileBoundary && g.isCategoryEnabled(payloads.CatBoundaryArrays) {
 		size := seqPick(&g.mu, payloads.BoundaryArraySizes, &g.bArrIdx).(int)
-		// Cap complex object arrays to prevent OOM
-		if itemSchema != nil && itemSchema.Type == "object" {
-			if size > 50 {
-				return 50
+		if itemSchema == nil {
+			if size > 100 {
+				return 100
 			}
+			return size
+		}
+
+		// Objects have multiple fields and can nest deeply; keep object array length bounded.
+		if itemSchema.Type == "object" {
+			if size > 10 {
+				return 10
+			}
+			return size
+		}
+
+		// For primitive items (uuid, integer, date, boolean, short string), calculate budget based on payload limit.
+		maxBudget := 1048576 // 1MB default budget for array accumulation
+		if g.settings.MaxPayloadSizeBytes > 0 {
+			maxBudget = g.settings.MaxPayloadSizeBytes
+		}
+
+		approxItemBytes := 30 // default item size in JSON
+		switch itemSchema.Type {
+		case "string":
+			formatLower := strings.ToLower(itemSchema.Format)
+			if formatLower == "uuid" {
+				approxItemBytes = 40 // "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+			} else if formatLower == "date-time" || formatLower == "date" {
+				approxItemBytes = 30
+			} else {
+				approxItemBytes = 50
+			}
+		case "integer", "number":
+			approxItemBytes = 15
+		case "boolean":
+			approxItemBytes = 6
+		}
+
+		maxItems := maxBudget / approxItemBytes
+		if maxItems < 100 {
+			maxItems = 100
+		}
+		// Hard ceiling per single array to prevent client-side memory exhaustion
+		if maxItems > 10000 {
+			maxItems = 10000
+		}
+
+		if size > maxItems {
+			return maxItems
 		}
 		return size
 	}

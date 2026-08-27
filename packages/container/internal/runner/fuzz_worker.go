@@ -196,7 +196,7 @@ func (r *Runner) buildFuzzIteration(
 		}
 
 		if encErr != nil || buf.Len() > maxPayloadSize {
-			bufPool.Put(buf)
+			PutBuffer(buf)
 			continue
 		}
 
@@ -205,7 +205,7 @@ func (r *Runner) buildFuzzIteration(
 			b = b[:len(b)-1]
 		}
 		hash = payloads.HashBytes(b)
-		bufPool.Put(buf)
+		PutBuffer(buf)
 
 		if enableDedup && seenHashes[hash] {
 			continue

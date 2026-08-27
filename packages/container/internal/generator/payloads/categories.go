@@ -82,12 +82,12 @@ type Category struct {
 
 // BoundaryCategories lists all boundary categories in display order.
 var BoundaryCategories = []Category{
-	{ID: CatBoundaryStrings, Label: "Strings", Description: "Empty, whitespace, long strings, Unicode, megabyte payloads", Items: BoundaryStrings},
+	{ID: CatBoundaryStrings, Label: "Strings", Description: "Empty, whitespace, long strings, Unicode, 1MB–100MB megabyte payloads", Items: BoundaryStrings},
 	{ID: CatBoundaryIntegers, Label: "Integers", Description: "Min/max int8–int64, overflow, JS safe integer limits", Items: BoundaryIntegers},
 	{ID: CatBoundaryNumbers, Label: "Floats", Description: "NaN, ±Infinity, denormalized, max/min float64", Items: BoundaryNumbers},
 	{ID: CatBoundaryDates, Label: "Dates", Description: "Epoch, Y2K38, far future, invalid leap-year dates", Items: BoundaryDates},
 	{ID: CatBoundaryBooleans, Label: "Booleans", Description: "True/false, nil, string coercions (yes/no, 1/0)", Items: BoundaryBooleans},
-	{ID: CatBoundaryArrays, Label: "Array Sizes", Description: "0, 1, 100, 10 000, 100 000 element arrays", Items: toAny(BoundaryArraySizes)},
+	{ID: CatBoundaryArrays, Label: "Array Sizes", Description: "0, 1, 5, 10, 50, 100 element arrays", Items: toAny(BoundaryArraySizes)},
 	{ID: CatBoundaryUUIDs, Label: "UUIDs", Description: "Nil UUID, max UUID, invalid format, empty string", Items: BoundaryUUIDs},
 }
 
