@@ -164,7 +164,6 @@ func (h *ChainHarvester) BuildCrossIdentityCandidates(
 }
 
 var idKeyRegex = regexp.MustCompile(`(?i)^(id|uuid|_id|item_id|entity_id|[a-z0-9_]+_id|[a-z0-9_]+id)$`)
-var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // ExtractResourceIDs searches a JSON payload for potential entity IDs.
 func ExtractResourceIDs(body []byte) []string {
