@@ -46,13 +46,36 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 	}
 
 	// Fast pre-filter: skip scanning if no secret/key indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "akia", "private key", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
+	if !containsAnyFoldASCII(input.ResponseBody, "akia", "-----begin", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
 		return nil
 	}
 
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range secretSignatures {
+		switch sig.category {
+		case "AWS Access Key":
+			if !containsFoldASCII(input.ResponseBody, "akia") {
+				continue
+			}
+		case "Private Key Block":
+			if !containsFoldASCII(input.ResponseBody, "-----begin") {
+				continue
+			}
+		case "JWT Token":
+			if !containsFoldASCII(input.ResponseBody, "eyj") {
+				continue
+			}
+		case "Internal IP":
+			if !containsAnyFoldASCII(input.ResponseBody, "10.", "172.", "192.168.") {
+				continue
+			}
+		case "Generic Secret/Key":
+			if !containsAnyFoldASCII(input.ResponseBody, "key", "secret", "token", "apikey") {
+				continue
+			}
+		}
+
 		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])

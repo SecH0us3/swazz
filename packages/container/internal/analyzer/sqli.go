@@ -47,13 +47,40 @@ func (a *SQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	}
 
 	// Fast pre-filter: skip scanning if no SQL error indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "syntax", "error", "sql", "mysql", "psql", "sqlite", "ora-", "quoted", "driver", "oledb", "sqlstate", "npgsql") {
+	if !containsAnyFoldASCII(input.ResponseBody, "syntax", "sql", "mysql", "postgres", "psql", "pg_", "pg::", "sqlite", "ora-", "quotation", "quoted string", "driver", "oledb", "sqlstate", "npgsql", "sqlclient", "sqlexception") {
 		return nil
 	}
 
 	var findings []swagger.AnalysisFinding
 
 	for _, sig := range dbSignatures {
+		switch sig.name {
+		case "MySQL":
+			if !containsAnyFoldASCII(input.ResponseBody, "syntax", "mysql", "jdbc") {
+				continue
+			}
+		case "PostgreSQL":
+			if !containsAnyFoldASCII(input.ResponseBody, "syntax", "pg_", "psql", "pg::", "npgsql") {
+				continue
+			}
+		case "SQLite":
+			if !containsAnyFoldASCII(input.ResponseBody, "sqlite", "syntax") {
+				continue
+			}
+		case "MSSQL":
+			if !containsAnyFoldASCII(input.ResponseBody, "quotation", "oledb", "sql server", "sqlserver") {
+				continue
+			}
+		case "Oracle":
+			if !containsAnyFoldASCII(input.ResponseBody, "ora-", "quoted string") {
+				continue
+			}
+		case "Generic":
+			if !containsAnyFoldASCII(input.ResponseBody, "sqlstate", "sqlexception", "sqlclient") {
+				continue
+			}
+		}
+
 		loc := sig.pattern.FindIndex(input.ResponseBody)
 		if loc != nil {
 			matchText := string(input.ResponseBody[loc[0]:loc[1]])

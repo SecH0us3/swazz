@@ -80,11 +80,18 @@ func (a *MCPStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 		})
 	}
 
-	// 3. Secret Exposure in Tool Content
-	if mcpPrivateKeyRx.MatchString(bodyStr) ||
-		mcpAwsKeyRx.MatchString(bodyStr) ||
-		mcpDbConnRx.MatchString(bodyStr) ||
-		mcpJwtRx.MatchString(bodyStr) {
+	// 3. Secret Exposure in Tool Content (Fast guards before regex)
+	hasSecret := false
+	if strings.Contains(bodyStr, "-----BEGIN ") && mcpPrivateKeyRx.MatchString(bodyStr) {
+		hasSecret = true
+	} else if strings.Contains(bodyStr, "AKIA") && mcpAwsKeyRx.MatchString(bodyStr) {
+		hasSecret = true
+	} else if strings.Contains(bodyStr, "://") && mcpDbConnRx.MatchString(bodyStr) {
+		hasSecret = true
+	} else if strings.Contains(bodyStr, "eyJ") && mcpJwtRx.MatchString(bodyStr) {
+		hasSecret = true
+	}
+	if hasSecret {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:   "swazz/mcp-secret-leak",
 			Level:    "critical",
@@ -93,17 +100,19 @@ func (a *MCPStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 		})
 	}
 
-	// 4. Prompt Injection Reflection Check
+	// 4. Prompt Injection Reflection Check (Fast guards before regex)
 	if input.SentPayload != nil {
-		payloadBytes, _ := json.Marshal(input.SentPayload)
-		payloadStr := string(payloadBytes)
-		if mcpPromptInjRx.MatchString(payloadStr) && mcpPromptInjRx.MatchString(bodyStr) {
-			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:   "swazz/mcp-prompt-injection-reflection",
-				Level:    "warning",
-				Message:  "Injected prompt manipulation sequences were reflected in the MCP tool output, indicating vulnerability to indirect prompt injection.",
-				Evidence: fmt.Sprintf("Injected: %s\nReflected in response: %s", payloadStr, bodyStr),
-			})
+		if strings.Contains(bodyLower, "ignore") || strings.Contains(bodyLower, "system") || strings.Contains(bodyLower, "assistant") || strings.Contains(bodyLower, "human") {
+			payloadBytes, _ := json.Marshal(input.SentPayload)
+			payloadStr := string(payloadBytes)
+			if mcpPromptInjRx.MatchString(payloadStr) && mcpPromptInjRx.MatchString(bodyStr) {
+				findings = append(findings, swagger.AnalysisFinding{
+					RuleID:   "swazz/mcp-prompt-injection-reflection",
+					Level:    "warning",
+					Message:  "Injected prompt manipulation sequences were reflected in the MCP tool output, indicating vulnerability to indirect prompt injection.",
+					Evidence: fmt.Sprintf("Injected: %s\nReflected in response: %s", payloadStr, bodyStr),
+				})
+			}
 		}
 	}
 
