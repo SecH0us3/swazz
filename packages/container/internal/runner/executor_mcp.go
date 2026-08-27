@@ -86,12 +86,7 @@ func (r *Runner) executeMCPRequest(
 	}
 
 	// Apply rate limiting to prevent DoS
-	// Use a separate rate limiter per runner to allow configurable limits
-	if r.mcpRateLimiter == nil {
-		// Import mcp package for rate limiter
-		r.mcpRateLimiter = mcp.NewRateLimiter(100, 50) // 100 req/sec, max 50 waiting
-	}
-	if !r.mcpRateLimiter.Allow(reqCtx) {
+	if r.mcpRateLimiter != nil && !r.mcpRateLimiter.Allow(reqCtx) {
 		result.Error = "Rate limit exceeded for MCP calls"
 		result.Status = 429
 		result.ResponseBody = "Error: Too many concurrent MCP requests"
