@@ -154,3 +154,24 @@ func TestLoggerExtraHelpers(t *testing.T) {
 	}
 }
 
+func TestCRLFWriter(t *testing.T) {
+	var buf bytes.Buffer
+	w := &crlfWriter{out: &buf}
+
+	SetRawTerminal(false)
+	_, _ = w.Write([]byte("line 1\nline 2\n"))
+	if buf.String() != "line 1\nline 2\n" {
+		t.Errorf("expected normal newlines when raw terminal is false, got %q", buf.String())
+	}
+
+	buf.Reset()
+	SetRawTerminal(true)
+	defer SetRawTerminal(false)
+
+	_, _ = w.Write([]byte("line 1\nline 2\r\nline 3\n"))
+	if buf.String() != "line 1\r\nline 2\r\nline 3\r\n" {
+		t.Errorf("expected CRLF newlines when raw terminal is true, got %q", buf.String())
+	}
+}
+
+

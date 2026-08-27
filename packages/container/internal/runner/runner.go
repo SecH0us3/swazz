@@ -276,6 +276,7 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)
+	r.logStartupSummary(profiles)
 
 	r.logDebug("Start run: len(endpoints)=%d, profiles=%v sizeBaselinesIsNil=%t",
 		len(r.config.Endpoints), profiles, r.sizeBaselines == nil)

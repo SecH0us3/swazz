@@ -14,7 +14,6 @@ import (
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
-	"time"
 )
 
 var printMu sync.Mutex
@@ -128,9 +127,9 @@ func printProgressClean(stats swagger.RunStats) {
 	}
 
 	if ep != "" {
-		fmt.Fprintf(os.Stderr, "🎯 Progress: [%d%%] %d/%d reqs | %.1f rps | Active: %s\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec, ep)
+		fmt.Fprintf(os.Stderr, "🎯 Progress: [%d%%] %d/%d reqs | %.1f rps | Active: %s\r\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec, ep)
 	} else {
-		fmt.Fprintf(os.Stderr, "🎯 Progress: [%d%%] %d/%d reqs | %.1f rps\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec)
+		fmt.Fprintf(os.Stderr, "🎯 Progress: [%d%%] %d/%d reqs | %.1f rps\r\n", pct, stats.TotalRequests, stats.TotalPlanned, stats.RequestsPerSec)
 	}
 }
 
@@ -148,26 +147,6 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 	}
 	numLinesPrinted = 0
 
-	sep := strings.Repeat("-", 60)
-	fmt.Fprintln(os.Stderr, "\n"+sep)
-	fmt.Fprintln(os.Stderr, "  swazz scan complete")
-	fmt.Fprintln(os.Stderr, sep)
-	fmt.Fprintf(os.Stderr, "  Total requests:  %d\n", stats.TotalRequests)
-
-	duration := (time.Now().UnixMilli() - stats.StartTime) / 1000
-	fmt.Fprintf(os.Stderr, "  Duration:        %ds\n", duration)
-	fmt.Fprintf(os.Stderr, "  Avg RPS:         %.1f\n", stats.RequestsPerSec)
-
-	fmt.Fprintln(os.Stderr, "\n  Status distribution:")
-	var statCodes []int
-	for code := range stats.StatusCounts {
-		statCodes = append(statCodes, code)
-	}
-	sort.Ints(statCodes)
-	for _, code := range statCodes {
-		fmt.Fprintf(os.Stderr, "    %03d: %5d\n", code, stats.StatusCounts[code])
-	}
-
 	var errs, warns, notes int
 	for _, f := range findings {
 		switch f.Level {
@@ -180,18 +159,23 @@ func printSummary(findings []*classifier.Finding, stats *swagger.RunStats) {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "\n  Findings: %d\n", len(findings))
+	sep := strings.Repeat("-", 60)
+	fmt.Fprintln(os.Stderr, "\n"+sep)
+	fmt.Fprintln(os.Stderr, "  📋 Classified Security Findings")
+	fmt.Fprintln(os.Stderr, sep)
+	fmt.Fprintf(os.Stderr, "  Total findings:  %d\n", len(findings))
 	if len(findings) > 0 {
 		if errs > 0 {
-			fmt.Fprintf(os.Stderr, "    errors:   %d\n", errs)
+			fmt.Fprintf(os.Stderr, "    🛑 errors:    %d\n", errs)
 		}
 		if warns > 0 {
-			fmt.Fprintf(os.Stderr, "    warnings: %d\n", warns)
+			fmt.Fprintf(os.Stderr, "    ⚠️  warnings:  %d\n", warns)
 		}
 		if notes > 0 {
-			fmt.Fprintf(os.Stderr, "    notes:    %d\n", notes)
+			fmt.Fprintf(os.Stderr, "    ℹ️  notes:     %d\n", notes)
 		}
-
+	} else {
+		fmt.Fprintln(os.Stderr, "  ✨ Clean scan (0 classified rule findings)")
 	}
-	fmt.Fprintln(os.Stderr, "\n"+sep)
+	fmt.Fprintln(os.Stderr, sep)
 }

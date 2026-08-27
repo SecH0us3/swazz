@@ -131,11 +131,17 @@ func TestPrintSummary(t *testing.T) {
 	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
-	if !strings.Contains(output, "swazz scan complete") {
-		t.Errorf("Expected 'swazz scan complete' in summary, got: %s", output)
+	if !strings.Contains(output, "Classified Security Findings") {
+		t.Errorf("Expected 'Classified Security Findings' in summary, got: %s", output)
 	}
-	if !strings.Contains(output, "errors:   1") {
-		t.Errorf("Expected 'errors:   1' in summary, got: %s", output)
+	if !strings.Contains(output, "errors:    1") {
+		t.Errorf("Expected 'errors:    1' in summary, got: %s", output)
+	}
+	if !strings.Contains(output, "warnings:  1") {
+		t.Errorf("Expected 'warnings:  1' in summary, got: %s", output)
+	}
+	if !strings.Contains(output, "notes:     1") {
+		t.Errorf("Expected 'notes:     1' in summary, got: %s", output)
 	}
 }
 
