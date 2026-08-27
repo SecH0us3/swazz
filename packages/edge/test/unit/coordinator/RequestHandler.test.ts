@@ -10,12 +10,14 @@ import { QueueService } from '../../../src/coordinator/QueueService';
 import { ulid } from 'ulidx';
 
 const mockGetCachedSwagger = vi.fn();
+const mockGetScan = vi.fn().mockResolvedValue(null);
 
 vi.mock('../../../src/repositories/scans', () => {
   return {
     ScansRepository: vi.fn().mockImplementation(function () {
       return {
         getCachedSwagger: mockGetCachedSwagger,
+        getScan: mockGetScan,
       };
     })
   };

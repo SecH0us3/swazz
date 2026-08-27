@@ -187,6 +187,7 @@ func accumulateResult(stats *swagger.RunStats, result *swagger.FuzzResult) {
 	}
 	stats.EndpointCounts[epKey][status]++
 
+	stats.TotalSentBytes += int64(result.PayloadSize)
 	stats.TotalResponseBytes += result.ResponseSize
 	if result.ResponseSize > stats.MaxResponseSize {
 		stats.MaxResponseSize = result.ResponseSize

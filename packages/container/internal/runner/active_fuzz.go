@@ -238,7 +238,7 @@ func hashPayload(built generatedPayload) uint32 {
 	_ = json.NewEncoder(buf).Encode(payloadMap)
 	payloadStr := strings.TrimSuffix(buf.String(), "\n")
 	h := payloads.HashStr(payloadStr)
-	bufPool.Put(buf)
+	PutBuffer(buf)
 	return h
 }
 

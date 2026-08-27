@@ -119,6 +119,7 @@ func (r *Runner) executeWebSocketRequest(
 		Endpoint:        urlStr,
 		Method:          "WS",
 		ResponseSize:    int64(len(respMsg)),
+		Settings:        r.config.Settings,
 	}
 
 	analyzerChain := analyzer.NewRegistry()

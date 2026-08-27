@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"swazz-engine/internal/swagger"
 )
 
 func TestSecurityHeadersAnalyzer(t *testing.T) {
@@ -20,13 +21,27 @@ func TestSecurityHeadersAnalyzer(t *testing.T) {
 		assert.Nil(t, a.Analyze(&AnalysisInput{}))
 	})
 
-	t.Run("missing all headers", func(t *testing.T) {
+	t.Run("disabled by default", func(t *testing.T) {
+		headers := make(http.Header)
+		headers.Set("Content-Type", "text/html")
+		input := &AnalysisInput{
+			ResponseHeaders: headers,
+		}
+		assert.Nil(t, a.Analyze(input), "security headers analysis should be disabled by default")
+	})
+
+	enabledSettings := swagger.Settings{
+		EnableSecurityHeadersAnalysis: func() *bool { b := true; return &b }(),
+	}
+
+	t.Run("missing all headers when enabled", func(t *testing.T) {
 		headers := make(http.Header)
 		// Set Content-Type HTML to check X-Frame-Options
 		headers.Set("Content-Type", "text/html")
-		
+
 		input := &AnalysisInput{
 			ResponseHeaders: headers,
+			Settings:        enabledSettings,
 		}
 		findings := a.Analyze(input)
 
@@ -50,6 +65,7 @@ func TestSecurityHeadersAnalyzer(t *testing.T) {
 
 		input := &AnalysisInput{
 			ResponseHeaders: headers,
+			Settings:        enabledSettings,
 		}
 		findings := a.Analyze(input)
 		assert.Empty(t, findings)
@@ -59,14 +75,15 @@ func TestSecurityHeadersAnalyzer(t *testing.T) {
 		headers := make(http.Header)
 		headers.Set("Content-Type", "application/xhtml+xml")
 		headers.Set("Strict-Transport-Security", "includeSubdomains")
-		headers.Set("X-Frame-Options", "ALLOWALL") // Insecure
+		headers.Set("X-Frame-Options", "ALLOWALL")     // Insecure
 		headers.Set("X-Content-Type-Options", "sniff") // Insecure
-		headers.Set("Server", "nginx/1.21.6") // Verbose version leakage
+		headers.Set("Server", "nginx/1.21.6")          // Verbose version leakage
 		headers.Set("X-Powered-By", "PHP/8.1")
 		headers.Set("X-AspNet-Version", "4.0.30319")
 
 		input := &AnalysisInput{
 			ResponseHeaders: headers,
+			Settings:        enabledSettings,
 		}
 		findings := a.Analyze(input)
 

@@ -24,6 +24,7 @@ type AnalysisInput struct {
 	SizeMultiplier  float64
 	BaselineTimeMs  int64
 	TimeThresholdMs int
+	Settings        swagger.Settings
 }
 
 // ResponseAnalyzer is the interface implemented by each specific vulnerability scanner.

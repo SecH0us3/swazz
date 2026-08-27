@@ -327,8 +327,9 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 			} else if ev.Type == "complete" {
 				var msg string
 				if stats, ok := ev.Data.(swagger.RunStats); ok {
-					msg = fmt.Sprintf("[Fuzz Complete] finished with %d requests, duration: %v",
-						stats.TotalRequests, time.Duration(stats.TotalDurationMs)*time.Millisecond)
+					dur := time.Duration(stats.TotalDurationMs) * time.Millisecond
+					msg = fmt.Sprintf("[Fuzz Complete] finished with %d requests, total scan time: %v (Avg RPS: %.1f)",
+						stats.TotalRequests, dur, stats.RequestsPerSec)
 					logInfo("Run %s: %s", runID, msg)
 				} else {
 					statsJSON, _ := json.Marshal(ev.Data)

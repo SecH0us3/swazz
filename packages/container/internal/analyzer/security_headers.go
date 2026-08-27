@@ -19,7 +19,7 @@ var versionRegex = regexp.MustCompile(`/\d+`)
 
 // Analyze inspects response headers for security issues.
 func (a *SecurityHeadersAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
-	if input == nil || input.ResponseHeaders == nil {
+	if input == nil || input.ResponseHeaders == nil || !input.Settings.SecurityHeadersAnalysisEnabled() {
 		return nil
 	}
 

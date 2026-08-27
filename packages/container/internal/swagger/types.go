@@ -286,6 +286,26 @@ type Settings struct {
 	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
 	EnableSmartTriage             bool                        `json:"enable_smart_triage,omitempty"`
 	MaxTriagePerScan              int                         `json:"max_triage_per_scan,omitempty"`
+	EnableDifferentialAnalysis    *bool                       `json:"enable_differential_analysis,omitempty"`
+	EnableSecurityHeadersAnalysis *bool                       `json:"enable_security_headers_analysis,omitempty"`
+}
+
+// SecurityHeadersAnalysisEnabled returns true if security headers and CSP analysis is enabled.
+// Defaults to false when nil to suppress noisy static header checks (e.g. missing HSTS, CSP, X-Content-Type-Options).
+func (s Settings) SecurityHeadersAnalysisEnabled() bool {
+	if s.EnableSecurityHeadersAnalysis == nil {
+		return false
+	}
+	return *s.EnableSecurityHeadersAnalysis
+}
+
+// DifferentialAnalysisEnabled returns true if differential analysis and stateful BOLA chains are enabled.
+// Defaults to false when nil.
+func (s Settings) DifferentialAnalysisEnabled() bool {
+	if s.EnableDifferentialAnalysis == nil {
+		return false
+	}
+	return *s.EnableDifferentialAnalysis
 }
 
 // SemanticMutationEnabled returns true if semantic format wrappers are enabled.
@@ -461,6 +481,7 @@ type RunStats struct {
 	StartTime          int64                            `json:"startTime"`
 	IsRunning          bool                             `json:"isRunning"`
 	Progress           Progress                         `json:"progress"`
+	TotalSentBytes     int64                            `json:"totalSentBytes"`
 	TotalResponseBytes int64                            `json:"totalResponseBytes"`
 	MaxResponseSize    int64                            `json:"maxResponseSize"`
 	TotalDurationMs    int64                            `json:"totalDurationMs"`

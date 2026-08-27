@@ -388,7 +388,7 @@ func (r *Runner) executeRequest(
 					respBody = string(rawBodyBytes)
 				}
 			}
-			bufPool.Put(buf)
+			PutBuffer(buf)
 		}
 		discarded, _ := io.Copy(io.Discard, resp.Body) // #nosec G104 -- drain remaining body for connection reuse
 		resp.Body.Close()                              // #nosec G104 -- close error irrelevant after body fully consumed
@@ -502,6 +502,7 @@ func (r *Runner) executeRequest(
 				SizeMultiplier:  multiplier,
 				BaselineTimeMs:  baselineTime,
 				TimeThresholdMs: r.config.Settings.TimeAnomalyThresholdMs,
+				Settings:        r.config.Settings,
 			}
 			result.AnalyzerFindings = r.analyzer.Analyze(input)
 			if (logger.IsDebugEnabled() || r.config.Settings.Debug) && len(result.AnalyzerFindings) > 0 {

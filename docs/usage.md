@@ -106,6 +106,8 @@ The fuzzer engine relies on a JSON configuration file. It fully supports **JSONC
     - **CRLF & Header Injection**: reflections of HTTP headers, unauthorized `Set-Cookie` injections, and CORS origin reflections (`Access-Control-Allow-Origin`).
     - **Response Size Anomalies**: responses significantly larger than the endpoint baseline size, indicating potential data exfiltration.
     Default is `true`.
+  - **`enable_differential_analysis`**: (Boolean) If `true`, enables deep AST structural fingerprint comparison, dynamic entity creation harvesting, and cross-identity replay chains to detect BOLA/IDOR and Schema Drift / Privilege Escalation vulnerabilities. Default is `false`.
+  - **`enable_security_headers_analysis`**: (Boolean) If `true`, enables passive HTTP security header analysis (HSTS, Content-Security-Policy, X-Content-Type-Options, X-Frame-Options, Server version leakage). Default is `false` to avoid repetitive header noise and focus scan output on critical API vulnerabilities.
   - **`response_size_anomaly_multiplier`**: (Float) The ratio multiplier above baseline response size required to trigger a `swazz/response-size-anomaly` warning (e.g., `5.0` for 5x larger than baseline). Default is `5.0`.
   - **`iterations_per_profile`**: (Integer) Number of fuzzing iterations to run per profile.
   - **`timeout_ms`**: (Integer) Request timeout limit in milliseconds.

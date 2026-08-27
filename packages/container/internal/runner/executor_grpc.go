@@ -159,6 +159,7 @@ func (r *Runner) executeGRPCRequest(
 			SizeMultiplier:  5.0,
 			BaselineTimeMs:  0,
 			TimeThresholdMs: 0,
+			Settings:        r.config.Settings,
 		}
 		result.AnalyzerFindings = r.analyzer.Analyze(input)
 	}

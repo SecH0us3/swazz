@@ -287,7 +287,10 @@ func runCLIErr(args []string) error {
 	restoreTerm()
 	r.Unsubscribe(resultsCh)
 	<-resultsDone
-	logger.Info("Run complete.")
+
+	stats := r.GetStats()
+	runDuration := time.Duration(stats.TotalDurationMs) * time.Millisecond
+	logger.Info("Run complete. Total scan time: %v (%d requests executed)", runDuration, stats.TotalRequests)
 
 	// 5. Generate outputs
 	resultsMu.Lock()
@@ -331,7 +334,6 @@ func runCLIErr(args []string) error {
 
 	cls := classifier.New(clsRules)
 	findings := cls.ClassifyAll(finalResults)
-	stats := r.GetStats()
 
 	printSummary(findings, &stats)
 

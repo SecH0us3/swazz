@@ -47,8 +47,8 @@ func TestFormatDuration(t *testing.T) {
 	}{
 		{0, "0s"},
 		{-100, "0s"},
-		{500, "0s"},
-		{1500, "1s"},
+		{500, "500ms"},
+		{1500, "1.5s"},
 		{45000, "45s"},
 		{60000, "1m"},
 		{75000, "1m 15s"},
@@ -273,7 +273,8 @@ func TestLogCompletionSummary(t *testing.T) {
 		TotalRequests:      50,
 		TotalPlanned:       50,
 		RequestsPerSec:     25.5,
-		TotalDurationMs:    1960,
+		TotalDurationMs:    1000,
+		TotalSentBytes:     524288,
 		TotalResponseBytes: 1048576,
 		StatusCounts: map[int]int64{
 			200: 45,
@@ -299,8 +300,8 @@ func TestLogCompletionSummary(t *testing.T) {
 
 	fullOutput := strings.Join(receivedMsgs, "\n")
 	assert.Contains(t, fullOutput, "Swazz Fuzzing Scan Completed")
-	assert.Contains(t, fullOutput, "Duration:           1s (Avg RPS: 25.5)")
-	assert.Contains(t, fullOutput, "Requests Executed:   50 / 50 (100.0%) | Transferred: 1.0 MB (1048576 B)")
+	assert.Contains(t, fullOutput, "Total Scan Time:     1s (Avg RPS: 25.5)")
+	assert.Contains(t, fullOutput, "Requests Executed:   50 / 50 (100.0%) | Sent: 512.0 KB (524288 B) | Received: 1.0 MB (1048576 B)")
 	assert.Contains(t, fullOutput, "Status Distribution: 200: 45 | 500: 5")
 	assert.Contains(t, fullOutput, "Clean scan (0 analyzer findings)")
 }

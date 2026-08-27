@@ -92,17 +92,27 @@ func formatBytes(b int) string {
 	return fmt.Sprintf("%.1f %s (%d B)", float64(b)/float64(div), units[exp], b)
 }
 
-// formatDuration formats millisecond durations into readable strings (e.g. "45s", "1m 23s", "2h 15m").
+// formatDuration formats millisecond durations into readable strings (e.g. "170ms", "1.5s", "45s", "1m 23s", "2h 15m").
 func formatDuration(ms int64) string {
 	if ms <= 0 {
 		return "0s"
 	}
-	sec := ms / 1000
-	if sec < 60 {
-		return fmt.Sprintf("%ds", sec)
+	if ms < 1000 {
+		return fmt.Sprintf("%dms", ms)
 	}
-	min := sec / 60
-	remSec := sec % 60
+	sec := float64(ms) / 1000.0
+	if sec < 10.0 {
+		if ms%1000 == 0 {
+			return fmt.Sprintf("%ds", int64(sec))
+		}
+		return fmt.Sprintf("%.1fs", sec)
+	}
+	secInt := ms / 1000
+	if secInt < 60 {
+		return fmt.Sprintf("%ds", secInt)
+	}
+	min := secInt / 60
+	remSec := secInt % 60
 	if min < 60 {
 		if remSec > 0 {
 			return fmt.Sprintf("%dm %ds", min, remSec)
@@ -452,12 +462,13 @@ func (r *Runner) logCompletionSummary(stats swagger.RunStats) {
 	}
 	r.resultsMu.Unlock()
 
-	transferredStr := formatBytes(int(stats.TotalResponseBytes))
+	sentStr := formatBytes(int(stats.TotalSentBytes))
+	recvStr := formatBytes(int(stats.TotalResponseBytes))
 
 	r.logInfo("════════════════════════════════════════════════════════════════")
 	r.logInfo("🏁 Swazz Fuzzing Scan Completed")
-	r.logInfo("⏱️  Duration:           %s (Avg RPS: %.1f)", durationStr, stats.RequestsPerSec)
-	r.logInfo("📊 Requests Executed:   %d / %d (%.1f%%) | Transferred: %s", stats.TotalRequests, stats.TotalPlanned, percent, transferredStr)
+	r.logInfo("⏱️  Total Scan Time:     %s (Avg RPS: %.1f)", durationStr, stats.RequestsPerSec)
+	r.logInfo("📊 Requests Executed:   %d / %d (%.1f%%) | Sent: %s | Received: %s", stats.TotalRequests, stats.TotalPlanned, percent, sentStr, recvStr)
 	r.logInfo("🛑 Status Distribution: %s", statusSummary)
 	if findingsCount > 0 {
 		r.logInfo("🚨 Security Findings:   %d active analyzer finding(s) discovered across %d result(s)", findingsCount, resultsCount)

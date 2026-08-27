@@ -255,28 +255,38 @@ func TestSettings_GettersAndDefaults(t *testing.T) {
 	s := Settings{}
 	assert.True(t, s.SemanticMutationEnabled())
 	assert.True(t, s.MCPMethodFuzzingEnabled())
+	assert.False(t, s.DifferentialAnalysisEnabled())
+	assert.False(t, s.SecurityHeadersAnalysisEnabled())
 	assert.Equal(t, 30, s.GetMaxTriagePerScan())
 
 	// 2. Explicitly false
 	f := false
 	sFalse := Settings{
-		EnableSemanticMutation: &f,
-		EnableMCPMethodFuzzing: &f,
-		MaxTriagePerScan:       10,
+		EnableSemanticMutation:        &f,
+		EnableMCPMethodFuzzing:        &f,
+		EnableDifferentialAnalysis:    &f,
+		EnableSecurityHeadersAnalysis: &f,
+		MaxTriagePerScan:              10,
 	}
 	assert.False(t, sFalse.SemanticMutationEnabled())
 	assert.False(t, sFalse.MCPMethodFuzzingEnabled())
+	assert.False(t, sFalse.DifferentialAnalysisEnabled())
+	assert.False(t, sFalse.SecurityHeadersAnalysisEnabled())
 	assert.Equal(t, 10, sFalse.GetMaxTriagePerScan())
 
 	// 3. Explicitly true
 	tr := true
 	sTrue := Settings{
-		EnableSemanticMutation: &tr,
-		EnableMCPMethodFuzzing: &tr,
-		MaxTriagePerScan:       50,
+		EnableSemanticMutation:        &tr,
+		EnableMCPMethodFuzzing:        &tr,
+		EnableDifferentialAnalysis:    &tr,
+		EnableSecurityHeadersAnalysis: &tr,
+		MaxTriagePerScan:              50,
 	}
 	assert.True(t, sTrue.SemanticMutationEnabled())
 	assert.True(t, sTrue.MCPMethodFuzzingEnabled())
+	assert.True(t, sTrue.DifferentialAnalysisEnabled())
+	assert.True(t, sTrue.SecurityHeadersAnalysisEnabled())
 	assert.Equal(t, 50, sTrue.GetMaxTriagePerScan())
 }
 

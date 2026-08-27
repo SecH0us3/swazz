@@ -37,11 +37,12 @@ import (
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
+	"swazz-engine/internal/differential"
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
+	"swazz-engine/internal/runner/bola"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
-	"swazz-engine/internal/runner/bola"
 )
 
 var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
@@ -398,6 +399,10 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	detector := bola.NewDetector(r)
 	_ = detector.BolaPhase(runCtx, candidates)
+
+	diffPhase := differential.NewPhase(r)
+	_ = diffPhase.Run(runCtx, candidates)
+
 	r.rateLimitPhase(runCtx)
 
 	// Wait a brief grace period for any late OOB network interactions to complete

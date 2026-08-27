@@ -98,6 +98,8 @@ export interface SwazzSettings {
     enable_adaptive_rate_limit?: boolean;
     enable_semantic_mutation?: boolean;
     enable_mcp_method_fuzzing?: boolean;
+    enable_differential_analysis?: boolean;
+    enable_security_headers_analysis?: boolean;
     use_llm_prepass?: boolean;
     enable_smart_triage?: boolean;
     max_triage_per_scan?: number;
@@ -160,6 +162,8 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     enable_adaptive_rate_limit: false,
     enable_semantic_mutation: true,
     enable_mcp_method_fuzzing: true,
+    enable_differential_analysis: false,
+    enable_security_headers_analysis: false,
     use_llm_prepass: false,
     ai_gateway_url: '',
     cf_aig_token: '',
@@ -248,6 +252,7 @@ export interface RunStats {
     endpointCounts: Record<string, Record<number, number>>;
     startTime: number;
     isRunning: boolean;
+    totalSentBytes?: number;
     totalResponseBytes: number;
     maxResponseSize: number;
     totalDurationMs: number;
