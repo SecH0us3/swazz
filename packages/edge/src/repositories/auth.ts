@@ -113,7 +113,10 @@ export class AuthRepository extends BaseService implements IAuthRepository {
       .bind(token, username, challenge, difficulty, expiryStr).run();
   }
 
-  async getAndConsumeChallenge(token: string, expectedUsername?: string): Promise<{ username: string; challenge: string; difficulty: number; expires_at: string } | null> {
+  async getAndConsumeChallenge(token?: string, expectedUsername?: string): Promise<{ username: string; challenge: string; difficulty: number; expires_at: string } | null> {
+    if (!token) {
+      return null;
+    }
     let query = 'SELECT username, challenge, difficulty, expires_at FROM login_challenges WHERE token = ?';
     let bindings: any[] = [token];
     if (expectedUsername) {

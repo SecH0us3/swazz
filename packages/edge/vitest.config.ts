@@ -14,6 +14,10 @@ export default defineConfig({
       miniflare: {
         compatibilityDate: "2026-06-10",
         d1Databases: ["DB"],
+        bindings: {
+          JWT_SECRET: "test-secret",
+          ENVIRONMENT: "test",
+        },
       }
     }),
   ],
