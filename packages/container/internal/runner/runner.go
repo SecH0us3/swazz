@@ -224,6 +224,7 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		timeBaselines: &sync.Map{},
 		state:         make(map[string]string),
 		regexCache:    make(map[string]*regexp.Regexp),
+		mcpRateLimiter: mcp.NewRateLimiter(100, 50),
 	}
 	if config.MCPServer != nil {
 		client, err := mcp.NewClientFromConfig(
