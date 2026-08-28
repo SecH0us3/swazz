@@ -22,9 +22,9 @@ type ssrfSignature struct {
 
 var ssrfSignatures = []ssrfSignature{
 	{"AWS IMDS", regexp.MustCompile(`(?i)(ami-[0-9a-fA-F]{8,17}|i-[0-9a-fA-F]{8,17}|security-credentials/[a-zA-Z0-9_-]+|"Code"\s*:\s*"Success"\s*,\s*"LastUpdated"|iam/info)`)},
-	{"GCP Cloud Metadata", regexp.MustCompile(`(?i)(computeMetadata/v1|Metadata-Flavor:\s*Google|compute\.internal|service-accounts/default/token)`)},
+	{"GCP Cloud Metadata", regexp.MustCompile(`(?i)(computeMetadata/v1|Metadata-Flavor:\s*Google|compute[.]internal|service-accounts/default/token)`)},
 	{"Azure IMDS", regexp.MustCompile(`(?i)("azEnvironment"\s*:\s*"AzurePublicCloud"|"vmId"\s*:\s*"[0-9a-fA-F-]+"|"subscriptionId"\s*:\s*"[0-9a-fA-F-]+")`)},
-	{"Kubernetes ServiceAccount", regexp.MustCompile(`(?i)(var/run/secrets/kubernetes\.io/serviceaccount/token|apiVersion:\s*v1.*kind:\s*Secret|system:serviceaccount:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+)`)},
+	{"Kubernetes ServiceAccount", regexp.MustCompile(`(?i)(var/run/secrets/kubernetes[.]io/serviceaccount/token|apiVersion:\s*v1.*kind:\s*Secret|system:serviceaccount:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+)`)},
 	{"Envoy/Service Mesh Admin", regexp.MustCompile(`(?i)(cluster_manager|listener_manager|stats_recent_lookups|server_info.*envoy)`)},
 }
 
