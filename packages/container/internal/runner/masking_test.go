@@ -19,14 +19,14 @@ func TestMaskSensitiveArgs(t *testing.T) {
 	assert.Empty(t, maskSensitiveArgs(empty))
 
 	input := map[string]any{
-		"username":      "alice",
-		"password":      "secret123",
-		"bearer_token":  "xyz-token",
-		"session_id":    "sess_abc",
-		"csrf_token":    "csrf-value",
-		"credentials":   map[string]any{"raw": "cert-data"},
-		"public_field":  12345,
-		"is_admin":      false,
+		"username":     "alice",
+		"password":     "secret123",
+		"bearer_token": "xyz-token",
+		"session_id":   "sess_abc",
+		"csrf_token":   "csrf-value",
+		"credentials":  map[string]any{"raw": "cert-data"},
+		"public_field": 12345,
+		"is_admin":     false,
 		"nested": map[string]any{
 			"api_key":   "sk-123456",
 			"safe_data": "visible",

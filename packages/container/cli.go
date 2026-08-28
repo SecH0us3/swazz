@@ -6,8 +6,6 @@
 package main
 
 import (
-	"swazz-engine/internal/agent"
-	"swazz-engine/internal/config"
 	"context"
 	"encoding/json"
 	"flag"
@@ -17,7 +15,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"swazz-engine/internal/agent"
 	"swazz-engine/internal/classifier"
+	"swazz-engine/internal/config"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/output"
@@ -29,7 +29,6 @@ import (
 
 	"golang.org/x/term"
 )
-
 
 func runCLI(args []string) {
 	if err := runCLIErr(args); err != nil {
@@ -406,4 +405,3 @@ func runCLIErr(args []string) error {
 	}
 	return nil
 }
-

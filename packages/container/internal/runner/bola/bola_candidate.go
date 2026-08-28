@@ -203,7 +203,7 @@ func (d *Detector) generateCandidateForEndpoint(
 		)
 		res.Identity = "User A"
 
-		d.ctx.SendStat(res, i + 1, limit)
+		d.ctx.SendStat(res, i+1, limit)
 		d.ctx.BroadcastResult(res)
 
 		if res.Status >= 200 && res.Status < 300 {

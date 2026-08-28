@@ -25,31 +25,32 @@ import (
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/ws"
 )
+
 type CliConfig struct {
-	SwaggerURLs         []string                `json:"swagger_urls"`
-	SwaggerURLsAlias    []string                `json:"_swagger_urls"`
-	BaseURL             string                  `json:"base_url"`
-	Headers             map[string]string       `json:"headers"`
-	GlobalHeaders       map[string]string       `json:"global_headers"`
-	Cookies             map[string]string       `json:"cookies"`
-	WordlistFiles       map[string]string       `json:"wordlist_files"`
-	Dictionaries        map[string][]any        `json:"dictionaries"`
-	Settings            swagger.Settings        `json:"settings"`
-	Endpoints           *struct {
+	SwaggerURLs      []string          `json:"swagger_urls"`
+	SwaggerURLsAlias []string          `json:"_swagger_urls"`
+	BaseURL          string            `json:"base_url"`
+	Headers          map[string]string `json:"headers"`
+	GlobalHeaders    map[string]string `json:"global_headers"`
+	Cookies          map[string]string `json:"cookies"`
+	WordlistFiles    map[string]string `json:"wordlist_files"`
+	Dictionaries     map[string][]any  `json:"dictionaries"`
+	Settings         swagger.Settings  `json:"settings"`
+	Endpoints        *struct {
 		Include []string `json:"include"`
 		Exclude []string `json:"exclude"`
 	} `json:"endpoints"`
 	// EndpointDefinitions holds pre-parsed endpoints (e.g. from browser extension HAR capture).
 	// When populated, swagger_url is not required — the runner uses these directly.
-	EndpointDefinitions []swagger.EndpointConfig         `json:"endpoint_definitions,omitempty"`
-	DisabledEndpoints   []string                         `json:"disabled_endpoints"`
-	Rules               *swagger.RulesConfig             `json:"rules"`
-	AuthSequence        []swagger.AuthStep               `json:"auth_sequence"`
-	AuthIdentities      map[string]swagger.AuthIdentity  `json:"auth_identities,omitempty"`
-	Variables           map[string]any                   `json:"variables,omitempty"`
-	Security            swagger.SecurityConfig           `json:"security"`
-	MCPServer           *swagger.MCPServerConfig         `json:"mcp_server,omitempty"`
-	LicenseKey          string                           `json:"license_key,omitempty"`
+	EndpointDefinitions []swagger.EndpointConfig        `json:"endpoint_definitions,omitempty"`
+	DisabledEndpoints   []string                        `json:"disabled_endpoints"`
+	Rules               *swagger.RulesConfig            `json:"rules"`
+	AuthSequence        []swagger.AuthStep              `json:"auth_sequence"`
+	AuthIdentities      map[string]swagger.AuthIdentity `json:"auth_identities,omitempty"`
+	Variables           map[string]any                  `json:"variables,omitempty"`
+	Security            swagger.SecurityConfig          `json:"security"`
+	MCPServer           *swagger.MCPServerConfig        `json:"mcp_server,omitempty"`
+	LicenseKey          string                          `json:"license_key,omitempty"`
 }
 
 func (c *CliConfig) Validate() error {
@@ -190,8 +191,6 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 		cliCfg.Settings.Profiles = swagger.DefaultSettings().Profiles
 	}
 
-
-
 	var allEndpoints []swagger.EndpointConfig
 	basePath := cliCfg.BaseURL
 
@@ -291,7 +290,7 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 				}
 
 				specRaw, fetchErr := fetchSpec(urlStr, headersCopy, cliCfg.Security.AllowPrivateIPs)
-				
+
 				var parsed *swagger.ParseResult
 				var parseErr error
 

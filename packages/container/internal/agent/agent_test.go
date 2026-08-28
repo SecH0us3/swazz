@@ -6,7 +6,6 @@
 package agent
 
 import (
-	"swazz-engine/internal/config"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -15,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"swazz-engine/internal/config"
 	"testing"
 	"time"
 
@@ -551,6 +551,3 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 
 	<-agentDone
 }
-
-
-

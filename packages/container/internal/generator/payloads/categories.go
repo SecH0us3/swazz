@@ -23,22 +23,27 @@ const (
 
 // Malicious category IDs
 const (
-	CatMaliciousSQLi          = "malicious_sqli"
-	CatMaliciousXSS           = "malicious_xss"
-	CatMaliciousPathTraversal = "malicious_path_traversal"
-	CatMaliciousEncoding      = "malicious_encoding"
-	CatMaliciousNumbers       = "malicious_numbers"
-	CatMaliciousDates         = "malicious_dates"
-	CatMaliciousBooleans      = "malicious_booleans"
-	CatMaliciousTypeConfusion = "malicious_type_confusion"
-	CatHostInjection          = "malicious_host_injection"
-	CatCORSMisconfig          = "malicious_cors_misconfig"
-	CatIPSpoofing             = "malicious_ip_spoofing"
-	CatJWTManipulation        = "malicious_jwt_manipulation"
-	CatOOBInteraction         = "malicious_oob_interaction"
-	CatMaliciousCmdi          = "malicious_cmdi"
-	CatMaliciousSSTI          = "malicious_ssti"
-	CatMaliciousXXE           = "malicious_xxe"
+	CatMaliciousSQLi               = "malicious_sqli"
+	CatMaliciousXSS                = "malicious_xss"
+	CatMaliciousPathTraversal      = "malicious_path_traversal"
+	CatMaliciousEncoding           = "malicious_encoding"
+	CatMaliciousNumbers            = "malicious_numbers"
+	CatMaliciousDates              = "malicious_dates"
+	CatMaliciousBooleans           = "malicious_booleans"
+	CatMaliciousTypeConfusion      = "malicious_type_confusion"
+	CatHostInjection               = "malicious_host_injection"
+	CatCORSMisconfig               = "malicious_cors_misconfig"
+	CatIPSpoofing                  = "malicious_ip_spoofing"
+	CatJWTManipulation             = "malicious_jwt_manipulation"
+	CatOOBInteraction              = "malicious_oob_interaction"
+	CatMaliciousCmdi               = "malicious_cmdi"
+	CatMaliciousSSTI               = "malicious_ssti"
+	CatMaliciousXXE                = "malicious_xxe"
+	CatMaliciousPrototypePollution = "malicious_prototype_pollution"
+	CatMaliciousNoSQLi             = "malicious_nosqli"
+	CatMaliciousSSRF               = "malicious_ssrf"
+	CatMaliciousMassAssignment     = "malicious_mass_assignment"
+	CatMaliciousGraphQL            = "malicious_graphql"
 )
 
 // Random category IDs (single bucket for all random generators)
@@ -52,14 +57,19 @@ const (
 // so the generator can filter by active category IDs.
 
 var (
-	MaliciousSQLi          = toAny(maliciousSQLi)
-	MaliciousXSS           = toAny(maliciousXSS)
-	MaliciousPathTraversal = toAny(maliciousPathTraversal)
-	MaliciousEncoding      = toAny(maliciousEncoding)
-	MaliciousOOB           = toAny(maliciousOOB)
-	MaliciousCmdi          = toAny(maliciousCmdi)
-	MaliciousSSTI          = toAny(maliciousSSTI)
-	MaliciousXXE           = toAny(maliciousXXE)
+	MaliciousSQLi               = toAny(maliciousSQLi)
+	MaliciousXSS                = toAny(maliciousXSS)
+	MaliciousPathTraversal      = toAny(maliciousPathTraversal)
+	MaliciousEncoding           = toAny(maliciousEncoding)
+	MaliciousOOB                = toAny(maliciousOOB)
+	MaliciousCmdi               = toAny(maliciousCmdi)
+	MaliciousSSTI               = toAny(maliciousSSTI)
+	MaliciousXXE                = toAny(maliciousXXE)
+	MaliciousPrototypePollution = toAny(maliciousPrototypePollution)
+	MaliciousNoSQLi             = toAny(maliciousNoSQLi)
+	MaliciousSSRF               = toAny(maliciousSSRF)
+	MaliciousMassAssignment     = toAny(maliciousMassAssignment)
+	MaliciousGraphQL            = toAny(maliciousGraphQL)
 )
 
 func toAny[T any](in []T) []any {
@@ -109,6 +119,11 @@ var MaliciousCategories = []Category{
 	{ID: CatMaliciousCmdi, Label: "Command Injection", Description: "OS command injection payloads (e.g. ; id, | id, ; whoami, etc.)", Items: MaliciousCmdi},
 	{ID: CatMaliciousSSTI, Label: "Server-Side Template Injection (SSTI)", Description: "Template injection payloads (e.g. {{7*7}}, ${7*7}, etc.)", Items: MaliciousSSTI},
 	{ID: CatMaliciousXXE, Label: "XML External Entity (XXE)", Description: "XML external entity injection payloads for local file read", Items: MaliciousXXE},
+	{ID: CatMaliciousPrototypePollution, Label: "Prototype Pollution", Description: "Object prototype injection (__proto__, constructor.prototype)", Items: MaliciousPrototypePollution},
+	{ID: CatMaliciousNoSQLi, Label: "NoSQL Injection", Description: "MongoDB / BSON operator injection ($ne, $gt, $where, $regex)", Items: MaliciousNoSQLi},
+	{ID: CatMaliciousSSRF, Label: "SSRF & Cloud Metadata", Description: "AWS IMDS, GCP metadata, Azure compute, Kubernetes SA tokens", Items: MaliciousSSRF},
+	{ID: CatMaliciousMassAssignment, Label: "Mass Assignment", Description: "Privilege escalation and attribute tampering (role: admin, is_admin: true)", Items: MaliciousMassAssignment},
+	{ID: CatMaliciousGraphQL, Label: "GraphQL Abuse", Description: "Introspection, field suggestions, and query depth batching DoS", Items: MaliciousGraphQL},
 }
 
 // RandomCategories lists all random categories.

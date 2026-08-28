@@ -23,7 +23,7 @@ func TestIsBlocked(t *testing.T) {
 	assert.True(t, IsBlocked(net.ParseIP("192.168.1.1")))
 	assert.True(t, IsBlocked(net.ParseIP("169.254.169.254")))
 	assert.True(t, IsBlocked(net.ParseIP("::1")))
-	
+
 	// Should not block external IPs
 	assert.False(t, IsBlocked(net.ParseIP("8.8.8.8")))
 	assert.False(t, IsBlocked(net.ParseIP("1.1.1.1")))
@@ -47,7 +47,7 @@ func TestSafeDialContext_Blocked(t *testing.T) {
 	dialer := SafeDialContext(5 * time.Second)
 	_, err := dialer(context.Background(), "tcp", "127.0.0.1:80")
 	assert.Error(t, err)
-	
+
 	var blockedErr *ErrBlockedAddress
 	assert.ErrorAs(t, err, &blockedErr)
 	assert.Contains(t, err.Error(), "private/reserved address")

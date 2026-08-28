@@ -59,6 +59,10 @@ var maliciousXSS = []string{
 	"<details open ontoggle=alert(1)>",
 	`<math><mtext><table><mglyph><style><!--</style><img src=x onerror=alert(1)>`,
 	`{{constructor.constructor("return this")().alert(1)}}`,
+	`"><svg/onload=alert(1)>`,
+	`'-alert(1)-'`,
+	`\x3cscript\x3ealert(1)\x3c/script\x3e`,
+	`%3Cscript%3Ealert(1)%3C%2Fscript%3E`,
 }
 
 // ─── Path Traversal ─────────────────────────────────────
@@ -71,6 +75,8 @@ var maliciousPathTraversal = []string{
 	"%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
 	"..%252f..%252f..%252fetc%252fpasswd",
 	"file:///etc/passwd",
+	"..%c0%af..%c0%af..%c0%afetc/passwd",
+	"%252e%252e%252fetc%252fpasswd",
 }
 
 // ─── OOB Interaction Payloads ───────────────────────────
@@ -157,6 +163,10 @@ var maliciousCmdi = []string{
 	"&& id",
 	"|| whoami",
 	"&& whoami",
+	"`id`",
+	"$(id)",
+	"|cat /etc/passwd",
+	";cat /etc/passwd",
 }
 
 var maliciousSSTI = []string{
@@ -166,17 +176,92 @@ var maliciousSSTI = []string{
 	"#{7*7}",
 	"{{7+'7'}}",
 	"${{7*7}}",
+	"*{7*7}",
+	"@[7*7]",
+	"{{config.items()}}",
+	"${T(java.lang.Runtime).getRuntime().exec('id')}",
+	"{{ request.application.__globals__.__builtins__.__import__('os').popen('id').read() }}",
 }
 
 var maliciousXXE = []string{
 	`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>`,
 	`<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">]><foo>&xxe;</foo>`,
+	`<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;"><!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;"><!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">]><lolz>&lol4;</lolz>`,
+	`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % remote SYSTEM "http://127.0.0.1:80/evil.dtd">%remote;]><root/>`,
+	`<!DOCTYPE foo [<!ELEMENT foo ANY ><!ENTITY xxe SYSTEM "https://127.0.0.1/test.xml" >]><foo>&xxe;</foo>`,
+	`<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE foo [ <!ENTITY xxe SYSTEM "php://filter/read=convert.base64-encode/resource=index.php" >]><foo>&xxe;</foo>`,
+}
+
+var maliciousPrototypePollution = []string{
+	`{"__proto__":{"polluted":"true"}}`,
+	`{"constructor":{"prototype":{"polluted":"true"}}}`,
+	`__proto__[polluted]=true`,
+	`constructor.prototype.polluted=true`,
+	`{"__proto__":{"isAdmin":true}}`,
+	`{"__proto__":{"status":"admin"}}`,
+	`__proto__.polluted=yes`,
+	`{"__proto__":{"role":"admin"}}`,
+	`constructor[prototype][polluted]=true`,
+	`{"__proto__":{"auth":true}}`,
+	`constructor.prototype.isAdmin=true`,
+	`{"__proto__":{"__proto__":{"polluted":"true"}}}`,
+}
+
+var maliciousNoSQLi = []string{
+	`{"$ne": null}`,
+	`{"$gt": ""}`,
+	`{"$regex": ".*"}`,
+	`{"$where": "sleep(5000)"}`,
+	`{"$or": [{}, {"a":"a"}]}`,
+	`[$ne]=1`,
+	`{"$exists": true}`,
+	`{"$nin": []}`,
+	`{"$ne": ""}`,
+	`{"$where": "this.password.match(/.*)/"}`,
+	`{"$type": "string"}`,
+	`{ "$elemMatch": { "$ne": null } }`,
+	`{"$regex": "^.*"}`,
+}
+
+var maliciousSSRF = []string{
+	"http://169.254.169.254/latest/meta-data/",
+	"http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+	"http://metadata.google.internal/computeMetadata/v1/",
+	"http://169.254.169.254/metadata/v1/",
+	"http://169.254.169.254/latest/dynamic/instance-identity/document",
+	"file:///etc/hosts",
+	"http://0/",
+	"http://127.0.0.1:80/",
+	"http://localhost:22/",
+	"2130706433",
+	"0177.0.0.1",
+	"0",
+}
+
+var maliciousMassAssignment = []string{
+	`{"role":"admin"}`,
+	`{"is_admin":true}`,
+	`{"permissions":["*"]}`,
+	`{"tier":"premium"}`,
+	`{"verified":true}`,
+	`{"role_id":1}`,
+	`{"status":"active"}`,
+}
+
+var maliciousGraphQL = []string{
+	`{"query":"query { __schema { queryType { name } } }"}`,
+	`{"query":"query { __type(name: \"User\") { name fields { name } } }"}`,
+	`{"query":"query { user(id: 1) { passwrd } }"}`,
+	`[{"query":"query{__typename}"},{"query":"query{__typename}"},{"query":"query{__typename}"}]`,
+	`{"query":"query { __schema { types { name fields { name type { name kind } } } } }"}`,
+	`{"query":"query { user { id user { id user { id user { id } } } } }"}`,
+	`{"query":"fragment f on User { id } query { ...f ...f ...f ...f }"}`,
 }
 
 var AllMaliciousStrings []any
 
 func init() {
-	all := make([]any, 0, len(maliciousEncoding)+len(maliciousSQLi)+len(maliciousXSS)+len(maliciousPathTraversal)+len(maliciousCmdi)+len(maliciousSSTI)+len(maliciousXXE)+len(maliciousOOB))
+	all := make([]any, 0, len(maliciousEncoding)+len(maliciousSQLi)+len(maliciousXSS)+len(maliciousPathTraversal)+len(maliciousCmdi)+len(maliciousSSTI)+len(maliciousXXE)+len(maliciousOOB)+len(maliciousPrototypePollution)+len(maliciousNoSQLi)+len(maliciousSSRF)+len(maliciousMassAssignment)+len(maliciousGraphQL))
 	for _, s := range maliciousEncoding {
 		all = append(all, s)
 	}
@@ -199,6 +284,21 @@ func init() {
 		all = append(all, s)
 	}
 	for _, s := range maliciousOOB {
+		all = append(all, s)
+	}
+	for _, s := range maliciousPrototypePollution {
+		all = append(all, s)
+	}
+	for _, s := range maliciousNoSQLi {
+		all = append(all, s)
+	}
+	for _, s := range maliciousSSRF {
+		all = append(all, s)
+	}
+	for _, s := range maliciousMassAssignment {
+		all = append(all, s)
+	}
+	for _, s := range maliciousGraphQL {
 		all = append(all, s)
 	}
 	AllMaliciousStrings = all

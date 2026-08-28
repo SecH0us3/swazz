@@ -292,7 +292,7 @@ func TestGRPCIntegration_EndToEnd(t *testing.T) {
 
 	expectedEndpoints := map[string]bool{
 		"/demo.UserService/GetUser":           false,
-		"/demo.UserService/SearchUsers":        false,
+		"/demo.UserService/SearchUsers":       false,
 		"/demo.UserService/UpdateUser":        false,
 		"/demo.UserService/ExecuteDiagnostic": false,
 		"/demo.UserService/DeleteUser":        false,

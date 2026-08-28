@@ -96,12 +96,12 @@ func (idx *RepoIndexer) FindHandlerContext(httpMethod, routePath string) (filePa
 			}
 
 			contextLines := foundLines[startLine : endLine+1]
-			
+
 			relPath, err := filepath.Rel(idx.RootDir, foundPath)
 			if err != nil {
 				relPath = foundPath
 			}
-			
+
 			return relPath, strings.Join(contextLines, "\n"), nil
 		}
 		return "", "", fmt.Errorf("failed to walk directory: %w", walkErr)

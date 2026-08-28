@@ -6,7 +6,6 @@
 package agent
 
 import (
-	"swazz-engine/internal/config"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"swazz-engine/internal/config"
 	"sync"
 	"time"
 
@@ -49,7 +49,7 @@ type WSMessageIn struct {
 }
 
 type JobDispatchPayload struct {
-	RunID  string    `json:"runId"`
+	RunID  string           `json:"runId"`
 	Config config.CliConfig `json:"config"`
 }
 

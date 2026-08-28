@@ -26,6 +26,9 @@ func init() {
 		pattern  string
 	}{
 		{"AWS Access Key", `\b(AKIA[0-9A-Z]{16})\b`},
+		{"Google Cloud API Key", `\b(AIza[0-9A-Za-z-_]{35})\b`},
+		{"Slack Token", `\b(xox[baprs]-[0-9a-zA-Z]{10,})\b`},
+		{"Stripe Standard API Key", `\b(sk_live_[0-9a-zA-Z]{24,})\b`},
 		{"Private Key Block", `-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----`},
 		{"JWT Token", `\b(eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_.+/=]+)\b`},
 		{"Internal IP", `\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b`},
@@ -46,7 +49,7 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 	}
 
 	// Fast pre-filter: skip scanning if no secret/key indicators are present in response body
-	if !containsAnyFoldASCII(input.ResponseBody, "akia", "-----begin", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
+	if !containsAnyFoldASCII(input.ResponseBody, "akia", "aiza", "xox", "sk_live", "-----begin", "eyj", "10.", "172.", "192.168.", "key", "token", "secret", "apikey", "api_key") {
 		return nil
 	}
 
@@ -56,6 +59,18 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 		switch sig.category {
 		case "AWS Access Key":
 			if !containsFoldASCII(input.ResponseBody, "akia") {
+				continue
+			}
+		case "Google Cloud API Key":
+			if !containsFoldASCII(input.ResponseBody, "aiza") {
+				continue
+			}
+		case "Slack Token":
+			if !containsFoldASCII(input.ResponseBody, "xox") {
+				continue
+			}
+		case "Stripe Standard API Key":
+			if !containsFoldASCII(input.ResponseBody, "sk_live") {
 				continue
 			}
 		case "Private Key Block":
@@ -87,10 +102,13 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 			}
 
 			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:   "swazz/sensitive-data-leak",
-				Level:    "warning",
-				Message:  fmt.Sprintf("Sensitive data/secret (%s) leaked in the response body.", sig.category),
-				Evidence: fmt.Sprintf("Leaked credential indicator: %s", redactedMatch),
+				RuleID:           "swazz/sensitive-data-leak",
+				Level:            "warning",
+				Message:          fmt.Sprintf("Sensitive data/secret (%s) leaked in the response body.", sig.category),
+				Evidence:         fmt.Sprintf("Leaked credential indicator: %s", redactedMatch),
+				OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+				OWASPCategory:    []string{"A02:2025 Cryptographic Failures"},
+				CWEIDs:           []string{"CWE-200", "CWE-312"},
 			})
 		}
 	}

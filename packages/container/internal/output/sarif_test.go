@@ -371,7 +371,7 @@ func TestToSARIF(t *testing.T) {
 				rules := runs[0]["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]map[string]any)
 
 				expectedCWEs := map[string]string{
-					"swazz/bola-idor":                "639",
+					"swazz/bola-idor":               "639",
 					"swazz/tenant-isolation-bypass": "639",
 					"swazz/unauthorized-access":     "306",
 					"swazz/sensitive-data-leak":     "200",
@@ -497,7 +497,7 @@ func TestToSARIF(t *testing.T) {
 					Endpoint:     "/api/v1/users",
 					ResolvedPath: "/api/v1/users",
 					Status:       500,
-					Payload:      make(chan int), // fails json.MarshalIndent
+					Payload:      make(chan int),            // fails json.MarshalIndent
 					ResponseBody: strings.Repeat("A", 2500), // > 2000 characters
 				},
 			},

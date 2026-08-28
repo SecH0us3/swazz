@@ -452,5 +452,3 @@ func TestIsAsyncAPISpec(t *testing.T) {
 		})
 	}
 }
-
-

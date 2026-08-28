@@ -8,9 +8,9 @@ package runner
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildPathParams(t *testing.T) {

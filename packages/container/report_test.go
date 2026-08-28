@@ -31,8 +31,8 @@ func TestPrintProgressClean(t *testing.T) {
 	logger.SetLevelByName("info")
 
 	stats := swagger.RunStats{
-		TotalRequests: 10,
-		TotalPlanned:  100,
+		TotalRequests:  10,
+		TotalPlanned:   100,
 		RequestsPerSec: 15.5,
 	}
 	stats.Progress.CurrentEndpoint = "GET /api/v1/users"
@@ -144,4 +144,3 @@ func TestPrintSummary(t *testing.T) {
 		t.Errorf("Expected 'notes:     1' in summary, got: %s", output)
 	}
 }
-

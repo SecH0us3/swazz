@@ -404,6 +404,21 @@ func (g *Generator) BodyIterations() int {
 	if is(payloads.CatMaliciousXXE) {
 		maliciousBody = append(maliciousBody, payloads.MaliciousXXE...)
 	}
+	if is(payloads.CatMaliciousPrototypePollution) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousPrototypePollution...)
+	}
+	if is(payloads.CatMaliciousNoSQLi) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousNoSQLi...)
+	}
+	if is(payloads.CatMaliciousSSRF) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousSSRF...)
+	}
+	if is(payloads.CatMaliciousMassAssignment) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousMassAssignment...)
+	}
+	if is(payloads.CatMaliciousGraphQL) {
+		maliciousBody = append(maliciousBody, payloads.MaliciousGraphQL...)
+	}
 	if is(payloads.CatOOBInteraction) {
 		maliciousBody = append(maliciousBody, payloads.MaliciousOOB...)
 	}

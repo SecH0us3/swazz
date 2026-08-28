@@ -391,4 +391,3 @@ func TestExtractParams_DirectHelpers(t *testing.T) {
 	assert.Equal(t, "", getStringField(m, "num"))
 	assert.Equal(t, "", getStringField(m, "nonexistent"))
 }
-

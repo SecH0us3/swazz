@@ -138,9 +138,9 @@ type SecurityConfig struct {
 // MCPServerConfig defines configuration for target MCP servers.
 type MCPServerConfig struct {
 	Type    string   `json:"type"`              // "stdio", "sse", or "http"
-	Command string   `json:"command,omitempty"`  // Executable name (for stdio type)
-	Args    []string `json:"args,omitempty"`     // Arguments passed to command (for stdio type)
-	URL     string   `json:"url,omitempty"`      // SSE or HTTP endpoint URL
+	Command string   `json:"command,omitempty"` // Executable name (for stdio type)
+	Args    []string `json:"args,omitempty"`    // Arguments passed to command (for stdio type)
+	URL     string   `json:"url,omitempty"`     // SSE or HTTP endpoint URL
 }
 
 // Config holds the full fuzzing configuration.

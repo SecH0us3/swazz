@@ -96,3 +96,87 @@ func BenchmarkSensitiveAnalyzer_SecretResponse(b *testing.B) {
 		_ = analyzer.Analyze(input)
 	}
 }
+
+func BenchmarkPrototypePollutionAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &PrototypePollutionAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"status": "ok", "user": {"id": 1, "name": "Alice"}}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}
+
+func BenchmarkNoSQLiAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &NoSQLiAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"status": "ok", "items": [{"_id": "60d5ec49f1b2c8b1f8e4e1a1", "title": "Doc 1"}]}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}
+
+func BenchmarkSSRFCloudMetadataAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &SSRFCloudMetadataAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"status": "ok", "url": "https://api.example.com/v1/resource"}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}
+
+func BenchmarkJWTTamperingAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &JWTTamperingAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"status": "ok", "authenticated": true}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}
+
+func BenchmarkMassAssignmentAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &MassAssignmentAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"status": "ok", "profile": {"username": "johndoe", "bio": "Hello world"}}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}
+
+func BenchmarkDPoPTamperingAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &DPoPTamperingAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"status": "ok", "token_type": "DPoP"}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}
+
+func BenchmarkGraphQLSecurityAnalyzer_CleanResponse(b *testing.B) {
+	analyzer := &GraphQLSecurityAnalyzer{}
+	input := &AnalysisInput{
+		ResponseBody: []byte(`{"data":{"user":{"id":"1","name":"Alice"}}}`),
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = analyzer.Analyze(input)
+	}
+}

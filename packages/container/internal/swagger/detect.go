@@ -52,7 +52,6 @@ func IsWSDL(raw []byte) bool {
 	return strings.Contains(content, "<definitions") || strings.Contains(content, "<wsdl:definitions")
 }
 
-
 // IsHAR checks if the given raw JSON represents a HAR file.
 func IsHAR(raw []byte) bool {
 	var check map[string]any
@@ -240,5 +239,3 @@ func IsAsyncAPISpec(raw []byte) bool {
 	}
 	return false
 }
-
-

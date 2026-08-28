@@ -21,9 +21,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 
-	swazzWs "swazz-engine/internal/ws"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
+	swazzWs "swazz-engine/internal/ws"
 )
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +119,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		case "crash":
 			return
-			
+
 		default:
 			c.Write(r.Context(), websocket.MessageText, []byte(`{"error": "unknown action"}`))
 		}
@@ -129,7 +129,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 func startVulnerableDemoServer(t *testing.T) (string, func()) {
 	server := httptest.NewServer(http.HandlerFunc(wsHandler))
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
-	
+
 	cleanup := func() {
 		server.Close()
 	}
@@ -146,11 +146,11 @@ func TestWSIntegration_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, protoRes)
 	require.Len(t, protoRes.Endpoints, 1)
-	
+
 	ep := protoRes.Endpoints[0]
 	assert.Equal(t, "WS", ep.Method)
 	assert.Equal(t, wsURL, ep.Path)
-	
+
 	// 2. Configure full Swazz Fuzzing Runner with RANDOM, BOUNDARY, MALICIOUS profiles
 	cfg := &swagger.Config{
 		BaseURL:   wsURL,

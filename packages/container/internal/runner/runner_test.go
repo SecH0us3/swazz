@@ -931,10 +931,10 @@ func TestCheckpointWatermark(t *testing.T) {
 		limiter:    NewConcurrencyLimiter(1),
 	}
 	r.progress.totalRequests.Store(0)
-	
+
 	// Start the stats aggregator
 	go r.statsAggregator()
-	
+
 	r.statsChan <- statsMsg{
 		result:           &swagger.FuzzResult{},
 		currentIteration: 3,
@@ -956,7 +956,7 @@ func TestCheckpointWatermark(t *testing.T) {
 		endpoint:         "GET /test",
 		profile:          "RANDOM",
 	}
-	
+
 	time.Sleep(200 * time.Millisecond)
 	stats := r.GetStats()
 	if stats.Progress.CurrentIteration != 3 {
@@ -1141,5 +1141,3 @@ func TestRunner_Start_AlreadyRunning(t *testing.T) {
 	r.Stop()
 	wg.Wait()
 }
-
-

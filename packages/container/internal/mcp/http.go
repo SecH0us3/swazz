@@ -31,7 +31,7 @@ type HTTPClient struct {
 // NewHTTPClient initializes a new HTTPClient.
 func NewHTTPClient(urlStr string, allowPrivateIPs bool, headers map[string]string) *HTTPClient {
 	client := security.NewSSRFProtectedClient(30*time.Second, allowPrivateIPs)
-	
+
 	// Always enable certificate validation by default
 	if transport, ok := client.Transport.(*http.Transport); ok {
 		if transport.TLSClientConfig == nil {
@@ -41,7 +41,7 @@ func NewHTTPClient(urlStr string, allowPrivateIPs bool, headers map[string]strin
 			}
 		}
 	}
-	
+
 	return &HTTPClient{
 		url:        urlStr,
 		httpClient: client,

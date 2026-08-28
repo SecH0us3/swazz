@@ -169,4 +169,3 @@ func TestNewSSRFProtectedClient(t *testing.T) {
 	assert.Equal(t, 10*time.Second, cAllowed.Timeout)
 	assert.Equal(t, http.DefaultTransport, cAllowed.Transport)
 }
-

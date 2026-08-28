@@ -94,10 +94,13 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 		payloadLower := []byte(strings.ToLower(payloadStr))
 		if bytes.Contains(bodyLower, payloadLower) {
 			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:   "swazz/reflected-xss",
-				Level:    "error",
-				Message:  fmt.Sprintf("Reflected XSS payload '%s' detected unescaped in the response body.", payloadStr),
-				Evidence: fmt.Sprintf("Found payload: %s", payloadStr),
+				RuleID:           "swazz/reflected-xss",
+				Level:            "error",
+				Message:          fmt.Sprintf("Reflected XSS payload '%s' detected unescaped in the response body.", payloadStr),
+				Evidence:         fmt.Sprintf("Found payload: %s", payloadStr),
+				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+				OWASPCategory:    []string{"A03:2025 Injection"},
+				CWEIDs:           []string{"CWE-79"},
 			})
 		}
 	}

@@ -32,8 +32,8 @@ func TestProbeService_ValidMCPServer(t *testing.T) {
 		case "initialize":
 			result = map[string]any{
 				"protocolVersion": "2024-11-05",
-				"serverInfo":     map[string]any{"name": "test-mcp", "version": "1.0"},
-				"capabilities":   map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "test-mcp", "version": "1.0"},
+				"capabilities":    map[string]any{"tools": map[string]any{}},
 			}
 		case "tools/list":
 			result = map[string]any{
@@ -111,8 +111,8 @@ func TestProbeAll_WithSecretResolver(t *testing.T) {
 		case "initialize":
 			result = map[string]any{
 				"protocolVersion": "2024-11-05",
-				"serverInfo":     map[string]any{"name": "auth-mcp", "version": "1.0"},
-				"capabilities":   map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "auth-mcp", "version": "1.0"},
+				"capabilities":    map[string]any{"tools": map[string]any{}},
 			}
 		case "tools/list":
 			result = map[string]any{

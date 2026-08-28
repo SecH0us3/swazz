@@ -13,10 +13,10 @@ import (
 
 // RateLimiter provides rate limiting for MCP tool calls to prevent DoS
 type RateLimiter struct {
-	limiter  *rate.Limiter
-	mu       sync.Mutex
-	waiting  int
-	maxWait  int
+	limiter *rate.Limiter
+	mu      sync.Mutex
+	waiting int
+	maxWait int
 }
 
 // NewRateLimiter creates a new rate limiter with the specified requests per second and max concurrent waiters

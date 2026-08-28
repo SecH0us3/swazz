@@ -319,7 +319,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 		}
 
 		r := NewMock(cfg, nil)
-	d := NewDetector(r)
+		d := NewDetector(r)
 
 		// Candidate with baseline body
 		results := []*swagger.FuzzResult{
@@ -377,7 +377,7 @@ func TestBOLA_SimilarityFiltering(t *testing.T) {
 		}
 
 		r := NewMock(cfg, nil)
-	d := NewDetector(r)
+		d := NewDetector(r)
 
 		results := []*swagger.FuzzResult{
 			{
@@ -650,7 +650,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 		}
 
 		r := NewMock(cfg, nil)
-	d := NewDetector(r)
+		d := NewDetector(r)
 
 		cand := &swagger.FuzzResult{
 			Endpoint:       "/api/admin/dashboard",
@@ -724,7 +724,7 @@ func TestBOLA_SkipNoAuth(t *testing.T) {
 		}
 
 		r := NewMock(cfg, nil)
-	d := NewDetector(r)
+		d := NewDetector(r)
 
 		cand := &swagger.FuzzResult{
 			Endpoint:     "/api/admin/dashboard",
@@ -867,7 +867,3 @@ func TestRunner_GlobalHeadersAndMissingCandidates(t *testing.T) {
 	candidates := d.generateMissingCandidates(ctx, map[string]bool{})
 	assert.NotEmpty(t, candidates)
 }
-
-
-
-

@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"strings"
 
-	"swazz-engine/internal/swagger"
 	"github.com/tidwall/gjson"
+	"swazz-engine/internal/swagger"
 )
 
 // ParseHAR parses a standard HAR JSON log.entries.
@@ -43,7 +43,7 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 
 		method := strings.ToUpper(req.Get("method").String())
 		fullURL := req.Get("url").String()
-		
+
 		u, err := url.Parse(fullURL)
 		if err != nil || u.Host == "" {
 			return true
@@ -67,8 +67,8 @@ func ParseHAR(raw []byte, domainFilter string) (*swagger.ParseResult, error) {
 		ep, exists := endpointsMap[key]
 		if !exists {
 			ep = swagger.EndpointConfig{
-				Path:         path,
-				Method:       method,
+				Path:   path,
+				Method: method,
 				Schema: swagger.SchemaProperty{
 					Type:       "object",
 					Properties: map[string]*swagger.SchemaProperty{},

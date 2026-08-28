@@ -334,5 +334,3 @@ func TestRunActiveParameterFuzzing_Execution(t *testing.T) {
 	stats := r.GetStats()
 	assert.Greater(t, stats.TotalRequests, int64(0))
 }
-
-

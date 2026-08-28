@@ -206,7 +206,7 @@ func TestEndpointRequests(t *testing.T) {
 			name:    "standard active param fuzzing disabled",
 			profile: swagger.ProfileRandom,
 			settings: swagger.Settings{
-				IterationsPerProfile:  20,
+				IterationsPerProfile:   20,
 				ActiveParameterFuzzing: false,
 			},
 			ep: epWithFields,
@@ -218,7 +218,7 @@ func TestEndpointRequests(t *testing.T) {
 			name:    "active param fuzzing multiplies iterations by field count",
 			profile: swagger.ProfileRandom,
 			settings: swagger.Settings{
-				IterationsPerProfile:  10,
+				IterationsPerProfile:   10,
 				ActiveParameterFuzzing: true,
 			},
 			ep: epWithFields,
@@ -255,11 +255,11 @@ func TestCalculateTotalPlanned(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		settings          swagger.Settings
-		profiles          []swagger.FuzzingProfile
-		expectedEPs       int32
-		minExpectedTotal  int64
+		name             string
+		settings         swagger.Settings
+		profiles         []swagger.FuzzingProfile
+		expectedEPs      int32
+		minExpectedTotal int64
 	}{
 		{
 			name: "without rate limiting",
@@ -268,7 +268,7 @@ func TestCalculateTotalPlanned(t *testing.T) {
 				RateLimitCheck:       false,
 			},
 			profiles:         []swagger.FuzzingProfile{swagger.ProfileRandom},
-			expectedEPs:      4, // 2 baseline + 1*2 profiles
+			expectedEPs:      4,         // 2 baseline + 1*2 profiles
 			minExpectedTotal: 2 + 1 + 5, // baseline (2) + test1(1) + test2(5)
 		},
 		{

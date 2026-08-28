@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/swagger"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestHandleOOBTrigger(t *testing.T) {
@@ -51,14 +51,14 @@ func TestHandleOOBTrigger(t *testing.T) {
 	case ev, ok := <-events:
 		assert.True(t, ok)
 		assert.Equal(t, EventResult, ev.Type)
-		
+
 		res, ok := ev.Data.(*swagger.FuzzResultSSE)
 		assert.True(t, ok)
 		assert.Equal(t, "POST", res.Method)
 		assert.Equal(t, "/api/user", res.ResolvedPath)
 		assert.Equal(t, "/api/user", res.Endpoint)
 		assert.Equal(t, "oob-"+uuid, res.ID)
-		
+
 		// The SSE object in the event contains payload preview and finding flags
 		assert.Contains(t, res.PayloadPreview, "oob-test-uuid-999")
 	case <-time.After(2 * time.Second):

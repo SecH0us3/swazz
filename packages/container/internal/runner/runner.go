@@ -34,10 +34,10 @@ import (
 	"time"
 
 	"swazz-engine/internal/analyzer"
+	"swazz-engine/internal/differential"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/license"
 	"swazz-engine/internal/logger"
-	"swazz-engine/internal/differential"
 	"swazz-engine/internal/mcp"
 	"swazz-engine/internal/oob"
 	"swazz-engine/internal/runner/bola"
@@ -211,20 +211,20 @@ func New(config *swagger.Config, client *http.Client, gates ...license.Gate) *Ru
 		gate = gates[0]
 	}
 	r := &Runner{
-		config:        config,
-		client:        client,
-		gate:          gate,
-		subs:          make(map[chan Event]struct{}),
-		eventQueue:    NewMPSCQueue(),
-		doneCh:        make(chan struct{}),
-		broadcastDone: make(chan struct{}),
-		statsChan:     make(chan statsMsg, 4096),
-		statsDone:     make(chan struct{}),
-		analyzer:      analyzer.NewRegistry(),
-		sizeBaselines: &sync.Map{},
-		timeBaselines: &sync.Map{},
-		state:         make(map[string]string),
-		regexCache:    make(map[string]*regexp.Regexp),
+		config:         config,
+		client:         client,
+		gate:           gate,
+		subs:           make(map[chan Event]struct{}),
+		eventQueue:     NewMPSCQueue(),
+		doneCh:         make(chan struct{}),
+		broadcastDone:  make(chan struct{}),
+		statsChan:      make(chan statsMsg, 4096),
+		statsDone:      make(chan struct{}),
+		analyzer:       analyzer.NewRegistry(),
+		sizeBaselines:  &sync.Map{},
+		timeBaselines:  &sync.Map{},
+		state:          make(map[string]string),
+		regexCache:     make(map[string]*regexp.Regexp),
 		mcpRateLimiter: mcp.NewRateLimiter(100, 50),
 	}
 	if config.MCPServer != nil {
@@ -495,31 +495,33 @@ func (r *Runner) baselinePhase(ctx context.Context) {
 }
 
 // RunnerContext implementation for bola.Detector
-func (r *Runner) RLockConfig() { r.configMu.RLock() }
+func (r *Runner) RLockConfig()   { r.configMu.RLock() }
 func (r *Runner) RUnlockConfig() { r.configMu.RUnlock() }
-func (r *Runner) LockConfig() { r.configMu.Lock() }
+func (r *Runner) LockConfig()    { r.configMu.Lock() }
 func (r *Runner) UnlockConfig() {
 	r.configMu.Unlock()
 	r.updateReplacer()
 	r.detector = bola.NewDetector(r)
 }
 
-func (r *Runner) LockResults() { r.resultsMu.Lock() }
+func (r *Runner) LockResults()   { r.resultsMu.Lock() }
 func (r *Runner) UnlockResults() { r.resultsMu.Unlock() }
 
 func (r *Runner) LogDebug(format string, args ...any) { r.logDebug(format, args...) }
-func (r *Runner) LogInfo(format string, args ...any) { r.logInfo(format, args...) }
-func (r *Runner) LogWarn(format string, args ...any) { r.logWarn(format, args...) }
+func (r *Runner) LogInfo(format string, args ...any)  { r.logInfo(format, args...) }
+func (r *Runner) LogWarn(format string, args ...any)  { r.logWarn(format, args...) }
 func (r *Runner) LogError(format string, args ...any) { r.logError(format, args...) }
 
 func (r *Runner) BroadcastProgress() { r.Broadcast(Event{Type: EventProgress, Data: r.GetStats()}) }
-func (r *Runner) BroadcastResult(res *swagger.FuzzResult) { r.Broadcast(Event{Type: EventResult, Data: res}) }
+func (r *Runner) BroadcastResult(res *swagger.FuzzResult) {
+	r.Broadcast(Event{Type: EventResult, Data: res})
+}
 
 func (r *Runner) UpdateProgressProfile(profile string) { r.progress.currentProfile.Store(profile) }
-func (r *Runner) UpdateProgressEndpoint(epKey string) { r.progress.currentEndpoint.Store(epKey) }
-func (r *Runner) AddTotalEndpoints(n int32) { r.progress.totalEndpoints.Add(n) }
-func (r *Runner) AddCompletedEndpoints(n int32) { r.progress.completedEndpoints.Add(n) }
-func (r *Runner) AddTotalPlanned(n int64) { r.progress.totalPlanned.Add(n) }
+func (r *Runner) UpdateProgressEndpoint(epKey string)  { r.progress.currentEndpoint.Store(epKey) }
+func (r *Runner) AddTotalEndpoints(n int32)            { r.progress.totalEndpoints.Add(n) }
+func (r *Runner) AddCompletedEndpoints(n int32)        { r.progress.completedEndpoints.Add(n) }
+func (r *Runner) AddTotalPlanned(n int64)              { r.progress.totalPlanned.Add(n) }
 
 func (r *Runner) SendStat(res *swagger.FuzzResult, currentIteration, totalIterations int) {
 	r.statsChan <- statsMsg{
@@ -536,7 +538,6 @@ func (r *Runner) ExecuteRequest(ctx context.Context, baseURL, resolvedPath, epPa
 	return r.executeRequest(ctx, baseURL, resolvedPath, epPath, method, globalHeaders, globalCookies, body, profile, queryParams, headers, contentType)
 }
 
-func (r *Runner) SetLimiterTarget(concurrency int) { r.limiter.SetTarget(concurrency) }
+func (r *Runner) SetLimiterTarget(concurrency int)         { r.limiter.SetTarget(concurrency) }
 func (r *Runner) LimiterAcquire(ctx context.Context) error { return r.limiter.Acquire(ctx) }
-func (r *Runner) LimiterRelease() { r.limiter.Release() }
-
+func (r *Runner) LimiterRelease()                          { r.limiter.Release() }

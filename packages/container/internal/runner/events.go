@@ -20,10 +20,10 @@ import (
 // Event types for SSE streaming.
 const (
 	EventResult     = "result"
-	EventProgress    = "progress"
-	EventComplete    = "complete"
-	EventError       = "error"
-	EventCheckpoint  = "checkpoint"
+	EventProgress   = "progress"
+	EventComplete   = "complete"
+	EventError      = "error"
+	EventCheckpoint = "checkpoint"
 )
 
 // Event represents a streaming event sent to subscribers.

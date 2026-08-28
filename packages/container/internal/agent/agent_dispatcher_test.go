@@ -38,7 +38,7 @@ func TestAgentDispatcher_SendWSMethods(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "event", outMsg.Type)
 		assert.Equal(t, "run-1", outMsg.RunID)
-		
+
 		payload, ok := outMsg.Payload.(WSEventPayload)
 		require.True(t, ok)
 		assert.Equal(t, "test_event", payload.Type)
@@ -54,7 +54,7 @@ func TestAgentDispatcher_SendWSMethods(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "error", outMsg.Type)
 		assert.Equal(t, "run-2", outMsg.RunID)
-		
+
 		payloadMap, ok := outMsg.Payload.(map[string]string)
 		require.True(t, ok)
 		assert.Equal(t, "something went wrong", payloadMap["error"])
@@ -120,13 +120,13 @@ func TestAgentDispatcher_Dispatch_OOBTrigger_UnknownRunner(t *testing.T) {
 	assert.NotPanics(t, func() {
 		d.Dispatch(context.Background(), msgIn)
 	})
-	
+
 	// Test with missing fields (should error internally but not panic)
 	msgIn.Payload = []byte(`{"runId": ""}`)
 	assert.NotPanics(t, func() {
 		d.Dispatch(context.Background(), msgIn)
 	})
-	
+
 	// Test with invalid JSON
 	msgIn.Payload = []byte(`{bad_json}`)
 	assert.NotPanics(t, func() {

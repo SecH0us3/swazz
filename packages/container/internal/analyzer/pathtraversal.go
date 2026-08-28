@@ -35,10 +35,13 @@ func (a *PathTraversalAnalyzer) Analyze(input *AnalysisInput) []swagger.Analysis
 	for _, sig := range pathTraversalSignatures {
 		if bytes.Contains(input.ResponseBody, sig) {
 			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:   "swazz/path-traversal-leak",
-				Level:    "error",
-				Message:  fmt.Sprintf("Path traversal or file inclusion leak signature '%s' detected in response body.", string(sig)),
-				Evidence: fmt.Sprintf("Found leaked signature: %s", string(sig)),
+				RuleID:           "swazz/path-traversal-leak",
+				Level:            "error",
+				Message:          fmt.Sprintf("Path traversal or file inclusion leak signature '%s' detected in response body.", string(sig)),
+				Evidence:         fmt.Sprintf("Found leaked signature: %s", string(sig)),
+				OWASPAPICategory: []string{"API1:2023 Broken Object Level Authorization"},
+				OWASPCategory:    []string{"A01:2025 Broken Access Control"},
+				CWEIDs:           []string{"CWE-22"},
 			})
 			break
 		}

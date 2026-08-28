@@ -17,13 +17,13 @@ import (
 
 func TestStatefulChaining(t *testing.T) {
 	mux := http.NewServeMux()
-	
+
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Custom-Token", "header-token-123")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"data":{"userId": 42}, "session": "json-session-abc"}`))
 	})
-	
+
 	mux.HandleFunc("/profile/42", func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if auth != "Bearer header-token-123" {
@@ -39,7 +39,7 @@ func TestStatefulChaining(t *testing.T) {
 	defer ts.Close()
 
 	settings := swagger.DefaultSettings()
-	
+
 	settings.ChainingRules = []swagger.ChainingRule{
 		{
 			SourceEndpoint: "/login",

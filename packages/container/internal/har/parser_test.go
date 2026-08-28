@@ -6,8 +6,8 @@
 package har
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestParseHAR(t *testing.T) {

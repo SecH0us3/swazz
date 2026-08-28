@@ -30,6 +30,11 @@ var maliciousStringCategories = []struct {
 	{payloads.CatMaliciousCmdi, payloads.MaliciousCmdi},
 	{payloads.CatMaliciousSSTI, payloads.MaliciousSSTI},
 	{payloads.CatMaliciousXXE, payloads.MaliciousXXE},
+	{payloads.CatMaliciousPrototypePollution, payloads.MaliciousPrototypePollution},
+	{payloads.CatMaliciousNoSQLi, payloads.MaliciousNoSQLi},
+	{payloads.CatMaliciousSSRF, payloads.MaliciousSSRF},
+	{payloads.CatMaliciousMassAssignment, payloads.MaliciousMassAssignment},
+	{payloads.CatMaliciousGraphQL, payloads.MaliciousGraphQL},
 }
 
 func (g *Generator) generateString(format, propName string) any {

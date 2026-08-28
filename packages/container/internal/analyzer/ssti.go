@@ -48,10 +48,13 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			rawExprBytes := []byte(ctx.RawExpr)
 			if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 				findings = append(findings, swagger.AnalysisFinding{
-					RuleID:   "swazz/ssti-leak",
-					Level:    "error",
-					Message:  fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", ctx.RawExpr, ctx.Expected),
-					Evidence: fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, ctx.Expected),
+					RuleID:           "swazz/ssti-leak",
+					Level:            "error",
+					Message:          fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", ctx.RawExpr, ctx.Expected),
+					Evidence:         fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, ctx.Expected),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A03:2025 Injection"},
+					CWEIDs:           []string{"CWE-1336"},
 				})
 			}
 			continue
@@ -64,10 +67,13 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				if hasStandaloneNumber(input.ResponseBody, evalValBytes) && !bytes.Contains(input.ResponseBody, rawExprBytes) {
 					evalVal := string(evalValBytes)
 					findings = append(findings, swagger.AnalysisFinding{
-						RuleID:   "swazz/ssti-leak",
-						Level:    "error",
-						Message:  fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", rawExpr, evalVal),
-						Evidence: fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, evalVal),
+						RuleID:           "swazz/ssti-leak",
+						Level:            "error",
+						Message:          fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", rawExpr, evalVal),
+						Evidence:         fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, evalVal),
+						OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+						OWASPCategory:    []string{"A03:2025 Injection"},
+						CWEIDs:           []string{"CWE-1336"},
 					})
 					break
 				}

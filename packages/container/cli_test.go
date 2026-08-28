@@ -6,7 +6,6 @@
 package main
 
 import (
-	"swazz-engine/internal/config"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"swazz-engine/internal/config"
 	"testing"
 	"time"
 
@@ -104,7 +104,7 @@ func TestBuildRunnerConfig_OptionsAndValidation(t *testing.T) {
 		EndpointDefinitions: []swagger.EndpointConfig{
 			{Path: "/test", Method: "GET"},
 		},
-		GlobalHeaders: map[string]string{"X-Global": "1"},
+		GlobalHeaders:     map[string]string{"X-Global": "1"},
 		DisabledEndpoints: []string{"/disabled"},
 	})
 	assert.NoError(t, err)
@@ -384,4 +384,3 @@ func TestRunCLIErr_SeverityAndFlags(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
-

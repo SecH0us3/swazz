@@ -6,7 +6,6 @@
 package main
 
 import (
-	"swazz-engine/internal/config"
 	"context"
 	"encoding/json"
 	"flag"
@@ -14,6 +13,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"swazz-engine/internal/config"
 	"swazz-engine/internal/crawler"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"

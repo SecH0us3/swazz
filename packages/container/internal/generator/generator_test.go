@@ -287,7 +287,7 @@ func TestMinIterationsNeeded_NewCategories(t *testing.T) {
 
 func TestGenerate_BooleanAndDateAndHeaderIterations(t *testing.T) {
 	schemaBool := &swagger.SchemaProperty{Type: "boolean"}
-	
+
 	gBound := New(nil, swagger.ProfileBoundary, swagger.Settings{})
 	_ = gBound.Generate("bool", schemaBool)
 
@@ -313,11 +313,11 @@ func TestGenerate_BooleanAndDateAndHeaderIterations(t *testing.T) {
 func TestGenerateNumber_BoundaryAndMalicious(t *testing.T) {
 	settings := swagger.Settings{
 		PayloadCategories: map[swagger.FuzzingProfile][]string{
-			swagger.ProfileBoundary: {payloads.CatBoundaryIntegers, payloads.CatBoundaryNumbers},
+			swagger.ProfileBoundary:  {payloads.CatBoundaryIntegers, payloads.CatBoundaryNumbers},
 			swagger.ProfileMalicious: {payloads.CatMaliciousNumbers},
 		},
 	}
-	
+
 	// Boundary Integer
 	gBoundary := New(nil, swagger.ProfileBoundary, settings)
 	valInt := gBoundary.generateNumber("integer")
@@ -337,11 +337,11 @@ func TestGenerateString_BoundaryAndMalicious(t *testing.T) {
 	settings := swagger.Settings{
 		OOBServerURL: "http://example.com/oob",
 		PayloadCategories: map[swagger.FuzzingProfile][]string{
-			swagger.ProfileBoundary: {payloads.CatBoundaryStrings},
+			swagger.ProfileBoundary:  {payloads.CatBoundaryStrings},
 			swagger.ProfileMalicious: {payloads.CatMaliciousSQLi},
 		},
 	}
-	
+
 	// Boundary
 	gBoundary := New(nil, swagger.ProfileBoundary, settings)
 	valStr := gBoundary.generateString("", "test_prop")
@@ -351,7 +351,7 @@ func TestGenerateString_BoundaryAndMalicious(t *testing.T) {
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
 	valMal := gMalicious.generateString("", "test_prop")
 	assert.NotNil(t, valMal)
-	
+
 	// UUID
 	valUUID := gBoundary.generateString("uuid", "id")
 	assert.NotNil(t, valUUID)
@@ -368,7 +368,7 @@ func TestSecurityHeaderIterations(t *testing.T) {
 			swagger.ProfileMalicious: {payloads.CatHostInjection},
 		},
 	}
-	
+
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
 	count := gMalicious.SecurityHeaderIterations()
 	assert.Positive(t, count)
@@ -397,17 +397,17 @@ func TestBodyIterations(t *testing.T) {
 			},
 		},
 	}
-	
+
 	gBoundary := New(nil, swagger.ProfileBoundary, settings)
 	assert.Zero(t, gBoundary.BodyIterations())
-	
+
 	gMalicious := New(nil, swagger.ProfileMalicious, settings)
 	assert.Positive(t, gMalicious.BodyIterations())
 }
 
 func TestRandomizeAndRegisterSSTI(t *testing.T) {
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
-	
+
 	res := g.randomizeAndRegisterSSTI("{{7*7}}")
 	assert.NotEqual(t, "{{7*7}}", res)
 
@@ -420,7 +420,7 @@ func TestRandomizeAndRegisterSSTI(t *testing.T) {
 
 func TestGenerateSemanticValue(t *testing.T) {
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
-	
+
 	assert.NotEqual(t, "test", g.GenerateSemanticValue("email", "test"))
 	assert.NotEqual(t, "test", g.GenerateSemanticValue("url", "test"))
 	assert.NotEqual(t, "test", g.GenerateSemanticValue("uri", "test"))
@@ -449,7 +449,7 @@ func TestGenerateSecurityHeaders_Fuzzer(t *testing.T) {
 
 func TestOOBURLFormats(t *testing.T) {
 	g := New(nil, swagger.ProfileMalicious, swagger.Settings{})
-	
+
 	// Default
 	url1 := g.oobURL("uuid-1")
 	assert.Contains(t, url1, "http://localhost:8080/api/oob/uuid-1")
@@ -467,7 +467,7 @@ func TestOOBURLFormats(t *testing.T) {
 
 func TestGetArraySize(t *testing.T) {
 	g := New(nil, swagger.ProfileBoundary, swagger.Settings{})
-	
+
 	objSchema := &swagger.SchemaProperty{Type: "object"}
 	size := g.getArraySize(objSchema)
 	assert.GreaterOrEqual(t, size, 0)
@@ -477,7 +477,7 @@ func TestGetArraySize(t *testing.T) {
 func TestGenerateNumber_AllProfiles(t *testing.T) {
 	for _, profile := range []swagger.FuzzingProfile{swagger.ProfileBoundary, swagger.ProfileMalicious, swagger.ProfileRandom} {
 		g := New(nil, profile, swagger.Settings{})
-		
+
 		intVal := g.generateNumber("integer")
 		require.NotNil(t, intVal)
 
@@ -504,7 +504,7 @@ func TestGenerateBoolean_AllProfiles(t *testing.T) {
 
 func TestGenerateUUIDAndDate(t *testing.T) {
 	g := New(nil, swagger.ProfileRandom, swagger.Settings{})
-	
+
 	uuidStr := g.generateUUID()
 	assert.Len(t, uuidStr, 36)
 
@@ -514,7 +514,7 @@ func TestGenerateUUIDAndDate(t *testing.T) {
 
 func TestGenerate_ArrayAndNull(t *testing.T) {
 	g := New(nil, swagger.ProfileRandom, swagger.Settings{})
-	
+
 	// Nil schema
 	assert.Nil(t, g.Generate("nil_key", nil))
 
@@ -528,5 +528,3 @@ func TestGenerate_ArrayAndNull(t *testing.T) {
 	arrVal := g.Generate("arr_key", arrSchema)
 	assert.NotNil(t, arrVal)
 }
-
-
