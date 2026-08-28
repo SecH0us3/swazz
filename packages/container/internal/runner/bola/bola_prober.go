@@ -57,7 +57,6 @@ func (d *Detector) replayCandidates(
 			defer d.ctx.LimiterRelease()
 			defer bolaWg.Done()
 
-
 			d.ctx.UpdateProgressEndpoint(cand.Method + " " + cand.Endpoint)
 			d.ctx.BroadcastProgress()
 
@@ -67,7 +66,6 @@ func (d *Detector) replayCandidates(
 				d.ctx.BroadcastProgress()
 				return
 			}
-
 
 			d.replayCandidate(ctx, cand, ep, identityHeaders, identityCookies, &bolaMu, &bolaResults)
 

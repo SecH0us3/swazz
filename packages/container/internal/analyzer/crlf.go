@@ -117,10 +117,13 @@ func (a *CRLFAnalyzer) checkInjectedHeaders(payload string, respHeaders http.Hea
 				}
 
 				findings = append(findings, swagger.AnalysisFinding{
-					RuleID:   ruleID,
-					Level:    "error",
-					Message:  message,
-					Evidence: fmt.Sprintf("Injected header found in response — %s: %s", headerName, rv),
+					RuleID:           ruleID,
+					Level:            "error",
+					Message:          message,
+					Evidence:         fmt.Sprintf("Injected header found in response — %s: %s", headerName, rv),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A03:2025 Injection"},
+					CWEIDs:           []string{"CWE-113"},
 				})
 				break // one finding per injected header is enough
 			}
@@ -245,10 +248,13 @@ func (a *CRLFAnalyzer) checkCORSReflection(payload string, respHeaders http.Head
 			}
 			if match {
 				return []swagger.AnalysisFinding{{
-					RuleID:   "swazz/header-injection",
-					Level:    "warning",
-					Message:  fmt.Sprintf("CORS misconfiguration: Access-Control-Allow-Origin reflects attacker-controlled value '%s'.", acao),
-					Evidence: fmt.Sprintf("Access-Control-Allow-Origin: %s (payload contained '%s')", acao, origin),
+					RuleID:           "swazz/header-injection",
+					Level:            "warning",
+					Message:          fmt.Sprintf("CORS misconfiguration: Access-Control-Allow-Origin reflects attacker-controlled value '%s'.", acao),
+					Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s (payload contained '%s')", acao, origin),
+					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+					OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+					CWEIDs:           []string{"CWE-942"},
 				}}
 			}
 		}

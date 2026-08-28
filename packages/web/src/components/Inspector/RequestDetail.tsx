@@ -6,6 +6,7 @@
 import { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
+import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -214,7 +215,8 @@ export function RequestDetail({
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
     const [subTab, setSubTab] = useState<'body' | 'query' | 'headers'>('body');
     const hasFindings = result.analyzerFindings && result.analyzerFindings.length > 0;
-    const [mainTab, setMainTab] = useState<'findings' | 'request'>('request');
+    const [mainTab, setMainTab] = useState<'findings' | 'request' | 'poc'>('request');
+    const [pocLang, setPocLang] = useState<'curl' | 'python' | 'typescript' | 'go'>('curl');
 
     useEffect(() => {
         setMainTab('request');
@@ -523,16 +525,16 @@ export function RequestDetail({
                     </div>
                 </div>
 
-                {hasFindings && (
-                    <div className="tabs-header request-detail-main-tabs" role="tablist">
-                        <button 
-                            className={`tab-button ${mainTab === 'request' ? 'active' : ''}`} 
-                            onClick={() => setMainTab('request')}
-                            role="tab"
-                            aria-selected={mainTab === 'request'}
-                        >
-                            Request Details
-                        </button>
+                <div className="tabs-header request-detail-main-tabs" role="tablist">
+                    <button 
+                        className={`tab-button ${mainTab === 'request' ? 'active' : ''}`} 
+                        onClick={() => setMainTab('request')}
+                        role="tab"
+                        aria-selected={mainTab === 'request'}
+                    >
+                        Request Details
+                    </button>
+                    {hasFindings && (
                         <button 
                             className={`tab-button ${mainTab === 'findings' ? 'active' : ''}`} 
                             onClick={() => setMainTab('findings')}
@@ -544,8 +546,16 @@ export function RequestDetail({
                                 {result.analyzerFindings?.length || 0}
                             </span>
                         </button>
-                    </div>
-                )}
+                    )}
+                    <button 
+                        className={`tab-button ${mainTab === 'poc' ? 'active' : ''}`} 
+                        onClick={() => setMainTab('poc')}
+                        role="tab"
+                        aria-selected={mainTab === 'poc'}
+                    >
+                        ⚡️ Live Replay & PoC Export
+                    </button>
+                </div>
 
                 {hasFindings && mainTab === 'findings' && (
                     <div className="analyzer-findings-alerts">
@@ -627,7 +637,77 @@ export function RequestDetail({
                     </div>
                 )}
 
-                {(!hasFindings || mainTab === 'request') && (
+                {mainTab === 'poc' && (
+                    <div className="poc-container">
+                        <div className="poc-header">
+                            <div className="poc-lang-tabs">
+                                <button
+                                    className={`btn btn-sm ${pocLang === 'curl' ? 'btn-primary' : 'btn-ghost'}`}
+                                    onClick={() => setPocLang('curl')}
+                                >
+                                    cURL
+                                </button>
+                                <button
+                                    className={`btn btn-sm ${pocLang === 'python' ? 'btn-primary' : 'btn-ghost'}`}
+                                    onClick={() => setPocLang('python')}
+                                >
+                                    Python
+                                </button>
+                                <button
+                                    className={`btn btn-sm ${pocLang === 'typescript' ? 'btn-primary' : 'btn-ghost'}`}
+                                    onClick={() => setPocLang('typescript')}
+                                >
+                                    TypeScript
+                                </button>
+                                <button
+                                    className={`btn btn-sm ${pocLang === 'go' ? 'btn-primary' : 'btn-ghost'}`}
+                                    onClick={() => setPocLang('go')}
+                                >
+                                    Go
+                                </button>
+                            </div>
+                            <button 
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                    const reqOpts = {
+                                        method: result.method,
+                                        url: initialUrl,
+                                        headers: result.requestHeaders,
+                                        body: result.payload,
+                                    };
+                                    let code = '';
+                                    if (pocLang === 'curl') code = generateCurl(reqOpts);
+                                    else if (pocLang === 'python') code = generatePython(reqOpts);
+                                    else if (pocLang === 'typescript') code = generateTypeScript(reqOpts);
+                                    else if (pocLang === 'go') code = generateGo(reqOpts);
+                                    copy(code, 'poc');
+                                }}
+                            >
+                                {copied === 'poc' ? '✓ Copied' : '📋 Copy Exploit Script'}
+                            </button>
+                        </div>
+                        <div className="poc-code-wrapper">
+                            <pre className="poc-code-pre">
+                                <code>
+                                    {(() => {
+                                        const reqOpts = {
+                                            method: result.method,
+                                            url: initialUrl,
+                                            headers: result.requestHeaders,
+                                            body: result.payload,
+                                        };
+                                        if (pocLang === 'curl') return generateCurl(reqOpts);
+                                        if (pocLang === 'python') return generatePython(reqOpts);
+                                        if (pocLang === 'typescript') return generateTypeScript(reqOpts);
+                                        return generateGo(reqOpts);
+                                    })()}
+                                </code>
+                            </pre>
+                        </div>
+                    </div>
+                )}
+
+                {mainTab === 'request' && (
                     <div className="modal-split">
                     <div className="modal-pane">
                         <div className="detail-pane-header">

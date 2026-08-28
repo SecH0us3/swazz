@@ -13,7 +13,7 @@ import (
 func TestCLIAnalyzer_Analyze(t *testing.T) {
 	// "cat" is safe cross-platform enough for Unix-like testing, which Mac OS handles well.
 	analyzer := NewCLIAnalyzer("cat {{prompt_file}}")
-	
+
 	findingMessage := "SQL Injection found"
 	contextCode := "SELECT * FROM users"
 	prompt := "Analyze this finding:"
@@ -49,7 +49,7 @@ func TestCLIAnalyzer_Analyze(t *testing.T) {
 func TestCLIAnalyzer_AnalyzeStdin(t *testing.T) {
 	// "cat" reads from stdin on Unix-like systems (Mac OS) when no file arguments are passed
 	analyzer := NewCLIAnalyzer("cat")
-	
+
 	findingMessage := "SQL Injection found"
 	contextCode := "SELECT * FROM users"
 	prompt := "Analyze this finding:"
@@ -67,7 +67,7 @@ func TestCLIAnalyzer_AnalyzeStdin(t *testing.T) {
 func TestCLIAnalyzer_AnalyzeStdinWithHyphen(t *testing.T) {
 	// "cat -" reads from stdin on Unix-like systems (Mac OS) when "-" is passed
 	analyzer := NewCLIAnalyzer("cat -")
-	
+
 	findingMessage := "CRLF Injection found"
 	contextCode := "resp.Header.Add(\"Location\", input)"
 	prompt := "Check this out:"

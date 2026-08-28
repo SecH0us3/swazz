@@ -196,7 +196,7 @@ func (r *Runner) executeMCPRequest(
 		}
 		errMsg := strings.ToLower(err.Error())
 		// Check for server crash indicators more precisely
-		isCrash := strings.Contains(errMsg, "exit status") || strings.Contains(errMsg, "process terminated") || 
+		isCrash := strings.Contains(errMsg, "exit status") || strings.Contains(errMsg, "process terminated") ||
 			strings.Contains(errMsg, "channel closed") || strings.Contains(errMsg, "broken pipe") ||
 			strings.Contains(errMsg, "signal") || strings.Contains(errMsg, "killed")
 		if isCrash {

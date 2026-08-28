@@ -930,7 +930,6 @@ func TestMaybeReauthenticateWithProbe(t *testing.T) {
 	assert.Equal(t, 0, authCount)
 	assert.Equal(t, 1, probeCount)
 
-
 	// 2. Session is expired.
 	// Set global token to "expired-token". Now probe will fail, and it should run the auth sequence.
 	r.configMu.Lock()
@@ -1210,6 +1209,3 @@ func TestAuthSequence_FullPKCEOAuthFlow(t *testing.T) {
 
 	assert.Equal(t, "Bearer final-oauth-jwt-access-token", cfg.GlobalHeaders["Authorization"])
 }
-
-
-

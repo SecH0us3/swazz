@@ -463,7 +463,7 @@ func TestParseSpec_WithParserOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to parse spec: %v", err)
 	}
-	
+
 	// Since node budget is 1, the nested "name" property should be truncated to the safe fallback "object" (instead of "string")
 	ep := result.Endpoints[0]
 	nameProp := ep.Schema.Properties["name"]
@@ -474,5 +474,3 @@ func TestParseSpec_WithParserOptions(t *testing.T) {
 		t.Errorf("Expected truncated fallback type 'object' for property 'name', got '%s'", nameProp.Type)
 	}
 }
-
-

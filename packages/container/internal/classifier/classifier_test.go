@@ -238,9 +238,9 @@ func TestClassifier_PartialRules_IgnoreOnly(t *testing.T) {
 	cls := New(rules)
 
 	tests := []struct {
-		status   int
-		wantNil  bool // true = should be ignored (Classify returns nil)
-		wantSev  Severity
+		status  int
+		wantNil bool // true = should be ignored (Classify returns nil)
+		wantSev Severity
 	}{
 		// User-added ignore code
 		{400, true, ""},

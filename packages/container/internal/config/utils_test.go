@@ -207,4 +207,3 @@ func TestMatchesAny_LiteralFastPathDoesNotPopulateRegexCache(t *testing.T) {
 		t.Errorf("expected wildcard pattern %q to be compiled and cached in globRegexCache", wildcardPattern)
 	}
 }
-

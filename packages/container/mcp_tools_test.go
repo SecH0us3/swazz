@@ -315,4 +315,3 @@ func TestListMCPTools_WithAuthSequence(t *testing.T) {
 	assert.Equal(t, "Bearer secret-jwt-token", gotAuthHeader)
 	assert.Equal(t, "session-12345", gotCookie)
 }
-

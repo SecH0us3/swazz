@@ -6,13 +6,13 @@
 package main
 
 import (
-	"swazz-engine/internal/config"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"swazz-engine/internal/config"
 	"testing"
 
 	"swazz-engine/internal/swagger"
@@ -150,4 +150,3 @@ func TestRunSpiderCLIErr_Execution(t *testing.T) {
 		"-quiet",
 	})
 }
-

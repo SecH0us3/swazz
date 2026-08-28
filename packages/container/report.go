@@ -10,10 +10,10 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/logger"
 	"swazz-engine/internal/swagger"
+	"sync"
 )
 
 var printMu sync.Mutex

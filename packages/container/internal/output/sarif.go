@@ -61,7 +61,7 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string, baseURL string)
 			tags = append(tags, p)
 		}
 		sort.Strings(tags)
-		
+
 		props, ok := r["properties"].(map[string]any)
 		if !ok {
 			props = make(map[string]any)
@@ -73,7 +73,7 @@ func ToSARIF(findings []*classifier.Finding, toolVersion string, baseURL string)
 		if cweID := cweForRule(id); cweID != "" {
 			props["cwe"] = cweID
 		}
-		
+
 		rules = append(rules, r)
 	}
 

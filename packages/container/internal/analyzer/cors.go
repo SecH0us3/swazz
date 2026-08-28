@@ -44,10 +44,13 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	// Check 1: Wildcard ACAO
 	if acao == "*" {
 		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:   "swazz/cors-misconfig",
-			Level:    "warning",
-			Message:  "CORS wildcard: Access-Control-Allow-Origin is set to '*', which allows any origin to access the resource",
-			Evidence: fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
+			RuleID:           "swazz/cors-misconfig",
+			Level:            "warning",
+			Message:          "CORS wildcard: Access-Control-Allow-Origin is set to '*', which allows any origin to access the resource",
+			Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
+			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			CWEIDs:           []string{"CWE-942"},
 		})
 		return findings
 	}
@@ -72,10 +75,13 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	for _, origin := range suspiciousCORSOrigins {
 		if host == origin || strings.HasSuffix(host, "."+origin) {
 			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:   "swazz/cors-misconfig",
-				Level:    "warning",
-				Message:  fmt.Sprintf("CORS origin reflection: server reflected suspicious origin '%s' in Access-Control-Allow-Origin", acao),
-				Evidence: fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
+				RuleID:           "swazz/cors-misconfig",
+				Level:            "warning",
+				Message:          fmt.Sprintf("CORS origin reflection: server reflected suspicious origin '%s' in Access-Control-Allow-Origin", acao),
+				Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
+				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+				OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+				CWEIDs:           []string{"CWE-942"},
 			})
 			return findings
 		}
@@ -84,10 +90,13 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	// Check 3: "null" origin (can be exploited via sandboxed iframe)
 	if acaoLower == "null" {
 		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:   "swazz/cors-misconfig",
-			Level:    "warning",
-			Message:  "CORS null origin: Access-Control-Allow-Origin is set to 'null', exploitable via sandboxed iframe",
-			Evidence: fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
+			RuleID:           "swazz/cors-misconfig",
+			Level:            "warning",
+			Message:          "CORS null origin: Access-Control-Allow-Origin is set to 'null', exploitable via sandboxed iframe",
+			Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
+			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			CWEIDs:           []string{"CWE-942"},
 		})
 	}
 

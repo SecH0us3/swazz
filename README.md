@@ -44,6 +44,7 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 ## 🚀 Key Features
 
 - **⚡️ Smart Fuzzing**: Context-aware payload generation based on parameter types and schemas.
+- **🛡️ 2026 Core Security Analyzers**: Specialized detection for Prototype Pollution (CWE-1321), NoSQL Injection (CWE-943), SSRF & Cloud Instance Metadata (CWE-918), JWT Alg-None / Signature Tampering (CWE-347), and Mass Assignment (CWE-915).
 - **🎮 Interactive Live Simulator**: Zero-friction attack simulation playground on the web showcase exploring BOLA, JSON SQLi, SSRF, and Mass Assignment mutation diffs.
 - **🛰️ gRPC Microservice Fuzzing**: Direct fuzzing of gRPC microservices via live Server Reflection (`grpc://`, `grpcs://`) or `.proto` schema ingestion, with dynamic binary Protobuf wire serialization and specialized gRPC vulnerability analyzers.
 - **🔄 Zero-Setup HAR Replay**: Import browser `.har` files directly for instant fuzzing of undocumented APIs and real-world workflows without needing an OpenAPI spec.

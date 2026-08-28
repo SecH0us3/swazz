@@ -173,5 +173,3 @@ func TestCRLFWriter(t *testing.T) {
 		t.Errorf("expected CRLF newlines when raw terminal is true, got %q", buf.String())
 	}
 }
-
-

@@ -29,7 +29,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 
 	status := input.ResponseHeaders.Get("X-Swazz-WS-Status")
 	wsError := input.ResponseHeaders.Get("X-Swazz-WS-Error")
-	
+
 	if status == "500" {
 		findings = append(findings, swagger.AnalysisFinding{
 			RuleID:        "swazz/ws-crash-detected",

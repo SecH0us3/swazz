@@ -17,30 +17,48 @@ export default {
       const strValue = typeof input === "object" ? JSON.stringify(input) : String(input);
 
       // 1. SQL Injection
-      const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE)\b|'|--)/i;
+      const sqliRegex = /(\b(OR|AND|UNION|SELECT|DROP|INSERT|UPDATE|DELETE|SLEEP|WAITFOR)\b|'|--)/i;
       if (sqliRegex.test(strValue)) {
         throw new Error("You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '" + strValue + "'");
       }
 
-      // 2. XSS
+      // 2. Command Injection (CMDi)
+      const cmdiRegex = /(;|\||`|\$\(|\bwhoami\b|\bid\b|\bcat\b|\bdir\b)/i;
+      if (cmdiRegex.test(strValue)) {
+        throw new Error("uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon) Linux version 5.15.0-generic");
+      }
+
+      // 3. Path Traversal & LFI
+      const traversalRegex = /(\.\.\/|\.\.\\|\/etc\/passwd|win\.ini|file:\/\/)/i;
+      if (traversalRegex.test(strValue)) {
+        throw new Error("root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n[fonts]\njava.io.FileNotFoundException: /etc/passwd (Access denied)");
+      }
+
+      // 4. XXE (XML External Entity)
+      const xxeRegex = /(<\?xml|<!DOCTYPE|<!ENTITY)/i;
+      if (xxeRegex.test(strValue)) {
+        throw new Error("root:x:0:0:root:/root:/bin/bash\n/bin/sh\nXML parser error: Entity 'xxe' failed to parse");
+      }
+
+      // 5. NoSQL Injection
+      const nosqlRegex = /(\$ne|\$gt|\$where|\$regex|\$or|\$exists|\[\$ne\])/i;
+      if (nosqlRegex.test(strValue)) {
+        throw new Error("CastError: Cast to ObjectId failed for value \"" + strValue + "\" at path \"_id\"\nMongoServerError: unknown operator: " + strValue);
+      }
+
+      // 6. XSS (HTML Parser exception leak)
       const xssRegex = /(<script|onload|onerror|iframe|javascript:|alert\()/i;
       if (xssRegex.test(strValue)) {
         throw new Error("HTML Parser Error: Unexpected token '<'\n    at parseHTML (/usr/src/app/node_modules/htmlparser2/lib/Parser.js:12:34)\n    at Object.parse (/usr/src/app/node_modules/htmlparser2/lib/index.js:5:10)");
       }
 
-      // 3. Path Traversal
-      const traversalRegex = /(\.\.\/|\.\.\\|\/etc\/passwd|file:\/\/)/i;
-      if (traversalRegex.test(strValue)) {
-        throw new Error("java.io.FileNotFoundException: Access denied\n\tat java.io.FileInputStream.open0(Native Method)\n\tat java.io.FileInputStream.open(FileInputStream.java:195)");
-      }
-
-      // 4. Null byte / CRLF injection / HTTP smuggling
+      // 7. Null byte / CRLF injection / HTTP smuggling
       const protocolRegex = /(\x00|%00|\r\n)/;
       if (protocolRegex.test(strValue)) {
         throw new Error("Protocol Exception: Illegal character in request stream");
       }
 
-      // 5. Extreme numbers / Date abuse (NaN, Infinity, weird dates, arrays, nested structures)
+      // 8. Extreme numbers / Date abuse (Stack Trace Leaks)
       if (
         strValue.includes("NaN") || 
         strValue.includes("Infinity") || 
@@ -49,12 +67,12 @@ export default {
         strValue.includes("2023-02-29") || 
         strValue.includes("10000-01-01")
       ) {
-        throw new Error("ArithmeticException / DateTimeException: Value out of range or invalid representation");
+        throw new Error("java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"input\" is null\n\tat java.base/java.lang.String.length(String.java:123)\n\tat com.swazz.demo.Controller.process(Controller.java:45)\n\tat org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1064)");
       }
 
-      // 6. Type confusion (sending empty objects/arrays where a string is expected)
+      // 9. Type confusion (sending empty objects/arrays where a string is expected)
       if (typeof input === "object") {
-        throw new Error("NullPointerException: Cannot cast complex object to primitive string");
+        throw new Error("java.lang.NullPointerException: Cannot cast complex object to primitive string\n\tat com.swazz.demo.Controller.process(Controller.java:45)\n\tat org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1064)");
       }
 
       // 7. SSRF / Command Injection simulating an OOB callback
@@ -621,6 +639,109 @@ export default {
                   }
                 }
               }
+            },
+            "/api/profile": {
+              post: {
+                summary: "Update user profile (Vulnerable to Prototype Pollution & Mass Assignment)",
+                requestBody: {
+                  required: true,
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          role: { type: "string" },
+                          is_admin: { type: "boolean" }
+                        }
+                      }
+                    }
+                  }
+                },
+                responses: {
+                  "200": {
+                    description: "Profile updated successfully"
+                  }
+                }
+              }
+            },
+            "/api/documents": {
+              get: {
+                summary: "Search documents (Vulnerable to NoSQL Injection)",
+                parameters: [
+                  {
+                    name: "filter",
+                    in: "query",
+                    schema: { type: "string" },
+                    description: "NoSQL filter criteria"
+                  }
+                ],
+                responses: {
+                  "200": {
+                    description: "Matching documents list"
+                  }
+                }
+              }
+            },
+            "/api/fetch-url": {
+              post: {
+                summary: "Fetch external URL resource (Vulnerable to SSRF)",
+                requestBody: {
+                  required: true,
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          url: { type: "string", format: "uri" }
+                        },
+                        required: ["url"]
+                      }
+                    }
+                  }
+                },
+                responses: {
+                  "200": {
+                    description: "Fetched resource response"
+                  }
+                }
+              }
+            },
+            "/api/admin/metrics": {
+              get: {
+                summary: "Get administrator metrics (Vulnerable to JWT alg:none tampering)",
+                responses: {
+                  "200": {
+                    description: "Protected administrative metrics"
+                  },
+                  "401": {
+                    description: "Unauthorized"
+                  }
+                }
+              }
+            },
+            "/api/dpop-secure": {
+              get: {
+                summary: "Access RFC 9449 DPoP protected resource (Vulnerable to DPoP proof tampering)",
+                responses: {
+                  "200": {
+                    description: "Success"
+                  },
+                  "401": {
+                    description: "DPoP verification error"
+                  }
+                }
+              }
+            },
+            "/api/cors-test": {
+              get: {
+                summary: "Cross-Origin resource (Vulnerable to CORS origin reflection)",
+                responses: {
+                  "200": {
+                    description: "Authenticated CORS response"
+                  }
+                }
+              }
             }
           }
         };
@@ -704,7 +825,22 @@ export default {
       }
 
       if (method === "GET" && path === "/welcome") {
-        const name = url.searchParams.get("name") || "Guest";
+        let name = url.searchParams.get("name") || "Guest";
+        // SSTI math expression evaluation simulation
+        if (name.includes("7*7")) {
+          name = name.replace(/\{\{7\*7\}\}|\$\{7\*7\}|\#\{7\*7\}|7\*7/g, "49");
+        }
+        if (name.includes("7+'7'")) {
+          name = name.replace(/\{\{7\+'7'\}\}|\$\{7\+'7'\}|7\+'7'/g, "77");
+        }
+        // CMDi command execution output simulation
+        if (name.includes("id") || name.includes("whoami") || name.includes(";") || name.includes("|")) {
+          name = "uid=0(root) gid=0(root) groups=0(root)";
+        }
+        // Path Traversal simulation
+        if (name.includes("/etc/passwd") || name.includes("..")) {
+          name = "root:x:0:0:root:/root:/bin/bash";
+        }
         return new Response(`<h1>Welcome ${name}!</h1>`, {
           headers: { ...corsHeaders, "Content-Type": "text/html" }
         });
@@ -714,6 +850,8 @@ export default {
         return new Response(JSON.stringify({
           status: "healthy",
           awsKey: "AKIAIOSFODNN7EXAMPLE",
+          privateKey: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Y...",
+          apiSecret: "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
           internalIP: "192.168.1.15"
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -965,6 +1103,20 @@ export default {
               });
             }
 
+            if (query.includes("passwrd") || query.includes("secret_pass")) {
+              return new Response(JSON.stringify({
+                errors: [
+                  {
+                    message: 'Cannot query field "passwrd" on type "User". Did you mean "password"?',
+                    locations: [{ line: 2, column: 5 }]
+                  }
+                ]
+              }), {
+                status: 200,
+                headers: { ...corsHeaders, "Content-Type": "application/json" }
+              });
+            }
+
             if (body.variables && typeof body.variables === "object") {
               for (const key of Object.keys(body.variables)) {
                 checkAllVulnerabilities(body.variables[key]);
@@ -1002,6 +1154,204 @@ export default {
         }
         return new Response(JSON.stringify({ status: "ok", count: g.rateLimitCounter }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // 1. Prototype Pollution & Mass Assignment endpoint
+      if (method === "POST" && path === "/api/profile") {
+        let body: any = {};
+        try {
+          body = await request.json();
+        } catch (e) {
+          return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+        }
+
+        const rawStr = JSON.stringify(body);
+        const isProto = rawStr.includes("__proto__") || rawStr.includes("constructor.prototype") || rawStr.includes("polluted");
+        const isMassAssignment = body.role === "admin" || body.role === "superadmin" || body.is_admin === true || body.tier === "superadmin";
+
+        const responseData: Record<string, any> = {
+          status: "success",
+          message: "Profile updated successfully",
+          user: {
+            id: 100,
+            name: body.name || "Default User",
+            role: isMassAssignment ? (body.role || "admin") : "user",
+            is_admin: isMassAssignment ? (body.is_admin ?? true) : false,
+          }
+        };
+
+        if (isProto) {
+          responseData.polluted = "true";
+        }
+
+        return new Response(JSON.stringify(responseData), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // 2. NoSQL Injection endpoint
+      if (method === "GET" && path === "/api/documents") {
+        const filter = url.searchParams.get("filter") || "";
+        const rawFilter = decodeURIComponent(filter);
+
+        if (rawFilter.includes("$ne") || rawFilter.includes("$where") || rawFilter.includes("$gt") || rawFilter.includes("$regex") || rawFilter.includes("[$ne]")) {
+          return new Response(JSON.stringify({
+            error: "CastError: Cast to ObjectId failed for value \"" + rawFilter + "\" at path \"_id\"",
+            name: "CastError",
+            kind: "ObjectId"
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          status: "success",
+          documents: [
+            { id: "doc_1", title: "Public Company Overview", author: "admin" },
+            { id: "doc_2", title: "API Security Guidelines 2026", author: "sec_team" }
+          ]
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // 3. SSRF & Cloud Metadata endpoint
+      if (method === "POST" && path === "/api/fetch-url") {
+        let body: any = {};
+        try {
+          body = await request.json();
+        } catch (e) {
+          return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+        }
+
+        const targetUrl = String(body.url || "");
+        if (targetUrl.includes("169.254.169.254") || targetUrl.includes("latest/meta-data")) {
+          return new Response(JSON.stringify({
+            Code: "Success",
+            LastUpdated: "2026-08-28T00:00:00Z",
+            Type: "AWS-HMAC",
+            AccessKeyId: "ASIAIOSFODNN7EXAMPLE",
+            SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            Token: "AQoDYXdzEJr1...",
+            Expiration: "2026-08-29T00:00:00Z"
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        if (targetUrl.includes("metadata.google.internal") || targetUrl.includes("computeMetadata")) {
+          return new Response(JSON.stringify({
+            project: {
+              numericProjectId: 123456789,
+              projectId: "swazz-demo-cluster.compute.internal"
+            },
+            instance: {
+              id: "876543210987654321",
+              zone: "projects/123456789/zones/us-central1-a"
+            }
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json", "Metadata-Flavor": "Google" }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          status: "success",
+          url: targetUrl,
+          content: "Simulated resource content fetched successfully"
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // 4. JWT Verification & Alg-None Tampering endpoint
+      if (method === "GET" && path === "/api/admin/metrics") {
+        const authHeader = request.headers.get("Authorization") || "";
+        if (!authHeader) {
+          return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+        }
+
+        if (authHeader.includes("eyJhbGciOiJub25l")) {
+          return new Response(JSON.stringify({
+            status: "ok",
+            user: {
+              id: 1,
+              email: "admin@company.local",
+              roles: ["admin"]
+            },
+            metrics: {
+              activeScanners: 8,
+              totalFindings: 42,
+              systemHealth: "100%"
+            }
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        if (authHeader === "Bearer admin-token-valid") {
+          return new Response(JSON.stringify({
+            status: "ok",
+            user: { id: 1, email: "admin@company.local", roles: ["admin"] },
+            metrics: { activeScanners: 8, totalFindings: 42 }
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          error: "JsonWebTokenError: invalid signature at verifyToken"
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // 5. RFC 9449 DPoP endpoint
+      if (path === "/api/dpop-secure") {
+        const dpopHeader = request.headers.get("DPoP") || request.headers.get("dpop");
+        if (!dpopHeader || dpopHeader === "invalid-proof" || !dpopHeader.includes(".")) {
+          return new Response(JSON.stringify({
+            error: "invalid_dpop_proof",
+            error_description: "DPoPProofError: htm claim mismatch for resource access"
+          }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json", "WWW-Authenticate": "DPoP error=\"invalid_dpop_proof\"" }
+          });
+        }
+        return new Response(JSON.stringify({
+          status: "success",
+          message: "DPoP proof verified successfully",
+          secureData: "Protected resource under RFC 9449"
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // 6. CORS origin reflection endpoint
+      if (path === "/api/cors-test") {
+        const reqOrigin = request.headers.get("Origin") || "https://evil.com";
+        return new Response(JSON.stringify({
+          status: "ok",
+          authenticatedUser: "alex",
+          secretData: "sensitive-cross-origin-data"
+        }), {
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": reqOrigin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Content-Type": "application/json"
+          }
         });
       }
 

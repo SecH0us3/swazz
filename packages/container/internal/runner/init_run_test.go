@@ -64,7 +64,7 @@ func TestMCPDiscovery_AllEnabled(t *testing.T) {
 
 	cfg := &swagger.Config{
 		MCPServer: &swagger.MCPServerConfig{Type: "stdio"},
-		Settings: swagger.Settings{
+		Settings:  swagger.Settings{
 			// All fuzzing enabled by default
 		},
 	}

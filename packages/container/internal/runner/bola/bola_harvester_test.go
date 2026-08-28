@@ -43,14 +43,14 @@ func TestHarvestIDs_DeepJSONAndArrays(t *testing.T) {
 	harvestIDs(data, harvested)
 
 	expected := map[string]bool{
-		"trace-abc":   true,
-		"1001":        true,
-		"item-1":      true,
-		"u-1234":      true,
-		"9876543210":  true,
-		"555":         true,
-		"item-2":      true,
-		"sub-99":      true,
+		"trace-abc":  true,
+		"1001":       true,
+		"item-1":     true,
+		"u-1234":     true,
+		"9876543210": true,
+		"555":        true,
+		"item-2":     true,
+		"sub-99":     true,
 	}
 
 	assert.Equal(t, expected, harvested)

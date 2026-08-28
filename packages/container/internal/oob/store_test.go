@@ -37,7 +37,7 @@ func TestOOBStore(t *testing.T) {
 	importSwagger := &swagger.RequestLog{Method: "POST"}
 	store.RegisterUUID("test-uuid-2", ctx)
 	store.UpdateRequest("test-uuid-2", importSwagger)
-	
+
 	retrieved2, ok2 := store.GetAndRemoveUUID("test-uuid-2")
 	if !ok2 || retrieved2.Request != importSwagger {
 		t.Errorf("Expected request log to be updated on retrieved context")
@@ -69,29 +69,28 @@ func TestOOBStore(t *testing.T) {
 	// Test ClearSession
 	ctxSession1 := &OOBContext{SessionID: "sess-1", Endpoint: "ep-1"}
 	ctxSession2 := &OOBContext{SessionID: "sess-2", Endpoint: "ep-2"}
-	
+
 	store.RegisterUUID("uuid-s1-a", ctxSession1)
 	store.RegisterUUID("uuid-s1-b", ctxSession1)
 	store.RegisterUUID("uuid-s2-a", ctxSession2)
-	
+
 	if size := store.Size(); size != 5 {
 		t.Errorf("Expected Size to be 5, got %d", size)
 	}
-	
+
 	store.ClearSession("sess-1")
-	
+
 	if size := store.Size(); size != 3 {
 		t.Errorf("Expected Size to be 3 after clearing sess-1, got %d", size)
 	}
-	
+
 	_, okS1 := store.GetAndRemoveUUID("uuid-s1-a")
 	if okS1 {
 		t.Errorf("Expected uuid-s1-a to be removed by ClearSession")
 	}
-	
+
 	_, okS2 := store.GetAndRemoveUUID("uuid-s2-a")
 	if !okS2 {
 		t.Errorf("Expected uuid-s2-a to remain after clearing sess-1")
 	}
 }
-

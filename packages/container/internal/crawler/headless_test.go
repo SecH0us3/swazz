@@ -73,10 +73,10 @@ func TestCrawl_ContextTimeout(t *testing.T) {
 	cfg.Headers = map[string]string{"X-Test": "1"}
 	cfg.Headless = true
 	crawler := NewCrawler(cfg, NewSniffer())
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
-	
+
 	_, err := crawler.Crawl(ctx, "http://example.com")
 	if err != nil {
 		t.Logf("Crawl error: %v", err)

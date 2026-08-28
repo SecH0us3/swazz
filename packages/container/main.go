@@ -1,7 +1,6 @@
 package main
 
 import (
-	"swazz-engine/internal/agent"
 	"crypto/ed25519"
 	_ "embed"
 	"encoding/hex"
@@ -12,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"swazz-engine/internal/agent"
 	"time"
 
 	"swazz-engine/internal/license"

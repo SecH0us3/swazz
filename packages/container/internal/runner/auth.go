@@ -18,11 +18,11 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-	"net/url"
 
 	"github.com/pquerna/otp/totp"
 	"swazz-engine/internal/mcp"
@@ -641,7 +641,6 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 		req.Header.Set("User-Agent", "Swazz/1.0 (+https://github.com/SecH0us3/swazz)")
 	}
 
-
 	r.logDebug("[Auth] Sending probe request to %s to check session validity...", probeURL)
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -653,9 +652,7 @@ func (r *Runner) isSessionAliveViaProbe(ctx context.Context) bool {
 		_ = resp.Body.Close() // #nosec G104
 	}()
 
-
 	r.logDebug("[Auth] Probe response status: %d", resp.StatusCode)
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
 
 }
-

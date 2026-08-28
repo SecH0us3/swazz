@@ -27,17 +27,22 @@ func WrapEmail(vector string) []string {
 
 // WrapURL wraps an injection vector into valid URL formats using net/url API.
 func WrapURL(vector string) []string {
+	var variants []string
+	if strings.HasPrefix(vector, "http://") || strings.HasPrefix(vector, "https://") {
+		variants = append(variants, vector)
+	}
 	u, err := url.Parse("https://example.com/api/v1/test")
 	if err != nil {
-		return []string{"https://example.com/?q=" + url.QueryEscape(vector)}
+		return append(variants, "https://example.com/?q="+url.QueryEscape(vector))
 	}
 	q := u.Query()
 	q.Set("q", vector)
 	u.RawQuery = q.Encode()
-	return []string{
+	variants = append(variants,
 		u.String(),
 		fmt.Sprintf("https://example.com/path/%s", url.PathEscape(vector)),
-	}
+	)
+	return variants
 }
 
 // WrapDateTime wraps an injection vector into valid ISO 8601 / RFC 3339 date-time strings.
@@ -79,4 +84,3 @@ func WrapUUID(vector string) []string {
 		u, // baseline: valid UUID without injection vector, for differential comparison
 	}
 }
-

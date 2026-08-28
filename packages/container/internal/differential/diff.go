@@ -21,8 +21,8 @@ const (
 
 // SchemaFingerprint represents the structural fingerprint of a JSON payload.
 type SchemaFingerprint struct {
-	RootType         string            `json:"root_type"`          // "object", "array", "primitive", "empty"
-	FieldTypes       map[string]string `json:"field_types"`        // normalized path -> JSON primitive type ("string", "number", "boolean", "null", "array", "object")
+	RootType         string            `json:"root_type"`   // "object", "array", "primitive", "empty"
+	FieldTypes       map[string]string `json:"field_types"` // normalized path -> JSON primitive type ("string", "number", "boolean", "null", "array", "object")
 	FieldCount       int               `json:"field_count"`
 	IsErrorStructure bool              `json:"is_error_structure"` // true if body matches common error payload patterns
 }

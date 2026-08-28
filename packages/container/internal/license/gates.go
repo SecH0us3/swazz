@@ -10,12 +10,12 @@ package license
 // Feature identifiers used by the gate system. These are the canonical IDs
 // embedded in signed license tokens (see scripts/issue-license.go).
 const (
-	FeatureHighConcurrency = "unlimited_scans"   // concurrency ceiling above the free default (5)
-	FeatureScheduledRuns   = "scheduled_runs"    // scheduled / CI / recurring runs + webhooks
-	FeatureReportExports   = "report_exports"   // SARIF / HTML / MD / JUnit exports (JSON stays free)
+	FeatureHighConcurrency = "unlimited_scans"    // concurrency ceiling above the free default (5)
+	FeatureScheduledRuns   = "scheduled_runs"     // scheduled / CI / recurring runs + webhooks
+	FeatureReportExports   = "report_exports"     // SARIF / HTML / MD / JUnit exports (JSON stays free)
 	FeatureAIRemediation   = "ai_remediation_pro" // AI-powered auto-remediation
-	FeatureCloudHistory    = "cloud_history"     // dashboard compare / export, cloud-persisted history
-	FeatureEnterprise      = "enterprise"        // SSO/RBAC, compliance PDF, Jira sync
+	FeatureCloudHistory    = "cloud_history"      // dashboard compare / export, cloud-persisted history
+	FeatureEnterprise      = "enterprise"         // SSO/RBAC, compliance PDF, Jira sync
 )
 
 // FeatureType describes how a feature is gated.

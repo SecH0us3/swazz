@@ -20,8 +20,8 @@ import (
 )
 
 type targetField struct {
-	Location string                   // "body", "query", "header", "path"
-	Path     []string                 // e.g. ["user", "name"]
+	Location string   // "body", "query", "header", "path"
+	Path     []string // e.g. ["user", "name"]
 	Schema   *swagger.SchemaProperty
 }
 

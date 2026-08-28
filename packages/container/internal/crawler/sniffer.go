@@ -286,8 +286,8 @@ func (s *Sniffer) GetEndpoints() []DiscoveredEndpoint {
 
 // OpenAPI 3.0 export structures
 type openAPI struct {
-	OpenAPI string                         `json:"openapi"`
-	Info    openAPIInfo                    `json:"info"`
+	OpenAPI string                          `json:"openapi"`
+	Info    openAPIInfo                     `json:"info"`
 	Paths   map[string]map[string]openAPIOp `json:"paths"`
 }
 
@@ -311,7 +311,7 @@ type openAPIParam struct {
 }
 
 type openAPIReqBody struct {
-	Required bool                       `json:"required,omitempty"`
+	Required bool                        `json:"required,omitempty"`
 	Content  map[string]openAPIMediaType `json:"content"`
 }
 

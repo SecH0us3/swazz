@@ -23,7 +23,7 @@ type mockRunnerContext struct {
 	executeHandler func(baseURL, resolvedPath, epPath, method string, headers map[string]string) *swagger.FuzzResult
 }
 
-func (m *mockRunnerContext) Config() *swagger.Config { return m.cfg }
+func (m *mockRunnerContext) Config() *swagger.Config             { return m.cfg }
 func (m *mockRunnerContext) LogDebug(format string, args ...any) {}
 func (m *mockRunnerContext) LogInfo(format string, args ...any)  {}
 func (m *mockRunnerContext) LogWarn(format string, args ...any)  {}
@@ -42,7 +42,8 @@ func (m *mockRunnerContext) AddTotalEndpoints(n int32)            {}
 func (m *mockRunnerContext) AddCompletedEndpoints(n int32)        {}
 func (m *mockRunnerContext) AddTotalPlanned(n int64)              {}
 
-func (m *mockRunnerContext) SendStat(res *swagger.FuzzResult, currentIteration, totalIterations int) {}
+func (m *mockRunnerContext) SendStat(res *swagger.FuzzResult, currentIteration, totalIterations int) {
+}
 
 func (m *mockRunnerContext) RLockConfig()   {}
 func (m *mockRunnerContext) RUnlockConfig() {}

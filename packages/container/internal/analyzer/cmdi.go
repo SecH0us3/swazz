@@ -38,10 +38,13 @@ func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	// Check for Unix id command output pattern (e.g. uid=1000(alex))
 	if match := unixIdRegex.Find(input.ResponseBody); len(match) > 0 {
 		findings = append(findings, swagger.AnalysisFinding{
-			RuleID:   "swazz/cmdi-leak",
-			Level:    "error",
-			Message:  "OS Command Injection output signature (Unix id) detected in response body.",
-			Evidence: fmt.Sprintf("Found leaked signature: %s", string(match)),
+			RuleID:           "swazz/cmdi-leak",
+			Level:            "error",
+			Message:          "OS Command Injection output signature (Unix id) detected in response body.",
+			Evidence:         fmt.Sprintf("Found leaked signature: %s", string(match)),
+			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+			OWASPCategory:    []string{"A03:2025 Injection"},
+			CWEIDs:           []string{"CWE-78"},
 		})
 		return findings
 	}
@@ -50,10 +53,13 @@ func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 	for _, sig := range cmdiSignatures {
 		if bytes.Contains(input.ResponseBody, sig) {
 			findings = append(findings, swagger.AnalysisFinding{
-				RuleID:   "swazz/cmdi-leak",
-				Level:    "error",
-				Message:  fmt.Sprintf("OS Command Injection output signature '%s' detected in response body.", string(sig)),
-				Evidence: fmt.Sprintf("Found leaked signature: %s", string(sig)),
+				RuleID:           "swazz/cmdi-leak",
+				Level:            "error",
+				Message:          fmt.Sprintf("OS Command Injection output signature '%s' detected in response body.", string(sig)),
+				Evidence:         fmt.Sprintf("Found leaked signature: %s", string(sig)),
+				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+				OWASPCategory:    []string{"A03:2025 Injection"},
+				CWEIDs:           []string{"CWE-78"},
 			})
 			break
 		}

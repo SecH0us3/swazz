@@ -73,7 +73,7 @@ func (c *Client) SendMessage(ctx context.Context, endpoint string, payload []byt
 		}
 		return nil, http.StatusInternalServerError, err
 	}
-	
+
 	// Close when done
 	defer conn.Close(websocket.StatusNormalClosure, "")
 

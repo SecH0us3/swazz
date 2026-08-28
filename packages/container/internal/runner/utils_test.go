@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"swazz-engine/internal/generator"
 	"swazz-engine/internal/swagger"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestCapPathParam(t *testing.T) {

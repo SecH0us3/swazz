@@ -196,14 +196,20 @@ export function getOwaspApiCategories(ruleId: string, method?: string, endpoint?
     const isAdmin = /\/(admin|internal|manage|system|config|root|roles|permissions|superuser)/i.test(ep);
     const isAsset = /\/(v[0-9]+\/|beta|legacy|old|deprecated|debug|actuator|metrics|swagger|graphi?ql)/i.test(ep);
 
-    if (ruleId === 'swazz/bola-idor' || ruleId === 'swazz/tenant-isolation-bypass') {
+    if (ruleId === 'swazz/bola-idor' || ruleId === 'swazz/tenant-isolation-bypass' || ruleId === 'swazz/path-traversal-leak') {
         return ['API1:2023 Broken Object Level Authorization'];
     }
-    if (ruleId === 'swazz/unauthorized-access' || ruleId === 'swazz/weak-token') {
-        if (isAdmin) {
+    if (ruleId === 'swazz/unauthorized-access' || ruleId === 'swazz/weak-token' || ruleId === 'swazz/jwt-tampering' || ruleId === 'swazz/dpop-bypass' || ruleId === 'swazz/dpop-tampering') {
+        if (isAdmin || ruleId === 'swazz/jwt-tampering') {
             return ['API5:2023 Broken Function Level Authorization', 'API2:2023 Broken Authentication'];
         }
         return ['API2:2023 Broken Authentication'];
+    }
+    if (ruleId === 'swazz/prototype-pollution' || ruleId === 'swazz/mass-assignment') {
+        return ['API3:2023 Broken Object Property Level Authorization', 'API6:2023 Unrestricted Access to Sensitive Business Flows'];
+    }
+    if (ruleId === 'swazz/nosql-injection') {
+        return ['API3:2023 Broken Object Property Level Authorization', 'API10:2023 Unsafe Consumption of APIs'];
     }
     if (ruleId === 'swazz/sensitive-data-leak') {
         if (ev.includes('jwt') || ev.includes('token') || ev.includes('key') || ev.includes('secret')) {
@@ -214,7 +220,7 @@ export function getOwaspApiCategories(ruleId: string, method?: string, endpoint?
     if (ruleId === 'swazz/stack-trace-leak' || ruleId === 'swazz/null-pointer-exception' || ruleId === 'swazz/server-header-leak' || ruleId === 'swazz/x-powered-by-leak' || ruleId === 'swazz/x-aspnet-version-leak') {
         return ['API3:2023 Broken Object Property Level Authorization'];
     }
-    if (ruleId === 'swazz/no-rate-limit' || ruleId === 'swazz/rate-limit-active') {
+    if (ruleId === 'swazz/no-rate-limit' || ruleId === 'swazz/rate-limit-active' || ruleId === 'swazz/graphql-complexity-limit') {
         if (isAuth) {
             return ['API6:2023 Unrestricted Access to Sensitive Business Flows', 'API4:2023 Unrestricted Resource Consumption'];
         }
@@ -223,13 +229,16 @@ export function getOwaspApiCategories(ruleId: string, method?: string, endpoint?
     if (ruleId === 'swazz/timeout' || ruleId === 'swazz/response-size-anomaly' || ruleId === 'swazz/ws-timeout') {
         return ['API4:2023 Unrestricted Resource Consumption'];
     }
-    if (ruleId === 'swazz/oob-interaction' || ruleId === 'swazz/ssrf-out-of-band') {
+    if (ruleId === 'swazz/oob-interaction' || ruleId === 'swazz/ssrf-out-of-band' || ruleId === 'swazz/ssrf-cloud-metadata') {
         return ['API7:2023 Server Side Request Forgery'];
     }
-    if (ruleId === 'swazz/cors-misconfig' || ruleId.startsWith('swazz/csp-') || ruleId.startsWith('swazz/hsts-') || ruleId.startsWith('swazz/x-frame-') || ruleId.startsWith('swazz/x-content-type-') || ruleId === 'swazz/crlf-injection' || ruleId === 'swazz/header-injection') {
+    if (ruleId === 'swazz/cors-misconfig' || ruleId.startsWith('swazz/csp-') || ruleId.startsWith('swazz/hsts-') || ruleId.startsWith('swazz/x-frame-') || ruleId.startsWith('swazz/x-content-type-') || ruleId === 'swazz/crlf-injection' || ruleId === 'swazz/header-injection' || ruleId === 'swazz/graphql-introspection' || ruleId === 'swazz/graphql-field-suggestions') {
+        if (ruleId === 'swazz/graphql-introspection') {
+            return ['API8:2023 Security Misconfiguration', 'API9:2023 Improper Assets Management'];
+        }
         return ['API8:2023 Security Misconfiguration'];
     }
-    if (ruleId === 'swazz/deprecated-api-leak' || (isAsset && ruleId.startsWith('swazz/status-2'))) {
+    if (ruleId === 'swazz/deprecated-api-leak' || ruleId === 'swazz/shadow-api-detected' || (isAsset && ruleId.startsWith('swazz/status-2'))) {
         return ['API9:2023 Improper Assets Management'];
     }
     if (ruleId === 'swazz/sql-error-leak' || ruleId === 'swazz/time-based-sqli' || ruleId === 'swazz/cmdi-leak' || ruleId === 'swazz/time-based-cmdi' || ruleId === 'swazz/rce-leak' || ruleId === 'swazz/reflected-xss' || ruleId === 'swazz/ssti-leak' || ruleId === 'swazz/xxe-leak' || ruleId.startsWith('swazz/mcp-') || ruleId.startsWith('swazz/ws-') || ruleId.startsWith('swazz/status-5') || ruleId === 'swazz/network-error') {
@@ -264,25 +273,48 @@ export function getCweIds(ruleId: string, endpoint?: string, evidence?: string):
     return Array.from(new Set(cwes));
 }
 
-function getOwaspCategories(ruleId: string): string[] {
+export function getOwaspCategories(ruleId: string, method?: string, endpoint?: string, evidence?: string): string[] {
+    const ep = (endpoint || '').toLowerCase();
+    const ev = (evidence || '').toLowerCase();
+
     switch (ruleId) {
         case 'swazz/bola-idor':
         case 'swazz/tenant-isolation-bypass':
+        case 'swazz/path-traversal-leak':
+        case 'swazz/mass-assignment':
+        case 'swazz/ssrf-cloud-metadata':
             return ['A01:2025 Broken Access Control'];
         case 'swazz/unauthorized-access':
+        case 'swazz/jwt-tampering':
             return [
                 'A07:2025 Authentication Failures',
                 'A01:2025 Broken Access Control'
             ];
+        case 'swazz/weak-token':
+        case 'swazz/dpop-bypass':
+        case 'swazz/dpop-tampering':
+            return ['A07:2025 Authentication Failures'];
+        case 'swazz/prototype-pollution':
+            return ['A08:2025 Software or Data Integrity Failures'];
         case 'swazz/sensitive-data-leak':
-            return ['A01:2025 Broken Access Control'];
+            return ['A04:2025 Cryptographic Failures', 'A09:2025 Security Logging & Alerting Failures', 'A01:2025 Broken Access Control'];
+        case 'swazz/server-header-leak':
+        case 'swazz/x-powered-by-leak':
+        case 'swazz/x-aspnet-version-leak':
+        case 'swazz/deprecated-api-leak':
+        case 'swazz/shadow-api-detected':
+            return ['A03:2025 Software Supply Chain Failures'];
         case 'swazz/no-rate-limit':
         case 'swazz/rate-limit-active':
         case 'swazz/response-size-anomaly':
+        case 'swazz/graphql-complexity-limit':
             return ['A06:2025 Insecure Design'];
         case 'swazz/oob-interaction':
+        case 'swazz/ssrf-out-of-band':
             return ['A08:2025 Software or Data Integrity Failures'];
         case 'swazz/cors-misconfig':
+        case 'swazz/graphql-introspection':
+        case 'swazz/graphql-field-suggestions':
             return ['A02:2025 Security Misconfiguration'];
         case 'swazz/crlf-injection':
         case 'swazz/header-injection':
@@ -290,6 +322,9 @@ function getOwaspCategories(ruleId: string): string[] {
         case 'swazz/rce-leak':
         case 'swazz/time-based-sqli':
         case 'swazz/time-based-cmdi':
+        case 'swazz/nosql-injection':
+        case 'swazz/ssti-leak':
+        case 'swazz/xxe-leak':
             return ['A05:2025 Injection'];
         case 'swazz/stack-trace-leak':
         case 'swazz/null-pointer-exception':

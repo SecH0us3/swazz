@@ -175,5 +175,3 @@ func TestSemanticPlanner_ExtractSemanticFormats_All(t *testing.T) {
 	// nil config returns empty map
 	assert.Empty(t, planner.ExtractSemanticFormats(nil))
 }
-
-

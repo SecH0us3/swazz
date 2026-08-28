@@ -8,8 +8,8 @@ package har
 import (
 	"strings"
 
-	"swazz-engine/internal/swagger"
 	"github.com/tidwall/gjson"
+	"swazz-engine/internal/swagger"
 )
 
 // InferSchemaFromJSON guesses data types from a raw JSON string

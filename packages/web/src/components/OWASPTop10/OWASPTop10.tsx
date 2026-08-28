@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
 import type { AnalysisFinding } from '../../types.js';
-import { getOwaspApiCategories, getCweIds } from '../../hooks/useRunHistory.js';
+import { getOwaspApiCategories, getOwaspCategories, getCweIds } from '../../hooks/useRunHistory.js';
 import './OWASPTop10.css';
 
 export interface OWASPCategoryMeta {
@@ -292,11 +292,19 @@ export function OWASPTop10({ runId, queryResults, isRunning = false, onSelectRes
                     } else {
                         cats = (f.owaspCategory && f.owaspCategory.length > 0)
                             ? f.owaspCategory
-                            : [];
+                            : getOwaspCategories(f.ruleId, row.method, row.endpoint, f.evidence);
                     }
 
                     if (cats.length > 0) {
-                        for (const c of cats) {
+                        for (const rawCat of cats) {
+                            const matchedMeta = activeMetadata.find(m => 
+                                m.title.toLowerCase() === rawCat.toLowerCase() ||
+                                m.id.toLowerCase() === rawCat.toLowerCase() ||
+                                rawCat.toLowerCase().startsWith(m.id.toLowerCase()) ||
+                                rawCat.toLowerCase().startsWith(m.title.toLowerCase())
+                            );
+                            const c = matchedMeta ? matchedMeta.title : rawCat;
+
                             if (!groups[c]) {
                                 groups[c] = [];
                             }
@@ -320,11 +328,19 @@ export function OWASPTop10({ runId, queryResults, isRunning = false, onSelectRes
                 } else {
                     cats = (row.owaspCategory && row.owaspCategory.length > 0)
                         ? row.owaspCategory
-                        : [];
+                        : getOwaspCategories(row.status === 0 ? 'swazz/timeout' : `swazz/status-${row.status}`, row.method, row.endpoint, row.error);
                 }
 
                 if (cats.length > 0) {
-                    for (const c of cats) {
+                    for (const rawCat of cats) {
+                        const matchedMeta = activeMetadata.find(m => 
+                            m.title.toLowerCase() === rawCat.toLowerCase() ||
+                            m.id.toLowerCase() === rawCat.toLowerCase() ||
+                            rawCat.toLowerCase().startsWith(m.id.toLowerCase()) ||
+                            rawCat.toLowerCase().startsWith(m.title.toLowerCase())
+                        );
+                        const c = matchedMeta ? matchedMeta.title : rawCat;
+
                         if (!groups[c]) {
                             groups[c] = [];
                         }

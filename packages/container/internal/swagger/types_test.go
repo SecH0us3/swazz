@@ -14,10 +14,10 @@ import (
 
 func TestIgnoreRule_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
-		name        string
-		jsonInput   string
+		name         string
+		jsonInput    string
 		expectStatus string
-		expectErr   bool
+		expectErr    bool
 	}{
 		{
 			name:         "status as integer",
@@ -312,5 +312,3 @@ func TestMCPSettingsDefaults(t *testing.T) {
 	assert.True(t, sExplicit.MCPFuzzResourcesEnabled())
 	assert.False(t, sExplicit.MCPFuzzPromptsEnabled())
 }
-
-

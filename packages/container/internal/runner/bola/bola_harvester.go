@@ -89,7 +89,7 @@ func (d *Detector) HarvestFromResponse(originalPath, method string, respStatus i
 		}
 		d.ctx.UnlockConfig()
 		if varsUpdated {
-			
+
 		}
 	}
 

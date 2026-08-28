@@ -30,28 +30,28 @@ func NewMock(cfg *swagger.Config, client *http.Client) *mockRunnerContext {
 	return &mockRunnerContext{config: cfg, client: client}
 }
 
-func (m *mockRunnerContext) Config() *swagger.Config { return m.config }
-func (m *mockRunnerContext) LogDebug(f string, a ...any) {}
-func (m *mockRunnerContext) LogInfo(f string, a ...any) {}
-func (m *mockRunnerContext) LogWarn(f string, a ...any) {}
-func (m *mockRunnerContext) LogError(f string, a ...any) {}
-func (m *mockRunnerContext) BroadcastProgress() {}
-func (m *mockRunnerContext) BroadcastResult(res *swagger.FuzzResult) {}
-func (m *mockRunnerContext) UpdateProgressProfile(p string) {}
-func (m *mockRunnerContext) UpdateProgressEndpoint(p string) {}
-func (m *mockRunnerContext) AddTotalEndpoints(n int32) {}
-func (m *mockRunnerContext) AddCompletedEndpoints(n int32) {}
-func (m *mockRunnerContext) AddTotalPlanned(n int64) {}
+func (m *mockRunnerContext) Config() *swagger.Config                    { return m.config }
+func (m *mockRunnerContext) LogDebug(f string, a ...any)                {}
+func (m *mockRunnerContext) LogInfo(f string, a ...any)                 {}
+func (m *mockRunnerContext) LogWarn(f string, a ...any)                 {}
+func (m *mockRunnerContext) LogError(f string, a ...any)                {}
+func (m *mockRunnerContext) BroadcastProgress()                         {}
+func (m *mockRunnerContext) BroadcastResult(res *swagger.FuzzResult)    {}
+func (m *mockRunnerContext) UpdateProgressProfile(p string)             {}
+func (m *mockRunnerContext) UpdateProgressEndpoint(p string)            {}
+func (m *mockRunnerContext) AddTotalEndpoints(n int32)                  {}
+func (m *mockRunnerContext) AddCompletedEndpoints(n int32)              {}
+func (m *mockRunnerContext) AddTotalPlanned(n int64)                    {}
 func (m *mockRunnerContext) SendStat(res *swagger.FuzzResult, c, t int) {}
-func (m *mockRunnerContext) RLockConfig() {}
-func (m *mockRunnerContext) RUnlockConfig() {}
-func (m *mockRunnerContext) LockConfig() {}
-func (m *mockRunnerContext) UnlockConfig() {}
-func (m *mockRunnerContext) LockResults() {}
-func (m *mockRunnerContext) UnlockResults() {}
-func (m *mockRunnerContext) SetLimiterTarget(c int) {}
-func (m *mockRunnerContext) LimiterAcquire(ctx context.Context) error { return nil }
-func (m *mockRunnerContext) LimiterRelease() {}
+func (m *mockRunnerContext) RLockConfig()                               {}
+func (m *mockRunnerContext) RUnlockConfig()                             {}
+func (m *mockRunnerContext) LockConfig()                                {}
+func (m *mockRunnerContext) UnlockConfig()                              {}
+func (m *mockRunnerContext) LockResults()                               {}
+func (m *mockRunnerContext) UnlockResults()                             {}
+func (m *mockRunnerContext) SetLimiterTarget(c int)                     {}
+func (m *mockRunnerContext) LimiterAcquire(ctx context.Context) error   { return nil }
+func (m *mockRunnerContext) LimiterRelease()                            {}
 func (m *mockRunnerContext) GlobalHeadersWithGenerated(extra map[string]string) map[string]string {
 	return extra
 }
@@ -77,7 +77,7 @@ func (m *mockRunnerContext) ExecuteRequest(ctx context.Context, baseURL, resolve
 	globalHeaders map[string]string, globalCookies map[string]string,
 	body any, profile swagger.FuzzingProfile, queryParams map[string]any,
 	headers map[string]string, contentType string) *swagger.FuzzResult {
-	
+
 	reqURL := baseURL + resolvedPath
 	var bodyReader io.Reader
 	if body != nil {
@@ -98,17 +98,17 @@ func (m *mockRunnerContext) ExecuteRequest(ctx context.Context, baseURL, resolve
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	
+
 	start := time.Now()
 	resp, err := m.client.Do(req)
 	duration := time.Since(start)
-	
+
 	res := &swagger.FuzzResult{
-		Endpoint: epPath,
+		Endpoint:     epPath,
 		ResolvedPath: resolvedPath,
-		Method: method,
-		Profile: profile,
-		Duration: int64(duration),
+		Method:       method,
+		Profile:      profile,
+		Duration:     int64(duration),
 	}
 	if err != nil {
 		res.Error = err.Error()

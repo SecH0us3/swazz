@@ -205,11 +205,11 @@ func (p *Phase) Run(ctx context.Context, results []*swagger.FuzzResult) []*swagg
 						}
 					} else if diff.IsSchemaLeak {
 						analysisFinding = &swagger.AnalysisFinding{
-							ID:      uuid.New().String(),
-							RuleID:  "swazz/differential-schema-drift",
-							Level:   "error",
-							Message: fmt.Sprintf("Schema Drift / Privilege Escalation detected on %s %s. Unexpected sensitive fields exposed: %v", c.TargetEndpoint.Method, c.ResolvedPath, diff.AddedFields),
-							Evidence: fmt.Sprintf("Added sensitive fields: %s", strings.Join(diff.AddedFields, ", ")),
+							ID:               uuid.New().String(),
+							RuleID:           "swazz/differential-schema-drift",
+							Level:            "error",
+							Message:          fmt.Sprintf("Schema Drift / Privilege Escalation detected on %s %s. Unexpected sensitive fields exposed: %v", c.TargetEndpoint.Method, c.ResolvedPath, diff.AddedFields),
+							Evidence:         fmt.Sprintf("Added sensitive fields: %s", strings.Join(diff.AddedFields, ", ")),
 							OWASPCategory:    []string{"A01:2021-Broken Access Control"},
 							OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
 							CWEIDs:           []string{"CWE-200", "CWE-915"},
