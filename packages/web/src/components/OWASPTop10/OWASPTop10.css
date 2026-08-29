@@ -295,33 +295,6 @@
     gap: var(--space-4);
 }
 
-.btn-owasp-export {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: var(--font-size-xs);
-    padding: 6px var(--space-3);
-    height: auto;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-card);
-    color: var(--text-secondary);
-    transition: all var(--duration-fast) var(--ease-out);
-    cursor: pointer;
-}
-
-.btn-owasp-export:hover:not(:disabled) {
-    background: var(--bg-card-hover);
-    border-color: var(--border-default);
-    color: var(--text-primary);
-    transform: translateY(-1px);
-}
-
-.btn-owasp-export:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 /* Polished OWASP Cards with rich visuals */
 .owasp-card {
     transition: all var(--duration-normal) var(--ease-out) !important;

@@ -38,6 +38,7 @@ echo "dummy-xss-payload" > wordlists/xss-custom.txt
 # Keep track of PIDs we start to kill them on exit
 PIDS=()
 cleanup() {
+  local exit_code=$?
   if [ ${#PIDS[@]} -ne 0 ]; then
     echo -e "\n=== Cleaning up background services (PIDs: ${PIDS[*]}) ==="
     for pid in "${PIDS[@]}"; do
@@ -51,13 +52,14 @@ cleanup() {
   fi
   # Clean up dummy wordlist
   rm -rf wordlists
+  exit "$exit_code"
 }
 # Trap exit signals to ensure cleanup is run
 trap cleanup EXIT
 
 # Helper function to check if port is in use
 check_port() {
-  nc -z 127.0.0.1 "$1" >/dev/null 2>&1 || nc -z localhost "$1" >/dev/null 2>&1
+  lsof -iTCP:"$1" -sTCP:LISTEN -P -n >/dev/null 2>&1
 }
 
 # Helper function to check HTTP health for HTTP services
@@ -109,7 +111,7 @@ start_watchdog() {
     while true; do
       if ! check_service "$port"; then
         echo "[watchdog] $name down or unhealthy on port $port — restarting..." >> "$logfile"
-        lsof -ti :"$port" | xargs kill -9 2>/dev/null || true
+        lsof -ti :"$port" -P -n | xargs kill -9 2>/dev/null || true
         sleep 1
         "$@" >> "$logfile" 2>&1 &
         local child=$!
@@ -132,8 +134,10 @@ start_watchdog() {
 
 # Pre-cleanup: kill any zombie processes on the test ports and clear wrangler states
 echo "→ Stopping any existing services on ports 8788, 8787, 5173..."
-lsof -ti :8788,8787,5173 | xargs kill -9 2>/dev/null || true
-pkill -f "swazz-engine" || true
+pkill -9 -f "wrangler" 2>/dev/null || true
+pkill -9 -f "workerd" 2>/dev/null || true
+pkill -f "swazz-engine" 2>/dev/null || true
+lsof -ti :8788 -ti :8787 -ti :5173 -P -n | xargs kill -9 2>/dev/null || true
 rm -rf packages/edge/.wrangler
 rm -rf demo/.wrangler
 sleep 1
