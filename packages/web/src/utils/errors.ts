@@ -86,7 +86,7 @@ const nullPointerRegexes = [
     /undefined method .* for nil:NilClass/i
 ];
 
-export function isNullPointerException(text: string): boolean {
+function isNullPointerException(text: string): boolean {
     return nullPointerRegexes.some(r => r.test(text));
 }
 

@@ -30,10 +30,6 @@ function truncateValues(val: any): any {
     return val;
 }
 
-export function previewPayload(value: any): string {
-    return preview(value);
-}
-
 function truncateResponseValues(val: any): any {
     if (val === null || val === undefined) return val;
     if (typeof val === 'string') {
