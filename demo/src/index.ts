@@ -859,6 +859,10 @@ export default {
       }
 
       if (method === "GET" && path === "/users") {
+        const auth = request.headers.get("Authorization");
+        if (!auth) {
+          return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+        }
         const search = url.searchParams.get("search");
 
         const baselineUsers = [
