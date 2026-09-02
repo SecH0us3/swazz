@@ -132,4 +132,116 @@ describe('LicenseTab Component', () => {
         render(<LicenseTab />);
         expect(screen.getByText(/License management is only available for registered users/i)).toBeTruthy();
     });
+
+    it('activates a custom license key and allows deactivating it', async () => {
+        vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+        Object.assign(navigator, {
+            clipboard: {
+                writeText: vi.fn().mockResolvedValue(undefined),
+            },
+        });
+
+        // 1. Initial GET status
+        vi.spyOn(global, 'fetch').mockImplementation((url: any, options?: any) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/user/trial-status')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ claimed: true, claimed_at: '2026-08-01T00:00:00Z' }),
+                } as Response);
+            }
+            if (urlStr.includes('/api/user/license')) {
+                if (options?.method === 'POST') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({
+                            license: {
+                                company: 'Acme Corp',
+                                expires_at: '2027-01-01T00:00:00Z',
+                                features: ['enterprise', 'scheduled_runs'],
+                                max_users: 10,
+                                max_concurrency: 50,
+                            }
+                        })
+                    } as Response);
+                }
+                if (options?.method === 'DELETE') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ status: 'community' })
+                    } as Response);
+                }
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ status: 'community', license: null }),
+                } as Response);
+            }
+            return Promise.reject(new Error('Unknown URL'));
+        });
+
+        render(<LicenseTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Commercial License Key')).toBeTruthy();
+        });
+
+        const input = screen.getByPlaceholderText(/Paste your SWAZZ_LICENSE_KEY here/i);
+        fireEvent.change(input, { target: { value: 'SWAZZ_LICENSE_KEY: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig' } });
+
+        const activateBtn = screen.getByRole('button', { name: 'Activate' });
+        fireEvent.click(activateBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/License activated for Acme Corp!/i)).toBeTruthy();
+        });
+
+        expect(screen.getByText('Acme Corp')).toBeTruthy();
+
+        // Deactivate
+        const deactivateBtn = screen.getByRole('button', { name: /Deactivate License/i });
+        fireEvent.click(deactivateBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('License deactivated.')).toBeTruthy();
+        });
+    });
+
+    it('handles activation failure error message', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url: any, options?: any) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/user/trial-status')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ claimed: true, claimed_at: null }),
+                } as Response);
+            }
+            if (urlStr.includes('/api/user/license')) {
+                if (options?.method === 'POST') {
+                    return Promise.resolve({
+                        ok: false,
+                        json: () => Promise.resolve({ error: 'Signature verification failed' })
+                    } as Response);
+                }
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ status: 'community', license: null }),
+                } as Response);
+            }
+            return Promise.reject(new Error('Unknown URL'));
+        });
+
+        render(<LicenseTab />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Commercial License Key')).toBeTruthy();
+        });
+
+        const input = screen.getByPlaceholderText(/Paste your SWAZZ_LICENSE_KEY here/i);
+        fireEvent.change(input, { target: { value: 'eyJ1.eyJ2.sig' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+
+        await waitFor(() => {
+            expect(screen.getByText('Signature verification failed')).toBeTruthy();
+        });
+    });
 });

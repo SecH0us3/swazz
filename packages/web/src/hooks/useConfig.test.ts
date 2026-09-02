@@ -268,15 +268,48 @@ describe('useConfig', () => {
             expect(() => validateConfig({ rules: { ignore_rules: [{ status: '4yy' }] } })).toThrow('ignore_rule status format is invalid');
             expect(() => validateConfig({ rules: { ignore_rules: [{ status: 12 }] } })).toThrow('ignore_rule status format is invalid');
             expect(() => validateConfig({ rules: { ignore_rules: [{ status_code: '4000' }] } })).toThrow('ignore_rule status_code format is invalid');
+            expect(() => validateConfig({ rules: { ignore_rules: ['not an object'] } })).toThrow('rules.ignore_rules elements must be objects');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ rule_id: 123 }] } })).toThrow('ignore_rule rule_id must be a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ endpoint: 123 }] } })).toThrow('ignore_rule endpoint must be a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ method: 123 }] } })).toThrow('ignore_rule method must be a string');
+            expect(() => validateConfig({ rules: { ignore_rules: [{ payload: 123 }] } })).toThrow('ignore_rule payload must be a string');
+        });
+
+        it('should validate all remaining settings types and top-level fields', () => {
+            expect(() => validateConfig({ settings: { max_payload_size_bytes: 'invalid' } })).toThrow('settings.max_payload_size_bytes must be a number');
+            expect(() => validateConfig({ settings: { delay_between_requests_ms: 'invalid' } })).toThrow('settings.delay_between_requests_ms must be a number');
+            expect(() => validateConfig({ settings: { profiles: 'not an array' } })).toThrow('settings.profiles must be an array');
+            expect(() => validateConfig({ settings: { bola_similarity_threshold: 'invalid' } })).toThrow('settings.bola_similarity_threshold must be a number');
+            expect(() => validateConfig({ settings: { time_anomaly_threshold_ms: 'invalid' } })).toThrow('settings.time_anomaly_threshold_ms must be a number');
+            expect(() => validateConfig({ settings: { oob_server_url: 123 } })).toThrow('settings.oob_server_url must be a string');
+            expect(() => validateConfig({ settings: { debug: 'true' } })).toThrow('settings.debug must be a boolean');
+            expect(() => validateConfig({ settings: { data_retention: 123 } })).toThrow('settings.data_retention must be a string');
+            expect(() => validateConfig({ settings: { active_parameter_fuzzing: 'yes' } })).toThrow('settings.active_parameter_fuzzing must be a boolean');
+
+            expect(() => validateConfig({ endpoints: 'not array' })).toThrow('endpoints must be an array');
+            expect(() => validateConfig({ disabled_endpoints: 'not array' })).toThrow('disabled_endpoints must be an array');
+            expect(() => validateConfig({ _swagger_urls: 'not array' })).toThrow('_swagger_urls must be an array');
+            expect(() => validateConfig({ wordlist_files: 'not object' })).toThrow('wordlist_files must be an object');
+            expect(() => validateConfig({ auth_sequence: 'not array' })).toThrow('auth_sequence must be an array');
+            expect(() => validateConfig({ auth_identities: 'not object' })).toThrow('auth_identities must be an object');
+            expect(() => validateConfig({ security: 'not object' })).toThrow('security must be an object');
+            expect(() => validateConfig({ security: { allow_private_ips: 'yes' } })).toThrow('security.allow_private_ips must be a boolean');
+            expect(() => validateConfig({ rules: 'not object' })).toThrow('rules must be an object');
+            expect(() => validateConfig({ rules: { ignore: 'not array' } })).toThrow('rules.ignore must be an array');
+            expect(() => validateConfig({ rules: { ignore_rules: 'not array' } })).toThrow('rules.ignore_rules must be an array');
         });
     });
 
-    it('should import valid config correctly', () => {
+    it('should import valid config correctly and map all aliases', () => {
         const { result } = renderHook(() => useConfig());
 
         const newConfig = {
             base_url: 'https://imported.com',
-            global_headers: { 'Imported': 'true' }
+            headers: { 'Imported': 'true' },
+            swagger_urls: ['https://example.com/swagger.json'],
+            endpoints: {
+                exclude: ['GET /api/excluded']
+            }
         };
 
         act(() => {
@@ -285,7 +318,59 @@ describe('useConfig', () => {
 
         expect(result.current.config.base_url).toBe('https://imported.com');
         expect(result.current.config.global_headers).toEqual({ 'Imported': 'true' });
-        expect(result.current.config.settings).toEqual(DEFAULT_SETTINGS);
+        expect(result.current.config._swagger_urls).toEqual(['https://example.com/swagger.json']);
+        expect(result.current.config.disabled_endpoints).toEqual(['GET /api/excluded']);
+
+        // Export config
+        const exportedStr = result.current.exportConfig();
+        expect(exportedStr).toContain('GET /api/excluded');
+    });
+
+    it('should import config with endpoints.include calculating exclusions', () => {
+        const { result } = renderHook(() => useConfig());
+
+        act(() => {
+            result.current.updateConfig({
+                endpoints: [
+                    { method: 'GET', path: '/users', schema: {} as any },
+                    { method: 'POST', path: '/users', schema: {} as any }
+                ]
+            });
+        });
+
+        const configWithInclude = {
+            base_url: 'https://test.com',
+            endpoints: {
+                include: ['GET /users']
+            }
+        };
+
+        act(() => {
+            result.current.importConfig(JSON.stringify(configWithInclude));
+        });
+
+        expect(result.current.config.disabled_endpoints).toEqual(['POST /users']);
+    });
+
+    it('should update payload categories and delete undefined mcp_server', () => {
+        const { result } = renderHook(() => useConfig());
+
+        act(() => {
+            result.current.updateConfig({ mcp_server: { url: 'http://localhost:3000' } as any });
+        });
+        expect(result.current.config.mcp_server).toBeDefined();
+
+        act(() => {
+            result.current.updateConfig({ mcp_server: undefined });
+        });
+        expect(result.current.config.mcp_server).toBeUndefined();
+
+        act(() => {
+            result.current.updatePayloadCategories({
+                RANDOM: ['custom_cat']
+            } as any);
+        });
+        expect(result.current.config.settings.payload_categories?.RANDOM).toEqual(['custom_cat']);
     });
 
     it('should import config with comments (JSONC) correctly', () => {

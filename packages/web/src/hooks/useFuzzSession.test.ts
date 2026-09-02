@@ -191,4 +191,70 @@ describe('useFuzzSession hook', () => {
             'error'
         );
     });
+
+    it('should guard and show error when no Swagger URLs and no endpoints are configured', async () => {
+        const emptyConfig: SwazzConfig = {
+            ...initialConfig,
+            endpoints: [],
+            _swagger_urls: []
+        };
+
+        const { result } = renderHook(() => useFuzzSession({
+            config: emptyConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleStart();
+        });
+
+        expect(mockStart).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith('Add at least one Swagger URL to begin', 'error');
+    });
+
+    it('should handle paused status in connectToExisting and connection errors', async () => {
+        mockConnectToExisting.mockRejectedValueOnce(new Error('Socket disconnected'));
+
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        await act(async () => {
+            await result.current.handleConnectToExisting('run-err', Date.now(), 'https://api.example.com', 'manual', 'paused');
+        });
+
+        expect(useAppStore.getState().isPaused).toBe(true);
+        expect(mockShowToast).toHaveBeenCalledWith('Failed to connect to active scan: Socket disconnected', 'error');
+        expect(useAppStore.getState().liveRunId).toBeNull();
+    });
+
+    it('should return undefined when loadEndpoints is called with empty array', async () => {
+        const { result } = renderHook(() => useFuzzSession({
+            config: initialConfig,
+            updateConfig: mockUpdateConfig,
+            start: mockStart,
+            connectToExisting: mockConnectToExisting,
+            saveRun: mockSaveRun,
+            getDb: mockGetDb,
+            showToast: mockShowToast,
+        }));
+
+        let res;
+        await act(async () => {
+            res = await result.current.loadEndpoints([]);
+        });
+
+        expect(res).toBeUndefined();
+    });
 });

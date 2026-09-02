@@ -169,17 +169,78 @@ describe('errors utility', () => {
             expect(result?.key).toBe('val_err_email');
         });
 
-        it('should extract body.title and body.error', () => {
+        it('should extract body.title and body.error and body.message', () => {
             const preview1 = JSON.stringify({ title: 'Unauthorized Access' });
             expect(extractErrorSubtype(preview1)?.title).toBe('Unauthorized Access');
 
             const preview2 = JSON.stringify({ error: 'Rate limit exceeded' });
             expect(extractErrorSubtype(preview2)?.title).toBe('Rate limit exceeded');
+
+            const preview3 = JSON.stringify({ message: 'General failure' });
+            expect(extractErrorSubtype(preview3)?.title).toBe('General failure');
         });
 
-        it('should detect Python and JS null/undefined errors', () => {
+        it('should detect Python, JS, PHP, and Ruby null pointer errors', () => {
             expect(extractErrorSubtype("TypeError: 'NoneType' object is not subscriptable")?.title).toBe('Null Reference Exception');
             expect(extractErrorSubtype("TypeError: Cannot read properties of undefined (reading 'map')")?.title).toBe('Null Reference Exception');
+            expect(extractErrorSubtype("Fatal error: Call to a member function getName() on null in file.php")?.title).toBe('Null Reference Exception');
+            expect(extractErrorSubtype("Warning: Attempt to read property 'id' on null in file.php")?.title).toBe('Null Reference Exception');
+            expect(extractErrorSubtype("NoMethodError: undefined method 'foo' for nil:NilClass")?.title).toBe('Null Reference Exception');
+        });
+
+        it('should handle raw string MCP error and double JSON encoded bodies', () => {
+            expect(extractErrorSubtype('"MCP error 404: Server is unreachable"')?.title).toBe('MCP Error 404: Server is unreachable');
+
+            // double encoded JSON
+            const doubleEncoded = JSON.stringify(JSON.stringify({
+                title: 'Double Encoded Problem'
+            }));
+            expect(extractErrorSubtype(doubleEncoded)?.title).toBe('Double Encoded Problem');
+
+            // raw text MCP error without JSON
+            expect(extractErrorSubtype('MCP error 500: Internal engine crash')?.title).toBe('MCP Error 500: Internal engine crash');
+        });
+
+        it('should handle MCP content with object text and without error code', () => {
+            const previewObj = JSON.stringify({
+                isError: true,
+                content: [{ type: 'text', text: { message: 'Underlying socket reset' } }]
+            });
+            const resObj = extractErrorSubtype(previewObj);
+            expect(resObj?.title).toBe('MCP Tool Error: Underlying socket reset');
+
+            const previewRaw = JSON.stringify({
+                isError: true,
+                content: [{ type: 'text', text: 'Generic tool execution failure' }]
+            });
+            const resRaw = extractErrorSubtype(previewRaw);
+            expect(resRaw?.title).toBe('MCP Tool Error: Generic tool execution failure');
+        });
+
+        it('should handle empty body.errors and fallback properties', () => {
+            const preview = JSON.stringify({ errors: {} });
+            expect(extractErrorSubtype(preview)).toBeNull();
+        });
+    });
+
+    describe('cleanErrorMessage edge cases', () => {
+        it('should truncate exception detail > 60 chars and message > 80 chars', () => {
+            const longException = `CustomAppException: ${'x'.repeat(70)}`;
+            expect(cleanErrorMessage(longException)).toBe(`CustomAppException: ${'x'.repeat(57)}...`);
+
+            const longPlainMsg = 'Something unexpected happened while parsing the request body: ' + 'y'.repeat(50);
+            expect(cleanErrorMessage(longPlainMsg).length).toBe(80);
+            expect(cleanErrorMessage(longPlainMsg).endsWith('...')).toBe(true);
+        });
+
+        it('should fallback when constraint violations do not have quoted name', () => {
+            expect(cleanErrorMessage('duplicate key value violates unique constraint\n')).toBe('Unique Constraint Violation');
+            expect(cleanErrorMessage('violates foreign key constraint\n')).toBe('Foreign Key Violation');
+        });
+
+        it('should redact Ray ID with HTML strong tags', () => {
+            const res = getCleanDedupeKey('GET', '/test', 503, 'Error Ray ID <strong>abcd1234ef</strong>');
+            expect(res).toContain('Ray ID: [REDACTED]');
         });
     });
 });

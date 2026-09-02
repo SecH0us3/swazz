@@ -127,4 +127,76 @@ describe('ProjectSettings Component — Runners Tab', () => {
             expect(hexInput.value).toBe(mockFileContent);
         });
     });
+
+    it('navigates through project settings tabs and back to dashboard', () => {
+        render(<ProjectSettings />);
+
+        // Back to dashboard
+        const backBtn = screen.getByRole('button', { name: /Back to Dashboard/i });
+        fireEvent.click(backBtn);
+        expect(useAppStore.getState().activeTab).toBe('heatmap');
+
+        // Click API Specifications
+        fireEvent.click(screen.getByRole('button', { name: /API Specifications/i }));
+        expect(screen.getByRole('button', { name: /API Specifications/i }).className).toContain('active');
+
+        // Click Fuzzing & Performance
+        fireEvent.click(screen.getByRole('button', { name: /Fuzzing & Performance/i }));
+        expect(screen.getByRole('button', { name: /Fuzzing & Performance/i }).className).toContain('active');
+
+        // Click Anomalies & Security
+        fireEvent.click(screen.getByRole('button', { name: /Anomalies & Security/i }));
+        expect(screen.getByRole('button', { name: /Anomalies & Security/i }).className).toContain('active');
+
+        // Click Wordlist Files
+        fireEvent.click(screen.getByRole('button', { name: /Wordlist Files/i }));
+        expect(screen.getByRole('button', { name: /Wordlist Files/i }).className).toContain('active');
+
+        // Click Fuzzing Dictionaries
+        fireEvent.click(screen.getByRole('button', { name: /Fuzzing Dictionaries/i }));
+        expect(screen.getByRole('button', { name: /Fuzzing Dictionaries/i }).className).toContain('active');
+
+        // Click Auth Sequence
+        fireEvent.click(screen.getByRole('button', { name: /Auth Sequence/i }));
+        expect(screen.getByRole('button', { name: /Auth Sequence/i }).className).toContain('active');
+
+        // Click Request Chaining
+        fireEvent.click(screen.getByRole('button', { name: /Request Chaining/i }));
+        expect(screen.getByRole('button', { name: /Request Chaining/i }).className).toContain('active');
+
+        // Click Encryption Keys
+        fireEvent.click(screen.getByRole('button', { name: /Encryption Keys/i }));
+        expect(screen.getByRole('button', { name: /Encryption Keys/i }).className).toContain('active');
+
+        // Click Raw JSON Config
+        fireEvent.click(screen.getByRole('button', { name: /Raw JSON Config/i }));
+        expect(screen.getByRole('button', { name: /Raw JSON Config/i }).className).toContain('active');
+
+        // Click General & Target
+        fireEvent.click(screen.getByRole('button', { name: /General & Target/i }));
+        expect(screen.getByRole('button', { name: /General & Target/i }).className).toContain('active');
+    });
+
+    it('handles coming soon and gated feature buttons (WAF, Recon, Members, Schedule, Webhooks)', () => {
+        render(<ProjectSettings />);
+
+        const wafBtn = screen.getByRole('button', { name: /WAF Analysis/i });
+        fireEvent.click(wafBtn);
+
+        const reconBtn = screen.getByRole('button', { name: /Domain Recon/i });
+        fireEvent.click(reconBtn);
+
+        // Gated tabs
+        const membersBtn = screen.getByRole('button', { name: /Members & Roles/i });
+        fireEvent.click(membersBtn);
+
+        const aiRemediationBtn = screen.getByRole('button', { name: /AI Remediation/i });
+        fireEvent.click(aiRemediationBtn);
+
+        const scheduleBtn = screen.getByRole('button', { name: /Scan Scheduler/i });
+        fireEvent.click(scheduleBtn);
+
+        const webhooksBtn = screen.getByRole('button', { name: /Webhooks/i });
+        fireEvent.click(webhooksBtn);
+    });
 });

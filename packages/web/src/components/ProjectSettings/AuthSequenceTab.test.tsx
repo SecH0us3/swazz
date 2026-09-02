@@ -122,4 +122,101 @@ describe('AuthSequenceTab', () => {
             auth_sequence: []
         });
     });
+
+    it('updates request step fields (method, url, body)', () => {
+        currentConfig = {
+            auth_sequence: [{
+                type: 'request',
+                method: 'POST',
+                url: 'https://example.com/login',
+                body: '{"user":"admin"}'
+            }]
+        };
+
+        render(<AuthSequenceTab />);
+
+        const methodSelect = screen.getByDisplayValue('POST');
+        fireEvent.change(methodSelect, { target: { value: 'PUT' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [expect.objectContaining({ method: 'PUT' })]
+        });
+
+        const urlInput = screen.getByPlaceholderText('https://api.example.com/login');
+        fireEvent.change(urlInput, { target: { value: 'https://example.com/api/v2' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [expect.objectContaining({ url: 'https://example.com/api/v2' })]
+        });
+
+        const bodyInput = screen.getByPlaceholderText('{"username": "admin", "password": "password"}');
+        fireEvent.change(bodyInput, { target: { value: '{"token":"xyz"}' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [expect.objectContaining({ body: '{"token":"xyz"}' })]
+        });
+    });
+
+    it('updates totp step fields (secret, variable)', () => {
+        currentConfig = {
+            auth_sequence: [{
+                type: 'totp',
+                totp_secret: 'JBSWY3DPEHPK3PXP',
+                totp_variable: 'totp_code'
+            }]
+        };
+
+        render(<AuthSequenceTab />);
+
+        const secretInput = screen.getByPlaceholderText('JBSWY3DPEHPK3PXP');
+        fireEvent.change(secretInput, { target: { value: 'NEWSECRET' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [expect.objectContaining({ totp_secret: 'NEWSECRET' })]
+        });
+
+        const varInput = screen.getByPlaceholderText('totp_code');
+        fireEvent.change(varInput, { target: { value: 'custom_code' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [expect.objectContaining({ totp_variable: 'custom_code' })]
+        });
+    });
+
+    it('converts step between request and totp type', () => {
+        currentConfig = {
+            auth_sequence: [{
+                type: 'request',
+                method: 'POST',
+                url: 'https://example.com/login',
+                body: '{}'
+            }]
+        };
+
+        render(<AuthSequenceTab />);
+
+        const select = screen.getByDisplayValue('HTTP Request');
+        // Switch to TOTP: should strip request fields
+        fireEvent.change(select, { target: { value: 'totp' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [{
+                type: 'totp'
+            }]
+        });
+
+        // Now test switching from TOTP to request
+        currentConfig = {
+            auth_sequence: [{
+                type: 'totp',
+                totp_secret: 'SECRET',
+                totp_variable: 'VAR'
+            }]
+        };
+
+        const { rerender } = render(<AuthSequenceTab />);
+        rerender(<AuthSequenceTab />);
+        const totpSelect = screen.getByDisplayValue('TOTP Generator');
+        fireEvent.change(totpSelect, { target: { value: 'request' } });
+        expect(mockUpdateConfig).toHaveBeenCalledWith({
+            auth_sequence: [{
+                type: 'request',
+                method: 'POST'
+            }]
+        });
+    });
 });
