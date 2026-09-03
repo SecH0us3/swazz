@@ -7,7 +7,7 @@ import { env as rawEnv } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { Env } from '../../src/env';
 import { splitSql } from '../../src/splitSql';
-import { generateTestKeyPair } from '../utils/license';
+import { generateTestKeyPair, signLicenseToken } from '../utils/license';
 
 const env = rawEnv as unknown as Env;
 
@@ -210,5 +210,28 @@ describe('Trial License Integration', () => {
     expect(invalidRes.status).toBe(400);
     const invalidData = await invalidRes.json();
     expect(invalidData.valid).toBe(false);
+
+    // 3. Valid signed token -> 200 with valid: true
+    const validToken = await signLicenseToken(testKeyPair.privKeyHex, {
+      company: 'Acme Corp',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      features: ['*'],
+    });
+    const validRes = await app.fetch(
+      new Request('http://localhost/api/license/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+          'Cookie': `csrf_token=${csrfToken}`,
+        },
+        body: JSON.stringify({ license_key: validToken }),
+      }),
+      env
+    );
+    expect(validRes.status).toBe(200);
+    const validData = await validRes.json();
+    expect(validData.valid).toBe(true);
+    expect(validData.license.company).toBe('Acme Corp');
   });
 });

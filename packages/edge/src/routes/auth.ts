@@ -12,7 +12,8 @@ import { LicenseService } from '../services/license';
 
 export function registerAuthRoutes(
   app: Hono<{ Bindings: Env }>,
-  authServicesFactory: (env: Env) => IAuthService = (env) => new AuthService(env, new AuthRepository(env))
+  authServicesFactory: (env: Env) => IAuthService = (env) => new AuthService(env, new AuthRepository(env)),
+  licenseServiceFactory: (env: Env) => { verifyToken(token: string): Promise<any> } = (env) => new LicenseService(env, new AuthRepository(env))
 ) {
   app.post('/api/auth/register', async (c) => {
     try {
@@ -578,7 +579,7 @@ export function registerAuthRoutes(
         return c.json({ error: 'Missing license_key' }, 400);
       }
 
-      const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
+      const licenseService = licenseServiceFactory(c.env);
       const license = await licenseService.verifyToken(body.license_key);
       return c.json({ valid: true, license });
     } catch (err: any) {
