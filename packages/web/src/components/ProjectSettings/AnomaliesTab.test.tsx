@@ -92,7 +92,23 @@ describe('AnomaliesTab', () => {
             }
         });
     });
-});
+
+    it('ignores duplicate status code and rejects non-numeric/out-of-range code', () => {
+        render(<AnomaliesTab />);
+        const input = screen.getByPlaceholderText('e.g. 404');
+        const addBtn = screen.getByText('Add Code');
+
+        // Duplicate code 404
+        fireEvent.change(input, { target: { value: '404' } });
+        fireEvent.click(addBtn);
+        expect(mockUpdateConfig).not.toHaveBeenCalled();
+
+        // Out of range (e.g. 999)
+        fireEvent.change(input, { target: { value: '999' } });
+        fireEvent.click(addBtn);
+        expect(mockShowToast).toHaveBeenCalledWith('Please enter a valid HTTP status code (100-599).', 'error');
+    });
+
     it('updates timeout anomalies threshold', async () => {
         render(<AnomaliesTab />);
         const input = screen.getByDisplayValue('4000');
@@ -111,11 +127,67 @@ describe('AnomaliesTab', () => {
         });
     });
 
-    it('toggles BOLA testing', async () => {
+    it('toggles response body analysis and updates deviation multiplier', () => {
         render(<AnomaliesTab />);
-        const bolaCheckbox = screen.getByLabelText(/Enable Broken Object Level Authorization/i);
-        fireEvent.click(bolaCheckbox);
+        const bodyCheckbox = screen.getByLabelText(/Enable Response Body Structural Analysis/i);
+        fireEvent.click(bodyCheckbox);
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ analyze_response_body: false });
+
+        const multiplierInput = screen.getByDisplayValue('5');
+        fireEvent.change(multiplierInput, { target: { value: '3.5' } });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ response_size_anomaly_multiplier: 3.5 });
+    });
+
+    it('handles BOLA testing with auth headers, cookies and User B credentials', async () => {
+        mockConfig = {
+            ...mockConfig,
+            global_headers: { Authorization: 'Bearer token', 'X-Custom': 'val' },
+            cookies: { session_id: 'sess123' },
+            settings: {
+                ...mockConfig.settings,
+                bola_testing: true,
+                auth_headers: ['Authorization'],
+                auth_cookies: ['session_id']
+            },
+            auth_identities: {
+                userB: {
+                    headers: { Authorization: 'Bearer userB' },
+                    cookies: { session_id: 'sessB' }
+                }
+            }
+        };
+
+        render(<AnomaliesTab />);
+
+        expect(screen.getByText('User B (Secondary)')).toBeTruthy();
+
+        // Toggle auth header
+        const authHeaderBtn = screen.getByRole('button', { name: /🔒 Authorization/ });
+        fireEvent.click(authHeaderBtn);
         expect(mockUpdateSettings).toHaveBeenCalledWith({
-            bola_testing: true
+            auth_headers: []
         });
+
+        // Toggle auth cookie
+        const authCookieBtn = screen.getByRole('button', { name: /🔒 session_id/ });
+        fireEvent.click(authCookieBtn);
+        expect(mockUpdateSettings).toHaveBeenCalledWith({
+            auth_cookies: []
+        });
+    });
+
+    it('shows warning when BOLA is active but no credentials are selected', () => {
+        mockConfig = {
+            ...mockConfig,
+            settings: {
+                ...mockConfig.settings,
+                bola_testing: true,
+                auth_headers: [],
+                auth_cookies: []
+            }
+        };
+
+        render(<AnomaliesTab />);
+        expect(screen.getByText(/No authentication credentials are marked/i)).toBeTruthy();
+    });
 });

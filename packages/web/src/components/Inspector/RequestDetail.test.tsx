@@ -168,8 +168,8 @@ describe('RequestDetail Component', () => {
         expect(screen.getByDisplayValue(/"role": "admin"/i)).toBeTruthy();
     });
 
-    it('calls onClose when close button is clicked', () => {
-        render(
+    it('calls onClose when close button is clicked or Escape is pressed', () => {
+        const { unmount } = render(
             <RequestDetail
                 result={mockResult}
                 baseUrl="https://api.example.com"
@@ -181,7 +181,227 @@ describe('RequestDetail Component', () => {
 
         const closeBtn = screen.getByRole('button', { name: /✕|Close/i });
         fireEvent.click(closeBtn);
+        expect(mockOnClose).toHaveBeenCalledTimes(1);
 
-        expect(mockOnClose).toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(mockOnClose).toHaveBeenCalledTimes(2);
+
+        unmount();
+    });
+
+    it('generates and copies PoC code in cURL, Python, TypeScript, and Go', async () => {
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+                onTriage={mockOnTriage}
+            />
+        );
+
+        const pocTab = screen.getByRole('tab', { name: /Live Replay & PoC Export/i });
+        fireEvent.click(pocTab);
+
+        expect(screen.getByRole('button', { name: 'cURL' })).toBeTruthy();
+
+        // Python
+        fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+        expect(screen.getByText(/import requests/i)).toBeTruthy();
+
+        // TypeScript
+        fireEvent.click(screen.getByRole('button', { name: 'TypeScript' }));
+        expect(screen.getByText(/fetch\(/i)).toBeTruthy();
+
+        // Go
+        fireEvent.click(screen.getByRole('button', { name: 'Go' }));
+        expect(screen.getByText(/http\.NewRequest/i)).toBeTruthy();
+
+        // Copy Exploit Script
+        const copyScriptBtn = screen.getByRole('button', { name: /Copy Exploit Script/i });
+        fireEvent.click(copyScriptBtn);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+    });
+
+    it('handles replay request successfully and updates live response', async () => {
+        const mockReplay = vi.fn().mockResolvedValue({
+            status: 201,
+            body: { success: true },
+            headers: { 'X-Custom-Res': 'yes' }
+        });
+
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                onReplay={mockReplay}
+                globalHeaders={{ 'X-Auth': 'secret' }}
+                globalCookies={{ 'sid': '123' }}
+                config={mockConfig}
+            />
+        );
+
+        const replayBtn = screen.getByRole('button', { name: /Replay/i });
+        fireEvent.click(replayBtn);
+
+        await screen.findByText('201');
+        expect(mockReplay).toHaveBeenCalledWith(expect.objectContaining({
+            method: 'GET',
+            headers: expect.objectContaining({ 'X-Auth': 'secret' }),
+            cookies: expect.objectContaining({ 'sid': '123' })
+        }));
+    });
+
+    it('handles replay request error and malformed raw body', async () => {
+        const mockReplay = vi.fn().mockRejectedValue(new Error('Network connection refused'));
+
+        render(
+            <RequestDetail
+                result={mockResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                onReplay={mockReplay}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        // Switch to raw request and enter invalid JSON
+        fireEvent.click(screen.getByRole('button', { name: 'Raw Request' }));
+        const textarea = screen.getByDisplayValue(/"role": "admin"/i);
+        fireEvent.change(textarea, { target: { value: '{ not valid json }' } });
+
+        const replayBtn = screen.getByRole('button', { name: /Replay/i });
+        fireEvent.click(replayBtn);
+
+        await screen.findByText(/Network connection refused/i);
+    });
+
+    it('switches between Mutation Diff subtabs (Query, Headers, Body)', () => {
+        const resultWithQuery: any = {
+            ...mockResult,
+            resolvedPath: '/api/v1/users/42?filter=active&sort=desc',
+            payload: undefined // No body, triggers query default
+        };
+
+        render(
+            <RequestDetail
+                result={resultWithQuery}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        expect(screen.getByRole('button', { name: 'Query Parameters Diff' })).toBeTruthy();
+        
+        // Switch to Request Headers subtab
+        const headersSubTab = screen.getByRole('button', { name: 'Request Headers' });
+        fireEvent.click(headersSubTab);
+        expect(screen.getByText('Authorization:')).toBeTruthy();
+    });
+
+    it('highlights CRLF and CORS injected headers in response', () => {
+        const crlfResult: any = {
+            ...mockResult,
+            responseHeaders: {
+                'Set-Cookie': ['admin=true; Path=/'],
+                'Access-Control-Allow-Origin': ['https://evil.com']
+            },
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/crlf-injection',
+                    level: 'error',
+                    message: "CRLF injection via 'set-cookie:'",
+                    evidence: '— set-cookie: admin=true'
+                },
+                {
+                    ruleId: 'swazz/cors-misconfig',
+                    level: 'warning',
+                    message: 'Overly permissive CORS origin',
+                    evidence: 'https://evil.com'
+                }
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={crlfResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={mockConfig}
+            />
+        );
+
+        expect(screen.getAllByText('INJECTED').length).toBeGreaterThan(0);
+    });
+
+    it('displays MCP error negative status and multi-identity badge', () => {
+        const mcpResult: any = {
+            ...mockResult,
+            method: 'CALL',
+            status: 200,
+            identity: 'Anonymous',
+            responseBody: JSON.stringify({ isError: true, message: 'MCP tool failed' }),
+            payload: 'truncated payload…'
+        };
+
+        const configWithBola: any = {
+            ...mockConfig,
+            settings: {
+                bola_testing: true
+            }
+        };
+
+        render(
+            <RequestDetail
+                result={mcpResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                config={configWithBola}
+            />
+        );
+
+        // Status 200 with isError: true displays -400
+        expect(screen.getByText('-400')).toBeTruthy();
+        expect(screen.getByText('Anonymous')).toBeTruthy();
+
+        // Switch to raw request and verify preview note
+        fireEvent.click(screen.getByRole('button', { name: 'Raw Request' }));
+        expect(screen.getByText(/preview — full payload not stored/i)).toBeTruthy();
+
+        // Copy raw payload
+        const copyPayloadBtn = screen.getAllByRole('button', { name: 'Copy' })[0];
+        fireEvent.click(copyPayloadBtn);
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('truncated payload…');
+    });
+
+    it('handles embedded JSON in response body string', () => {
+        const embeddedResult: any = {
+            ...mockResult,
+            responseBody: 'Internal Server Error: {"errorCode": 50012, "detail": "DB fail"}'
+        };
+
+        render(
+            <RequestDetail
+                result={embeddedResult}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+            />
+        );
+
+        expect(screen.getByText(/errorCode/i)).toBeTruthy();
     });
 });

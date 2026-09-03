@@ -92,5 +92,68 @@ describe('KeysTab Component', () => {
         fireEvent.click(fileTabBtn);
 
         expect(screen.getByText(/Choose \.swazzkey file/i)).toBeTruthy();
+
+        // Cancel
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        fireEvent.click(cancelBtn);
+        expect(screen.queryByText(/Choose \.swazzkey file/i)).toBeNull();
+    });
+
+    it('handles download backup file', async () => {
+        const createObjectURLMock = vi.fn().mockReturnValue('blob:http://localhost/123');
+        const revokeObjectURLMock = vi.fn();
+        vi.stubGlobal('URL', {
+            createObjectURL: createObjectURLMock,
+            revokeObjectURL: revokeObjectURLMock
+        });
+
+        render(<KeysTab />);
+
+        const downloadBtn = screen.getByRole('button', { name: /Download \.swazzkey File/i });
+        fireEvent.click(downloadBtn);
+
+        await waitFor(() => {
+            expect(mockExportAsJwk).toHaveBeenCalled();
+            expect(createObjectURLMock).toHaveBeenCalled();
+        });
+    });
+
+    it('handles restore error on mnemonic failure', async () => {
+        mockImportFromMnemonic.mockRejectedValueOnce(new Error('Invalid checksum'));
+
+        render(<KeysTab />);
+        fireEvent.click(screen.getByRole('button', { name: /Restore from Backup \/ Mnemonic/i }));
+
+        const input = screen.getByPlaceholderText(/Enter your 12-word mnemonic seed phrase/i);
+        fireEvent.change(input, { target: { value: 'bad phrase' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+        await waitFor(() => {
+            expect(screen.getByText('Invalid checksum')).toBeTruthy();
+        });
+    });
+
+    it('renders message when mnemonic is not available', async () => {
+        vi.spyOn(encryptionHook, 'useEncryption').mockReturnValue({
+            hasKeyPair: true,
+            mnemonic: null,
+            getPublicKeyBase64: mockGetPublicKeyBase64,
+            exportAsJwk: mockExportAsJwk,
+            importFromMnemonic: mockImportFromMnemonic,
+            importFromJwk: mockImportFromJwk,
+            isReady: true,
+            isSupported: true,
+        } as any);
+
+        render(<KeysTab />);
+        fireEvent.click(screen.getByRole('button', { name: /Reveal 12-Word Seed Phrase/i }));
+
+        expect(screen.getByText(/Key pair imported via backup file/i)).toBeTruthy();
+    });
+
+    it('returns null if activeProject is not set', () => {
+        useAppStore.setState({ activeProject: null });
+        const { container } = render(<KeysTab />);
+        expect(container.firstChild).toBeNull();
     });
 });

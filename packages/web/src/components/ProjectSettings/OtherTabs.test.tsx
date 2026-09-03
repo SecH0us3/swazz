@@ -25,6 +25,23 @@ import { RunnersTab } from './RunnersTab.js';
 import { Section, KVEditor } from '../Sidebar/Shared.js';
 import { ChainingRulesEditor } from '../Sidebar/ChainingRulesEditor.js';
 
+vi.mock('../../hooks/useDb.js', () => ({
+    useDb: () => ({
+        getAllTriaged: vi.fn().mockResolvedValue([
+            {
+                endpoint: '/api/v1/users',
+                method: 'GET',
+                status: 500,
+                analyzerFindings: [{ ruleId: 'swazz/sqli' }],
+                payloadPreview: 'admin" OR 1=1--'
+            }
+        ]),
+        runs: [],
+        loadRuns: vi.fn().mockResolvedValue([]),
+        deleteRun: vi.fn().mockResolvedValue(undefined),
+    })
+}));
+
 describe('Other ProjectSettings components', () => {
     let mockFetch: any;
 
@@ -119,11 +136,43 @@ describe('Other ProjectSettings components', () => {
         });
     });
 
-    it('renders DictionariesTab', async () => {
+    it('renders DictionariesTab and validates/updates custom dictionaries', async () => {
         render(<DictionariesTab />);
         await waitFor(() => {
             expect(screen.getByText(/Custom Fuzzing Dictionaries/i)).toBeTruthy();
         });
+
+        const textarea = screen.getByRole('textbox');
+
+        // Valid update
+        fireEvent.change(textarea, { target: { value: JSON.stringify({ email: ['test@example.com'] }, null, 2) } });
+        fireEvent.blur(textarea);
+        expect(screen.queryByText(/must be/i)).toBeNull();
+
+        // Empty string resets to empty object
+        fireEvent.change(textarea, { target: { value: '' } });
+        fireEvent.blur(textarea);
+        expect(screen.queryByText(/must be/i)).toBeNull();
+
+        // Invalid JSON error
+        fireEvent.change(textarea, { target: { value: '{ not json }' } });
+        fireEvent.blur(textarea);
+        expect(screen.getByText(/Expected/i)).toBeTruthy();
+
+        // Not an object error
+        fireEvent.change(textarea, { target: { value: '[1, 2, 3]' } });
+        fireEvent.blur(textarea);
+        expect(screen.getByText('Dictionary configuration must be a JSON object')).toBeTruthy();
+
+        // Values not arrays
+        fireEvent.change(textarea, { target: { value: '{"user": "alice"}' } });
+        fireEvent.blur(textarea);
+        expect(screen.getByText('Value for key "user" must be an array of strings/numbers')).toBeTruthy();
+
+        // Array items not strings or numbers
+        fireEvent.change(textarea, { target: { value: '{"user": [{}]}' } });
+        fireEvent.blur(textarea);
+        expect(screen.getByText('Items in array "user" must be strings or numbers')).toBeTruthy();
     });
 
     it('renders KeysTab', async () => {
@@ -140,14 +189,79 @@ describe('Other ProjectSettings components', () => {
         });
     });
 
-    it('renders PerformanceTab', async () => {
+    it('renders PerformanceTab and navigates all subtabs and inputs', async () => {
         render(<PerformanceTab />);
         await waitFor(() => {
             expect(screen.getByText(/Fuzzing Settings/i)).toBeTruthy();
         });
+
+        // 1. Subtab: Concurrency & Rate Limits (default)
+        const concurrencyRange = screen.getByLabelText('Request Concurrency');
+        fireEvent.change(concurrencyRange, { target: { value: '5' } });
+        const concurrencyNumber = screen.getByLabelText('Request Concurrency Worker Count');
+        fireEvent.change(concurrencyNumber, { target: { value: '7' } });
+
+        const delayInput = screen.getByLabelText(/Delay Between Requests/i);
+        fireEvent.change(delayInput, { target: { value: '150' } });
+
+        const rateLimitCheckbox = screen.getByLabelText(/Enable Rate Limit Detection/i);
+        fireEvent.click(rateLimitCheckbox);
+        const burstInput = screen.getByLabelText('Burst Size');
+        fireEvent.change(burstInput, { target: { value: '100' } });
+
+        const adaptiveCheckbox = screen.getByLabelText(/Enable Adaptive Rate Limiting/i);
+        fireEvent.click(adaptiveCheckbox);
+
+        // 2. Subtab: Fuzzing & Intensity
+        const fuzzTabBtn = screen.getByRole('tab', { name: /Fuzzing & Intensity/i });
+        fireEvent.click(fuzzTabBtn);
+        const iterInput = screen.getByLabelText(/Fuzzing Intensity/i);
+        fireEvent.change(iterInput, { target: { value: '25' } });
+        const paramCheckbox = screen.getByLabelText(/Active Parameter Fuzzing/i);
+        fireEvent.click(paramCheckbox);
+        const harInput = screen.getByLabelText(/HAR Domain Filter/i);
+        fireEvent.change(harInput, { target: { value: 'api.example.com' } });
+
+        // 3. Subtab: Timeout & Duration
+        const timeoutTabBtn = screen.getByRole('tab', { name: /Timeout & Duration/i });
+        fireEvent.click(timeoutTabBtn);
+        const timeoutInput = screen.getByLabelText(/Individual Request Timeout/i);
+        fireEvent.change(timeoutInput, { target: { value: '3000' } });
+        const maxDurationInput = screen.getByLabelText(/Maximum Scan Duration/i);
+        fireEvent.change(maxDurationInput, { target: { value: '15' } });
+
+        // 4. Subtab: WAF Evasion & AI
+        const evasionTabBtn = screen.getByRole('tab', { name: /WAF Evasion & AI/i });
+        fireEvent.click(evasionTabBtn);
+        const proxyTextarea = screen.getByLabelText(/Proxy List/i);
+        fireEvent.change(proxyTextarea, { target: { value: 'http://127.0.0.1:8080\nhttp://127.0.0.1:8081' } });
+        fireEvent.blur(proxyTextarea);
+
+        const uaCheckbox = screen.getByLabelText(/Randomize User-Agent/i);
+        fireEvent.click(uaCheckbox);
+        const semanticCheckbox = screen.getByLabelText(/Semantic Format Wrappers/i);
+        fireEvent.click(semanticCheckbox);
+        const prepassCheckbox = screen.getByLabelText(/Pre-Scan LLM Batching/i);
+        fireEvent.click(prepassCheckbox);
+        const triageCheckbox = screen.getByLabelText(/Enable Smart Triage/i);
+        fireEvent.click(triageCheckbox);
+
+        const aiGatewayInput = screen.getByLabelText('AI Gateway / OpenAI Proxy URL');
+        fireEvent.change(aiGatewayInput, { target: { value: 'https://gateway.ai.cloudflare.com/v1/123/swazz/openai' } });
+        const cfTokenInput = screen.getByLabelText(/Cloudflare AI Gateway Token/i);
+        fireEvent.change(cfTokenInput, { target: { value: 'test-token' } });
+        const triageCountInput = screen.getByLabelText(/Max AI Triage Requests/i);
+        fireEvent.change(triageCountInput, { target: { value: '50' } });
     });
 
     it('renders and interacts with RawConfigTab', async () => {
+        const createObjectURLMock = vi.fn().mockReturnValue('blob:http://localhost/mock-blob');
+        const revokeObjectURLMock = vi.fn();
+        vi.stubGlobal('URL', {
+            createObjectURL: createObjectURLMock,
+            revokeObjectURL: revokeObjectURLMock
+        });
+
         Object.assign(navigator, {
             clipboard: {
                 writeText: vi.fn().mockResolvedValue(undefined)
@@ -173,6 +287,26 @@ describe('Other ProjectSettings components', () => {
         fireEvent.change(textarea, { target: { value: '{"base_url":"http://new.example.com"}' } });
         const saveBtn = screen.getByRole('button', { name: /Save Configuration/i });
         fireEvent.click(saveBtn);
+
+        // Export File button
+        const exportFileBtn = screen.getByRole('button', { name: /Export File/i });
+        fireEvent.click(exportFileBtn);
+        expect(createObjectURLMock).toHaveBeenCalled();
+
+        // Export Ignore Rules button
+        const exportIgnoreBtn = screen.getByRole('button', { name: /Export Ignore Rules/i });
+        fireEvent.click(exportIgnoreBtn);
+
+        // Import File
+        const importBtn = screen.getByRole('button', { name: /Import File/i });
+        fireEvent.click(importBtn);
+
+        // Simulate file upload with valid JSON
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        if (fileInput) {
+            const validFile = new File(['{"base_url": "https://imported.example.com"}'], 'config.json', { type: 'application/json' });
+            fireEvent.change(fileInput, { target: { files: [validFile] } });
+        }
     });
 
     it('renders and saves GeneralTab', async () => {
@@ -195,16 +329,35 @@ describe('Other ProjectSettings components', () => {
         });
     });
 
-    it('renders and updates ScheduleTab', async () => {
+    it('renders and updates ScheduleTab with all frequencies and validates custom cron', async () => {
         render(<ScheduleTab />);
         await waitFor(() => {
             expect(screen.getByText(/Auto-Scan Scheduler/i)).toBeTruthy();
         });
 
         const select = screen.getByRole('combobox');
-        fireEvent.change(select, { target: { value: 'daily' } });
-
         const saveBtn = screen.getByRole('button', { name: /Save Schedule/i });
+
+        // Daily
+        fireEvent.change(select, { target: { value: 'daily' } });
+        fireEvent.click(saveBtn);
+
+        // Weekly
+        fireEvent.change(select, { target: { value: 'weekly' } });
+        fireEvent.click(saveBtn);
+
+        // Custom - invalid fields length
+        fireEvent.change(select, { target: { value: 'custom' } });
+        const cronInput = screen.getByDisplayValue('0 0 * * *');
+        fireEvent.change(cronInput, { target: { value: '0 0 *' } });
+        fireEvent.click(saveBtn);
+
+        // Custom - frequency too high
+        fireEvent.change(cronInput, { target: { value: '*/5 * * * *' } });
+        fireEvent.click(saveBtn);
+
+        // Custom - valid
+        fireEvent.change(cronInput, { target: { value: '15 4 * * *' } });
         fireEvent.click(saveBtn);
 
         await waitFor(() => {
