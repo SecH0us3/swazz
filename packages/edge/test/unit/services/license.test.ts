@@ -196,18 +196,37 @@ describe('LicenseService', () => {
   });
 
   describe('Trial License', () => {
-    it('getTrialStatus returns unclaimed state initially', async () => {
+    it('getTrialStatus returns unclaimed state initially with can_claim true', async () => {
       authRepo.getTrialClaimedAt.mockResolvedValue(null);
       const res = await makeService().getTrialStatus('user-1');
       expect(res.claimed).toBe(false);
       expect(res.claimed_at).toBeNull();
+      expect(res.can_claim).toBe(true);
+      expect(res.cooldown_remaining_ms).toBe(0);
+      expect(res.next_available_at).toBeNull();
     });
 
-    it('getTrialStatus returns claimed state when timestamp exists', async () => {
-      authRepo.getTrialClaimedAt.mockResolvedValue('2026-08-17T12:00:00.000Z');
+    it('getTrialStatus returns cooldown active when claimed within 24 hours', async () => {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      authRepo.getTrialClaimedAt.mockResolvedValue(oneHourAgo);
       const res = await makeService().getTrialStatus('user-1');
       expect(res.claimed).toBe(true);
-      expect(res.claimed_at).toBe('2026-08-17T12:00:00.000Z');
+      expect(res.claimed_at).toBe(oneHourAgo);
+      expect(res.can_claim).toBe(false);
+      expect(res.cooldown_remaining_ms).toBeGreaterThan(22 * 60 * 60 * 1000);
+      expect(res.cooldown_remaining_ms).toBeLessThanOrEqual(23 * 60 * 60 * 1000);
+      expect(res.next_available_at).toBeDefined();
+    });
+
+    it('getTrialStatus returns can_claim true when claimed more than 24 hours ago', async () => {
+      const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      authRepo.getTrialClaimedAt.mockResolvedValue(twoDaysAgo);
+      const res = await makeService().getTrialStatus('user-1');
+      expect(res.claimed).toBe(true);
+      expect(res.claimed_at).toBe(twoDaysAgo);
+      expect(res.can_claim).toBe(true);
+      expect(res.cooldown_remaining_ms).toBe(0);
+      expect(res.next_available_at).toBeNull();
     });
 
     it('claimTrial successfully generates, activates, and returns a 14-day trial token', async () => {
@@ -231,10 +250,20 @@ describe('LicenseService', () => {
       expect(authRepo.setLicenseKey).toHaveBeenCalledWith('user-1', res.token);
     });
 
-    it('claimTrial rejects if trial was already claimed', async () => {
-      authRepo.getTrialClaimedAt.mockResolvedValue('2026-08-17T12:00:00.000Z');
-      await expect(makeService().claimTrial('user-1', 'alex')).rejects.toThrow('already been claimed');
+    it('claimTrial rejects if trial was claimed within 24 hours (cooldown active)', async () => {
+      const recentClaim = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      authRepo.getTrialClaimedAt.mockResolvedValue(recentClaim);
+      await expect(makeService().claimTrial('user-1', 'alex')).rejects.toThrow('once every 24 hours');
       expect(authRepo.setTrialClaimedAt).not.toHaveBeenCalled();
+    });
+
+    it('claimTrial succeeds if trial was claimed more than 24 hours ago (renewal)', async () => {
+      const oldClaim = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+      authRepo.getTrialClaimedAt.mockResolvedValue(oldClaim);
+      const res = await makeService().claimTrial('user-1', 'alex');
+      expect(res.status).toBe('ok');
+      expect(authRepo.setTrialClaimedAt).toHaveBeenCalledWith('user-1');
+      expect(authRepo.setLicenseKey).toHaveBeenCalledWith('user-1', res.token);
     });
 
     it('claimTrial rejects if SWAZZ_LICENSE_PRIVKEY is not configured with custom pubkey', async () => {
