@@ -31,6 +31,7 @@ jobs:
               - 'packages/web/**'
               - 'packages/edge/**'
               - 'demo/**'
+              - 'scripts/**'
               - 'package.json'
               - 'package-lock.json'
             backend:
@@ -310,6 +311,9 @@ jobs:
           npm run deploy:api
           npm run deploy:web
           npm run deploy:demo
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
 
       - name: Post-Deploy Smoke Test (Verify Production Dev-Key Rejection)
         run: |
