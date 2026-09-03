@@ -93,13 +93,19 @@ describe('LicenseTab Component', () => {
         expect(screen.getByText('Copy Key')).toBeTruthy();
     });
 
-    it('shows already-claimed notice when trial has been used and license is inactive', async () => {
+    it('shows cooldown notice when trial was claimed recently and license is inactive', async () => {
         vi.spyOn(global, 'fetch').mockImplementation((url: any) => {
             const urlStr = String(url);
             if (urlStr.includes('/api/user/trial-status')) {
                 return Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve({ claimed: true, claimed_at: '2026-08-01T00:00:00Z' }),
+                    json: () => Promise.resolve({
+                        claimed: true,
+                        claimed_at: '2026-09-03T10:00:00Z',
+                        can_claim: false,
+                        cooldown_remaining_ms: 14 * 60 * 60 * 1000,
+                        next_available_at: '2026-09-04T10:00:00Z',
+                    }),
                 } as Response);
             }
             if (urlStr.includes('/api/user/license')) {
@@ -114,10 +120,104 @@ describe('LicenseTab Component', () => {
         render(<LicenseTab />);
 
         await waitFor(() => {
-            expect(screen.getByText(/14-Day Free Trial has already been claimed for this account/i)).toBeTruthy();
+            expect(screen.getByText(/Next 14-day free trial will be available in 14 hours/i)).toBeTruthy();
         });
 
         expect(screen.queryByText('Claim 14-Day Free Trial')).toBeNull();
+    });
+
+    it('allows claiming trial again after 24-hour cooldown expires when license is inactive', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url: any) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/user/trial-status')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        claimed: true,
+                        claimed_at: '2026-09-01T10:00:00Z',
+                        can_claim: true,
+                        cooldown_remaining_ms: 0,
+                        next_available_at: null,
+                    }),
+                } as Response);
+            }
+            if (urlStr.includes('/api/user/license')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ status: 'community', license: null }),
+                } as Response);
+            }
+            return Promise.reject(new Error('Unknown URL'));
+        });
+
+        render(<LicenseTab />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Claim 14-Day Free Trial/i })).toBeTruthy();
+        });
+    });
+
+    it('shows Renew 14-Day Trial button when active trial license is eligible for renewal', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url: any, options?: any) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/user/trial-status')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        claimed: true,
+                        claimed_at: '2026-09-01T10:00:00Z',
+                        can_claim: true,
+                        cooldown_remaining_ms: 0,
+                        next_available_at: null,
+                    }),
+                } as Response);
+            }
+            if (urlStr.includes('/api/user/license')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        status: 'active',
+                        license: {
+                            company: 'tester (14-Day Trial)',
+                            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+                            features: ['*'],
+                            max_users: 1,
+                            max_concurrency: 1000,
+                        },
+                    }),
+                } as Response);
+            }
+            if (urlStr.includes('/api/user/trial-license') && options?.method === 'POST') {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        status: 'ok',
+                        license: {
+                            company: 'tester (14-Day Trial)',
+                            expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+                            features: ['*'],
+                            max_users: 1,
+                            max_concurrency: 1000,
+                        },
+                        token: 'eyJrenewed.sig',
+                    }),
+                } as Response);
+            }
+            return Promise.reject(new Error('Unknown URL'));
+        });
+
+        render(<LicenseTab />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Renew 14-Day Trial/i })).toBeTruthy();
+        });
+
+        const renewBtn = screen.getByRole('button', { name: /Renew 14-Day Trial/i });
+        fireEvent.click(renewBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/14-day free trial license renewed successfully/i)).toBeTruthy();
+        });
     });
 
     it('renders guest warning for guest users', () => {
