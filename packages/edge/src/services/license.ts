@@ -107,6 +107,15 @@ export class LicenseService implements ILicenseService {
   constructor(private env: Env, private authRepo: IAuthRepository) {}
 
   private getPublicKeyHex(): string {
+    if (this.env.NODE_ENV === 'production') {
+      if (!this.env.SWAZZ_LICENSE_PUBKEY) {
+        throw new Error('license: SWAZZ_LICENSE_PUBKEY must be configured in production environment|500');
+      }
+      if (this.env.SWAZZ_LICENSE_PUBKEY === DEFAULT_LICENSE_PUBKEY_HEX) {
+        throw new Error('license: default development public key is forbidden in production environment|500');
+      }
+      return this.env.SWAZZ_LICENSE_PUBKEY;
+    }
     return this.env.SWAZZ_LICENSE_PUBKEY || DEFAULT_LICENSE_PUBKEY_HEX;
   }
 
@@ -332,7 +341,14 @@ export class LicenseService implements ILicenseService {
     }
 
     let privKeyHex = this.env.SWAZZ_LICENSE_PRIVKEY;
-    if (!privKeyHex) {
+    if (this.env.NODE_ENV === 'production') {
+      if (!privKeyHex) {
+        throw new Error('Trial license generation is not configured on this server|503');
+      }
+      if (privKeyHex === DEFAULT_DEV_LICENSE_PRIVKEY_HEX) {
+        throw new Error('Development private key is forbidden in production environment|500');
+      }
+    } else if (!privKeyHex) {
       const pubKeyHex = this.getPublicKeyHex();
       if (pubKeyHex === DEFAULT_LICENSE_PUBKEY_HEX) {
         privKeyHex = DEFAULT_DEV_LICENSE_PRIVKEY_HEX;

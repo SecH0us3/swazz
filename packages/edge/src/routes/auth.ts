@@ -12,7 +12,8 @@ import { LicenseService } from '../services/license';
 
 export function registerAuthRoutes(
   app: Hono<{ Bindings: Env }>,
-  authServicesFactory: (env: Env) => IAuthService = (env) => new AuthService(env, new AuthRepository(env))
+  authServicesFactory: (env: Env) => IAuthService = (env) => new AuthService(env, new AuthRepository(env)),
+  licenseServiceFactory: (env: Env) => { verifyToken(token: string): Promise<any> } = (env) => new LicenseService(env, new AuthRepository(env))
 ) {
   app.post('/api/auth/register', async (c) => {
     try {
@@ -568,6 +569,22 @@ export function registerAuthRoutes(
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
       return c.json({ error: msg }, parseInt(status) || 500);
+    }
+  });
+
+  app.post('/api/license/verify', async (c) => {
+    try {
+      const body = await c.req.json();
+      if (!body || typeof body.license_key !== 'string' || !body.license_key.trim()) {
+        return c.json({ error: 'Missing license_key' }, 400);
+      }
+
+      const licenseService = licenseServiceFactory(c.env);
+      const license = await licenseService.verifyToken(body.license_key);
+      return c.json({ valid: true, license });
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ valid: false, error: msg }, parseInt(status, 10) || 400);
     }
   });
 }

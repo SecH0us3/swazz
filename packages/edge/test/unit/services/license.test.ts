@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LicenseService } from '../../../src/services/license';
+import { LicenseService, DEFAULT_LICENSE_PUBKEY_HEX, DEFAULT_DEV_LICENSE_PRIVKEY_HEX } from '../../../src/services/license';
 import { FEATURE_SCHEDULED_RUNS, FEATURE_ENTERPRISE } from '@swazz/shared';
 import { generateTestKeyPair, signLicenseToken } from '../../utils/license';
 
@@ -277,6 +277,65 @@ describe('LicenseService', () => {
       expect(res.status).toBe('ok');
       expect(res.license.company).toBe('alex (14-Day Trial)');
       expect(typeof res.token).toBe('string');
+    });
+  });
+
+  describe('Production Dev-Key Protection (NODE_ENV === production)', () => {
+    it('rejects getPublicKeyHex / verifyToken when NODE_ENV is production and SWAZZ_LICENSE_PUBKEY is not set', async () => {
+      const devToken = await signLicenseToken(DEFAULT_DEV_LICENSE_PRIVKEY_HEX, {
+        company: 'Dev Org',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+      });
+      const service = new LicenseService({ NODE_ENV: 'production' } as any, authRepo);
+      await expect(service.verifyToken(devToken)).rejects.toThrow('SWAZZ_LICENSE_PUBKEY must be configured in production');
+    });
+
+    it('rejects getPublicKeyHex / verifyToken when NODE_ENV is production and SWAZZ_LICENSE_PUBKEY is the default dev pubkey', async () => {
+      const devToken = await signLicenseToken(DEFAULT_DEV_LICENSE_PRIVKEY_HEX, {
+        company: 'Dev Org',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+      });
+      const service = new LicenseService({
+        NODE_ENV: 'production',
+        SWAZZ_LICENSE_PUBKEY: DEFAULT_LICENSE_PUBKEY_HEX,
+      } as any, authRepo);
+      await expect(service.verifyToken(devToken)).rejects.toThrow('default development public key is forbidden in production');
+    });
+
+    it('rejects claimTrial when NODE_ENV is production and SWAZZ_LICENSE_PRIVKEY is not set', async () => {
+      const service = new LicenseService({
+        NODE_ENV: 'production',
+        SWAZZ_LICENSE_PUBKEY: keyPair.pubKeyHex,
+      } as any, authRepo);
+      await expect(service.claimTrial('user-1', 'alex')).rejects.toThrow('Trial license generation is not configured on this server');
+    });
+
+    it('rejects claimTrial when NODE_ENV is production and SWAZZ_LICENSE_PRIVKEY is the default dev privkey', async () => {
+      const service = new LicenseService({
+        NODE_ENV: 'production',
+        SWAZZ_LICENSE_PUBKEY: keyPair.pubKeyHex,
+        SWAZZ_LICENSE_PRIVKEY: DEFAULT_DEV_LICENSE_PRIVKEY_HEX,
+      } as any, authRepo);
+      await expect(service.claimTrial('user-1', 'alex')).rejects.toThrow('Development private key is forbidden in production');
+    });
+
+    it('rejects tokens signed with dev private key in production environment', async () => {
+      const prodService = new LicenseService({
+        NODE_ENV: 'production',
+        SWAZZ_LICENSE_PUBKEY: keyPair.pubKeyHex, // Valid production key
+      } as any, authRepo);
+
+      // Sign with default dev private key
+      const devToken = await signLicenseToken(DEFAULT_DEV_LICENSE_PRIVKEY_HEX, {
+        company: 'Dev Org',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+      });
+
+      // Prod service must reject dev-signed token
+      await expect(prodService.verifyToken(devToken)).rejects.toThrow('invalid signature');
     });
   });
 });

@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { registerAuthRoutes } from '../../../src/routes/auth';
 import { Env } from '../../../src/env';
+import { LicenseService } from '../../../src/services/license';
 
 // Mock getUserIdFromRequest so we can test authenticated routes easily
 vi.mock('../../../src/utils/auth', async (importOriginal) => {
@@ -24,6 +25,7 @@ vi.mock('../../../src/utils/auth', async (importOriginal) => {
 describe('Auth Routes Unit Tests', () => {
   let app: Hono<{ Bindings: Env }>;
   let mockAuthService: any;
+  let mockLicenseService: any;
 
   beforeEach(() => {
     app = new Hono<{ Bindings: Env }>();
@@ -56,12 +58,16 @@ describe('Auth Routes Unit Tests', () => {
       updateAdminUserPlan: vi.fn()
     };
 
+    mockLicenseService = {
+      verifyToken: vi.fn(),
+    };
+
     app.use('*', async (c, next) => {
       c.env = { JWT_SECRET: 'test-secret', TURNSTILE_SECRET: 'test-turnstile' } as unknown as Env;
       await next();
     });
 
-    registerAuthRoutes(app, () => mockAuthService);
+    registerAuthRoutes(app, () => mockAuthService, () => mockLicenseService);
   });
 
   // POST /api/auth/register
@@ -526,6 +532,80 @@ describe('Auth Routes Unit Tests', () => {
       mockAuthService.exchangeOauthToken.mockRejectedValue(new Error('err|500'));
       const res = await app.request('/api/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code: 't' }) });
       expect(res.status).toBe(500);
+    });
+
+    describe('POST /api/license/verify', () => {
+      it('returns 400 when license_key is missing', async () => {
+        const res = await app.request('/api/license/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toBe('Missing license_key');
+      });
+
+      it('returns 400 when license_key is empty string', async () => {
+        const res = await app.request('/api/license/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ license_key: '   ' }),
+        });
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toBe('Missing license_key');
+      });
+
+      it('returns 200 with valid: true and license details on valid token', async () => {
+        const mockLicense = {
+          company: 'Acme Enterprise',
+          expires_at: '2026-12-31T23:59:59Z',
+          features: ['*'],
+        };
+        mockLicenseService.verifyToken.mockResolvedValue(mockLicense);
+
+        const res = await app.request('/api/license/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ license_key: 'valid.token.jwt' }),
+        });
+
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.valid).toBe(true);
+        expect(data.license).toEqual(mockLicense);
+      });
+
+      it('returns error status and valid: false when verifyToken throws formatted error', async () => {
+        mockLicenseService.verifyToken.mockRejectedValue(new Error('license: invalid signature|400'));
+
+        const res = await app.request('/api/license/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ license_key: 'invalid.token.sig' }),
+        });
+
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.valid).toBe(false);
+        expect(data.error).toBe('license: invalid signature');
+      });
+
+      it('defaults to 400 when verifyToken throws unformatted error', async () => {
+        mockLicenseService.verifyToken.mockRejectedValue(new Error('something went wrong'));
+
+        const res = await app.request('/api/license/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ license_key: 'token' }),
+        });
+
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.valid).toBe(false);
+        expect(data.error).toBe('something went wrong');
+      });
     });
   });
 });
