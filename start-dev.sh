@@ -19,6 +19,7 @@ elif [ -f "swazz_test_key.pem" ]; then
     echo "SWAZZ_LICENSE_PUBKEY=\"$DEV_PUBKEY\"" >> packages/edge/.dev.vars
   fi
 fi
+echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
 # Create dummy wordlist folder and file
 mkdir -p wordlists

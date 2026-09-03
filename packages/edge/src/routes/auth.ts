@@ -570,4 +570,20 @@ export function registerAuthRoutes(
       return c.json({ error: msg }, parseInt(status) || 500);
     }
   });
+
+  app.post('/api/license/verify', async (c) => {
+    try {
+      const body = await c.req.json();
+      if (!body || typeof body.license_key !== 'string' || !body.license_key.trim()) {
+        return c.json({ error: 'Missing license_key' }, 400);
+      }
+
+      const licenseService = new LicenseService(c.env, new AuthRepository(c.env));
+      const license = await licenseService.verifyToken(body.license_key);
+      return c.json({ valid: true, license });
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ valid: false, error: msg }, parseInt(status, 10) || 400);
+    }
+  });
 }

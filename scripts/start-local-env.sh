@@ -19,6 +19,7 @@ echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
 echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
 echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
+echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
 # 3. Setup Database
 echo "→ Applying local database migrations..."

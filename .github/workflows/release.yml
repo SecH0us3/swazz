@@ -310,3 +310,7 @@ jobs:
           npm run deploy:api
           npm run deploy:web
           npm run deploy:demo
+
+      - name: Post-Deploy Smoke Test (Verify Production Dev-Key Rejection)
+        run: |
+          node scripts/smoke-test-license.mjs

@@ -175,4 +175,40 @@ describe('Trial License Integration', () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it('verifies license tokens via public POST /api/license/verify without auth', async () => {
+    const csrfToken = await getCsrf();
+
+    // 1. Missing body or license_key -> 400
+    const badRes = await app.fetch(
+      new Request('http://localhost/api/license/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+          'Cookie': `csrf_token=${csrfToken}`,
+        },
+        body: JSON.stringify({}),
+      }),
+      env
+    );
+    expect(badRes.status).toBe(400);
+
+    // 2. Invalid signature token -> 400 with valid: false
+    const invalidRes = await app.fetch(
+      new Request('http://localhost/api/license/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+          'Cookie': `csrf_token=${csrfToken}`,
+        },
+        body: JSON.stringify({ license_key: 'eyJhbGciOiJFZERTQTEyMyJ9.eyJjb21wYW55IjoiVGVzdCJ9.d3Jvbmdfc2lnbmF0dXJlX2J5dGVzX3Nob3VsZF9iZV82NF9ieXRlc19sb25nX2hlcmVfMTIzNDU2' }),
+      }),
+      env
+    );
+    expect(invalidRes.status).toBe(400);
+    const invalidData = await invalidRes.json();
+    expect(invalidData.valid).toBe(false);
+  });
 });

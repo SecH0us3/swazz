@@ -30,6 +30,7 @@ echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
 echo 'PASSWORD_AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'SWAZZ_LICENSE_PUBKEY="0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef"' >> packages/edge/.dev.vars
 echo 'SWAZZ_LICENSE_PRIVKEY="302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6"' >> packages/edge/.dev.vars
+echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
 # Create dummy wordlist folder and file for E2E tests
 mkdir -p wordlists

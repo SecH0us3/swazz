@@ -12,6 +12,7 @@ echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
 echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
 echo 'TURNSTILE_SITE_KEY="0x4AAAAAADry7cDPHW8cvNuC"' >> packages/edge/.dev.vars
+echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
 # Start Vulnerable Demo API
 echo "Starting Vulnerable Demo API..."

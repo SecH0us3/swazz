@@ -50,6 +50,7 @@ app.use('/api/*', async (c, next) => {
   if (
     path === '/api/info' ||
     path === '/api/version' ||
+    path === '/api/license/verify' ||
     path === '/api/payload-catalog' ||
     path.startsWith('/api/auth/') ||
     path.startsWith('/api/admin/') ||
