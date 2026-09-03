@@ -11,6 +11,12 @@ const API_URL = (process.env.API_URL || 'https://swazz.secmy.app').replace(/\/$/
 // This key is embedded in the open-source codebase and must never be used in production.
 const DEFAULT_DEV_LICENSE_PRIVKEY_HEX = '302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6';
 
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
 function base64UrlEncode(buffer) {
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -40,10 +46,15 @@ async function runSmokeTest() {
   // 1. Fetch /api/info to verify server is reachable and extract CSRF token
   let csrfToken = null;
   let cookieHeader = '';
-  for (let attempt = 1; attempt <= 5; attempt++) {
+  const maxAttempts = 10;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log(`→ Attempt ${attempt}: Checking server health at ${API_URL}/api/info...`);
-      const infoRes = await fetch(`${API_URL}/api/info`);
+      console.log(`→ Attempt ${attempt}/${maxAttempts}: Checking server health at ${API_URL}/api/info...`);
+      const infoRes = await fetch(`${API_URL}/api/info`, {
+        headers: {
+          ...BROWSER_HEADERS,
+        },
+      });
       if (infoRes.ok) {
         csrfToken = infoRes.headers.get('x-csrf-token');
         const setCookie = infoRes.headers.get('set-cookie');
@@ -52,15 +63,18 @@ async function runSmokeTest() {
         }
         console.log(`✓ Server reachable. API info response: ${infoRes.status}`);
         break;
+      } else {
+        const bodyPreview = await infoRes.text().catch(() => '');
+        console.log(`  [Attempt ${attempt}] HTTP ${infoRes.status} (${infoRes.statusText}): ${bodyPreview.slice(0, 180)}`);
       }
     } catch (err) {
       console.log(`  Waiting for server availability (${err.message})...`);
     }
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 3000));
   }
 
   if (!csrfToken) {
-    console.error('❌ Server unreachable after 5 attempts. Aborting smoke test.');
+    console.error(`❌ Server unreachable after ${maxAttempts} attempts. Aborting smoke test.`);
     process.exit(1);
   }
 
@@ -75,6 +89,7 @@ async function runSmokeTest() {
 
   console.log('→ Sending development-signed license key to /api/license/verify...');
   const headers = {
+    ...BROWSER_HEADERS,
     'Content-Type': 'application/json',
   };
   if (csrfToken) {
