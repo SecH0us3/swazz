@@ -18,12 +18,23 @@ export interface LicenseInfo {
   max_concurrency?: number;
 }
 
+export const TRIAL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+export interface TrialStatus {
+  claimed: boolean;
+  claimed_at: string | null;
+  can_claim: boolean;
+  cooldown_remaining_ms: number;
+  next_available_at: string | null;
+}
+
 export interface ILicenseService {
   activate(userId: string, licenseKey: string): Promise<{ status: string; license: LicenseInfo }>;
   deactivate(userId: string): Promise<{ status: string }>;
   getStatus(userId: string): Promise<{ status: string; license: LicenseInfo | null }>;
   hasFeature(userId: string, feature: string): Promise<boolean>;
-  getTrialStatus(userId: string): Promise<{ claimed: boolean; claimed_at: string | null }>;
+  getTrialStatus(userId: string): Promise<TrialStatus>;
   claimTrial(userId: string, username: string): Promise<{ status: string; license: LicenseInfo; token: string }>;
 }
 
@@ -268,18 +279,56 @@ export class LicenseService implements ILicenseService {
     return this.hasFeatureIn(license, feature);
   }
 
-  async getTrialStatus(userId: string): Promise<{ claimed: boolean; claimed_at: string | null }> {
+  async getTrialStatus(userId: string): Promise<TrialStatus> {
     const claimedAt = await this.authRepo.getTrialClaimedAt(userId);
+    if (!claimedAt) {
+      return {
+        claimed: false,
+        claimed_at: null,
+        can_claim: true,
+        cooldown_remaining_ms: 0,
+        next_available_at: null,
+      };
+    }
+
+    const lastClaimed = new Date(claimedAt).getTime();
+    if (isNaN(lastClaimed)) {
+      return {
+        claimed: true,
+        claimed_at: claimedAt,
+        can_claim: true,
+        cooldown_remaining_ms: 0,
+        next_available_at: null,
+      };
+    }
+
+    const elapsed = Date.now() - lastClaimed;
+    if (elapsed >= TRIAL_COOLDOWN_MS) {
+      return {
+        claimed: true,
+        claimed_at: claimedAt,
+        can_claim: true,
+        cooldown_remaining_ms: 0,
+        next_available_at: null,
+      };
+    }
+
+    const remaining = TRIAL_COOLDOWN_MS - elapsed;
+    const nextAvailableAt = new Date(lastClaimed + TRIAL_COOLDOWN_MS).toISOString();
     return {
-      claimed: claimedAt !== null,
+      claimed: true,
       claimed_at: claimedAt,
+      can_claim: false,
+      cooldown_remaining_ms: remaining,
+      next_available_at: nextAvailableAt,
     };
   }
 
   async claimTrial(userId: string, username: string): Promise<{ status: string; license: LicenseInfo; token: string }> {
-    const claimedAt = await this.authRepo.getTrialClaimedAt(userId);
-    if (claimedAt !== null) {
-      throw new Error('Trial license has already been claimed for this account|409');
+    const trialStatus = await this.getTrialStatus(userId);
+    if (!trialStatus.can_claim) {
+      const hoursLeft = Math.max(1, Math.ceil(trialStatus.cooldown_remaining_ms / (60 * 60 * 1000)));
+      throw new Error(`Trial license can only be generated once every 24 hours. Next trial available in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}|429`);
     }
 
     let privKeyHex = this.env.SWAZZ_LICENSE_PRIVKEY;
@@ -295,7 +344,7 @@ export class LicenseService implements ILicenseService {
     }
 
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(now.getTime() + TRIAL_DURATION_MS).toISOString();
     const company = username ? `${username} (14-Day Trial)` : 'Swazz Trial User';
 
     const payload = {

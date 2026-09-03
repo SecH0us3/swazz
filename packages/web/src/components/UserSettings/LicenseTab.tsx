@@ -10,10 +10,18 @@ import { getFeatureLabel } from '@swazz/shared';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
+export interface TrialStatusData {
+    claimed: boolean;
+    claimed_at: string | null;
+    can_claim?: boolean;
+    cooldown_remaining_ms?: number;
+    next_available_at?: string | null;
+}
+
 export function LicenseTab() {
     const userProfile = useAppStore(state => state.userProfile);
     const [status, setStatus] = useState<LicenseStatus | null>(null);
-    const [trialStatus, setTrialStatus] = useState<{ claimed: boolean; claimed_at: string | null } | null>(null);
+    const [trialStatus, setTrialStatus] = useState<TrialStatusData | null>(null);
     const [licenseKey, setLicenseKey] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isActivating, setIsActivating] = useState(false);
@@ -130,13 +138,19 @@ export function LicenseTab() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to claim trial license');
+            const isRenewal = isActive && isTrialLicense;
             setStatus({ status: 'active', license: data.license });
-            setTrialStatus({ claimed: true, claimed_at: new Date().toISOString() });
+            setTrialStatus({
+                claimed: true,
+                claimed_at: new Date().toISOString(),
+                can_claim: false,
+                cooldown_remaining_ms: 24 * 60 * 60 * 1000,
+            });
             if (data.token) {
                 setClaimedToken(data.token);
             }
             useAppStore.setState({ licenseStatus: { status: 'active', license: data.license } });
-            setSuccess('14-day free trial license activated successfully!');
+            setSuccess(isRenewal ? '14-day free trial license renewed successfully!' : '14-day free trial license activated successfully!');
         } catch (err: any) {
             setError(err.message || 'Failed to claim trial license');
         } finally {
@@ -199,6 +213,10 @@ export function LicenseTab() {
             status!.license!.company.endsWith('(14-Day Trial)') ||
             status!.license!.company === 'Swazz Trial User'
         ));
+    const canClaimTrial = trialStatus ? (trialStatus.can_claim ?? !trialStatus.claimed) : true;
+    const cooldownHours = trialStatus?.cooldown_remaining_ms
+        ? Math.max(1, Math.ceil(trialStatus.cooldown_remaining_ms / (60 * 60 * 1000)))
+        : null;
 
     return (
         <div className="settings-card">
@@ -210,7 +228,7 @@ export function LicenseTab() {
 
             {isLoading && <p className="logs-no-data">Loading license status...</p>}
 
-            {!isLoading && !isActive && !trialStatus?.claimed && (
+            {!isLoading && !isActive && canClaimTrial && (
                 <div className="trial-claim-card">
                     <div className="trial-claim-header">
                         <div className="trial-claim-title-group">
@@ -234,9 +252,9 @@ export function LicenseTab() {
                 </div>
             )}
 
-            {!isLoading && !isActive && trialStatus?.claimed && (
+            {!isLoading && !isActive && !canClaimTrial && (
                 <div className="trial-used-notice">
-                    ✓ 14-Day Free Trial has already been claimed for this account.
+                    ✓ Trial claimed today. Next 14-day free trial will be available in {cooldownHours ? `${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}` : '24 hours'}.
                 </div>
             )}
 
@@ -249,11 +267,23 @@ export function LicenseTab() {
                                     <span className="account-status-dot active" />
                                     {isTrialLicense ? 'Trial License Active' : 'Enterprise License Active'}
                                 </div>
-                                {remainingDays !== null && (
-                                    <span className="trial-days-badge">
-                                        {remainingDays} day{remainingDays === 1 ? '' : 's'} remaining
-                                    </span>
-                                )}
+                                <div className="license-badge-actions">
+                                    {isTrialLicense && canClaimTrial && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={handleClaimTrial}
+                                            disabled={isClaimingTrial}
+                                        >
+                                            {isClaimingTrial ? 'Renewing...' : 'Renew 14-Day Trial'}
+                                        </button>
+                                    )}
+                                    {remainingDays !== null && (
+                                        <span className="trial-days-badge">
+                                            {remainingDays} day{remainingDays === 1 ? '' : 's'} remaining
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <div className="license-info-grid">
                                 <div className="license-info-item">

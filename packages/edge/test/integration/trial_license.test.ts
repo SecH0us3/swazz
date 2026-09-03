@@ -91,6 +91,7 @@ describe('Trial License Integration', () => {
     const statusData1 = await statusRes1.json();
     expect(statusData1.claimed).toBe(false);
     expect(statusData1.claimed_at).toBeNull();
+    expect(statusData1.can_claim).toBe(true);
 
     // 2. Claim trial license
     const claimRes = await app.fetch(
@@ -115,7 +116,7 @@ describe('Trial License Integration', () => {
     expect(typeof claimData.token).toBe('string');
     expect(claimData.token.split('.').length).toBe(3);
 
-    // 3. Trial status should now be claimed
+    // 3. Trial status should now be claimed and on cooldown
     const statusRes2 = await app.fetch(
       new Request('http://localhost/api/user/trial-status', {
         method: 'GET',
@@ -129,6 +130,8 @@ describe('Trial License Integration', () => {
     const statusData2 = await statusRes2.json();
     expect(statusData2.claimed).toBe(true);
     expect(statusData2.claimed_at).toBeTruthy();
+    expect(statusData2.can_claim).toBe(false);
+    expect(statusData2.cooldown_remaining_ms).toBeGreaterThan(0);
 
     // 4. Regular license status should now report active
     const licRes = await app.fetch(
@@ -145,7 +148,7 @@ describe('Trial License Integration', () => {
     expect(licData.status).toBe('active');
     expect(licData.license.company).toBe(`${username} (14-Day Trial)`);
 
-    // 5. Attempt duplicate claim -> 409
+    // 5. Attempt duplicate claim within cooldown -> 429
     const dupRes = await app.fetch(
       new Request('http://localhost/api/user/trial-license', {
         method: 'POST',
@@ -158,9 +161,9 @@ describe('Trial License Integration', () => {
       }),
       env
     );
-    expect(dupRes.status).toBe(409);
+    expect(dupRes.status).toBe(429);
     const dupData = await dupRes.json();
-    expect(dupData.error).toContain('already been claimed');
+    expect(dupData.error).toContain('once every 24 hours');
   });
 
   it('rejects unauthenticated requests to trial endpoints', async () => {
