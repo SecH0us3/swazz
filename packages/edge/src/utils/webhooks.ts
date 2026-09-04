@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { getDB } from './db';
 import { logInfo, logError } from '../../../common/logging/logger';
 import { Webhook } from '../types';
+import { safeFetchWebhook } from './ssrf';
 
 export async function signWebhookPayload(secret: string, timestamp: number, payloadStr: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -106,12 +107,12 @@ export async function dispatchWebhook(
 
     try {
       logInfo({ env, executionCtx: ctx }, 'Webhook', `Dispatching ${eventType} webhook to ${webhook.url}`);
-      const response = await fetch(webhook.url, {
+      const response = await safeFetchWebhook(webhook.url, {
         method: 'POST',
         headers: headersObj,
         body: payloadStr,
         signal: AbortSignal.timeout(5000)
-      });
+      }, env);
 
       if (!response.ok) {
         logError({ env, executionCtx: ctx }, 'Webhook', `Webhook ${webhook.id} returned non-OK status ${response.status} for event ${eventType}`);
