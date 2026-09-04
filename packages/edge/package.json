@@ -22,7 +22,7 @@
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
     "@swazz/shared": "*",
-    "hono": "^4.13.4",
+    "hono": "^4.13.5",
     "ulidx": "^2.4.1",
     "zod": "^4.4.3"
   }
