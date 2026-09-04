@@ -258,20 +258,20 @@ describe('ProjectService', () => {
   });
 
   describe('Project Webhooks & SSRF Protection', () => {
-    it('createProjectWebhook rejects SSRF URLs targeting private/loopback addresses', async () => {
+    it('createProjectWebhook rejects SSRF URLs targeting private/loopback addresses and direct IPs', async () => {
       await expect(
         service.createProjectWebhook('p1', {
           url: 'http://127.0.0.1:8787/hook',
           event_types: ['scan.started'],
         })
-      ).rejects.toThrow('private, loopback, or reserved network addresses|400');
+      ).rejects.toThrow('direct IP addresses are not permitted|400');
 
       await expect(
         service.createProjectWebhook('p1', {
           url: 'http://169.254.169.254/latest/meta-data/',
           event_types: ['scan.started'],
         })
-      ).rejects.toThrow('private, loopback, or reserved network addresses|400');
+      ).rejects.toThrow('direct IP addresses are not permitted|400');
 
       await expect(
         service.createProjectWebhook('p1', {
@@ -310,7 +310,7 @@ describe('ProjectService', () => {
       ).rejects.toThrow('private, loopback, or reserved network addresses|400');
     });
 
-    it('testProjectWebhook blocks dispatch targeting restricted addresses', async () => {
+    it('testProjectWebhook blocks dispatch targeting restricted addresses or direct IPs', async () => {
       projectRepo.getProjectWebhook.mockResolvedValue({
         id: 'w1',
         project_id: 'p1',
@@ -319,7 +319,7 @@ describe('ProjectService', () => {
         secret: 'whsec_test',
       });
 
-      await expect(service.testProjectWebhook('p1', 'w1')).rejects.toThrow('private, loopback, or reserved network addresses|400');
+      await expect(service.testProjectWebhook('p1', 'w1')).rejects.toThrow('direct IP addresses are not permitted|400');
     });
 
     it('testProjectWebhook successfully dispatches to valid public targets and returns status', async () => {

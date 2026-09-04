@@ -243,21 +243,16 @@ export async function validateWebhookUrl(url: string, env?: Env): Promise<URL> {
 
   const hostname = parsed.hostname;
 
-  // 1. Check against blocked hostname patterns (localhost, .internal, instance-data, etc.)
-  if (isBlockedHostname(hostname)) {
-    throw new Error('Webhook URL cannot target private, loopback, or reserved network addresses|400');
-  }
-
-  // 2. Check if hostname is directly an IPv4 literal
-  const v4 = parseIPv4(hostname);
-  if (v4 && isBlockedIPv4(v4)) {
-    throw new Error('Webhook URL cannot target private, loopback, or reserved network addresses|400');
-  }
-
-  // 3. Check if hostname is directly an IPv6 literal
+  // 1. Disallow direct IP addresses as webhook hosts (require FQDN domain names)
+  const isDirectV4 = parseIPv4(hostname);
   const cleanV6 = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
-  const v6 = parseIPv6(cleanV6);
-  if (v6 && isBlockedIPv6(v6)) {
+  const isDirectV6 = parseIPv6(cleanV6);
+  if (isDirectV4 || isDirectV6) {
+    throw new Error('Webhook URL must use a domain name, direct IP addresses are not permitted|400');
+  }
+
+  // 2. Check against blocked hostname patterns (localhost, .internal, instance-data, etc.)
+  if (isBlockedHostname(hostname)) {
     throw new Error('Webhook URL cannot target private, loopback, or reserved network addresses|400');
   }
 

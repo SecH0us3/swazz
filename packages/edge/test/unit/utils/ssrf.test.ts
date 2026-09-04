@@ -149,18 +149,17 @@ describe('SSRF Protection Utilities', () => {
       await expect(validateWebhookUrl('gopher://example.com/')).rejects.toThrow('URL protocol must be http or https');
     });
 
-    it('rejects loopback and private IPv4 target URLs', async () => {
-      await expect(validateWebhookUrl('http://127.0.0.1:8787/hook')).rejects.toThrow('private, loopback, or reserved');
-      await expect(validateWebhookUrl('http://127.1/hook')).rejects.toThrow('private, loopback, or reserved');
-      await expect(validateWebhookUrl('http://10.0.0.1/hook')).rejects.toThrow('private, loopback, or reserved');
-      await expect(validateWebhookUrl('http://192.168.1.1/hook')).rejects.toThrow('private, loopback, or reserved');
-      await expect(validateWebhookUrl('http://172.16.0.1/hook')).rejects.toThrow('private, loopback, or reserved');
-      await expect(validateWebhookUrl('http://0.0.0.0/hook')).rejects.toThrow('private, loopback, or reserved');
-    });
-
-    it('rejects cloud metadata IP addresses', async () => {
-      await expect(validateWebhookUrl('http://169.254.169.254/latest/meta-data/')).rejects.toThrow('private, loopback, or reserved');
-      await expect(validateWebhookUrl('http://[fd00:ec2::254]/')).rejects.toThrow('private, loopback, or reserved');
+    it('rejects direct IP addresses in webhook URLs', async () => {
+      await expect(validateWebhookUrl('http://127.0.0.1:8787/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://127.1/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://10.0.0.1/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://192.168.1.1/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://172.16.0.1/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://0.0.0.0/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://8.8.8.8/hook')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://169.254.169.254/latest/meta-data/')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://[fd00:ec2::254]/')).rejects.toThrow('direct IP addresses are not permitted');
+      await expect(validateWebhookUrl('http://[::1]/hook')).rejects.toThrow('direct IP addresses are not permitted');
     });
 
     it('rejects internal and loopback hostnames', async () => {
@@ -168,6 +167,24 @@ describe('SSRF Protection Utilities', () => {
       await expect(validateWebhookUrl('http://metadata.google.internal/')).rejects.toThrow('private, loopback, or reserved');
       await expect(validateWebhookUrl('http://instance-data/')).rejects.toThrow('private, loopback, or reserved');
       await expect(validateWebhookUrl('http://internal-host/webhook')).rejects.toThrow('private, loopback, or reserved');
+    });
+
+    it('rejects domains resolving to private/loopback IP addresses via DNS', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url: any) => {
+        if (url.toString().includes('cloudflare-dns.com')) {
+          return Promise.resolve(new Response(JSON.stringify({
+            Status: 0,
+            Answer: [{ name: 'rebind.evil.com', type: 1, data: '127.0.0.1' }]
+          }), { status: 200 }));
+        }
+        return Promise.resolve(new Response('OK', { status: 200 }));
+      });
+
+      await expect(validateWebhookUrl('https://rebind.evil.com/webhook')).rejects.toThrow(
+        'Webhook URL cannot target private, loopback, or reserved network addresses|400'
+      );
+
+      fetchSpy.mockRestore();
     });
 
     it('allows valid public domain webhook URLs', async () => {
@@ -182,13 +199,13 @@ describe('SSRF Protection Utilities', () => {
   });
 
   describe('safeFetchWebhook', () => {
-    it('blocks requests targeting private addresses before fetch', async () => {
+    it('blocks requests targeting direct IP addresses before fetch', async () => {
       await expect(
         safeFetchWebhook('http://127.0.0.1:8787/hook', { method: 'POST' })
-      ).rejects.toThrow('private, loopback, or reserved');
+      ).rejects.toThrow('direct IP addresses are not permitted');
     });
 
-    it('aborts when a redirect hop targets a restricted/private address', async () => {
+    it('aborts when a redirect hop targets a restricted/private address or IP', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url: any) => {
         if (url.toString().includes('example.com/redirect-to-metadata')) {
           return Promise.resolve(new Response(null, {
@@ -201,7 +218,7 @@ describe('SSRF Protection Utilities', () => {
 
       await expect(
         safeFetchWebhook('https://example.com/redirect-to-metadata', { method: 'POST' })
-      ).rejects.toThrow('private, loopback, or reserved');
+      ).rejects.toThrow('direct IP addresses are not permitted');
 
       fetchSpy.mockRestore();
     });
