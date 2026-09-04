@@ -54,6 +54,7 @@ __debug_bin
 tmp/
 coverage.out
 swazz.real.mcp.json
+swazz.*.json
 *.config.json
 
 # AI Assistants Local Data
