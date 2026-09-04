@@ -49,7 +49,11 @@ describe('ProjectService', () => {
       getProjectAnalytics: vi.fn(),
       checkUserIsMember: vi.fn(),
       getUserLoginHistory: vi.fn(),
-      getProjectAuditLogs: vi.fn()
+      getProjectAuditLogs: vi.fn(),
+      createProjectWebhook: vi.fn(),
+      getProjectWebhook: vi.fn(),
+      getProjectWebhooks: vi.fn(),
+      deleteProjectWebhook: vi.fn(),
     };
     rbacRepo = {
       checkPermission: vi.fn(),
@@ -250,6 +254,112 @@ describe('ProjectService', () => {
       expect(res.api_key).toBeDefined();
       expect(res.api_key.startsWith('swazz_live_')).toBe(true);
       expect(env.DB.batch).toHaveBeenCalled();
+    });
+  });
+
+  describe('Project Webhooks & SSRF Protection', () => {
+    it('createProjectWebhook rejects SSRF URLs targeting private/loopback addresses and direct IPs', async () => {
+      await expect(
+        service.createProjectWebhook('p1', {
+          url: 'http://127.0.0.1:8787/hook',
+          event_types: ['scan.started'],
+        })
+      ).rejects.toThrow('direct IP addresses are not permitted|400');
+
+      await expect(
+        service.createProjectWebhook('p1', {
+          url: 'http://169.254.169.254/latest/meta-data/',
+          event_types: ['scan.started'],
+        })
+      ).rejects.toThrow('direct IP addresses are not permitted|400');
+
+      await expect(
+        service.createProjectWebhook('p1', {
+          url: 'http://metadata.google.internal/computeMetadata/v1/',
+          event_types: ['scan.started'],
+        })
+      ).rejects.toThrow('private, loopback, or reserved network addresses|400');
+    });
+
+    it('createProjectWebhook accepts valid public domain URLs', async () => {
+      projectRepo.createProjectWebhook.mockResolvedValue(undefined as any);
+
+      const res = await service.createProjectWebhook('p1', {
+        url: 'https://example.com/webhook',
+        event_types: ['scan.started'],
+      });
+
+      expect(res.status).toBe('created');
+      expect(res.id).toBeDefined();
+      expect(res.secret.startsWith('whsec_')).toBe(true);
+      expect(projectRepo.createProjectWebhook).toHaveBeenCalled();
+    });
+
+    it('updateProjectWebhook rejects SSRF URLs targeting internal hosts', async () => {
+      projectRepo.getProjectWebhook.mockResolvedValue({
+        id: 'w1',
+        project_id: 'p1',
+        url: 'https://example.com/old',
+      });
+
+      await expect(
+        service.updateProjectWebhook('p1', 'w1', {
+          url: 'http://localhost:8080/hook',
+          event_types: ['scan.completed'],
+        })
+      ).rejects.toThrow('private, loopback, or reserved network addresses|400');
+    });
+
+    it('testProjectWebhook blocks dispatch targeting restricted addresses or direct IPs', async () => {
+      projectRepo.getProjectWebhook.mockResolvedValue({
+        id: 'w1',
+        project_id: 'p1',
+        url: 'http://127.0.0.1:8080/hook',
+        headers: null,
+        secret: 'whsec_test',
+      });
+
+      await expect(service.testProjectWebhook('p1', 'w1')).rejects.toThrow('direct IP addresses are not permitted|400');
+    });
+
+    it('testProjectWebhook successfully dispatches to valid public targets and returns status', async () => {
+      projectRepo.getProjectWebhook.mockResolvedValue({
+        id: 'w1',
+        project_id: 'p1',
+        url: 'https://example.com/webhook',
+        headers: JSON.stringify({ 'X-Custom': 'val' }),
+        secret: 'whsec_1234567890',
+      });
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+        return Promise.resolve(new Response(JSON.stringify({ received: true }), { status: 200 }));
+      });
+
+      const res = await service.testProjectWebhook('p1', 'w1');
+      expect(res.status).toBe('success');
+      expect(res.statusCode).toBe(200);
+
+      fetchSpy.mockRestore();
+    });
+
+    it('testProjectWebhook does not leak internal connection errors on failure', async () => {
+      projectRepo.getProjectWebhook.mockResolvedValue({
+        id: 'w1',
+        project_id: 'p1',
+        url: 'https://example.com/webhook',
+        headers: null,
+        secret: null,
+      });
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+        return Promise.reject(new Error('Internal socket ECONNREFUSED 10.0.0.5:443'));
+      });
+
+      await expect(service.testProjectWebhook('p1', 'w1')).rejects.toThrow(
+        'Webhook test failed: Target is unreachable or request was blocked|400'
+      );
+
+      fetchSpy.mockRestore();
     });
   });
 });

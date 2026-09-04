@@ -7,6 +7,7 @@ import { Env } from '../env';
 import { IProjectRepository } from '../repositories/projects';
 import { IRbacRepository } from '../repositories/rbac';
 import { signWebhookPayload } from '../utils/webhooks';
+import { validateWebhookUrl, safeFetchWebhook } from '../utils/ssrf';
 import { ulid } from 'ulidx';
 import { hashPassword, hashApiKey, hashUsername } from '../utils/auth';
 import { AuthRepository } from '../repositories/auth';
@@ -172,20 +173,7 @@ export class ProjectService implements IProjectService {
 
   async createProjectWebhook(projectId: string, body: any) {
     const { url, headers, event_types } = body;
-    if (!url || typeof url !== 'string') {
-      throw new Error('URL is required and must be a string|400');
-    }
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        throw new Error('URL protocol must be http or https|400');
-      }
-    } catch (urlErr: any) {
-      if (urlErr.message?.includes('|400')) {
-        throw urlErr;
-      }
-      throw new Error('Invalid URL format|400');
-    }
+    await validateWebhookUrl(url, this.env);
     if (headers) {
       try {
         const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
@@ -222,20 +210,7 @@ export class ProjectService implements IProjectService {
     }
 
     const { url, headers, event_types } = body;
-    if (!url || typeof url !== 'string') {
-      throw new Error('URL is required and must be a string|400');
-    }
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        throw new Error('URL protocol must be http or https|400');
-      }
-    } catch (urlErr: any) {
-      if (urlErr.message?.includes('|400')) {
-        throw urlErr;
-      }
-      throw new Error('Invalid URL format|400');
-    }
+    await validateWebhookUrl(url, this.env);
     if (headers) {
       try {
         const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
@@ -318,13 +293,16 @@ export class ProjectService implements IProjectService {
       headersObj['User-Agent'] = 'Swazz/1.0 (+https://github.com/SecH0us3/swazz)';
     }
 
+    // Re-validate against SSRF policy at dispatch time
+    await validateWebhookUrl(webhook.url, this.env);
+
     try {
-      const response = await fetch(webhook.url, {
+      const response = await safeFetchWebhook(webhook.url, {
         method: 'POST',
         headers: headersObj,
         body: payloadStr,
         signal: AbortSignal.timeout(5000)
-      });
+      }, this.env);
 
       if (!response.ok) {
         throw new Error(`Webhook target returned status ${response.status}`);
@@ -332,7 +310,14 @@ export class ProjectService implements IProjectService {
 
       return { status: 'success', statusCode: response.status };
     } catch (err: any) {
-      throw new Error(`Webhook test failed: ${err.message}|400`);
+      const msg = err.message || '';
+      if (msg.includes('|400')) {
+        throw err;
+      }
+      if (msg.includes('Webhook target returned status')) {
+        throw new Error(`Webhook test failed: ${msg}|400`);
+      }
+      throw new Error(`Webhook test failed: Target is unreachable or request was blocked|400`);
     }
   }
 

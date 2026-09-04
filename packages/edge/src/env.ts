@@ -33,5 +33,6 @@ export interface Env {
   SWAZZ_LICENSE_PUBKEY?: string;
   SWAZZ_LICENSE_PRIVKEY?: string;
   NODE_ENV?: string;
+  ALLOW_PRIVATE_WEBHOOKS?: string;
 }
 
