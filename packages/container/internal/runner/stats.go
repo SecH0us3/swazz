@@ -29,11 +29,14 @@ type statsMsg struct {
 
 // GetStats returns an immutable snapshot of current stats (lock-free).
 func (r *Runner) GetStats() swagger.RunStats {
-	p := r.latestStats.Load()
-	if p == nil {
-		return newEmptyStats()
+	var stats swagger.RunStats
+	if p := r.latestStats.Load(); p != nil {
+		stats = *p
+	} else {
+		stats = newEmptyStats()
 	}
-	return *p
+	stats.WAFCheck = r.wafCheckResult.Load()
+	return stats
 }
 
 type CheckpointData struct {

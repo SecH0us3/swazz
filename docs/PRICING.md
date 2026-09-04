@@ -45,9 +45,13 @@ Under our **Additional Use Grant**, you are granted full permission to run Swazz
 | **Enterprise SAML / Single Sign-On (Okta, Azure AD)** | ❌ | ✅ Included |
 | **Multi-Tenant Organizations & RBAC** | ❌ | ✅ Included |
 | **Custom Compliance PDF Reports (PCI-DSS, SOC2)** | ❌ | ✅ Included |
-| **Bi-directional Ticket Sync (Jira, GitLab)** | ❌ | ✅ Included |
+| **WAF Analysis (Pre-scan Detection & Web Tab)** | ✅ Included (Free) | ✅ Included |
+| **Virtual Patch CLI Export (`--waf-patch`)** | ❌ (Report Exports License) | ✅ Included |
 | **CLI Startup BSL Notice Banner** | Displayed | Suppressed / Clean |
 | **Communication & Issue Triage** | Public GitHub Issues | Direct Priority Channel |
+
+> [!NOTE]
+> **WAF Analysis Availability**: Domain-level pre-scan WAF fingerprinting (`waf_check_enabled`) and the Web Dashboard's interactive **WAF Check** tab are completely free across all editions (not license-gated). In CLI mode, exporting offline mitigation patch files to disk (`--waf-patch <vendor>`) is available under commercial Report Exports licensing.
 
 ---
 

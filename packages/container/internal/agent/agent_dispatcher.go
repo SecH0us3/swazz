@@ -32,6 +32,7 @@ import (
 	"swazz-engine/internal/safenet"
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/triage"
+	"swazz-engine/internal/wafcheck"
 	"swazz-engine/internal/ws"
 )
 
@@ -400,6 +401,28 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 					sendRunnerLog("warning", fmt.Sprintf("[AI] ⚠️ Failed to upload triage results: %v", patchErr))
 				} else {
 					sendRunnerLog("info", fmt.Sprintf("[AI] ✅ Successfully applied Smart Triage to %d defect groups", len(triageResults)))
+				}
+			}
+		}
+
+		// Post-scan WAF Mitigation (Virtual Patch Generation)
+		if wafResult := r.GetWAFCheckResult(); wafResult != nil && wafResult.Detection.Detected {
+			findings := classifier.New(liveClsRules).ClassifyAll(r.Results())
+			items := classifier.ToAuditResultItems(findings)
+			if len(items) > 0 {
+				client := wafcheck.NewClient(r.Config().Settings.WAFCheckEndpoint)
+				patchCtx, patchCancel := context.WithTimeout(ctx, 20*time.Second)
+				report, err := client.GeneratePatches(patchCtx, items, wafcheck.PatchOptions{
+					Vendor: "all", TargetURL: r.Config().BaseURL, IncludeTerraform: true,
+				})
+				patchCancel()
+				if err != nil {
+					logWarn("[WAF] ⚠️ Patch generation failed: %v", err)
+				} else if err := sendWAFPatchToEdge(d.coordinatorURL, d.token, runID, report); err != nil {
+					logError("Failed to send WAF patch report to Edge API: %v", err)
+					sendRunnerLog("warning", fmt.Sprintf("[WAF] ⚠️ Failed to upload WAF patch report: %v", err))
+				} else {
+					sendRunnerLog("info", fmt.Sprintf("[WAF] ✅ Generated WAF mitigation rules (%d bypasses)", report.TotalBypasses))
 				}
 			}
 		}

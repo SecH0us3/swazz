@@ -17,6 +17,7 @@ import { HistoryPage } from './HistoryPage.js';
 import { LandingShowcase } from './LandingShowcase.js';
 import { ComparePage } from './ComparePage.js';
 import { AboutPage } from './AboutPage.js';
+import { WafCheckPanel } from './WafCheck/WafCheckPanel.js';
 import { Logo } from './Common/Logo.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
@@ -401,6 +402,26 @@ export function MainWorkspace({
                             </button>
                         )}
                         <button
+                            className={`tab-bar-btn ${activeTab === 'waf' ? 'active' : ''}`}
+                            data-testid="tab-waf"
+                            onClick={() => useAppStore.setState({ activeTab: 'waf' })}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                            WAF Check
+                        </button>
+                        {currentStats?.wafCheck && (
+                            <span
+                                className="tab-bar-count waf-detection-badge"
+                                title={currentStats.wafCheck.detection.detected ? `WAF: ${currentStats.wafCheck.detection.wafType} (${Math.round(Math.min(100, currentStats.wafCheck.detection.confidence))}% confidence)` : 'No WAF detected'}
+                            >
+                                {currentStats.wafCheck.detection.detected
+                                    ? `🛡️ ${currentStats.wafCheck.detection.wafType || 'WAF'} detected`
+                                    : 'No WAF detected'}
+                            </span>
+                        )}
+                        <button
                             className={`tab-bar-btn ${activeTab === 'runner_logs' ? 'active' : ''}`}
                             onClick={() => useAppStore.setState({ activeTab: 'runner_logs' })}
                         >
@@ -533,6 +554,8 @@ export function MainWorkspace({
                             onExportHTML={handleExportHTML}
                             onExportMD={handleExportMD}
                         />
+                    ) : activeTab === 'waf' ? (
+                        <WafCheckPanel targetUrl={config?.base_url} />
                     ) : !hasActivity ? (
                         <div className="welcome-workspace-wrapper">
                             <div className="welcome-workspace-container">
@@ -664,6 +687,7 @@ export function MainWorkspace({
                                     findingsOnly={true}
                                     config={config}
                                     onUpdateCount={setGroupedFindingsCount}
+                                    wafPatchReport={currentStats?.waf_patch_report}
                                 />
                             )}
                             {isAnalysisEnabled && activeTab === 'owasp' && (

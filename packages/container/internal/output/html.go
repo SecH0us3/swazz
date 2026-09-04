@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"math"
 	"strings"
 	"time"
 
@@ -274,6 +275,81 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
 		findingsContent = `<p>No findings discovered. ✨</p>`
 	}
 
+	wafSectionHTML := ""
+	if stats != nil && stats.WAFCheck != nil {
+		detectedText := "No"
+		statusColor := "var(--note)"
+		if stats.WAFCheck.Detection.Detected {
+			detectedText = "Yes"
+			statusColor = "var(--error)"
+		}
+
+		var evidenceList strings.Builder
+		if len(stats.WAFCheck.Detection.Evidence) > 0 {
+			evidenceList.WriteString(`<ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">`)
+			for _, ev := range stats.WAFCheck.Detection.Evidence {
+				evidenceList.WriteString(fmt.Sprintf("<li>%s</li>", html.EscapeString(ev)))
+			}
+			evidenceList.WriteString("</ul>")
+		} else {
+			evidenceList.WriteString("None")
+		}
+
+		var bypassList strings.Builder
+		var activeBypasses []string
+		if stats.WAFCheck.BypassOpportunities.HTTPMethodsBypass {
+			activeBypasses = append(activeBypasses, "HTTP Methods Bypass")
+		}
+		if stats.WAFCheck.BypassOpportunities.HeaderBypass {
+			activeBypasses = append(activeBypasses, "Header Bypass")
+		}
+		if stats.WAFCheck.BypassOpportunities.EncodingBypass {
+			activeBypasses = append(activeBypasses, "Encoding Bypass")
+		}
+		if stats.WAFCheck.BypassOpportunities.ParameterPollution {
+			activeBypasses = append(activeBypasses, "Parameter Pollution")
+		}
+		if len(activeBypasses) > 0 {
+			bypassList.WriteString(`<ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">`)
+			for _, bp := range activeBypasses {
+				bypassList.WriteString(fmt.Sprintf("<li>%s</li>", html.EscapeString(bp)))
+			}
+			bypassList.WriteString("</ul>")
+		} else {
+			bypassList.WriteString("None")
+		}
+
+		wafType := stats.WAFCheck.Detection.WAFType
+		if wafType == "" {
+			wafType = "None"
+		}
+
+		wafSectionHTML = fmt.Sprintf(`
+        <h2>WAF Analysis</h2>
+        <div class="stat-card" style="text-align: left; margin-bottom: 2rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                <div><span class="stat-label">WAF Detected</span> <span style="font-weight: bold; color: %s;">%s</span></div>
+                <div><span class="stat-label">Vendor</span> <span style="font-weight: bold;">%s</span></div>
+                <div><span class="stat-label">Confidence</span> <span style="font-weight: bold;">%.0f%%</span></div>
+            </div>
+            <div style="margin-top: 1rem;">
+                <span class="stat-label">Evidence</span>
+                %s
+            </div>
+            <div style="margin-top: 1rem;">
+                <span class="stat-label">Bypass Opportunities</span>
+                %s
+            </div>
+        </div>`,
+			statusColor,
+			detectedText,
+			html.EscapeString(wafType),
+			math.Min(100, stats.WAFCheck.Detection.Confidence),
+			evidenceList.String(),
+			bypassList.String(),
+		)
+	}
+
 	const placeholder = "/*__REPORT_JS__*/"
 	tmpl := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
@@ -356,6 +432,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
             <div class="stat-card"><span class="stat-value" style="color: var(--warning)">%d</span><span class="stat-label">Warnings</span></div>
             <div class="stat-card"><span class="stat-value">%d</span><span class="stat-label">Endpoints</span></div>
         </div>
+        %s
 
         <h2>OWASP API Security Top 10 (2023)</h2>
         <div class="owasp-section">
@@ -391,7 +468,7 @@ func ToHTML(findings []*classifier.Finding, stats *swagger.RunStats) string {
     </script>
 </body>
 </html>`,
-		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, owaspAPIGrid.String(), owaspGrid.String(), statusOptions.String(), profileOptions.String(), findingsContent)
+		timestamp, duration, totalRequests, errors, warnings, totalEndpoints, wafSectionHTML, owaspAPIGrid.String(), owaspGrid.String(), statusOptions.String(), profileOptions.String(), findingsContent)
 	return strings.ReplaceAll(tmpl, placeholder, reportJS)
 }
 

@@ -8,11 +8,12 @@ import { Virtuoso } from 'react-virtuoso';
 import type { ResultSummary } from '../../hooks/useRunner.js';
 import type { HeatmapFilter } from '../Dashboard/Heatmap.js';
 import type { QueryOptions } from '../../hooks/useDb.js';
-import type { AnalysisFinding, SwazzConfig } from '../../types.js';
+import type { AnalysisFinding, SwazzConfig, WAFPatchReport } from '../../types.js';
 import { extractErrorSubtype, getCleanDedupeKey } from '../../utils/errors.js';
 import { categorizeFinding } from '../../utils/findings.js';
 import { FindingItem } from './FindingItem.js';
 import { StatusFilterDropdown } from './StatusFilterDropdown.js';
+import { WafPatchViewer } from './WafPatchViewer.js';
 import {
     getStatusClass,
     getBadgeClass,
@@ -35,6 +36,7 @@ interface Props {
     findingsOnly?: boolean;
     config?: SwazzConfig;
     onUpdateCount?: (count: number) => void;
+    wafPatchReport?: WAFPatchReport | null;
 }
 
 const PAGE_SIZE = 1000;
@@ -50,6 +52,7 @@ export function Inspector({
     findingsOnly = false,
     config,
     onUpdateCount,
+    wafPatchReport,
 }: Props) {
     const onSelectResultRef = useRef(onSelectResult);
     onSelectResultRef.current = onSelectResult;
@@ -523,6 +526,7 @@ export function Inspector({
             </div>
 
             <div className={`request-log ${findingsOnly ? 'findings-only' : ''}`}>
+                {findingsOnly && <WafPatchViewer report={wafPatchReport} />}
                 {rows.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-state-icon">🔍</div>

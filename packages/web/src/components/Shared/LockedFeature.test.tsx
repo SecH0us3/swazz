@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { LockedFeature } from './LockedFeature.js';
 import { useAppStore } from '../../store/appStore.js';
-import { FEATURE_SCHEDULED_RUNS, FEATURE_WAF_ANALYSIS } from '@swazz/shared';
+import { FEATURE_SCHEDULED_RUNS, FEATURE_DOMAIN_RECON } from '@swazz/shared';
 import { useToast } from '../../hooks/useToast.js';
 
 vi.mock('../../hooks/useToast.js', () => ({
@@ -30,11 +30,11 @@ describe('LockedFeature', () => {
 
     it('renders children with a coming-soon badge for coming_soon features', () => {
         render(
-            <LockedFeature feature={FEATURE_WAF_ANALYSIS}>
-                <span>WAF Analysis</span>
+            <LockedFeature feature={FEATURE_DOMAIN_RECON}>
+                <span>Domain Recon</span>
             </LockedFeature>
         );
-        expect(screen.getByText('WAF Analysis')).toBeTruthy();
+        expect(screen.getByText('Domain Recon')).toBeTruthy();
         expect(screen.getByText('⏳')).toBeTruthy();
     });
 

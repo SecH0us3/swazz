@@ -42,7 +42,7 @@ func ToJSON(findings []*classifier.Finding, stats *swagger.RunStats, version str
 		statusCounts = stats.StatusCounts
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"tool":      "swazz",
 		"version":   version,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -59,4 +59,10 @@ func ToJSON(findings []*classifier.Finding, stats *swagger.RunStats, version str
 		},
 		"findings": findings,
 	}
+
+	if stats != nil && stats.WAFCheck != nil {
+		result["wafCheck"] = stats.WAFCheck
+	}
+
+	return result
 }

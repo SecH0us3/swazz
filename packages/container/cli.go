@@ -23,6 +23,7 @@ import (
 	"swazz-engine/internal/output"
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/wafcheck"
 	"sync"
 	"syscall"
 	"time"
@@ -56,6 +57,8 @@ func runCLIErr(args []string) error {
 	disableTelemetry := flags.Bool("disable-telemetry", false, "Disable reporting anonymous global scan count telemetry")
 	mcpListTools := flags.Bool("mcp-list-tools", false, "List the target MCP server's tools and exit without fuzzing")
 	mcpFuzzMethods := flags.Bool("mcp-fuzz-methods", false, "Fuzz MCP server method/tool name dispatching for reflection, traversal and prototype pollution vulnerabilities")
+	wafPatchVendor := flags.String("waf-patch", "", "Generate WAF virtual patch rules for vendor (e.g. cloudflare, aws, all)")
+	wafPatchOutput := flags.String("waf-patch-output", "", "Path to save generated WAF virtual patch rules")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -396,6 +399,58 @@ func runCLIErr(args []string) error {
 			log.Printf("Failed to write Markdown report: %v", err)
 		} else {
 			logger.Info("Saved Markdown to %s", *markdownOut)
+		}
+	}
+	if *wafPatchVendor != "" {
+		if err := requireExport("waf-patch"); err != nil {
+			return err
+		}
+		items := classifier.ToAuditResultItems(findings)
+		if len(items) == 0 {
+			logger.Info("no WAF-patchable findings in this scan")
+		} else {
+			patchClient := wafcheck.NewClient(runCfg.Settings.WAFCheckEndpoint)
+			patchReport, err := patchClient.GeneratePatches(ctx, items, wafcheck.PatchOptions{
+				Vendor:           *wafPatchVendor,
+				TargetURL:        runCfg.BaseURL,
+				IncludeTerraform: true,
+			})
+			if err != nil {
+				log.Printf("Failed to generate WAF virtual patches: %v", err)
+			} else {
+				outPath := *wafPatchOutput
+				if outPath == "" {
+					outPath = fmt.Sprintf("waf-patch-%s.txt", *wafPatchVendor)
+				}
+				var nativeContent, tfContent string
+				if bundle, ok := patchReport.Bundles[*wafPatchVendor]; ok {
+					nativeContent = bundle.Native
+					tfContent = bundle.Terraform
+				} else {
+					for v, b := range patchReport.Bundles {
+						if b.Native != "" {
+							nativeContent += fmt.Sprintf("# Vendor: %s\n%s\n\n", v, b.Native)
+						}
+						if b.Terraform != "" {
+							tfContent += fmt.Sprintf("# Vendor: %s\n%s\n\n", v, b.Terraform)
+						}
+					}
+				}
+				cleanOut := filepath.Clean(outPath)
+				if err := os.WriteFile(cleanOut, []byte(nativeContent), 0600); err != nil { // #nosec G306,G703 -- report file output
+					log.Printf("Failed to write WAF patch output: %v", err)
+				} else {
+					logger.Info("Saved WAF patch rules to %s", outPath)
+				}
+				if tfContent != "" {
+					cleanTF := filepath.Clean(outPath + ".tf")
+					if err := os.WriteFile(cleanTF, []byte(tfContent), 0600); err != nil { // #nosec G306,G703 -- report file output
+						log.Printf("Failed to write WAF patch terraform output: %v", err)
+					} else {
+						logger.Info("Saved WAF patch Terraform to %s", outPath+".tf")
+					}
+				}
+			}
 		}
 	}
 

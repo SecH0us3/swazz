@@ -58,6 +58,7 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 - 🔔 **Real-Time Webhooks**: Deliver POST JSON payloads to external URLs on scan events and findings (see [Webhooks Guide](docs/webhooks.md)).
 - 🤖 **MCP Server**: Expose Swazz commands, local codebase search, and scan findings natively through Model Context Protocol.
 - 🧠 **Smart Triage**: LLM-based post-scan classifier via Cloudflare AI Gateway (Gemini, OpenAI) to automatically triage noisy false positives with an AI Confidence Score.
+- 🛡️ **WAF Analysis & Virtual Patch Generation**: Powered by the public [waf.secmy.app](https://waf.secmy.app) service, Swazz automatically fingerprints domain-level firewalls before scanning (`waf_check_enabled`, default true, opt-out), generates ready-to-deploy virtual patches across 9 vendor dialects (Cloudflare, AWS, GCP, Azure, ModSecurity, nginx, HAProxy, Caddy, K8s) via `--waf-patch <vendor>`, and provides an on-demand **WAF Check** tab in the web dashboard for sensitive files probing and mitigation rules. Fully free and not license-gated.
 
 ---
 
@@ -208,6 +209,17 @@ npx playwright install chromium
 bash tests/e2e/run-e2e.sh
 ```
 
+### 9. WAF Fingerprinting & Virtual Patch Generation
+Swazz includes automated Web Application Firewall (WAF) detection powered by the public [waf.secmy.app](https://waf.secmy.app) service. Before fuzzing begins, Swazz fingerprints domain-level firewalls (Cloudflare, AWS WAF, Akamai, Imperva, etc.) and highlights detection results in the scan header badge and reports (`waf_check_enabled`, default `true`, opt-out). If confirmed exploit vectors are discovered, Swazz can synthesize ready-to-deploy mitigation rules:
+```bash
+# Run fuzzing and synthesize Cloudflare WAF mitigation rules
+./swazz-engine start --config swazz.config.json --waf-patch cloudflare --waf-patch-output cf-rules.txt
+
+# Export mitigation rules for all 9 vendor dialects (AWS, Cloudflare, GCP, Azure, ModSecurity, Nginx, HAProxy, Caddy, K8s)
+./swazz-engine start --config swazz.config.json --waf-patch all --waf-patch-output patches/
+```
+In the Web Dashboard, open the standalone **WAF Check** tab in the main results bar to run on-demand domain fingerprinting, test sensitive file protections, and copy virtual patches without running a full scan.
+
 ---
 
 ## 🔐 Authentication & Administration
@@ -258,6 +270,7 @@ For a full set of examples (including BOLA testing, Multi-step Auth, and Petstor
     }
   ],
   "settings": {
+    "waf_check_enabled": true, // Pre-scan WAF fingerprinting via waf.secmy.app (default true, opt-out)
     "enable_differential_analysis": true, // AST structural diffing & cross-identity BOLA chains
     "enable_security_headers_analysis": false // Set true to inspect passive HTTP headers (HSTS, CSP, XCTO)
   },
@@ -365,5 +378,6 @@ Swazz is distributed under the **Business Source License 1.1 (BSL 1.1)**.
 - **Free Commercial Exemption**: Free for non-commercial use, open-source projects, and companies with under **$1,000,000 USD** in annual gross revenue.
 - **14-Day Free Trial Self-Generation**: Registered users can generate a one-time 14-day trial commercial license directly in **Settings → License & Subscription** to evaluate all enterprise capabilities (AI Remediation Pro, high concurrency, scheduled runs, report exports).
 - **Enterprise Commercial License**: Required for production commercial use by companies with annual revenue exceeding $1M USD.
+- **WAF Analysis (Free for All Users)**: Pre-scan WAF fingerprinting and the interactive Web UI **WAF Check** tab are completely free and not license-gated across all community and enterprise installations.
 - To view the embedded license text at any time, run `./swazz-engine license`.
 - For detailed pricing, feature comparisons, and licensing terms, read our [Pricing & Licensing Guide](docs/PRICING.md).

@@ -26,6 +26,7 @@ export interface IScansService {
   getFindings(scanId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ findings: any[] }>;
   getFindingDetails(findingId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
   updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
+  saveWAFPatchReport(scanId: string, report: any, userId?: string | null, isAuthEnabled?: boolean): Promise<{ success: boolean }>;
 }
 
 export interface TriageUpdatePayload {
@@ -166,6 +167,14 @@ export class ScansService implements IScansService {
     if (userId) {
       const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'get:/api/projects/:id/scans');
       if (!hasAccess) throw new Error('Forbidden|403');
+    }
+
+    if (scan && typeof scan.waf_patch_report === 'string') {
+      try {
+        scan.waf_patch_report = JSON.parse(scan.waf_patch_report);
+      } catch {
+        // keep as raw string if malformed
+      }
     }
 
     return { scan };
@@ -324,5 +333,19 @@ export class ScansService implements IScansService {
 
     const updatedCount = await this.scansRepo.batchUpdateFindingsAI(scanId, updates);
     return { success: true, updated_count: updatedCount };
+  }
+
+  async saveWAFPatchReport(scanId: string, report: any, userId?: string | null, isAuthEnabled?: boolean) {
+    const scan = await this.scansRepo.getScan(scanId);
+    if (!scan) throw new Error('Scan not found|404');
+
+    if (isAuthEnabled) {
+      if (!userId) throw new Error('Unauthorized|401');
+      const hasAccess = await this.rbacRepo.checkPermission(userId, scan.project_id, 'post:/api/projects/:id/scans');
+      if (!hasAccess && scan.user_id !== userId) throw new Error('Forbidden|403');
+    }
+
+    await this.scansRepo.saveWAFPatchReport(scanId, report);
+    return { success: true };
   }
 }

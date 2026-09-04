@@ -13,6 +13,20 @@ vi.mock('../../../src/utils/auth', () => ({
   getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 
+vi.mock('../../../src/middleware/license', () => ({
+  requireFeature: (feature: string) => async (c: any, next: any) => {
+    const { getUserIdFromRequest } = await import('../../../src/utils/auth');
+    const userId = await getUserIdFromRequest(c);
+    if (!userId) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    if (userId === 'unentitled_user') {
+      return c.json({ error: `feature requires a paid plan (feature: ${feature})` }, 403);
+    }
+    await next();
+  },
+}));
+
 describe('Scans Routes Unit Tests', () => {
   let app: Hono<any>;
   let mockServices: Partial<IScansService>;
@@ -29,6 +43,7 @@ describe('Scans Routes Unit Tests', () => {
       getFindings: vi.fn(),
       getFindingDetails: vi.fn(),
       updateFinding: vi.fn(),
+      saveWAFPatchReport: vi.fn(),
     };
 
     const mockFactory = () => mockServices as IScansService;
@@ -230,6 +245,46 @@ describe('Scans Routes Unit Tests', () => {
         body: JSON.stringify({ status: 'resolved' })
       });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('PATCH /api/scans/:id/waf-patch', () => {
+    it('should save WAF patch report successfully', async () => {
+      (mockServices.saveWAFPatchReport as any).mockResolvedValue({ success: true });
+      const report = { totalBypasses: 1, bundles: { cloudflare: { vendor: 'cloudflare', native: 'rule' } } };
+      const res = await app.request('/api/scans/s123/waf-patch', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(report),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(mockServices.saveWAFPatchReport).toHaveBeenCalledWith('s123', report, 'user_123', true);
+    });
+
+    it('returns error when service fails', async () => {
+      (mockServices.saveWAFPatchReport as any).mockRejectedValue(new Error('Scan not found|404'));
+      const res = await app.request('/api/scans/s123/waf-patch', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'Scan not found' });
+    });
+
+    it('does not require a paid license (free feature)', async () => {
+      const { getUserIdFromRequest } = await import('../../../src/utils/auth');
+      (getUserIdFromRequest as any).mockResolvedValueOnce('unentitled_user');
+      (mockServices.saveWAFPatchReport as any).mockResolvedValue({ success: true });
+
+      const res = await app.request('/api/scans/s123/waf-patch', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
     });
   });
 });

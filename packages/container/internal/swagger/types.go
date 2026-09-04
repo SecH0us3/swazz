@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"swazz-engine/internal/wafcheck"
 )
 
 // FuzzingProfile represents the type of payload generation strategy.
@@ -284,6 +286,8 @@ type Settings struct {
 	UseLLMPrepass                 bool                        `json:"use_llm_prepass,omitempty"`
 	AIGatewayURL                  string                      `json:"ai_gateway_url,omitempty"`
 	CFAigToken                    string                      `json:"cf_aig_token,omitempty"`
+	EnableWAFCheck                *bool                       `json:"waf_check_enabled,omitempty"`
+	WAFCheckEndpoint              string                      `json:"waf_check_endpoint,omitempty"`
 	EnableSmartTriage             bool                        `json:"enable_smart_triage,omitempty"`
 	MaxTriagePerScan              int                         `json:"max_triage_per_scan,omitempty"`
 	EnableDifferentialAnalysis    *bool                       `json:"enable_differential_analysis,omitempty"`
@@ -315,6 +319,15 @@ func (s Settings) SemanticMutationEnabled() bool {
 		return true
 	}
 	return *s.EnableSemanticMutation
+}
+
+// WAFCheckEnabled returns true if pre-scan WAF fingerprinting is enabled.
+// Defaults to true when the field is not set (nil), matching the frontend default.
+func (s Settings) WAFCheckEnabled() bool {
+	if s.EnableWAFCheck == nil {
+		return true
+	}
+	return *s.EnableWAFCheck
 }
 
 // MCPMethodFuzzingEnabled returns true if method and tool name fuzzing is enabled for MCP servers.
@@ -485,6 +498,7 @@ type RunStats struct {
 	TotalResponseBytes int64                            `json:"totalResponseBytes"`
 	MaxResponseSize    int64                            `json:"maxResponseSize"`
 	TotalDurationMs    int64                            `json:"totalDurationMs"`
+	WAFCheck           *wafcheck.Result                 `json:"wafCheck,omitempty"`
 }
 
 // Progress tracks endpoint-level completion.

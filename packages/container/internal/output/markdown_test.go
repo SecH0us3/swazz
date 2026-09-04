@@ -9,6 +9,7 @@ import (
 	"strings"
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/wafcheck"
 	"testing"
 	"time"
 )
@@ -78,5 +79,50 @@ func TestToMarkdown(t *testing.T) {
 	// Verify truncation preview string is present
 	if !strings.Contains(resStr, "...") {
 		t.Error("Expected response preview to be truncated with ellipsis")
+	}
+
+	// 3. Test with WAFCheck populated
+	statsWithWAF := &swagger.RunStats{
+		StartTime:     time.Now().UnixMilli() - 5000,
+		TotalRequests: 100,
+		WAFCheck: &wafcheck.Result{
+			Detection: wafcheck.Detection{
+				Detected:   true,
+				WAFType:    "Cloudflare",
+				Confidence: 0.92,
+				Evidence:   []string{"cf-ray header present"},
+			},
+			BypassOpportunities: wafcheck.BypassOpportunities{
+				EncodingBypass: true,
+			},
+			Timestamp: "2026-09-04T12:00:00Z",
+		},
+	}
+	resWAF := ToMarkdown(nil, statsWithWAF, "1.0.0")
+	resWAFStr := string(resWAF)
+	if !strings.Contains(resWAFStr, "## 🛡️ WAF Analysis") {
+		t.Error("Expected WAF Analysis section in markdown report")
+	}
+	if !strings.Contains(resWAFStr, "**Vendor:** Cloudflare") {
+		t.Error("Expected Cloudflare vendor in markdown report")
+	}
+	if !strings.Contains(resWAFStr, "92%") {
+		t.Error("Expected 92% confidence in markdown report")
+	}
+	if !strings.Contains(resWAFStr, "cf-ray header present") {
+		t.Error("Expected evidence in markdown report")
+	}
+	if !strings.Contains(resWAFStr, "Encoding Bypass") {
+		t.Error("Expected bypass opportunities in markdown report")
+	}
+
+	// 4. Test with WAFCheck nil
+	statsWithoutWAF := &swagger.RunStats{
+		TotalRequests: 100,
+		WAFCheck:      nil,
+	}
+	resNoWAF := ToMarkdown(nil, statsWithoutWAF, "1.0.0")
+	if strings.Contains(string(resNoWAF), "## 🛡️ WAF Analysis") {
+		t.Error("Did not expect WAF Analysis section in markdown report when WAFCheck is nil")
 	}
 }

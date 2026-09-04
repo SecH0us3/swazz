@@ -177,11 +177,8 @@ describe('ProjectSettings Component — Runners Tab', () => {
         expect(screen.getByRole('button', { name: /General & Target/i }).className).toContain('active');
     });
 
-    it('handles coming soon and gated feature buttons (WAF, Recon, Members, Schedule, Webhooks)', () => {
+    it('handles coming soon and gated feature buttons (Recon, Members, Schedule, Webhooks)', () => {
         render(<ProjectSettings />);
-
-        const wafBtn = screen.getByRole('button', { name: /WAF Analysis/i });
-        fireEvent.click(wafBtn);
 
         const reconBtn = screen.getByRole('button', { name: /Domain Recon/i });
         fireEvent.click(reconBtn);
@@ -198,5 +195,14 @@ describe('ProjectSettings Component — Runners Tab', () => {
 
         const webhooksBtn = screen.getByRole('button', { name: /Webhooks/i });
         fireEvent.click(webhooksBtn);
+    });
+
+    it('opens WAF Analysis tab directly — free feature, no license required', () => {
+        render(<ProjectSettings />);
+        const wafBtn = screen.getByRole('button', { name: /WAF Analysis/i });
+        fireEvent.click(wafBtn);
+
+        expect(wafBtn.className).toContain('active');
+        expect(screen.getByText(/Enable Pre-Scan WAF Fingerprinting/i)).toBeTruthy();
     });
 });

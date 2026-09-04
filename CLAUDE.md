@@ -155,13 +155,14 @@ To maintain clean architecture, the application is strictly modular:
 - **Payloads (Backend):** Static wordlists and payload definitions should be placed in `packages/container/internal/generator/payloads/`.
 
 ## 🤖 Autonomous Task Execution Protocol
-When the user asks to "Do Task N" (e.g., "Сделай задачу 5") referencing the GitHub Project board (Project #7, owner `SecH0us3`), Antigravity CLI must automatically execute the following Human-in-the-Loop workflow:
-1. **Find, Branch & Start**: Find the task on the GitHub Project board (`rtk gh project item-list 7 --owner SecH0us3 --format json`), locate its item ID, and immediately update its status to "In Progress" (option ID `47fc9ee4` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`):
+When the user asks to "Do Task N" (e.g., "Сделай задачу 5") referencing the GitHub Project board (Project #7, owner `SecH0us3`), run the following Human-in-the-Loop workflow. Planning and final review are owned by **Claude Code**; implementation is delegated to **Antigravity CLI** (`/swazz-toolkit:swazz-workflows`) as the execution engine.
+
+1. **Find, Branch & Start** *(Claude Code)*: Find the task on the GitHub Project board (`rtk gh project item-list 7 --owner SecH0us3 --format json`), locate its item ID, and immediately update its status to "In Progress" (option ID `47fc9ee4` for field `Status` `PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0` in project `PVT_kwHOAFg2Ls4BdsI1`):
    `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 47fc9ee4`
    Create a new git branch (e.g., `feature/task-N`).
-2. **Plan**: Research the codebase and generate an `implementation_plan.md` artifact. **STOP** and wait for the user's explicit approval.
-3. **Execute & Verify**: Write the code. Run unit tests (`scripts/test-backend.sh`). Ensure E2E validation against the Vulnerable Demo API (once Task 12 is complete).
-4. **Review**: Run the automated Vibe code review script: `rtk ./scripts/vibe-review.sh < /dev/null`. Address any style/code violations in `docs/reviews/vibe-review.md`. Then generate a `walkthrough.md` artifact summarizing changes. **STOP** and request final human review.
+2. **Plan** *(Claude Code)*: Research the codebase and generate an `implementation_plan.md` artifact — write it at spec-level detail (exact files, function signatures, edge cases, what NOT to touch), since Antigravity implements directly from it without re-planning. **STOP** and wait for the user's explicit approval.
+3. **Delegate & Execute** *(Antigravity CLI)*: Hand off the approved `implementation_plan.md` to Antigravity and instruct it to implement directly from the plan (it must not regenerate its own plan). Antigravity writes the code and tests, runs `scripts/test-backend.sh`, and validates E2E against the Vulnerable Demo API, then commits.
+4. **Review** *(Claude Code)*: Review the resulting `git diff` against `implementation_plan.md` for correctness, security, and scope creep. Generate a `walkthrough.md` artifact summarizing the changes and any findings. **STOP** and request final human review.
 5. **Complete**: After the user approves the walkthrough, set the task status to "Done" (option ID `98236657`):
    `rtk gh project item-edit --id <item-id> --field-id PVTSSF_lAHOAFg2Ls4BdsI1zhYL6f0 --project-id PVT_kwHOAFg2Ls4BdsI1 --single-select-option-id 98236657`
    and merge/commit changes.

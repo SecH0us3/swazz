@@ -24,7 +24,6 @@ export const FEATURE_ENTERPRISE = 'enterprise';
 export const FEATURE_REPORT_EXPORTS = 'report_exports';
 export const FEATURE_SCHEDULED_RUNS = 'scheduled_runs';
 export const FEATURE_UNLIMITED_SCANS = 'unlimited_scans';
-export const FEATURE_WAF_ANALYSIS = 'waf_analysis';
 
 export const FEATURES: FeatureDef[] = [
   { id: FEATURE_AI_REMEDIATION_PRO, label: "AI Remediation Pro", type: "paid" },
@@ -34,7 +33,6 @@ export const FEATURES: FeatureDef[] = [
   { id: FEATURE_REPORT_EXPORTS, label: "Report Exports (SARIF / HTML / MD / JUnit)", type: "paid" },
   { id: FEATURE_SCHEDULED_RUNS, label: "Scheduled / CI Runs & Webhooks", type: "paid" },
   { id: FEATURE_UNLIMITED_SCANS, label: "High Concurrency", type: "paid" },
-  { id: FEATURE_WAF_ANALYSIS, label: "WAF Analysis", type: "coming_soon" },
 ];
 
 export function getFeature(id: string): FeatureDef | undefined {

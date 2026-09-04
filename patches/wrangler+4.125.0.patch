@@ -1,0 +1,71 @@
+diff --git a/node_modules/wrangler/wrangler-dist/ProxyWorker.js b/node_modules/wrangler/wrangler-dist/ProxyWorker.js
+index 2631ee6..79262f7 100644
+--- a/node_modules/wrangler/wrangler-dist/ProxyWorker.js
++++ b/node_modules/wrangler/wrangler-dist/ProxyWorker.js
+@@ -155,15 +155,15 @@ var ProxyWorker = class {
+       }).catch((error) => {
+         if (isSameUserWorkerOrigin(userWorkerUrl, this.proxyData?.userWorkerUrl)) {
+           void sendMessageToProxyController(this.env, {
+-            type: "error",
+-            error: {
+-              name: error.name,
+-              message: error.message,
+-              stack: error.stack,
+-              cause: error.cause
+-            }
++            type: "debug-log",
++            args: ["fetch error to userWorker:", error.message]
+           });
+-          deferredResponse.reject(error);
++          deferredResponse.resolve(
++            new Response(
++              JSON.stringify({ error: "Network connection lost or request aborted", details: error.message }),
++              { status: 502, headers: { "Content-Type": "application/json" } }
++            )
++          );
+         } else if (request.method === "GET" || request.method === "HEAD") {
+           this.requestRetryQueue.set(request, deferredResponse);
+         } else {
+diff --git a/node_modules/wrangler/wrangler-dist/cli.js b/node_modules/wrangler/wrangler-dist/cli.js
+index 43b782c..32d4b8a 100644
+--- a/node_modules/wrangler/wrangler-dist/cli.js
++++ b/node_modules/wrangler/wrangler-dist/cli.js
+@@ -185137,7 +185137,7 @@ var init_dist12 = __esm({
+             this.onPreviewTokenExpired();
+             break;
+           case "error":
+-            this.emitErrorEvent("Error inside ProxyWorker", message.error);
++            logger3.warn("[ProxyWorker] Non-fatal proxy error intercepted:", message.error);
+             break;
+         }
+       }
+@@ -326241,7 +326241,7 @@ var init_ProxyController = __esm({
+             this.emitPreviewTokenExpiredEvent(message.proxyData);
+             break;
+           case "error":
+-            this.emitErrorEvent("Error inside ProxyWorker", message.error);
++            logger2.warn("[ProxyWorker] Non-fatal proxy error intercepted:", message.error);
+             break;
+           case "debug-log":
+             logger2.debug("[ProxyWorker]", ...message.args);
+@@ -326298,7 +326298,7 @@ var init_ProxyController = __esm({
+             );
+             break;
+           case "error":
+-            this.emitErrorEvent("Error inside InspectorProxyWorker", message.error);
++            logger2.warn("[InspectorProxyWorker] Non-fatal error intercepted:", message.error);
+             break;
+           case "debug-log":
+             if (this._torndown) {
+@@ -480828,9 +480828,8 @@ var init_DevEnv = __esm({
+               telemetryMessage: "api dev miniflare user error"
+             })
+           );
+-        } else if (event.source === "ProxyController" && (event.reason.startsWith("Failed to send message to") || event.reason.startsWith("Could not connect to InspectorProxyWorker"))) {
+-          logger2.debug(`Error in ${event.source}: ${event.reason}
+-`, event.cause);
++        } else if (event.source === "ProxyController") {
++          logger2.warn(`[ProxyController] Non-fatal proxy event intercepted (${event.reason}):`, event.cause);
+           logger2.debug("=> Error contextual data:", event.data);
+         } else if (event.source === "ConfigController" && event.cause instanceof ParseError) {
+           logger2.error(event.cause);

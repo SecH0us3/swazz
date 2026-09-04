@@ -48,6 +48,7 @@ export interface IScansRepository {
   getActiveScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
   processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void>;
+  saveWAFPatchReport(scanId: string, report: any): Promise<void>;
 }
 
 function normalizeAIRelevance(val: unknown): boolean {
@@ -512,5 +513,12 @@ export class ScansRepository extends BaseService implements IScansRepository {
         )
       );
     }
+  }
+
+  async saveWAFPatchReport(scanId: string, report: any): Promise<void> {
+    const reportStr = typeof report === 'string' ? report : JSON.stringify(report);
+    await this.db.prepare(
+      `UPDATE scans SET waf_patch_report = ? WHERE id = ?`
+    ).bind(reportStr, scanId).run();
   }
 }

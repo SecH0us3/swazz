@@ -12,6 +12,7 @@ import (
 
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/wafcheck"
 )
 
 func TestToJSON(t *testing.T) {
@@ -187,6 +188,43 @@ func TestToJSON(t *testing.T) {
 		}
 		if finding["endpoint"] != "/api/v1/users" {
 			t.Errorf("finding endpoint mismatch: got %v", finding["endpoint"])
+		}
+	})
+
+	t.Run("With WAFCheck populated", func(t *testing.T) {
+		stats := &swagger.RunStats{
+			TotalRequests: 10,
+			WAFCheck: &wafcheck.Result{
+				Detection: wafcheck.Detection{
+					Detected:   true,
+					WAFType:    "Cloudflare",
+					Confidence: 0.9,
+					Evidence:   []string{"cf-ray header"},
+				},
+				BypassOpportunities: wafcheck.BypassOpportunities{
+					EncodingBypass: true,
+				},
+				Timestamp: "2026-09-04T12:00:00Z",
+			},
+		}
+		res := ToJSON(nil, stats, "1.0.0")
+		waf, ok := res["wafCheck"].(*wafcheck.Result)
+		if !ok || waf == nil {
+			t.Fatalf("expected wafCheck in result, got %v", res["wafCheck"])
+		}
+		if !waf.Detection.Detected || waf.Detection.WAFType != "Cloudflare" {
+			t.Errorf("unexpected wafCheck values: %+v", waf)
+		}
+	})
+
+	t.Run("With WAFCheck nil", func(t *testing.T) {
+		stats := &swagger.RunStats{
+			TotalRequests: 10,
+			WAFCheck:      nil,
+		}
+		res := ToJSON(nil, stats, "1.0.0")
+		if _, exists := res["wafCheck"]; exists {
+			t.Errorf("expected wafCheck to be absent when nil")
 		}
 	})
 }

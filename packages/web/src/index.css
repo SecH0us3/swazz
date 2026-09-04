@@ -1341,6 +1341,11 @@ body.resizing .sidebar-resizer {
   color: var(--accent-light);
 }
 
+.waf-detection-badge {
+  align-self: center;
+  margin: 0 4px;
+}
+
 .workspace-config-toggle-btn {
   margin-left: auto;
   border-bottom: 2px solid transparent;
@@ -10715,4 +10720,212 @@ kbd {
   overflow-x: auto;
   max-height: 380px;
 }
+
+/* ==========================================================================
+   WAF Analysis Settings & On-demand Check (Parts A & C)
+   ========================================================================== */
+
+.project-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.project-settings-section-header {
+  margin-bottom: 4px;
+}
+
+.project-settings-section-title {
+  margin: 0 0 6px 0;
+  font-size: var(--font-size-md, 16px);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.project-settings-section-subtitle {
+  margin: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.waf-panel { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.waf-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.waf-panel-toolbar-left { display: flex; align-items: center; gap: var(--space-3); }
+.waf-panel-toolbar-right { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
+.waf-target-input {
+  width: 280px;
+  max-width: 100%;
+}
+.waf-target-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  background: var(--bg-input); border: 1px solid var(--border-default);
+  padding: 5px 10px; border-radius: var(--radius-md);
+}
+.waf-target-chip svg { color: var(--text-muted); flex-shrink: 0; }
+.waf-run-btn { display: inline-flex; align-items: center; gap: 8px; }
+.waf-loading-text {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: var(--font-size-xs); color: var(--text-muted);
+}
+.waf-spinner {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-light);
+  animation: spin 0.8s linear infinite;
+}
+
+/* Detection summary card */
+.waf-detection-card {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+.waf-detection-card.is-success { border-color: rgba(34,211,160,0.25); background: linear-gradient(135deg, var(--color-success-bg), var(--bg-card) 55%); }
+.waf-detection-card.is-warning { border-color: rgba(245,158,11,0.25); background: linear-gradient(135deg, var(--color-warning-bg), var(--bg-card) 55%); }
+.waf-detection-card.is-error { border-color: rgba(244,63,94,0.25); background: linear-gradient(135deg, var(--color-error-bg), var(--bg-card) 55%); }
+.waf-detection-icon {
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+}
+.is-success .waf-detection-icon { background: var(--color-success-bg); color: var(--color-success); }
+.is-warning .waf-detection-icon { background: var(--color-warning-bg); color: var(--color-warning); }
+.is-error .waf-detection-icon { background: var(--color-error-bg); color: var(--color-error); }
+.waf-detection-body { flex: 1; min-width: 0; }
+.waf-detection-title { font-size: var(--font-size-xs); font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 5px; }
+.waf-detection-title .waf-vendor-name { color: var(--color-success); }
+.waf-detection-sub { font-size: var(--font-size-2xs); color: var(--text-muted); margin-top: 1px; }
+.waf-confidence-ring {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-weight: 700; font-size: 9px;
+  background: conic-gradient(var(--color-success) calc(var(--pct,95)*1%), var(--bg-elevated) 0);
+  color: var(--text-primary);
+}
+.waf-confidence-ring-inner {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--bg-card);
+  display: flex; align-items: center; justify-content: center;
+}
+.waf-evidence-toggle {
+  background: transparent; border: none; color: var(--accent-light);
+  font-size: var(--font-size-xs); font-weight: 600; cursor: pointer;
+  padding: 4px 0; display: inline-flex; align-items: center; gap: 4px;
+}
+.waf-detection-card-inline .waf-detection-title {
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.waf-detection-card-inline .waf-evidence-toggle {
+  flex-shrink: 0; margin-left: auto;
+}
+.waf-check-attribution {
+  display: inline-block;
+  font-size: var(--font-size-2xs); color: var(--text-muted); text-decoration: none;
+  white-space: nowrap;
+}
+.waf-check-attribution:hover { color: var(--accent-light); }
+.waf-evidence-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.waf-evidence-list li {
+  font-family: var(--font-mono); font-size: var(--font-size-2xs); color: var(--text-secondary);
+  background: var(--bg-input); border-radius: var(--radius-sm); padding: 4px 8px;
+  border-left: 2px solid var(--color-success);
+}
+.waf-recommendation-body { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 4px 0 0; }
+.waf-vendor-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: var(--space-3); }
+.waf-vendor-chip {
+  font-size: var(--font-size-2xs); font-family: var(--font-mono); color: var(--text-muted);
+  background: var(--bg-input); border: 1px solid var(--border-default);
+  padding: 3px 8px; border-radius: var(--radius-full);
+}
+
+/* Stats row */
+.waf-stats-row {
+  display: flex; align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+}
+.waf-stat-pill {
+  flex: 1; display: flex; align-items: baseline; gap: 6px;
+  padding: 0 var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+}
+.waf-stat-pill:first-child { border-left: none; padding-left: 0; }
+.waf-stat-pill-value { font-family: var(--font-mono); font-size: var(--font-size-sm); font-weight: 700; color: var(--text-primary); }
+.waf-stat-pill-label { font-size: var(--font-size-2xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.waf-stat-pill.stat-danger .waf-stat-pill-value { color: var(--color-error); }
+.waf-stat-pill.stat-ok .waf-stat-pill-value { color: var(--color-success); }
+
+/* Sensitive files table card */
+.waf-table-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-card); overflow: hidden; }
+.waf-table-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.waf-table-card-title { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+.waf-table-card-header-toggle {
+  width: 100%; border: none; cursor: pointer; font-family: var(--font-ui);
+  color: inherit; text-align: left;
+}
+.waf-table-card-chevron { color: var(--text-muted); font-size: var(--font-size-2xs); width: 10px; display: inline-block; }
+.waf-table-scroll { max-height: 260px; overflow-y: auto; }
+.waf-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-xs); }
+.waf-table thead th {
+  position: sticky; top: 0; text-align: left; padding: 8px var(--space-4);
+  background: var(--bg-surface); color: var(--text-muted); font-weight: 600;
+  font-size: var(--font-size-2xs); text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.waf-table tbody td { padding: 7px var(--space-4); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.waf-table tbody tr:hover td { background: var(--bg-card-hover); }
+.waf-table tbody tr:last-child td { border-bottom: none; }
+.waf-table .payload-cell { font-family: var(--font-mono); color: var(--text-primary); }
+.waf-table-footer { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border-subtle); text-align: center; }
+.waf-table-footer button { background: transparent; border: none; color: var(--accent-light); font-size: var(--font-size-xs); font-weight: 600; cursor: pointer; }
+
+/* Mitigation rules card */
+.waf-rules-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-card); overflow: hidden; }
+.waf-rules-header { padding: var(--space-4); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.waf-rules-title-group { display: flex; align-items: center; gap: 10px; }
+.waf-rules-title-icon { color: var(--accent-light); font-size: 18px; }
+.waf-rules-title { font-size: var(--font-size-md); font-weight: 700; color: var(--text-primary); }
+.waf-rules-sub { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: 2px; }
+.waf-vendor-tabs { display: flex; gap: 4px; background: var(--bg-input); padding: 3px; border-radius: var(--radius-md); }
+.waf-vendor-tab {
+  padding: 5px 12px; border-radius: var(--radius-sm); border: none; background: transparent;
+  color: var(--text-muted); font-size: var(--font-size-xs); font-weight: 600; cursor: pointer;
+  font-family: var(--font-ui);
+}
+.waf-vendor-tab.active { background: var(--accent); color: #fff; }
+.waf-rules-body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.waf-code-block-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.waf-code-block-label { font-size: var(--font-size-2xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.waf-copy-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--bg-elevated); border: 1px solid var(--border-default); color: var(--text-secondary);
+  font-size: var(--font-size-2xs); font-weight: 600; padding: 4px 9px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.waf-copy-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
+.waf-code-block {
+  background: var(--bg-input); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4); font-family: var(--font-mono); font-size: var(--font-size-2xs);
+  line-height: 1.7; color: var(--text-secondary); overflow-x: auto;
+  white-space: pre;
+}
+.waf-code-block .tok-key { color: #38BDF8; }
+.waf-code-block .tok-str { color: #22d3a0; }
+.waf-code-block .tok-fn { color: #c084fc; }
+
+
 

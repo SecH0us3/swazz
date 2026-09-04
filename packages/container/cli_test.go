@@ -384,3 +384,89 @@ func TestRunCLIErr_SeverityAndFlags(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+func TestRunCLIErr_WAFPatch_LicenseGating(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer ts.Close()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config_waf_free.json")
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"endpoint_definitions": [
+			{"path": "/api/ping", "method": "GET"}
+		],
+		"settings": {
+			"iterations_per_profile": 1,
+			"concurrency": 1,
+			"timeout_ms": 1000,
+			"profiles": ["RANDOM"]
+		}
+	}`, ts.URL)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+
+	err := runCLIErr([]string{
+		"-config", cfgPath,
+		"-waf-patch", "cloudflare",
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a paid plan")
+}
+
+func TestRunCLIErr_WAFPatch_Success(t *testing.T) {
+	t.Setenv("SWAZZ_DISABLE_TELEMETRY", "true")
+	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	origKey := license.DefaultPublicKeyHex
+	license.DefaultPublicKeyHex = hex.EncodeToString(pubKey)
+	defer func() { license.DefaultPublicKeyHex = origKey }()
+
+	token, err := license.GenerateToken(privKey, &license.License{
+		Company:   "TestCorp",
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		Features:  []string{license.FeatureReportExports},
+	})
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer ts.Close()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config_waf_paid.json")
+	outPath := filepath.Join(tmpDir, "patch.rules")
+	cfgJSON := fmt.Sprintf(`{
+		"base_url": "%s",
+		"license_key": "%s",
+		"endpoint_definitions": [
+			{"path": "/api/ping", "method": "GET"}
+		],
+		"settings": {
+			"iterations_per_profile": 1,
+			"concurrency": 1,
+			"timeout_ms": 1000,
+			"profiles": ["RANDOM"]
+		}
+	}`, ts.URL, token)
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgJSON), 0600))
+
+	// No patchable findings in clean scan -> should succeed and log no patchable findings
+	err = runCLIErr([]string{
+		"-config", cfgPath,
+		"-waf-patch", "cloudflare",
+		"-waf-patch-output", outPath,
+		"-quiet",
+		"-allow-private-ips=true",
+		"-disable-telemetry",
+	})
+	assert.NoError(t, err)
+}
