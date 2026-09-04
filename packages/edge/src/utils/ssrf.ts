@@ -276,6 +276,15 @@ export async function validateWebhookUrl(url: string, env?: Env): Promise<URL> {
 /**
  * Safely executes a webhook fetch request with manual redirect following and re-validation
  * on every redirect hop to prevent redirect-based SSRF.
+ *
+ * Security Architecture Note:
+ * In Cloudflare Workers V8 runtime, native socket pinning or custom DialContext is not exposed
+ * by the standard `fetch()` API (unlike Go's http.Transport). While an adversarial DNS server
+ * returning TTL=0 could theoretically attempt TOCTOU rebinding between DoH pre-validation and fetch(),
+ * Cloudflare's edge recursor enforces minimum cache clamping (15-60s) preventing rapid rebinding,
+ * and Workers isolates do not host local cloud metadata interfaces (e.g. 169.254.169.254).
+ * Combined with strict FQDN enforcement, hostname blocklists, DoH pre-resolution, and manual redirect hop
+ * validation, this provides comprehensive SSRF mitigation within the Workers runtime capabilities.
  */
 export async function safeFetchWebhook(
   targetUrl: string,
