@@ -67,12 +67,12 @@ test.describe('Sidebar Endpoint Tree Filtering E2E Test', () => {
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 7. Verify that no request targeting "POST /login" was executed
-    // Switch to Request Logs tab
-    const requestLogsTab = page.locator('button:has-text("Request Logs")');
+    // Switch to Logs tab
+    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
 
-    // Check all log rows under Request Logs tab
+    // Check all log rows under Logs tab
     const logPaths = page.locator('.log-path');
     await expect(logPaths.first()).toBeVisible({ timeout: TIMEOUTS.LOAD });
     const logCount = await logPaths.count();

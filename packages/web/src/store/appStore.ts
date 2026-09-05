@@ -10,7 +10,7 @@ import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 import type { ParsingErrorDetails } from '../services/swaggerService.js';
 
 export interface UISlice {
-    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'settings' | 'project_settings' | 'history' | 'compare' | 'about' | 'analytics' | 'runner_logs';
+    activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'waf' | 'settings' | 'project_settings' | 'history' | 'compare' | 'about' | 'analytics' | 'runner_logs';
     isSidebarOpen: boolean;
     isConfigOpen: boolean;
     isSidebarHiddenDesktop: boolean;

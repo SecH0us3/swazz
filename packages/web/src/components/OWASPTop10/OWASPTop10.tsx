@@ -432,9 +432,6 @@ export function OWASPTop10({ runId, queryResults, isRunning = false, onSelectRes
                             🌐 Web Top 10 (2025)
                         </button>
                     </div>
-                    <span className="owasp-summary-count">
-                        {totalFindingsCount} Finding{totalFindingsCount === 1 ? '' : 's'} Detected
-                    </span>
                     <div className="owasp-nav-tabs">
                         <button
                             className={`owasp-tab-btn ${activeTab === 'cards' ? 'active' : ''}`}

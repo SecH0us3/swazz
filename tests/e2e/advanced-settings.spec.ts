@@ -254,9 +254,9 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
     // 1. Try pressing tab shortcut key "2" while focused in search input
     await page.keyboard.press('2');
     
-    // Check that we are STILL on tab 1 (Endpoint Heatmap active, Request Logs not active)
-    await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible();
-    await expect(page.locator('button.tab-bar-btn.active:has-text("Request Logs")')).toBeHidden();
+    // Check that we are STILL on tab 1 (Heatmap active, Logs not active)
+    await expect(page.locator('button.tab-bar-btn.active:has-text("Heatmap")')).toBeVisible();
+    await expect(page.locator('button.tab-bar-btn.active:has-text("Logs")')).toBeHidden();
 
     // Verify the character '2' was typed into the input field instead of triggering shortcut
     await expect(searchEndpointsInput).toHaveValue('2');
@@ -266,6 +266,6 @@ test.describe('Advanced Project Settings and Keyboard Shortcuts E2E Tests', () =
     await page.locator('.app-layout').click();
 
     await page.keyboard.press('2');
-    await expect(page.locator('button.tab-bar-btn.active:has-text("Request Logs")')).toBeVisible();
+    await expect(page.locator('button.tab-bar-btn.active:has-text("Logs")')).toBeVisible();
   });
 });

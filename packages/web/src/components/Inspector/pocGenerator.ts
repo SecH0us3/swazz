@@ -11,20 +11,22 @@ export interface PocRequestOptions {
 }
 
 export function generateCurl(options: PocRequestOptions): string {
-  const parts: string[] = ['curl', '-X', options.method.toUpperCase(), `"${options.url}"`];
+  // One shell argument group per line, joined with backslash continuations so the
+  // command stays readable and is still pasteable straight into a shell.
+  const lines: string[] = [`curl -X ${options.method.toUpperCase()} "${options.url}"`];
 
   if (options.headers) {
     for (const [key, value] of Object.entries(options.headers)) {
-      parts.push('-H', `"${key}: ${value.replace(/"/g, '\\"')}"`);
+      lines.push(`-H "${key}: ${value.replace(/"/g, '\\"')}"`);
     }
   }
 
   if (options.body !== undefined && options.body !== null) {
     const bodyStr = typeof options.body === 'object' ? JSON.stringify(options.body) : String(options.body);
-    parts.push('--data-raw', `'${bodyStr.replace(/'/g, "'\\''")}'`);
+    lines.push(`--data-raw '${bodyStr.replace(/'/g, "'\\''")}'`);
   }
 
-  return parts.join(' ');
+  return lines.join(' \\\n  ');
 }
 
 export function generatePython(options: PocRequestOptions): string {

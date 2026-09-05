@@ -19,6 +19,7 @@ The Web UI is the easiest way to manage your fuzzer, inspect requests, and visua
      - **Mutation Diff**: Automatically compares fuzzed payloads and query parameters against the original API schemas or template structures. Mutated values are highlighted in **yellow** (for random/boundary mutations) or **red** (for malicious/security payloads), while newly added keys are highlighted in **green** and deleted keys are struck through.
      - **Raw Request**: Toggle to the raw request view to manually edit URLs, headers, and body payloads, then click **Replay** to send custom requests and view real-time responses.
    - **Configuration Management**: Configure target hosts, auth tokens, and fuzzing parameters directly in the browser. Fuzzing & Rate Limit settings are logically organized into horizontal sub-tabs (**Concurrency & Rate Limits**, **Fuzzing & Intensity**, **Timeout & Duration**, and **WAF Evasion & AI**).
+   - **WAF Check Tab**: An on-demand perimeter firewall analysis tool accessible from the main results bar (alongside Endpoint Heatmap, Request Logs, Grouped Errors, and OWASP Top 10). Features an editable target URL field (local to the check, does not alter project configuration), invokes domain-level fingerprinting powered by `waf.secmy.app`, probes sensitive files (`.env`, `.git/config`, `wp-config.php`, etc.) for perimeter leaks, and synthesizes ready-to-deploy virtual patch rules across 9 vendor dialects (Cloudflare, AWS, GCP, Azure, ModSecurity, nginx, HAProxy, Caddy, K8s). Free for all users and not license-gated.
 
 ## CLI Mode
 
@@ -114,6 +115,8 @@ The fuzzer engine relies on a JSON configuration file. It fully supports **JSONC
   - **`bola_similarity_threshold`**: (Float) Threshold ratio for BOLA detection. Default is `0.85`.
   - **`time_anomaly_threshold_ms`**: (Integer) Threshold in milliseconds for detecting response time anomalies. Default is `4000`.
   - **`oob_server_url`**: (String) Out-of-band interaction server URL for detecting SSRF / out-of-band vulnerability trigger interactions. Default is `""`.
+  - **`waf_check_enabled`**: (Boolean) If `true`, runs pre-scan domain WAF fingerprinting via `waf.secmy.app` before initiating fuzzing. The detected WAF type, confidence score, and bypass techniques are saved in the scan record and displayed in report summaries. Default is `true` (opt-out).
+  - **`waf_endpoint`**: (String) Custom endpoint URL for the WAF analysis service. Defaults to `https://waf.secmy.app`.
   - **`debug`**: (Boolean) Enables debug logging output. Default is `false`.
 
 ## Authentication Sequences & Variable Evaluation 🔐
@@ -371,9 +374,11 @@ When specifying a `"rule_id"` in `swazz.ignore.json`, you can target any of the 
 ### Output Formats
 
 In CLI mode, Swazz outputs findings into `packages/container/internal/output/`. The fuzzer currently supports multiple export formats:
-- **JSON**: Detailed machine-readable output.
-- **HTML**: A static report of the findings, featuring an executive summary that groups all findings by their corresponding **OWASP Top 10 (2025)** categories.
+- **JSON**: Detailed machine-readable output. Includes the domain `waf_check` fingerprint object in the root `RunStats`.
+- **HTML**: A static report of the findings, featuring an executive summary that groups all findings by their corresponding **OWASP Top 10 (2025)** categories and includes a dedicated **WAF Analysis & Mitigation** summary card with confidence scores, vendor pills, and bypass recommendations.
+- **Markdown**: Human-readable scan report with structured vulnerability tables, curl repro commands, and a pre-scan WAF summary block.
 - **SARIF**: For integration into GitHub Advanced Security and other SAST/DAST tools.
+- **Virtual Patch Exports (`--waf-patch <vendor>`)**: Ready-to-deploy firewall rules (Cloudflare, AWS WAF, GCP Cloud Armor, Azure WAF, ModSecurity, Nginx, HAProxy, Caddy, K8s Ingress, or all vendors) and Terraform HCL. Gated by the report-exports license feature in CLI mode.
 
 ### UI Performance Optimization
 
@@ -516,6 +521,86 @@ Swazz captures WebSocket close frames, disconnection reasons, and asynchronous r
 | `swazz/sql-error-leak` | **Error** | SQL syntax errors or database exceptions leaked in WebSocket JSON message bodies. |
 | `swazz/cmdi-leak` | **Error** | OS command execution output signatures detected in WebSocket response payloads. |
 | `swazz/sensitive-data-leak` | **Error** | Leaked secrets, API tokens, or credential signatures in WebSocket frames. |
+
+---
+
+## Domain WAF Analysis & Virtual Patch Generation 🛡️
+
+Swazz includes an end-to-end Web Application Firewall (WAF) analysis and mitigation pipeline powered by the public [waf.secmy.app](https://waf.secmy.app) service. The feature operates across three complementary stages: pre-scan fingerprinting (Part A), post-scan mitigation rule generation (Part B), and an on-demand standalone security check tab in the web workspace (Part C).
+
+> [!NOTE]
+> The **WAF Analysis** feature (`waf_analysis`) is completely free for all users and not license-gated, both in the Web Dashboard and during pre-scan fingerprinting. While initial architecture scaffolded it as a placeholder, it was deliberately made fully free. In CLI mode, exporting offline mitigation files to disk via `--waf-patch <vendor>` is governed by the standard report-exports commercial license feature.
+
+### How It Works: The `waf.secmy.app` Service
+
+Fingerprinting and virtual patching requests are processed server-side (by the Go runner engine or Cloudflare Edge coordinator) through `waf.secmy.app`:
+- **Domain-Level Fingerprinting**: Unlike payload analyzers that evaluate individual endpoint responses, WAF fingerprinting is performed once per target domain. The service issues targeted probes (testing HTTP methods, character encodings, and header anomalies) from Cloudflare edge locations to fingerprint the perimeter firewall and test bypass opportunities.
+- **Server-Side Execution**: All external service calls are dispatched server-side, avoiding browser CORS limitations and keeping API tokens protected.
+
+---
+
+### Part A: Pre-Scan WAF Fingerprinting
+
+When starting any fuzzing scan with `waf_check_enabled` set to `true` (the default setting), Swazz performs an automated pre-flight domain check:
+- **Vendor Detection**: Identifies firewalls including **Cloudflare**, **AWS WAF**, **GCP Cloud Armor**, **Azure WAF**, **Akamai**, **Imperva Incapsula**, **Fastly**, **F5 BIG-IP**, **ModSecurity**, and others.
+- **Confidence Scoring**: Computes a confidence percentage (0–100%) based on matched response headers (e.g. `cf-ray`, `x-amzn-requestid`), cookie patterns, and block-page signatures.
+- **Suggested Bypass Techniques**: Suggests evasion patterns (e.g. Unicode encoding, double URL-encoding, case variation, parameter pollution) to guide security testing.
+- **Dashboard Visibility**: Displays a detection badge directly in the Web Dashboard tab bar (e.g. `🛡️ Cloudflare detected (95% confidence)`).
+- **Report Integration**: Surfaced across all report formats:
+  - **JSON**: Stored in `stats.waf_check` within the root scan result payload.
+  - **HTML**: Rendered as a dedicated summary card featuring the detected vendor, confidence score, and matched evidence items.
+  - **Markdown**: Formatted as a pre-scan WAF summary table with detection status and suggested evasion tactics.
+
+To disable pre-scan fingerprinting, set `"waf_check_enabled": false` in your configuration's `settings` block:
+```json
+{
+  "settings": {
+    "waf_check_enabled": false
+  }
+}
+```
+
+---
+
+### Part B: Automatic Post-Scan Mitigation Rules (Virtual Patching)
+
+When a WAF is identified and the fuzzing run uncovers confirmed vulnerability bypasses (HTTP 200 responses to attack payloads), Swazz can automatically synthesize ready-to-deploy virtual patches:
+- **Supported Attack Categories**: Maps vulnerabilities from Swazz analyzers directly into firewall rule signatures:
+  - SQL Injection (`swazz/sql-error-leak`, `swazz/time-based-sqli`)
+  - Cross-Site Scripting (`swazz/reflected-xss`)
+  - Command Injection (`swazz/cmdi-leak`, `swazz/time-based-cmdi`, `swazz/rce-leak`)
+  - Path Traversal (`swazz/path-traversal-leak`)
+  - Server-Side Request Forgery (`swazz/ssrf-cloud-metadata`)
+  - NoSQL Injection (`swazz/nosql-injection`)
+  - XML External Entity (`swazz/xxe-leak`)
+  - Server-Side Template Injection (`swazz/ssti-leak`)
+  - CRLF / Header Injection (`swazz/header-injection`)
+  - GraphQL Injection (`swazz/graphql-*`)
+  - Prototype Pollution (`swazz/prototype-pollution`)
+- **9 Vendor Dialects**: Generates native firewall syntax and Terraform HCL for:
+  1. **Cloudflare**: Ruleset Engine expression rules (`http.request.uri.path`, `http.request.body.raw`).
+  2. **AWS WAF**: JSON rule definitions with ByteMatch and SQLi match statements.
+  3. **GCP Cloud Armor**: Expression filters (`evaluatePreconfiguredExpr`).
+  4. **Azure WAF**: Custom rule match conditions with `GeoMatch` and `Regex` criteria.
+  5. **ModSecurity (OWASP CRS)**: `SecRule` directives with regex pattern matching.
+  6. **Nginx**: Location blocks and `map` directives for request filtering.
+  7. **HAProxy**: `acl` expressions and `http-request deny` rules.
+  8. **Caddy**: Named matcher directives and request rejection rules.
+  9. **Kubernetes Ingress**: Snippet annotations (`nginx.ingress.kubernetes.io/server-snippet`).
+- **CLI Flags**:
+  - `--waf-patch <vendor>`: Vendor dialect (`cloudflare`, `aws`, `gcp`, `azure`, `modsecurity`, `nginx`, `haproxy`, `caddy`, `k8s`, or `all`). Gated by the report-exports license feature in CLI mode.
+  - `--waf-patch-output <file>`: Destination file or directory path. If omitted, rules are printed directly to stdout.
+- **Web Persistence**: When executed in coordinator/runner mode, the generated `VirtualPatchReport` is persisted to the scan record in the D1 database (`waf_patch_report`) and rendered in the scan's findings and inspector views.
+
+---
+
+### Part C: On-Demand "WAF Check" Tab
+
+The Web Dashboard features a standalone **WAF Check** tab in the main results bar (alongside **Endpoint Heatmap**, **Request Logs**, **Grouped Errors**, and **OWASP Top 10**):
+- **Editable Target Input**: Defaults to the active project's `base_url` or scan URL, but can be freely edited by clicking into the field or pressing Enter to execute. Edits remain local to the check and do not overwrite your project's saved `base_url`.
+- **Compact Detection Card**: Shows the detected WAF vendor, status badge, and visual confidence ring with expandable evidence and suggested bypass pills.
+- **Sensitive Files Probe**: Probes common high-risk origin paths (such as `.env`, `.git/config`, `wp-config.php`, `id_rsa`, `server-status`, `docker-compose.yml`, etc.) to test whether the perimeter firewall actually protects sensitive administrative files from public exposure. Displays checked, unprotected, and blocked counts with an expandable table of exposed paths.
+- **WAF Mitigation Rules Viewer**: Includes horizontal vendor tabs to preview native firewall syntax and Terraform HCL side-by-side, complete with one-click top-right copy buttons.
 
 ---
 

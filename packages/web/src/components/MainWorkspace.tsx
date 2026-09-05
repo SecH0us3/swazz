@@ -17,6 +17,7 @@ import { HistoryPage } from './HistoryPage.js';
 import { LandingShowcase } from './LandingShowcase.js';
 import { ComparePage } from './ComparePage.js';
 import { AboutPage } from './AboutPage.js';
+import { WafCheckPanel } from './WafCheck/WafCheckPanel.js';
 import { Logo } from './Common/Logo.js';
 import type { RunStats } from '../types.js';
 import type { HeatmapFilter } from './Dashboard/Heatmap.js';
@@ -356,7 +357,7 @@ export function MainWorkspace({
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
                             </svg>
-                            Endpoint Heatmap
+                            Heatmap
                         </button>
                         <button
                             className={`tab-bar-btn ${activeTab === 'logs' ? 'active' : ''}`}
@@ -365,7 +366,7 @@ export function MainWorkspace({
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
                             </svg>
-                            Request Logs
+                            Logs
                             {totalRequestsCount > 0 && (
                                 <span className="tab-bar-count">{totalRequestsCount.toLocaleString()}</span>
                             )}
@@ -380,7 +381,7 @@ export function MainWorkspace({
                                     <line x1="12" y1="9" x2="12" y2="13" />
                                     <line x1="12" y1="17" x2="12.01" y2="17" />
                                 </svg>
-                                Grouped Errors
+                                Findings
                                 {groupedFindingsCount > 0 && (
                                     <span className="tab-bar-count">{groupedFindingsCount.toLocaleString()}</span>
                                 )}
@@ -394,12 +395,22 @@ export function MainWorkspace({
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                                 </svg>
-                                OWASP Top 10
+                                OWASP
                                 {owaspFindingsCount > 0 && (
                                     <span className="tab-bar-count">{owaspFindingsCount.toLocaleString()}</span>
                                 )}
                             </button>
                         )}
+                        <button
+                            className={`tab-bar-btn ${activeTab === 'waf' ? 'active' : ''}`}
+                            data-testid="tab-waf"
+                            onClick={() => useAppStore.setState({ activeTab: 'waf' })}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                            WAF
+                        </button>
                         <button
                             className={`tab-bar-btn ${activeTab === 'runner_logs' ? 'active' : ''}`}
                             onClick={() => useAppStore.setState({ activeTab: 'runner_logs' })}
@@ -407,7 +418,7 @@ export function MainWorkspace({
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
                             </svg>
-                            Runner Logs
+                            Runner
                         </button>
                         <button
                             className={`tab-bar-btn ${activeTab === 'history' ? 'active' : ''}`}
@@ -464,7 +475,6 @@ export function MainWorkspace({
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                                 </svg>
-                                Download
                             </button>
                             
                             {isExportHovered && (
@@ -533,6 +543,8 @@ export function MainWorkspace({
                             onExportHTML={handleExportHTML}
                             onExportMD={handleExportMD}
                         />
+                    ) : activeTab === 'waf' ? (
+                        <WafCheckPanel targetUrl={config?.base_url} />
                     ) : !hasActivity ? (
                         <div className="welcome-workspace-wrapper">
                             <div className="welcome-workspace-container">
@@ -664,6 +676,7 @@ export function MainWorkspace({
                                     findingsOnly={true}
                                     config={config}
                                     onUpdateCount={setGroupedFindingsCount}
+                                    wafPatchReport={currentStats?.waf_patch_report}
                                 />
                             )}
                             {isAnalysisEnabled && activeTab === 'owasp' && (

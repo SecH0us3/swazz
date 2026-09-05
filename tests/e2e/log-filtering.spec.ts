@@ -45,8 +45,8 @@ test.describe('Request Log Filters (Status, Path & Identity) E2E Test', () => {
     }
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // 6. Switch to Request Logs tab
-    const requestLogsTab = page.locator('button:has-text("Request Logs")');
+    // 6. Switch to Logs tab
+    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
 

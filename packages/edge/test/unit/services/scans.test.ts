@@ -44,6 +44,7 @@ describe('ScansService Unit Tests', () => {
       getFindings: vi.fn(),
       getFindingDetails: vi.fn(),
       updateFinding: vi.fn(),
+      saveWAFPatchReport: vi.fn(),
     };
 
     mockRbacRepo = {
@@ -149,6 +150,16 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
       const res = await scansService.getScan('s1', 'u1');
       expect(res.scan.id).toBe('s1');
+    });
+
+    it('parses waf_patch_report JSON string if present', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({
+        id: 's1',
+        project_id: 'p1',
+        waf_patch_report: JSON.stringify({ totalBypasses: 2, bundles: {} }),
+      });
+      const res = await scansService.getScan('s1', 'u1');
+      expect(res.scan.waf_patch_report).toEqual({ totalBypasses: 2, bundles: {} });
     });
   });
 
@@ -340,6 +351,32 @@ describe('ScansService Unit Tests', () => {
       mockScansRepo.updateFinding.mockResolvedValueOnce({ id: 'f1', updated: true });
       const res = await scansService.updateFinding('f1', {}, 'u1', false);
       expect(res.finding.updated).toBe(true);
+    });
+  });
+
+  describe('saveWAFPatchReport', () => {
+    it('throws if scan not found', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce(null);
+      await expect(scansService.saveWAFPatchReport('s1', {})).rejects.toThrow('Scan not found|404');
+    });
+
+    it('throws if auth enabled and no user', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1' });
+      await expect(scansService.saveWAFPatchReport('s1', {}, null, true)).rejects.toThrow('Unauthorized|401');
+    });
+
+    it('throws if auth enabled and user has no access', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'other' });
+      mockRbacRepo.checkPermission.mockResolvedValueOnce(false);
+      await expect(scansService.saveWAFPatchReport('s1', {}, 'u1', true)).rejects.toThrow('Forbidden|403');
+    });
+
+    it('saves report successfully', async () => {
+      mockScansRepo.getScan.mockResolvedValueOnce({ id: 's1', project_id: 'p1', user_id: 'u1' });
+      const report = { totalBypasses: 1, bundles: {} };
+      const res = await scansService.saveWAFPatchReport('s1', report, 'u1', true);
+      expect(res.success).toBe(true);
+      expect(mockScansRepo.saveWAFPatchReport).toHaveBeenCalledWith('s1', report);
     });
   });
 });

@@ -32,5 +32,8 @@ features:
   - icon: 🔒
     title: Security Hardened
     details: Comprehensive SSRF protection, agent cryptographic authentication, and sandboxing.
+  - icon: 🛡️
+    title: WAF Analysis & Virtual Patching
+    details: Domain-level firewall detection via waf.secmy.app, sensitive file probing, and multi-vendor virtual patch rule synthesis.
 ---
 

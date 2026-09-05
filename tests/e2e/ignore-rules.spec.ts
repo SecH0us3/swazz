@@ -40,8 +40,8 @@ test.describe('Ignore Rules configuration and persistence E2E Tests', () => {
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
-    // 5. Navigate to Grouped Errors tab
-    const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
+    // 5. Navigate to Findings tab
+    const findingsTab = page.locator('button.tab-bar-btn:has-text("Findings")');
     await expect(findingsTab).toBeVisible();
     await findingsTab.click();
 

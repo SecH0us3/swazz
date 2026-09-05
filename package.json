@@ -12,6 +12,7 @@
     "docs"
   ],
   "scripts": {
+    "postinstall": "patch-package",
     "dev:backend": "npm run dev --workspace=packages/edge",
     "dev:frontend": "npm run dev --workspace=packages/web",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "concurrently": "^10.0.3",
+    "patch-package": "^8.0.0",
     "wrangler": "4.125.0"
   },
   "overrides": {

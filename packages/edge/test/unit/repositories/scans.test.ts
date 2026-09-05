@@ -347,4 +347,24 @@ describe('ScansRepository Unit Tests', () => {
       expect(dispatchWebhook).toHaveBeenNthCalledWith(2, mockEnv, 'p-2', 'scan.failed', expect.any(Object));
     });
   });
+
+  describe('saveWAFPatchReport', () => {
+    it('saveWAFPatchReport updates scans with stringified report', async () => {
+      const repo = new ScansRepository(mockEnv);
+      const report = { targetUrl: 'https://example.com', totalBypasses: 1, bundles: {} };
+      await repo.saveWAFPatchReport('s-1', report);
+
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE scans SET waf_patch_report = ? WHERE id = ?'));
+      expect(mockBind).toHaveBeenCalledWith(JSON.stringify(report), 's-1');
+    });
+
+    it('saveWAFPatchReport accepts raw string report', async () => {
+      const repo = new ScansRepository(mockEnv);
+      const reportStr = '{"raw": true}';
+      await repo.saveWAFPatchReport('s-1', reportStr);
+
+      expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('UPDATE scans SET waf_patch_report = ? WHERE id = ?'));
+      expect(mockBind).toHaveBeenCalledWith(reportStr, 's-1');
+    });
+  });
 });

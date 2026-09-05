@@ -43,6 +43,7 @@ import (
 	"swazz-engine/internal/runner/bola"
 	"swazz-engine/internal/security"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/wafcheck"
 )
 
 var uuidRegex = regexp.MustCompile(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
@@ -65,6 +66,11 @@ func (r *Runner) Results() []*swagger.FuzzResult {
 	res := make([]*swagger.FuzzResult, len(r.allResults))
 	copy(res, r.allResults)
 	return res
+}
+
+// GetWAFCheckResult returns the result of the pre-scan WAF check, if any.
+func (r *Runner) GetWAFCheckResult() *wafcheck.Result {
+	return r.wafCheckResult.Load()
 }
 
 // ─── embedded sub-structs ────────────────────────────────────────────────────
@@ -112,9 +118,10 @@ type Runner struct {
 	pause     runnerPause
 
 	// Stats aggregation — channel-based, owned by statsAggregator goroutine.
-	statsChan   chan statsMsg
-	latestStats atomic.Pointer[swagger.RunStats]
-	statsDone   chan struct{}
+	statsChan      chan statsMsg
+	latestStats    atomic.Pointer[swagger.RunStats]
+	wafCheckResult atomic.Pointer[wafcheck.Result]
+	statsDone      chan struct{}
 
 	subsMu        sync.RWMutex
 	subs          map[chan Event]struct{}
@@ -274,6 +281,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	r.runPreScanLLM(runCtx)
+	r.runPreScanWAFCheck(runCtx)
 
 	profiles := r.getOrderedProfiles()
 	r.calculateTotalPlanned(profiles)

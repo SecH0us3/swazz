@@ -178,3 +178,34 @@ Audit a target MCP server across tool arguments, prototype pollution in tool nam
    swazz-engine start -config swazz.config.mcp.json -mcp-fuzz-methods --sarif mcp-findings.sarif
    ```
 
+---
+
+## 🛡️ Recipe 5: Automated WAF Detection & Virtual Patching in CI/CD
+
+Combine automated WAF detection with post-scan virtual patch generation in your CI/CD pipeline. If vulnerabilities are confirmed during fuzzing, Swazz exports ready-to-deploy mitigation rules to protect production APIs immediately while code-level fixes are being developed.
+
+1. **Configure WAF Detection in `swazz.config.json`**:
+   ```json
+   {
+     "base_url": "https://api.staging.example.com",
+     "swagger_urls": ["https://api.staging.example.com/openapi.json"],
+     "settings": {
+       "waf_check_enabled": true,
+       "profiles": ["BOUNDARY", "MALICIOUS"]
+     }
+   }
+   ```
+
+2. **Execute Scan with Automated Virtual Patch Export**:
+   ```bash
+   # Generate Cloudflare WAF Expression Rules from confirmed bypass findings
+   swazz-engine start --config swazz.config.json --waf-patch cloudflare --waf-patch-output artifacts/cloudflare-waf-rules.txt --sarif results.sarif
+
+   # Or generate multi-vendor bundles (AWS, GCP, Azure, ModSecurity, Nginx, Caddy, HAProxy, K8s)
+   swazz-engine start --config swazz.config.json --waf-patch all --waf-patch-output artifacts/waf-patches/
+   ```
+
+3. **Deploy or Review Virtual Patches**:
+   The resulting files contain native firewall rules and Terraform HCL snippets that your DevOps or SecOps team can review and apply to perimeter security gateways directly.
+
+

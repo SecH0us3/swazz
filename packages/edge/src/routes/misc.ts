@@ -8,11 +8,27 @@ import { Env } from '../env';
 import { getUserIdFromRequest, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { IMiscRepository, MiscRepository } from '../repositories/misc';
 import { IMiscService, MiscService } from '../services/misc';
+import { runWafCheck } from '../services/wafCheck';
 
 export function registerMiscRoutes(
   app: Hono<{ Bindings: Env }>,
   miscServicesFactory: (env: Env) => IMiscService = (env) => new MiscService(env, new MiscRepository(env))
 ) {
+  app.post('/api/waf-check', async (c) => {
+    try {
+      const body = await c.req.json();
+      if (!body?.url || typeof body.url !== 'string') {
+        throw new Error('Missing target url|400');
+      }
+      const result = await runWafCheck(c.env, body.url);
+      return c.json(result);
+    } catch (err: any) {
+      const parts = err.message.split('|');
+      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 502;
+      return c.json({ error: parts[0] }, statusCode as any);
+    }
+  });
+
   app.all('/api/proxy', async (c) => {
     const services = miscServicesFactory(c.env);
     try {

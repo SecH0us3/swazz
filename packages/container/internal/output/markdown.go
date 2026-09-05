@@ -8,6 +8,7 @@ package output
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -58,6 +59,46 @@ func ToMarkdown(findings []*classifier.Finding, stats *swagger.RunStats, version
 	sb.WriteString(fmt.Sprintf("| 🟡 Warnings | %d |\n", warnings))
 	sb.WriteString(fmt.Sprintf("| 🔵 Notes | %d |\n", notes))
 	sb.WriteString("\n")
+
+	if stats != nil && stats.WAFCheck != nil {
+		sb.WriteString("## 🛡️ WAF Analysis\n\n")
+		if stats.WAFCheck.Detection.Detected {
+			sb.WriteString("- **WAF Detected:** Yes\n")
+			if stats.WAFCheck.Detection.WAFType != "" {
+				sb.WriteString(fmt.Sprintf("- **Vendor:** %s\n", stats.WAFCheck.Detection.WAFType))
+			}
+			sb.WriteString(fmt.Sprintf("- **Confidence:** %.0f%%\n", math.Min(100, stats.WAFCheck.Detection.Confidence)))
+			if len(stats.WAFCheck.Detection.Evidence) > 0 {
+				sb.WriteString("- **Evidence:**\n")
+				for _, ev := range stats.WAFCheck.Detection.Evidence {
+					sb.WriteString(fmt.Sprintf("  - %s\n", ev))
+				}
+			}
+		} else {
+			sb.WriteString("- **WAF Detected:** No\n")
+		}
+
+		var bypasses []string
+		if stats.WAFCheck.BypassOpportunities.HTTPMethodsBypass {
+			bypasses = append(bypasses, "HTTP Methods Bypass")
+		}
+		if stats.WAFCheck.BypassOpportunities.HeaderBypass {
+			bypasses = append(bypasses, "Header Bypass")
+		}
+		if stats.WAFCheck.BypassOpportunities.EncodingBypass {
+			bypasses = append(bypasses, "Encoding Bypass")
+		}
+		if stats.WAFCheck.BypassOpportunities.ParameterPollution {
+			bypasses = append(bypasses, "Parameter Pollution")
+		}
+		if len(bypasses) > 0 {
+			sb.WriteString("- **Bypass Opportunities:**\n")
+			for _, bp := range bypasses {
+				sb.WriteString(fmt.Sprintf("  - %s\n", bp))
+			}
+		}
+		sb.WriteString("\n")
+	}
 
 	// Group findings by Endpoint
 	groupedByEndpoint := make(map[string][]*classifier.Finding)

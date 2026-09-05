@@ -51,8 +51,8 @@ test.describe('Triage & History Persistence E2E Tests', () => {
     }
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // 5. Navigate to Grouped Errors tab
-    const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
+    // 5. Navigate to Findings tab
+    const findingsTab = page.locator('button.tab-bar-btn:has-text("Findings")');
     await expect(findingsTab).toBeVisible();
     await findingsTab.click();
 
@@ -105,8 +105,8 @@ test.describe('Triage & History Persistence E2E Tests', () => {
     await expect(loadRunBtn).toBeVisible();
     await loadRunBtn.click();
 
-    // Navigate to Grouped Errors and expand all
-    const findingsTabReloaded = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
+    // Navigate to Findings and expand all
+    const findingsTabReloaded = page.locator('button.tab-bar-btn:has-text("Findings")');
     await expect(findingsTabReloaded).toBeVisible();
     await findingsTabReloaded.click();
 

@@ -46,7 +46,6 @@ var Features = []FeatureDef{
 	{ID: FeatureHighConcurrency, Label: "High Concurrency", Type: FeatureTypePaid},
 	{ID: FeatureReportExports, Label: "Report Exports (SARIF / HTML / MD / JUnit)", Type: FeatureTypePaid},
 	{ID: FeatureScheduledRuns, Label: "Scheduled / CI Runs & Webhooks", Type: FeatureTypePaid},
-	{ID: "waf_analysis", Label: "WAF Analysis", Type: FeatureTypeComingSoon},
 	{ID: "domain_recon", Label: "Domain Reconnaissance", Type: FeatureTypeComingSoon},
 }
 

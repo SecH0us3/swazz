@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useFeatureGate } from './useFeatureGate.js';
 import { useAppStore } from '../store/appStore.js';
-import { FEATURE_SCHEDULED_RUNS, FEATURE_WAF_ANALYSIS } from '@swazz/shared';
+import { FEATURE_SCHEDULED_RUNS, FEATURE_DOMAIN_RECON } from '@swazz/shared';
 
 describe('useFeatureGate', () => {
     beforeEach(() => {
@@ -72,7 +72,7 @@ describe('useFeatureGate', () => {
     });
 
     it('marks coming_soon features as locked with a coming-soon message', () => {
-        const { result } = renderHook(() => useFeatureGate(FEATURE_WAF_ANALYSIS));
+        const { result } = renderHook(() => useFeatureGate(FEATURE_DOMAIN_RECON));
         expect(result.current.unlocked).toBe(false);
         expect(result.current.gateType).toBe('coming_soon');
         expect(result.current.lockMessage).toContain('coming soon');

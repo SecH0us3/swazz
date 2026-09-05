@@ -101,6 +101,7 @@ export interface SwazzSettings {
     enable_differential_analysis?: boolean;
     enable_security_headers_analysis?: boolean;
     use_llm_prepass?: boolean;
+    waf_check_enabled?: boolean;
     enable_smart_triage?: boolean;
     max_triage_per_scan?: number;
     ai_gateway_url?: string;
@@ -165,6 +166,7 @@ export const DEFAULT_SETTINGS: SwazzSettings = {
     enable_differential_analysis: false,
     enable_security_headers_analysis: false,
     use_llm_prepass: false,
+    waf_check_enabled: true,
     ai_gateway_url: '',
     cf_aig_token: '',
 };
@@ -263,6 +265,44 @@ export interface RunStats {
         currentEndpoint: string;
         currentProfile: FuzzingProfile | '';
     };
+    wafCheck?: WAFCheckResult;
+    waf_patch_report?: WAFPatchReport;
+}
+
+export interface WAFPatchBundle {
+    vendor: string;
+    native: string;
+    terraform?: string;
+    ruleCount: number;
+}
+
+export interface WAFPatchReport {
+    targetUrl: string;
+    generatedAt: string;
+    totalBypasses: number;
+    bundles: Record<string, WAFPatchBundle>;
+}
+
+export interface WAFDetection {
+    detected: boolean;
+    wafType: string;
+    confidence: number;
+    evidence: string[];
+    suggestedBypassTechniques: string[];
+    captchaDetected?: string;
+}
+
+export interface WAFBypassOpportunities {
+    httpMethodsBypass: boolean;
+    headerBypass: boolean;
+    encodingBypass: boolean;
+    parameterPollution: boolean;
+}
+
+export interface WAFCheckResult {
+    detection: WAFDetection;
+    bypassOpportunities: WAFBypassOpportunities;
+    timestamp: string;
 }
 
 // ─── Request abstraction ────────────────────────────────

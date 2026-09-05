@@ -493,6 +493,49 @@ describe('Inspector Component', () => {
         fireEvent.click(exportBtn);
         expect(onExportMock).toHaveBeenCalled();
     });
+
+    it('renders WAF patch report viewer when findingsOnly is true and report is present', async () => {
+        mockQueryResults.mockResolvedValue({ rows: [], total: 0 });
+        const report = {
+            targetUrl: 'https://example.com',
+            generatedAt: '2026-09-04T12:00:00.000Z',
+            totalBypasses: 1,
+            bundles: {
+                cloudflare: { vendor: 'cloudflare', native: 'rule-cf', ruleCount: 1 }
+            }
+        };
+
+        const { rerender } = render(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+                wafPatchReport={report}
+            />
+        );
+
+        expect(screen.getByTestId('waf-patch-viewer')).toBeInTheDocument();
+        expect(screen.getByText('rule-cf')).toBeInTheDocument();
+
+        // When wafPatchReport is absent, viewer is not rendered
+        rerender(
+            <Inspector
+                runId="run-123"
+                queryResults={mockQueryResults}
+                heatmapFilter={null}
+                onClearHeatmapFilter={() => {}}
+                onSelectResult={() => {}}
+                onExport={() => {}}
+                findingsOnly={true}
+                wafPatchReport={null}
+            />
+        );
+        expect(screen.queryByTestId('waf-patch-viewer')).not.toBeInTheDocument();
+    });
 });
 
 

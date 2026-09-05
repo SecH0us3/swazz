@@ -104,7 +104,7 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
 
     // Wait for logs tab to start showing fuzzer request logs count (indicating active scanning)
-    const logsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
+    const logsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(logsTab).toBeVisible();
     // Wait until there is at least one digit in the count
     await expect(logsTab).toContainText(/[1-9]\d*/, { timeout: TIMEOUTS.LOAD });
@@ -118,11 +118,11 @@ test.describe('Runner Agent Disconnection & Failover E2E Test', () => {
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
     // 10. Verify scan completed successfully and we have findings
-    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
+    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP")');
     await expect(owaspTab).toBeVisible();
     await owaspTab.click();
 
-    const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
+    const findingsCountTab = page.locator('.owasp-tab-btn', { hasText: 'Findings' });
+    await expect(findingsCountTab).toHaveText(/Findings \(\d+\)/, { timeout: TIMEOUTS.DEFAULT });
   });
 });

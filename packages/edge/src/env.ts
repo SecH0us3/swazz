@@ -34,5 +34,6 @@ export interface Env {
   SWAZZ_LICENSE_PRIVKEY?: string;
   NODE_ENV?: string;
   ALLOW_PRIVATE_WEBHOOKS?: string;
+  WAF_CHECKER_URL?: string;
 }
 

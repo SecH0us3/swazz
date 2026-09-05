@@ -12,6 +12,7 @@ import (
 
 	"swazz-engine/internal/classifier"
 	"swazz-engine/internal/swagger"
+	"swazz-engine/internal/wafcheck"
 )
 
 func TestToHTML(t *testing.T) {
@@ -293,6 +294,53 @@ func TestToHTML(t *testing.T) {
 		// Verify Took duration is present
 		if !strings.Contains(res, "Took ") {
 			t.Errorf("expected Took duration to be present, output was: %s", res)
+		}
+	})
+
+	t.Run("With WAFCheck populated", func(t *testing.T) {
+		stats := &swagger.RunStats{
+			TotalRequests: 50,
+			WAFCheck: &wafcheck.Result{
+				Detection: wafcheck.Detection{
+					Detected:   true,
+					WAFType:    "Cloudflare",
+					Confidence: 92,
+					Evidence:   []string{"cf-ray header present"},
+				},
+				BypassOpportunities: wafcheck.BypassOpportunities{
+					EncodingBypass: true,
+				},
+				Timestamp: "2026-09-04T12:00:00Z",
+			},
+		}
+
+		res := ToHTML(nil, stats)
+		if !strings.Contains(res, "<h2>WAF Analysis</h2>") {
+			t.Errorf("expected WAF Analysis section in HTML")
+		}
+		if !strings.Contains(res, "Cloudflare") {
+			t.Errorf("expected Cloudflare vendor in HTML")
+		}
+		if !strings.Contains(res, "92%") {
+			t.Errorf("expected 92%% confidence in HTML")
+		}
+		if !strings.Contains(res, "cf-ray header present") {
+			t.Errorf("expected evidence in HTML")
+		}
+		if !strings.Contains(res, "Encoding Bypass") {
+			t.Errorf("expected bypass opportunities in HTML")
+		}
+	})
+
+	t.Run("With WAFCheck nil", func(t *testing.T) {
+		stats := &swagger.RunStats{
+			TotalRequests: 50,
+			WAFCheck:      nil,
+		}
+
+		res := ToHTML(nil, stats)
+		if strings.Contains(res, "<h2>WAF Analysis</h2>") {
+			t.Errorf("did not expect WAF Analysis section in HTML when WAFCheck is nil")
 		}
 	})
 }

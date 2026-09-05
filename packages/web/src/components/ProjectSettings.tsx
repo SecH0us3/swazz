@@ -21,9 +21,10 @@ import { ScheduleTab } from './ProjectSettings/ScheduleTab.js';
 import { AuditTrailTab } from './ProjectSettings/AuditTrailTab.js';
 import { WebhooksTab } from './ProjectSettings/WebhooksTab.js';
 import { AuthSequenceTab } from './ProjectSettings/AuthSequenceTab.js';
+import { WafAnalysisTab } from './ProjectSettings/WafAnalysisTab.js';
 import { useFeatureGate } from '../hooks/useFeatureGate.js';
 import { useToast } from '../hooks/useToast.js';
-import { FEATURE_ENTERPRISE, FEATURE_AI_REMEDIATION_PRO, FEATURE_SCHEDULED_RUNS, FEATURE_WAF_ANALYSIS, FEATURE_DOMAIN_RECON } from '@swazz/shared';
+import { FEATURE_ENTERPRISE, FEATURE_AI_REMEDIATION_PRO, FEATURE_SCHEDULED_RUNS, FEATURE_DOMAIN_RECON } from '@swazz/shared';
 interface Runner {
     connectionId: string | null;
     name: string;
@@ -35,13 +36,12 @@ interface Runner {
 }
 
 export function ProjectSettings() {
-    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'auth_sequence'>('general');
+    const [activeSubTab, setActiveSubTab] = useState<'general' | 'members' | 'api_specs' | 'performance' | 'anomalies' | 'runners' | 'wordlists' | 'dictionaries' | 'chaining' | 'ai_remediation' | 'keys' | 'raw_config' | 'schedule' | 'audit_trail' | 'webhooks' | 'auth_sequence' | 'waf_analysis'>('general');
     const { showToast } = useToast();
 
     const gateMembers = useFeatureGate(FEATURE_ENTERPRISE);
     const gateAIRemediation = useFeatureGate(FEATURE_AI_REMEDIATION_PRO);
     const gateScheduledRuns = useFeatureGate(FEATURE_SCHEDULED_RUNS);
-    const gateWAF = useFeatureGate(FEATURE_WAF_ANALYSIS);
     const gateRecon = useFeatureGate(FEATURE_DOMAIN_RECON);
 
     // Runners state (kept in parent for count badge in tab navigation)
@@ -312,14 +312,13 @@ export function ProjectSettings() {
                     </button>
                     <button
                         id="tab-waf-analysis"
-                        className="tab-bar-btn"
-                        onClick={() => showToast(gateWAF.lockMessage, 'error')}
-                        title={gateWAF.lockMessage}
+                        className={`tab-bar-btn ${activeSubTab === 'waf_analysis' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('waf_analysis')}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-bar-icon">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                         </svg>
-                        WAF Analysis ⏳
+                        WAF Analysis
                     </button>
                     <button
                         id="tab-domain-recon"
@@ -378,6 +377,7 @@ export function ProjectSettings() {
                     {activeSubTab === 'schedule' && <ScheduleTab />}
                     {activeSubTab === 'audit_trail' && <AuditTrailTab />}
                     {activeSubTab === 'webhooks' && <WebhooksTab />}
+                    {activeSubTab === 'waf_analysis' && <WafAnalysisTab />}
                 </div>
             </div>
         </div>

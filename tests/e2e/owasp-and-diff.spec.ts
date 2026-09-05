@@ -51,8 +51,8 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 5. Verify Request Mutation Visual Diff
-    // Switch to Request Logs tab
-    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
+    // Switch to Logs tab
+    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
 
@@ -84,7 +84,7 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await closeBtn.click();
 
     // 6. Verify OWASP Top 10 Mapping Accuracy (API 2023 & Web 2025)
-    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
+    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP")');
     await expect(owaspTab).toBeVisible();
     await owaspTab.click();
 
@@ -144,8 +144,8 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     }
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // 4. Navigate to OWASP Top 10 tab
-    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
+    // 4. Navigate to OWASP tab
+    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP")');
     await expect(owaspTab).toBeVisible();
     await owaspTab.click();
 
