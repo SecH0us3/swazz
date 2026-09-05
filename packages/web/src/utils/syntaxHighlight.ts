@@ -3,11 +3,11 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-export type CodeLang = 'json' | 'generic';
+export type CodeLang = 'json' | 'generic' | 'code';
 
 export interface CodeToken {
     text: string;
-    className?: string; // one of 'tok-key' | 'tok-str' | 'tok-fn', or undefined for plain text
+    className?: string; // 'tok-key' | 'tok-str' | 'tok-fn' | 'tok-comment' | 'tok-num', or undefined for plain text
 }
 
 const JSON_REGEX = /(?<key>"(?:\\.|[^"\\])*"\s*:)|(?<str>"(?:\\.|[^"\\])*")|(?<bool>\b(?:true|false|null)\b)|(?<num>-?\b\d+(?:\.\d+)?\b)/g;
@@ -34,6 +34,28 @@ const GENERIC_REGEX = new RegExp(
     'g'
 );
 
+// Shared across the PoC exporter's four targets (bash/cURL, Python, TypeScript, Go).
+// One combined list is deliberate: these snippets are short and the languages overlap,
+// so a per-language grammar would be far more machinery than the payoff justifies.
+const CODE_KEYWORDS = [
+    'import', 'from', 'package', 'func', 'def', 'return', 'const', 'let', 'var',
+    'async', 'await', 'if', 'else', 'elif', 'for', 'range', 'while', 'try', 'catch',
+    'except', 'finally', 'with', 'as', 'class', 'new', 'nil', 'None', 'null',
+    'True', 'False', 'true', 'false', 'err', 'print', 'fmt', 'curl', 'echo',
+];
+
+const CODE_KEYWORDS_PATTERN = CODE_KEYWORDS.slice()
+    .sort((a, b) => b.length - a.length)
+    .join('|');
+
+const CODE_REGEX = new RegExp(
+    '(?<comment>#[^\\n]*|//[^\\n]*)' +
+    '|(?<str>"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|`(?:\\\\.|[^`\\\\])*`)' +
+    `|(?<kw>(?<![\\w-])(?:${CODE_KEYWORDS_PATTERN})(?![\\w-]))` +
+    '|(?<num>-?\\b\\d+(?:\\.\\d+)?\\b)',
+    'g'
+);
+
 function getClassName(match: RegExpExecArray, lang: CodeLang): string | undefined {
     const groups = match.groups;
     if (!groups) return undefined;
@@ -43,6 +65,11 @@ function getClassName(match: RegExpExecArray, lang: CodeLang): string | undefine
         if (groups.str) return 'tok-str';
         if (groups.bool) return 'tok-key';
         if (groups.num) return 'tok-fn';
+    } else if (lang === 'code') {
+        if (groups.comment) return 'tok-comment';
+        if (groups.str) return 'tok-str';
+        if (groups.kw) return 'tok-key';
+        if (groups.num) return 'tok-num';
     } else {
         if (groups.comment) return 'tok-key';
         if (groups.str) return 'tok-str';
@@ -58,7 +85,7 @@ export function tokenizeCode(code: string, lang: CodeLang): CodeToken[] {
         return [];
     }
 
-    const regex = lang === 'json' ? JSON_REGEX : GENERIC_REGEX;
+    const regex = lang === 'json' ? JSON_REGEX : lang === 'code' ? CODE_REGEX : GENERIC_REGEX;
     regex.lastIndex = 0;
 
     const tokens: CodeToken[] = [];

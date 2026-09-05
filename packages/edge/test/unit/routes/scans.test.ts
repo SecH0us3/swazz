@@ -286,5 +286,16 @@ describe('Scans Routes Unit Tests', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ success: true });
     });
+
+    it('returns a structured error for a malformed JSON body', async () => {
+      const res = await app.request('/api/scans/s123/waf-patch', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not json',
+      });
+      expect(res.status).toBe(500);
+      expect(await res.json()).toHaveProperty('error');
+      expect(mockServices.saveWAFPatchReport).not.toHaveBeenCalled();
+    });
   });
 });

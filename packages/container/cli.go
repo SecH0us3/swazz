@@ -24,6 +24,7 @@ import (
 	"swazz-engine/internal/runner"
 	"swazz-engine/internal/swagger"
 	"swazz-engine/internal/wafcheck"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -416,6 +417,7 @@ func runCLIErr(args []string) error {
 				IncludeTerraform: true,
 			})
 			if err != nil {
+				// An optional report export must never fail the scan itself.
 				log.Printf("Failed to generate WAF virtual patches: %v", err)
 			} else {
 				outPath := *wafPatchOutput
@@ -443,11 +445,11 @@ func runCLIErr(args []string) error {
 					logger.Info("Saved WAF patch rules to %s", outPath)
 				}
 				if tfContent != "" {
-					cleanTF := filepath.Clean(outPath + ".tf")
+					cleanTF := strings.TrimSuffix(cleanOut, filepath.Ext(cleanOut)) + ".tf"
 					if err := os.WriteFile(cleanTF, []byte(tfContent), 0600); err != nil { // #nosec G306,G703 -- report file output
 						log.Printf("Failed to write WAF patch terraform output: %v", err)
 					} else {
-						logger.Info("Saved WAF patch Terraform to %s", outPath+".tf")
+						logger.Info("Saved WAF patch Terraform to %s", cleanTF)
 					}
 				}
 			}

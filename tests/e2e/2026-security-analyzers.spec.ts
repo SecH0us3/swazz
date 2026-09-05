@@ -44,8 +44,8 @@ test.describe('2026 Security Analyzers & PoC Generator E2E Tests', () => {
     }
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-    // 5. Switch to Request Logs tab
-    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
+    // 5. Switch to Logs tab
+    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
 

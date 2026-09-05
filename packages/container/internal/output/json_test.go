@@ -198,7 +198,7 @@ func TestToJSON(t *testing.T) {
 				Detection: wafcheck.Detection{
 					Detected:   true,
 					WAFType:    "Cloudflare",
-					Confidence: 0.9,
+					Confidence: 90,
 					Evidence:   []string{"cf-ray header"},
 				},
 				BypassOpportunities: wafcheck.BypassOpportunities{

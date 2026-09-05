@@ -208,11 +208,11 @@ export function registerScansRoutes(
   app.patch('/api/scans/:id/waf-patch', async (c) => {
     const services = scansServicesFactory(c.env);
     const scanId = c.req.param('id');
-    const body = await c.req.json();
-    const userId = await getUserIdFromRequest(c);
     const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
 
     try {
+      const body = await c.req.json();
+      const userId = await getUserIdFromRequest(c);
       const result = await services.saveWAFPatchReport(scanId, body, userId, isAuthEnabled);
       return c.json(result);
     } catch (err: any) {

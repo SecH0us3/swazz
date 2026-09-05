@@ -89,7 +89,7 @@ test.describe('Rate Limit Detection & Throttle Control E2E Test', () => {
       await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
       // 4. Verify that 'Missing Rate Limiting' (swazz/no-rate-limit) Finding was detected on /users
-      const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
+      const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
       await expect(requestLogsTab).toBeVisible();
       await requestLogsTab.click();
 

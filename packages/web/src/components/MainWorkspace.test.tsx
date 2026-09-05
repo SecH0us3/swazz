@@ -72,7 +72,7 @@ describe('MainWorkspace Component — WAF Check Tab', () => {
 
         const wafTabBtn = screen.getByTestId('tab-waf');
         expect(wafTabBtn).toBeInTheDocument();
-        expect(wafTabBtn).toHaveTextContent('WAF Check');
+        expect(wafTabBtn).toHaveTextContent('WAF');
     });
 
     it('activates the WAF tab and renders WafCheckPanel when clicked', () => {

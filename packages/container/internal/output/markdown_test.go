@@ -89,7 +89,7 @@ func TestToMarkdown(t *testing.T) {
 			Detection: wafcheck.Detection{
 				Detected:   true,
 				WAFType:    "Cloudflare",
-				Confidence: 0.92,
+				Confidence: 92,
 				Evidence:   []string{"cf-ray header present"},
 			},
 			BypassOpportunities: wafcheck.BypassOpportunities{

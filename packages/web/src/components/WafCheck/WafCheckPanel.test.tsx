@@ -296,21 +296,20 @@ describe('WafCheckPanel Component', () => {
         fireEvent.click(evidenceBtn);
         expect(screen.queryByTestId('waf-evidence-list')).not.toBeInTheDocument();
 
-        // Stats row: 3 checked, 2 unprotected, 1 blocked
+        // Stats row: 3 checked, 2 not blocked by the WAF (200 + 404), 1 blocked (403).
+        // The header badge separately reports that only 1 of those is an actual leak.
         const statsRow = screen.getByTestId('waf-stats-row');
         expect(statsRow).toBeInTheDocument();
-        expect(statsRow).toHaveTextContent('3');
-        expect(statsRow).toHaveTextContent('Paths Checked');
-        expect(statsRow).toHaveTextContent('2');
-        expect(statsRow).toHaveTextContent('Unprotected');
-        expect(statsRow).toHaveTextContent('1');
-        expect(statsRow).toHaveTextContent('Blocked / Redirected');
+        expect(statsRow).toHaveTextContent('3Paths Checked');
+        expect(statsRow).toHaveTextContent('2Not Blocked');
+        expect(statsRow).toHaveTextContent('1Blocked');
+        expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('1 exposed');
 
         // Sensitive files section is collapsed by default
         expect(screen.getByTestId('waf-sensitive-files-table')).toBeInTheDocument();
         expect(screen.queryByText('.env')).not.toBeInTheDocument();
 
-        // Expand it — defaults to unprotected (status 200 and 404 visible, 403 hidden)
+        // Expand it — defaults to not-blocked (status 200 and 404 visible, 403 hidden)
         fireEvent.click(screen.getByTestId('waf-files-section-toggle'));
         expect(screen.getByText('.env')).toBeInTheDocument();
         expect(screen.getByText('composer.json')).toBeInTheDocument();
@@ -323,7 +322,7 @@ describe('WafCheckPanel Component', () => {
         fireEvent.click(toggleFilesBtn);
         expect(screen.getByText('.git/HEAD')).toBeInTheDocument();
         expect(screen.getByText('403')).toBeInTheDocument();
-        expect(toggleFilesBtn).toHaveTextContent('Show unprotected only');
+        expect(toggleFilesBtn).toHaveTextContent('Show not blocked only');
 
         // Re-collapse
         fireEvent.click(toggleFilesBtn);
@@ -333,5 +332,35 @@ describe('WafCheckPanel Component', () => {
         expect(screen.getByTestId('waf-patch-viewer')).toBeInTheDocument();
         expect(screen.getByText('WAF Mitigation Rules')).toBeInTheDocument();
         expect(screen.getByTestId('waf-patch-native')).toHaveTextContent('http.request.uri.path contains "composer.json"');
+    });
+
+    it('counts 404s as a WAF coverage gap but not as an exposed file', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: true, wafType: 'Cloudflare', confidence: 95, evidence: [] },
+                sensitiveFiles: {
+                    total: 2,
+                    results: [
+                        { category: 'Sensitive Files', method: 'GET', status: 404, payload: '.env' },
+                        { category: 'Sensitive Files', method: 'GET', status: 404, payload: '.git/HEAD' },
+                    ],
+                },
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => expect(screen.getByTestId('waf-stats-row')).toBeInTheDocument());
+
+        // The WAF let both requests through (a real coverage gap), but neither file exists,
+        // so nothing is actually leaking — the two signals must be reported separately.
+        const statsRow = screen.getByTestId('waf-stats-row');
+        expect(statsRow).toHaveTextContent('2Paths Checked');
+        expect(statsRow).toHaveTextContent('2Not Blocked');
+        expect(statsRow).toHaveTextContent('0Blocked');
+        expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('0 exposed');
     });
 });

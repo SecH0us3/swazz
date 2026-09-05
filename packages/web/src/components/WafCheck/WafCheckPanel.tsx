@@ -35,8 +35,12 @@ export interface WafCheckPanelProps {
     targetUrl?: string;
 }
 
-function isUnprotectedStatus(status: number): boolean {
-    return status === 200 || status === 404 || status >= 500;
+function isExposedStatus(status: number): boolean {
+    return status === 200;
+}
+
+function isBlockedStatus(status: number): boolean {
+    return status === 403 || status === 406 || status === 429 || (status >= 300 && status < 400);
 }
 
 export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
@@ -131,16 +135,16 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
 
     const sensitiveResults = result?.sensitiveFiles?.results || [];
     const totalFilesChecked = sensitiveResults.length;
-    const unprotectedFiles = sensitiveResults.filter(r => isUnprotectedStatus(r.status));
-    const unprotectedCount = unprotectedFiles.length;
-    const blockedCount = totalFilesChecked - unprotectedCount;
-    const displayedFiles = showAllFiles ? sensitiveResults : unprotectedFiles;
+    // Two distinct signals: WAF coverage (did the request reach the origin at all?) and
+    // actual exposure (did a sensitive file really come back?). A 404 is a coverage gap
+    // but not a leak, so it must be counted in the former and not the latter.
+    const notBlockedFiles = sensitiveResults.filter(r => !isBlockedStatus(r.status));
+    const notBlockedCount = notBlockedFiles.length;
+    const exposedCount = sensitiveResults.filter(r => isExposedStatus(r.status)).length;
+    const blockedCount = totalFilesChecked - notBlockedCount;
+    const displayedFiles = showAllFiles ? sensitiveResults : notBlockedFiles;
 
-    const rawConfidence = result?.detection?.confidence ?? 0;
-    const normalizedConfidence = (rawConfidence <= 1 && rawConfidence > 0)
-        ? rawConfidence * 100
-        : rawConfidence;
-    const confidenceScore = Math.round(Math.min(100, normalizedConfidence));
+    const confidenceScore = Math.round(Math.max(0, Math.min(100, result?.detection?.confidence ?? 0)));
 
     return (
         <div className="waf-panel" data-testid="waf-check-panel">
@@ -263,12 +267,12 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
                         <span className="waf-stat-pill-label">Paths Checked</span>
                     </div>
                     <div className="waf-stat-pill stat-danger">
-                        <span className="waf-stat-pill-value">{unprotectedCount}</span>
-                        <span className="waf-stat-pill-label">Unprotected</span>
+                        <span className="waf-stat-pill-value">{notBlockedCount}</span>
+                        <span className="waf-stat-pill-label">Not Blocked</span>
                     </div>
                     <div className="waf-stat-pill stat-ok">
                         <span className="waf-stat-pill-value">{blockedCount}</span>
-                        <span className="waf-stat-pill-label">Blocked / Redirected</span>
+                        <span className="waf-stat-pill-label">Blocked</span>
                     </div>
                 </div>
             )}
@@ -284,10 +288,10 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
                     >
                         <span className="waf-table-card-title">
                             <span className="waf-table-card-chevron">{isFilesTableExpanded ? '▾' : '▸'}</span>
-                            {showAllFiles ? `Sensitive Files Probed (${totalFilesChecked})` : 'Sensitive Files — Unprotected'}
+                            {showAllFiles ? `Sensitive Files Probed (${totalFilesChecked})` : 'Sensitive Files — Not Blocked'}
                         </span>
-                        <span className={`badge ${unprotectedCount > 0 ? 'badge-error' : 'badge-success'}`}>
-                            {unprotectedCount} exposed
+                        <span className={`badge ${exposedCount > 0 ? 'badge-error' : 'badge-success'}`}>
+                            {exposedCount} exposed
                         </span>
                     </button>
                     {isFilesTableExpanded && (
@@ -324,14 +328,14 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
                                     </tbody>
                                 </table>
                             </div>
-                            {totalFilesChecked > unprotectedCount && (
+                            {totalFilesChecked > notBlockedFiles.length && (
                                 <div className="waf-table-footer">
                                     <button
                                         type="button"
                                         data-testid="waf-files-toggle-btn"
                                         onClick={() => setShowAllFiles(!showAllFiles)}
                                     >
-                                        {showAllFiles ? 'Show unprotected only' : `Show all ${totalFilesChecked} checked paths →`}
+                                        {showAllFiles ? 'Show not blocked only' : `Show all ${totalFilesChecked} checked paths →`}
                                     </button>
                                 </div>
                             )}

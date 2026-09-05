@@ -67,8 +67,8 @@ test.describe('Swazz Integration E2E Test', () => {
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 8. Assert that findings are populated
-    // Switch to Grouped Errors tab to view findings
-    const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
+    // Switch to Findings tab to view findings
+    const findingsTab = page.locator('button.tab-bar-btn:has-text("Findings")');
     await expect(findingsTab).toBeVisible();
     await findingsTab.click();
 

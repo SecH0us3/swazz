@@ -105,3 +105,6 @@ packages/edge/coverage_report.txt
 # Git Worktrees
 .worktrees/
 packages/web/coverage/
+
+# Claude Code personal (non-shared) settings
+.claude/settings.local.json

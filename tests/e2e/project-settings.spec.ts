@@ -341,11 +341,14 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await expect(totalStat).not.toHaveText('0', { timeout: TIMEOUTS.LOAD });
 
       const successStat = page.locator('.stat-card.stat-2xx .stat-value');
-      // Tolerate very low success count (e.g. < 20) on fast machines where loopback is < 5ms
+      // Assert the timeout's effect relatively, not against a fixed number: on a fast machine
+      // loopback can answer inside 5ms often enough to clear any absolute bound, but the bulk
+      // of requests must still have been cut short.
       await expect(async () => {
-        const text = await successStat.innerText();
-        const val = parseInt(text, 10);
-        expect(val).toBeLessThan(20);
+        const success = parseInt(await successStat.innerText(), 10);
+        const total = parseInt(await totalStat.innerText(), 10);
+        expect(total).toBeGreaterThan(0);
+        expect(success).toBeLessThan(total / 2);
       }).toPass({ timeout: TIMEOUTS.DEFAULT });
     } finally {
       // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests

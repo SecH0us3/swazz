@@ -45,8 +45,11 @@ test.describe('Feature Gating E2E', () => {
     await expect(page.locator('#tab-members')).toContainText('🔒');
 
     // Coming-soon tabs show the hourglass badge.
-    await expect(page.locator('#tab-waf-analysis')).toContainText('⏳');
     await expect(page.locator('#tab-domain-recon')).toContainText('⏳');
+
+    // WAF Analysis is free for every plan — no lock and no hourglass.
+    await expect(page.locator('#tab-waf-analysis')).not.toContainText('⏳');
+    await expect(page.locator('#tab-waf-analysis')).not.toContainText('🔒');
 
     // Clicking a locked paid tab does not open it and shows a toast.
     await page.locator('#tab-webhooks').click();
@@ -54,8 +57,12 @@ test.describe('Feature Gating E2E', () => {
     await expect(page.locator('.project-settings-content')).not.toContainText('Webhook');
 
     // Clicking a coming-soon tab shows the coming-soon toast.
-    await page.locator('#tab-waf-analysis').click();
+    await page.locator('#tab-domain-recon').click();
     await expect(page.locator('.toast', { hasText: 'coming soon' })).toBeVisible({ timeout: TIMEOUTS.SHORT });
+
+    // WAF Analysis opens for a free user instead of being gated.
+    await page.locator('#tab-waf-analysis').click();
+    await expect(page.locator('.project-settings-content')).toContainText('Enable Pre-Scan WAF Fingerprinting', { timeout: TIMEOUTS.SHORT });
   });
 
   test('activating a license unlocks paid tabs', async ({ page }) => {
@@ -97,6 +104,9 @@ test.describe('Feature Gating E2E', () => {
     await expect(page.locator('.project-settings-content')).toContainText('Webhook', { timeout: TIMEOUTS.SHORT });
 
     // Coming-soon tabs stay locked regardless of license.
-    await expect(page.locator('#tab-waf-analysis')).toContainText('⏳');
+    await expect(page.locator('#tab-domain-recon')).toContainText('⏳');
+
+    // WAF Analysis is free, so a license changes nothing for it.
+    await expect(page.locator('#tab-waf-analysis')).not.toContainText('⏳');
   });
 });

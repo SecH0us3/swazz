@@ -14,31 +14,43 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"swazz-engine/internal/swagger"
 )
 
 const DefaultEndpoint = "https://waf.secmy.app"
 
-type Detection struct {
-	Detected                  bool     `json:"detected"`
-	WAFType                   string   `json:"wafType"`
-	Confidence                float64  `json:"confidence"`
-	Evidence                  []string `json:"evidence"`
-	SuggestedBypassTechniques []string `json:"suggestedBypassTechniques"`
-	CaptchaDetected           string   `json:"captchaDetected,omitempty"`
+// maxResponseBytes caps how much of a third-party response we buffer into memory.
+const maxResponseBytes = 10 << 20
+
+// parseAPIError renders a non-2xx response from the WAF-checker API as an error,
+// preferring the structured {error, message} body when present.
+func parseAPIError(label string, statusCode int, body []byte) error {
+	var errResp struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil {
+		if errResp.Error != "" && errResp.Message != "" {
+			return fmt.Errorf("%s API error (%d): %s - %s", label, statusCode, errResp.Error, errResp.Message)
+		}
+		if errResp.Error != "" {
+			return fmt.Errorf("%s API error (%d): %s", label, statusCode, errResp.Error)
+		}
+		if errResp.Message != "" {
+			return fmt.Errorf("%s API error (%d): %s", label, statusCode, errResp.Message)
+		}
+	}
+	return fmt.Errorf("%s API error with status %d: %s", label, statusCode, string(body))
 }
 
-type BypassOpportunities struct {
-	HTTPMethodsBypass  bool `json:"httpMethodsBypass"`
-	HeaderBypass       bool `json:"headerBypass"`
-	EncodingBypass     bool `json:"encodingBypass"`
-	ParameterPollution bool `json:"parameterPollution"`
-}
-
-type Result struct {
-	Detection           Detection           `json:"detection"`
-	BypassOpportunities BypassOpportunities `json:"bypassOpportunities"`
-	Timestamp           string              `json:"timestamp"`
-}
+// The detection DTOs live in internal/swagger so that the shared types package does not
+// have to depend on this HTTP client package. These aliases keep call sites readable.
+type (
+	Detection           = swagger.WAFDetection
+	BypassOpportunities = swagger.WAFBypassOpportunities
+	Result              = swagger.WAFCheckResult
+)
 
 type Client struct {
 	endpoint string
@@ -89,28 +101,13 @@ func (c *Client) Detect(ctx context.Context, targetURL string) (*Result, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read WAF check response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var errResp struct {
-			Error   string `json:"error"`
-			Message string `json:"message"`
-		}
-		if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil {
-			if errResp.Error != "" && errResp.Message != "" {
-				return nil, fmt.Errorf("WAF check API error (%d): %s - %s", resp.StatusCode, errResp.Error, errResp.Message)
-			}
-			if errResp.Error != "" {
-				return nil, fmt.Errorf("WAF check API error (%d): %s", resp.StatusCode, errResp.Error)
-			}
-			if errResp.Message != "" {
-				return nil, fmt.Errorf("WAF check API error (%d): %s", resp.StatusCode, errResp.Message)
-			}
-		}
-		return nil, fmt.Errorf("WAF check API error with status %d: %s", resp.StatusCode, string(body))
+		return nil, parseAPIError("WAF check", resp.StatusCode, body)
 	}
 
 	var res Result

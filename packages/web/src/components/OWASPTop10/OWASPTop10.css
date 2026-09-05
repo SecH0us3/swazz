@@ -29,15 +29,6 @@
     color: var(--text-primary);
 }
 
-.owasp-summary-count {
-    font-size: var(--font-size-lg);
-    font-weight: 700;
-    color: var(--color-error);
-    background: var(--color-error-bg);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-full);
-}
-
 .owasp-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

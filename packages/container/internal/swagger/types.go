@@ -12,9 +12,32 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"swazz-engine/internal/wafcheck"
 )
+
+// WAFDetection describes the outcome of a domain-level WAF fingerprint.
+type WAFDetection struct {
+	Detected                  bool     `json:"detected"`
+	WAFType                   string   `json:"wafType"`
+	Confidence                float64  `json:"confidence"`
+	Evidence                  []string `json:"evidence"`
+	SuggestedBypassTechniques []string `json:"suggestedBypassTechniques"`
+	CaptchaDetected           string   `json:"captchaDetected,omitempty"`
+}
+
+// WAFBypassOpportunities lists evasion vectors the fingerprinter considers viable.
+type WAFBypassOpportunities struct {
+	HTTPMethodsBypass  bool `json:"httpMethodsBypass"`
+	HeaderBypass       bool `json:"headerBypass"`
+	EncodingBypass     bool `json:"encodingBypass"`
+	ParameterPollution bool `json:"parameterPollution"`
+}
+
+// WAFCheckResult is the full response of a domain-level WAF check.
+type WAFCheckResult struct {
+	Detection           WAFDetection           `json:"detection"`
+	BypassOpportunities WAFBypassOpportunities `json:"bypassOpportunities"`
+	Timestamp           string                 `json:"timestamp"`
+}
 
 // FuzzingProfile represents the type of payload generation strategy.
 type FuzzingProfile string
@@ -498,7 +521,7 @@ type RunStats struct {
 	TotalResponseBytes int64                            `json:"totalResponseBytes"`
 	MaxResponseSize    int64                            `json:"maxResponseSize"`
 	TotalDurationMs    int64                            `json:"totalDurationMs"`
-	WAFCheck           *wafcheck.Result                 `json:"wafCheck,omitempty"`
+	WAFCheck           *WAFCheckResult                  `json:"wafCheck,omitempty"`
 }
 
 // Progress tracks endpoint-level completion.

@@ -150,14 +150,14 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
-    // 5. Verify MCP findings under OWASP Top 10 tab
-    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP Top 10")');
+    // 5. Verify MCP findings under OWASP tab
+    const owaspTab = page.locator('button.tab-bar-btn:has-text("OWASP")');
     await expect(owaspTab).toBeVisible();
     await owaspTab.click();
 
     // Verify summary count reflects finding(s)
-    const summaryBanner = page.locator('.owasp-summary-count');
-    await expect(summaryBanner).toHaveText(/\d+ Finding[s]? Detected/, { timeout: TIMEOUTS.DEFAULT });
+    const findingsCountTab = page.locator('.owasp-tab-btn', { hasText: 'Findings' });
+    await expect(findingsCountTab).toHaveText(/Findings \(\d+\)/, { timeout: TIMEOUTS.DEFAULT });
 
     // Verify category card has findings (our mcp server crash finding)
     const mcpCrashCard = page.locator('.owasp-card').filter({ hasText: /API10:2023|A10:2025|Unsafe Consumption of APIs|Mishandling/ });

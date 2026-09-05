@@ -60,8 +60,8 @@ test.describe('HAR File Import (Traffic Replay Fuzzing) E2E Test', () => {
     // Wait for the fuzzer to complete (timeout of 60s max since it's a small mock HAR)
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
 
-    // 5. Navigate to "Request Logs" tab to verify requests were sent
-    const requestLogsTab = page.locator('button:has-text("Request Logs")');
+    // 5. Navigate to "Logs" tab to verify requests were sent
+    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
 

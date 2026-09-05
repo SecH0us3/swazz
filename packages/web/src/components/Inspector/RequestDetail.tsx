@@ -3,10 +3,11 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { ReactNode, useState, useEffect } from 'react';
+import React, { ReactNode, useState, useEffect } from 'react';
 import type { FuzzResult, SwazzConfig, AnalysisFinding } from '../../types.js';
 import { generateTemplateFromSchema, parseQueryParams, renderJsonDiff } from './diffUtils.js';
 import { generateCurl, generatePython, generateTypeScript, generateGo } from './pocGenerator.js';
+import { tokenizeCode } from '../../utils/syntaxHighlight.js';
 
 function tryParseEmbeddedJson(val: any): any {
     if (val === null || val === undefined) return val;
@@ -696,10 +697,16 @@ export function RequestDetail({
                                             headers: result.requestHeaders,
                                             body: result.payload,
                                         };
-                                        if (pocLang === 'curl') return generateCurl(reqOpts);
-                                        if (pocLang === 'python') return generatePython(reqOpts);
-                                        if (pocLang === 'typescript') return generateTypeScript(reqOpts);
-                                        return generateGo(reqOpts);
+                                        let code: string;
+                                        if (pocLang === 'curl') code = generateCurl(reqOpts);
+                                        else if (pocLang === 'python') code = generatePython(reqOpts);
+                                        else if (pocLang === 'typescript') code = generateTypeScript(reqOpts);
+                                        else code = generateGo(reqOpts);
+                                        return tokenizeCode(code, 'code').map((tok, i) =>
+                                            tok.className
+                                                ? <span key={i} className={tok.className}>{tok.text}</span>
+                                                : <React.Fragment key={i}>{tok.text}</React.Fragment>
+                                        );
                                     })()}
                                 </code>
                             </pre>

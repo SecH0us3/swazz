@@ -97,6 +97,12 @@
   --duration-fast: 100ms;
   --duration-base: 180ms;
   --duration-slow: 320ms;
+
+  /* Syntax highlighting tokens */
+  --syntax-keyword: #38BDF8;
+  --syntax-string:  #22d3a0;
+  --syntax-comment: #71717a;
+  --syntax-number:  #c084fc;
 }
 
 [data-theme="light"] {
@@ -134,6 +140,12 @@
   --color-warning-bg: rgba(245,158,11,0.12);
   --color-error-bg:   rgba(244,63,94,0.12);
   --color-info-bg:    rgba(56,189,248,0.12);
+
+  /* Syntax tokens need more contrast against a white page */
+  --syntax-keyword: #0369a1;
+  --syntax-string:  #047857;
+  --syntax-comment: #8a8a93;
+  --syntax-number:  #7c3aed;
 }
 
 /* ─── Reset & Base ───────────────────────────────────────── */
@@ -1301,8 +1313,8 @@ body.resizing .sidebar-resizer {
 .tab-bar-btn {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px var(--space-4);
+  gap: 6px;
+  padding: 8px var(--space-3);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -1339,11 +1351,6 @@ body.resizing .sidebar-resizer {
   background: var(--accent-subtle);
   border-color: rgba(2,132,199,0.3);
   color: var(--accent-light);
-}
-
-.waf-detection-badge {
-  align-self: center;
-  margin: 0 4px;
 }
 
 .workspace-config-toggle-btn {
@@ -10576,7 +10583,12 @@ kbd {
 }
 
 .workspace-export-btn {
-  color: var(--accent-light) !important;
+  color: var(--text-muted);
+}
+
+.workspace-export-dropdown-container:hover .workspace-export-btn,
+.workspace-export-btn:hover {
+  color: var(--accent-light);
 }
 
 .workspace-export-dropdown-menu {
@@ -10593,6 +10605,17 @@ kbd {
   flex-direction: column;
   padding: 4px;
   border: 1px solid var(--border-default);
+}
+
+/* Bridges the 4px gap under the trigger so moving the cursor into the menu
+   does not leave the hover container and close it mid-travel. */
+.workspace-export-dropdown-menu::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 0;
+  right: 0;
+  height: 5px;
 }
 
 .workspace-export-dropdown-item {
@@ -10717,9 +10740,17 @@ kbd {
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-primary);
-  overflow-x: auto;
   max-height: 380px;
+  overflow-y: auto;
+  /* Long payload lines wrap instead of forcing a horizontal scrollbar. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
+
+.poc-code-pre .tok-key     { color: var(--syntax-keyword); }
+.poc-code-pre .tok-str     { color: var(--syntax-string); }
+.poc-code-pre .tok-comment { color: var(--syntax-comment); font-style: italic; }
+.poc-code-pre .tok-num     { color: var(--syntax-number); }
 
 /* ==========================================================================
    WAF Analysis Settings & On-demand Check (Parts A & C)

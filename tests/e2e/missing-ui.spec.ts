@@ -36,13 +36,13 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await page.locator('.app-layout').click();
 
     // 1. Test numeric tab switching keys
-    // Switch to Request Logs (tab 2)
+    // Switch to Logs (tab 2)
     await page.keyboard.press('2');
-    await expect(page.locator('button.tab-bar-btn.active:has-text("Request Logs")')).toBeVisible();
+    await expect(page.locator('button.tab-bar-btn.active:has-text("Logs")')).toBeVisible();
 
-    // Switch to Grouped Errors (tab 3)
+    // Switch to Findings (tab 3)
     await page.keyboard.press('3');
-    await expect(page.locator('button.tab-bar-btn.active:has-text("Grouped Errors")')).toBeVisible();
+    await expect(page.locator('button.tab-bar-btn.active:has-text("Findings")')).toBeVisible();
 
     // Switch to Scan History (tab 5)
     await page.keyboard.press('5');
@@ -50,7 +50,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
 
     // Switch back to Dashboard (tab 1)
     await page.keyboard.press('1');
-    await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible();
+    await expect(page.locator('button.tab-bar-btn.active:has-text("Heatmap")')).toBeVisible();
 
     // 2. Test Alt+L and Alt+C sidebar toggles
     // Verify left sidebar is open (visible)
@@ -261,10 +261,10 @@ test.describe('Additional UI Coverage E2E Tests', () => {
       await fileChooser.setFiles(tempReportPath);
 
       // Successfully importing a CLI report should redirect to main dashboard/heatmap view
-      await expect(page.locator('button.tab-bar-btn.active:has-text("Endpoint Heatmap")')).toBeVisible({ timeout: TIMEOUTS.LOAD });
+      await expect(page.locator('button.tab-bar-btn.active:has-text("Heatmap")')).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
-      // Verify that imported run's findings are populated in Grouped Errors
-      const findingsTab = page.locator('button.tab-bar-btn:has-text("Grouped Errors")');
+      // Verify that imported run's findings are populated in Findings
+      const findingsTab = page.locator('button.tab-bar-btn:has-text("Findings")');
       await expect(findingsTab).toBeVisible();
       await findingsTab.click();
 
@@ -352,7 +352,7 @@ test.describe('Additional UI Coverage E2E Tests', () => {
     await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // 2. Go to request logs
-    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Request Logs")');
+    const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
 

@@ -82,28 +82,13 @@ func (c *Client) GeneratePatches(ctx context.Context, results []AuditResultItem,
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read virtual-patch response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var errResp struct {
-			Error   string `json:"error"`
-			Message string `json:"message"`
-		}
-		if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil {
-			if errResp.Error != "" && errResp.Message != "" {
-				return nil, fmt.Errorf("virtual-patch API error (%d): %s - %s", resp.StatusCode, errResp.Error, errResp.Message)
-			}
-			if errResp.Error != "" {
-				return nil, fmt.Errorf("virtual-patch API error (%d): %s", resp.StatusCode, errResp.Error)
-			}
-			if errResp.Message != "" {
-				return nil, fmt.Errorf("virtual-patch API error (%d): %s", resp.StatusCode, errResp.Message)
-			}
-		}
-		return nil, fmt.Errorf("virtual-patch API error with status %d: %s", resp.StatusCode, string(body))
+		return nil, parseAPIError("virtual-patch", resp.StatusCode, body)
 	}
 
 	var rep PatchReport

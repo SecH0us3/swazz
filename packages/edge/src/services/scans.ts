@@ -26,7 +26,7 @@ export interface IScansService {
   getFindings(scanId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ findings: any[] }>;
   getFindingDetails(findingId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
   updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
-  saveWAFPatchReport(scanId: string, report: any, userId?: string | null, isAuthEnabled?: boolean): Promise<{ success: boolean }>;
+  saveWAFPatchReport(scanId: string, report: unknown, userId?: string | null, isAuthEnabled?: boolean): Promise<{ success: boolean }>;
 }
 
 export interface TriageUpdatePayload {
@@ -335,7 +335,7 @@ export class ScansService implements IScansService {
     return { success: true, updated_count: updatedCount };
   }
 
-  async saveWAFPatchReport(scanId: string, report: any, userId?: string | null, isAuthEnabled?: boolean) {
+  async saveWAFPatchReport(scanId: string, report: unknown, userId?: string | null, isAuthEnabled?: boolean) {
     const scan = await this.scansRepo.getScan(scanId);
     if (!scan) throw new Error('Scan not found|404');
 

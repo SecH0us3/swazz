@@ -207,17 +207,25 @@ describe('RequestDetail Component', () => {
 
         expect(screen.getByRole('button', { name: 'cURL' })).toBeTruthy();
 
+        // The snippet is syntax-highlighted, so it is split across token spans —
+        // assert on the block's combined text rather than a single text node.
+        const pocCode = () => document.querySelector('.poc-code-pre')?.textContent || '';
+
+        // cURL uses backslash line continuations so long commands stay readable
+        expect(pocCode()).toMatch(/curl -X GET/i);
+        expect(pocCode()).toContain(' \\\n');
+
         // Python
         fireEvent.click(screen.getByRole('button', { name: 'Python' }));
-        expect(screen.getByText(/import requests/i)).toBeTruthy();
+        expect(pocCode()).toMatch(/import requests/i);
 
         // TypeScript
         fireEvent.click(screen.getByRole('button', { name: 'TypeScript' }));
-        expect(screen.getByText(/fetch\(/i)).toBeTruthy();
+        expect(pocCode()).toMatch(/fetch\(/i);
 
         // Go
         fireEvent.click(screen.getByRole('button', { name: 'Go' }));
-        expect(screen.getByText(/http\.NewRequest/i)).toBeTruthy();
+        expect(pocCode()).toMatch(/http\.NewRequest/i);
 
         // Copy Exploit Script
         const copyScriptBtn = screen.getByRole('button', { name: /Copy Exploit Script/i });
