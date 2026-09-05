@@ -241,6 +241,14 @@ jobs:
       - name: Install dependencies
         run: npm install --ignore-scripts
 
+      - name: Apply first-party patches (wrangler dev stability fix)
+        # --ignore-scripts above skips postinstall for every dependency (defense against
+        # supply-chain attacks via third-party postinstall scripts). This job is the only
+        # one that runs `wrangler dev` (via tests/e2e/run-e2e.sh), so it is the only one
+        # that needs our own patches/wrangler+4.125.0.patch applied. Invoking patch-package
+        # directly here applies only that patch, not any other package's postinstall.
+        run: npx patch-package
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
