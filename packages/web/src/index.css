@@ -7515,6 +7515,30 @@ kbd {
   line-height: 1.4;
 }
 
+.waf-block-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.waf-block-banner-icon { font-size: 18px; line-height: 1.2; flex-shrink: 0; }
+.waf-block-banner-body { min-width: 0; }
+.waf-block-banner-title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.waf-block-banner-sub {
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
 /* API Specs Tab Styles */
 .project-settings-card {
   padding: 24px;

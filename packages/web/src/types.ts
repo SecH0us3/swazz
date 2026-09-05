@@ -250,6 +250,7 @@ export interface RunStats {
     totalPlanned: number;
     requestsPerSecond: number;
     statusCounts: Record<number, number>;
+    statusByProfile?: Partial<Record<FuzzingProfile, Record<number, number>>>;
     profileCounts: Record<FuzzingProfile, number>;
     endpointCounts: Record<string, Record<number, number>>;
     startTime: number;

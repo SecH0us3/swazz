@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import type { RunStats } from '../../types.js';
 import { StatsBar } from './StatsBar.js';
+import { WAFBlockBanner } from './WAFBlockBanner.js';
 import { Heatmap } from './Heatmap.js';
 import type { HeatmapFilter } from './Heatmap.js';
 import { useAppStore } from '../../store/appStore.js';
@@ -193,6 +194,7 @@ export function Dashboard({ stats, endpointKeys, vulnerableEndpoints, heatmapFil
 
     return (
         <div className="dashboard">
+            <WAFBlockBanner stats={displayStats} />
             <StatsBar stats={displayStats} isRunning={isRunning} />
             <Heatmap
                 stats={displayStats}

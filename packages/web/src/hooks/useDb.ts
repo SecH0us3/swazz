@@ -410,12 +410,17 @@ export function useDb() {
 
         const endpointCounts: Record<string, Record<number, number>> = {};
         const profileCounts = { RANDOM: 0, BOUNDARY: 0, MALICIOUS: 0 };
+        const statusByProfile: Record<string, Record<number, number>> = {};
 
         const rows = data.findings.map((f: any) => {
             const key = `${f.method} ${f.endpoint}`;
             if (!endpointCounts[key]) endpointCounts[key] = {};
             endpointCounts[key][f.status] = (endpointCounts[key][f.status] || 0) + 1;
             if (f.profile in profileCounts) profileCounts[f.profile as keyof typeof profileCounts]++;
+            if (f.profile) {
+                if (!statusByProfile[f.profile]) statusByProfile[f.profile] = {};
+                statusByProfile[f.profile][f.status] = (statusByProfile[f.profile][f.status] || 0) + 1;
+            }
             return toSummary({ ...f, retries: f.retries || 0 });
         });
 
@@ -424,6 +429,7 @@ export function useDb() {
             totalPlanned: data.summary?.totalRequests || data.findings.length,
             requestsPerSecond: 0,
             statusCounts: data.summary?.statusCounts || {},
+            statusByProfile,
             profileCounts,
             endpointCounts,
             startTime: timestamp,
