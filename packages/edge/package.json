@@ -20,7 +20,7 @@
     "workerd": "1.20260825.1"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^13.3.2",
+    "@simplewebauthn/server": "^13.3.3",
     "@swazz/shared": "*",
     "hono": "^4.13.5",
     "ulidx": "^2.4.1",
