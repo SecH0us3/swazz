@@ -244,9 +244,9 @@ describe('WafCheckPanel Component', () => {
                 sensitiveFiles: {
                     total: 3,
                     results: [
-                        { category: 'Sensitive Files', method: 'GET', status: 200, payload: '.env', durationMs: 112 },
-                        { category: 'Sensitive Files', method: 'GET', status: 404, payload: 'composer.json', durationMs: 56 },
-                        { category: 'Sensitive Files', method: 'GET', status: 403, payload: '.git/HEAD', durationMs: 45 },
+                        { category: 'Sensitive Files', method: 'GET', status: 200, payload: '.env', durationMs: 112, verdict: 'exposed' },
+                        { category: 'Sensitive Files', method: 'GET', status: 404, payload: 'composer.json', durationMs: 56, verdict: 'passed' },
+                        { category: 'Sensitive Files', method: 'GET', status: 403, payload: '.git/HEAD', durationMs: 45, verdict: 'blocked' },
                     ],
                 },
                 patches: {
@@ -362,5 +362,93 @@ describe('WafCheckPanel Component', () => {
         expect(statsRow).toHaveTextContent('2Not Blocked');
         expect(statsRow).toHaveTextContent('0Blocked');
         expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('0 exposed');
+    });
+
+    it('classifies SPA-shell 200 responses with verdict: passed as 0 exposed', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: true, wafType: 'Cloudflare', confidence: 95, evidence: [] },
+                sensitiveFiles: {
+                    total: 3,
+                    results: [
+                        { category: 'Sensitive Files', method: 'GET', status: 200, payload: '.env', verdict: 'passed' },
+                        { category: 'Sensitive Files', method: 'GET', status: 200, payload: '.git/HEAD', verdict: 'passed' },
+                        { category: 'Sensitive Files', method: 'GET', status: 200, payload: 'composer.json', verdict: 'passed' },
+                    ],
+                },
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => expect(screen.getByTestId('waf-stats-row')).toBeInTheDocument());
+
+        const statsRow = screen.getByTestId('waf-stats-row');
+        expect(statsRow).toHaveTextContent('3Paths Checked');
+        expect(statsRow).toHaveTextContent('3Not Blocked');
+        expect(statsRow).toHaveTextContent('0Blocked');
+        expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('0 exposed');
+    });
+
+    it('falls back to status-based classification when rows have no verdict', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: true, wafType: 'Cloudflare', confidence: 95, evidence: [] },
+                sensitiveFiles: {
+                    total: 3,
+                    results: [
+                        { category: 'Sensitive Files', method: 'GET', status: 200, payload: '.env' },
+                        { category: 'Sensitive Files', method: 'GET', status: 404, payload: 'composer.json' },
+                        { category: 'Sensitive Files', method: 'GET', status: 403, payload: '.git/HEAD' },
+                    ],
+                },
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => expect(screen.getByTestId('waf-stats-row')).toBeInTheDocument());
+
+        const statsRow = screen.getByTestId('waf-stats-row');
+        expect(statsRow).toHaveTextContent('3Paths Checked');
+        expect(statsRow).toHaveTextContent('2Not Blocked');
+        expect(statsRow).toHaveTextContent('1Blocked');
+        expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('1 exposed');
+    });
+
+    it('handles failed probe with status: null and error: timeout as passed, rendering error', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: true, wafType: 'Cloudflare', confidence: 95, evidence: [] },
+                sensitiveFiles: {
+                    total: 1,
+                    results: [
+                        { category: 'Sensitive Files', method: 'GET', status: null, error: 'timeout', payload: '.env' },
+                    ],
+                },
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => expect(screen.getByTestId('waf-stats-row')).toBeInTheDocument());
+
+        const statsRow = screen.getByTestId('waf-stats-row');
+        expect(statsRow).toHaveTextContent('1Paths Checked');
+        expect(statsRow).toHaveTextContent('1Not Blocked');
+        expect(statsRow).toHaveTextContent('0Blocked');
+        expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('0 exposed');
+
+        fireEvent.click(screen.getByTestId('waf-files-section-toggle'));
+        expect(screen.getByText('timeout')).toBeInTheDocument();
     });
 });

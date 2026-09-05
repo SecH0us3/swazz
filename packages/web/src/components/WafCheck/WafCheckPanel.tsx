@@ -11,6 +11,8 @@ import { WafPatchViewer } from '../Inspector/WafPatchViewer.js';
 
 const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/$/, '');
 
+export type WafVerdict = 'blocked' | 'passed' | 'exposed';
+
 export interface WafCheckResponse {
     detection: WAFDetection;
     recommendation?: string;
@@ -19,8 +21,11 @@ export interface WafCheckResponse {
         results: Array<{
             category: string;
             method: string;
-            status: number;
+            status: number | null;
             payload: string;
+            blocked?: boolean;
+            verdict?: WafVerdict;
+            error?: string | null;
             responseTime?: number;
             durationMs?: number;
             statusText?: string;
@@ -35,12 +40,12 @@ export interface WafCheckPanelProps {
     targetUrl?: string;
 }
 
-function isExposedStatus(status: number): boolean {
-    return status === 200;
-}
-
-function isBlockedStatus(status: number): boolean {
-    return status === 403 || status === 406 || status === 429 || (status >= 300 && status < 400);
+function classify(r: { status: number | null; verdict?: WafVerdict }): WafVerdict {
+    if (r.verdict) return r.verdict;
+    if (r.status === 403 || r.status === 406 || r.status === 429) return 'blocked';
+    if (r.status !== null && r.status >= 300 && r.status < 400) return 'blocked';
+    if (r.status === 200) return 'exposed';
+    return 'passed';
 }
 
 export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
@@ -138,13 +143,13 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
     // Two distinct signals: WAF coverage (did the request reach the origin at all?) and
     // actual exposure (did a sensitive file really come back?). A 404 is a coverage gap
     // but not a leak, so it must be counted in the former and not the latter.
-    const notBlockedFiles = sensitiveResults.filter(r => !isBlockedStatus(r.status));
+    const notBlockedFiles = sensitiveResults.filter(r => classify(r) !== 'blocked');
     const notBlockedCount = notBlockedFiles.length;
-    const exposedCount = sensitiveResults.filter(r => isExposedStatus(r.status)).length;
+    const exposedCount = sensitiveResults.filter(r => classify(r) === 'exposed').length;
     const blockedCount = totalFilesChecked - notBlockedCount;
     const displayedFiles = showAllFiles ? sensitiveResults : notBlockedFiles;
 
-    const confidenceScore = Math.round(Math.max(0, Math.min(100, result?.detection?.confidence ?? 0)));
+    const confidenceScore = Math.round(result?.detection?.confidence ?? 0);
 
     return (
         <div className="waf-panel" data-testid="waf-check-panel">
@@ -310,9 +315,16 @@ export function WafCheckPanel({ targetUrl }: WafCheckPanelProps) {
                                         {displayedFiles.map((row, idx) => (
                                             <tr key={idx}>
                                                 <td>
-                                                    <span className={`badge ${row.status === 200 ? 'badge-error' : (row.status === 404 || row.status >= 500 ? 'badge-warning' : 'badge-success')}`}>
-                                                        {row.status}
-                                                    </span>
+                                                    {(() => {
+                                                        const verdict = classify(row);
+                                                        const badgeClass = verdict === 'exposed' ? 'badge-error' : verdict === 'blocked' ? 'badge-success' : 'badge-warning';
+                                                        const label = row.status !== null ? row.status : (row.error || 'ERR');
+                                                        return (
+                                                            <span className={`badge ${badgeClass}`}>
+                                                                {label}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </td>
                                                 <td className="payload-cell">{row.payload || row.path || ''}</td>
                                                 <td>{row.method || 'GET'}</td>
