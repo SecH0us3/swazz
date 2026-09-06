@@ -43,7 +43,10 @@ export interface WafCheckPanelProps {
 function classify(r: { status: number | null; verdict?: WafVerdict }): WafVerdict {
     if (r.verdict) return r.verdict;
     if (r.status === 403 || r.status === 406 || r.status === 429) return 'blocked';
-    if (r.status !== null && r.status >= 300 && r.status < 400) return 'blocked';
+    // A 3xx is not a block: the WAF let the request through and the origin answered
+    // with a redirect (usually http->https or a canonical host). Whether the file is
+    // actually exposed is unknown until the redirect is followed, so stay conservative.
+    if (r.status !== null && r.status >= 300 && r.status < 400) return 'passed';
     if (r.status === 200) return 'exposed';
     return 'passed';
 }
