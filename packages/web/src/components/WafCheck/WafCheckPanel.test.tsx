@@ -422,6 +422,36 @@ describe('WafCheckPanel Component', () => {
         expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('1 exposed');
     });
 
+    it('does not count 3xx redirects as blocked in the status-based fallback', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                detection: { detected: true, wafType: 'Cloudflare', confidence: 95, evidence: [] },
+                sensitiveFiles: {
+                    total: 3,
+                    results: [
+                        { category: 'Sensitive Files', method: 'GET', status: 301, payload: '.env' },
+                        { category: 'Sensitive Files', method: 'GET', status: 302, payload: 'config.php' },
+                        { category: 'Sensitive Files', method: 'GET', status: 403, payload: '.git/HEAD' },
+                    ],
+                },
+            }),
+        });
+
+        render(<WafCheckPanel />);
+        fireEvent.click(screen.getByTestId('run-waf-check-btn'));
+
+        await waitFor(() => expect(screen.getByTestId('waf-stats-row')).toBeInTheDocument());
+
+        const statsRow = screen.getByTestId('waf-stats-row');
+        expect(statsRow).toHaveTextContent('3Paths Checked');
+        expect(statsRow).toHaveTextContent('2Not Blocked');
+        expect(statsRow).toHaveTextContent('1Blocked');
+        // A redirect is inconclusive, not proof of exposure
+        expect(screen.getByTestId('waf-files-section-toggle')).toHaveTextContent('0 exposed');
+    });
+
     it('handles failed probe with status: null and error: timeout as passed, rendering error', async () => {
         mockFetch.mockResolvedValueOnce({
             ok: true,
