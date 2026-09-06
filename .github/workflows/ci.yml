@@ -90,6 +90,7 @@ jobs:
 
       - name: Update Frontend Coverage Badge
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        continue-on-error: true
         run: |
           cd packages/web
           COVERAGE=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('coverage/coverage-summary.json')); console.log(data.total.statements.pct)")
@@ -102,15 +103,24 @@ jobs:
           
           curl -s "https://img.shields.io/badge/frontend--coverage-${COVERAGE}%25-${COLOR}" -o frontend-coverage.svg
           
-          git fetch origin badges || git branch badges
-          git checkout badges || git checkout -b badges
-          cp frontend-coverage.svg ../../frontend-coverage.svg
+          cp frontend-coverage.svg /tmp/frontend-coverage.svg
           cd ../..
+          git reset --hard HEAD
+          git clean -fd
+          git fetch origin badges:badges 2>/dev/null || git fetch origin badges
+          git checkout -f badges
+          cp /tmp/frontend-coverage.svg frontend-coverage.svg
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend-coverage.svg
           git commit -m "chore: update frontend coverage badge [skip ci]" || echo "No changes"
-          git push origin badges || git push -u origin badges
+          for i in {1..5}; do
+            git pull --rebase origin badges || true
+            if git push origin badges; then
+              break
+            fi
+            sleep $((RANDOM % 3 + 1))
+          done
 
   test-edge:
     name: Test Edge
@@ -138,6 +148,7 @@ jobs:
 
       - name: Update Edge Coverage Badge
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        continue-on-error: true
         run: |
           cd packages/edge
           COVERAGE=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('coverage/coverage-summary.json')); console.log(data.total.statements.pct)")
@@ -150,15 +161,24 @@ jobs:
           
           curl -s "https://img.shields.io/badge/edge--coverage-${COVERAGE}%25-${COLOR}" -o edge-coverage.svg
           
-          git fetch origin badges || git branch badges
-          git checkout badges || git checkout -b badges
-          cp edge-coverage.svg ../../edge-coverage.svg
+          cp edge-coverage.svg /tmp/edge-coverage.svg
           cd ../..
+          git reset --hard HEAD
+          git clean -fd
+          git fetch origin badges:badges 2>/dev/null || git fetch origin badges
+          git checkout -f badges
+          cp /tmp/edge-coverage.svg edge-coverage.svg
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add edge-coverage.svg
           git commit -m "chore: update edge coverage badge [skip ci]" || echo "No changes"
-          git push origin badges || git push -u origin badges
+          for i in {1..5}; do
+            git pull --rebase origin badges || true
+            if git push origin badges; then
+              break
+            fi
+            sleep $((RANDOM % 3 + 1))
+          done
 
   test-backend:
     name: Test Backend
@@ -183,6 +203,7 @@ jobs:
 
       - name: Update Backend Coverage Badge
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        continue-on-error: true
         run: |
           cd packages/container
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
@@ -195,15 +216,24 @@ jobs:
           
           curl -s "https://img.shields.io/badge/backend--coverage-${COVERAGE}%25-${COLOR}" -o backend-coverage.svg
           
-          git fetch origin badges || git branch badges
-          git checkout badges || git checkout -b badges
-          cp backend-coverage.svg ../../backend-coverage.svg
+          cp backend-coverage.svg /tmp/backend-coverage.svg
           cd ../..
+          git reset --hard HEAD
+          git clean -fd
+          git fetch origin badges:badges 2>/dev/null || git fetch origin badges
+          git checkout -f badges
+          cp /tmp/backend-coverage.svg backend-coverage.svg
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backend-coverage.svg
           git commit -m "chore: update backend coverage badge [skip ci]" || echo "No changes"
-          git push origin badges || git push -u origin badges
+          for i in {1..5}; do
+            git pull --rebase origin badges || true
+            if git push origin badges; then
+              break
+            fi
+            sleep $((RANDOM % 3 + 1))
+          done
 
   test-e2e:
     name: Test E2E (Playwright) - Shard ${{ matrix.shardIndex }} of ${{ matrix.shardTotal }}
