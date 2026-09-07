@@ -14,6 +14,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Exports SWAZZ_LICENSE_PUBKEY (dev key, unless already set) for both the edge
+# worker and the locally built Go engine, which embeds no default public key.
+# shellcheck source=scripts/dev-license-keys.sh
+. "$SCRIPT_DIR/dev-license-keys.sh"
+
 echo "=== Starting Swazz Dev Environment ==="
 
 # Set environment vars for coordinator if .dev.vars does not exist
@@ -23,8 +28,8 @@ if [ ! -f packages/edge/.dev.vars ]; then
   echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
   echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
   echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
-  echo 'SWAZZ_LICENSE_PUBKEY="0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef"' >> packages/edge/.dev.vars
-  echo 'SWAZZ_LICENSE_PRIVKEY="302e020100300506032b657004220420b52bfb4e1736b2d3026e64fc4273b3703d1c3c993d6661a40b6f0c144678bef6"' >> packages/edge/.dev.vars
+  echo "SWAZZ_LICENSE_PUBKEY=\"$SWAZZ_LICENSE_PUBKEY\"" >> packages/edge/.dev.vars
+  echo "SWAZZ_LICENSE_PRIVKEY=\"$SWAZZ_DEV_LICENSE_PRIVKEY_HEX\"" >> packages/edge/.dev.vars
   echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 fi
 

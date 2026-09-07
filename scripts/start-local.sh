@@ -7,11 +7,17 @@ lsof -ti :8788,8787,5173 | xargs kill -9 2>/dev/null || true
 pkill -f "swazz-engine" || true
 sleep 1
 
+# Exports SWAZZ_LICENSE_PUBKEY (dev key, unless already set) for both the edge
+# worker and the locally built Go engine, which embeds no default public key.
+# shellcheck source=scripts/dev-license-keys.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dev-license-keys.sh"
+
 # Setup dev vars
 echo 'JWT_SECRET="test-secret"' > packages/edge/.dev.vars
 echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
 echo 'TURNSTILE_SITE_KEY="0x4AAAAAADry7cDPHW8cvNuC"' >> packages/edge/.dev.vars
+echo "SWAZZ_LICENSE_PUBKEY=\"$SWAZZ_LICENSE_PUBKEY\"" >> packages/edge/.dev.vars
 echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
 # Start Vulnerable Demo API

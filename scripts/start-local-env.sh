@@ -4,6 +4,11 @@
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Exports SWAZZ_LICENSE_PUBKEY (dev key, unless already set) for both the edge
+# worker and the locally built Go engine, which embeds no default public key.
+# shellcheck source=scripts/dev-license-keys.sh
+. "$ROOT_DIR/scripts/dev-license-keys.sh"
+
 echo "=== Starting Swazz Local Environment ==="
 echo "Project Root: $ROOT_DIR"
 
@@ -19,6 +24,7 @@ echo 'AUTH_ENABLED="true"' >> packages/edge/.dev.vars
 echo 'LIMIT_ANONYMOUS="true"' >> packages/edge/.dev.vars
 echo 'TURNSTILE_SITE_KEY="1x00000000000000000000AA"' >> packages/edge/.dev.vars
 echo 'ADMIN_SECRET="test-admin-secret"' >> packages/edge/.dev.vars
+echo "SWAZZ_LICENSE_PUBKEY=\"$SWAZZ_LICENSE_PUBKEY\"" >> packages/edge/.dev.vars
 echo 'NODE_ENV="development"' >> packages/edge/.dev.vars
 
 # 3. Setup Database
