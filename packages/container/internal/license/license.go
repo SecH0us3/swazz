@@ -24,9 +24,23 @@ var (
 	ErrNoPublicKey        = errors.New("license: public key not configured")
 )
 
-// DefaultPublicKeyHex is the embedded default Ed25519 public key for Swazz Enterprise license verification.
-// Can be overridden via SWAZZ_LICENSE_PUBKEY environment variable.
-var DefaultPublicKeyHex = "0407b9eb6ca30fa7b7ef1f3b3b27d1aa6683b6c49cbb6b756561cfacc0597bef"
+// DefaultPublicKeyHex is the Ed25519 public key (64-char hex) that this build
+// trusts for Swazz Enterprise license verification.
+//
+// It is intentionally EMPTY in source. No trust anchor is committed to the
+// repository: the development keypair used by the local edge worker has its
+// private half in the tree (DEFAULT_DEV_LICENSE_PRIVKEY_HEX in
+// packages/edge/src/services/license.ts), so embedding its public half here
+// would let anyone mint a license that released binaries accept.
+//
+// Release builds inject the production public key at link time:
+//
+//	go build -ldflags "-X swazz-engine/internal/license.DefaultPublicKeyHex=<64-char hex>"
+//
+// Local and development runs export SWAZZ_LICENSE_PUBKEY instead, which always
+// takes precedence over the embedded value. With neither set, NewVerifier fails
+// with ErrNoPublicKey and the engine stays in community mode.
+var DefaultPublicKeyHex = ""
 
 type License struct {
 	Company        string    `json:"company"`
@@ -85,11 +99,15 @@ type Verifier struct {
 }
 
 func NewVerifier(pubKeyInput string) (*Verifier, error) {
+	pubKeyInput = strings.TrimSpace(pubKeyInput)
 	if pubKeyInput == "" {
-		pubKeyInput = os.Getenv("SWAZZ_LICENSE_PUBKEY")
+		pubKeyInput = strings.TrimSpace(os.Getenv("SWAZZ_LICENSE_PUBKEY"))
 	}
 	if pubKeyInput == "" {
-		pubKeyInput = DefaultPublicKeyHex
+		pubKeyInput = strings.TrimSpace(DefaultPublicKeyHex)
+	}
+	if pubKeyInput == "" {
+		return nil, fmt.Errorf("%w: this build embeds no public key; set SWAZZ_LICENSE_PUBKEY to the 64-character hex public key", ErrNoPublicKey)
 	}
 
 	var keyBytes []byte

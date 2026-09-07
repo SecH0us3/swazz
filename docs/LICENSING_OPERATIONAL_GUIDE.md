@@ -37,13 +37,26 @@ openssl pkey -in swazz_master_private.pem -pubout -out swazz_master_public.pem
 
 After generating the keypair, run the issuing script once (see Step 3). The output will include the **Public Key (hex)** — a 64-character hex string.
 
-Update the embedded default in [`packages/container/internal/license/license.go`](https://github.com/SecH0us3/swazz/blob/master/packages/container/internal/license/license.go#L29):
+> [!IMPORTANT]
+> `DefaultPublicKeyHex` in [`packages/container/internal/license/license.go`](https://github.com/SecH0us3/swazz/blob/master/packages/container/internal/license/license.go) is **empty in source and must stay empty**. No trust anchor is committed to the repository: the development keypair used by the local edge worker has its private half in the tree (`DEFAULT_DEV_LICENSE_PRIVKEY_HEX` in `packages/edge/src/services/license.ts`), so embedding its public half would let anyone mint a license that released binaries accept.
 
-```go
-var DefaultPublicKeyHex = "<your-64-char-hex-public-key>"
+The production public key is linked into release artifacts at build time instead:
+
+```bash
+go build -ldflags "-s -w -X swazz-engine/internal/license.DefaultPublicKeyHex=<your-64-char-hex-public-key>" -o swazz-engine .
 ```
 
-Alternatively, clients/operators can set the `SWAZZ_LICENSE_PUBKEY` environment variable or compile with `-ldflags "-X swazz-engine/internal/license.DefaultPublicKeyHex=..."` to set the embedded key at runtime.
+The Docker images take it as a build argument, which the release workflow forwards to that same `-ldflags` value:
+
+```bash
+docker build --build-arg LICENSE_PUBKEY_HEX=<your-64-char-hex-public-key> -f Dockerfile.cli packages/container
+```
+
+**Release configuration (one-time):** set the repository variable `SWAZZ_LICENSE_PUBKEY` (Settings → Secrets and variables → Actions → Variables) to the **same** 64-character hex key configured as the edge worker's `SWAZZ_LICENSE_PUBKEY` secret. `.github/workflows/release.yml` reads it, refuses to build if it is missing, malformed, or equal to the development key, and embeds it in every published binary and image. If the two ever diverge, dashboard-issued licenses fail in the CLI with `license: invalid signature`.
+
+**Precedence at runtime:** `SWAZZ_LICENSE_PUBKEY` (environment) → key linked in at build time → nothing (`license: public key not configured`, engine stays in community mode). Clients never need to set the environment variable against an official release; it exists for self-hosted signing keys and for local development.
+
+**Local development:** builds made straight from source embed no key. `scripts/dev-license-keys.sh` (sourced by `start-dev.sh`, `scripts/start-local*.sh`, and `tests/e2e/run-e2e.sh`) exports `SWAZZ_LICENSE_PUBKEY` with the development key so locally issued dev licenses verify against a locally built engine.
 
 ---
 
@@ -125,7 +138,7 @@ Max Users:         50
 SWAZZ_LICENSE_KEY:
 eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJjb21wYW55Ijoi...
 ---------------------------------------------------------
-Public Key (hex, for DefaultPublicKeyHex / SWAZZ_LICENSE_PUBKEY):
+Public Key (hex, for the LICENSE_PUBKEY_HEX release build arg / SWAZZ_LICENSE_PUBKEY):
 a84976722d515a815a4a5ebcebf7ffecaa2d9735d10ea354ef3ddc45dfba8314
 =========================================================
 ```
@@ -144,9 +157,10 @@ Send the generated `SWAZZ_LICENSE_KEY` string securely to the client contact via
 If the master private key is compromised:
 
 1. Generate a new Ed25519 keypair (Step 2).
-2. Update `DefaultPublicKeyHex` in `license.go` with the new public key hex.
-3. Release a new version of Swazz with the updated public key.
-4. Re-issue licenses to all active clients using the new private key.
+2. Update the edge worker secrets `SWAZZ_LICENSE_PRIVKEY` / `SWAZZ_LICENSE_PUBKEY` with the new pair.
+3. Update the `SWAZZ_LICENSE_PUBKEY` repository variable with the new public key hex (do **not** edit `license.go`).
+4. Release a new version of Swazz — the release workflow embeds the new public key in the binaries and images.
+5. Re-issue licenses to all active clients using the new private key. Licenses signed with the old key stop verifying as soon as clients upgrade.
 
 ---
 
@@ -236,7 +250,7 @@ Run the embedded license status command:
 ```
 
 * **Signing**: Owner signs the license JWT with the **Ed25519 private key** (never leaves owner's machine).
-* **Verification**: Swazz Engine verifies the JWT signature using the **Ed25519 public key** embedded at compile time (`DefaultPublicKeyHex`).
+* **Verification**: Swazz Engine verifies the JWT signature using the **Ed25519 public key** embedded at compile time (`DefaultPublicKeyHex`, injected via `-ldflags` during the release build), or the one given by the `SWAZZ_LICENSE_PUBKEY` environment variable, which overrides it.
 * **No phone-home**: License verification is fully offline. No network call to a license server is required.
 
 ---
@@ -246,6 +260,6 @@ Run the embedded license status command:
 | Error Message | Cause | Resolution |
 | :--- | :--- | :--- |
 | `license: invalid token format` | Token string is malformed or truncated. | Re-copy the exact `SWAZZ_LICENSE_KEY` without added whitespace or line breaks. |
-| `license: invalid signature` | License was signed with a different key or tampered with. | Ensure the embedded public key matches the private key used for signing. Contact vendor. |
+| `license: invalid signature` | License was signed with a different key than the one this binary trusts, or was tampered with. | Official releases embed the production public key, so this normally means the key is for another vendor deployment, or the binary was built from source without `-ldflags "-X swazz-engine/internal/license.DefaultPublicKeyHex=..."`. Set `SWAZZ_LICENSE_PUBKEY` to your issuer's 64-char hex public key, or use an official release image. Contact vendor if it persists. |
 | `license: expired license` | License validity period (`expires_at`) has elapsed. | Contact `enterprise@swazz.secmy.app` for a license renewal token. |
-| `license: public key not configured` | No public key found (empty hex and no `SWAZZ_LICENSE_PUBKEY` env). | Set `SWAZZ_LICENSE_PUBKEY` environment variable to the 64-char hex public key. |
+| `license: public key not configured` | The binary embeds no public key (built from source without the release `-ldflags`) and `SWAZZ_LICENSE_PUBKEY` is unset. | Set the `SWAZZ_LICENSE_PUBKEY` environment variable to the 64-char hex public key, or use an official release binary/image. |

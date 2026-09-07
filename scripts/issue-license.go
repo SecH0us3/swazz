@@ -133,7 +133,7 @@ func main() {
 	fmt.Println("SWAZZ_LICENSE_KEY:")
 	fmt.Println(token)
 	fmt.Println("---------------------------------------------------------")
-	fmt.Println("Public Key (hex, for DefaultPublicKeyHex / SWAZZ_LICENSE_PUBKEY):")
+	fmt.Println("Public Key (hex, for the LICENSE_PUBKEY_HEX release build arg / SWAZZ_LICENSE_PUBKEY):")
 	fmt.Println(pubKeyHex)
 	if *outFileFlag != "" {
 		fmt.Printf("Token saved to:    %s\n", *outFileFlag)

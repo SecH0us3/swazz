@@ -66,6 +66,23 @@ Swazz Engine binary includes cryptographic **Ed25519 + JWT** license key verific
    ./swazz-engine license
    ```
 
+### 🔍 Which public key does my binary trust?
+
+Official releases (the published binaries and the `ghcr.io/sech0us3/swazz` / `ghcr.io/sech0us3/swazz-cli` images) have the **production public key linked in at build time** — the same key the hosted dashboard signs licenses with. Nothing extra is needed: a key issued by the dashboard verifies out of the box.
+
+Engines you build yourself from source embed **no key at all** (the repository ships no trust anchor, since a committed key with a public private half could be used to forge licenses). Such a build reports `license: public key not configured` and stays in community mode until you point it at a key.
+
+`SWAZZ_LICENSE_PUBKEY` is the runtime override and always wins over the embedded key:
+
+```bash
+# Self-built engine, or a self-hosted deployment signing its own licenses
+export SWAZZ_LICENSE_PUBKEY="<64-character hex Ed25519 public key>"
+export SWAZZ_LICENSE_KEY="eyJhbGciOiJFZERTQSI..."
+./swazz-engine license
+```
+
+So if an official release rejects a dashboard-issued key with `license: invalid signature`, the key was signed by a different issuer than the one the binary trusts — check that `SWAZZ_LICENSE_PUBKEY` is not set to an unrelated key, then contact `enterprise@swazz.secmy.app`.
+
 ### 🛡️ Production Master Key Setup (Self-Hosted Deployment)
 For air-gapped or dedicated enterprise deployments:
 1. Generate an Ed25519 keypair:
@@ -73,7 +90,7 @@ For air-gapped or dedicated enterprise deployments:
    openssl genpkey -algorithm ed25519 -out swazz_master_private.pem
    openssl pkey -in swazz_master_private.pem -pubout -out swazz_master_public.pem
    ```
-2. Configure `SWAZZ_LICENSE_PRIVKEY` (private key) and `SWAZZ_LICENSE_PUBKEY` (public key) in Cloudflare Worker secrets or environment variables.
+2. Configure `SWAZZ_LICENSE_PRIVKEY` (private key) and `SWAZZ_LICENSE_PUBKEY` (public key) in Cloudflare Worker secrets or environment variables, and give the **same** public key to every engine that must verify those licenses — either as the `SWAZZ_LICENSE_PUBKEY` environment variable, or linked into your own build with `-ldflags "-X swazz-engine/internal/license.DefaultPublicKeyHex=<hex>"`.
 3. Issue manual enterprise licenses with:
    ```bash
    go run scripts/issue-license.go -key swazz_master_private.pem -company "Acme Corp" -days 365 -features "*"
