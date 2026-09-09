@@ -90,7 +90,7 @@ describe('LicenseTab Component', () => {
 
         expect(screen.getByText(/Trial License Active/i)).toBeTruthy();
         expect(screen.getByText('tester (14-Day Trial)')).toBeTruthy();
-        expect(screen.getByText('Copy Key')).toBeTruthy();
+        expect(screen.getByText('Copy')).toBeTruthy();
     });
 
     it('shows cooldown notice when trial was claimed recently and license is inactive', async () => {

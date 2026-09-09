@@ -306,24 +306,24 @@ export function LicenseTab() {
                             <div className="license-features-list">
                                 {status.license!.features.map((f) => (
                                     <span key={f} className="license-feature-badge">
-                                        {getFeatureLabel(f)}
+                                        {f === '*' ? 'All Features' : getFeatureLabel(f)}
                                     </span>
                                 ))}
                             </div>
 
                             {claimedToken && (
                                 <div className="trial-token-box">
-                                    <div className="trial-token-header">
-                                        <span className="trial-token-label">License Key (Runner CLI)</span>
+                                    <span className="trial-token-label">License Key (Runner CLI)</span>
+                                    <div className="trial-token-field">
+                                        <div className="trial-token-content">{claimedToken}</div>
                                         <button
                                             type="button"
-                                            className="btn btn-secondary btn-sm"
+                                            className="btn btn-ghost btn-xs response-copy-btn"
                                             onClick={() => handleCopyToken(claimedToken)}
                                         >
-                                            {copiedToken ? '✓ Copied' : 'Copy Key'}
+                                            {copiedToken ? '✓ Copied' : 'Copy'}
                                         </button>
                                     </div>
-                                    <div className="trial-token-content">{claimedToken}</div>
                                     <p className="trial-instructions">
                                         Pass to CLI runner: <code>export SWAZZ_LICENSE_KEY=&quot;{claimedToken.slice(0, 24)}...&quot;</code>
                                     </p>
