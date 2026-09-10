@@ -62,7 +62,10 @@ test.describe('Trial License Self-Generation E2E Test', () => {
   test('commercial license user who previously claimed trial does not show Trial License Active', async ({ page }) => {
     await registerAndLogin(page, 'u', false);
 
-    await page.route('**/api/user/license/trial-status', async (route) => {
+    // The endpoint is /api/user/trial-status, not /api/user/license/trial-status —
+    // the wrong glob never matched, so this test ran against the real (claimed: false)
+    // status and never covered the "previously claimed a trial" case it is named for.
+    await page.route('**/api/user/trial-status', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

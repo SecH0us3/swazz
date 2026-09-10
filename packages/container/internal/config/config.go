@@ -235,14 +235,20 @@ func BuildRunnerConfig(cliCfg *CliConfig) (*swagger.Config, error) {
 
 				if swagger.IsWSURL(urlStr) {
 					parsedWS, errWS := ws.SynthesizeWSEndpoint(urlStr)
-					if errWS == nil {
-						resChan <- specResult{
-							urlStr:    urlStr,
-							endpoints: parsedWS.Endpoints,
-							basePath:  parsedWS.BasePath,
-						}
+					if errWS != nil {
+						// Report it rather than falling through. The URL is a ws:// one,
+						// so the branches below cannot handle it: it would reach the
+						// generic HTTP fetch and surface as `unsupported protocol
+						// scheme "ws"`, hiding the real diagnosis.
+						resChan <- specResult{err: fmt.Errorf("failed to synthesize ws endpoint (%s): %w", urlStr, errWS)}
 						return
 					}
+					resChan <- specResult{
+						urlStr:    urlStr,
+						endpoints: parsedWS.Endpoints,
+						basePath:  parsedWS.BasePath,
+					}
+					return
 				}
 
 				if swagger.IsGRPCURL(urlStr) {

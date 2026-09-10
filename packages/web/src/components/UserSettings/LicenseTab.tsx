@@ -70,10 +70,17 @@ export function LicenseTab() {
       return;
     }
     lastVerifiedKeyRef.current = normalized;
+    // Two verifications can be in flight at once — one fired immediately, another
+    // scheduled by a later paste. Without this guard the earlier response would
+    // overwrite the preview and label whatever is now in the textarea with the
+    // details of a key that is no longer there.
+    const isStale = () => normalizeLicenseKey(licenseKeyRef.current) !== normalized;
     try {
       const res = await verifyLicenseKey(normalized);
+      if (isStale()) return;
       setKeyPreview(res);
     } catch {
+      if (isStale()) return;
       setKeyPreview({ valid: false, error: 'Failed to verify key' });
     }
   }, []);
@@ -285,8 +292,10 @@ export function LicenseTab() {
         report exports, AI remediation, cloud history, and enterprise tools.
       </p>
 
-      {/* 1. Trial claim or cooldown banner */}
-      {!isLoading && !isActive && !isExpired && canClaimTrial && (
+      {/* 1. Trial claim or cooldown banner. Shown for an expired licence too: it is
+          not active, so the trial is exactly what such a user may still be entitled
+          to, and gating this on !isExpired left them with no way forward at all. */}
+      {!isLoading && !isActive && canClaimTrial && (
         <div className="trial-claim-card">
           <div className="trial-claim-header">
             <div className="trial-claim-title-group">
@@ -310,7 +319,7 @@ export function LicenseTab() {
         </div>
       )}
 
-      {!isLoading && !isActive && !isExpired && !canClaimTrial && (
+      {!isLoading && !isActive && !canClaimTrial && (
         <div className="trial-used-notice">
           ✓ Trial claimed today. Next 14-day free trial will be available in {cooldownHours ? `${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}` : '24 hours'}.
         </div>
@@ -516,10 +525,16 @@ export function LicenseTab() {
       {/* 4. Contact Sales card (Always rendered) */}
       <ContactSalesCard isCommercialActive={isActive && !trial} isPrimary={isExpired} />
 
-      {/* 5. Deactivate section (at bottom with confirmation modal) */}
-      {isActive && (
+      {/* 5. Deactivate section (at bottom with confirmation modal). Offered for an
+          expired licence as well — the key is still stored, and clearing it is the
+          only way back to a clean community state. */}
+      {(isActive || isExpired) && (
         <div className="license-deactivate-section">
-          <p className="license-deactivate-warning">Paid features will be locked immediately.</p>
+          <p className="license-deactivate-warning">
+            {isActive
+              ? 'Paid features will be locked immediately.'
+              : 'Removes the stored key. Paid features are already locked.'}
+          </p>
           <button
             type="button"
             className="btn btn-danger btn-sm"

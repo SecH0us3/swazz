@@ -71,7 +71,16 @@ export function buildLicenseRequestMailto(req: LicenseRequest): string {
   if (remaining <= 0) {
     return `mailto:${SALES_EMAIL}?subject=${encodeURIComponent(subject)}`;
   }
-  return `${base}${encodedBody.slice(0, remaining)}`;
+
+  // Trim the plain body and re-encode, rather than slicing encodedBody: cutting the
+  // percent-encoded string at an arbitrary offset can land inside an escape ("…%E2%8")
+  // and hand the mail client a URI it cannot decode, losing the whole body. Shrink until
+  // the encoded form fits — one character can encode to as many as nine.
+  let plain = body;
+  while (plain.length > 0 && encodeURIComponent(plain).length > remaining) {
+    plain = plain.slice(0, Math.max(0, Math.floor(plain.length * 0.9) - 1));
+  }
+  return `${base}${encodeURIComponent(plain)}`;
 }
 
 interface ContactSalesCardProps {
@@ -92,6 +101,7 @@ export function ContactSalesCard({ isCommercialActive = false, isPrimary = false
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [comments, setComments] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const openBtnRef = useRef<HTMLButtonElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
@@ -170,9 +180,19 @@ export function ContactSalesCard({ isCommercialActive = false, isPrimary = false
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(fullBody);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    // Rejects in a non-secure context or when permission is denied. Reporting
+    // "Copied" regardless would be a lie, and this is the fallback offered when the
+    // mailto body had to be trimmed.
+    navigator.clipboard
+      .writeText(fullBody)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        setCopyFailed(true);
+        setTimeout(() => setCopyFailed(false), 4000);
+      });
   };
 
   const handleOpenMail = () => {
@@ -348,7 +368,7 @@ export function ContactSalesCard({ isCommercialActive = false, isPrimary = false
               </a>
               <div className="contact-sales-buttons">
                 <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopy}>
-                  {copied ? '✓ Copied' : 'Copy Text'}
+                  {copied ? '✓ Copied' : copyFailed ? "Couldn't copy" : 'Copy Text'}
                 </button>
                 <button
                   type="button"

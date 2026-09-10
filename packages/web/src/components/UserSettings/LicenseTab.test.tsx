@@ -515,15 +515,55 @@ describe('LicenseTab Component', () => {
         });
 
         const textarea = screen.getByPlaceholderText(/Paste your SWAZZ_LICENSE_KEY here/i);
-        fireEvent.paste(textarea, {
-            clipboardData: {
-                getData: () => 'eyJhbGciOiJFZERTQSI.paste-payload.sig-bytes',
-            },
-        });
+        const pastedKey = 'eyJhbGciOiJFZERTQSI.paste-payload.sig-bytes';
+        fireEvent.paste(textarea, { clipboardData: { getData: () => pastedKey } });
+        // A real paste also puts the text in the field; fireEvent.paste alone does not.
+        // The component drops a verification result once the field no longer holds the
+        // key that was verified, so without this the preview is correctly discarded.
+        fireEvent.change(textarea, { target: { value: pastedKey } });
 
         await waitFor(() => {
             expect(screen.getByText(/✓ Pasted Corp · commercial/i)).toBeTruthy();
         });
+    });
+
+    it('discards a verification result once the field holds a different key', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url: any, options?: any) => {
+            const urlStr = String(url);
+            if (urlStr.includes('/api/user/trial-status')) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ claimed: false }) } as Response);
+            }
+            if (urlStr.includes('/api/user/license')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ status: 'community', license: null }),
+                } as Response);
+            }
+            if (urlStr.includes('/api/license/verify') && options?.method === 'POST') {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        valid: true,
+                        license: { company: 'Stale Corp', kind: 'commercial', expires_at: '2030-01-01T00:00:00Z', features: [] },
+                    }),
+                } as Response);
+            }
+            return Promise.reject(new Error('Unknown URL'));
+        });
+
+        render(<LicenseTab />);
+        await waitFor(() => {
+            expect(screen.getByText('Commercial License Key')).toBeTruthy();
+        });
+
+        const textarea = screen.getByPlaceholderText(/Paste your SWAZZ_LICENSE_KEY here/i);
+        // Verification starts for key A, then the user replaces the field with key B
+        // before the response lands. The answer describes A and must not be shown.
+        fireEvent.paste(textarea, { clipboardData: { getData: () => 'eyJhbGciOiJFZERTQSI.key-a.sig' } });
+        fireEvent.change(textarea, { target: { value: 'eyJhbGciOiJFZERTQSI.key-b.sig' } });
+
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByText(/Stale Corp/i)).toBeNull();
     });
 
     it('handles activation failure error message', async () => {
