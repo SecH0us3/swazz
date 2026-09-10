@@ -3,10 +3,9 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-// @ts-nocheck
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { Env } from './env';
+import { Env, AppEnv } from './env';
 import { logInfo, logWarn, logError } from '../../common/logging/logger';
 import { getUserIdFromRequest, getDeleteRequestedAt, safeCompare } from './utils/auth';
 import { AuthRepository } from './repositories/auth';
@@ -25,7 +24,7 @@ import { ScansRepository } from './repositories/scans';
 
 export { RunnerCoordinator } from './Coordinator';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 app.use('*', async (c, next) => {
   const allowedOrigins = c.env.ALLOWED_ORIGINS ? c.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : ['*'];
@@ -454,7 +453,7 @@ export default {
               userPublicKey: msg.body.userPublicKey || ""
             }),
           });
-          const doRes = await stub.fetch(doReq as any);
+          const doRes = await stub.fetch(doReq);
           if (doRes.ok) {
             const scansRepo = new ScansRepository(env);
             await scansRepo.updateScanStatus(msg.body.runId, 'dispatched', undefined, ctx);

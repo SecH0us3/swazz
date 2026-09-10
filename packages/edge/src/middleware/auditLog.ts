@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Context, Next } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { AuditLogRepository } from '../repositories/auditLog';
 import { PermissionKey } from '../config/rbac';
@@ -17,7 +17,7 @@ type AuditSource = 'web' | 'api_key' | 'mcp';
  * - 'api_key' : token starts with 'swazz_live_' (direct API call)
  * - 'web'     : JWT session token (browser UI)
  */
-function detectSource(c: Context<{ Bindings: Env }>): AuditSource {
+function detectSource<E extends { Bindings: Env }>(c: Context<E>): AuditSource {
   if (c.req.path.startsWith('/api/mcp') || c.req.header('X-MCP-Client')) {
     return 'mcp';
   }
@@ -38,7 +38,7 @@ function detectSource(c: Context<{ Bindings: Env }>): AuditSource {
  * @param label   - Human-readable description, e.g. 'Updated project settings'
  */
 export function auditLog(action: PermissionKey | string, label: string) {
-  return async (c: Context<{ Bindings: Env; Variables: { auditDetails: any } }>, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     await next();
 
     // Only log successful mutations

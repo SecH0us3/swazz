@@ -306,7 +306,7 @@ export class ProjectRepository extends BaseService implements IProjectRepository
     try {
       const doId = this.env.COORDINATOR_DO.idFromName('global-coordinator');
       const stub = this.env.COORDINATOR_DO.get(doId);
-      const doRes = await stub.fetch(new Request('http://do/runners') as any);
+      const doRes = await stub.fetch(new Request('http://do/runners'));
       if (doRes.ok) {
         const data = await doRes.json() as { runners: any[] };
         runnersList = (data.runners || []).map(r => {

@@ -11,7 +11,7 @@ import type { Env } from '../env';
 
 export async function cleanupSecurityTables(db: D1Database, env?: any, ctx?: any): Promise<void> {
   try {
-    const repo = new CleanupRepository({ DB: db } as any);
+    const repo = new CleanupRepository({ DB: db });
     const changes = await repo.cleanupSecurityTables();
 
     if (changes.challenges > 0) {
@@ -36,7 +36,7 @@ export async function cleanupExpiredGuests(db: D1Database, env?: any, ctx?: any)
     // Run security tables cleanup at the same time
     await cleanupSecurityTables(db, env, ctx);
 
-    const repo = new CleanupRepository({ DB: db } as any);
+    const repo = new CleanupRepository({ DB: db });
     const expiredGuests = await repo.getExpiredGuestUsers();
 
     if (expiredGuests.length === 0) {
@@ -89,7 +89,7 @@ export async function cleanupScheduledDeletions(env: Env, ctx?: any): Promise<vo
         const stub = env.COORDINATOR_DO.get(doId);
         const doRes = await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, {
           method: 'POST'
-        }) as any);
+        }));
         if (!doRes.ok) {
           logError({ env, executionCtx: ctx }, "Cleanup", `Failed to revoke runner connections in DO for user ${userId}`, { error: await doRes.text() });
         }

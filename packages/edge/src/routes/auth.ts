@@ -4,14 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
+import { errorStatus } from '../utils/http';
 import { IAuthService, AuthService } from '../services/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
 
 export function registerAuthRoutes(
-  app: Hono<{ Bindings: Env }>,
+  app: Hono<AppEnv>,
   authServicesFactory: (env: Env) => IAuthService = (env) => new AuthService(env, new AuthRepository(env)),
   licenseServiceFactory: (env: Env) => { verifyToken(token: string): Promise<any> } = (env) => new LicenseService(env, new AuthRepository(env))
 ) {
@@ -44,7 +45,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -64,7 +65,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -82,7 +83,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -96,7 +97,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -131,7 +132,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -149,7 +150,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -174,7 +175,7 @@ export function registerAuthRoutes(
       const [msg, status, retry_after] = err.message.split('|');
       const response: any = { error: msg };
       if (retry_after) response.retry_after = parseInt(retry_after);
-      return c.json(response, parseInt(status) || 500);
+      return c.json(response, errorStatus(status));
     }
   });
 
@@ -188,7 +189,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -202,7 +203,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -219,7 +220,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -237,7 +238,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -255,7 +256,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -272,7 +273,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -291,7 +292,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -311,7 +312,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   };
 
@@ -333,7 +334,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -347,7 +348,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -362,7 +363,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -380,7 +381,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -399,7 +400,7 @@ export function registerAuthRoutes(
       return c.redirect(url);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -446,7 +447,7 @@ export function registerAuthRoutes(
       return c.redirect(url);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -488,7 +489,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -502,7 +503,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -521,7 +522,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -535,7 +536,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -549,7 +550,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -568,7 +569,7 @@ export function registerAuthRoutes(
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, parseInt(status) || 500);
+      return c.json({ error: msg }, errorStatus(status));
     }
   });
 
@@ -584,7 +585,7 @@ export function registerAuthRoutes(
       return c.json({ valid: true, license });
     } catch (err: any) {
       const [msg, status] = err.message.split('|');
-      return c.json({ valid: false, error: msg }, parseInt(status, 10) || 400);
+      return c.json({ valid: false, error: msg }, errorStatus(status, 400));
     }
   });
 }

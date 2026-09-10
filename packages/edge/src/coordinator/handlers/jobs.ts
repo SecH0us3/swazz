@@ -31,7 +31,7 @@ export class DispatchHandler implements RouteHandler {
     });
 
     let runner = null;
-    if (context.env.AUTH_ENABLED === 'false' || (context.env.AUTH_ENABLED as any) === false) {
+    if (String(context.env.AUTH_ENABLED) === 'false') {
       runner = activeRunners[0] || null;
     } else {
       if (payload.userPublicKey) {

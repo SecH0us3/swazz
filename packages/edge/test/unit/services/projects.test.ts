@@ -236,7 +236,7 @@ describe('ProjectService', () => {
       expect(res.status).toBe('ok');
       expect(res.username).toBe('newuser');
       expect(res.password).toBeDefined();
-      expect(res.password.length).toBe(16);
+      expect(res.password?.length).toBe(16);
       expect(env.DB.batch).toHaveBeenCalled();
     });
 
@@ -252,7 +252,7 @@ describe('ProjectService', () => {
       expect(res.status).toBe('ok');
       expect(res.username).toBe('service-acc');
       expect(res.api_key).toBeDefined();
-      expect(res.api_key.startsWith('swazz_live_')).toBe(true);
+      expect(res.api_key?.startsWith('swazz_live_')).toBe(true);
       expect(env.DB.batch).toHaveBeenCalled();
     });
   });

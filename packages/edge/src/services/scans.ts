@@ -9,6 +9,14 @@ import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
 
+export interface TriageUpdatePayload {
+  finding_id: string;
+  ai_status: string;
+  ai_relevance?: boolean;
+  ai_explanation?: string;
+  ai_confidence?: number;
+}
+
 export interface IScansService {
   createScan(
     body: any,
@@ -25,16 +33,9 @@ export interface IScansService {
   getRunnerLogs(scanId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ logs: any[] }>;
   getFindings(scanId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ findings: any[] }>;
   getFindingDetails(findingId: string, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
-  updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean): Promise<{ finding: any }>;
+  updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean, ctx?: any): Promise<{ finding: any }>;
+  batchUpdateFindingsAI(scanId: string, updates: TriageUpdatePayload[], userId: string | null, isAuthEnabled: boolean): Promise<{ success: boolean; updated_count: number }>;
   saveWAFPatchReport(scanId: string, report: unknown, userId?: string | null, isAuthEnabled?: boolean): Promise<{ success: boolean }>;
-}
-
-export interface TriageUpdatePayload {
-  finding_id: string;
-  ai_status: string;
-  ai_relevance?: boolean;
-  ai_explanation?: string;
-  ai_confidence?: number;
 }
 
 export class ScansService implements IScansService {

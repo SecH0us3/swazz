@@ -4,16 +4,17 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getClientIp } from '../utils/auth';
 import { IScansRepository, ScansRepository } from '../repositories/scans';
 import { IScansService, ScansService } from '../services/scans';
 import { RbacRepository } from '../repositories/rbac';
 import { requireFeature } from '../middleware/license';
 import { FEATURE_AI_REMEDIATION_PRO } from '@swazz/shared';
+import { errorStatus } from '../utils/http';
 
 export function registerScansRoutes(
-  app: Hono<{ Bindings: Env }>,
+  app: Hono<AppEnv>,
   scansServicesFactory: (env: Env) => IScansService = (env) => new ScansService(env, new ScansRepository(env), new RbacRepository(env))
 ) {
   app.post('/api/scans', async (c) => {
@@ -34,9 +35,8 @@ export function registerScansRoutes(
       const result = await services.createScan(body, userId, authHeader, clientIp, waitUntil);
       return c.json(result, 201);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -49,9 +49,8 @@ export function registerScansRoutes(
       const result = await services.getScans(projectId || '', userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -64,9 +63,8 @@ export function registerScansRoutes(
       const result = await services.getScan(scanId, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -80,9 +78,8 @@ export function registerScansRoutes(
       const result = await services.updateScan(scanId, body, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -95,9 +92,8 @@ export function registerScansRoutes(
       const result = await services.generateUploadUrl(scanId, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -111,9 +107,8 @@ export function registerScansRoutes(
       const result = await services.uploadReport(scanId, authHeader, bodyStream);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -127,9 +122,8 @@ export function registerScansRoutes(
       const result = await services.getRunnerLogs(scanId, userId, isAuthEnabled);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -143,9 +137,8 @@ export function registerScansRoutes(
       const result = await services.getFindings(scanId, userId, isAuthEnabled);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -159,9 +152,8 @@ export function registerScansRoutes(
       const result = await services.getFindingDetails(findingId, userId, isAuthEnabled);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -181,9 +173,8 @@ export function registerScansRoutes(
       const result = await services.updateFinding(findingId, body, userId, isAuthEnabled, executionCtx);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -196,12 +187,11 @@ export function registerScansRoutes(
 
     try {
       const updates = body.updates || [];
-      const result = await services.batchUpdateFindingsAI(scanId, updates, userId, isAuthEnabled);
+      const result = await services.batchUpdateFindingsAI(scanId!, updates, userId, isAuthEnabled);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -216,9 +206,8 @@ export function registerScansRoutes(
       const result = await services.saveWAFPatchReport(scanId, body, userId, isAuthEnabled);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 }

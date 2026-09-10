@@ -4,13 +4,13 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Context, Next } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest } from '../utils/auth';
 import { AuthRepository } from '../repositories/auth';
 import { LicenseService } from '../services/license';
 
 export const requireFeature = (feature: string) => {
-  return async (c: Context<{ Bindings: Env }>, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const userId = await getUserIdFromRequest(c);
     if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);

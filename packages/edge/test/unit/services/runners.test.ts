@@ -26,8 +26,10 @@ describe('RunnersService Unit Tests', () => {
   let mockEnv: Env;
   let mockRunnersRepo: any;
   let mockRbacRepo: any;
+  let mockCoordinatorFetch = vi.fn();
 
   beforeEach(() => {
+    mockCoordinatorFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key' }], status: 'ok' })));
     mockEnv = {
       AUTH_ENABLED: 'true',
       SCAN_QUEUE: {
@@ -36,7 +38,7 @@ describe('RunnersService Unit Tests', () => {
       COORDINATOR_DO: {
         idFromName: vi.fn().mockReturnValue({ toString: () => 'do-id-1' }),
         get: vi.fn().mockReturnValue({
-          fetch: vi.fn().mockResolvedValue(new Response(JSON.stringify({ runners: [{ publicKey: 'test-key' }], status: 'ok' }))),
+          fetch: mockCoordinatorFetch,
         }),
       },
     } as any;
@@ -119,7 +121,7 @@ describe('RunnersService Unit Tests', () => {
   });
 
   test('queueRun should update scan status and return run info', async () => {
-    (mockEnv.COORDINATOR_DO.get().fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'r1', status: 'queued' }) });
+    mockCoordinatorFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'r1', status: 'queued' }) });
     const res = await runnersService.queueRun({ scanId: 'scan-1' }, 'user-1', true, false);
     expect(res.id).toBeDefined();
     expect(res.status).toBe('queued');
@@ -197,7 +199,7 @@ describe('RunnersService Unit Tests', () => {
   });
 
   test('restartRunner should reboot active runner', async () => {
-    (mockEnv.COORDINATOR_DO.get().fetch as any).mockResolvedValueOnce({ ok: true });
+    mockCoordinatorFetch.mockResolvedValueOnce({ ok: true });
     const res = await runnersService.restartRunner('conn-1', 'user-1');
     expect(res.status).toBe('restarted');
   });
@@ -213,7 +215,7 @@ describe('RunnersService Unit Tests', () => {
   });
 
   test('restartRunner should throw error if DO returns !ok', async () => {
-    (mockEnv.COORDINATOR_DO.get().fetch as any).mockResolvedValueOnce({ ok: false, text: async () => 'DO Error', status: 400 });
+    mockCoordinatorFetch.mockResolvedValueOnce({ ok: false, text: async () => 'DO Error', status: 400 });
     await expect(runnersService.restartRunner('conn-1', 'user-1')).rejects.toThrow('DO Error|400');
   });
 });

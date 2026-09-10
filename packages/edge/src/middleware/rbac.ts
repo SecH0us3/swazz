@@ -4,13 +4,13 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Context, Next } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, getSessionIat } from '../utils/auth';
 import { PermissionKey } from '../config/rbac';
 import { RbacRepository } from '../repositories/rbac';
 
 export const requirePermission = (permission: PermissionKey) => {
-  return async (c: Context<{ Bindings: Env }>, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const projectId = c.req.param('id');
     if (!projectId) {
       return c.json({ error: 'Project ID is required in the path' }, 400);

@@ -7,16 +7,21 @@ import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 import type { Env } from '../env';
 import { logWarn, logError } from '../../../common/logging/logger';
 
-const getLogCtx = (env: Env, ctx?: any) => ctx?.env ? ctx : { env, executionCtx: ctx };
+interface MonitoredPreparedStatement extends D1PreparedStatement {
+  __originalStmt?: D1PreparedStatement;
+  __query?: string;
+}
+
+const getLogCtx = (env: Pick<Env, 'DB'> & Partial<Env>, ctx?: any) => ctx?.env ? ctx : { env, executionCtx: ctx };
 /**
  * Resolves the appropriate D1 database binding based on the environment and optional routing key.
  * If routingKey indicates shard-1 and env.DB_SHARD_1 is defined, it routes there.
  * Otherwise, it defaults to the primary database binding (env.DB).
  */
-export function getDB(env: Env, routingKey?: string | number, ctx?: any): D1Database {
+export function getDB(env: Pick<Env, 'DB'> & Partial<Env>, routingKey?: string | number, ctx?: any): D1Database {
   let db: D1Database;
   if (routingKey && typeof routingKey === 'string' && routingKey.includes('shard-1')) {
-    const shard1 = (env as any).DB_SHARD_1 as D1Database | undefined;
+    const shard1 = env.DB_SHARD_1;
     if (shard1) {
       db = shard1;
     } else {
@@ -33,9 +38,9 @@ export function getDB(env: Env, routingKey?: string | number, ctx?: any): D1Data
 /**
  * Records execution time for D1 queries and logs / caches slow queries.
  */
-export async function recordQueryTime(query: string, duration: number, env: Env, ctx?: any) {
-  const threshold = (env as any).SLOW_QUERY_THRESHOLD_MS !== undefined
-    ? Number((env as any).SLOW_QUERY_THRESHOLD_MS)
+export async function recordQueryTime(query: string, duration: number, env: Pick<Env, 'DB'> & Partial<Env>, ctx?: any) {
+  const threshold = env.SLOW_QUERY_THRESHOLD_MS !== undefined
+    ? Number(env.SLOW_QUERY_THRESHOLD_MS)
     : 200;
 
   if (duration >= threshold) {
@@ -53,9 +58,9 @@ export async function recordQueryTime(query: string, duration: number, env: Env,
 
     const recordPromise = (async () => {
       // 2. Expose to Analytics Engine if bound
-      if ((env as any).ANALYTICS_ENGINE) {
+      if (env.ANALYTICS_ENGINE) {
         try {
-          (env as any).ANALYTICS_ENGINE.writeDataPoint({
+          env.ANALYTICS_ENGINE.writeDataPoint({
             blobs: [query, timestamp],
             doubles: [duration, threshold],
             indexes: ['slow_query']
@@ -102,7 +107,7 @@ export async function recordQueryTime(query: string, duration: number, env: Env,
   }
 }
 
-function wrapD1Database(db: D1Database, env: Env, ctx?: any): D1Database {
+function wrapD1Database(db: D1Database, env: Pick<Env, 'DB'> & Partial<Env>, ctx?: any): D1Database {
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop === '__originalDb') {
@@ -117,14 +122,16 @@ function wrapD1Database(db: D1Database, env: Env, ctx?: any): D1Database {
       if (prop === 'batch') {
         return async (statements: D1PreparedStatement[]) => {
           const startTime = Date.now();
-          const unwrappedStatements = statements.map(s => (s as any).__originalStmt || s);
+          // Statements might be monitored proxies carrying the original underlying statement
+          const unwrappedStatements = statements.map(s => (s as MonitoredPreparedStatement).__originalStmt || s);
           try {
             const res = await target.batch(unwrappedStatements);
             return res;
           } finally {
             try {
               const duration = Date.now() - startTime;
-              const label = statements.map(s => (s as any).__query || 'unknown').join('; ');
+              // Extract query string from monitored prepared statements for logging
+              const label = statements.map(s => (s as MonitoredPreparedStatement).__query || 'unknown').join('; ');
               const timingPromise = recordQueryTime(`BATCH: ${label}`, duration, env, ctx);
               if (ctx && (typeof ctx.waitUntil === 'function' || typeof ctx.executionCtx?.waitUntil === 'function')) {
                 // Non-blocking
@@ -190,7 +197,7 @@ function wrapD1Database(db: D1Database, env: Env, ctx?: any): D1Database {
   });
 }
 
-function wrapD1PreparedStatement(stmt: D1PreparedStatement, query: string, env: Env, ctx?: any): D1PreparedStatement {
+function wrapD1PreparedStatement(stmt: D1PreparedStatement, query: string, env: Pick<Env, 'DB'> & Partial<Env>, ctx?: any): D1PreparedStatement {
   return new Proxy(stmt, {
     get(target, prop, receiver) {
       if (prop === '__originalStmt') {
@@ -200,17 +207,26 @@ function wrapD1PreparedStatement(stmt: D1PreparedStatement, query: string, env: 
         return query;
       }
       if (prop === 'bind') {
-        return (...values: any[]) => {
+        return (...values: unknown[]) => {
           const nextStmt = target.bind(...values);
           return wrapD1PreparedStatement(nextStmt, query, env, ctx);
         };
       }
       if (prop === 'first' || prop === 'run' || prop === 'all' || prop === 'raw') {
-        return async (...args: any[]) => {
+        return async (...args: unknown[]) => {
           const startTime = Date.now();
           try {
-            const method = prop;
-            const res = await (target as any)[method](...args);
+            let res: unknown;
+            if (prop === 'first') {
+              res = await target.first(args[0] as string);
+            } else if (prop === 'run') {
+              res = await target.run();
+            } else if (prop === 'all') {
+              res = await target.all();
+            } else {
+              const rawOpts = args[0] as { columnNames?: boolean } | undefined;
+              res = rawOpts?.columnNames ? await target.raw({ columnNames: true }) : await target.raw();
+            }
             return res;
           } finally {
             try {

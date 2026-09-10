@@ -9,6 +9,12 @@ import { Context } from 'hono';
 import { ulid } from 'ulidx';
 import type { AuthRepository } from '../repositories/auth';
 
+declare module 'hono' {
+  interface ContextVariableMap {
+    jwtPayload: Record<string, unknown>;
+  }
+}
+
 const KV_POSITIVE_TTL = 300; // 5 minutes
 const KV_NEGATIVE_TTL = 60;  // 1 minute
 
@@ -19,7 +25,7 @@ export async function hashApiKey(key: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promise<string | null> {
+export async function getUserIdFromRequest<E extends { Bindings: Env }>(c: Context<E>): Promise<string | null> {
   let token = null;
   const authHeader = c.req.header('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -80,11 +86,11 @@ export async function getUserIdFromRequest(c: Context<{ Bindings: Env }>): Promi
     return null;
   }
   try {
-    const cachedPayload = c.get('jwtPayload' as any);
+    const cachedPayload = c.get('jwtPayload');
     let decoded = cachedPayload;
     if (!decoded) {
       decoded = await verify(token, secret, "HS256");
-      c.set('jwtPayload' as any, decoded);
+      c.set('jwtPayload', decoded);
     }
     if (!decoded || !decoded.sub) {
       return null;
@@ -222,7 +228,7 @@ const LOCKOUT_MINUTES = 15;
  */
 
 
-export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<number | null> {
+export async function getSessionIat<E extends { Bindings: Env }>(c: Context<E>): Promise<number | null> {
   let token = null;
   const authHeader = c.req.header('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -240,11 +246,11 @@ export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<numb
   if (!secret) return null;
   
   try {
-    const cachedPayload = c.get('jwtPayload' as any);
+    const cachedPayload = c.get('jwtPayload');
     let decoded = cachedPayload;
     if (!decoded) {
       decoded = await verify(token, secret, "HS256");
-      c.set('jwtPayload' as any, decoded);
+      c.set('jwtPayload', decoded);
     }
     if (decoded && typeof decoded === 'object' && 'iat' in decoded) {
       return Number(decoded.iat);
@@ -258,7 +264,7 @@ export async function getSessionIat(c: Context<{ Bindings: Env }>): Promise<numb
 
 
 
-export async function isAnonymousUser(c: Context<{ Bindings: Env }>): Promise<boolean> {
+export async function isAnonymousUser<E extends { Bindings: Env }>(c: Context<E>): Promise<boolean> {
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return true;
@@ -274,14 +280,14 @@ export async function isAnonymousUser(c: Context<{ Bindings: Env }>): Promise<bo
   }
 }
 
-export function isWebRequest(c: Context<{ Bindings: Env }>): boolean {
+export function isWebRequest<E extends { Bindings: Env }>(c: Context<E>): boolean {
   const ua = c.req.header('User-Agent') || '';
   const origin = c.req.header('Origin');
   const referer = c.req.header('Referer');
   return ua.includes('Mozilla') || !!origin || !!referer;
 }
 
-export function getClientIp(c: Context<{ Bindings: Env }>): string {
+export function getClientIp<E extends { Bindings: Env }>(c: Context<E>): string {
   return c.req.header('CF-Connecting-IP') || c.req.header('X-Real-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
 }
 

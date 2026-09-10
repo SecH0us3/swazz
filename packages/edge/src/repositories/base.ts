@@ -7,10 +7,10 @@ import { Env } from '../env';
 import { getDB } from '../utils/db';
 import type { D1Database } from '@cloudflare/workers-types';
 
-export abstract class BaseService {
+export abstract class BaseService<E extends Pick<Env, 'DB'> = Env> {
   protected db: D1Database;
 
-  constructor(protected env: Env) {
+  constructor(protected env: E) {
     this.db = getDB(env);
   }
 }

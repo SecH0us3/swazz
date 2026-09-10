@@ -5,7 +5,8 @@
 
 import { env as rawEnv } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
-import { Env } from '../../src/env';
+import { Context } from 'hono';
+import { Env, AppEnv } from '../../src/env';
 import { ProjectRepository } from '../../src/repositories/projects';
 import { RbacRepository } from '../../src/repositories/rbac';
 import { AuthRepository } from '../../src/repositories/auth';
@@ -64,10 +65,12 @@ describe('Member Provisioning Integration', () => {
     expect(res.api_key).toBeUndefined();
 
     // Verify login works
+    const mockContext = new Context<AppEnv>(new Request('http://localhost'), { env });
+
     const loginRes = await authService.login({
       username,
-      password: res.password
-    }, '127.0.0.1', undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      password: res.password!
+    }, '127.0.0.1', undefined, undefined, mockContext);
 
     expect(loginRes.status).toBe('ok');
     expect(loginRes.token).toBeDefined();
@@ -87,11 +90,13 @@ describe('Member Provisioning Integration', () => {
     expect(res.api_key).toBeDefined();
     expect(res.password).toBeUndefined();
 
+    const mockContext = new Context<AppEnv>(new Request('http://localhost'), { env });
+
     // Attempt interactive login, should fail
     await expect(authService.login({
       username,
       password: 'some-random-password'
-    }, '127.0.0.1', undefined, undefined, { req: { header: () => undefined, raw: {} } }))
+    }, '127.0.0.1', undefined, undefined, mockContext))
       .rejects.toThrow('Interactive login is disabled for service accounts');
   });
 });

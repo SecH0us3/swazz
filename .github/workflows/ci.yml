@@ -143,6 +143,13 @@ jobs:
       - name: Install dependencies
         run: npm install --ignore-scripts
 
+      # Vitest transpiles without type checking, so nothing else in CI type checks
+      # this package. It went unchecked entirely until the `types` entry in
+      # tsconfig.json was repaired: an unresolvable entry makes tsc abort after one
+      # error, which reads as a near-clean run while checking nothing.
+      - name: Typecheck
+        run: npx tsc --noEmit -p packages/edge
+
       - name: Run tests
         run: npm test --workspace=packages/edge -- --coverage
 

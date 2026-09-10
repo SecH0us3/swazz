@@ -66,7 +66,7 @@ export class QueueService {
         }
 
         let isCompatible = false;
-        if (this.env.AUTH_ENABLED === 'false' || (this.env.AUTH_ENABLED as any) === false) {
+        if (String(this.env.AUTH_ENABLED) === 'false') {
           isCompatible = true;
         } else if (runnerPubKey) {
           if (scanUserPubKey === runnerPubKey) {

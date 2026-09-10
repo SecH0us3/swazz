@@ -5,7 +5,8 @@
 
 import { env as rawEnv } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { Env } from '../../src/env';
+import { Context } from 'hono';
+import { Env, AppEnv } from '../../src/env';
 import { AuthRepository } from '../../src/repositories/auth';
 import { AuthService } from '../../src/services/auth';
 import { splitSql } from '../../src/splitSql';
@@ -14,6 +15,7 @@ const env = rawEnv as unknown as Env;
 
 describe('AuthService Integration', () => {
   let authServices: AuthService;
+  let mockContext: Context<AppEnv>;
 
   beforeAll(async () => {
     // Use Vite's import.meta.glob to bundle SQL migrations as raw strings
@@ -42,6 +44,7 @@ describe('AuthService Integration', () => {
     }
 
     authServices = new AuthService(env, new AuthRepository(env));
+    mockContext = new Context<AppEnv>(new Request('http://localhost'), { env });
   });
 
   describe('User Registration & Login', () => {
@@ -50,7 +53,7 @@ describe('AuthService Integration', () => {
       const res = await authServices.register({
         username: username,
         password: 'securepassword123'
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, undefined, undefined, mockContext);
 
       expect(res.status).toBe('ok');
       expect(res.id).toBeDefined();
@@ -65,13 +68,13 @@ describe('AuthService Integration', () => {
       await authServices.register({
         username: username,
         password: 'securepassword123'
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, undefined, undefined, mockContext);
 
       // Second registration should fail
       await expect(authServices.register({
         username: username,
         password: 'anotherpassword123'
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } })).rejects.toThrow('Username already exists');
+      }, undefined, undefined, mockContext)).rejects.toThrow('Username already exists');
     });
 
     it('should login an existing user', async () => {
@@ -82,14 +85,14 @@ describe('AuthService Integration', () => {
       await authServices.register({
         username: username,
         password: password
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, undefined, undefined, mockContext);
 
       // Attempt login (Step 1 and 2 conceptually)
       // Since testing JWT_SECRET is 'test-secret', the login logic bypasses step 1 PoW challenge
       const res = await authServices.login({
         username: username,
         password: password
-      }, '127.0.0.1', undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, '127.0.0.1', undefined, undefined, mockContext);
 
       expect(res.status).toBe('ok');
       expect(res.token).toBeDefined();
@@ -102,21 +105,21 @@ describe('AuthService Integration', () => {
       await authServices.register({
         username: username,
         password: password
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, undefined, undefined, mockContext);
 
       // Simulate 5 failed logins
       for (let i = 0; i < 5; i++) {
         await expect(authServices.login({
           username: username,
           password: 'wrongpassword'
-        }, '127.0.0.1', undefined, undefined, { req: { header: () => undefined, raw: {} } })).rejects.toThrow('Invalid credentials');
+        }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow('Invalid credentials');
       }
 
       // 6th attempt should return lockout message
       await expect(authServices.login({
         username: username,
         password: password
-      }, '127.0.0.1', undefined, undefined, { req: { header: () => undefined, raw: {} } })).rejects.toThrow(/Account temporarily locked/);
+      }, '127.0.0.1', undefined, undefined, mockContext)).rejects.toThrow(/Account temporarily locked/);
     });
   });
 
@@ -149,7 +152,7 @@ describe('AuthService Integration', () => {
       const step2 = await authServices.registerGuest({
         token: step1.token,
         nonce: nonce
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, undefined, undefined, mockContext);
 
       expect(step2.status).toBe('ok');
       expect(step2.username).toMatch(/^g_/);
@@ -163,10 +166,10 @@ describe('AuthService Integration', () => {
       const reg = await authServices.register({
         username: username,
         password: 'securepassword123'
-      }, undefined, undefined, { req: { header: () => undefined, raw: {} } });
+      }, undefined, undefined, mockContext);
 
       // Delete user
-      const delRes = await authServices.deleteUser(reg.id, { req: { header: () => undefined, raw: {} } });
+      const delRes = await authServices.deleteUser(reg.id, mockContext);
       expect(delRes.status).toBe('deletion_scheduled');
 
       // Check me - should show requested at
