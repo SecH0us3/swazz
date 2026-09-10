@@ -47,6 +47,9 @@ jobs:
               - '.github/workflows/ci.yml'
             backend:
               - 'packages/container/**'
+              # The Go demo targets are built by this job and by nothing else.
+              - 'demo/ws/**'
+              - 'demo/grpc/**'
               - '.github/workflows/ci.yml'
             edge:
               - 'packages/edge/**'
@@ -204,6 +207,13 @@ jobs:
         with:
           go-version: '1.26.6'
           cache-dependency-path: packages/container/go.sum
+
+      # The demo targets live outside packages/container, so nothing compiled them.
+      # demo/ws/main.go had not built since the commit that introduced it.
+      - name: Build demo targets
+        run: |
+          (cd demo/ws && go build -o /dev/null .)
+          (cd demo/grpc && go build -o /dev/null .)
 
       - name: Run tests
         run: cd packages/container && go test -coverprofile=coverage.out ./...

@@ -82,7 +82,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				// simulate panic
 				func() {
 					defer func() {
-						if r := recover(); r != nil {
+						// Not `r` — that would shadow the *http.Request this closure
+						// needs for r.Context() below.
+						if rec := recover(); rec != nil {
 							errStr := fmt.Sprintf("panic: index out of range\n%s", debug.Stack())
 							c.Write(r.Context(), websocket.MessageText, []byte(errStr))
 							c.Close(websocket.StatusInternalError, "internal error")
