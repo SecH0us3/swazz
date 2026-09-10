@@ -106,8 +106,38 @@ go run scripts/issue-license.go \
 | `-days` | No | `365` | Validity duration in days |
 | `-features` | No | `*` | Comma-separated features, or `*` for all |
 | `-max-users` | No | `0` | Max users (`0` = unlimited) |
+| `-max-concurrency` | No | `0` | Concurrency ceiling (`0` = the free default of 5; values above 1000 are clamped) |
+| `-kind` | No | `commercial` | License kind: `commercial` or `trial`. See [License Kind](#license-kind) |
 | `-token-only` | No | `false` | Output raw license token string only (CI/automation) |
 | `-out` | No | — | Path to save license token string to file |
+
+### License Kind
+
+`-kind` is written into the signed payload and is what the dashboard and the CLI use to
+describe a licence. It does not grant or withhold anything — entitlements come from
+`-features` and the ceilings — it only decides what the user is told:
+
+| Kind | Dashboard badge | CLI / agent | Offers "Renew 14-Day Trial" |
+|---|---|---|---|
+| `commercial` (default) | *Commercial License Active*, or *Enterprise License Active* when the licence carries `*` or `enterprise` | `Commercial` / `Enterprise` | No |
+| `trial` | *Trial License Active* | `Trial` | Yes |
+
+```bash
+# A time-boxed evaluation licence
+go run scripts/issue-license.go \
+  -key /path/to/swazz_master_private.pem \
+  -company "Startup Inc" \
+  -days 14 \
+  -kind trial
+```
+
+Issue a paid licence with the default `commercial`; passing `-kind trial` by mistake makes
+a paying customer see trial wording and a renew-trial button.
+
+**Tokens issued before this field existed** carry no `kind`. They keep working: the
+dashboard and the engine fall back to the old convention and treat a company name ending
+in `(14-Day Trial)`, or exactly `Swazz Trial User`, as a trial, and everything else as
+commercial. Re-issuing such a licence with an explicit `-kind` removes the guesswork.
 
 ### Known Feature Identifiers
 

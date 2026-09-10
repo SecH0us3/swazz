@@ -85,6 +85,8 @@ graph TD
 ### Root Commands
 - `npm install`: Install frontend dependencies.
 - `npm run dev`: Starts the Go backend and Vite frontend concurrently.
+- `bash scripts/start-local-dev.sh`: **Full local stack** — edge coordinator (8787), web dashboard (5173), the vulnerable HTTP (8788), gRPC (50051) and WebSocket (50052) demo targets, and the Go runner agent connected to the coordinator. Use this rather than `npm run dev` when a change needs the runner or a demo target.
+- `bash scripts/stop-local-dev.sh`: Stops everything the above starts. Prefer it over `pkill`: `go run` execs a compiled temporary binary, so killing by process name leaves the gRPC and WebSocket demos holding their ports.
 - `npm run build`: Build the web dashboard.
 - `npm run deploy:web`: Deploy the dashboard to Cloudflare Pages.
 - `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` plugin.

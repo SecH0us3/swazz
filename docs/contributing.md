@@ -49,6 +49,17 @@ Follow these steps to set up your development environment:
    *   The Go backend will run on `http://localhost:8080`.
    *   The React frontend dashboard will open on `http://localhost:5173`.
 
+   For work that involves the runner agent or one of the vulnerable demo targets — gRPC
+   and WebSocket fuzzing, runner reconnection, end-to-end scans — start the full stack
+   instead. It also brings up the edge coordinator, the HTTP demo (8788), the gRPC demo
+   (50051), the WebSocket demo (50052) and an agent connected to the coordinator:
+   ```bash
+   bash scripts/start-local-dev.sh
+   bash scripts/stop-local-dev.sh   # when you are done
+   ```
+   Use the stop script rather than `pkill`: `go run` execs a compiled temporary binary, so
+   killing by process name leaves the gRPC and WebSocket demos holding their ports.
+
 ---
 
 ## 📂 Project Architecture
