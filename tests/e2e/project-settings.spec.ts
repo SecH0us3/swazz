@@ -341,14 +341,21 @@ test.describe('Project and Payload Settings E2E Tests', () => {
       await expect(totalStat).not.toHaveText('0', { timeout: TIMEOUTS.LOAD });
 
       const successStat = page.locator('.stat-card.stat-2xx .stat-value');
-      // Assert the timeout's effect relatively, not against a fixed number: on a fast machine
-      // loopback can answer inside 5ms often enough to clear any absolute bound, but the bulk
-      // of requests must still have been cut short.
+      const clientErrStat = page.locator('.stat-card.stat-4xx .stat-value');
+      const serverErrStat = page.locator('.stat-card.stat-5xx .stat-value');
+      // Assert on the direct signature of a timeout rather than on how many requests
+      // happened to succeed. A request cut short never receives an HTTP status (the
+      // executor records Status 0), so it counts towards Total but lands in none of the
+      // 2xx/4xx/5xx buckets, which are filtered by numeric range in StatsBar. Counting
+      // successes instead raced the machine: on fast hardware loopback answers inside
+      // 5ms often enough to push 2xx past any share-of-total bound.
       await expect(async () => {
         const success = parseInt(await successStat.innerText(), 10);
+        const clientErrors = parseInt(await clientErrStat.innerText(), 10);
+        const serverErrors = parseInt(await serverErrStat.innerText(), 10);
         const total = parseInt(await totalStat.innerText(), 10);
         expect(total).toBeGreaterThan(0);
-        expect(success).toBeLessThan(total / 2);
+        expect(total - (success + clientErrors + serverErrors)).toBeGreaterThan(0);
       }).toPass({ timeout: TIMEOUTS.DEFAULT });
     } finally {
       // 11. Cleanup: restore default settings to prevent polluting coordinator database for other tests

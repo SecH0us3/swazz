@@ -37,6 +37,11 @@ test.describe('API Specifications and Guest Restrictions E2E Tests', () => {
     // 3. Open Members & Roles tab
     const membersRolesTabBtn = page.locator('button.tab-bar-btn:has-text("Members & Roles")');
     await expect(membersRolesTabBtn).toBeVisible();
+    // The tab stays gated until the mocked license reaches the store, and it renders as
+    // "Members & Roles 🔒" until then — a substring locator matches either state. Clicking
+    // while still locked only raises a toast and leaves the sub-tab unchanged, which is what
+    // made this flaky under full-suite load. Wait for the lock badge to clear first.
+    await expect(membersRolesTabBtn).not.toContainText('🔒');
     await membersRolesTabBtn.click();
 
     // 4. Verify guest warning banner is visible

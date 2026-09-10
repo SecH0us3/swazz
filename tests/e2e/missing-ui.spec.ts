@@ -277,7 +277,9 @@ test.describe('Additional UI Coverage E2E Tests', () => {
       await expect(findingRow).toBeVisible();
 
       // 2. Export MD Report check
-      const downloadTab = page.locator('button.tab-bar-btn:has-text("Download")');
+      // Icon-only button since the export control moved into a hover dropdown; match the
+      // class rather than the text, which no longer exists in the markup.
+      const downloadTab = page.locator('button.tab-bar-btn.workspace-export-btn');
       await expect(downloadTab).toBeVisible();
       await downloadTab.hover();
 

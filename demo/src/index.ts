@@ -539,6 +539,26 @@ export default {
                 }
               }
             },
+            "/slow": {
+              get: {
+                summary: "Always responds after a fixed delay, so a low request timeout is guaranteed to cut it short",
+                responses: {
+                  "200": {
+                    description: "Response emitted after the delay",
+                    content: {
+                      "application/json": {
+                        schema: {
+                          type: "object",
+                          properties: {
+                            delayedMs: { type: "integer" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "/headers": {
               get: {
                 summary: "Reflects custom query params into response headers to simulate CRLF vulnerabilities",
@@ -843,6 +863,20 @@ export default {
         }
         return new Response(`<h1>Welcome ${name}!</h1>`, {
           headers: { ...corsHeaders, "Content-Type": "text/html" }
+        });
+      }
+
+      // Deliberately slow endpoint. E2E coverage for the request-timeout setting needs a
+      // target that cannot answer within a low timeout: on fast hardware every other demo
+      // route replies over loopback in well under a millisecond, so a 5ms timeout produced
+      // zero timed-out requests and the setting's effect was unobservable. Keep the delay
+      // comfortably above any timeout a test would configure, but small enough that the
+      // other suites which fuzz this spec pay only a negligible cost.
+      if (method === "GET" && path === "/slow") {
+        const delayedMs = 120;
+        await new Promise((resolve) => setTimeout(resolve, delayedMs));
+        return new Response(JSON.stringify({ delayedMs }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
 
