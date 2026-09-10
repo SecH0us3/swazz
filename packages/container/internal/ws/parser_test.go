@@ -21,8 +21,13 @@ func TestSynthesizeWSEndpoint(t *testing.T) {
 	}
 
 	ep := res.Endpoints[0]
-	if ep.Path != urlStr {
-		t.Errorf("expected path %q, got %q", urlStr, ep.Path)
+	// Only the channel path belongs in Path; the origin goes to BasePath. Putting the
+	// whole URL here made the executor append it to base_url and every handshake 404d.
+	if ep.Path != "/ws" {
+		t.Errorf("expected path %q, got %q", "/ws", ep.Path)
+	}
+	if res.BasePath != "ws://localhost:8080" {
+		t.Errorf("expected base path %q, got %q", "ws://localhost:8080", res.BasePath)
 	}
 	if ep.Method != "WS" {
 		t.Errorf("expected method WS, got %q", ep.Method)
