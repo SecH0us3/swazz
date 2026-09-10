@@ -4146,6 +4146,13 @@ kbd {
 .account-status-dot.inactive {
   background-color: var(--text-muted);
 }
+.account-status-dot.expired {
+  background-color: var(--color-warning);
+}
+
+[data-theme="light"] .account-status-dot.expired {
+  background-color: #b45309;
+}
 
 .delete-error-message {
   margin: 0;
@@ -4571,15 +4578,7 @@ kbd {
   gap: 24px;
 }
 
-.settings-card {
-  background-color: var(--bg-elevated);
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+
 
 .settings-card-title {
   margin: 0;
@@ -4742,9 +4741,27 @@ kbd {
 }
 
 .license-status-badge.active {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid rgba(34, 211, 160, 0.3);
+}
+
+[data-theme="light"] .license-status-badge.active {
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.3);
+  background: rgba(4, 120, 87, 0.1);
+}
+
+.license-status-badge.expired {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="light"] .license-status-badge.expired {
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.3);
+  background: rgba(180, 83, 9, 0.1);
 }
 
 .license-status-badge.inactive {
@@ -4766,6 +4783,7 @@ kbd {
   padding: var(--space-3) 0;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
+  max-width: 720px;
 }
 
 .license-info-item {
@@ -4788,6 +4806,48 @@ kbd {
   color: var(--text-main);
 }
 
+.license-info-value.mono {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+}
+
+.license-info-sub {
+  font-size: var(--font-size-2xs, 11px);
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
+.license-expiring-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-warning-bg);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-2);
+}
+
+.license-expired-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-error-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-2);
+}
+
+[data-theme="light"] .license-expired-hint {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.3);
+  background: rgba(185, 28, 28, 0.1);
+}
+
 .license-features-list {
   display: flex;
   flex-wrap: wrap;
@@ -4798,13 +4858,26 @@ kbd {
 .license-feature-badge {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   padding: 4px 10px;
   font-size: var(--font-size-xs);
   font-weight: 500;
   border-radius: var(--radius-full, 9999px);
-  background: rgba(124, 58, 237, 0.12);
-  color: var(--accent-light);
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid rgba(34, 211, 160, 0.28);
+}
+
+[data-theme="light"] .license-feature-badge {
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.30);
+  background: rgba(4, 120, 87, 0.10);
+}
+
+.license-feature-badge.muted {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border-color: var(--border-default);
 }
 
 /* Trial License Styles */
@@ -4860,17 +4933,50 @@ kbd {
   line-height: 1.4;
 }
 
-.trial-days-badge {
+.license-days-badge {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
   font-size: var(--font-size-xs);
   font-weight: 600;
   border-radius: var(--radius-full, 9999px);
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.3);
   letter-spacing: 0.02em;
+}
+
+.license-days-badge.ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid rgba(34, 211, 160, 0.3);
+}
+
+[data-theme="light"] .license-days-badge.ok {
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.3);
+  background: rgba(4, 120, 87, 0.1);
+}
+
+.license-days-badge.warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="light"] .license-days-badge.warn {
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.3);
+  background: rgba(180, 83, 9, 0.1);
+}
+
+.license-days-badge.danger {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="light"] .license-days-badge.danger {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.3);
+  background: rgba(185, 28, 28, 0.1);
 }
 
 .trial-used-notice {
@@ -4935,6 +5041,202 @@ kbd {
   background: rgba(0, 102, 255, 0.08);
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+.license-deactivate-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-default);
+  margin-top: var(--space-4);
+  gap: var(--space-4);
+}
+
+.license-deactivate-warning {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.license-key-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input, var(--bg-hover));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.license-verify-preview {
+  font-size: var(--font-size-xs);
+  margin-top: var(--space-1);
+}
+
+.license-verify-preview.valid {
+  color: var(--color-success);
+}
+
+[data-theme="light"] .license-verify-preview.valid {
+  color: #047857;
+}
+
+.license-verify-preview.invalid {
+  color: var(--color-error);
+}
+
+.license-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.license-input-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@keyframes license-skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.license-skeleton {
+  height: 120px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  animation: license-skeleton-pulse 1.5s ease-in-out infinite;
+  margin-bottom: var(--space-4);
+}
+
+.license-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* Contact Sales Card & Modal Styles */
+.contact-sales-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.contact-sales-info h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.contact-sales-info p {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.contact-sales-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.contact-sales-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.contact-sales-consent input {
+  margin-top: 2px;
+}
+
+.contact-sales-details {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.contact-sales-details summary {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.contact-sales-details-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.contact-sales-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.contact-sales-feature-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.contact-sales-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-default);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.contact-sales-email-link {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
+.contact-sales-buttons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.contact-sales-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  margin: 0;
 }
 
 /* Danger Zone specific */

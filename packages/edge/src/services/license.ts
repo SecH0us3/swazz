@@ -14,8 +14,10 @@ export interface LicenseInfo {
   company: string;
   expires_at: string;
   features: string[];
+  kind: 'trial' | 'commercial';
   max_users?: number;
   max_concurrency?: number;
+  key_fingerprint?: string;
 }
 
 export const TRIAL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -32,10 +34,24 @@ export interface TrialStatus {
 export interface ILicenseService {
   activate(userId: string, licenseKey: string): Promise<{ status: string; license: LicenseInfo }>;
   deactivate(userId: string): Promise<{ status: string }>;
-  getStatus(userId: string): Promise<{ status: string; license: LicenseInfo | null }>;
+  getStatus(userId: string): Promise<{ status: 'community' | 'active' | 'expired' | 'invalid'; license: LicenseInfo | null }>;
   hasFeature(userId: string, feature: string): Promise<boolean>;
   getTrialStatus(userId: string): Promise<TrialStatus>;
   claimTrial(userId: string, username: string): Promise<{ status: string; license: LicenseInfo; token: string }>;
+}
+
+export function isLegacyTrialCompany(company?: string | null): boolean {
+  if (!company) return false;
+  return company.endsWith('(14-Day Trial)') || company === 'Swazz Trial User';
+}
+
+export async function computeLicenseFingerprint(token: string): Promise<string> {
+  const clean = token.trim();
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(clean));
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .substring(0, 16);
 }
 
 function base64UrlDecode(str: string): Uint8Array {
@@ -72,7 +88,7 @@ function hexToBytes(hex: string): Uint8Array {
 
 export async function signLicenseToken(
   privKeyHex: string,
-  payload: { company: string; expires_at: string; features: string[]; max_users?: number; max_concurrency?: number }
+  payload: { company: string; expires_at: string; features: string[]; kind?: string; max_users?: number; max_concurrency?: number }
 ): Promise<string> {
   const header = { alg: 'EdDSA', typ: 'JWT' };
   const headerB64 = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(header)));
@@ -120,7 +136,7 @@ export class LicenseService implements ILicenseService {
   }
 
   private cacheKey(userId: string): string {
-    return `license:${userId}`;
+    return `license:v2:${userId}`;
   }
 
   private async getCachedLicense(userId: string): Promise<LicenseInfo | null> {
@@ -151,22 +167,41 @@ export class LicenseService implements ILicenseService {
     } catch {}
   }
 
-  private async loadLicense(userId: string): Promise<LicenseInfo | null> {
+  private async loadLicenseDetailed(userId: string): Promise<{ license: LicenseInfo | null; reason: 'ok' | 'expired' | 'invalid' }> {
     const cached = await this.getCachedLicense(userId);
-    if (cached) return cached;
+    if (cached) {
+      const isExpired = cached.expires_at && new Date(cached.expires_at).getTime() < Date.now();
+      return { license: cached, reason: isExpired ? 'expired' : 'ok' };
+    }
 
     const key = await this.authRepo.getLicenseKey(userId);
-    if (!key) return null;
+    if (!key) {
+      return { license: null, reason: 'invalid' };
+    }
+
     try {
-      const license = await this.verifyToken(key);
+      const license = await this.verifyToken(key, false);
       await this.setCachedLicense(userId, license);
-      return license;
-    } catch {
-      return null;
+      return { license, reason: 'ok' };
+    } catch (err: any) {
+      if (err.message && err.message.includes('expired license')) {
+        try {
+          const expiredLicense = await this.verifyToken(key, true);
+          return { license: expiredLicense, reason: 'expired' };
+        } catch {
+          return { license: null, reason: 'invalid' };
+        }
+      }
+      return { license: null, reason: 'invalid' };
     }
   }
 
-  async verifyToken(tokenStr: string): Promise<LicenseInfo> {
+  private async loadLicense(userId: string): Promise<LicenseInfo | null> {
+    const { license, reason } = await this.loadLicenseDetailed(userId);
+    return reason === 'ok' ? license : null;
+  }
+
+  async verifyToken(tokenStr: string, allowExpired = false): Promise<LicenseInfo> {
     let cleanToken = tokenStr.trim();
     if (cleanToken.includes('SWAZZ_LICENSE_KEY:')) {
       cleanToken = cleanToken.split('SWAZZ_LICENSE_KEY:')[1].trim();
@@ -223,7 +258,7 @@ export class LicenseService implements ILicenseService {
       if (isNaN(expires.getTime())) {
         throw new Error('license: invalid token format|400');
       }
-      if (expires.getTime() < Date.now()) {
+      if (!allowExpired && expires.getTime() < Date.now()) {
         throw new Error('license: expired license|403');
       }
     }
@@ -243,12 +278,21 @@ export class LicenseService implements ILicenseService {
       maxConcurrency = 1000;
     }
 
+    const kind: 'trial' | 'commercial' =
+      payload.kind === 'trial' || payload.kind === 'commercial'
+        ? payload.kind
+        : (isLegacyTrialCompany(payload.company) ? 'trial' : 'commercial');
+
+    const keyFingerprint = await computeLicenseFingerprint(cleanToken);
+
     return {
       company: payload.company || '',
       expires_at: payload.expires_at || '',
       features,
+      kind,
       max_users: payload.max_users,
       max_concurrency: maxConcurrency,
+      key_fingerprint: keyFingerprint,
     };
   }
 
@@ -274,10 +318,13 @@ export class LicenseService implements ILicenseService {
     return { status: 'ok' };
   }
 
-  async getStatus(userId: string): Promise<{ status: string; license: LicenseInfo | null }> {
-    const license = await this.loadLicense(userId);
-    if (license) {
+  async getStatus(userId: string): Promise<{ status: 'community' | 'active' | 'expired' | 'invalid'; license: LicenseInfo | null }> {
+    const { license, reason } = await this.loadLicenseDetailed(userId);
+    if (reason === 'ok' && license) {
       return { status: 'active', license };
+    }
+    if (reason === 'expired' && license) {
+      return { status: 'expired', license };
     }
     const key = await this.authRepo.getLicenseKey(userId);
     return { status: key ? 'invalid' : 'community', license: null };
@@ -367,6 +414,7 @@ export class LicenseService implements ILicenseService {
       company,
       expires_at: expiresAt,
       features: ['*'],
+      kind: 'trial' as const,
       max_users: 1,
       max_concurrency: 1000,
     };

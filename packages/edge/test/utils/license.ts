@@ -16,8 +16,9 @@ export async function generateTestKeyPair(): Promise<TestLicenseKeyPair> {
     true,
     ['sign', 'verify']
   );
-  const pubKey = await crypto.subtle.exportKey('raw', keyPair.publicKey);
-  const privKey = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+  const kp = keyPair as CryptoKeyPair;
+  const pubKey = (await crypto.subtle.exportKey('raw', kp.publicKey)) as ArrayBuffer;
+  const privKey = (await crypto.subtle.exportKey('pkcs8', kp.privateKey)) as ArrayBuffer;
 
   const pubHex = Array.from(new Uint8Array(pubKey)).map(b => b.toString(16).padStart(2, '0')).join('');
   const privHex = Array.from(new Uint8Array(privKey)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -42,7 +43,14 @@ function bytesToBase64Url(bytes: Uint8Array): string {
 
 export async function signLicenseToken(
   privKeyHex: string,
-  payload: { company: string; expires_at: string; features: string[]; max_users?: number; max_concurrency?: number }
+  payload: {
+    company: string;
+    expires_at: string;
+    features: string[];
+    kind?: string;
+    max_users?: number;
+    max_concurrency?: number;
+  }
 ): Promise<string> {
   const header = { alg: 'EdDSA', typ: 'JWT' };
   const headerB64 = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(header)));

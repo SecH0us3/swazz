@@ -42,12 +42,57 @@ var (
 // with ErrNoPublicKey and the engine stays in community mode.
 var DefaultPublicKeyHex = ""
 
+const (
+	KindTrial      = "trial"
+	KindCommercial = "commercial"
+)
+
 type License struct {
 	Company        string    `json:"company"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	Features       []string  `json:"features"`
+	Kind           string    `json:"kind,omitempty"`
 	MaxUsers       int       `json:"max_users,omitempty"`
 	MaxConcurrency int       `json:"max_concurrency,omitempty"`
+}
+
+// IsTrial reports whether the license is a self-service trial. Tokens issued
+// before the `kind` field existed are classified by the legacy company-name
+// convention used by claimTrial.
+func (l *License) IsTrial() bool {
+	if l == nil {
+		return false
+	}
+	if l.Kind != "" {
+		return l.Kind == KindTrial
+	}
+	return strings.HasSuffix(l.Company, "(14-Day Trial)") || l.Company == "Swazz Trial User"
+}
+
+// KindOrDefault returns KindTrial or KindCommercial.
+func (l *License) KindOrDefault() string {
+	if l != nil && l.IsTrial() {
+		return KindTrial
+	}
+	return KindCommercial
+}
+
+// TierLabel returns the human-readable tier of a license: "Trial",
+// "Enterprise" (all features or the enterprise feature) or "Commercial".
+func (l *License) TierLabel() string {
+	if l == nil {
+		return "Commercial"
+	}
+	if l.IsTrial() {
+		return "Trial"
+	}
+	for _, f := range l.Features {
+		fLower := strings.ToLower(f)
+		if fLower == "*" || fLower == "all" || fLower == "enterprise" {
+			return "Enterprise"
+		}
+	}
+	return "Commercial"
 }
 
 func (l *License) HasFeature(feature string) bool {

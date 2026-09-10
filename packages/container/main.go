@@ -194,7 +194,8 @@ func runLicenseCommand() {
 
 	daysLeft := lic.DaysRemaining()
 
-	fmt.Println("License Status: \033[1;32mEnterprise Active ✓\033[0m")
+	fmt.Printf("License Status: \033[1;32m%s Active ✓\033[0m\n", lic.TierLabel())
+	fmt.Printf("  Kind:        %s\n", lic.KindOrDefault())
 	fmt.Printf("  Company:     %s\n", lic.Company)
 	fmt.Printf("  Expires At:  %s (%d days remaining)\n", lic.ExpiresAt.Format("2006-01-02"), daysLeft)
 	if lic.IsExpiringSoon(3) {
