@@ -27,6 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # paths-filter lists a pull request's changed files through the REST API,
+      # which a private repository answers only with this permission.
+      pull-requests: read
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
