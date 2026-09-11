@@ -255,8 +255,17 @@ Run the embedded license status command:
 
 ### Web UI Dashboard Check:
 1. Open the Swazz Dashboard at `http://localhost:5173`.
-2. Navigate to **System Settings -> License & Subscription**.
-3. Verify the **Enterprise Active** badge, expiration date, and enabled feature entitlements.
+2. Open the account menu (top right) → **Profile Settings** → **License & Subscription**.
+3. Check the status badge, the expiry date and the enabled feature entitlements. The badge
+   reflects the licence kind and its state:
+   - **Commercial License Active** or **Enterprise License Active** — a paid licence;
+     *Enterprise* when it grants all features (`*`) or the `enterprise` feature.
+   - **Trial License Active** — a licence issued with `-kind trial`, or the self-service trial.
+   - **License Expired** — the key is still stored but `expires_at` has passed. Paid features
+     are locked; the tab offers the free trial when the account is eligible, a way to
+     contact sales, and a button to remove the stored key.
+
+   The **Key** field shows a short fingerprint of the active key, so two keys can be told apart.
 
 ---
 
@@ -291,5 +300,5 @@ Run the embedded license status command:
 | :--- | :--- | :--- |
 | `license: invalid token format` | Token string is malformed or truncated. | Re-copy the exact `SWAZZ_LICENSE_KEY` without added whitespace or line breaks. |
 | `license: invalid signature` | License was signed with a different key than the one this binary trusts, or was tampered with. | Official releases embed the production public key, so this normally means the key is for another vendor deployment, or the binary was built from source without `-ldflags "-X swazz-engine/internal/license.DefaultPublicKeyHex=..."`. Set `SWAZZ_LICENSE_PUBKEY` to your issuer's 64-char hex public key, or use an official release image. Contact vendor if it persists. |
-| `license: expired license` | License validity period (`expires_at`) has elapsed. | Contact `enterprise@swazz.secmy.app` for a license renewal token. |
+| `license: expired license` | License validity period (`expires_at`) has elapsed. | The dashboard shows such a key as **License Expired**. Contact `enterprise@swazz.secmy.app` for a license renewal token. |
 | `license: public key not configured` | The binary embeds no public key (built from source without the release `-ldflags`) and `SWAZZ_LICENSE_PUBKEY` is unset. | Set the `SWAZZ_LICENSE_PUBKEY` environment variable to the 64-char hex public key, or use an official release binary/image. |

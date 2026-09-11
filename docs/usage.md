@@ -404,6 +404,9 @@ You can specify gRPC microservice targets in `swagger_urls` or `base_url`:
    - `grpc://hostname:port` — Unencrypted gRPC (Insecure plaintext connection)
    - `grpcs://hostname:port` — TLS-encrypted gRPC connection
 
+   The same URL can be pasted into the dashboard's spec loader; the target is set to
+   its origin (`grpc://localhost:50051`).
+
    ```json
    {
      "base_url": "grpc://localhost:50051",
@@ -483,6 +486,9 @@ You can specify WebSocket targets in `swagger_urls`:
    When targeting a live WebSocket endpoint directly without a schema file, Swazz automatically synthesizes a versatile envelope schema covering standard JSON-RPC, Action-dispatcher, and Command-based patterns:
    - `ws://hostname:port/path` — Plaintext WebSocket connection
    - `wss://hostname:port/path` — TLS-encrypted WebSocket connection
+
+   The URL can also be pasted into the dashboard's spec loader: it shows up as a `WS`
+   endpoint, and the target is set to the origin (`ws://hostname:port`).
 
    The URL in `swagger_urls` is enough on its own — Swazz splits it into the origin it
    dials and the channel path it fuzzes, so `base_url` may be omitted:
