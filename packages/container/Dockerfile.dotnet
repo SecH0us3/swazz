@@ -12,4 +12,4 @@ RUN apk update && apk add --no-cache dotnet8-sdk
 USER swazz:swazz
 
 ENTRYPOINT ["/swazz-engine"]
-CMD ["serve"]
+CMD ["run-agent"]

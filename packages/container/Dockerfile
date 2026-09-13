@@ -40,4 +40,4 @@ EXPOSE 8080
 USER nonroot:nonroot
 
 ENTRYPOINT ["/swazz-engine"]
-CMD ["serve"]
+CMD ["run-agent"]

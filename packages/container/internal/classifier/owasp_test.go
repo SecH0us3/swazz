@@ -74,6 +74,33 @@ func TestResolveTaxonomyPrefersAnalyzerValues(t *testing.T) {
 	assert.Equal(t, []string{"CWE-1321"}, cwe)
 }
 
+// TestResolveTaxonomyMergesRuleTableCategories: the rule tables classify these
+// injection findings as API10:2023 while the analyzers tag them API8:2023.
+// Preferring either side alone empties a card, so both must survive.
+func TestResolveTaxonomyMergesRuleTableCategories(t *testing.T) {
+	for _, ruleID := range []string{
+		"swazz/sql-error-leak", "swazz/reflected-xss", "swazz/cmdi-leak",
+		"swazz/ssti-leak", "swazz/xxe-leak",
+	} {
+		af := swagger.AnalysisFinding{
+			RuleID:           ruleID,
+			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+		}
+
+		_, api, _ := ResolveTaxonomy(&af, "GET", "/x")
+
+		assert.Contains(t, api, "API8:2023 Security Misconfiguration", ruleID)
+		assert.Contains(t, api, "API10:2023 Unsafe Consumption of APIs", ruleID)
+	}
+}
+
+func TestMergeTaxonomyDeduplicatesAndKeepsOrder(t *testing.T) {
+	assert.Equal(t, []string{"a", "b", "c"}, mergeTaxonomy([]string{"a", "b"}, []string{"b", "c"}))
+	assert.Equal(t, []string{"x"}, mergeTaxonomy(nil, []string{"x"}))
+	assert.Equal(t, []string{"y"}, mergeTaxonomy([]string{"y"}, nil))
+	assert.Empty(t, mergeTaxonomy(nil, nil))
+}
+
 func TestResolveTaxonomyFallsBackToRuleTables(t *testing.T) {
 	af := swagger.AnalysisFinding{RuleID: "swazz/reflected-xss"}
 

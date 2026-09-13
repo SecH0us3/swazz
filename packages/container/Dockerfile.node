@@ -15,4 +15,4 @@ RUN apk update && apk add --no-cache \
 USER swazz:swazz
 
 ENTRYPOINT ["/swazz-engine"]
-CMD ["serve"]
+CMD ["run-agent"]

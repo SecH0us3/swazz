@@ -34,4 +34,4 @@ ENV PATH="/home/swazz/.npm-global/bin:/home/swazz/.local/bin:${PATH}"
 RUN npm install -g @anthropic-ai/claude-cli || npm install -g claude-cli
 
 ENTRYPOINT ["/swazz-engine"]
-CMD ["serve"]
+CMD ["run-agent"]
