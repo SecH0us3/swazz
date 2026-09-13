@@ -84,3 +84,27 @@ func TestResolveTaxonomyFallsBackToRuleTables(t *testing.T) {
 	assert.Equal(t, CWEIdentifiers("swazz/reflected-xss", "GET", "/search", ""), cwe)
 	assert.NotEmpty(t, web)
 }
+
+// TestClassifyAllKeepsAnalyzerTaxonomy covers the real call site: swazz/prototype-pollution
+// has no entry in the rule-ID lookup tables, so recomputing its taxonomy blanked out the
+// mapping the analyzer had set (see internal/analyzer/prototype_pollution.go).
+func TestClassifyAllKeepsAnalyzerTaxonomy(t *testing.T) {
+	res := &swagger.FuzzResult{
+		ID: "r1", Endpoint: "/api/users", Method: "POST", Status: 200,
+		AnalyzerFindings: []swagger.AnalysisFinding{{
+			RuleID:           "swazz/prototype-pollution",
+			Level:            "error",
+			Message:          "Prototype pollution",
+			OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+			OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
+			CWEIDs:           []string{"CWE-1321"},
+		}},
+	}
+
+	findings := New(nil).ClassifyAll([]*swagger.FuzzResult{res})
+
+	assert.Len(t, findings, 1)
+	assert.Equal(t, []string{"A08:2025 Software or Data Integrity Failures"}, findings[0].OWASPCategory)
+	assert.Equal(t, []string{"API3:2023 Broken Object Property Level Authorization"}, findings[0].OWASPAPICategory)
+	assert.Equal(t, []string{"CWE-1321"}, findings[0].CWEIDs)
+}
