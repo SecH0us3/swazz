@@ -97,7 +97,7 @@ sudo systemd-run \
   -p ProtectSystem=strict \
   -p ProtectHome=yes \
   -p RestrictAddressFamilies="AF_INET AF_INET6 AF_UNIX" \
-  /usr/local/bin/swazz-engine serve
+  /usr/local/bin/swazz-engine run-agent --coordinator wss://swazz.secmy.app/api/runners/connect --token "$SWAZZ_RUNNER_TOKEN"
 ```
 
 ---

@@ -9,7 +9,7 @@
 [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
 [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions)
-[![E2E: Playwright](https://img.shields.io/badge/e2e-44%20specs-brightgreen?logo=playwright)](tests/e2e)
+[![E2E: Playwright](https://img.shields.io/badge/e2e-43%20specs-brightgreen?logo=playwright)](tests/e2e)
 [![SARIF](https://img.shields.io/badge/report-SARIF-blueviolet)](https://sarifweb.azurewebsites.net/)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://mariadb.com/bsl11/)
 [![Docs](https://img.shields.io/badge/docs-GitHub_Pages-blue.svg)](https://SecH0us3.github.io/swazz/)
@@ -37,7 +37,7 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 | [**`packages/container`**](packages/container) | [![Backend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/backend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Core Go Fuzzing Engine, Triage Workers, Classifiers |
 | [**`packages/web`**](packages/web) | [![Frontend Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/frontend-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | React Frontend, Interactive Dashboard, Settings UI |
 | [**`packages/edge`**](packages/edge) | [![Edge Coverage](https://raw.githubusercontent.com/SecH0us3/swazz/badges/edge-coverage.svg)](https://github.com/SecH0us3/swazz/actions) | Cloudflare Workers API Gateway, Auth, Database Migrations |
-| [**`tests/e2e`**](tests/e2e) | [![E2E Tests](https://img.shields.io/badge/playwright-44%20suites-brightgreen?logo=playwright)](tests/e2e) | End-to-End browser test suite across 8 parallel shards |
+| [**`tests/e2e`**](tests/e2e) | [![E2E Tests](https://img.shields.io/badge/playwright-43%20suites-brightgreen?logo=playwright)](tests/e2e) | End-to-End browser test suite across 8 parallel shards |
 
 ---
 
@@ -51,7 +51,7 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 - **🔐 Auth Pipelines**: Support for complex, multi-step authentication sequences (login -> cookie collection -> fuzzing).
 - **🛡️ Compliance & Taxonomy Mapping**: Automatically map all discovered vulnerabilities to both the **OWASP API Security Top 10 (2023)** and **OWASP Web Top 10 (2025)** standards, along with standard **CWE** identifiers, in reports and the Web Dashboard.
 - **🎯 Precision Control**: Define custom rules to ignore specific status codes or elevate them to errors/warnings.
-- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, or standalone **HTML** reports (now also accessible directly from the Web UI).
+- **📊 Professional Reporting**: Export findings in **SARIF** (for CI/CD integration), **JSON**, **JUnit XML**, **Markdown**, or standalone **HTML** reports (now also accessible directly from the Web UI).
 - **🔄 Multi-Scan Comparison**: Side-by-side analysis of scan runs to compare coverage metrics, HTTP status code distributions, and findings diffs (New, Fixed, and Common vulnerabilities).
 - **🛠 Interactive Wizard**: Fast setup with `swazz-engine wizard` — no manual JSON editing required.
 - 🌐 **Web Dashboard**: Real-time Heatmap, Request Inspector, Sidebar Endpoint Tree with **Included Only** filter toggle, and OWASP Compliance dashboard for deep-dive analysis.
@@ -79,7 +79,7 @@ For Kubernetes orchestration (Helm chart), please see the [Kubernetes Deployment
 ```bash
 docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
 # Run fuzzing directly (mount your config file using a volume):
-docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config /app/swazz.config.json
+docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> start --config /app/swazz.config.json
 ```
 
 If you use this repository's Compose setup, you can launch the complete dashboard, Cloudflare coordinator, and runner agent stack with a single command:
@@ -216,7 +216,8 @@ Swazz includes automated Web Application Firewall (WAF) detection powered by the
 ./swazz-engine start --config swazz.config.json --waf-patch cloudflare --waf-patch-output cf-rules.txt
 
 # Export mitigation rules for all 9 vendor dialects (AWS, Cloudflare, GCP, Azure, ModSecurity, Nginx, HAProxy, Caddy, K8s)
-./swazz-engine start --config swazz.config.json --waf-patch all --waf-patch-output patches/
+# --waf-patch-output is a file path; a matching .tf file is written alongside it when Terraform output is available
+./swazz-engine start --config swazz.config.json --waf-patch all --waf-patch-output patches.txt
 ```
 In the Web Dashboard, open the standalone **WAF Check** tab in the main results bar to run on-demand domain fingerprinting, test sensitive file protections, and copy virtual patches without running a full scan.
 
@@ -318,9 +319,10 @@ To suppress false positives and filter noisy findings, Swazz supports ignore rul
 ```
 
 *   **`rule_id`**: Matches the Swazz vulnerability type (e.g. `swazz/sql-error-leak`, `swazz/reflected-xss`, `swazz/status-500`).
-*   **`endpoint`**: Matches the request URL path (supports exact strings or wildcard `*` suffixes like `/api/admin/*`).
+*   **`endpoint`**: Matches the request URL path. Without a wildcard the match is exact (case-insensitive). `*` matches within a single path segment (`/api/admin/*` matches `/api/admin/users` but not `/api/admin/users/42`); use `**` to cross segments (`/api/admin/**`).
 *   **`method`**: Matches the HTTP request method (case-insensitive).
 *   **`payload`**: Matches the request body/parameters (supports regular expressions or substring matching).
+*   **`status`**: Matches the response status code — an exact code (`404`, or the number `404`) or a range (`"4xx"`, `"5xx"`).
 
 ---
 

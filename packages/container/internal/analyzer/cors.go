@@ -49,7 +49,7 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			Message:          "CORS wildcard: Access-Control-Allow-Origin is set to '*', which allows any origin to access the resource",
 			Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
 			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 			CWEIDs:           []string{"CWE-942"},
 		})
 		return findings
@@ -80,7 +80,7 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				Message:          fmt.Sprintf("CORS origin reflection: server reflected suspicious origin '%s' in Access-Control-Allow-Origin", acao),
 				Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
 				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-				OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+				OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 				CWEIDs:           []string{"CWE-942"},
 			})
 			return findings
@@ -95,7 +95,7 @@ func (a *CORSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			Message:          "CORS null origin: Access-Control-Allow-Origin is set to 'null', exploitable via sandboxed iframe",
 			Evidence:         fmt.Sprintf("Access-Control-Allow-Origin: %s", acao),
 			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 			CWEIDs:           []string{"CWE-942"},
 		})
 	}

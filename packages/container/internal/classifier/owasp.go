@@ -7,6 +7,8 @@ package classifier
 
 import (
 	"strings"
+
+	"swazz-engine/internal/swagger"
 )
 
 // OWASPCategories returns the list of OWASP Top 10 (2025) categories for a given Rule ID.
@@ -45,4 +47,30 @@ func OWASPCategories(ruleID string) []string {
 		}
 		return nil
 	}
+}
+
+// ResolveTaxonomy returns the OWASP Web (2025), OWASP API (2023) and CWE
+// identifiers to attach to an analyzer finding.
+//
+// Analyzers that already carry their own taxonomy (the 2026 core analyzers —
+// prototype pollution, NoSQL injection, SSRF, JWT, mass assignment, gRPC,
+// WebSocket, differential BOLA — all do) keep it: those mappings are more
+// precise than a rule-ID lookup and several of those rule IDs have no lookup
+// entry at all, so recomputing them unconditionally silently dropped the
+// compliance mapping from reports and the dashboard. Only empty fields fall
+// back to the rule-ID tables.
+func ResolveTaxonomy(f *swagger.AnalysisFinding, method, endpoint string) (owaspWeb, owaspAPI, cweIDs []string) {
+	owaspWeb = f.OWASPCategory
+	if len(owaspWeb) == 0 {
+		owaspWeb = OWASPCategories(f.RuleID)
+	}
+	owaspAPI = f.OWASPAPICategory
+	if len(owaspAPI) == 0 {
+		owaspAPI = OWASPAPICategories(f.RuleID, method, endpoint, f.Evidence)
+	}
+	cweIDs = f.CWEIDs
+	if len(cweIDs) == 0 {
+		cweIDs = CWEIdentifiers(f.RuleID, method, endpoint, f.Evidence)
+	}
+	return owaspWeb, owaspAPI, cweIDs
 }

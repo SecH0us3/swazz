@@ -63,7 +63,7 @@ func (a *NoSQLiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 				Message:          fmt.Sprintf("NoSQL / %s database error signature leaked in the response body.", sig.db),
 				Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 				OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
-				OWASPCategory:    []string{"A03:2025 Injection"},
+				OWASPCategory:    []string{"A05:2025 Injection"},
 				CWEIDs:           []string{"CWE-943"},
 			})
 			break

@@ -62,7 +62,7 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 			Message:          "JWT cryptographic verification error leaked in the response body.",
 			Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 			OWASPAPICategory: []string{"API2:2023 Broken Authentication"},
-			OWASPCategory:    []string{"A07:2025 Identification and Authentication Failures"},
+			OWASPCategory:    []string{"A07:2025 Authentication Failures"},
 			CWEIDs:           []string{"CWE-347", "CWE-287"},
 		})
 		return findings
@@ -76,7 +76,7 @@ func (a *JWTTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisF
 			Message:          "Server accepted an unsigned or alg:none JWT payload and returned authenticated resource data.",
 			Evidence:         string(input.ResponseBody),
 			OWASPAPICategory: []string{"API2:2023 Broken Authentication"},
-			OWASPCategory:    []string{"A07:2025 Identification and Authentication Failures"},
+			OWASPCategory:    []string{"A07:2025 Authentication Failures"},
 			CWEIDs:           []string{"CWE-347", "CWE-287"},
 		})
 	}

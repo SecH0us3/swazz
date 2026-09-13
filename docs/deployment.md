@@ -119,9 +119,10 @@ For rapid self-hosted environments:
    # CRITICAL: Define the exact domain hosting the UI
    ALLOWED_ORIGIN=https://swazz.yourdomain.com
 
-   # CRITICAL: Block scanning internal subnets
-   SWAZZ_ALLOW_PRIVATE_IPS=false
    ```
+   Private subnets are blocked by default; there is no environment variable that
+   widens this. Scanning internal ranges is opted into per scan via
+   `--allow-private-ips=true` or `security.allow_private_ips` in the scan config.
 3. **Build and Run**:
    ```bash
    docker compose -f compose.yml up -d --build
@@ -135,7 +136,7 @@ When deploying Swazz to production, ensure all of the following controls are str
 
 | Check | Control | Risk Addressed | Implementation Detail |
 | :--- | :--- | :--- | :--- |
-| 🛡️ | **Disable Private IP Fuzzing** | Server-Side Request Forgery (SSRF) | Set `SWAZZ_ALLOW_PRIVATE_IPS=false` or ensure `AllowLocalNetwork=false` in Go agent configurations. |
+| 🛡️ | **Disable Private IP Fuzzing** | Server-Side Request Forgery (SSRF) | Blocked by default. Keep `security.allow_private_ips` unset/false in scan configs, and never start the runner agent with `--dangerous-no-container` or `SWAZZ_DEV=1`, both of which lift the restriction. |
 | 🔑 | **Pin Docker Image Tags** | Supply Chain Compromise | In Dockerfiles and Compose configurations, use specific SHA-256 hashes instead of `latest` or mutable version tags. |
 | 🌐 | **Restrict CORS Headers** | Cross-Origin Data Leakage | Set `ALLOWED_ORIGIN` (compose) or `ALLOWED_ORIGINS` (Workers) to the exact URL of your frontend dashboard. Never use `*`. |
 | 🤖 | **Enable Turnstile CAPTCHA** | Brute-force & Bot registrations | Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` variables to enable Captcha verification during registration/login. |

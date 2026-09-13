@@ -8,6 +8,10 @@ package classifier
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestOWASPCategories(t *testing.T) {
@@ -51,4 +55,32 @@ func TestOWASPCategories(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveTaxonomyPrefersAnalyzerValues(t *testing.T) {
+	// swazz/prototype-pollution has no entry in the rule-ID lookup tables, so
+	// recomputing its taxonomy used to blank out the mapping the analyzer set.
+	af := swagger.AnalysisFinding{
+		RuleID:           "swazz/prototype-pollution",
+		OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
+		OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+		CWEIDs:           []string{"CWE-1321"},
+	}
+
+	web, api, cwe := ResolveTaxonomy(&af, "POST", "/api/users")
+
+	assert.Equal(t, []string{"A08:2025 Software or Data Integrity Failures"}, web)
+	assert.Equal(t, []string{"API3:2023 Broken Object Property Level Authorization"}, api)
+	assert.Equal(t, []string{"CWE-1321"}, cwe)
+}
+
+func TestResolveTaxonomyFallsBackToRuleTables(t *testing.T) {
+	af := swagger.AnalysisFinding{RuleID: "swazz/reflected-xss"}
+
+	web, api, cwe := ResolveTaxonomy(&af, "GET", "/search")
+
+	assert.Equal(t, OWASPCategories("swazz/reflected-xss"), web)
+	assert.Equal(t, OWASPAPICategories("swazz/reflected-xss", "GET", "/search", ""), api)
+	assert.Equal(t, CWEIdentifiers("swazz/reflected-xss", "GET", "/search", ""), cwe)
+	assert.NotEmpty(t, web)
 }

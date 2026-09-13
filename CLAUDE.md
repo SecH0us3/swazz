@@ -7,7 +7,7 @@ This file provides essential context for the developer CLI to understand the `sw
 
 ### Core Architecture
 The project is a hybrid repository using **npm workspaces** for the frontend and **Go modules** for the backend engine:
-- **`packages/container`**: The core Go engine. Contains the HTTP API server (for the web dashboard), the CLI runner (`swazz-engine start`), the Smart Payload Generator, and output formatters.
+- **`packages/container`**: The core Go engine. Contains the runner agent that serves the web dashboard over the coordinator WebSocket (`swazz-engine run-agent`), the CLI runner (`swazz-engine start`), the Smart Payload Generator, and output formatters.
 - **`packages/web`**: A React 19 dashboard. Features a real-time Endpoint × Status heatmap, request inspector, and configuration management.
 - **`packages/edge`**: Cloudflare integration (if applicable).
 
@@ -75,7 +75,7 @@ graph TD
 ## 🛠 Tech Stack
 - **Language**: Go (Backend), TypeScript/ESM (Frontend)
 - **Frontend**: React 19, Vite, Vanilla CSS (CSS Variables)
-- **Backend API**: Gin, standard `net/http`
+- **Backend API**: Cloudflare Workers + Hono (`packages/edge`); the Go engine uses the standard library `net/http` and `nhooyr.io/websocket`
 - **Testing**: `go test` (Backend), Vitest (Frontend if any)
 
 ---
@@ -84,7 +84,7 @@ graph TD
 
 ### Root Commands
 - `npm install`: Install frontend dependencies.
-- `npm run dev`: Starts the Go backend and Vite frontend concurrently.
+- `npm run dev`: Starts the edge coordinator (Wrangler) and the Vite frontend concurrently. It does **not** start the Go engine.
 - `bash scripts/start-local-dev.sh`: **Full local stack** — edge coordinator (8787), web dashboard (5173), the vulnerable HTTP (8788), gRPC (50051) and WebSocket (50052) demo targets, and the Go runner agent connected to the coordinator. Use this rather than `npm run dev` when a change needs the runner or a demo target.
 - `bash scripts/stop-local-dev.sh`: Stops everything the above starts. Prefer it over `pkill`: `go run` execs a compiled temporary binary, so killing by process name leaves the gRPC and WebSocket demos holding their ports.
 - `npm run build`: Build the web dashboard.
@@ -92,7 +92,7 @@ graph TD
 - `bash scripts/setup-dev.sh`: **One-time setup.** Symlinks the `swazz-toolkit` plugin.
 
 ### Backend Commands (in `packages/container`)
-- `go run main.go serve`: Start the HTTP API server.
+- `go run main.go run-agent --coordinator <ws-url> --token <token>`: Join the coordinator as a runner agent.
 - `go run main.go start --config <path>`: Run the fuzzer in CLI mode.
 - `go test ./...`: Run all backend tests.
 
@@ -134,7 +134,7 @@ graph TD
 - `packages/container/main.go`: Entrypoint for both the server and CLI.
 - `packages/container/internal/generator/`: Fuzz payload generation (`generator.go`) and static payloads (`payloads/`).
 - `packages/container/internal/runner/`: The concurrent fuzz execution engine.
-- `packages/container/api/`: Gin HTTP handlers for the web UI.
+- `packages/container/internal/agent/`: Runner agent — coordinator WebSocket client and job dispatcher.
 - `packages/web/src/components/`: React UI components (Dashboard, Heatmap, Inspector).
 
 ## 📊 Grouped Errors & Finding Categories

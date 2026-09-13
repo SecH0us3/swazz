@@ -99,7 +99,7 @@ func (a *XSSAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				Message:          fmt.Sprintf("Reflected XSS payload '%s' detected unescaped in the response body.", payloadStr),
 				Evidence:         fmt.Sprintf("Found payload: %s", payloadStr),
 				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-				OWASPCategory:    []string{"A03:2025 Injection"},
+				OWASPCategory:    []string{"A05:2025 Injection"},
 				CWEIDs:           []string{"CWE-79"},
 			})
 		}

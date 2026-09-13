@@ -53,7 +53,7 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 					Message:          fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", ctx.RawExpr, ctx.Expected),
 					Evidence:         fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, ctx.Expected),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-					OWASPCategory:    []string{"A03:2025 Injection"},
+					OWASPCategory:    []string{"A05:2025 Injection"},
 					CWEIDs:           []string{"CWE-1336"},
 				})
 			}
@@ -72,7 +72,7 @@ func (a *SSTIAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 						Message:          fmt.Sprintf("SSTI math expression '%s' evaluated to '%s' in the response without raw expression reflection.", rawExpr, evalVal),
 						Evidence:         fmt.Sprintf("Payload: %s | Evaluated: %s", payloadStr, evalVal),
 						OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-						OWASPCategory:    []string{"A03:2025 Injection"},
+						OWASPCategory:    []string{"A05:2025 Injection"},
 						CWEIDs:           []string{"CWE-1336"},
 					})
 					break

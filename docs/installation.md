@@ -99,12 +99,18 @@ If you just want to run the core Go engine from the command line without the web
    go run main.go start --config /path/to/config.json
    ```
 
-### Server Mode (Backend API Only)
+### Runner Agent Mode (Web Dashboard Backend)
 
-To spin up just the API backend for the web dashboard:
+The web dashboard is served by the Cloudflare edge coordinator; the Go engine
+joins it as a runner agent over WebSocket rather than exposing its own API
+server:
 ```bash
 cd packages/container
-go run main.go serve
+go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --token <runner-token>
 ```
+
+To bring up the whole local stack (coordinator, dashboard, demo targets and a
+connected runner agent) in one step, run `bash scripts/start-local-dev.sh` from
+the repository root instead.
 
 [← Back to Home](./index.md) | [Next: Usage & Configuration →](./usage.md)

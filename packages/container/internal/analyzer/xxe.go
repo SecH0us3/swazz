@@ -59,7 +59,7 @@ func (a *XXEAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				Message:          fmt.Sprintf("XXE leak detected. File signature '%s' found in response body when XML/XXE payload was sent.", string(sig)),
 				Evidence:         fmt.Sprintf("Found leaked signature: %s", string(sig)),
 				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-				OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+				OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 				CWEIDs:           []string{"CWE-611"},
 			})
 			break

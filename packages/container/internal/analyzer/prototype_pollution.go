@@ -66,7 +66,7 @@ func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.Ana
 			Message:          "Prototype Pollution runtime error leaked in the response body.",
 			Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 			OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
-			OWASPCategory:    []string{"A08:2025 Software and Data Integrity Failures"},
+			OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
 			CWEIDs:           []string{"CWE-1321"},
 		})
 		return findings
@@ -95,7 +95,7 @@ func (a *PrototypePollutionAnalyzer) Analyze(input *AnalysisInput) []swagger.Ana
 				Message:          "Injected prototype property ('polluted') was reflected in the JSON response object, indicating object prototype pollution.",
 				Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 				OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
-				OWASPCategory:    []string{"A08:2025 Software and Data Integrity Failures"},
+				OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
 				CWEIDs:           []string{"CWE-1321"},
 			})
 		}

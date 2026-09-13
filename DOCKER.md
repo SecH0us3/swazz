@@ -28,11 +28,11 @@ This Docker Compose setup starts three containers:
 If you prefer to run the runner agent in a standalone container or on your host, you can point it to the local compose coordinator:
 
 ```bash
-# Pull the latest CLI / Runner container
-docker pull ghcr.io/sech0us3/swazz-cli:latest
+# Pull the CLI / Runner container, pinned to an immutable commit SHA tag
+docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
 
 # Run the fuzzer agent on the host network, connecting to the compose coordinator:
-docker run --rm -it ghcr.io/sech0us3/swazz-cli:latest run-agent \
+docker run --rm -it ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> run-agent \
   --coordinator ws://localhost:8081/api/runners/connect \
   --token swazz_live_citoken1234567890 \
   --dangerous-no-container
@@ -46,8 +46,13 @@ docker run --rm -it ghcr.io/sech0us3/swazz-cli:latest run-agent \
 - **Never**: `ALLOWED_ORIGIN=*` ❌ (allows any domain to make requests)
 
 ### Private IP Fuzzing
-- **Development**: `SWAZZ_ALLOW_PRIVATE_IPS=true` ✅ (safe, isolated local network)
-- **Production**: `SWAZZ_ALLOW_PRIVATE_IPS=false` ✅ (prevents fuzzer scans from reaching internal cloud IPs)
+Private ranges are blocked by default, and the setting is per scan rather than
+per container:
+- **Development**: `swazz-engine start --allow-private-ips=true`, or `"security": {"allow_private_ips": true}` in `swazz.config.json` ✅ (safe, isolated local network)
+- **Production**: leave it unset ✅ (prevents fuzzer scans from reaching internal cloud IPs)
+
+The `runner` compose service passes `--dangerous-no-container`, which lifts the
+restriction for the local demo stack — drop that flag for anything production-like.
 
 ### Base Images
 Docker images are configured for supply-chain security:
@@ -58,6 +63,6 @@ Docker images are configured for supply-chain security:
 ## Related Documentation
 
 - [Swazz README](README.md)
-- [Edge Coordinator Setup](packages/edge/README.md)
+- [Deployment Guidelines](docs/deployment.md)
 - [Runner Agent Setup](packages/container/AGENT.md)
-- [Frontend Setup](packages/web/README.md)
+- [Environment Variables](docs/env_variables.md)
