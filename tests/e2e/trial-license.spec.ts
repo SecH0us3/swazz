@@ -3,7 +3,7 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { registerAndLogin , TIMEOUTS} from './helpers';
 
 async function navigateToLicenseSettings(page: Page) {
@@ -47,15 +47,96 @@ test.describe('Trial License Self-Generation E2E Test', () => {
     // Verify success and active state
     await expect(page.locator('.two-factor-success-alert')).toContainText('14-day free trial license activated successfully', { timeout: TIMEOUTS.DEFAULT });
     await expect(page.locator('.license-status-badge.active')).toContainText('Trial License Active');
-    await expect(page.locator('.trial-days-badge')).toContainText('remaining');
+    await expect(page.locator('.license-days-badge')).toContainText('remaining');
     await expect(page.locator('.license-info-value', { hasText: 'Trial' })).toBeVisible();
 
     // Token copy box is displayed
-    const copyBtn = page.getByRole('button', { name: 'Copy Key' });
+    const copyBtn = page.getByRole('button', { name: 'Copy' });
     await expect(copyBtn).toBeVisible();
     await expect(page.locator('.trial-token-content')).toBeVisible();
 
     // Claim button is now gone
     await expect(page.getByRole('button', { name: 'Claim 14-Day Free Trial' })).not.toBeVisible();
   });
+
+  test('commercial license user who previously claimed trial does not show Trial License Active', async ({ page }) => {
+    await registerAndLogin(page, 'u', false);
+
+    // The endpoint is /api/user/trial-status, not /api/user/license/trial-status —
+    // the wrong glob never matched, so this test ran against the real (claimed: false)
+    // status and never covered the "previously claimed a trial" case it is named for.
+    await page.route('**/api/user/trial-status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ claimed: true, can_claim: false }),
+      });
+    });
+
+    const expiresAt = new Date(Date.now() + 86400000 * 90).toISOString();
+    await page.route('**/api/user/license', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'active',
+            license: {
+              company: 'Acme Enterprise',
+              kind: 'commercial',
+              expires_at: expiresAt,
+              features: ['*'],
+              concurrency: 50,
+              key_fingerprint: 'abcdef0123456789',
+            },
+          }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await navigateToLicenseSettings(page);
+
+    await expect(page.locator('.license-status-badge.active')).toContainText('Enterprise License Active');
+    await expect(page.locator('.license-status-badge')).not.toContainText('Trial License Active');
+    await expect(page.getByRole('button', { name: 'Claim 14-Day Free Trial' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Renew 14-Day Trial' })).not.toBeVisible();
+  });
+
+  test('expired license displays License Expired badge and Contact Sales primary button', async ({ page }) => {
+    await registerAndLogin(page, 'u', false);
+
+    const expiredDate = new Date(Date.now() - 86400000 * 10).toISOString();
+    await page.route('**/api/user/license', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'expired',
+            license: {
+              company: 'Expired Corp',
+              kind: 'commercial',
+              expires_at: expiredDate,
+              features: ['*'],
+              concurrency: 10,
+              key_fingerprint: '1234567890abcdef',
+            },
+          }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await navigateToLicenseSettings(page);
+
+    await expect(page.locator('.license-status-badge')).toContainText('License Expired');
+    await expect(page.locator('.license-info-value', { hasText: 'Expired Corp' })).toBeVisible();
+    const contactSalesBtn = page.getByRole('button', { name: '✉ Contact Sales' });
+    await expect(contactSalesBtn).toBeVisible();
+    await expect(contactSalesBtn).toHaveClass(/btn-primary/);
+  });
 });
+

@@ -219,7 +219,7 @@ func (d *AgentDispatcher) handleJobDispatch(ctx context.Context, wsMsg WSMessage
 		if licErr != nil {
 			logWarn("[%s] License verification failed for job: %v", dispatch.RunID, licErr)
 		} else if jobLic != nil {
-			logInfo("[%s] Job license active: %s (expires %s)", dispatch.RunID, jobLic.Company, jobLic.ExpiresAt.Format("2006-01-02"))
+			logInfo("[%s] %s license active: %s (expires %s)", dispatch.RunID, jobLic.TierLabel(), jobLic.Company, jobLic.ExpiresAt.Format("2006-01-02"))
 			if jobLic.IsExpiringSoon(3) {
 				logWarn("[%s] ⚠️  Job license expires soon: %d day(s) remaining (expires %s)", dispatch.RunID, jobLic.DaysRemaining(), jobLic.ExpiresAt.Format("2006-01-02"))
 			}

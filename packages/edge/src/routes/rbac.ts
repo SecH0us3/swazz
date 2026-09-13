@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { requirePermission } from '../middleware/rbac';
 import { requireFeature } from '../middleware/license';
 import { auditLog } from '../middleware/auditLog';
@@ -12,9 +12,10 @@ import { getUserIdFromRequest } from '../utils/auth';
 import { IRbacRepository, RbacRepository } from '../repositories/rbac';
 import { IRbacService, RbacService } from '../services/rbac';
 import { FEATURE_ENTERPRISE } from '@swazz/shared';
+import { errorStatus } from '../utils/http';
 
 export function registerRbacRoutes(
-  app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
+  app: Hono<AppEnv>,
   rbacServicesFactory: (env: Env) => IRbacService = (env) => new RbacService(env, new RbacRepository(env))
 ) {
   
@@ -44,9 +45,8 @@ export function registerRbacRoutes(
       const result = await services.createCustomRole(projectId, userId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -72,9 +72,8 @@ export function registerRbacRoutes(
       const result = await services.updateMemberRoles(projectId, userId, memberId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -88,9 +87,8 @@ export function registerRbacRoutes(
       const result = await services.removeMember(projectId, userId, memberId);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -105,9 +103,8 @@ export function registerRbacRoutes(
       const result = await services.updateCustomRole(projectId, userId, roleId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -121,9 +118,8 @@ export function registerRbacRoutes(
       const result = await services.deleteCustomRole(projectId, userId, roleId);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -135,9 +131,8 @@ export function registerRbacRoutes(
       const result = await services.getInvitations(userId);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -151,9 +146,8 @@ export function registerRbacRoutes(
       const result = await services.createInvitation(projectId, userId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -166,9 +160,8 @@ export function registerRbacRoutes(
       const result = await services.acceptInvitation(userId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -181,9 +174,8 @@ export function registerRbacRoutes(
       const result = await services.declineInvitation(userId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 }

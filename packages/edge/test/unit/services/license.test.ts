@@ -192,7 +192,7 @@ describe('LicenseService', () => {
     const result = await service.deactivate('user-1');
     expect(result.status).toBe('ok');
     expect(authRepo.setLicenseKey).toHaveBeenCalledWith('user-1', null);
-    expect(kv.delete).toHaveBeenCalledWith('license:user-1');
+    expect(kv.delete).toHaveBeenCalledWith('license:v2:user-1');
   });
 
   describe('Trial License', () => {
@@ -272,7 +272,7 @@ describe('LicenseService', () => {
     });
 
     it('claimTrial falls back to default dev keypair when pubkey is default and privkey is undefined', async () => {
-      const defaultService = new LicenseService({}, authRepo);
+      const defaultService = new LicenseService({} as any, authRepo);
       const res = await defaultService.claimTrial('user-1', 'alex');
       expect(res.status).toBe('ok');
       expect(res.license.company).toBe('alex (14-Day Trial)');
@@ -338,4 +338,91 @@ describe('LicenseService', () => {
       await expect(prodService.verifyToken(devToken)).rejects.toThrow('invalid signature');
     });
   });
+
+  describe('License Kind & Fingerprint (Block A & E)', () => {
+    it('sets kind to commercial for explicit commercial token', async () => {
+      const token = await signLicenseToken(keyPair.privKeyHex, {
+        company: 'Commercial Co',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+        kind: 'commercial',
+      });
+
+      const lic = await makeService().verifyToken(token);
+      expect(lic.kind).toBe('commercial');
+      expect(lic.key_fingerprint).toBeDefined();
+      expect(lic.key_fingerprint).toHaveLength(16);
+      expect(lic.key_fingerprint).not.toBe(token);
+    });
+
+    it('sets kind to trial for explicit trial token', async () => {
+      const token = await signLicenseToken(keyPair.privKeyHex, {
+        company: 'Some Org',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+        kind: 'trial',
+      });
+
+      const lic = await makeService().verifyToken(token);
+      expect(lic.kind).toBe('trial');
+    });
+
+    it('uses legacy company fallback when kind is omitted', async () => {
+      const trialToken = await signLicenseToken(keyPair.privKeyHex, {
+        company: 'Alice (14-Day Trial)',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+      });
+      const licTrial = await makeService().verifyToken(trialToken);
+      expect(licTrial.kind).toBe('trial');
+
+      const commToken = await signLicenseToken(keyPair.privKeyHex, {
+        company: 'Example Corp',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        features: ['*'],
+      });
+      const licComm = await makeService().verifyToken(commToken);
+      expect(licComm.kind).toBe('commercial');
+    });
+
+    it('does not read cached license under legacy cache key (A8)', async () => {
+      const kv = {
+        get: vi.fn((key: string) => {
+          if (key === 'license:user-1') {
+            return JSON.stringify({ company: 'Old Cached', kind: undefined });
+          }
+          return null;
+        }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      };
+      authRepo.getLicenseKey.mockResolvedValue(null);
+      const service = new LicenseService({ ...env, SESSION_CACHE: kv }, authRepo);
+
+      const res = await service.getStatus('user-1');
+      expect(res.status).toBe('community');
+      expect(kv.get).toHaveBeenCalledWith('license:v2:user-1');
+    });
+
+    it('getStatus returns expired status with license data for expired token with valid signature (E1/E10)', async () => {
+      const token = await signLicenseToken(keyPair.privKeyHex, {
+        company: 'Expired Corp',
+        expires_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        features: ['sso'],
+        kind: 'commercial',
+      });
+      authRepo.getLicenseKey.mockResolvedValue(token);
+
+      const res = await makeService().getStatus('user-1');
+      expect(res.status).toBe('expired');
+      expect(res.license).not.toBeNull();
+      expect(res.license?.company).toBe('Expired Corp');
+      expect(res.license?.kind).toBe('commercial');
+
+      // hasFeature must return false for expired license
+      const hasFeat = await makeService().hasFeature('user-1', 'sso');
+      expect(hasFeat).toBe(false);
+    });
+  });
 });
+

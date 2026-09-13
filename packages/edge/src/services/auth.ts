@@ -3,10 +3,11 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { ulid } from 'ulidx';
 import { sign, verify } from 'hono/jwt';
 import { Context } from 'hono';
+import type { IncomingRequestCfProperties } from '@cloudflare/workers-types';
 import { IAuthRepository, LoginHistoryMeta } from '../repositories/auth';
 import {
   hashPassword, verifyPassword, hashApiKey, getClientIp,
@@ -19,7 +20,18 @@ import {
   verifyRegistrationResponse,
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
+  type AuthenticatorTransportFuture,
 } from '@simplewebauthn/server';
+
+const VALID_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
+  'ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'
+]);
+
+function parseTransports(raw?: string | null): AuthenticatorTransportFuture[] | undefined {
+  if (!raw) return undefined;
+  const list = raw.split(',').map(s => s.trim()).filter((s): s is AuthenticatorTransportFuture => VALID_TRANSPORTS.has(s as AuthenticatorTransportFuture));
+  return list.length > 0 ? list : undefined;
+}
 
 function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array) {
   let binary = '';
@@ -42,38 +54,38 @@ function base64ToArrayBuffer(base64: string) {
 }
 
 export interface IAuthService {
-  register(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<{ Bindings: Env }>): Promise<any>;
+  register(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
   registerGuestStep1(clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined): Promise<any>;
-  registerGuest(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<{ Bindings: Env }>): Promise<any>;
+  registerGuest(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
   getMe(userId: string): Promise<any>;
   updatePublicKey(userId: string, publicKey: string | undefined | null): Promise<any>;
-  regenerateApiKey(userId: string, c: Context<{ Bindings: Env }>): Promise<any>;
+  regenerateApiKey(userId: string, c: Context<AppEnv>): Promise<any>;
   loginStep1(body: any, clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined): Promise<any>;
-  login(body: any, clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<{ Bindings: Env }>): Promise<any>;
-  deleteUser(userId: string, c: Context<{ Bindings: Env }>): Promise<any>;
+  login(body: any, clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
+  deleteUser(userId: string, c: Context<AppEnv>): Promise<any>;
   cancelDeleteUser(userId: string): Promise<any>;
   setup2FA(userId: string, body: any): Promise<any>;
   verify2FA(userId: string, body: any): Promise<any>;
   disable2FA(userId: string, body: any): Promise<any>;
-  generatePasskeyRegistrationOptions(userId: string, rpID: string, c: Context<{ Bindings: Env }>): Promise<any>;
-  verifyPasskeyRegistration(userId: string, body: any, expectedOrigin: string, rpID: string, c: Context<{ Bindings: Env }>): Promise<any>;
-  generatePasskeyLoginOptions(body: any, clientIp: string, rpID: string, c: Context<{ Bindings: Env }>): Promise<any>;
-  verifyPasskeyLogin(body: any, clientIp: string, expectedOrigin: string, rpID: string, c: Context<{ Bindings: Env }>): Promise<any>;
+  generatePasskeyRegistrationOptions(userId: string, rpID: string, c: Context<AppEnv>): Promise<any>;
+  verifyPasskeyRegistration(userId: string, body: any, expectedOrigin: string, rpID: string, c: Context<AppEnv>): Promise<any>;
+  generatePasskeyLoginOptions(body: any, clientIp: string, rpID: string, c: Context<AppEnv>): Promise<any>;
+  verifyPasskeyLogin(body: any, clientIp: string, expectedOrigin: string, rpID: string, c: Context<AppEnv>): Promise<any>;
   getPasskeys(userId: string): Promise<any>;
   deletePasskey(userId: string, id: string): Promise<any>;
   updateAdminUserPlan(adminSecret: string, providedSecret: string | undefined, body: any): Promise<any>;
   handleGithubLogin(userId: string | null, redirectUri: string): Promise<string>;
-  handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<{ Bindings: Env }>): Promise<{ redirectUrl: string }>;
+  handleGithubCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>): Promise<{ redirectUrl: string }>;
   handleGitlabLogin(userId: string | null, redirectUri: string): Promise<string>;
-  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<{ Bindings: Env }>): Promise<{ redirectUrl: string }>;
-  exchangeOauthToken(body: any, c: Context<{ Bindings: Env }>): Promise<any>;
+  handleGitlabCallback(code: string, state: string, frontendUrl: string, c: Context<AppEnv>): Promise<{ redirectUrl: string }>;
+  exchangeOauthToken(body: any, c: Context<AppEnv>): Promise<any>;
 }
 
 export class AuthService implements IAuthService {
   constructor(private env: Env, private authRepo: IAuthRepository) {}
 
-  private extractLoginMeta(c: Context<{ Bindings: Env }>): LoginHistoryMeta {
-    const cf = (c.req.raw as any).cf;
+  private extractLoginMeta(c: Context<AppEnv>): LoginHistoryMeta {
+    const cf = (c.req.raw as Request & { cf?: IncomingRequestCfProperties }).cf;
     return {
       ipAddress: getClientIp(c),
       userAgent: c.req.header('User-Agent') || null,
@@ -85,7 +97,7 @@ export class AuthService implements IAuthService {
     };
   }
 
-  async register(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<{ Bindings: Env }>): Promise<any> {
+  async register(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any> {
     const username = body.username.trim();
     const password = body.password;
     const email = typeof body.email === 'string' ? body.email.trim() : null;
@@ -195,7 +207,7 @@ export class AuthService implements IAuthService {
     return { status: 'ok', token, challenge, difficulty };
   }
 
-  async registerGuest(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<{ Bindings: Env }>): Promise<any> {
+  async registerGuest(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any> {
     try {
       this.authRepo.cleanupExpiredGuests().catch(() => {});
     } catch {}
@@ -326,7 +338,7 @@ export class AuthService implements IAuthService {
     return { status: 'ok', token, challenge, difficulty };
   }
 
-  async login(body: any, clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<{ Bindings: Env }>): Promise<any> {
+  async login(body: any, clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any> {
     const startTime = Date.now();
     const enforceUniformDelay = async (start: number) => {
       const elapsed = Date.now() - start;
@@ -435,14 +447,14 @@ export class AuthService implements IAuthService {
     return { status: 'ok', token: jwtToken };
   }
 
-  async deleteUser(userId: string, c: Context<{ Bindings: Env }>): Promise<any> {
+  async deleteUser(userId: string, c: Context<AppEnv>): Promise<any> {
     await this.authRepo.scheduleUserDeletion(userId);
     deletionCache.delete(userId);
 
     try {
       const doId = this.env.COORDINATOR_DO.idFromName('global-coordinator');
       const stub = this.env.COORDINATOR_DO.get(doId);
-      await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, { method: 'POST' }) as any);
+      await stub.fetch(new Request(`http://do/revoke-user?userId=${userId}`, { method: 'POST' }));
     } catch {}
 
     return { status: 'deletion_scheduled', eta_days: 7 };
@@ -532,7 +544,7 @@ export class AuthService implements IAuthService {
     const excludeCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: [] }));
 
     const options = await generateRegistrationOptions({
-      rpName: 'Swazz', rpID, userID: userIDBytes as any, userName: user.username, userDisplayName: user.username,
+      rpName: 'Swazz', rpID, userID: userIDBytes.slice(), userName: user.username, userDisplayName: user.username,
       excludeCredentials, authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred', authenticatorAttachment: 'platform' }
     });
 
@@ -567,7 +579,7 @@ export class AuthService implements IAuthService {
     }
   }
 
-  async generatePasskeyLoginOptions(body: any, clientIp: string, rpID: string, c: Context<{ Bindings: Env }>): Promise<any> {
+  async generatePasskeyLoginOptions(body: any, clientIp: string, rpID: string, c: Context<AppEnv>): Promise<any> {
     const ipRateLimit = await this.authRepo.checkIpRateLimit(`ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) throw new Error('Too many requests. Please try again later.|429');
 
@@ -594,7 +606,7 @@ export class AuthService implements IAuthService {
       }
 
       userId = user.id;
-      allowCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: pk.transports ? (pk.transports.split(',')) as any : undefined }));
+      allowCredentials = passkeys.map(pk => ({ id: pk.credential_id, type: 'public-key' as const, transports: parseTransports(pk.transports) }));
     }
 
     const options = await generateAuthenticationOptions({ rpID, allowCredentials, userVerification: 'preferred' });
@@ -608,7 +620,7 @@ export class AuthService implements IAuthService {
     return options;
   }
 
-  async verifyPasskeyLogin(body: any, clientIp: string, expectedOrigin: string, rpID: string, c: Context<{ Bindings: Env }>): Promise<any> {
+  async verifyPasskeyLogin(body: any, clientIp: string, expectedOrigin: string, rpID: string, c: Context<AppEnv>): Promise<any> {
     const ipRateLimit = await this.authRepo.checkIpRateLimit(`ip:${clientIp}`, 30, 60);
     if (ipRateLimit.limited) throw new Error('Too many requests. Please try again later.|429');
 
@@ -643,7 +655,7 @@ export class AuthService implements IAuthService {
     try {
       const verification = await verifyAuthenticationResponse({
         response: body, expectedChallenge, expectedOrigin, expectedRPID: rpID,
-        credential: { id: credential_id, publicKey: base64ToArrayBuffer(pk.public_key), counter: pk.counter, transports: pk.transports ? pk.transports.split(',') as any : undefined }
+        credential: { id: credential_id, publicKey: base64ToArrayBuffer(pk.public_key), counter: pk.counter, transports: parseTransports(pk.transports) }
       });
 
       if (verification.verified && verification.authenticationInfo) {

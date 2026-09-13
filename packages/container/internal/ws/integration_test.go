@@ -127,7 +127,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func startVulnerableDemoServer(t *testing.T) (string, func()) {
-	server := httptest.NewServer(http.HandlerFunc(wsHandler))
+	// Routed through a mux rather than a bare handler on purpose. A bare
+	// http.HandlerFunc answers on every path, which hid a URL-building bug: the
+	// synthesizer put the whole ws:// URL in Endpoint.Path, the executor appended
+	// that to base_url, and the target became ws://host/ws/ws://host/ws. This test
+	// stayed green while the real demo, which registers only "/ws", returned 404 for
+	// every request. Keep the mux so that class of bug fails here.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", wsHandler)
+	server := httptest.NewServer(mux)
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
 
 	cleanup := func() {
@@ -149,11 +157,14 @@ func TestWSIntegration_EndToEnd(t *testing.T) {
 
 	ep := protoRes.Endpoints[0]
 	assert.Equal(t, "WS", ep.Method)
-	assert.Equal(t, wsURL, ep.Path)
+	// Origin and path are kept apart, the way ParseAsyncAPISpec does it, so the
+	// executor can join base_url and path without duplicating the origin.
+	assert.Equal(t, "/ws", ep.Path)
+	assert.Equal(t, strings.TrimSuffix(wsURL, "/ws"), protoRes.BasePath)
 
 	// 2. Configure full Swazz Fuzzing Runner with RANDOM, BOUNDARY, MALICIOUS profiles
 	cfg := &swagger.Config{
-		BaseURL:   wsURL,
+		BaseURL:   protoRes.BasePath,
 		Endpoints: protoRes.Endpoints,
 		Security: swagger.SecurityConfig{
 			AllowPrivateIPs: true,

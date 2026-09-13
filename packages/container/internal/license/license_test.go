@@ -289,4 +289,172 @@ func TestIssueLicenseCLI_E2E(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, string(output), "Error: -company flag is required")
 	})
+
+	t.Run("CLI script with -kind flag and validation", func(t *testing.T) {
+		// Valid commercial kind
+		cmdComm := exec.Command("go", "run", scriptPath,
+			"-key", pemPath,
+			"-company", "CommercialCo",
+			"-kind", "commercial",
+		)
+		outComm, err := cmdComm.CombinedOutput()
+		require.NoError(t, err, "CLI execution failed: %s", string(outComm))
+		assert.Contains(t, string(outComm), "Kind:              commercial")
+
+		// Valid trial kind
+		cmdTrial := exec.Command("go", "run", scriptPath,
+			"-key", pemPath,
+			"-company", "TrialCo",
+			"-kind", "trial",
+		)
+		outTrial, err := cmdTrial.CombinedOutput()
+		require.NoError(t, err, "CLI execution failed: %s", string(outTrial))
+		assert.Contains(t, string(outTrial), "Kind:              trial")
+
+		// Invalid kind rejected
+		cmdInvalid := exec.Command("go", "run", scriptPath,
+			"-key", pemPath,
+			"-company", "InvalidCo",
+			"-kind", "invalid_kind",
+		)
+		outInvalid, err := cmdInvalid.CombinedOutput()
+		assert.Error(t, err)
+		assert.Contains(t, string(outInvalid), "Error: -kind must be either 'commercial' or 'trial'")
+	})
+}
+
+func TestIsTrial(t *testing.T) {
+	tests := []struct {
+		name     string
+		lic      *License
+		expected bool
+	}{
+		{
+			name:     "nil license",
+			lic:      nil,
+			expected: false,
+		},
+		{
+			name:     "empty license",
+			lic:      &License{},
+			expected: false,
+		},
+		{
+			name: "explicit trial kind",
+			lic: &License{
+				Company: "Normal Company",
+				Kind:    KindTrial,
+			},
+			expected: true,
+		},
+		{
+			name: "explicit commercial kind with trial-like company name",
+			lic: &License{
+				Company: "Acme (14-Day Trial)",
+				Kind:    KindCommercial,
+			},
+			expected: false,
+		},
+		{
+			name: "explicit commercial kind with Swazz Trial User company name",
+			lic: &License{
+				Company: "Swazz Trial User",
+				Kind:    KindCommercial,
+			},
+			expected: false,
+		},
+		{
+			name: "legacy fallback with (14-Day Trial) suffix",
+			lic: &License{
+				Company: "Acme Inc (14-Day Trial)",
+			},
+			expected: true,
+		},
+		{
+			name: "legacy fallback with exact Swazz Trial User",
+			lic: &License{
+				Company: "Swazz Trial User",
+			},
+			expected: true,
+		},
+		{
+			name: "standard commercial company without kind",
+			lic: &License{
+				Company: "Example Corp",
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.lic.IsTrial())
+		})
+	}
+}
+
+func TestTierLabel(t *testing.T) {
+	tests := []struct {
+		name     string
+		lic      *License
+		expected string
+	}{
+		{
+			name:     "nil license",
+			lic:      nil,
+			expected: "Commercial",
+		},
+		{
+			name: "trial license",
+			lic: &License{
+				Kind: KindTrial,
+			},
+			expected: "Trial",
+		},
+		{
+			name: "legacy trial license",
+			lic: &License{
+				Company: "Swazz Trial User",
+			},
+			expected: "Trial",
+		},
+		{
+			name: "enterprise with wildcard feature",
+			lic: &License{
+				Kind:     KindCommercial,
+				Features: []string{"*"},
+			},
+			expected: "Enterprise",
+		},
+		{
+			name: "enterprise with all feature",
+			lic: &License{
+				Kind:     KindCommercial,
+				Features: []string{"all"},
+			},
+			expected: "Enterprise",
+		},
+		{
+			name: "enterprise with explicit enterprise feature",
+			lic: &License{
+				Kind:     KindCommercial,
+				Features: []string{"sso", "enterprise"},
+			},
+			expected: "Enterprise",
+		},
+		{
+			name: "commercial license with regular features",
+			lic: &License{
+				Kind:     KindCommercial,
+				Features: []string{"sso", "rbac"},
+			},
+			expected: "Commercial",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.lic.TierLabel())
+		})
+	}
 }

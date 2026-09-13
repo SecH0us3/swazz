@@ -8,6 +8,7 @@ import { useConfig } from '../../hooks/useConfig.js';
 import { useToast } from '../../hooks/useToast.js';
 import { loadSwaggerUrl, parseRawSpec, detectMcpServer, ParsingError } from '../../services/swaggerService.js';
 import { useAppStore } from '../../store/appStore.js';
+import { normalizeSpecUrl } from '../../utils/url.js';
 
 export function ApiSpecsTab() {
     const { config, updateConfig } = useConfig();
@@ -50,17 +51,9 @@ export function ApiSpecsTab() {
         });
     };
 
-    const normalizeUrl = (url: string) => {
-        let cleanUrl = url.trim();
-        if (!cleanUrl) return '';
-        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
-            cleanUrl = `https://${cleanUrl}`;
-        }
-        return cleanUrl;
-    };
 
     const addUrl = async () => {
-        const trimmed = normalizeUrl(urlInput);
+        const trimmed = normalizeSpecUrl(urlInput);
         if (!trimmed) return;
 
         const newUrls = [...swaggerUrls, trimmed];

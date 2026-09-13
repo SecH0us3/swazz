@@ -12,6 +12,14 @@ import { ulid } from 'ulidx';
 import { hashPassword, hashApiKey, hashUsername } from '../utils/auth';
 import { AuthRepository } from '../repositories/auth';
 
+export interface ProjectMemberAccountResult {
+  status: string;
+  id: string;
+  username: string;
+  password?: string;
+  api_key?: string;
+}
+
 export interface IProjectService {
   getProjects(userId: string | null, isAuthEnabled: boolean): Promise<{ projects: any[] }>;
   createProject(userId: string | null, isAuthEnabled: boolean, body: any): Promise<{ id: string; status: string }>;
@@ -28,7 +36,7 @@ export interface IProjectService {
   updateProjectWebhook(projectId: string, webhookId: string, body: any): Promise<any>;
   deleteProjectWebhook(projectId: string, webhookId: string): Promise<any>;
   testProjectWebhook(projectId: string, webhookId: string): Promise<any>;
-  createProjectMemberAccount(projectId: string, body: any): Promise<any>;
+  createProjectMemberAccount(projectId: string, body: any): Promise<ProjectMemberAccountResult>;
 }
 
 export class ProjectService implements IProjectService {
@@ -321,7 +329,7 @@ export class ProjectService implements IProjectService {
     }
   }
 
-  async createProjectMemberAccount(projectId: string, body: any) {
+  async createProjectMemberAccount(projectId: string, body: any): Promise<ProjectMemberAccountResult> {
     if (!body || typeof body !== 'object') {
       throw new Error('Invalid request body|400');
     }

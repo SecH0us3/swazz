@@ -165,8 +165,15 @@ test.describe('MCP and API Key Hashing E2E Tests', () => {
     await expect(mcpCrashCard).toHaveClass(/has-findings/);
     await mcpCrashCard.click();
 
-    // Check that a finding for /mcp/sse or mcp://tool/query_db exists
-    const findingRow = page.locator('.owasp-accordion .owasp-finding-row').filter({ hasText: 'mcp://tool/query_db' }).first();
+    // Check that a finding against the MCP surface exists. Match the URI shape rather than
+    // one declared tool name: the fuzzer substitutes injection payloads for the tool segment
+    // (mcp://tool/__globals__, mcp://prompt/__proto__, mcp://resource/file:///etc/passwd, …),
+    // so 'query_db' is mutated away by design and pinning it asserted the opposite of what
+    // the engine is supposed to do.
+    const findingRow = page
+      .locator('.owasp-accordion .owasp-finding-row')
+      .filter({ hasText: /mcp:\/\/(tool|prompt|resource)\/|\/mcp\/sse/ })
+      .first();
     await expect(findingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
   });
 

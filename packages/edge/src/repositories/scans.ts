@@ -47,7 +47,17 @@ export interface IScansRepository {
   getQueuedScans(): Promise<any[]>;
   getActiveScans(): Promise<any[]>;
   getScanConfigByProject(projectId: string, profileName: string): Promise<string | null>;
-  processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void>;
+  processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<void>;
+  batchUpdateFindingsAI(
+    scanId: string,
+    updates: Array<{
+      finding_id: string;
+      ai_status: string;
+      ai_relevance?: boolean | null;
+      ai_explanation?: string;
+      ai_confidence?: number;
+    }>
+  ): Promise<number>;
   saveWAFPatchReport(scanId: string, report: unknown): Promise<void>;
 }
 
@@ -397,7 +407,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
     return row ? row.config_json : null;
   }
 
-  async processFindingsQueueMessages(messages: any[], ctx?: any): Promise<void> {
+  async processFindingsQueueMessages(messages: readonly any[], ctx?: any): Promise<void> {
     const statements: any[] = [];
     const webhooksToDispatch: Array<{ projectId: string; eventType: string; payload: any }> = [];
 

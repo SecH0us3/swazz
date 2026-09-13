@@ -8,6 +8,7 @@ package ws
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"swazz-engine/internal/swagger"
 )
@@ -26,15 +27,37 @@ func SynthesizeWSEndpoint(wsURL string) (*swagger.ParseResult, error) {
 		},
 	}
 
+	// Split the URL the way ParseAsyncAPISpec does: the origin belongs in BasePath and
+	// only the channel path in Path. Storing the whole URL in Path made the executor
+	// append it to base_url — the target became
+	// ws://host:port/ws://host:port/ws and every handshake came back 404.
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid websocket url %q: %w", wsURL, err)
+	}
+	if u.Host == "" {
+		return nil, fmt.Errorf("websocket url %q has no host", wsURL)
+	}
+
+	path := u.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	if u.RawQuery != "" {
+		path += "?" + u.RawQuery
+	}
+
 	endpoint := swagger.EndpointConfig{
-		Path:        wsURL,
+		Path:        path,
 		Method:      "WS",
 		ContentType: "application/json",
 		Schema:      schema,
 	}
 
+	// Filled in so that swagger_urls alone is enough: the loader adopts this as the
+	// base URL when the config does not set one.
 	return &swagger.ParseResult{
-		BasePath:  "",
+		BasePath:  u.Scheme + "://" + u.Host,
 		Endpoints: []swagger.EndpointConfig{endpoint},
 	}, nil
 }

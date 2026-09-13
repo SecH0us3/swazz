@@ -27,6 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # paths-filter lists a pull request's changed files through the REST API,
+      # which a private repository answers only with this permission.
+      pull-requests: read
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -47,6 +50,9 @@ jobs:
               - '.github/workflows/ci.yml'
             backend:
               - 'packages/container/**'
+              # The Go demo targets are built by this job and by nothing else.
+              - 'demo/ws/**'
+              - 'demo/grpc/**'
               - '.github/workflows/ci.yml'
             edge:
               - 'packages/edge/**'
@@ -143,6 +149,13 @@ jobs:
       - name: Install dependencies
         run: npm install --ignore-scripts
 
+      # Vitest transpiles without type checking, so nothing else in CI type checks
+      # this package. It went unchecked entirely until the `types` entry in
+      # tsconfig.json was repaired: an unresolvable entry makes tsc abort after one
+      # error, which reads as a near-clean run while checking nothing.
+      - name: Typecheck
+        run: npx tsc --noEmit -p packages/edge
+
       - name: Run tests
         run: npm test --workspace=packages/edge -- --coverage
 
@@ -197,6 +210,13 @@ jobs:
         with:
           go-version: '1.26.6'
           cache-dependency-path: packages/container/go.sum
+
+      # The demo targets live outside packages/container, so nothing compiled them.
+      # demo/ws/main.go had not built since the commit that introduced it.
+      - name: Build demo targets
+        run: |
+          (cd demo/ws && go build -o /dev/null .)
+          (cd demo/grpc && go build -o /dev/null .)
 
       - name: Run tests
         run: cd packages/container && go test -coverprofile=coverage.out ./...

@@ -104,7 +104,7 @@ describe('MCP Routes', () => {
         body: JSON.stringify(payload)
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { result: { protocolVersion: string; serverInfo: { name: string } } };
       expect(body.result.protocolVersion).toBe('2024-11-05');
       expect(body.result.serverInfo.name).toBe('swazz-mcp-coordinator');
     });
@@ -116,7 +116,7 @@ describe('MCP Routes', () => {
         body: JSON.stringify('not-an-object')
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { error: { code: number } };
       expect(body.error.code).toBe(-32600);
     });
 
@@ -132,7 +132,7 @@ describe('MCP Routes', () => {
         body: JSON.stringify(payload)
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { error: { code: number } };
       expect(body.error.code).toBe(-32600);
     });
 
@@ -148,7 +148,7 @@ describe('MCP Routes', () => {
         body: JSON.stringify(payload)
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { result: { tools: Array<{ name: string }> } };
       expect(body.result.tools.length).toBeGreaterThan(0);
       expect(body.result.tools[0].name).toBe('swazz_list_projects');
     });
@@ -165,7 +165,7 @@ describe('MCP Routes', () => {
         body: JSON.stringify(payload)
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { error: { code: number } };
       expect(body.error.code).toBe(-32601);
     });
 
@@ -218,7 +218,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { result: { content: Array<{ text: string }> } };
       expect(body.result.content[0].text).toContain('projects');
       expect(spyAppFetch).toHaveBeenCalled();
     });
@@ -292,7 +292,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { result: { isError: boolean; content: Array<{ text: string }> } };
       expect(body.result.isError).toBe(true);
       expect(body.result.content[0].text).toBe('Error plain text response');
     });
@@ -324,7 +324,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { result: { isError: boolean; content: Array<{ text: string }> } };
       expect(body.result.isError).toBe(true);
       expect(body.result.content[0].text).toContain('Network break');
     });
@@ -384,7 +384,7 @@ describe('MCP Routes', () => {
     it('should return list of tools', async () => {
       const res = await app.request('/api/mcp/tools');
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { tools: any[] };
       expect(body.tools.length).toBeGreaterThan(0);
     });
   });
@@ -453,7 +453,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await res.json() as { error: string };
       expect(body.error).toContain('Missing required path parameters');
     });
 
@@ -538,7 +538,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as { result: string };
       expect(body.result).toBe('Plain text fallback');
     });
 
@@ -565,7 +565,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(403);
-      const body = await res.json();
+      const body = await res.json() as { error: string };
       expect(body.error).toBe('Forbidden access');
     });
 
@@ -589,7 +589,7 @@ describe('MCP Routes', () => {
       });
 
       expect(res.status).toBe(500);
-      const body = await res.json();
+      const body = await res.json() as { error: string };
       expect(body.error).toContain('Internal network error');
     });
   });

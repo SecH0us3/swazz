@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { registerAuthRoutes } from '../../../src/routes/auth';
-import { Env } from '../../../src/env';
+import { Env, AppEnv } from '../../../src/env';
 import { LicenseService } from '../../../src/services/license';
 
 // Mock getUserIdFromRequest so we can test authenticated routes easily
@@ -23,12 +23,12 @@ vi.mock('../../../src/utils/auth', async (importOriginal) => {
 });
 
 describe('Auth Routes Unit Tests', () => {
-  let app: Hono<{ Bindings: Env }>;
+  let app: Hono<AppEnv>;
   let mockAuthService: any;
   let mockLicenseService: any;
 
   beforeEach(() => {
-    app = new Hono<{ Bindings: Env }>();
+    app = new Hono<AppEnv>();
 
     mockAuthService = {
       register: vi.fn(),
@@ -108,7 +108,7 @@ describe('Auth Routes Unit Tests', () => {
       expect(res.status).toBe(200);
     });
     it('reads turnstile token if configured', async () => {
-      const liveApp = new Hono<{ Bindings: Env }>();
+      const liveApp = new Hono<AppEnv>();
       liveApp.use('*', async (c, next) => { c.env = { TURNSTILE_SECRET: 'a', JWT_SECRET: 'live' } as any; await next(); });
       registerAuthRoutes(liveApp, () => mockAuthService);
       mockAuthService.registerGuestStep1.mockResolvedValue({ status: 'ok' });
@@ -219,7 +219,7 @@ describe('Auth Routes Unit Tests', () => {
   // POST /api/auth/login
   describe('POST /api/auth/login', () => {
     it('missing properties in live env', async () => {
-      const liveApp = new Hono<{ Bindings: Env }>();
+      const liveApp = new Hono<AppEnv>();
       liveApp.use('*', async (c, next) => { c.env = { JWT_SECRET: 'live' } as any; await next(); });
       registerAuthRoutes(liveApp, () => mockAuthService);
       const res = await liveApp.request('/api/auth/login', { method: 'POST', body: JSON.stringify({ password: 'pw' }) });
@@ -234,7 +234,8 @@ describe('Auth Routes Unit Tests', () => {
       mockAuthService.login.mockRejectedValue(new Error('err|429|120'));
       const res = await app.request('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'u', password: 'p' }) });
       expect(res.status).toBe(429);
-      expect((await res.json()).retry_after).toBe(120);
+      const data = await res.json() as { retry_after?: number };
+      expect(data.retry_after).toBe(120);
     });
   });
 
@@ -453,14 +454,14 @@ describe('Auth Routes Unit Tests', () => {
 
   describe('POST /api/admin/users/plan', () => {
     it('returns 401 if missing admin secret in env', async () => {
-      const liveApp = new Hono<{ Bindings: Env }>();
+      const liveApp = new Hono<AppEnv>();
       liveApp.use('*', async (c, next) => { c.env = {} as any; await next(); });
       registerAuthRoutes(liveApp, () => mockAuthService);
       const res = await liveApp.request('/api/admin/users/plan', { method: 'POST' });
       expect(res.status).toBe(401);
     });
     it('handles success', async () => {
-      const liveApp = new Hono<{ Bindings: Env }>();
+      const liveApp = new Hono<AppEnv>();
       liveApp.use('*', async (c, next) => { c.env = { ADMIN_SECRET: 'admin' } as any; await next(); });
       registerAuthRoutes(liveApp, () => mockAuthService);
       mockAuthService.updateAdminUserPlan.mockResolvedValue({ status: 'ok' });
@@ -468,7 +469,7 @@ describe('Auth Routes Unit Tests', () => {
       expect(res.status).toBe(200);
     });
     it('handles error', async () => {
-      const liveApp = new Hono<{ Bindings: Env }>();
+      const liveApp = new Hono<AppEnv>();
       liveApp.use('*', async (c, next) => { c.env = { ADMIN_SECRET: 'admin' } as any; await next(); });
       registerAuthRoutes(liveApp, () => mockAuthService);
       mockAuthService.updateAdminUserPlan.mockRejectedValue(new Error('err|500'));
@@ -502,7 +503,7 @@ describe('Auth Routes Unit Tests', () => {
       expect(res.headers.get('Location')).toBe('http://localhost:5173');
     });
     it('GET /api/auth/callback/github live origin', async () => {
-      const liveApp = new Hono<{ Bindings: Env }>();
+      const liveApp = new Hono<AppEnv>();
       liveApp.use('*', async (c, next) => { c.env = { JWT_SECRET: 'live' } as any; await next(); });
       registerAuthRoutes(liveApp, () => mockAuthService);
       mockAuthService.handleGithubCallback.mockResolvedValue({ redirectUrl: 'http://example.com' });
@@ -542,7 +543,7 @@ describe('Auth Routes Unit Tests', () => {
           body: JSON.stringify({}),
         });
         expect(res.status).toBe(400);
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         expect(data.error).toBe('Missing license_key');
       });
 
@@ -553,7 +554,7 @@ describe('Auth Routes Unit Tests', () => {
           body: JSON.stringify({ license_key: '   ' }),
         });
         expect(res.status).toBe(400);
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         expect(data.error).toBe('Missing license_key');
       });
 
@@ -572,7 +573,7 @@ describe('Auth Routes Unit Tests', () => {
         });
 
         expect(res.status).toBe(200);
-        const data = await res.json();
+        const data = await res.json() as { valid?: boolean; license?: unknown };
         expect(data.valid).toBe(true);
         expect(data.license).toEqual(mockLicense);
       });
@@ -587,7 +588,7 @@ describe('Auth Routes Unit Tests', () => {
         });
 
         expect(res.status).toBe(400);
-        const data = await res.json();
+        const data = await res.json() as { valid?: boolean; error?: string };
         expect(data.valid).toBe(false);
         expect(data.error).toBe('license: invalid signature');
       });
@@ -602,7 +603,7 @@ describe('Auth Routes Unit Tests', () => {
         });
 
         expect(res.status).toBe(400);
-        const data = await res.json();
+        const data = await res.json() as { valid?: boolean; error?: string };
         expect(data.valid).toBe(false);
         expect(data.error).toBe('something went wrong');
       });

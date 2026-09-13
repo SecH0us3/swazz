@@ -78,9 +78,9 @@ describe('getDB Helper & Proxy Traps', () => {
 
   describe('D1Database Proxy Traps', () => {
     it('forwards normal properties and binds functions correctly', () => {
-      const db = getDB(mockEnv);
+      const db = getDB(mockEnv) as unknown as { someProperty: string; someMethod: () => string };
       expect(db.someProperty).toBe('some-value');
-      expect((db as any).someMethod()).toBe('method-result');
+      expect(db.someMethod()).toBe('method-result');
     });
 
     it('intercepts prepare and returns a wrapped statement', () => {

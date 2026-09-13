@@ -50,6 +50,17 @@ The recommended way to start the entire local development environment—includin
 ```
 This script handles starting all components in the background, redirects their logs, and shuts them all down cleanly when you press `Ctrl+C`.
 
+If you would rather have the stack keep running after the command returns — handy when you
+want the terminal back — use the background variant instead. It brings up the same
+services, plus the vulnerable HTTP (8788), gRPC (50051) and WebSocket (50052) demo targets:
+```bash
+bash scripts/start-local-dev.sh   # start, returns immediately
+bash scripts/stop-local-dev.sh    # stop everything it started
+```
+Stop it with that script rather than `pkill`: `go run` execs a compiled temporary binary,
+so killing by process name reaps the wrapper while the gRPC and WebSocket demos keep
+holding their ports.
+
 Alternatively, if you only want to start the frontend Web UI and edge coordinator development servers (without compiling or running the runner agent), you can run:
 ```bash
 npm run dev

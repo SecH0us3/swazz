@@ -11,7 +11,7 @@ import { dbStreamResult } from './useDb.js';
 import type { ScanRun } from './useDb.js';
 import { useAppStore } from '../store/appStore.js';
 import { matchesPattern } from '../utils/glob.js';
-import { sanitizeTargetUrl } from '../utils/url.js';
+import { sanitizeTargetUrl, hasSupportedScheme } from '../utils/url.js';
 
 interface UseFuzzSessionProps {
     config: SwazzConfig;
@@ -43,7 +43,10 @@ export function useFuzzSession({
 
         let firstError: any = null;
         for (const url of urls) {
-            const urlToLoad = url.startsWith('http') ? url : `https://${url}`;
+            // startsWith('http') let http/https through but not ws://, wss://, grpc://
+            // or grpcs://, so a WebSocket target was sent to the parser as
+            // https://ws://host/path and never resolved.
+            const urlToLoad = hasSupportedScheme(url) ? url : `https://${url}`;
             try {
                 const { basePath, endpoints, endpointCount, cachedAt } = await loadSwaggerUrl(
                     urlToLoad,

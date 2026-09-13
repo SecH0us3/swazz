@@ -30,6 +30,7 @@ import { DeletionOverlay } from './components/Auth/DeletionOverlay.js';
 import { AuthModal } from './components/Auth/AuthModal.js';
 import { sanitizeTargetUrl } from './utils/url.js';
 import { fetchProjects } from './services/projectService.js';
+import { fetchLicenseStatus } from './services/licenseService.js';
 import { ParsingErrorModal } from './components/Shared/ParsingErrorModal.js';
 import { useTips } from './hooks/useTips.js';
 import { DidYouKnowToast } from './components/DidYouKnow/DidYouKnowToast.js';
@@ -115,14 +116,11 @@ export default function App() {
                         plan: data.plan
                     } 
                 });
-                fetch(`${PROXY_URL}/api/user/license`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
-                .then(res => res.ok ? res.json() : null)
-                .then(lic => {
-                    if (lic) useAppStore.setState({ licenseStatus: lic });
-                })
-                .catch(() => {});
+                fetchLicenseStatus()
+                    .then(lic => {
+                        if (lic) useAppStore.setState({ licenseStatus: lic });
+                    })
+                    .catch(() => {});
             })
             .catch(err => {
                 console.error(err);

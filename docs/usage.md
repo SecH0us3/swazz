@@ -404,6 +404,9 @@ You can specify gRPC microservice targets in `swagger_urls` or `base_url`:
    - `grpc://hostname:port` — Unencrypted gRPC (Insecure plaintext connection)
    - `grpcs://hostname:port` — TLS-encrypted gRPC connection
 
+   The same URL can be pasted into the dashboard's spec loader; the target is set to
+   its origin (`grpc://localhost:50051`).
+
    ```json
    {
      "base_url": "grpc://localhost:50051",
@@ -484,9 +487,14 @@ You can specify WebSocket targets in `swagger_urls`:
    - `ws://hostname:port/path` — Plaintext WebSocket connection
    - `wss://hostname:port/path` — TLS-encrypted WebSocket connection
 
+   The URL can also be pasted into the dashboard's spec loader: it shows up as a `WS`
+   endpoint, and the target is set to the origin (`ws://hostname:port`).
+
+   The URL in `swagger_urls` is enough on its own — Swazz splits it into the origin it
+   dials and the channel path it fuzzes, so `base_url` may be omitted:
+
    ```json
    {
-     "base_url": "wss://api.example.com/socket",
      "swagger_urls": [
        "wss://api.example.com/socket"
      ],
@@ -494,12 +502,21 @@ You can specify WebSocket targets in `swagger_urls`:
        "Authorization": "Bearer my_jwt_token"
      },
      "settings": {
-       "iterations": 20,
+       "iterations_per_profile": 20,
        "concurrency": 5,
        "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"]
      }
    }
    ```
+
+   Set `base_url` only when the origin differs from the spec URL, and give it the origin
+   alone (`wss://api.example.com`) rather than the full channel URL — the path from the
+   endpoint is appended to it.
+
+   To try this against the bundled vulnerable target, start the local stack with
+   `bash scripts/start-local-dev.sh` and point `swagger_urls` at
+   `ws://127.0.0.1:50052/ws`. The `BOUNDARY` profile is the one that reaches its crash
+   path, so a successful run reports `swazz/ws-internal-error-leak`.
 
 ### WebSocket Handshake Authentication
 If your WebSocket endpoint requires authentication headers during the initial HTTP Upgrade handshake, configure them in `global_headers`:

@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthService } from '../../../src/services/auth';
 import { IAuthRepository } from '../../../src/repositories/auth';
-import { Env } from '../../../src/env';
+import { Env, AppEnv } from '../../../src/env';
 import { Context } from 'hono';
 import * as simplewebauthn from '@simplewebauthn/server';
 import { verifyTurnstile, hashPassword, verifyPassword, hashApiKey, hashUsername, verifyDummyPassword } from '../../../src/utils/auth';
@@ -47,7 +47,8 @@ describe('AuthService', () => {
   let mockRepo: Record<keyof IAuthRepository, any>;
   let mockEnv: Env;
   let service: AuthService;
-  let mockContext: Context<{ Bindings: Env }>;
+  let mockContext: Context<AppEnv>;
+  let mockSessionCacheGet = vi.fn();
 
   beforeEach(() => {
     mockRepo = {
@@ -77,6 +78,12 @@ describe('AuthService', () => {
       updatePasskeyCounter: vi.fn(),
       deletePasskey: vi.fn().mockResolvedValue(true),
       updateUserPlan: vi.fn(),
+      getLicenseKey: vi.fn(),
+      setLicenseKey: vi.fn(),
+      getTrialClaimedAt: vi.fn(),
+      setTrialClaimedAt: vi.fn(),
+      getUserDeleteRequestedAt: vi.fn(),
+      verifyApiKey: vi.fn(),
       linkGithubUser: vi.fn(),
       getUserByGithubId: vi.fn(),
       getUserByEmail: vi.fn(),
@@ -85,6 +92,7 @@ describe('AuthService', () => {
       getUserByGitlabId: vi.fn(),
       createGitlabUser: vi.fn()
     };
+    mockSessionCacheGet = vi.fn();
     mockEnv = {
       JWT_SECRET: 'test-secret',
       BETA_MODE_ENABLED: 'false',
@@ -92,7 +100,7 @@ describe('AuthService', () => {
       GITHUB_CLIENT_ID: 'ghid',
       GITHUB_CLIENT_SECRET: 'ghsec',
       SESSION_CACHE: {
-        get: vi.fn(),
+        get: mockSessionCacheGet,
         put: vi.fn(),
         delete: vi.fn()
       },
@@ -351,7 +359,7 @@ describe('AuthService', () => {
     });
 
     it('verifyPasskeyRegistration', async () => {
-      vi.mocked(mockEnv.SESSION_CACHE!.get).mockResolvedValue('c');
+      mockSessionCacheGet.mockResolvedValue('c');
       vi.mocked(simplewebauthn.verifyRegistrationResponse).mockResolvedValue({
         verified: true,
         registrationInfo: { credential: { id: '1', publicKey: new Uint8Array(), counter: 0 }, credentialDeviceType: 'd', credentialBackedUp: false }
@@ -372,7 +380,7 @@ describe('AuthService', () => {
 
     it('verifyPasskeyLogin', async () => {
       mockRepo.getPasskeyByCredentialId.mockResolvedValue({ user_id: 'u1', public_key: 'AAAA', counter: 0, transports: '' });
-      vi.mocked(mockEnv.SESSION_CACHE!.get).mockResolvedValue('c');
+      mockSessionCacheGet.mockResolvedValue('c');
       vi.mocked(simplewebauthn.verifyAuthenticationResponse).mockResolvedValue({
         verified: true,
         authenticationInfo: { newCounter: 1 }
@@ -427,12 +435,12 @@ describe('AuthService', () => {
     });
 
     it('exchangeOauthToken handles missing token', async () => {
-      vi.mocked(mockEnv.SESSION_CACHE!.get).mockResolvedValue(null);
+      mockSessionCacheGet.mockResolvedValue(null);
       await expect(service.exchangeOauthToken({ code: 'code' }, mockContext)).rejects.toThrow('Invalid or expired exchange code|400');
     });
 
     it('exchangeOauthToken succeeds', async () => {
-      vi.mocked(mockEnv.SESSION_CACHE!.get).mockResolvedValue('jwt');
+      mockSessionCacheGet.mockResolvedValue('jwt');
       const res = await service.exchangeOauthToken({ code: 'code' }, mockContext);
       expect(res.status).toBe('ok');
       expect(res.token).toBe('jwt');

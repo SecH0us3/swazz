@@ -4,11 +4,12 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { mcpTools } from '../utils/mcp';
 import { getUserIdFromRequest } from '../utils/auth';
+import { errorStatus } from '../utils/http';
 
-async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<{ Bindings: Env }>): Promise<any> {
+async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<AppEnv>): Promise<any> {
   if (!reqBody || typeof reqBody !== 'object') {
     return {
       jsonrpc: '2.0',
@@ -142,7 +143,7 @@ async function handleMcpJsonRpc(reqBody: any, c: any, app: Hono<{ Bindings: Env 
   };
 }
 
-export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
+export function registerMcpRoutes(app: Hono<AppEnv>) {
   app.get('/api/mcp/sse', async (c) => {
     const userId = await getUserIdFromRequest(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
@@ -274,7 +275,7 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
     const fetchRequest = new Request(urlStr, {
       method: tool.method,
       headers,
-      body: tool.method !== 'GET' && tool.method !== 'HEAD' && args ? JSON.stringify(args) : undefined
+      body: tool.method !== 'GET' && args ? JSON.stringify(args) : undefined
     });
 
     try {
@@ -289,7 +290,7 @@ export function registerMcpRoutes(app: Hono<{ Bindings: Env }>) {
       }
 
       if (!response.ok) {
-        return c.json({ error: responseBody?.error || responseBody || 'Request failed' }, response.status);
+        return c.json({ error: responseBody?.error || responseBody || 'Request failed' }, errorStatus(response.status));
       }
 
       return c.json({ result: responseBody });

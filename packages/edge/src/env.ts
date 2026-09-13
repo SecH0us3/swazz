@@ -3,13 +3,16 @@
 // Swazz is licensed under the Business Source License 1.1 (BSL 1.1)
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
-import type { D1Database, R2Bucket, KVNamespace, DurableObjectNamespace, Queue } from '@cloudflare/workers-types';
+import type { D1Database, R2Bucket, KVNamespace, DurableObjectNamespace, Queue, AnalyticsEngineDataset } from '@cloudflare/workers-types';
 
 export interface Env {
   DB: D1Database;
+  DB_SHARD_1?: D1Database;
   STORAGE: R2Bucket;
   SESSION_CACHE?: KVNamespace;
   COORDINATOR_DO: DurableObjectNamespace;
+  ANALYTICS_ENGINE?: AnalyticsEngineDataset;
+  SLOW_QUERY_THRESHOLD_MS?: string | number;
   JWT_SECRET: string;
   TURNSTILE_SECRET?: string;
   TURNSTILE_SITE_KEY?: string;
@@ -37,3 +40,14 @@ export interface Env {
   WAF_CHECKER_URL?: string;
 }
 
+
+// The Hono environment every route registrar and middleware shares. It must be one
+// type: Hono's Env generic is invariant, so declaring `Hono<{ Bindings: Env }>` in some
+// registrars and `Hono<{ Bindings: Env; Variables: ... }>` in others made them mutually
+// unassignable. That mismatch is why src/index.ts carried a blanket @ts-nocheck.
+// auditDetails is `unknown` rather than `any` because its only consumer
+// (middleware/auditLog.ts) already narrows it with a typeof check before use.
+export type AppEnv = {
+  Bindings: Env;
+  Variables: { auditDetails: unknown };
+};

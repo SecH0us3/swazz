@@ -131,7 +131,7 @@ Fuzz a target gRPC service using Server Reflection without needing local `.proto
     "grpc://localhost:50051"
   ],
   "settings": {
-    "iterations": 15,
+    "iterations_per_profile": 15,
     "concurrency": 5,
     "profiles": ["RANDOM", "BOUNDARY", "MALICIOUS"],
     "analyze_response_body": true

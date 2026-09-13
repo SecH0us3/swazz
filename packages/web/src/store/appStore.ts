@@ -8,6 +8,7 @@ import type { FuzzResult, RunStats, Project, SwazzConfig } from '../types.js';
 import { DEFAULT_SETTINGS } from '../types.js';
 import type { HeatmapFilter } from '../components/Dashboard/Heatmap.js';
 import type { ParsingErrorDetails } from '../services/swaggerService.js';
+import type { LicenseStatus } from '../utils/license.js';
 
 export interface UISlice {
     activeTab: 'heatmap' | 'logs' | 'findings' | 'owasp' | 'waf' | 'settings' | 'project_settings' | 'history' | 'compare' | 'about' | 'analytics' | 'runner_logs';
@@ -79,7 +80,7 @@ export interface UserSlice {
     turnstileSiteKey: string | null;
     betaModeEnabled: boolean;
     betaLimitReached: boolean;
-    licenseStatus: { status: 'community' | 'active' | 'invalid'; license: { company: string; expires_at: string; features: string[]; max_users?: number; max_concurrency?: number } | null } | null;
+    licenseStatus: LicenseStatus | null;
 }
 
 const createUserSlice: StateCreator<AppState, [], [], UserSlice> = () => ({

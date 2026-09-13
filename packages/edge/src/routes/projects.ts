@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest } from '../utils/auth';
 import { requirePermission } from '../middleware/rbac';
 import { requireFeature } from '../middleware/license';
@@ -13,9 +13,10 @@ import { IProjectRepository, ProjectRepository } from '../repositories/projects'
 import { IProjectService, ProjectService } from '../services/projects';
 import { RbacRepository } from '../repositories/rbac';
 import { FEATURE_SCHEDULED_RUNS } from '@swazz/shared';
+import { errorStatus } from '../utils/http';
 
 export function registerProjectsRoutes(
-  app: Hono<{ Bindings: Env; Variables: { auditDetails: any } }>,
+  app: Hono<AppEnv>,
   projectServicesFactory: (env: Env) => IProjectService = (env) => new ProjectService(env, new ProjectRepository(env), new RbacRepository(env))
 ) {
   app.get('/api/projects', async (c) => {
@@ -163,9 +164,8 @@ export function registerProjectsRoutes(
       const result = await services.getProjectWebhooks(projectId);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -177,9 +177,8 @@ export function registerProjectsRoutes(
       const result = await services.createProjectWebhook(projectId, body);
       return c.json(result, 201);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -192,9 +191,8 @@ export function registerProjectsRoutes(
       const result = await services.updateProjectWebhook(projectId, webhookId, body);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -206,9 +204,8 @@ export function registerProjectsRoutes(
       const result = await services.deleteProjectWebhook(projectId, webhookId);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -220,9 +217,8 @@ export function registerProjectsRoutes(
       const result = await services.testProjectWebhook(projectId, webhookId);
       return c.json(result);
     } catch (e: any) {
-      const parts = e.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (e instanceof Error ? e.message : String(e)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -250,9 +246,8 @@ export function registerProjectsRoutes(
         });
         return c.json(result, 201);
       } catch (e: any) {
-        const parts = e.message.split('|');
-        const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-        return c.json({ error: parts[0] }, statusCode as any);
+        const parts = (e instanceof Error ? e.message : String(e)).split('|');
+        return c.json({ error: parts[0] }, errorStatus(parts[1]));
       }
     }
   );

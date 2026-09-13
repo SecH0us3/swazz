@@ -188,26 +188,29 @@ export async function resolveHostIPs(hostname: string): Promise<string[]> {
       }),
     ]);
 
-    if (resA.ok) {
-      const data = await resA.json() as any;
-      if (data && Array.isArray(data.Answer)) {
-        for (const ans of data.Answer) {
-          if (ans.type === 1 && typeof ans.data === 'string') {
-            ips.push(ans.data);
+    const extractDohIps = (payload: unknown, targetType: number): string[] => {
+      const result: string[] = [];
+      if (typeof payload === 'object' && payload !== null && 'Answer' in payload && Array.isArray((payload as { Answer: unknown }).Answer)) {
+        for (const ans of (payload as { Answer: unknown[] }).Answer) {
+          if (typeof ans === 'object' && ans !== null && 'type' in ans && 'data' in ans) {
+            const record = ans as { type: unknown; data: unknown };
+            if (record.type === targetType && typeof record.data === 'string') {
+              result.push(record.data);
+            }
           }
         }
       }
+      return result;
+    };
+
+    if (resA.ok) {
+      const data: unknown = await resA.json();
+      ips.push(...extractDohIps(data, 1));
     }
 
     if (resAAAA.ok) {
-      const data = await resAAAA.json() as any;
-      if (data && Array.isArray(data.Answer)) {
-        for (const ans of data.Answer) {
-          if (ans.type === 28 && typeof ans.data === 'string') {
-            ips.push(ans.data);
-          }
-        }
-      }
+      const data: unknown = await resAAAA.json();
+      ips.push(...extractDohIps(data, 28));
     }
   } catch {
     // If DoH lookup fails or is unavailable

@@ -289,6 +289,6 @@ describe('UserSettings Component', () => {
         const licenseTabBtn = screen.getByRole('button', { name: /License & Subscription/i });
         fireEvent.click(licenseTabBtn);
 
-        expect(screen.getByText(/License Status/i)).toBeTruthy();
+        expect(screen.getByText(/Commercial License Key/i)).toBeTruthy();
     });
 });

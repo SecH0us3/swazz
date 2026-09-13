@@ -4,14 +4,15 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
 import { IMiscRepository, MiscRepository } from '../repositories/misc';
 import { IMiscService, MiscService } from '../services/misc';
 import { runWafCheck } from '../services/wafCheck';
+import { errorStatus, toStatusCode } from '../utils/http';
 
 export function registerMiscRoutes(
-  app: Hono<{ Bindings: Env }>,
+  app: Hono<AppEnv>,
   miscServicesFactory: (env: Env) => IMiscService = (env) => new MiscService(env, new MiscRepository(env))
 ) {
   app.post('/api/waf-check', async (c) => {
@@ -23,9 +24,8 @@ export function registerMiscRoutes(
       const result = await runWafCheck(c.env, body.url);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 502;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1], 502));
     }
   });
 
@@ -33,13 +33,15 @@ export function registerMiscRoutes(
     const services = miscServicesFactory(c.env);
     try {
       const bodyText = await c.req.text();
-      const payload = JSON.parse(bodyText) as any;
+      const payload: unknown = JSON.parse(bodyText);
+      if (!payload || typeof payload !== 'object') {
+        throw new Error('Invalid JSON payload|400');
+      }
       const result = await services.proxy(payload);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 502;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1], 502));
     }
   });
   
@@ -53,11 +55,10 @@ export function registerMiscRoutes(
 
     try {
       const result = await services.parseSpec(body, userId, isAnon, ip, isWeb);
-      return c.text(result.bodyText, result.status as any, { 'Content-Type': 'application/json' });
+      return c.text(result.bodyText, toStatusCode(result.status), { 'Content-Type': 'application/json' });
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1], 500));
     }
   });
 

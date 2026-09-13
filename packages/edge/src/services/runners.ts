@@ -65,7 +65,7 @@ export class RunnersService implements IRunnersService {
     }
 
     let userId = "";
-    if (this.env.AUTH_ENABLED === 'false' || this.env.AUTH_ENABLED === false) {
+    if (String(this.env.AUTH_ENABLED) === 'false') {
       userId = "anon-dev-user";
     } else if (publicKey) {
       const user = await this.runnersRepo.getUserByPublicKey(publicKey);

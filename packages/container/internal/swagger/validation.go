@@ -53,8 +53,13 @@ func ValidateBaseURL(baseURL string) error {
 		if err != nil {
 			return fmt.Errorf("invalid base_url: %w", err)
 		}
-		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "grpc" && u.Scheme != "grpcs" {
-			return fmt.Errorf("base_url must have a valid http, https, grpc, or grpcs scheme")
+		// ws/wss belong here: executor_http.go routes them to the WebSocket executor
+		// and docs/usage.md documents them as base_url values, but they were missing
+		// from this list, so the documented flow was rejected before it could run.
+		switch u.Scheme {
+		case "http", "https", "grpc", "grpcs", "ws", "wss":
+		default:
+			return fmt.Errorf("base_url must have a valid http, https, ws, wss, grpc, or grpcs scheme")
 		}
 	}
 	return nil

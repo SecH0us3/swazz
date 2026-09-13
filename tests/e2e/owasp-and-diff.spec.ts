@@ -66,6 +66,17 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
       .filter({ hasText: /MALICIOUS|BOUNDARY/ })
       .first();
     await expect(fuzzedPostRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+
+    // The log list is virtualised and keeps re-laying-out while rows settle after a
+    // run, so the row under the cursor shifts and Playwright's stability check retries
+    // until the test times out. Wait for the row count to hold steady before clicking.
+    await expect(async () => {
+      const before = await page.locator('.log-row').count();
+      await page.waitForTimeout(500);
+      const after = await page.locator('.log-row').count();
+      expect(after).toBe(before);
+    }).toPass({ timeout: TIMEOUTS.DEFAULT });
+
     await fuzzedPostRow.click();
 
     // Inspect the right side-panel (Request Detail) and check Mutation Diff

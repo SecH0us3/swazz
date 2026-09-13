@@ -13,7 +13,7 @@ import { Section } from './Shared.js';
 import { EndpointTree } from './EndpointTree.js';
 import { useAppStore } from '../../store/appStore.js';
 import { ProjectSelector } from '../ProjectSelector.js';
-import { sanitizeTargetUrl } from '../../utils/url.js';
+import { sanitizeTargetUrl, normalizeSpecUrl } from '../../utils/url.js';
 
 interface Props {
     style?: React.CSSProperties;
@@ -88,17 +88,9 @@ export function Sidebar({
         onUpdateConfig({ _swagger_urls: urls });
     };
 
-    const normalizeUrl = (url: string) => {
-        let cleanUrl = url.trim();
-        if (!cleanUrl) return '';
-        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.includes('localhost')) {
-            cleanUrl = `https://${cleanUrl}`;
-        }
-        return cleanUrl;
-    };
 
     const addUrl = async () => {
-        const trimmed = normalizeUrl(urlInput);
+        const trimmed = normalizeSpecUrl(urlInput);
         if (!trimmed) return;
 
         const sanitizedTarget = sanitizeTargetUrl(trimmed);

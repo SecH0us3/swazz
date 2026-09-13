@@ -37,6 +37,7 @@ type License struct {
 	Company        string    `json:"company"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	Features       []string  `json:"features"`
+	Kind           string    `json:"kind,omitempty"`
 	MaxUsers       int       `json:"max_users,omitempty"`
 	MaxConcurrency int       `json:"max_concurrency,omitempty"`
 }
@@ -44,6 +45,7 @@ type License struct {
 func main() {
 	keyFileFlag := flag.String("key", "", "Path to Ed25519 PEM private key file (required)")
 	companyFlag := flag.String("company", "", "Company / organization name (required)")
+	kindFlag := flag.String("kind", "commercial", "License kind: commercial | trial")
 	daysFlag := flag.Int("days", 365, "License validity duration in days")
 	featuresFlag := flag.String("features", "*", "Comma-separated feature list (use '*' for unlimited)")
 	maxUsersFlag := flag.Int("max-users", 0, "Maximum users (0 = unlimited)")
@@ -66,6 +68,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: -company flag is required")
 		os.Exit(1)
 	}
+	if *kindFlag != "commercial" && *kindFlag != "trial" {
+		fmt.Fprintf(os.Stderr, "Error: -kind must be either 'commercial' or 'trial' (got %q)\n", *kindFlag)
+		os.Exit(1)
+	}
 
 	// --- Load Ed25519 private key from PEM ---
 	privKey, pubKey, err := loadEd25519PrivateKey(*keyFileFlag)
@@ -84,6 +90,7 @@ func main() {
 		Company:        *companyFlag,
 		ExpiresAt:      exp,
 		Features:       features,
+		Kind:           *kindFlag,
 		MaxUsers:       *maxUsersFlag,
 		MaxConcurrency: *maxConcurrencyFlag,
 	}
@@ -115,6 +122,7 @@ func main() {
 	fmt.Println("=========================================================")
 	fmt.Println("🔑 SWAZZ ENTERPRISE LICENSE KEY GENERATED SUCCESSFULLY")
 	fmt.Println("=========================================================")
+	fmt.Printf("Kind:              %s\n", lic.Kind)
 	fmt.Printf("Company:           %s\n", lic.Company)
 	fmt.Printf("Issued At:         %s\n", now.Format(time.RFC3339))
 	fmt.Printf("Expires At:        %s (%d days)\n", exp.Format(time.RFC3339), *daysFlag)

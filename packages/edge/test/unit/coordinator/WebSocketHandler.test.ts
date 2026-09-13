@@ -323,7 +323,9 @@ describe('WebSocketHandler', () => {
       signature: '1122334455'
     };
 
-    const arrayBuffer = new TextEncoder().encode(JSON.stringify(msg)).buffer;
+    const encoded = new TextEncoder().encode(JSON.stringify(msg));
+    const arrayBuffer = encoded.buffer;
+    if (!(arrayBuffer instanceof ArrayBuffer)) throw new Error('Expected ArrayBuffer');
     vi.spyOn(queueService, 'checkAndDispatchQueuedScans').mockResolvedValue();
 
     await handler.handleMessage(mockWs, arrayBuffer);

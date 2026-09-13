@@ -4,15 +4,16 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { Hono } from 'hono';
-import { Env } from '../env';
+import { Env, AppEnv } from '../env';
 import { getUserIdFromRequest, isWebRequest, isAnonymousUser } from '../utils/auth';
 import { IRunnersRepository, RunnersRepository } from '../repositories/runners';
 import { IRunnersService, RunnersService } from '../services/runners';
 
 import { RbacRepository } from '../repositories/rbac';
+import { errorStatus } from '../utils/http';
 
 export function registerRunnersRoutes(
-  app: Hono<{ Bindings: Env }>,
+  app: Hono<AppEnv>,
   runnersServicesFactory: (env: Env) => IRunnersService = (env) => new RunnersService(env, new RunnersRepository(env), new RbacRepository(env))
 ) {
   app.get('/api/runners/connect', async (c) => {
@@ -38,9 +39,8 @@ export function registerRunnersRoutes(
       const result = await services.getRunners(userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -71,9 +71,8 @@ export function registerRunnersRoutes(
       const result = await services.queueRun(body, userId, isWeb, isAnon);
       return c.json(result, 201);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -86,9 +85,8 @@ export function registerRunnersRoutes(
       const result = await services.stopRun(runId, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -101,9 +99,8 @@ export function registerRunnersRoutes(
       const result = await services.pauseRun(runId, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
   
@@ -116,9 +113,8 @@ export function registerRunnersRoutes(
       const result = await services.resumeRun(runId, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 
@@ -131,9 +127,8 @@ export function registerRunnersRoutes(
       const result = await services.restartRunner(connectionId, userId);
       return c.json(result);
     } catch (err: any) {
-      const parts = err.message.split('|');
-      const statusCode = parts.length > 1 ? parseInt(parts[1], 10) : 500;
-      return c.json({ error: parts[0] }, statusCode as any);
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
 }

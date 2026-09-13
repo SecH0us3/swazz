@@ -79,6 +79,12 @@ while IFS= read -r file; do
       HAS_UI_CHANGES=true
       ;;
 
+    # License, trials & feature gating
+    packages/web/src/components/UserSettings/LicenseTab*|packages/web/src/components/UserSettings/ContactSales*|packages/web/src/utils/license*|packages/web/src/services/licenseService*|packages/edge/src/services/license*|packages/edge/src/middleware/license*)
+      SPECS+=("tests/e2e/trial-license.spec.ts" "tests/e2e/feature-gating.spec.ts" "tests/e2e/settings.spec.ts" "tests/e2e/config-sidebar-toggles.spec.ts" "tests/e2e/advanced-settings.spec.ts" "tests/e2e/payload-settings.spec.ts")
+      HAS_UI_CHANGES=true
+      ;;
+
     # Settings, Sidebar & Toggles
     packages/web/src/components/UserSettings*|packages/web/src/components/ConfigSidebar*|packages/web/src/components/*Settings*)
       SPECS+=("tests/e2e/settings.spec.ts" "tests/e2e/config-sidebar-toggles.spec.ts" "tests/e2e/advanced-settings.spec.ts" "tests/e2e/payload-settings.spec.ts")
@@ -124,12 +130,6 @@ while IFS= read -r file; do
     # BOLA, OWASP & Diff
     packages/web/src/components/*Compare*|packages/web/src/components/*Diff*|packages/web/src/components/*BOLA*)
       SPECS+=("tests/e2e/bola.spec.ts" "tests/e2e/owasp-and-diff.spec.ts" "tests/e2e/compare.spec.ts")
-      HAS_UI_CHANGES=true
-      ;;
-
-    # Licensing
-    packages/edge/src/routes/license*|packages/web/src/components/*License*)
-      SPECS+=("tests/e2e/trial-license.spec.ts")
       HAS_UI_CHANGES=true
       ;;
 

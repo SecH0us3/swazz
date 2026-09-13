@@ -105,7 +105,7 @@ func StartAgent(args []string) {
 		if err != nil {
 			logWarn("⚠️  License verification failed: %v (running in community mode)", err)
 		} else if lic != nil {
-			logInfo("🔑 Enterprise license active: %s (expires %s)", lic.Company, lic.ExpiresAt.Format("2006-01-02"))
+			logInfo("🔑 %s license active: %s (expires %s)", lic.TierLabel(), lic.Company, lic.ExpiresAt.Format("2006-01-02"))
 			if lic.IsExpiringSoon(3) {
 				logWarn("⚠️  License expires soon: %d day(s) remaining (expires %s)", lic.DaysRemaining(), lic.ExpiresAt.Format("2006-01-02"))
 			}

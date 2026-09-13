@@ -19,8 +19,8 @@ export interface ICleanupRepository {
   deleteUsersData(userIds: string[], projectIds: string[], usernames: string[]): Promise<void>;
 }
 
-export class CleanupRepository extends BaseService implements ICleanupRepository {
-  constructor(env: Env) {
+export class CleanupRepository extends BaseService<Env | { DB: D1Database }> implements ICleanupRepository {
+  constructor(env: Env | { DB: D1Database }) {
     super(env);
   }
 

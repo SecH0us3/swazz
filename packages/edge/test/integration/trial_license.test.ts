@@ -110,6 +110,7 @@ describe('Trial License Integration', () => {
     const claimData = await claimRes.json();
     expect(claimData.status).toBe('ok');
     expect(claimData.license.company).toBe(`${username} (14-Day Trial)`);
+    expect(claimData.license.kind).toBe('trial');
     expect(claimData.license.features).toEqual(['*']);
     expect(claimData.license.max_users).toBe(1);
     expect(claimData.license.max_concurrency).toBe(1000);
