@@ -50,4 +50,4 @@ WORKDIR /
 EXPOSE 8080
 
 ENTRYPOINT ["/swazz-engine"]
-CMD ["serve"]
+CMD ["run-agent"]

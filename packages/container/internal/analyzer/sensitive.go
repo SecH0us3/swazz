@@ -107,7 +107,7 @@ func (a *SensitiveAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFind
 				Message:          fmt.Sprintf("Sensitive data/secret (%s) leaked in the response body.", sig.category),
 				Evidence:         fmt.Sprintf("Leaked credential indicator: %s", redactedMatch),
 				OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
-				OWASPCategory:    []string{"A02:2025 Cryptographic Failures"},
+				OWASPCategory:    []string{"A04:2025 Cryptographic Failures"},
 				CWEIDs:           []string{"CWE-200", "CWE-312"},
 			})
 		}

@@ -59,7 +59,7 @@ func (a *DPoPTamperingAnalyzer) Analyze(input *AnalysisInput) []swagger.Analysis
 				Message:          "RFC 9449 DPoP proof cryptographic verification error leaked in the response body.",
 				Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 				OWASPAPICategory: []string{"API2:2023 Broken Authentication"},
-				OWASPCategory:    []string{"A07:2025 Identification and Authentication Failures"},
+				OWASPCategory:    []string{"A07:2025 Authentication Failures"},
 				CWEIDs:           []string{"CWE-347", "CWE-287"},
 			})
 			break // Only report the first match to avoid duplicates for a single response

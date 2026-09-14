@@ -215,7 +215,6 @@ Pass `SWAZZ_LICENSE_KEY` into your Swazz Docker Runner container:
 ```bash
 docker run -d --name swazz-runner \
   -e SWAZZ_LICENSE_KEY="eyJhbGciOiJFZERTQSI..." \
-  -e SWAZZ_ALLOW_PRIVATE_IPS=true \
   ghcr.io/sech0us3/swazz-runner:ai
 ```
 

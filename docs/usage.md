@@ -256,17 +256,15 @@ To prevent Server-Side Request Forgery (SSRF) when Swazz is hosted as a shared r
 
 Swazz enforces SSRF protection by verifying resolved host IP addresses before making spec-fetching or fuzzing HTTP requests.
 
-- **Server Mode (`swazz-engine serve`)**:
+- **Runner Agent Mode (`swazz-engine run-agent`)**:
   - By default, requests targeting private IP ranges (RFC 1918, loopback, link-local) are **blocked**.
-  - To allow internal API scanning, set the environment variable:
-    ```bash
-    export SWAZZ_ALLOW_PRIVATE_IPS=true
-    ```
+  - Set `security.allow_private_ips` in the scan configuration to allow them for that scan. The web dashboard exposes this as a per-project toggle under **Project Settings → Anomalies**.
+  - Running the agent outside a container with `--dangerous-no-container` (or with `SWAZZ_DEV=1`) lifts the restriction for every scan, since that mode is meant for local development only.
 - **CLI Mode (`swazz-engine start`)**:
-  - By default, CLI mode **allows** private IP/localhost connections to support scanning local developer APIs.
-  - To block private IP connections in CLI mode, supply the command-line flag or config setting:
+  - By default, CLI mode also **blocks** private IP/localhost connections.
+  - To scan local developer APIs, opt in explicitly with the command-line flag or the config setting:
     ```bash
-    swazz-engine start --config config.json --allow-private-ips=false
+    swazz-engine start --config config.json --allow-private-ips=true
     ```
     Or in `swazz.config.json`:
     ```json

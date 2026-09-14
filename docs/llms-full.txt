@@ -59,7 +59,7 @@ If you prefer to run everything locally without containers, follow these steps:
 
 #### Run Everything At Once (No Docker)
 
-The easiest way to start both the Go backend and the Vite frontend concurrently in development mode is:
+The easiest way to start the edge coordinator (Wrangler) and the Vite frontend concurrently in development mode is:
 ```bash
 npm run dev
 ```
@@ -67,23 +67,26 @@ npm run dev
 #### Docker (Recommended for Production)
 
 We publish two Docker images to the GitHub Container Registry:
-- **API Server & Web Dashboard**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)
+- **Runner Agent**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz)
 - **Headless CLI Fuzzer**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
 
 For security reasons and to guarantee reproducibility, we **never use the `latest` tag**. Always use a specific commit SHA (replace `<COMMIT_SHA>` with the actual hash from our [Releases](https://github.com/SecH0us3/swazz/releases)).
 
-##### Running the API Server (Web Dashboard)
+##### Running the Runner Agent
 ```bash
 docker pull ghcr.io/sech0us3/swazz:<COMMIT_SHA>
-# The image exposes the backend service on container port 8080. Choose any host port you prefer:
-docker run -p 8080:8080 ghcr.io/sech0us3/swazz:<COMMIT_SHA>
+# The agent connects out to the edge coordinator over WebSocket and listens on no port.
+# The web dashboard is served by the coordinator, not by this image (see DOCKER.md).
+docker run --rm ghcr.io/sech0us3/swazz:<COMMIT_SHA> run-agent \
+  --coordinator wss://<your-coordinator>/api/runners/connect \
+  --token <runner-token>
 ```
 
 ##### Running the Headless CLI
 ```bash
 docker pull ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA>
 # Run fuzzing directly (mount your config file using a volume):
-docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> --config /app/swazz.config.json
+docker run --rm -v $(pwd):/app ghcr.io/sech0us3/swazz-cli:<COMMIT_SHA> start --config /app/swazz.config.json
 ```
 
 If you use this repository's compose setup, host ports are parameterized via FRONTEND_PORT (default: 3000) and BACKEND_PORT (default: 8081). See DOCKER.md for details.
@@ -415,10 +418,10 @@ Written in Go, this is the core of Swazz. It handles all heavy lifting, multi-th
 A React 19 Single Page Application built with Vite.
 - **Strict UI Separation**: Components in `src/components/` are kept "dumb" focusing only on layout. Complex application states are managed via hooks in `src/hooks/`.
 - **Vanilla CSS**: We strictly use Vanilla CSS with CSS variables (`src/index.css`) rather than utility frameworks like Tailwind. This maintains a lean, unified design language with a premium dark-theme aesthetic.
-- **Service Layer**: All external API calls to the Go backend are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
+- **Service Layer**: All calls to the edge coordinator API (`/api/*`, proxied to `packages/edge`, which listens on `127.0.0.1:8787` in development) are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
 
-#### 3. `packages/edge` (Optional)
-Reserved for Cloudflare Workers integration and edge-deployments.
+#### 3. `packages/edge` (Coordinator)
+The Cloudflare Worker and Durable Object coordinator the dashboard talks to. It serves every `/api/*` route, stores data in D1 and R2, and dispatches scans to connected Go runner agents over WebSocket.
 
 ### Smart Fuzzing Workflow
 

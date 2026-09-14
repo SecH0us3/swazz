@@ -180,3 +180,35 @@ func TestToString(t *testing.T) {
 		})
 	}
 }
+
+// TestToSSEKeepsAnalyzerTaxonomy guards the live dashboard path: ToSSE used to
+// recompute the taxonomy from the rule ID, which blanked out the OWASP/CWE
+// mapping for every analyzer whose rule ID has no lookup-table entry.
+func TestToSSEKeepsAnalyzerTaxonomy(t *testing.T) {
+	r := &swagger.FuzzResult{
+		ID: "r1", Endpoint: "/api/users", Method: "POST", Status: 200,
+		AnalyzerFindings: []swagger.AnalysisFinding{{
+			RuleID:           "swazz/prototype-pollution",
+			Level:            "error",
+			OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+			OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
+			CWEIDs:           []string{"CWE-1321"},
+		}},
+	}
+
+	sse := ToSSE(r)
+
+	if len(sse.AnalyzerFindings) != 1 {
+		t.Fatalf("expected 1 analyzer finding, got %d", len(sse.AnalyzerFindings))
+	}
+	f := sse.AnalyzerFindings[0]
+	if len(f.OWASPCategory) == 0 || f.OWASPCategory[0] != "A08:2025 Software or Data Integrity Failures" {
+		t.Errorf("OWASP Web category not preserved: %v", f.OWASPCategory)
+	}
+	if len(f.OWASPAPICategory) == 0 || f.OWASPAPICategory[0] != "API3:2023 Broken Object Property Level Authorization" {
+		t.Errorf("OWASP API category not preserved: %v", f.OWASPAPICategory)
+	}
+	if len(f.CWEIDs) == 0 || f.CWEIDs[0] != "CWE-1321" {
+		t.Errorf("CWE ids not preserved: %v", f.CWEIDs)
+	}
+}

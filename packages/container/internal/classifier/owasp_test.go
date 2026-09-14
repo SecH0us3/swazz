@@ -8,6 +8,10 @@ package classifier
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"swazz-engine/internal/swagger"
 )
 
 func TestOWASPCategories(t *testing.T) {
@@ -51,4 +55,83 @@ func TestOWASPCategories(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveTaxonomyPrefersAnalyzerValues(t *testing.T) {
+	// swazz/prototype-pollution has no entry in the rule-ID lookup tables, so
+	// recomputing its taxonomy used to blank out the mapping the analyzer set.
+	af := swagger.AnalysisFinding{
+		RuleID:           "swazz/prototype-pollution",
+		OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
+		OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+		CWEIDs:           []string{"CWE-1321"},
+	}
+
+	web, api, cwe := ResolveTaxonomy(&af, "POST", "/api/users")
+
+	assert.Equal(t, []string{"A08:2025 Software or Data Integrity Failures"}, web)
+	assert.Equal(t, []string{"API3:2023 Broken Object Property Level Authorization"}, api)
+	assert.Equal(t, []string{"CWE-1321"}, cwe)
+}
+
+// TestResolveTaxonomyMergesRuleTableCategories: the rule tables classify these
+// injection findings as API10:2023 while the analyzers tag them API8:2023.
+// Preferring either side alone empties a card, so both must survive.
+func TestResolveTaxonomyMergesRuleTableCategories(t *testing.T) {
+	for _, ruleID := range []string{
+		"swazz/sql-error-leak", "swazz/reflected-xss", "swazz/cmdi-leak",
+		"swazz/ssti-leak", "swazz/xxe-leak",
+	} {
+		af := swagger.AnalysisFinding{
+			RuleID:           ruleID,
+			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
+		}
+
+		_, api, _ := ResolveTaxonomy(&af, "GET", "/x")
+
+		assert.Contains(t, api, "API8:2023 Security Misconfiguration", ruleID)
+		assert.Contains(t, api, "API10:2023 Unsafe Consumption of APIs", ruleID)
+	}
+}
+
+func TestMergeTaxonomyDeduplicatesAndKeepsOrder(t *testing.T) {
+	assert.Equal(t, []string{"a", "b", "c"}, mergeTaxonomy([]string{"a", "b"}, []string{"b", "c"}))
+	assert.Equal(t, []string{"x"}, mergeTaxonomy(nil, []string{"x"}))
+	assert.Equal(t, []string{"y"}, mergeTaxonomy([]string{"y"}, nil))
+	assert.Empty(t, mergeTaxonomy(nil, nil))
+}
+
+func TestResolveTaxonomyFallsBackToRuleTables(t *testing.T) {
+	af := swagger.AnalysisFinding{RuleID: "swazz/reflected-xss"}
+
+	web, api, cwe := ResolveTaxonomy(&af, "GET", "/search")
+
+	assert.Equal(t, OWASPCategories("swazz/reflected-xss"), web)
+	assert.Equal(t, OWASPAPICategories("swazz/reflected-xss", "GET", "/search", ""), api)
+	assert.Equal(t, CWEIdentifiers("swazz/reflected-xss", "GET", "/search", ""), cwe)
+	assert.NotEmpty(t, web)
+}
+
+// TestClassifyAllKeepsAnalyzerTaxonomy covers the real call site: swazz/prototype-pollution
+// has no entry in the rule-ID lookup tables, so recomputing its taxonomy blanked out the
+// mapping the analyzer had set (see internal/analyzer/prototype_pollution.go).
+func TestClassifyAllKeepsAnalyzerTaxonomy(t *testing.T) {
+	res := &swagger.FuzzResult{
+		ID: "r1", Endpoint: "/api/users", Method: "POST", Status: 200,
+		AnalyzerFindings: []swagger.AnalysisFinding{{
+			RuleID:           "swazz/prototype-pollution",
+			Level:            "error",
+			Message:          "Prototype pollution",
+			OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
+			OWASPCategory:    []string{"A08:2025 Software or Data Integrity Failures"},
+			CWEIDs:           []string{"CWE-1321"},
+		}},
+	}
+
+	findings := New(nil).ClassifyAll([]*swagger.FuzzResult{res})
+
+	assert.Len(t, findings, 1)
+	assert.Equal(t, []string{"A08:2025 Software or Data Integrity Failures"}, findings[0].OWASPCategory)
+	assert.Equal(t, []string{"API3:2023 Broken Object Property Level Authorization"}, findings[0].OWASPAPICategory)
+	assert.Equal(t, []string{"CWE-1321"}, findings[0].CWEIDs)
 }

@@ -7,6 +7,8 @@ package classifier
 
 import (
 	"strings"
+
+	"swazz-engine/internal/swagger"
 )
 
 // OWASPCategories returns the list of OWASP Top 10 (2025) categories for a given Rule ID.
@@ -45,4 +47,47 @@ func OWASPCategories(ruleID string) []string {
 		}
 		return nil
 	}
+}
+
+// mergeTaxonomy returns the union of two classification lists, preserving the
+// order of the first and appending anything the second adds. Duplicates drop out.
+func mergeTaxonomy(primary, fallback []string) []string {
+	if len(primary) == 0 {
+		return fallback
+	}
+	if len(fallback) == 0 {
+		return primary
+	}
+	seen := make(map[string]bool, len(primary)+len(fallback))
+	out := make([]string, 0, len(primary)+len(fallback))
+	for _, list := range [][]string{primary, fallback} {
+		for _, v := range list {
+			if !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// ResolveTaxonomy returns the OWASP Web (2025), OWASP API (2023) and CWE
+// identifiers to attach to an analyzer finding.
+//
+// These are multi-valued classification lists, so the analyzer's own mapping and
+// the rule-ID tables are merged rather than one replacing the other:
+//
+//   - Recomputing everything from the rule ID drops the mapping the analyzer set.
+//     28 rule IDs (prototype pollution, NoSQL injection, SSRF cloud metadata, JWT
+//     and DPoP tampering, mass assignment, gRPC, differential BOLA) have no table
+//     entry at all, so their findings used to arrive with no OWASP category.
+//   - Taking only the analyzer's mapping drops what the tables add. No analyzer
+//     emits API10:2023, so preferring the analyzer's API8:2023 alone would empty
+//     the API10 card for sql-error-leak, reflected-xss, cmdi-leak, ssti-leak and
+//     xxe-leak.
+func ResolveTaxonomy(f *swagger.AnalysisFinding, method, endpoint string) (owaspWeb, owaspAPI, cweIDs []string) {
+	owaspWeb = mergeTaxonomy(f.OWASPCategory, OWASPCategories(f.RuleID))
+	owaspAPI = mergeTaxonomy(f.OWASPAPICategory, OWASPAPICategories(f.RuleID, method, endpoint, f.Evidence))
+	cweIDs = mergeTaxonomy(f.CWEIDs, CWEIdentifiers(f.RuleID, method, endpoint, f.Evidence))
+	return owaspWeb, owaspAPI, cweIDs
 }

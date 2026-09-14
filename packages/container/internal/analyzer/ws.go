@@ -25,7 +25,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 	}
 
 	var findings []swagger.AnalysisFinding
-	owasp := []string{"A05:2021-Security Misconfiguration", "A04:2021-Insecure Design"}
+	owasp := []string{"A02:2025 Security Misconfiguration", "A06:2025 Insecure Design"}
 
 	status := input.ResponseHeaders.Get("X-Swazz-WS-Status")
 	wsError := input.ResponseHeaders.Get("X-Swazz-WS-Error")
@@ -57,7 +57,7 @@ func (a *WSStatusAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFindi
 				Level:         "error",
 				Message:       "WebSocket response frame contains internal stack traces, panics, or unhandled error messages.",
 				Evidence:      string(input.ResponseBody),
-				OWASPCategory: []string{"A05:2021-Security Misconfiguration"},
+				OWASPCategory: []string{"A02:2025 Security Misconfiguration"},
 			})
 		}
 	}

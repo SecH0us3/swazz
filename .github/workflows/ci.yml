@@ -350,7 +350,8 @@ jobs:
         run: npm install --ignore-scripts
 
       - name: Download all blob reports
-        uses: actions/download-artifact@v8
+        # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         continue-on-error: true
         with:
           path: all-blob-reports
@@ -358,12 +359,26 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
+        # A shard's report can arrive truncated when the artifact download fails
+        # (the download step above is continue-on-error). Skip unreadable archives
+        # with a warning instead of letting one of them fail the whole merge.
         run: |
-          if [ -d "./all-blob-reports" ] && [ -n "$(ls -A ./all-blob-reports 2>/dev/null)" ]; then
-            echo "→ Merging Playwright blob reports..."
+          shopt -s nullglob
+          mkdir -p ./all-blob-reports
+          valid=0
+          for report in ./all-blob-reports/*.zip; do
+            if unzip -tq "$report" > /dev/null 2>&1; then
+              valid=$((valid + 1))
+            else
+              echo "::warning::Skipping unreadable blob report $(basename "$report"): the artifact download was incomplete or the archive is truncated."
+              rm -f "$report"
+            fi
+          done
+          if [ "$valid" -gt 0 ]; then
+            echo "→ Merging $valid Playwright blob report(s)..."
             npx playwright merge-reports --reporter html ./all-blob-reports
           else
-            echo "✓ No blob reports found to merge (E2E tests were skipped or none executed)."
+            echo "✓ No readable blob reports to merge (E2E tests were skipped or none executed)."
             mkdir -p playwright-report
             echo "<html><body><p>No E2E tests were executed for this run.</p></body></html>" > playwright-report/index.html
           fi

@@ -41,7 +41,7 @@ func (a *GraphQLSecurityAnalyzer) Analyze(input *AnalysisInput) []swagger.Analys
 			Message:          "GraphQL schema introspection is enabled in production, exposing full schema definitions.",
 			Evidence:         string(input.ResponseBody[:min(len(input.ResponseBody), 300)]),
 			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 			CWEIDs:           []string{"CWE-200"},
 		})
 	}
@@ -55,7 +55,7 @@ func (a *GraphQLSecurityAnalyzer) Analyze(input *AnalysisInput) []swagger.Analys
 			Message:          fmt.Sprintf("GraphQL field suggestion leaked internal schema field name: %s", matchText),
 			Evidence:         matchText,
 			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 			CWEIDs:           []string{"CWE-200"},
 		})
 	}
@@ -69,7 +69,7 @@ func (a *GraphQLSecurityAnalyzer) Analyze(input *AnalysisInput) []swagger.Analys
 			Message:          "GraphQL batching query complexity limit reached during fuzzing.",
 			Evidence:         matchText,
 			OWASPAPICategory: []string{"API4:2023 Unrestricted Resource Consumption"},
-			OWASPCategory:    []string{"A05:2025 Security Misconfiguration"},
+			OWASPCategory:    []string{"A02:2025 Security Misconfiguration"},
 			CWEIDs:           []string{"CWE-400"},
 		})
 	}

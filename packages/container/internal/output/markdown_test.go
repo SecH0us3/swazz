@@ -37,7 +37,7 @@ func TestToMarkdown(t *testing.T) {
 			Endpoint:      "/api/test",
 			ResolvedPath:  "/api/test?q=%3Cscript%3E",
 			Method:        "GET",
-			OWASPCategory: []string{"A03:2021-Injection"},
+			OWASPCategory: []string{"A05:2025 Injection"},
 			Source:        "Fuzzer",
 			Payload:       "<script>",
 			ResponseBody:  "<div><script></div>",

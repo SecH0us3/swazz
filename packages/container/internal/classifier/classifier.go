@@ -189,6 +189,7 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 			case af.RuleID == "swazz/bola-idor" || af.RuleID == "swazz/unauthorized-access":
 				source = "access_control"
 			}
+			afOWASP, afOWASPAPI, afCWE := ResolveTaxonomy(&af, r.Method, r.Endpoint)
 			f := &Finding{
 				ID:               r.ID,
 				RuleID:           af.RuleID,
@@ -204,9 +205,9 @@ func (c *Classifier) ClassifyAll(results []*swagger.FuzzResult) []*Finding {
 				Error:            af.Evidence, // Store evidence matched fragment here
 				Timestamp:        r.Timestamp,
 				Source:           source,
-				OWASPCategory:    OWASPCategories(af.RuleID),
-				OWASPAPICategory: OWASPAPICategories(af.RuleID, r.Method, r.Endpoint, af.Evidence),
-				CWEIDs:           CWEIdentifiers(af.RuleID, r.Method, r.Endpoint, af.Evidence),
+				OWASPCategory:    afOWASP,
+				OWASPAPICategory: afOWASPAPI,
+				CWEIDs:           afCWE,
 			}
 
 			if IsIgnored(f, c.ignoreRules) {

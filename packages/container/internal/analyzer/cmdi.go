@@ -43,7 +43,7 @@ func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 			Message:          "OS Command Injection output signature (Unix id) detected in response body.",
 			Evidence:         fmt.Sprintf("Found leaked signature: %s", string(match)),
 			OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-			OWASPCategory:    []string{"A03:2025 Injection"},
+			OWASPCategory:    []string{"A05:2025 Injection"},
 			CWEIDs:           []string{"CWE-78"},
 		})
 		return findings
@@ -58,7 +58,7 @@ func (a *CmdiAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding {
 				Message:          fmt.Sprintf("OS Command Injection output signature '%s' detected in response body.", string(sig)),
 				Evidence:         fmt.Sprintf("Found leaked signature: %s", string(sig)),
 				OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-				OWASPCategory:    []string{"A03:2025 Injection"},
+				OWASPCategory:    []string{"A05:2025 Injection"},
 				CWEIDs:           []string{"CWE-78"},
 			})
 			break

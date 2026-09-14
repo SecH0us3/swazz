@@ -43,15 +43,8 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     
-    // Allow fuzzer to process requests across profiles and endpoints
-    await page.waitForTimeout(5000);
-    if (await stopBtn.isVisible()) {
-      await stopBtn.click();
-    }
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
-
     // 5. Verify Request Mutation Visual Diff
-    // Switch to Logs tab
+    // Switch to the Logs tab while the scan is still running; the log list reloads as results arrive.
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
@@ -61,11 +54,20 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await expect(filterInput).toBeVisible();
     await filterInput.fill('/login');
 
-    // Locate a fuzzed POST request log row (which has a request body)
+    // Locate a fuzzed POST request log row (which has a request body).
+    // The runner works profile by profile (every endpoint under RANDOM, then under MALICIOUS),
+    // so how soon a MALICIOUS request reaches POST /login depends on runner speed. Stopping
+    // after a fixed delay left only RANDOM rows on slower machines; wait for the row instead.
     const fuzzedPostRow = page.locator('.log-row')
       .filter({ hasText: /MALICIOUS|BOUNDARY/ })
       .first();
-    await expect(fuzzedPostRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(fuzzedPostRow).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+
+    // Stop the scan now that the rows this test inspects exist.
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // The log list is virtualised and keeps re-laying-out while rows settle after a
     // run, so the row under the cursor shifts and Playwright's stability check retries
@@ -194,7 +196,60 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const webCard = page.locator('.owasp-card').filter({ hasText: /A01:2025|A02:2025|A10:2025/ }).first();
     await expect(webCard).toBeVisible();
 
+    // 8. Verify the Web Top 10 (2025) grid carries real data, not just headers.
+    // Until now this half of the tab asserted only that some card element exists,
+    // which is true even when every finding arrives with an empty or stale-edition
+    // OWASP category and ends up in the catch-all "Unmapped / Other" bucket.
+
+    // 8a. All ten canonical 2025 categories render, in order.
+    const webCardIds = page.locator('.owasp-card .owasp-card-id');
+    await expect(webCardIds).toHaveCount(10);
+    await expect(webCardIds).toHaveText([
+      'A01:2025', 'A02:2025', 'A03:2025', 'A04:2025', 'A05:2025',
+      'A06:2025', 'A07:2025', 'A08:2025', 'A09:2025', 'A10:2025',
+    ]);
+
+    // 8b. At least one canonical card actually carries findings. If the engine
+    // stops mapping findings onto OWASP Web categories, every card drops to
+    // "0 findings" and this fails.
+    const webCardWithFindings = page.locator('.owasp-card.has-findings').first();
+    await expect(webCardWithFindings).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+
+    // 8c. Expanding it lists real finding rows, mirroring the API 2023 flow.
+    await webCardWithFindings.click();
+    const webFindingRow = page.locator('.owasp-finding-row').first();
+    await expect(webFindingRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(webFindingRow.locator('.owasp-finding-path').first()).toHaveText(/.+/);
+
+    // 8d. Findings tab: every accordion is either a canonical 2025 category or the
+    // "Unmapped / Other" catch-all. The catch-all is legitimate — plain status-code
+    // rows such as HTTP 401 carry no OWASP Web category — but a finding labelled
+    // with an edition the dashboard does not know (e.g. the 2021-era
+    // "A05:2021-Security Misconfiguration") matches no card and shows up here as
+    // its own stray accordion, which this rejects.
+    const accordionTitles = (await page.locator('.owasp-accordion-title').allTextContents())
+      .map(t => t.trim().replace(/Learn More.*$/, '').trim());
+    expect(accordionTitles.length).toBeGreaterThan(0);
+
+    const strayTitles = accordionTitles.filter(
+      t => !/^A(0[1-9]|10):2025 /.test(t) && !t.startsWith('Unmapped / Other'),
+    );
+    expect(strayTitles, `OWASP Web 2025 accordions outside the 2025 taxonomy: ${strayTitles.join(', ')}`)
+      .toEqual([]);
+
+    // 8e. The mapping must spread findings across the taxonomy rather than
+    // collapsing everything into one card or into the catch-all.
+    // Note: this cannot detect a category carrying the right 2025 id with the
+    // wrong title (e.g. "A05:2025 Security Misconfiguration"), because the
+    // dashboard buckets by the "Axx:2025" prefix and files it under whatever
+    // that id means. That class is covered in the engine by
+    // TestAnalyzerOWASPCategoriesAreCanonical.
+    const mappedTitles = accordionTitles.filter(t => /^A(0[1-9]|10):2025 /.test(t));
+    expect(mappedTitles.length, `mapped OWASP Web 2025 categories: ${mappedTitles.join(', ')}`)
+      .toBeGreaterThanOrEqual(2);
+
     // Toggle back to API Security (2023)
+    await overviewTabBtn.click();
     const apiBtn = page.locator('.owasp-standard-toggle button:has-text("API Security (2023)")');
     await apiBtn.click();
     await expect(owaspTitle).toContainText('OWASP API Security Top 10 (2023)');

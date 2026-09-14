@@ -49,7 +49,7 @@ func runCLIErr(args []string) error {
 	markdownOut := flags.String("markdown", "", "Path to save Markdown report")
 	failOnSeverity := flags.String("fail-on-severity", "none", "Exit with code 2 if findings meet severity threshold (error|warning|note|none)")
 	ignoreConfig := flags.String("ignore-config", "swazz.ignore.json", "Path to ignore rules JSON file")
-	allowPrivateIps := flags.Bool("allow-private-ips", true, "Allow requests to private IP addresses (default: true for CLI mode)")
+	allowPrivateIps := flags.Bool("allow-private-ips", false, "Allow requests to private IP addresses (overrides security.allow_private_ips from the config file)")
 	debugMode := flags.Bool("debug", false, "Enable debug logging for HTTP interactions")
 	logLevelFlag := flags.String("log-level", "", "Log level: debug, info, warn, error")
 	quietFlag := flags.Bool("quiet", false, "Silence all progress output (only show errors)")

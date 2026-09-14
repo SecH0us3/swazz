@@ -199,7 +199,7 @@ func (p *Phase) Run(ctx context.Context, results []*swagger.FuzzResult) []*swagg
 							Message: fmt.Sprintf("BOLA/IDOR confirmed via Differential Analysis. Identity %s retrieved entity '%s' (creator: %s) on %s %s with %0.1f%% structural match.", c.ProbeIdentity, c.HarvestedID, c.CreatorIdentity, c.TargetEndpoint.Method, c.ResolvedPath, diff.Similarity*100),
 							Evidence: fmt.Sprintf("Baseline Root: %s (%d fields), Probe Root: %s (%d fields), Structural Similarity: %0.2f",
 								c.BaselineFingerprint.RootType, c.BaselineFingerprint.FieldCount, probeFp.RootType, probeFp.FieldCount, diff.Similarity),
-							OWASPCategory:    []string{"A01:2021-Broken Access Control"},
+							OWASPCategory:    []string{"A01:2025 Broken Access Control"},
 							OWASPAPICategory: []string{"API1:2023 Broken Object Level Authorization"},
 							CWEIDs:           []string{"CWE-284", "CWE-639"},
 						}
@@ -210,7 +210,7 @@ func (p *Phase) Run(ctx context.Context, results []*swagger.FuzzResult) []*swagg
 							Level:            "error",
 							Message:          fmt.Sprintf("Schema Drift / Privilege Escalation detected on %s %s. Unexpected sensitive fields exposed: %v", c.TargetEndpoint.Method, c.ResolvedPath, diff.AddedFields),
 							Evidence:         fmt.Sprintf("Added sensitive fields: %s", strings.Join(diff.AddedFields, ", ")),
-							OWASPCategory:    []string{"A01:2021-Broken Access Control"},
+							OWASPCategory:    []string{"A01:2025 Broken Access Control"},
 							OWASPAPICategory: []string{"API3:2023 Broken Object Property Level Authorization"},
 							CWEIDs:           []string{"CWE-200", "CWE-915"},
 						}

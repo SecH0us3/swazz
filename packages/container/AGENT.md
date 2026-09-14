@@ -9,7 +9,7 @@ Always prefix shell commands with `rtk` (e.g., `rtk go test ./...`).
 
 ### Build & Run
 - **Build CLI**: `rtk go build -o swazz-engine main.go`
-- **Run API Server**: `rtk go run main.go serve`
+- **Run Runner Agent**: `rtk go run main.go run-agent --coordinator <ws-url> --token <token>`
 - **Run CLI Fuzzer**: `rtk go run main.go start --config swazz.config.json`
 
 ### Profiling

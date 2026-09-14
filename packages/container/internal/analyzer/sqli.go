@@ -96,7 +96,7 @@ OuterLoop:
 					Message:          fmt.Sprintf("SQL injection vulnerability: %s database error leaked in the response.", sig.name),
 					Evidence:         fmt.Sprintf("Match: %q | Context: ...%s...", matchText, contextSnippet),
 					OWASPAPICategory: []string{"API8:2023 Security Misconfiguration"},
-					OWASPCategory:    []string{"A03:2025 Injection", "A05:2025 Security Misconfiguration"},
+					OWASPCategory:    []string{"A05:2025 Injection", "A02:2025 Security Misconfiguration"},
 					CWEIDs:           []string{"CWE-89", "CWE-209"},
 				})
 				break OuterLoop // Report only the first match per response to avoid duplicate noise

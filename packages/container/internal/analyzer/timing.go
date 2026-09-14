@@ -59,7 +59,7 @@ func (a *TimingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 			Level:         "error",
 			Message:       fmt.Sprintf("Time-Based SQL Injection detected. Response delayed by %dms (Baseline: %dms).", input.Duration, input.BaselineTimeMs),
 			Evidence:      fmt.Sprintf("Payload: %v", input.SentPayload),
-			OWASPCategory: []string{"A03:2021-Injection"},
+			OWASPCategory: []string{"A05:2025 Injection"},
 		})
 	} else if isCmdi {
 		findings = append(findings, swagger.AnalysisFinding{
@@ -67,7 +67,7 @@ func (a *TimingAnalyzer) Analyze(input *AnalysisInput) []swagger.AnalysisFinding
 			Level:         "error",
 			Message:       fmt.Sprintf("Time-Based Command Injection detected. Response delayed by %dms (Baseline: %dms).", input.Duration, input.BaselineTimeMs),
 			Evidence:      fmt.Sprintf("Payload: %v", input.SentPayload),
-			OWASPCategory: []string{"A03:2021-Injection"},
+			OWASPCategory: []string{"A05:2025 Injection"},
 		})
 	}
 
