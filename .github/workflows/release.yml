@@ -111,18 +111,18 @@ jobs:
 
             We publish two Docker images for each release, including the `latest` tag.
 
-            ### Web Dashboard & API Server
-            Pushed to [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz). To run:
+            ### Runner Agent
+            Pushed to [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz). It connects out to your edge coordinator and listens on no port:
             ```bash
             docker pull ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}
-            docker run -p 8080:8080 ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }}
+            docker run --rm ghcr.io/${{ env.REPO_LC }}:${{ env.DOCKER_TAG }} run-agent --coordinator wss://<your-coordinator>/api/runners/connect --token <runner-token>
             ```
 
             ### Headless CLI Engine (Binary Only)
             Pushed to [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli). To run fuzzing runs directly:
             ```bash
             docker pull ghcr.io/${{ env.REPO_LC }}-cli:${{ env.DOCKER_TAG }}
-            docker run --rm -v $(pwd):/app ghcr.io/${{ env.REPO_LC }}-cli:${{ env.DOCKER_TAG }} --config /app/swazz.config.json
+            docker run --rm -v $(pwd):/app ghcr.io/${{ env.REPO_LC }}-cli:${{ env.DOCKER_TAG }} start --config /app/swazz.config.json
             ```
           files: |
             packages/container/swazz-engine-linux-amd64
@@ -196,20 +196,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Node.js
-        # v6.4.0
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: "25.9.0"
-          cache: "npm"
-
-      - name: Install dependencies and build Web UI
-        run: |
-          npm install
-          npm run build
-          mkdir -p packages/container/web
-          cp -r packages/web/dist packages/container/web/dist
 
       - name: Extract metadata (Server)
         id: meta-server
@@ -349,10 +335,7 @@ jobs:
         run: npm install --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=60000
 
       - name: Build Web UI
-        run: |
-          npm run build
-          mkdir -p packages/container/web
-          cp -r packages/web/dist packages/container/web/dist
+        run: npm run build
 
       - name: Deploy to Cloudflare
         env:
