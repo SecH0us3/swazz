@@ -42,12 +42,13 @@ Follow these steps to set up your development environment:
    ```
 
 4. **Run the Development Server:**
-   You can start both the Go backend (reloaded automatically via `air`) and the Vite frontend concurrently:
+   You can start the edge coordinator and the Vite frontend concurrently:
    ```bash
    npm run dev
    ```
-   *   The Go backend will run on `http://localhost:8080`.
+   *   The edge coordinator (`wrangler dev`) will run on `http://localhost:8787`.
    *   The React frontend dashboard will open on `http://localhost:5173`.
+   *   This does **not** start the Go runner agent, so scans cannot execute. Use the full stack below for that.
 
    For work that involves the runner agent or one of the vulnerable demo targets — gRPC
    and WebSocket fuzzing, runner reconnection, end-to-end scans — start the full stack

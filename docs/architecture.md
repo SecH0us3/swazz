@@ -22,10 +22,10 @@ Written in Go, this is the core of Swazz. It handles all heavy lifting, multi-th
 A React 19 Single Page Application built with Vite.
 - **Strict UI Separation**: Components in `src/components/` are kept "dumb" focusing only on layout. Complex application states are managed via hooks in `src/hooks/`.
 - **Vanilla CSS**: We strictly use Vanilla CSS with CSS variables (`src/index.css`) rather than utility frameworks like Tailwind. This maintains a lean, unified design language with a premium dark-theme aesthetic.
-- **Service Layer**: All external API calls to the Go backend are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
+- **Service Layer**: All calls to the edge coordinator API (`/api/*`, proxied to `packages/edge`, which listens on `127.0.0.1:8787` in development) are encapsulated in `src/services/` (e.g., `swaggerService.ts`).
 
-### 3. `packages/edge` (Optional)
-Reserved for Cloudflare Workers integration and edge-deployments. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.md). To monitor database queries for performance regressions, refer to the [D1 Slow Query Monitoring Guide](./slow_queries.md).
+### 3. `packages/edge` (Coordinator)
+The Cloudflare Worker and Durable Object coordinator the dashboard talks to. It serves every `/api/*` route, stores data in D1 and R2, and dispatches scans to connected Go runner agents over WebSocket. For a detailed study on optimizing edge deployment costs, latency, and performance using Cloudflare KV and Cache API, see the [Cloudflare KV & Cache API Optimization Research](./cloudflare_kv_cache_research.md). To monitor database queries for performance regressions, refer to the [D1 Slow Query Monitoring Guide](./slow_queries.md).
 
 ## Smart Fuzzing Workflow
 
