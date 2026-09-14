@@ -43,15 +43,8 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     const stopBtn = page.locator('button.btn-danger[title="Stop"]');
     await expect(stopBtn).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
     
-    // Allow fuzzer to process requests across profiles and endpoints
-    await page.waitForTimeout(5000);
-    if (await stopBtn.isVisible()) {
-      await stopBtn.click();
-    }
-    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
-
     // 5. Verify Request Mutation Visual Diff
-    // Switch to Logs tab
+    // Switch to the Logs tab while the scan is still running; the log list reloads as results arrive.
     const requestLogsTab = page.locator('button.tab-bar-btn:has-text("Logs")');
     await expect(requestLogsTab).toBeVisible();
     await requestLogsTab.click();
@@ -61,11 +54,20 @@ test.describe('OWASP Top 10 Mapping & Request Mutation Visual Diff E2E Tests', (
     await expect(filterInput).toBeVisible();
     await filterInput.fill('/login');
 
-    // Locate a fuzzed POST request log row (which has a request body)
+    // Locate a fuzzed POST request log row (which has a request body).
+    // The runner works profile by profile (every endpoint under RANDOM, then under MALICIOUS),
+    // so how soon a MALICIOUS request reaches POST /login depends on runner speed. Stopping
+    // after a fixed delay left only RANDOM rows on slower machines; wait for the row instead.
     const fuzzedPostRow = page.locator('.log-row')
       .filter({ hasText: /MALICIOUS|BOUNDARY/ })
       .first();
-    await expect(fuzzedPostRow).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
+    await expect(fuzzedPostRow).toBeVisible({ timeout: TIMEOUTS.SCAN_RUN });
+
+    // Stop the scan now that the rows this test inspects exist.
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click();
+    }
+    await expect(startBtn).toBeVisible({ timeout: TIMEOUTS.LOAD });
 
     // The log list is virtualised and keeps re-laying-out while rows settle after a
     // run, so the row under the cursor shifts and Playwright's stability check retries
