@@ -25,12 +25,13 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: discovery
-              image: "{{ .Values.discovery.image.repository }}:{{ required "discovery.image.tag is required: set an immutable tag or sha256 digest" .Values.discovery.image.tag }}"
+              image: {{ include "swazz.image" (dict "repository" .Values.discovery.image.repository "tag" .Values.discovery.image.tag "message" "discovery.image.tag is required: set an immutable tag, or a sha256:... digest") | quote }}
               imagePullPolicy: {{ .Values.discovery.image.pullPolicy }}
-              command:
-                - swazz-engine
-                - discover
+              # No command: the image entrypoint is /swazz-engine. Overriding it
+              # with a bare "swazz-engine" cannot resolve, since the distroless
+              # image has the binary at / and does not put / on PATH.
               args:
+                - "discover"
                 - "--exclude-namespace"
                 - {{ .Values.discovery.excludeNamespaces | quote }}
                 - "--concurrency"

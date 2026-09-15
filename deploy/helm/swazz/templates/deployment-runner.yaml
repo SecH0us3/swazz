@@ -19,8 +19,20 @@ spec:
     spec:
       containers:
         - name: runner
-          image: "{{ .Values.runner.image.repository }}:{{ required "runner.image.tag is required: set an immutable tag or sha256 digest" .Values.runner.image.tag }}"
+          image: {{ include "swazz.image" (dict "repository" .Values.runner.image.repository "tag" .Values.runner.image.tag "message" "runner.image.tag is required: set an immutable tag, or a sha256:... digest") | quote }}
           imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
+          # run-agent takes its configuration from flags, not the environment,
+          # so the values below are passed explicitly as arguments.
+          args:
+            - "run-agent"
+            - "--coordinator"
+            - {{ index .Values.runner.env "COORDINATOR_URL" | default (printf "ws://%s-edge:%v/api/runners/connect" (include "swazz.fullname" .) .Values.edge.service.port) | quote }}
+            - "--token"
+            - {{ index .Values.runner.env "RUNNER_TOKEN" | default "" | quote }}
+            {{- if .Values.runner.name }}
+            - "--name"
+            - {{ .Values.runner.name | quote }}
+            {{- end }}
           env:
             - name: COORDINATOR_URL
               value: {{ index .Values.runner.env "COORDINATOR_URL" | default (printf "ws://%s-edge:%v/api/runners/connect" (include "swazz.fullname" .) .Values.edge.service.port) | quote }}

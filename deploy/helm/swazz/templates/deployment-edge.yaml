@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: edge
-          image: "{{ .Values.edge.image.repository }}:{{ required "edge.image.tag is required: set an immutable tag or sha256 digest" .Values.edge.image.tag }}"
+          image: {{ include "swazz.image" (dict "repository" .Values.edge.image.repository "tag" .Values.edge.image.tag "message" "edge.image.tag is required: set an immutable tag, or a sha256:... digest") | quote }}
           imagePullPolicy: {{ .Values.edge.image.pullPolicy }}
           ports:
             - name: http

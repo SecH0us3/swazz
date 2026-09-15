@@ -60,3 +60,17 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Render an image reference. A tag beginning with "sha256:" is a digest and must
+be joined with "@"; anything else is a tag and is joined with ":".
+*/}}
+{{- define "swazz.image" -}}
+{{- $repo := .repository -}}
+{{- $ref := required .message .tag -}}
+{{- if hasPrefix "sha256:" $ref -}}
+{{- printf "%s@%s" $repo $ref -}}
+{{- else -}}
+{{- printf "%s:%s" $repo $ref -}}
+{{- end -}}
+{{- end -}}
