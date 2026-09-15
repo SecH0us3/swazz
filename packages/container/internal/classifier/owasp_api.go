@@ -298,13 +298,14 @@ func EvaluateOWASPAPI(ctx *ClassificationContext) []ClassificationMatch {
 			Reason:     "XML External Entity parsed and processed by backend parser",
 			CWE:        "CWE-611",
 		})
-	} else if strings.HasPrefix(ruleID, "swazz/mcp-") || strings.HasPrefix(ruleID, "swazz/ws-") {
+	} else if strings.HasPrefix(ruleID, "swazz/mcp-") || strings.HasPrefix(ruleID, "swazz/ws-") ||
+		strings.HasPrefix(ruleID, "swazz/grpc-") {
 		matches = append(matches, ClassificationMatch{
 			Category:   "API10:2023 Unsafe Consumption of APIs",
 			Standard:   "OWASP_API_2023",
 			Weight:     0.9,
 			Confidence: "HIGH",
-			Reason:     "Third-party MCP tool or WebSocket channel crashed or reflected unsanitized input",
+			Reason:     "Third-party MCP tool, gRPC service or WebSocket channel crashed or reflected unsanitized input",
 			CWE:        "CWE-20",
 		})
 	} else if strings.HasPrefix(ruleID, "swazz/status-5") || ruleID == "swazz/network-error" {

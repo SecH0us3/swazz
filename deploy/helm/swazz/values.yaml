@@ -8,9 +8,13 @@ global:
 web:
   replicaCount: 1
   image:
+    # No web image is published from this repository; build and push one from
+    # packages/web/Dockerfile, then set repository and tag below.
     repository: sech0us3/swazz-web
     pullPolicy: IfNotPresent
-    tag: "latest"
+    # Required. Use an immutable tag or a sha256 digest — never a mutable tag
+    # such as "latest" (see the supply-chain rules in CLAUDE.md).
+    tag: ""
   service:
     type: ClusterIP
     port: 80
@@ -22,9 +26,12 @@ web:
 edge:
   replicaCount: 1
   image:
+    # No edge image is published from this repository; build and push one from
+    # packages/edge/Dockerfile, then set repository and tag below.
     repository: sech0us3/swazz-edge
     pullPolicy: IfNotPresent
-    tag: "latest"
+    # Required. Immutable tag or sha256 digest only.
+    tag: ""
   service:
     type: ClusterIP
     port: 80
@@ -39,9 +46,11 @@ edge:
 runner:
   replicaCount: 1
   image:
-    repository: sech0us3/swazz-runner
+    repository: ghcr.io/sech0us3/swazz
     pullPolicy: IfNotPresent
-    tag: "latest"
+    # Required. Immutable tag or sha256 digest only — release tags and
+    # sha-<short-commit> tags are published by .github/workflows/release.yml.
+    tag: ""
   env:
     # RUNNER_TOKEN must be replaced with a Service Account token generated from the Swazz Dashboard in production
     RUNNER_TOKEN: "swazz_live_default_token"
@@ -71,9 +80,11 @@ discovery:
   enabled: false
   schedule: "0 2 * * *" # Every day at 02:00 UTC
   image:
-    repository: sech0us3/swazz-runner
+    repository: ghcr.io/sech0us3/swazz
     pullPolicy: IfNotPresent
-    tag: "latest"
+    # Required. Immutable tag or sha256 digest only — release tags and
+    # sha-<short-commit> tags are published by .github/workflows/release.yml.
+    tag: ""
   concurrency: 5
   iterations: 10
   profiles: "BOUNDARY,MALICIOUS"

@@ -106,10 +106,11 @@ If you just want to run the core Go engine from the command line without the web
 
 #### Server Mode (Backend API Only)
 
-To spin up just the API backend for the web dashboard:
+The web dashboard is served by the Cloudflare edge coordinator; the Go engine
+joins it as a runner agent over WebSocket rather than exposing its own API server:
 ```bash
 cd packages/container
-go run main.go serve
+go run main.go run-agent --coordinator ws://127.0.0.1:8787/api/runners/connect --token <runner-token>
 ```
 
 ---
@@ -408,7 +409,7 @@ The project is structured into workspaces:
 
 #### 1. `packages/container` (Backend Engine)
 Written in Go, this is the core of Swazz. It handles all heavy lifting, multi-threading, and networking.
-- `main.go`: The main entrypoint. Handles commands for both CLI (`start`) and API (`serve`).
+- `main.go`: The main entrypoint. Handles `start` (CLI fuzzing), `run-agent` (coordinator runner), `spider`, `discover`, `wizard`, `generate-keys`, `license` and `version`.
 - `internal/generator/`: Contains logic for analyzing OpenAPI specs and generating smart payloads (e.g., UUIDs, strings, large boundaries). Static payloads are kept in `internal/generator/payloads/`.
 - `internal/runner/`: The concurrent execution engine. Manages rate limits, parallel execution, and HTTP clients.
 - `internal/output/`: Analyzes HTTP responses and outputs them into specific formats (SARIF, JSON).

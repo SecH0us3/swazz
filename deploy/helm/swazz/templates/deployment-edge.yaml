@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: edge
-          image: "{{ .Values.edge.image.repository }}:{{ .Values.edge.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "swazz.image" (dict "repository" .Values.edge.image.repository "tag" .Values.edge.image.tag "message" "edge.image.tag is required: set an immutable tag, or a sha256:... digest") | quote }}
           imagePullPolicy: {{ .Values.edge.image.pullPolicy }}
           ports:
             - name: http

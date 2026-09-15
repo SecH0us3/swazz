@@ -24,19 +24,43 @@ The deployment consists of four main components:
    ```
 
 2. **Configure your values**
-   Copy the default `values.yaml` or create an override file (`my-values.yaml`) to set your environment variables, specifically `global.jwtSecret` and optional discovery settings:
+   Copy the default `values.yaml` or create an override file (`my-values.yaml`) to set your environment variables, specifically `global.jwtSecret`, the image tags and optional discovery settings.
+
+   Image tags have no default: mutable tags such as `latest` are not allowed, so
+   every enabled component needs an explicit immutable tag or a `sha256:...`
+   digest, and the install fails with a clear message if one is missing. The
+   runner and discovery images are published as `ghcr.io/sech0us3/swazz` by
+   `.github/workflows/release.yml`, tagged with the release tag or
+   `sha-<short-commit>`; no image is published for `web` or `edge`, so build and
+   push those yourself from `packages/web/Dockerfile` and
+   `packages/edge/Dockerfile`.
+
    ```yaml
    global:
      domain: swazz.yourdomain.com
      jwtSecret: "YOUR_SUPER_SECRET_JWT_KEY"
 
+   web:
+     image:
+       repository: your-registry/swazz-web
+       tag: "v1.2.3"
+
+   edge:
+     image:
+       repository: your-registry/swazz-edge
+       tag: "v1.2.3"
+
    runner:
      replicaCount: 3 # Scale your fuzzers
+     image:
+       tag: "sha-1a2b3c4" # or sha256:... for a digest
      env:
        RUNNER_TOKEN: "your_custom_token"
 
    discovery:
      enabled: true # Enable Kubernetes MCP Auto-Discovery
+     image:
+       tag: "sha-1a2b3c4"
      schedule: "0 2 * * *" # Every day at 02:00 UTC
      reports:
        uploadTo: "coordinator"

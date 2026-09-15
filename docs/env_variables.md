@@ -26,7 +26,7 @@ These configurations apply to the Edge Coordinator service located in `packages/
 | Variable Name | Description | Default / Example |
 | :--- | :--- | :--- |
 | **`JWT_SECRET`** | Secret key for signing and validating session JSON Web Tokens. | *Secret string* (Dev: `test-secret`) |
-| **`TURNSTILE_SECRET_KEY`** | Secret key used for validating Cloudflare Turnstile CAPTCHA responses. | *Secret string* |
+| **`TURNSTILE_SECRET`** | Secret key used for validating Cloudflare Turnstile CAPTCHA responses. Registration and login skip CAPTCHA verification entirely when it is unset, so an incorrect name silently disables the check. | *Secret string* |
 | **`GITHUB_CLIENT_ID`** | Client ID for GitHub OAuth 2.0 application. | *Secret string* |
 | **`GITHUB_CLIENT_SECRET`** | Client Secret for GitHub OAuth 2.0 application. | *Secret string* |
 | **`GITHUB_REDIRECT_URI`** | Custom redirect URI for GitHub OAuth callback. | `https://your-domain.com/api/auth/callback/github` |
@@ -57,7 +57,6 @@ These environment variables are read by the fuzzer agent engine (`packages/conta
 
 | Variable Name | Description | Allowed Values / Example |
 | :--- | :--- | :--- |
-| **`SWAZZ_AGENT_TOKEN`** | Cryptographic token for agent authorization on the Edge Coordinator. | *Hex/Base64 Token* |
 | **`SWAZZ_LOG_LEVEL`** | Verbosity threshold for fuzzer engine logging. | `debug`, `info`, `warn`, `error` (Default: `info`) |
 | **`SWAZZ_LOG_FORMAT`** | Format of log messages output to stdout/stderr. | `text`, `json` (Default: `text`) |
 | **`SWAZZ_DEV`** | Bypass local URL/SSRF blocks (enables scanning `localhost`). | `1` (Bypasses check), `0` (Enforced default) |
