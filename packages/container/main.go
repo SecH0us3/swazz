@@ -167,6 +167,8 @@ func main() {
 		runDiscover(os.Args[2:])
 	case "license":
 		runLicenseCommand()
+	case "version", "--version", "-v":
+		fmt.Printf("swazz-engine %s\n", Version)
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printHelp()
@@ -227,6 +229,7 @@ func printHelp() {
 	fmt.Println("  swazz-engine discover [options]   Discover API services running in a Kubernetes cluster")
 	fmt.Println("  swazz-engine generate-keys        Generate asymmetric keypair for runner signing authentication")
 	fmt.Println("  swazz-engine license              Display Business Source License 1.1 (BSL 1.1) terms")
+	fmt.Println("  swazz-engine version              Print the engine version (also --version, -v)")
 	fmt.Println()
 	fmt.Println("Options for 'run-agent':")
 	fmt.Println("  --coordinator <ws-url>       WebSocket URL of the Swazz Coordinator (e.g. wss://swazz.secmy.app/api/runners/connect)")

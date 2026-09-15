@@ -21,7 +21,7 @@ func OWASPCategories(ruleID string) []string {
 			"A07:2025 Authentication Failures",
 			"A01:2025 Broken Access Control",
 		}
-	case "swazz/sensitive-data-leak":
+	case "swazz/sensitive-data-leak", "swazz/mcp-secret-leak", "swazz/mcp-resource-leak":
 		return []string{"A01:2025 Broken Access Control"}
 	case "swazz/no-rate-limit", "swazz/rate-limit-active", "swazz/response-size-anomaly":
 		return []string{"A06:2025 Insecure Design"}
@@ -37,9 +37,12 @@ func OWASPCategories(ruleID string) []string {
 		"swazz/time-based-sqli", "swazz/time-based-cmdi":
 		return []string{"A05:2025 Injection"}
 	case "swazz/stack-trace-leak", "swazz/null-pointer-exception", "swazz/sql-error-leak",
-		"swazz/timeout", "swazz/network-error", "swazz/mcp-server-crash":
+		"swazz/timeout", "swazz/network-error", "swazz/mcp-server-crash",
+		"swazz/mcp-tool-exception",
+		"swazz/grpc-server-crash", "swazz/grpc-internal-error",
+		"swazz/grpc-unknown-error", "swazz/grpc-data-loss":
 		return []string{"A10:2025 Mishandling of Exceptional Conditions"}
-	case "swazz/mcp-tool-error-reflection":
+	case "swazz/mcp-tool-error-reflection", "swazz/mcp-prompt-injection-reflection":
 		return []string{"A05:2025 Injection"}
 	default:
 		if strings.HasPrefix(ruleID, "swazz/status-5") {

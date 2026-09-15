@@ -25,7 +25,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: discovery
-              image: "{{ .Values.discovery.image.repository }}:{{ .Values.discovery.image.tag }}"
+              image: "{{ .Values.discovery.image.repository }}:{{ required "discovery.image.tag is required: set an immutable tag or sha256 digest" .Values.discovery.image.tag }}"
               imagePullPolicy: {{ .Values.discovery.image.pullPolicy }}
               command:
                 - swazz-engine

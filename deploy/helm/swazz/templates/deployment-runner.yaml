@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: runner
-          image: "{{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.runner.image.repository }}:{{ required "runner.image.tag is required: set an immutable tag or sha256 digest" .Values.runner.image.tag }}"
           imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
           env:
             - name: COORDINATOR_URL

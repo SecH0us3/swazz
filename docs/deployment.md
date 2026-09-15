@@ -90,7 +90,7 @@ The entire stack is deployed on a single virtual machine (VM) using **Docker Com
    This generates `swazz_runner.key` and prints the user public key. Save the public key in your user profile on the Swazz Web Dashboard.
 2. Run the agent in daemon/service mode:
    ```bash
-   swazz-engine start-agent \
+   swazz-engine run-agent \
      --coordinator wss://your-coordinator.workers.dev/api/runners/connect \
      --key /path/to/swazz_runner.key \
      --name "production-runner-01"
@@ -139,6 +139,6 @@ When deploying Swazz to production, ensure all of the following controls are str
 | 🛡️ | **Disable Private IP Fuzzing** | Server-Side Request Forgery (SSRF) | Blocked by default. Keep `security.allow_private_ips` unset/false in scan configs, and never start the runner agent with `--dangerous-no-container` or `SWAZZ_DEV=1`, both of which lift the restriction. |
 | 🔑 | **Pin Docker Image Tags** | Supply Chain Compromise | In Dockerfiles and Compose configurations, use specific SHA-256 hashes instead of `latest` or mutable version tags. |
 | 🌐 | **Restrict CORS Headers** | Cross-Origin Data Leakage | Set `ALLOWED_ORIGIN` (compose) or `ALLOWED_ORIGINS` (Workers) to the exact URL of your frontend dashboard. Never use `*`. |
-| 🤖 | **Enable Turnstile CAPTCHA** | Brute-force & Bot registrations | Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` variables to enable Captcha verification during registration/login. |
+| 🤖 | **Enable Turnstile CAPTCHA** | Brute-force & Bot registrations | Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` variables to enable Captcha verification during registration/login. Verification is skipped whenever `TURNSTILE_SECRET` is unset, so confirm the exact name. |
 | 🔒 | **Enforce HTTPS / SSL** | MitM & Token theft | Use a reverse proxy (e.g., Traefik, Nginx) in front of compose deployments to manage SSL termination via Let's Encrypt. |
 | 👮 | **Agent Isolation** | Host system compromise | Run target fuzzing runners inside stateless, isolated docker containers or scratch VMs with no connection to the agent's internal subnet. |

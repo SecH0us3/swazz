@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.web.image.repository }}:{{ required "web.image.tag is required: set an immutable tag or sha256 digest" .Values.web.image.tag }}"
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
           ports:
             - name: http

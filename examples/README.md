@@ -26,7 +26,7 @@ A specialized configuration designed to test BOLA (Broken Object Level Authoriza
 A minimal configuration used for the local Swazz Demo API.
 **Use case:** For contributors testing against the local `scripts/start-local-dev.sh` environment.
 
-### 5. `wraggler.config.example.jsonc`
+### 5. `wrangler.config.example.jsonc`
 Configuration example for the Edge Coordinator (Wraggler).
 **Use case:** Setting up a custom deployment of the Swazz orchestration API.
 

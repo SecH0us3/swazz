@@ -135,3 +135,22 @@ func TestClassifyAllKeepsAnalyzerTaxonomy(t *testing.T) {
 	assert.Equal(t, []string{"API3:2023 Broken Object Property Level Authorization"}, findings[0].OWASPAPICategory)
 	assert.Equal(t, []string{"CWE-1321"}, findings[0].CWEIDs)
 }
+
+func TestGrpcAndMcpRulesAreClassified(t *testing.T) {
+	// grpc.go and mcp.go set no inline taxonomy at all, so these rely entirely
+	// on the rule-ID tables. Before this change every one returned empty and the
+	// findings landed in the dashboard's "Unmapped / Other" bucket.
+	for _, id := range []string{
+		"swazz/grpc-server-crash", "swazz/grpc-internal-error",
+		"swazz/grpc-unknown-error", "swazz/grpc-data-loss",
+		"swazz/mcp-server-crash", "swazz/mcp-tool-exception",
+		"swazz/mcp-secret-leak", "swazz/mcp-resource-leak",
+		"swazz/mcp-prompt-injection-reflection", "swazz/mcp-tool-error-reflection",
+	} {
+		af := swagger.AnalysisFinding{RuleID: id}
+		web, api, cwe := ResolveTaxonomy(&af, "POST", "/x")
+		if len(web) == 0 || len(api) == 0 || len(cwe) == 0 {
+			t.Errorf("%s is unclassified: web=%v api=%v cwe=%v", id, web, api, cwe)
+		}
+	}
+}

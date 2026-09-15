@@ -203,12 +203,12 @@ Swazz is an advanced, high-performance Smart API Fuzzer designed to identify cra
 
 ### Root Commands
 - \`npm install\`: Install frontend dependencies.
-- \`npm run dev\`: Starts the Go backend and Vite frontend concurrently.
+- \`npm run dev\`: Starts the edge coordinator and Vite frontend concurrently.
 - \`npm run build\`: Build the web dashboard.
 - \`npm run deploy:web\`: Deploy the dashboard to Cloudflare Pages.
 
 ### Backend Commands (in \`packages/container\`)
-- \`go run main.go serve\`: Start the HTTP API server.
+- \`go run main.go run-agent --coordinator <ws-url> --token <token>\`: Join the coordinator as a runner agent.
 - \`go run main.go start --config <path>\`: Run the fuzzer in CLI mode.
 - \`go test ./...\`: Run all backend tests.
 
