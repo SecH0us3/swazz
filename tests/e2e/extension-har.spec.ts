@@ -62,7 +62,9 @@ test.describe('Browser extension HAR round trip', () => {
     const popup = await openPopup();
     await popup.locator('#settings-toggle').click();
     await popup.locator('#input-domains').fill(TARGET);
-    await popup.locator('#btn-toggle-record').check();
+    // The checkbox itself is visually hidden behind the CSS switch, so click the slider.
+    await popup.locator('label.switch:has(#btn-toggle-record) .slider').click();
+    await expect(popup.locator('#btn-toggle-record')).toBeChecked();
     await expect(popup.locator('#recording-status')).toHaveText('Recording');
     await popup.close();
 

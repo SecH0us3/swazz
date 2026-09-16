@@ -126,11 +126,13 @@ document.addEventListener('DOMContentLoaded', () => {
             cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
             cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
 
+            // Render endpoints first: it seeds the default selection that the
+            // Sync and HAR buttons key off, so updating them before this would
+            // leave both disabled until the next storage change.
+            renderEndpoints();
+
             // Sync sync & export buttons state
             updateSyncButtonState();
-
-            // Render endpoints list
-            renderEndpoints();
 
             // Load projects dropdown
             if (activeToken) {
