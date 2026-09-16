@@ -1,15 +1,3 @@
-// Inject the MAIN world script (inject.js) into the page context
-try {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inject.js');
-    script.onload = function() {
-        this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-} catch (e) {
-    console.error("Swazz content script: failed to inject helper", e);
-}
-
 // Listen for messages from the page's MAIN world context
 window.addEventListener('message', (event) => {
     // Check message integrity

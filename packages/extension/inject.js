@@ -3,24 +3,29 @@
     if (window.__swazz_intercept_loaded) return;
     window.__swazz_intercept_loaded = true;
 
+    let nextRequestId = 1;
+
     function formatHeaders(headers) {
         const result = {};
         if (!headers) return result;
         if (headers instanceof Headers) {
             for (const [key, value] of headers.entries()) {
-                result[key] = value;
+                result[key.toLowerCase()] = value;
             }
         } else if (Array.isArray(headers)) {
             headers.forEach(([key, value]) => {
-                result[key] = value;
+                if (key) result[key.toLowerCase()] = value;
             });
         } else if (typeof headers === 'object') {
-            Object.assign(result, headers);
+            for (const key of Object.keys(headers)) {
+                result[key.toLowerCase()] = headers[key];
+            }
         }
         return result;
     }
 
-    function sendRequestLog(url, method, headers, body) {
+    function sendRequestLog(url, method, headers, body, customReqId) {
+        const reqId = customReqId || (nextRequestId++);
         try {
             // Absolute URL check
             const absoluteUrl = new URL(url, window.location.href).href;
@@ -30,14 +35,35 @@
                 source: 'swazz-detector',
                 type: 'request',
                 data: {
+                    requestId: reqId,
                     url: absoluteUrl,
-                    method: method.toUpperCase(),
+                    method: (method || 'GET').toUpperCase(),
                     headers: formatHeaders(headers),
                     body: body || ''
                 }
             }, window.location.origin);
         } catch (e) {
             // Silently ignore URL parsing errors
+        }
+        return reqId;
+    }
+
+    function sendResponseLog(requestId, status, statusText, headers, bodyText) {
+        if (!requestId) return;
+        try {
+            window.postMessage({
+                source: 'swazz-detector',
+                type: 'response',
+                data: {
+                    requestId: requestId,
+                    status: typeof status === 'number' ? status : 0,
+                    statusText: statusText || '',
+                    headers: formatHeaders(headers),
+                    bodyText: (bodyText || '').slice(0, 10000)
+                }
+            }, window.location.origin);
+        } catch (e) {
+            // Silently ignore
         }
     }
 
@@ -49,6 +75,7 @@
             let method = "GET";
             let headers = {};
             let body = "";
+            const reqId = nextRequestId++;
 
             try {
                 if (typeof resource === 'string') {
@@ -86,19 +113,38 @@
                 // If body is in the request object (not config), read asynchronously
                 // without blocking the actual network call
                 if (!body && resource && typeof resource === 'object' && resource.body) {
-                    resource.clone().text().then(text => {
-                        sendRequestLog(url, method, headers, text);
-                    }).catch(() => {
-                        sendRequestLog(url, method, headers, '');
-                    });
+                    try {
+                        resource.clone().text().then(text => {
+                            sendRequestLog(url, method, headers, text, reqId);
+                        }).catch(() => {
+                            sendRequestLog(url, method, headers, '', reqId);
+                        });
+                    } catch (e) {
+                        sendRequestLog(url, method, headers, '', reqId);
+                    }
                 } else {
-                    sendRequestLog(url, method, headers, body);
+                    sendRequestLog(url, method, headers, body, reqId);
                 }
             } catch (e) {
                 // Interceptor safety fallback
             }
 
-            return originalFetch.apply(this, arguments);
+            const fetchPromise = originalFetch.apply(this, arguments);
+            fetchPromise.then(res => {
+                try {
+                    const cloned = res.clone();
+                    const status = res.status;
+                    const statusText = res.statusText;
+                    const resHeaders = formatHeaders(res.headers);
+                    cloned.text().then(text => {
+                        sendResponseLog(reqId, status, statusText, resHeaders, text);
+                    }).catch(() => {
+                        sendResponseLog(reqId, status, statusText, resHeaders, '');
+                    });
+                } catch (e) {}
+            }).catch(() => {});
+
+            return fetchPromise;
         };
     }
 
@@ -113,6 +159,36 @@
             this._method = method;
             this._url = url;
             this._headers = {};
+            if (!this._swazzListenerAttached) {
+                this._swazzListenerAttached = true;
+                this.addEventListener('loadend', function() {
+                    try {
+                        if (!this._swazzReqId) return;
+                        const status = this.status;
+                        const statusText = this.statusText;
+                        const rawHeaders = this.getAllResponseHeaders() || '';
+                        const headers = {};
+                        rawHeaders.split('\r\n').forEach(line => {
+                            const parts = line.split(': ');
+                            if (parts.length >= 2) {
+                                const k = parts.shift().trim();
+                                headers[k.toLowerCase()] = parts.join(': ').trim();
+                            }
+                        });
+                        let bodyText = '';
+                        const rt = this.responseType;
+                        if (rt === '' || rt === 'text') {
+                            bodyText = this.responseText || '';
+                        } else if (rt === 'json') {
+                            try {
+                                bodyText = typeof this.response === 'string' ? this.response : JSON.stringify(this.response);
+                            } catch (e) {}
+                        }
+                        sendResponseLog(this._swazzReqId, status, statusText, headers, bodyText);
+                        this._swazzReqId = null;
+                    } catch (e) {}
+                });
+            }
             return originalOpen.apply(this, arguments);
         };
 
@@ -142,7 +218,8 @@
                         } catch {}
                     }
                 }
-                sendRequestLog(this._url, this._method, this._headers, body);
+                const reqId = sendRequestLog(this._url, this._method, this._headers, body);
+                this._swazzReqId = reqId;
             } catch (e) {}
             return originalSend.apply(this, arguments);
         };
@@ -157,8 +234,6 @@
             const url = form.action || window.location.href;
             const method = (form.method || 'GET').toUpperCase();
             
-            // Do not intercept if form submission is prevented or handled by JS (which will trigger fetch/XHR)
-            // But we can check after a tiny delay or just log it anyway (redundancies are merged in background.js)
             const formData = new FormData(form);
             const bodyParams = {};
             formData.forEach((value, key) => {
@@ -170,7 +245,7 @@
             const contentType = form.enctype || 'application/x-www-form-urlencoded';
             let body = "";
             if (contentType === 'multipart/form-data') {
-                body = new URLSearchParams(bodyParams).toString(); // Fallback representation
+                body = new URLSearchParams(bodyParams).toString();
             } else {
                 body = new URLSearchParams(bodyParams).toString();
             }
@@ -179,20 +254,32 @@
         } catch (err) {}
     }, true);
 
-    // 4. Expose sync endpoint helper for dashboard auto-sync
-    // If the dashboard wants to push authentication updates, it can dispatch a custom event
-    window.addEventListener('swazz-handshake', (e) => {
-        // Only handle events from the same origin to avoid token leakage
-        if (e.detail && e.detail.token && typeof e.detail.token === 'string') {
-            window.postMessage({
-                source: 'swazz-detector',
-                type: 'auth_sync',
-                data: {
-                    token: e.detail.token,
-                    userProfile: e.detail.userProfile || null,
-                    swazzUrl: window.location.origin
+    // 4. Intercept navigator.sendBeacon (B4)
+    if (navigator.sendBeacon) {
+        const originalSendBeacon = navigator.sendBeacon;
+        navigator.sendBeacon = function(url, data) {
+            try {
+                let body = "";
+                let headers = {};
+                if (typeof data === 'string') {
+                    body = data;
+                    headers = { 'content-type': 'text/plain;charset=UTF-8' };
+                } else if (data instanceof Blob) {
+                    headers = { 'content-type': data.type || 'application/octet-stream' };
+                } else if (data instanceof FormData) {
+                    const params = {};
+                    for (const [k, v] of data.entries()) {
+                        if (typeof v === 'string') params[k] = v;
+                    }
+                    body = new URLSearchParams(params).toString();
+                    headers = { 'content-type': 'application/x-www-form-urlencoded' };
+                } else if (data instanceof URLSearchParams) {
+                    body = data.toString();
+                    headers = { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' };
                 }
-            }, window.location.origin);
-        }
-    });
+                sendRequestLog(url, 'POST', headers, body);
+            } catch (e) {}
+            return originalSendBeacon.apply(this, arguments);
+        };
+    }
 })();

@@ -8,11 +8,15 @@
     "activeTab",
     "cookies",
     "scripting",
-    "webNavigation"
+    "webNavigation",
+    "side_panel"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -26,6 +30,12 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     },
     {
       "matches": ["<all_urls>"],

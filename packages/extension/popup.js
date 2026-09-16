@@ -5,6 +5,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const recordStatus = document.getElementById('recording-status');
     const toggleDescSub = document.getElementById('toggle-desc-sub');
 
+    const linkOpenSidepanel = document.getElementById('link-open-sidepanel');
+    const scopeWarningBox = document.getElementById('scope-warning-box');
+    const scopeWarningText = document.getElementById('scope-warning-text');
+    const btnScopeWarningAction = document.getElementById('btn-scope-warning-action');
+
     const settingsToggle = document.getElementById('settings-toggle');
     const settingsContent = document.getElementById('settings-content');
 
@@ -22,8 +27,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const endpointsList = document.getElementById('endpoints-list');
     const lblEndpointCount = document.getElementById('lbl-endpoint-count');
     const btnClearEndpoints = document.getElementById('btn-clear-endpoints');
+    const btnImportHar = document.getElementById('btn-import-har');
+    const inputImportHar = document.getElementById('input-import-har');
+
+    const inputEndpointSearch = document.getElementById('input-endpoint-search');
+    const chkSelectAll = document.getElementById('chk-select-all');
+    const lblSelectedCount = document.getElementById('lbl-selected-count');
 
     const btnSyncSwazz = document.getElementById('btn-sync-swazz');
+    const btnExportHar = document.getElementById('btn-export-har');
     const syncStatus = document.getElementById('sync-status');
     const inputNewProjectName = document.getElementById('input-new-project-name');
     const btnCreateProject = document.getElementById('btn-create-project');
@@ -38,6 +50,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeSwazzUrl = "http://localhost:5173";
     let activeProjectId = null;
     let projectsList = [];
+    let droppedOutOfScope = 0;
+    let droppedNoScope = 0;
+    let lastDroppedHost = "";
+
+    const selectedKeys = new Set();
+    const unselectedKeys = new Set();
+    const expandedKeys = new Set();
+    let searchQuery = "";
+
+    // Open in side panel (C5)
+    if (linkOpenSidepanel) {
+        linkOpenSidepanel.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+                const currentWindow = await chrome.windows.getCurrent();
+                await chrome.sidePanel.open({ windowId: currentWindow.id });
+                window.close();
+            } catch (err) {
+                console.error("Failed to open side panel:", err);
+            }
+        });
+    }
 
     // Collapsible Settings
     settingsToggle.addEventListener('click', () => {
@@ -51,6 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
             'recording', 
             'targetDomains', 
             'capturedRequests', 
+            'droppedOutOfScope',
+            'droppedNoScope',
+            'lastDroppedHost',
             'token', 
             'swazzUrl', 
             'projectId',
@@ -61,6 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
             isRecording = !!state.recording;
             targetDomains = state.targetDomains || [];
             capturedRequests = state.capturedRequests || {};
+            droppedOutOfScope = state.droppedOutOfScope || 0;
+            droppedNoScope = state.droppedNoScope || 0;
+            lastDroppedHost = state.lastDroppedHost || "";
             updateCrawlUI(state.crawlState);
             activeToken = state.token || null;
             activeSwazzUrl = state.swazzUrl || "http://localhost:5173";
@@ -69,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Sync toggle
             toggleRecord.checked = isRecording;
             updateRecordingUI();
+            updateScopeWarningUI();
 
             // Sync settings form
             inputSwazzUrl.value = activeSwazzUrl;
@@ -85,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cardActiveProject.textContent = state.projectName || (activeProjectId ? `Project ID: ${activeProjectId.slice(0, 8)}...` : 'None Selected');
             cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
 
-            // Sync sync button disabled state
+            // Sync sync & export buttons state
             updateSyncButtonState();
 
             // Render endpoints list
@@ -113,11 +154,70 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Scope warning UI (C2)
+    function updateScopeWarningUI() {
+        if (!scopeWarningBox) return;
+
+        if (isRecording && targetDomains.length === 0) {
+            scopeWarningBox.classList.remove('hidden');
+            scopeWarningText.textContent = "Recording is on but scope is empty — nothing will be captured";
+            btnScopeWarningAction.textContent = "Use current tab";
+            btnScopeWarningAction.onclick = () => {
+                addActiveTabToScope();
+            };
+        } else if (droppedOutOfScope > 0) {
+            scopeWarningBox.classList.remove('hidden');
+            scopeWarningText.textContent = `${droppedOutOfScope} requests ignored (out of scope)`;
+            const hostToAdd = lastDroppedHost || "";
+            btnScopeWarningAction.textContent = hostToAdd ? `Add ${hostToAdd} to scope` : "Add to scope";
+            btnScopeWarningAction.onclick = () => {
+                if (hostToAdd) {
+                    addDomainToScope(hostToAdd);
+                }
+            };
+        } else {
+            scopeWarningBox.classList.add('hidden');
+        }
+    }
+
+    function addDomainToScope(host) {
+        const clean = host.trim().toLowerCase();
+        if (!clean) return;
+        if (!targetDomains.includes(clean)) {
+            targetDomains.push(clean);
+            inputDomains.value = targetDomains.join(', ');
+            cardActiveDomains.textContent = `Domains: ${targetDomains.join(', ')}`;
+        }
+        droppedOutOfScope = 0;
+        lastDroppedHost = "";
+        chrome.storage.local.set({
+            targetDomains,
+            droppedOutOfScope: 0,
+            lastDroppedHost: ""
+        });
+        updateScopeWarningUI();
+        updateSyncButtonState();
+    }
+
+    function addActiveTabToScope() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs && tabs[0] && tabs[0].url) {
+                try {
+                    const tabUrl = new URL(tabs[0].url);
+                    if (tabUrl.protocol.startsWith('http')) {
+                        addDomainToScope(tabUrl.host);
+                    }
+                } catch (e) {}
+            }
+        });
+    }
+
     // Toggle recording
     toggleRecord.addEventListener('change', (e) => {
         isRecording = e.target.checked;
         chrome.storage.local.set({ recording: isRecording });
         updateRecordingUI();
+        updateScopeWarningUI();
     });
 
     // Update domains in storage
@@ -128,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         targetDomains = domains;
         chrome.storage.local.set({ targetDomains: domains });
         cardActiveDomains.textContent = domains.length > 0 ? `Domains: ${domains.join(', ')}` : 'Scope: Empty';
+        updateScopeWarningUI();
         updateSyncButtonState();
     });
 
@@ -212,13 +313,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             const newProjectId = data.id;
 
-            // Clear input
             inputNewProjectName.value = '';
-
-            // Reload projects and select the newly created one
             await fetchProjects();
             
-            // Set as active
             activeProjectId = newProjectId;
             selectProject.value = newProjectId;
             
@@ -259,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             projectsList = data.projects || [];
 
-            // Populate select list
             selectProject.innerHTML = '<option value="">-- Select Swazz Project --</option>';
             projectsList.forEach(p => {
                 const opt = document.createElement('option');
@@ -271,7 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectProject.appendChild(opt);
             });
 
-            // Update active project name in storage if changed
             if (activeProjectId) {
                 const activeP = projectsList.find(p => p.id === activeProjectId);
                 if (activeP) {
@@ -296,7 +391,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tabUrl = new URL(tabs[0].url);
                 const host = tabUrl.host;
                 
-                // Exclude chrome/extension settings pages
                 if (tabUrl.protocol.startsWith('http')) {
                     helperCurrentTab.textContent = 'Suggest active tab: ';
                     const strong = document.createElement('strong');
@@ -307,13 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     helperCurrentTab.appendChild(strong);
 
                     strong.addEventListener('click', () => {
-                        if (!targetDomains.includes(host)) {
-                            targetDomains.push(host);
-                            inputDomains.value = targetDomains.join(', ');
-                            chrome.storage.local.set({ targetDomains });
-                            cardActiveDomains.textContent = `Domains: ${targetDomains.join(', ')}`;
-                            updateSyncButtonState();
-                        }
+                        addDomainToScope(host);
                     });
                 }
             } catch (e) {}
@@ -324,17 +412,99 @@ document.addEventListener('DOMContentLoaded', () => {
     btnClearEndpoints.addEventListener('click', () => {
         if (confirm("Are you sure you want to clear all recorded endpoints?")) {
             capturedRequests = {};
-            chrome.storage.local.set({ capturedRequests: {} });
+            selectedKeys.clear();
+            unselectedKeys.clear();
+            expandedKeys.clear();
+            droppedOutOfScope = 0;
+            droppedNoScope = 0;
+            lastDroppedHost = "";
+            chrome.storage.local.set({
+                capturedRequests: {},
+                droppedOutOfScope: 0,
+                droppedNoScope: 0,
+                lastDroppedHost: ""
+            });
             renderEndpoints();
+            updateScopeWarningUI();
+            updateSyncButtonState();
         }
     });
 
-    // Render list of captured endpoints
-    function renderEndpoints() {
-        const keys = Object.keys(capturedRequests);
-        lblEndpointCount.textContent = keys.length;
+    // Helper to get selected captured requests map (C3)
+    function getSelectedRequests() {
+        const selected = {};
+        for (const k of Object.keys(capturedRequests)) {
+            if (selectedKeys.has(k)) {
+                selected[k] = capturedRequests[k];
+            }
+        }
+        return selected;
+    }
 
-        if (keys.length === 0) {
+    // Search filter input (C3)
+    if (inputEndpointSearch) {
+        inputEndpointSearch.addEventListener('input', (e) => {
+            searchQuery = (e.target.value || '').toLowerCase().trim();
+            renderEndpoints();
+        });
+    }
+
+    // Select all checkbox (C3)
+    if (chkSelectAll) {
+        chkSelectAll.addEventListener('change', () => {
+            const allKeys = Object.keys(capturedRequests);
+            if (chkSelectAll.checked) {
+                allKeys.forEach(k => {
+                    selectedKeys.add(k);
+                    unselectedKeys.delete(k);
+                });
+            } else {
+                allKeys.forEach(k => {
+                    selectedKeys.delete(k);
+                    unselectedKeys.add(k);
+                });
+            }
+            renderEndpoints();
+            updateSyncButtonState();
+        });
+    }
+
+    // Render list of captured endpoints (C3, C4)
+    function renderEndpoints() {
+        const allKeys = Object.keys(capturedRequests);
+        lblEndpointCount.textContent = allKeys.length;
+
+        // Auto-select newly captured keys
+        allKeys.forEach(k => {
+            if (!unselectedKeys.has(k) && !selectedKeys.has(k)) {
+                selectedKeys.add(k);
+            }
+        });
+
+        // Filter keys by search query
+        const filteredKeys = allKeys.filter(k => {
+            if (!searchQuery) return true;
+            const req = capturedRequests[k];
+            if (!req) return false;
+            const methodMatch = (req.method || '').toLowerCase().includes(searchQuery);
+            const pathMatch = (req.path || '').toLowerCase().includes(searchQuery);
+            return methodMatch || pathMatch;
+        });
+
+        let selectedCount = 0;
+        allKeys.forEach(k => {
+            if (selectedKeys.has(k)) selectedCount++;
+        });
+        if (lblSelectedCount) {
+            lblSelectedCount.textContent = `(${selectedCount} selected)`;
+        }
+
+        if (chkSelectAll) {
+            chkSelectAll.checked = allKeys.length > 0 && selectedCount === allKeys.length;
+            chkSelectAll.indeterminate = selectedCount > 0 && selectedCount < allKeys.length;
+        }
+
+        if (allKeys.length === 0) {
             emptyState.style.display = 'flex';
             endpointsList.innerHTML = '';
             return;
@@ -344,43 +514,128 @@ document.addEventListener('DOMContentLoaded', () => {
         endpointsList.innerHTML = '';
 
         // Sort by timestamp desc
-        const sorted = keys.map(k => capturedRequests[k])
-            .sort((a, b) => b.lastCaptured - a.lastCaptured);
+        const sorted = filteredKeys.map(k => capturedRequests[k])
+            .sort((a, b) => (b.lastCaptured || 0) - (a.lastCaptured || 0));
 
         sorted.forEach(req => {
             const item = document.createElement('div');
             item.className = 'endpoint-item';
 
-            const methodClass = req.method.toLowerCase();
+            const methodClass = (req.method || 'get').toLowerCase();
             const statusClass = req.status || 'needs_work';
             const statusLabel = statusClass === 'well_covered' ? 'Covered' : 'Needs variations';
 
             const itemRow = document.createElement('div');
             itemRow.className = 'item-row';
 
-            const itemMeta = document.createElement('div');
-            itemMeta.className = 'item-meta';
+            const itemHeader = document.createElement('div');
+            itemHeader.className = 'endpoint-item-header';
+
+            // Checkbox (C3)
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.className = 'endpoint-select-chk';
+            chk.checked = selectedKeys.has(req.key);
+            chk.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (chk.checked) {
+                    selectedKeys.add(req.key);
+                    unselectedKeys.delete(req.key);
+                } else {
+                    selectedKeys.delete(req.key);
+                    unselectedKeys.add(req.key);
+                }
+                renderEndpoints();
+                updateSyncButtonState();
+            });
+            itemHeader.appendChild(chk);
+
+            // Delete ✕ button (C3)
+            const btnDel = document.createElement('button');
+            btnDel.className = 'btn-delete-endpoint';
+            btnDel.title = 'Delete endpoint';
+            btnDel.textContent = '✕';
+            btnDel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                delete capturedRequests[req.key];
+                selectedKeys.delete(req.key);
+                unselectedKeys.delete(req.key);
+                expandedKeys.delete(req.key);
+                chrome.storage.local.set({ capturedRequests }, () => {
+                    renderEndpoints();
+                    updateSyncButtonState();
+                });
+            });
+            itemHeader.appendChild(btnDel);
+
+            // Expand/collapse arrow (C4)
+            const expandToggle = document.createElement('span');
+            expandToggle.className = 'endpoint-expand-toggle' + (expandedKeys.has(req.key) ? ' open' : '');
+            expandToggle.textContent = '▶';
+            itemHeader.appendChild(expandToggle);
 
             const methodBadge = document.createElement('span');
             methodBadge.className = `badge-method ${methodClass}`;
             methodBadge.textContent = req.method;
+            itemHeader.appendChild(methodBadge);
 
             const pathSpan = document.createElement('span');
             pathSpan.className = 'item-path';
             pathSpan.title = req.exampleUrl;
             pathSpan.textContent = req.path;
+            itemHeader.appendChild(pathSpan);
 
-            itemMeta.appendChild(methodBadge);
-            itemMeta.appendChild(pathSpan);
+            itemRow.appendChild(itemHeader);
+
+            // Right side: status chips (C4) + coverage badge
+            const rightSide = document.createElement('div');
+            rightSide.style.display = 'flex';
+            rightSide.style.alignItems = 'center';
+            rightSide.style.gap = '6px';
+            rightSide.style.flexShrink = '0';
+
+            // Response status chips (C4)
+            if (req.statuses && Object.keys(req.statuses).length > 0) {
+                const chipsContainer = document.createElement('div');
+                chipsContainer.className = 'status-chips-container';
+                for (const sCode of Object.keys(req.statuses)) {
+                    const sCount = req.statuses[sCode];
+                    const chip = document.createElement('span');
+                    const codeNum = parseInt(sCode, 10);
+                    let chipClass = 'sother';
+                    if (codeNum >= 200 && codeNum < 300) chipClass = 's2xx';
+                    else if (codeNum >= 300 && codeNum < 400) chipClass = 's3xx';
+                    else if (codeNum >= 400 && codeNum < 500) chipClass = 's4xx';
+                    else if (codeNum >= 500) chipClass = 's5xx';
+
+                    chip.className = `badge-status-chip ${chipClass}`;
+                    chip.textContent = `${sCode} ×${sCount}`;
+                    chipsContainer.appendChild(chip);
+                }
+                rightSide.appendChild(chipsContainer);
+            }
 
             const statusBadge = document.createElement('span');
             statusBadge.className = `badge-status ${statusClass}`;
             statusBadge.textContent = statusLabel;
+            rightSide.appendChild(statusBadge);
 
-            itemRow.appendChild(itemMeta);
-            itemRow.appendChild(statusBadge);
+            itemRow.appendChild(rightSide);
             item.appendChild(itemRow);
 
+            // Row click toggles expansion
+            itemRow.style.cursor = 'pointer';
+            itemRow.addEventListener('click', (e) => {
+                if (e.target === chk || e.target === btnDel) return;
+                if (expandedKeys.has(req.key)) {
+                    expandedKeys.delete(req.key);
+                } else {
+                    expandedKeys.add(req.key);
+                }
+                renderEndpoints();
+            });
+
+            // Recommendation string
             if (req.recommendation) {
                 const rec = document.createElement('div');
                 rec.className = 'item-recommendation';
@@ -388,26 +643,139 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.appendChild(rec);
             }
 
+            // Expandable details (C4)
+            const isExpanded = expandedKeys.has(req.key);
+            const detailsContainer = document.createElement('div');
+            detailsContainer.className = 'item-expandable-details' + (isExpanded ? '' : ' hidden');
+
+            // Query keys
+            const queryKeysSection = document.createElement('div');
+            queryKeysSection.className = 'item-detail-section';
+            const qkLabel = document.createElement('span');
+            qkLabel.className = 'item-detail-label';
+            qkLabel.textContent = `Captured Query Parameters (${(req.queryKeys || []).length}):`;
+            const qkValue = document.createElement('div');
+            qkValue.className = 'item-detail-value';
+            qkValue.textContent = (req.queryKeys && req.queryKeys.length > 0) ? req.queryKeys.join(', ') : '(none)';
+            queryKeysSection.appendChild(qkLabel);
+            queryKeysSection.appendChild(qkValue);
+            detailsContainer.appendChild(queryKeysSection);
+
+            // Body sample
+            const bodySample = (req.bodyVariations && req.bodyVariations.length > 0) ? req.bodyVariations[0] : (req.lastResponse && req.lastResponse.bodySample ? req.lastResponse.bodySample : "");
+            if (bodySample) {
+                const bodySection = document.createElement('div');
+                bodySection.className = 'item-detail-section';
+                const bodyLabel = document.createElement('span');
+                bodyLabel.className = 'item-detail-label';
+                bodyLabel.textContent = 'Body Sample:';
+                const bodyValue = document.createElement('div');
+                bodyValue.className = 'item-detail-value';
+                bodyValue.textContent = bodySample.length > 500 ? bodySample.slice(0, 500) + '...' : bodySample;
+                bodySection.appendChild(bodyLabel);
+                bodySection.appendChild(bodyValue);
+                detailsContainer.appendChild(bodySection);
+            }
+
+            item.appendChild(detailsContainer);
             endpointsList.appendChild(item);
         });
     }
 
-    // Check if we can enable Sync button
+    // Check if we can enable Sync and Export buttons (A3, C3)
     function updateSyncButtonState() {
         const hasProject = !!activeProjectId;
         const hasToken = !!activeToken;
-        const hasEndpoints = Object.keys(capturedRequests).length > 0;
+        const selectedMap = getSelectedRequests();
+        const selectedCount = Object.keys(selectedMap).length;
+        const hasSelected = selectedCount > 0;
 
-        btnSyncSwazz.disabled = !(hasProject && hasToken && hasEndpoints);
+        btnSyncSwazz.disabled = !(hasProject && hasToken && hasSelected);
+        if (btnExportHar) {
+            btnExportHar.disabled = !hasSelected;
+        }
     }
 
-    // Sync to Swazz Dashboard action
+    // HAR Export Action (A2, A3, C3)
+    if (btnExportHar) {
+        btnExportHar.addEventListener('click', () => {
+            const selectedMap = getSelectedRequests();
+            const reqCount = Object.keys(selectedMap).length;
+            if (reqCount === 0) {
+                showSyncStatus("No endpoints selected to export.", "error");
+                return;
+            }
+
+            try {
+                const result = window.SwazzHar.downloadHar(selectedMap, targetDomains);
+                showSyncStatus(`⬇ Exported ${result.entries} requests → ${result.filename}`, "success");
+            } catch (err) {
+                console.error("HAR export failed:", err);
+                showSyncStatus(`❌ Export error: ${err.message}`, "error");
+            }
+        });
+    }
+
+    // HAR Import Action (A4)
+    if (btnImportHar && inputImportHar) {
+        btnImportHar.addEventListener('click', () => {
+            inputImportHar.click();
+        });
+
+        inputImportHar.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const importedMap = window.SwazzHar.parseHarIntoRequests(reader.result);
+                    const importedKeys = Object.keys(importedMap);
+                    if (importedKeys.length === 0) {
+                        showSyncStatus("No endpoints found in HAR.", "error");
+                        return;
+                    }
+
+                    const merged = window.SwazzHar.mergeCapturedRequests(capturedRequests, importedMap);
+                    capturedRequests = merged;
+                    importedKeys.forEach(k => {
+                        selectedKeys.add(k);
+                        unselectedKeys.delete(k);
+                    });
+
+                    chrome.storage.local.set({ capturedRequests: merged }, () => {
+                        renderEndpoints();
+                        updateSyncButtonState();
+                        showSyncStatus(`📂 Imported ${importedKeys.length} endpoints from HAR!`, "success");
+                    });
+                } catch (err) {
+                    console.error("HAR import failed:", err);
+                    showSyncStatus(`❌ Import error: ${err.message}`, "error");
+                } finally {
+                    inputImportHar.value = '';
+                }
+            };
+            reader.onerror = () => {
+                showSyncStatus("❌ Failed to read HAR file.", "error");
+                inputImportHar.value = '';
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    // Sync to Swazz Dashboard action (acting on selected subset, C3)
     btnSyncSwazz.addEventListener('click', async () => {
         if (!activeProjectId || !activeToken) return;
 
-        const reqCount = Object.keys(capturedRequests).length;
+        const selectedMap = getSelectedRequests();
+        const reqCount = Object.keys(selectedMap).length;
+        if (reqCount === 0) {
+            showSyncStatus("No endpoints selected to sync.", "error");
+            return;
+        }
+
         if (reqCount > 5000) {
-            const proceed = confirm(`Warning: You have captured ${reqCount} requests. Exporting more than 5000 requests may result in slow parsing or timeouts. Do you want to proceed?`);
+            const proceed = confirm(`Warning: You have selected ${reqCount} requests. Exporting more than 5000 requests may result in slow parsing or timeouts. Do you want to proceed?`);
             if (!proceed) {
                 showSyncStatus("Sync cancelled.", "info");
                 return;
@@ -417,8 +785,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSyncSwazz.disabled = true;
         showSyncStatus("Generating HAR log...", "info");
 
-        // 1. Build standard HAR payload from captured requests
-        const harPayload = buildHarPayload(capturedRequests);
+        // 1. Build standard HAR payload from selected requests
+        const harPayload = window.SwazzHar.buildHarPayload(selectedMap);
 
         try {
             // 2. Parse HAR payload into Swazz Endpoints using coordinator
@@ -468,7 +836,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
 
                 if (matchIndex >= 0) {
-                    // Update schema and params if matched
                     mergedEndpoints[matchIndex] = mergeEndpointDefs(mergedEndpoints[matchIndex], newEp);
                 } else {
                     mergedEndpoints.push(newEp);
@@ -477,11 +844,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentConfig.endpoints = mergedEndpoints;
 
-            // Auto-fill base_url and swagger_url from the captured traffic domain
-            // so the runner can start scanning without manual configuration
             let capturedBaseUrl = parseData.basePath || null;
             if (!capturedBaseUrl) {
-                // Fall back to the first target domain if parser didn't return basePath
                 try {
                     const stored = await new Promise(r => chrome.storage.local.get(['targetDomains'], r));
                     const domains = stored.targetDomains || [];
@@ -493,10 +857,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!currentConfig.base_url) {
                     currentConfig.base_url = capturedBaseUrl;
                 }
-                // swagger_url is required by the runner to start a scan.
-                // If not already set, point it to the base URL so the runner
-                // has a valid target. The user can override it to an actual
-                // OpenAPI spec URL in project settings.
                 if (!currentConfig.swagger_url) {
                     currentConfig.swagger_url = capturedBaseUrl;
                 }
@@ -554,7 +914,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper to merge endpoint definitions
     function mergeEndpointDefs(oldEp, newEp) {
-        // Merge request body schema properties
         const mergedSchema = { ...oldEp.schema };
         if (newEp.schema && newEp.schema.properties) {
             mergedSchema.properties = {
@@ -564,7 +923,6 @@ document.addEventListener('DOMContentLoaded', () => {
             mergedSchema.type = "object";
         }
 
-        // Merge headers, query params, etc.
         return {
             ...oldEp,
             schema: mergedSchema,
@@ -579,96 +937,33 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Helper to build standard HAR log structure from captured requests
-    function buildHarPayload(requestsMap) {
-        const entries = [];
-        const keys = Object.keys(requestsMap);
-
-        keys.forEach(k => {
-            const req = requestsMap[k];
-            try {
-                const urlObj = new URL(req.exampleUrl);
-
-                // Construct standard query string items
-                const queryParams = [];
-                urlObj.searchParams.forEach((value, name) => {
-                    queryParams.push({ name, value });
-                });
-
-                // Map headers
-                const headerItems = Object.entries(req.headers || {}).map(([name, value]) => ({ name, value }));
-                // Parse common content types
-                let mimeType = "application/json";
-                
-                // Generate entries for each unique body or query variation captured
-                // This tells the Go parser to look at all forms of the request!
-                const bodyList = req.bodyVariations.length > 0 ? req.bodyVariations : [""];
-                const queryList = req.queryVariations.length > 0 ? req.queryVariations : [urlObj.search];
-
-                queryList.forEach(q => {
-                    bodyList.forEach(b => {
-                        const variantUrl = new URL(urlObj.origin + urlObj.pathname + q);
-                        const vQueryParams = [];
-                        variantUrl.searchParams.forEach((val, name) => {
-                            vQueryParams.push({ name, value: val });
-                        });
-
-                        entries.push({
-                            startedDateTime: new Date(req.lastCaptured).toISOString(),
-                            time: 10,
-                            request: {
-                                method: req.method,
-                                url: variantUrl.href,
-                                httpVersion: "HTTP/1.1",
-                                cookies: [],
-                                headers: headerItems,
-                                queryString: vQueryParams,
-                                postData: b ? {
-                                    mimeType: mimeType,
-                                    text: b
-                                } : undefined,
-                                headersSize: -1,
-                                bodySize: b ? b.length : -1
-                            },
-                            response: {
-                                status: 200,
-                                statusText: "OK",
-                                httpVersion: "HTTP/1.1",
-                                cookies: [],
-                                headers: [],
-                                content: { size: 0, mimeType: "application/json" },
-                                redirectURL: "",
-                                headersSize: -1,
-                                bodySize: -1
-                            },
-                            cache: {},
-                            timings: { send: 0, wait: 10, receive: 0 }
-                        });
-                    });
-                });
-            } catch (e) {
-                console.error("Skipping malformed URL during HAR generation:", req.exampleUrl, e);
-            }
-        });
-
-        return {
-            log: {
-                version: "1.2",
-                creator: {
-                    name: "Swazz Extension Capturer",
-                    version: "1.0.0"
-                },
-                entries: entries
-            }
-        };
-    }
-
-    // Set up chrome storage listener for live updates
+    // Storage listener for live updates
     chrome.storage.onChanged.addListener((changes) => {
         if (changes.capturedRequests) {
             capturedRequests = changes.capturedRequests.newValue || {};
             renderEndpoints();
             updateSyncButtonState();
+        }
+        if (changes.recording) {
+            isRecording = !!changes.recording.newValue;
+            toggleRecord.checked = isRecording;
+            updateRecordingUI();
+            updateScopeWarningUI();
+        }
+        if (changes.targetDomains) {
+            targetDomains = changes.targetDomains.newValue || [];
+            inputDomains.value = targetDomains.join(', ');
+            cardActiveDomains.textContent = targetDomains.length > 0 ? `Domains: ${targetDomains.join(', ')}` : 'Scope: Empty';
+            updateScopeWarningUI();
+            updateSyncButtonState();
+        }
+        if (changes.droppedOutOfScope !== undefined) {
+            droppedOutOfScope = changes.droppedOutOfScope.newValue || 0;
+            updateScopeWarningUI();
+        }
+        if (changes.lastDroppedHost !== undefined) {
+            lastDroppedHost = changes.lastDroppedHost.newValue || "";
+            updateScopeWarningUI();
         }
         if (changes.token || changes.swazzUrl) {
             loadState();
@@ -692,7 +987,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isCurrentlyCrawling = res.crawlState && res.crawlState.crawling;
                 
                 if (isCurrentlyCrawling) {
-                    // STOP CRAWL
                     const crawlState = res.crawlState || {};
                     crawlState.crawling = false;
                     chrome.storage.local.set({ crawlState }, () => {
@@ -701,7 +995,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // START CRAWL
                 if (!isRecording) {
                     showCrawlStatus("Please enable Traffic Recording first!", "error");
                     return;
