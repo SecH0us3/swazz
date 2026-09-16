@@ -154,7 +154,7 @@ if check_port 8788; then
 else
   echo "→ Starting Vulnerable Demo API (with watchdog)..."
   start_watchdog 8788 "Vulnerable Demo API" demo.log \
-    env NODE_OPTIONS="--max-old-space-size=4096" "$WRANGLER" dev --port 8788 --cwd demo --inspector-port 0 --log-level info
+    env NODE_OPTIONS="--max-old-space-size=1536" "$WRANGLER" dev --port 8788 --cwd demo --inspector-port 0 --log-level info
   wait_for_port 8788 "Vulnerable Demo API"
 fi
 
@@ -168,7 +168,7 @@ else
   "$WRANGLER" d1 execute swazz_db --local --command "INSERT OR IGNORE INTO users (id, username, password_hash, api_key, plan) VALUES ('01H9YZECI00000000000000000', 'ci_user', 'no-hash-needed-for-token', '0c4000e5af58b58dac6d8f190a5e4960441c0d8b6370b09096900931f87df527', 'Supporter Plan');" --cwd packages/edge || true
   echo "→ Starting Edge Coordinator (with watchdog)..."
   start_watchdog 8787 "Edge Coordinator" edge.log \
-    env NODE_OPTIONS="--max-old-space-size=4096" "$WRANGLER" dev --cwd packages/edge --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
+    env NODE_OPTIONS="--max-old-space-size=1536" "$WRANGLER" dev --cwd packages/edge --inspector-port 0 --var JWT_SECRET:test-secret --var PASSWORD_AUTH_ENABLED:true --var BETA_MODE_ENABLED:true --var BETA_USER_LIMIT:5000 --log-level error
   wait_for_port 8787 "Edge Coordinator"
 fi
 
