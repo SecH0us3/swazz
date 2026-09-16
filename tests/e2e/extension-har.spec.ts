@@ -125,4 +125,35 @@ test.describe('Browser extension HAR round trip', () => {
     await expect(app.locator('.tree-leaf-row:has-text("goods")')).toBeVisible({ timeout: 30000 });
     await app.close();
   });
+
+  test('accepts the dashboard Auto-Sync handshake and rejects a hostile origin', async () => {
+    const worker = context.serviceWorkers()[0];
+    await worker.evaluate(() => (globalThis as any).chrome.storage.local.remove('token'));
+
+    // A page that is not the dashboard must not be able to plant a token.
+    const hostile = await context.newPage();
+    await hostile.goto(`http://${TARGET}/welcome`);
+    await hostile.evaluate(() => {
+      localStorage.setItem('swazz_token', 'attacker-token');
+      window.dispatchEvent(new CustomEvent('swazz-handshake', { detail: { token: 'attacker-token' } }));
+    });
+    await hostile.waitForTimeout(500);
+    let stored = await worker.evaluate(() => (globalThis as any).chrome.storage.local.get('token'));
+    expect(stored.token, 'a non-dashboard origin must never set the token').toBeFalsy();
+    await hostile.close();
+
+    // The dashboard itself may, via the Auto-Sync button's event.
+    const app = await context.newPage();
+    await app.goto(DASHBOARD);
+    await app.evaluate(() => {
+      localStorage.setItem('swazz_token', 'dashboard-token');
+      window.dispatchEvent(new CustomEvent('swazz-handshake', { detail: {} }));
+    });
+    await expect
+      .poll(async () => (await worker.evaluate(() => (globalThis as any).chrome.storage.local.get('token'))).token, {
+        timeout: 10000,
+      })
+      .toBe('dashboard-token');
+    await app.close();
+  });
 });

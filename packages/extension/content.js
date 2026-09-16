@@ -59,6 +59,13 @@ window.addEventListener('storage', (e) => {
     }
 });
 
+// The dashboard's "Auto-Sync with Extension" button dispatches this event. It is
+// handled here in the isolated world rather than in the page, so a hostile site
+// cannot reach the listener at all; background.js re-checks the sender origin.
+window.addEventListener('swazz-handshake', () => {
+    checkAndSyncDashboardToken();
+});
+
 
 // ==========================================
 // DOM VULNERABILITY HIGHLIGHTER

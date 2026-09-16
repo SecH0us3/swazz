@@ -47,7 +47,8 @@ export default withMermaid(defineConfig({
           { text: 'Deployment & Production 🚀', link: '/deployment' },
           { text: 'CI/CD Pipelines ⚡️', link: '/ci_cd' },
           { text: 'AI Auto-Fix & Remediation 🤖', link: '/ai_remediation' },
-          { text: 'DefectDojo Integration 🛡', link: '/defectdojo' }
+          { text: 'DefectDojo Integration 🛡', link: '/defectdojo' },
+          { text: 'Browser Extension 🧩', link: '/browser_extension' }
         ]
       },
       {
