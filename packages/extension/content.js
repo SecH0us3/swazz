@@ -1,3 +1,7 @@
+// Helpers from scope.js
+const { stripPort, isDomainTargeted, isAuthOriginAllowed } = (typeof window !== 'undefined' && window.SwazzScope) || 
+    (typeof globalThis !== 'undefined' && globalThis.SwazzScope) || {};
+
 // Listen for messages from the page's MAIN world context
 window.addEventListener('message', (event) => {
     // Check message integrity
@@ -10,8 +14,10 @@ window.addEventListener('message', (event) => {
 
 // Auto-sync token when visiting the Swazz Dashboard page
 function checkAndSyncDashboardToken() {
-    const host = window.location.host;
-    if (host === 'localhost:5173' || host === 'swazz.secmy.app' || host.endsWith('.swazz.secmy.app')) {
+    const isAllowed = typeof isAuthOriginAllowed === 'function' 
+        ? isAuthOriginAllowed(window.location.href)
+        : (window.location.host === 'localhost:5173' || (window.location.protocol === 'https:' && (window.location.host === 'swazz.secmy.app' || window.location.host.endsWith('.swazz.secmy.app'))));
+    if (isAllowed) {
         try {
             // Check token in local storage
             const token = localStorage.getItem('swazz_token');
@@ -60,29 +66,6 @@ window.addEventListener('storage', (e) => {
 
 let mutationObserver = null;
 let injectedStyles = null;
-
-function stripPort(hostOrTarget) {
-    if (!hostOrTarget) return '';
-    const s = hostOrTarget.trim().toLowerCase();
-    if (s.startsWith('[')) {
-        const closingBracketIndex = s.indexOf(']');
-        if (closingBracketIndex !== -1) {
-            return s.substring(0, closingBracketIndex + 1);
-        }
-    }
-    return s.split(':')[0];
-}
-
-function isDomainTargeted(host, targetDomains) {
-    if (!targetDomains || targetDomains.length === 0) return false;
-    const cleanHost = stripPort(host);
-    return targetDomains.some(target => {
-        const t = stripPort(target);
-        if (!t) return false;
-        // Only allow exact match or subdomain (not substring to prevent spoofing)
-        return cleanHost === t || cleanHost.endsWith('.' + t);
-    });
-}
 
 function injectHighlighterStyles() {
     if (injectedStyles) return;

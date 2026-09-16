@@ -1,0 +1,12 @@
+{
+  "name": "@swazz/extension",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitest/coverage-istanbul": "^4.1.11",
+    "vitest": "^4.1.11"
+  }
+}

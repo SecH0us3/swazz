@@ -48,6 +48,37 @@
         return reqId;
     }
 
+    function isTextualContentType(ct) {
+        if (!ct) return true; // missing Content-Type is allowed
+        const lower = ct.toLowerCase();
+        return lower.startsWith('text/') ||
+               lower.includes('json') ||
+               lower.includes('xml') ||
+               lower.includes('x-www-form-urlencoded');
+    }
+
+    function shouldCaptureResponseBody(headers) {
+        let cl = null;
+        let ct = null;
+        if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+            cl = headers.get('content-length');
+            ct = headers.get('content-type');
+        } else if (headers && typeof headers === 'object') {
+            for (const k of Object.keys(headers)) {
+                const kl = k.toLowerCase();
+                if (kl === 'content-length') cl = headers[k];
+                else if (kl === 'content-type') ct = headers[k];
+            }
+        }
+        if (cl) {
+            const len = parseInt(cl, 10);
+            if (!isNaN(len) && len > 64 * 1024) {
+                return false;
+            }
+        }
+        return isTextualContentType(ct);
+    }
+
     function sendResponseLog(requestId, status, statusText, headers, bodyText) {
         if (!requestId) return;
         try {
@@ -132,15 +163,19 @@
             const fetchPromise = originalFetch.apply(this, arguments);
             fetchPromise.then(res => {
                 try {
-                    const cloned = res.clone();
                     const status = res.status;
                     const statusText = res.statusText;
                     const resHeaders = formatHeaders(res.headers);
-                    cloned.text().then(text => {
-                        sendResponseLog(reqId, status, statusText, resHeaders, text);
-                    }).catch(() => {
+                    if (shouldCaptureResponseBody(res.headers)) {
+                        const cloned = res.clone();
+                        cloned.text().then(text => {
+                            sendResponseLog(reqId, status, statusText, resHeaders, text);
+                        }).catch(() => {
+                            sendResponseLog(reqId, status, statusText, resHeaders, '');
+                        });
+                    } else {
                         sendResponseLog(reqId, status, statusText, resHeaders, '');
-                    });
+                    }
                 } catch (e) {}
             }).catch(() => {});
 
@@ -176,13 +211,15 @@
                             }
                         });
                         let bodyText = '';
-                        const rt = this.responseType;
-                        if (rt === '' || rt === 'text') {
-                            bodyText = this.responseText || '';
-                        } else if (rt === 'json') {
-                            try {
-                                bodyText = typeof this.response === 'string' ? this.response : JSON.stringify(this.response);
-                            } catch (e) {}
+                        if (shouldCaptureResponseBody(headers)) {
+                            const rt = this.responseType;
+                            if (rt === '' || rt === 'text') {
+                                bodyText = this.responseText || '';
+                            } else if (rt === 'json') {
+                                try {
+                                    bodyText = typeof this.response === 'string' ? this.response : JSON.stringify(this.response);
+                                } catch (e) {}
+                            }
                         }
                         sendResponseLog(this._swazzReqId, status, statusText, headers, bodyText);
                         this._swazzReqId = null;

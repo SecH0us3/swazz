@@ -1,5 +1,11 @@
-importScripts('har.js');
-const { normalizePath } = self.SwazzHar;
+if (typeof importScripts === 'function') {
+    importScripts('har.js', 'scope.js');
+}
+
+const { normalizePath } = (typeof self !== 'undefined' && self.SwazzHar) || 
+    (typeof require === 'function' ? require('./har.js') : (typeof window !== 'undefined' ? window.SwazzHar : {}));
+const { stripPort, isDomainTargeted, isAuthOriginAllowed } = (typeof self !== 'undefined' && self.SwazzScope) || 
+    (typeof require === 'function' ? require('./scope.js') : (typeof window !== 'undefined' ? window.SwazzScope : {}));
 
 // Default state
 const DEFAULT_STATE = {
@@ -38,6 +44,7 @@ function scheduleFlush() {
 
 function flushStorage() {
     flushTimer = null;
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
     isFlushing = true;
     chrome.storage.local.set({
         capturedRequests,
@@ -53,6 +60,7 @@ function flushStorage() {
 }
 
 function updateBadge() {
+    if (typeof chrome === 'undefined' || !chrome.action) return;
     const count = Object.keys(capturedRequests).length;
     if (count > 0) {
         chrome.action.setBadgeText({ text: String(count) });
@@ -63,89 +71,71 @@ function updateBadge() {
 }
 
 // Initialize state in local storage if not present
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.storage.local.get(Object.keys(DEFAULT_STATE), (result) => {
-        const updates = {};
-        for (const key in DEFAULT_STATE) {
-            if (result[key] === undefined) {
-                updates[key] = DEFAULT_STATE[key];
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onInstalled) {
+    chrome.runtime.onInstalled.addListener(() => {
+        chrome.storage.local.get(Object.keys(DEFAULT_STATE), (result) => {
+            const updates = {};
+            for (const key in DEFAULT_STATE) {
+                if (result[key] === undefined) {
+                    updates[key] = DEFAULT_STATE[key];
+                }
             }
-        }
-        if (Object.keys(updates).length > 0) {
-            chrome.storage.local.set(updates);
-        }
+            if (Object.keys(updates).length > 0) {
+                chrome.storage.local.set(updates);
+            }
+        });
     });
-});
-
-// Hydrate module-level state on startup
-chrome.storage.local.get([
-    'recording',
-    'targetDomains',
-    'capturedRequests',
-    'droppedOutOfScope',
-    'droppedNoScope',
-    'lastDroppedHost'
-], (state) => {
-    if (state) {
-        recording = !!state.recording;
-        targetDomains = state.targetDomains || [];
-        capturedRequests = state.capturedRequests || {};
-        droppedOutOfScope = state.droppedOutOfScope || 0;
-        droppedNoScope = state.droppedNoScope || 0;
-        lastDroppedHost = state.lastDroppedHost || "";
-    }
-    updateBadge();
-});
-
-// Re-hydrate on storage changes not originating from our own flush
-chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local') return;
-
-    if (changes.recording) {
-        recording = !!changes.recording.newValue;
-        updateBadge();
-    }
-    if (changes.targetDomains) {
-        targetDomains = changes.targetDomains.newValue || [];
-    }
-    if (changes.capturedRequests) {
-        if (!isFlushing) {
-            capturedRequests = changes.capturedRequests.newValue || {};
-            updateBadge();
-        }
-    }
-    if (changes.droppedOutOfScope && !isFlushing) {
-        droppedOutOfScope = changes.droppedOutOfScope.newValue || 0;
-    }
-    if (changes.droppedNoScope && !isFlushing) {
-        droppedNoScope = changes.droppedNoScope.newValue || 0;
-    }
-    if (changes.lastDroppedHost && !isFlushing) {
-        lastDroppedHost = changes.lastDroppedHost.newValue || "";
-    }
-});
-
-function stripPort(hostOrTarget) {
-    if (!hostOrTarget) return '';
-    const s = hostOrTarget.trim().toLowerCase();
-    if (s.startsWith('[')) {
-        const closingBracketIndex = s.indexOf(']');
-        if (closingBracketIndex !== -1) {
-            return s.substring(0, closingBracketIndex + 1);
-        }
-    }
-    return s.split(':')[0];
 }
 
-// Function to match host against target domains list
-function isDomainTargeted(host, domains) {
-    if (!domains || domains.length === 0) return false;
-    const cleanHost = stripPort(host);
-    return domains.some(target => {
-        const t = stripPort(target);
-        if (!t) return false;
-        // Only allow exact match or subdomain (not substring to prevent spoofing)
-        return cleanHost === t || cleanHost.endsWith('.' + t);
+// Hydrate module-level state on startup
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get([
+        'recording',
+        'targetDomains',
+        'capturedRequests',
+        'droppedOutOfScope',
+        'droppedNoScope',
+        'lastDroppedHost'
+    ], (state) => {
+        if (state) {
+            recording = !!state.recording;
+            targetDomains = state.targetDomains || [];
+            capturedRequests = state.capturedRequests || {};
+            droppedOutOfScope = state.droppedOutOfScope || 0;
+            droppedNoScope = state.droppedNoScope || 0;
+            lastDroppedHost = state.lastDroppedHost || "";
+        }
+        updateBadge();
+    });
+}
+
+// Re-hydrate on storage changes not originating from our own flush
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
+
+        if (changes.recording) {
+            recording = !!changes.recording.newValue;
+            updateBadge();
+        }
+        if (changes.targetDomains) {
+            targetDomains = changes.targetDomains.newValue || [];
+        }
+        if (changes.capturedRequests) {
+            if (!isFlushing) {
+                capturedRequests = changes.capturedRequests.newValue || {};
+                updateBadge();
+            }
+        }
+        if (changes.droppedOutOfScope && !isFlushing) {
+            droppedOutOfScope = changes.droppedOutOfScope.newValue || 0;
+        }
+        if (changes.droppedNoScope && !isFlushing) {
+            droppedNoScope = changes.droppedNoScope.newValue || 0;
+        }
+        if (changes.lastDroppedHost && !isFlushing) {
+            lastDroppedHost = changes.lastDroppedHost.newValue || "";
+        }
     });
 }
 
@@ -174,22 +164,12 @@ function processCapturedRequest(reqData, senderTab) {
         return;
     }
 
-    // Sender origin check (B1): drop only if neither request host nor tab host is in targetDomains
+    // Validate sender tab url if present (unparseable tab URL is dropped)
     if (senderTab && senderTab.url) {
-        let tabUrl;
         try {
-            tabUrl = new URL(senderTab.url);
+            new URL(senderTab.url);
         } catch (e) {
             return; // Drop on unparseable sender.tab.url
-        }
-
-        const hostInScope = isDomainTargeted(host, targetDomains);
-        const tabInScope = isDomainTargeted(tabUrl.host, targetDomains);
-        if (!hostInScope && !tabInScope) {
-            droppedOutOfScope++;
-            lastDroppedHost = host;
-            scheduleFlush();
-            return;
         }
     }
 
@@ -324,53 +304,46 @@ function processCapturedResponse(resData) {
 }
 
 // B4: Listen for document navigation on committed
-chrome.webNavigation.onCommitted.addListener((details) => {
-    // Only capture top-level frame navigation
-    if (details.frameId !== 0) return;
-    if (!details.url || !details.url.startsWith('http')) return;
+if (typeof chrome !== 'undefined' && chrome.webNavigation && chrome.webNavigation.onCommitted) {
+    chrome.webNavigation.onCommitted.addListener((details) => {
+        // Only capture top-level frame navigation
+        if (details.frameId !== 0) return;
+        if (!details.url || !details.url.startsWith('http')) return;
 
-    processCapturedRequest({
-        url: details.url,
-        method: 'GET',
-        headers: {},
-        body: ''
-    }, null);
-});
+        processCapturedRequest({
+            url: details.url,
+            method: 'GET',
+            headers: {},
+            body: ''
+        }, null);
+    });
+}
 
-// Listen for messages from Content Script or Popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+function handleRuntimeMessage(message, sender, sendResponse) {
     if (!message || message.source !== 'swazz-detector') return;
 
     if (message.type === 'auth_sync') {
         // B6: Validate sender tab origin against allowlist
-        if (!sender.tab || !sender.tab.url) return;
+        if (!sender || !sender.tab || !sender.tab.url) return;
         try {
             const senderUrl = new URL(sender.tab.url);
-            const senderOrigin = senderUrl.origin;
-            const host = senderUrl.host;
-            const isAllowedOrigin = (
-                senderOrigin === 'http://localhost:5173' ||
-                host === 'swazz.secmy.app' ||
-                host.endsWith('.swazz.secmy.app')
-            ) && (senderUrl.protocol === 'https:' || senderUrl.protocol === 'http:');
-
             const { token, userProfile, swazzUrl } = message.data || {};
-            if (isAllowedOrigin && swazzUrl === senderOrigin) {
+            if (isAuthOriginAllowed(sender.tab.url) && swazzUrl === senderUrl.origin) {
                 chrome.storage.local.set({ token, userProfile, swazzUrl });
             } else {
-                console.warn('[Swazz Security] Rejected auth_sync from unverified origin:', senderOrigin, swazzUrl);
+                console.warn('[Swazz Security] Rejected auth_sync from unverified origin:', senderUrl.origin, swazzUrl);
             }
         } catch (e) {}
         return;
     }
 
     if (message.type === 'get_my_tab_id') {
-        sendResponse({ tabId: sender.tab ? sender.tab.id : null });
+        if (sendResponse) sendResponse({ tabId: sender && sender.tab ? sender.tab.id : null });
         return;
     }
 
     if (message.type === 'request') {
-        processCapturedRequest(message.data, sender.tab);
+        processCapturedRequest(message.data, sender ? sender.tab : null);
         return;
     }
 
@@ -378,4 +351,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         processCapturedResponse(message.data);
         return;
     }
-});
+}
+
+// Listen for messages from Content Script or Popup
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+}
+
+// Export for unit tests in Node / Vitest
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        processCapturedRequest,
+        processCapturedResponse,
+        handleRuntimeMessage,
+        getCapturedRequests: () => capturedRequests,
+        setCapturedRequests: (val) => { capturedRequests = val; },
+        getRecording: () => recording,
+        setRecording: (val) => { recording = val; },
+        getTargetDomains: () => targetDomains,
+        setTargetDomains: (val) => { targetDomains = val; },
+        getDroppedOutOfScope: () => droppedOutOfScope,
+        getDroppedNoScope: () => droppedNoScope,
+        resetState: () => {
+            recording = false;
+            targetDomains = [];
+            capturedRequests = {};
+            droppedOutOfScope = 0;
+            droppedNoScope = 0;
+            lastDroppedHost = "";
+            pendingRequests.clear();
+        }
+    };
+}

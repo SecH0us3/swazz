@@ -8,6 +8,7 @@
     "packages/edge",
     "packages/rag",
     "packages/shared",
+    "packages/extension",
     "demo",
     "docs"
   ],
