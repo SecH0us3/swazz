@@ -27,8 +27,6 @@ jobs:
         uses: docker://ghcr.io/sech0us3/swazz-cli:7d8123ae45b1480f2d12f170f3f3c7e73d8123ae
         with:
           args: start --config swazz.config.json --sarif results.sarif
-        env:
-          SWAZZ_AGENT_TOKEN: ${{ secrets.SWAZZ_AGENT_TOKEN }}
 
       - name: Upload SARIF Report
         uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v3
@@ -78,10 +76,18 @@ For zero-setup scans, record your browser sessions using DevTools and upload the
 1. Open DevTools (F12) -> Network -> Check "Preserve Log".
 2. Perform user flows (e.g. login, create object, delete object).
 3. Right click on request log -> "Save all as HAR with content".
-4. Run Swazz in traffic replay mode:
-   ```bash
-   swazz-engine start --har path/to/recorded.har --target https://api.target.local
+4. Point `swagger_urls` at the recorded file and run Swazz:
+   ```json
+   {
+     "base_url": "https://api.target.local",
+     "swagger_urls": ["path/to/recorded.har"]
+   }
    ```
+   ```bash
+   swazz-engine start --config swazz.config.json
+   ```
+   Noisy third-party hosts can be filtered out with the `har_domain_filter`
+   setting; see the HAR section of the [Usage guide](usage.md).
 
 ---
 

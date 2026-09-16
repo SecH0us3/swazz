@@ -9,7 +9,9 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,4 +178,25 @@ func TestRunGenerateKeys_FileCreation(t *testing.T) {
 func TestStartPprof(t *testing.T) {
 	// Empty addr should be a clean no-op without launching background goroutines
 	startPprof("")
+}
+
+// TestVersionCommand covers the identifier SECURITY.md asks vulnerability
+// reporters to include; before this existed the documented invocation exited 1
+// with "Unknown command: --version".
+func TestVersionCommand(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "swazz-engine")
+	build := exec.Command("go", "build", "-ldflags", "-X main.Version=1.2.3-test", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build failed: %v\n%s", err, out)
+	}
+
+	for _, arg := range []string{"version", "--version", "-v"} {
+		out, err := exec.Command(bin, arg).CombinedOutput()
+		if err != nil {
+			t.Errorf("%q exited with error: %v (output %q)", arg, err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != "swazz-engine 1.2.3-test" {
+			t.Errorf("%q printed %q, want %q", arg, got, "swazz-engine 1.2.3-test")
+		}
+	}
 }

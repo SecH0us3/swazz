@@ -68,8 +68,9 @@ Swazz is divided into multiple packages across the stack. The coverage is contin
 You can download the pre-compiled CLI binary from the [Releases](https://github.com/SecH0us3/swazz/releases) page for Linux, macOS, and Windows.
 
 ### Docker & Compose
-We package and run the Swazz application components via Docker and Docker Compose. We publish the following container image:
+We package and run the Swazz application components via Docker and Docker Compose. We publish the following container images:
 - **Headless CLI Fuzzer / Scanner**: [ghcr.io/sech0us3/swazz-cli](https://github.com/SecH0us3/swazz/pkgs/container/swazz-cli)
+- **Runner Agent**: [ghcr.io/sech0us3/swazz](https://github.com/SecH0us3/swazz/pkgs/container/swazz) — connects out to your edge coordinator over WebSocket and listens on no port.
 
 For detailed instructions on running the entire Web UI, coordinator, and runner agent locally, please see the [Docker Deployment Guide](DOCKER.md).
 
