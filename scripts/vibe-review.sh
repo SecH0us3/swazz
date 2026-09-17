@@ -67,6 +67,21 @@ CRITICAL RULES TO VERIFY:
 3. E2E Tests: Registration username must be 3 to 20 characters. Ensure test usernames are < 20 chars.
 4. Git: Never track docs/superpowers/ or docs/reviews/ directories. Do not stage or commit files.
 
+If the diff touches internal/safenet, internal/security, agent/coordinator authentication,
+or anything that renders attacker-influenced data (internal/output SARIF/JSON/HTML), do NOT
+just check it against a generic checklist — a checklist without a threat model tends to add
+half-finished point defenses instead of closing the actual hole. Instead verify:
+5. No new hand-maintained IP/CIDR/allow-deny list: network safety checks must go through
+   the single shared predicate (internal/safenet.IsReservedOrPrivate), not a second
+   independently-maintained list that can drift and reopen an SSRF gap.
+6. Any value validated once and compared/reused later (hostname pinning, path/filename
+   checks) is normalized through the SAME parser on both sides — mismatched parsers are a
+   classic TOCTOU/bypass (DNS rebinding, IDN/punycode, path traversal).
+7. Values the code returns, stores, or logs that came from attacker-controlled input are
+   validated as if they were inputs to whatever consumes them next, not just checked on the
+   way in.
+8. New/changed security checks fail closed on parse error or ambiguity, not open.
+
 Run 'git diff $MERGE_BASE HEAD' to inspect the code changes. You can also view modified files using read_file.
 Summarize the changes, highlight potential bugs, and suggest improvements.
 Store your review in 'docs/reviews/vibe-review.md' and finish."

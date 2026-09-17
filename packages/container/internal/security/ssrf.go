@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"swazz-engine/internal/safenet"
 )
 
 const (
@@ -29,9 +31,16 @@ func ConfigureTransport(t *http.Transport) {
 	t.IdleConnTimeout = IdleConnTimeout
 }
 
-// IsPrivateIP checks if the given IP address is loopback, link-local, private (RFC 1918 / RFC 4193), or unspecified.
+// IsPrivateIP checks if the given IP address is loopback, link-local, private
+// (RFC 1918 / RFC 4193), unspecified, or otherwise non-globally-routable
+// (CGNAT, benchmark, multicast, reserved ranges, ...).
+//
+// This delegates to safenet.IsReservedOrPrivate rather than maintaining a
+// second, independent CIDR list: two hand-written blocklists inevitably
+// drift apart, and the gap between them is exactly the kind of SSRF bypass
+// this function exists to prevent.
 func IsPrivateIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() || ip.IsUnspecified()
+	return safenet.IsReservedOrPrivate(ip)
 }
 
 // NewSSRFProtectedTransport returns an http.RoundTripper that blocks access to private IP addresses.

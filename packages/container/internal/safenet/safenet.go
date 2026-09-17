@@ -94,7 +94,17 @@ func IsBlocked(ip net.IP) bool {
 	if AllowLocalNetwork {
 		return false
 	}
+	return IsReservedOrPrivate(ip)
+}
 
+// IsReservedOrPrivate reports whether ip falls into any private, loopback,
+// link-local, or otherwise non-globally-routable range, independent of the
+// AllowLocalNetwork bypass. This is the single source of truth for "is this
+// IP safe to let a fuzzer/agent dial" — other packages (e.g. internal/security)
+// must call this instead of maintaining their own CIDR list, since a
+// hand-maintained list that drifts from this one silently reopens SSRF
+// bypasses (e.g. CGNAT 100.64.0.0/10 missing from a narrower check).
+func IsReservedOrPrivate(ip net.IP) bool {
 	// Normalize to 4-byte representation if it's an IPv4 address
 	// (handles IPv4-mapped IPv6 addresses like ::ffff:127.0.0.1)
 	if v4 := ip.To4(); v4 != nil {
