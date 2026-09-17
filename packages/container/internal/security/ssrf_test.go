@@ -39,6 +39,30 @@ func TestIsPrivateIP(t *testing.T) {
 	assert.False(t, IsPrivateIP(net.ParseIP("2001:4860:4860::8888")))
 }
 
+// TestIsPrivateIP_MatchesSafenet guards against the two SSRF blocklists
+// (this package's IsPrivateIP and safenet.IsReservedOrPrivate, used by
+// agent/cloud mode) drifting apart. Before this delegated to safenet,
+// CGNAT (100.64.0.0/10) and several other reserved ranges were only
+// blocked in agent mode, leaving local CLI mode's default SSRF protection
+// bypassable — exactly the "list instead of a shared rule" trap.
+func TestIsPrivateIP_MatchesSafenet(t *testing.T) {
+	// Carrier-Grade NAT (RFC 6598) — used by Tailscale/Kubernetes overlays,
+	// and the range that a hand-maintained, narrower check tends to miss.
+	assert.True(t, IsPrivateIP(net.ParseIP("100.64.0.1")))
+
+	// Benchmark/testing (RFC 2544 / RFC 5180)
+	assert.True(t, IsPrivateIP(net.ParseIP("198.18.0.1")))
+
+	// Reserved/future use (RFC 1112 / RFC 6890)
+	assert.True(t, IsPrivateIP(net.ParseIP("240.0.0.1")))
+
+	// Multicast (RFC 5771 / RFC 1112)
+	assert.True(t, IsPrivateIP(net.ParseIP("224.0.0.1")))
+
+	// IPv6 deprecated site-local (RFC 3879)
+	assert.True(t, IsPrivateIP(net.ParseIP("fec0::1")))
+}
+
 func TestConfigureTransport(t *testing.T) {
 	tr := &http.Transport{}
 	ConfigureTransport(tr)

@@ -29,6 +29,27 @@ func TestIsBlocked(t *testing.T) {
 	assert.False(t, IsBlocked(net.ParseIP("1.1.1.1")))
 }
 
+func TestIsReservedOrPrivate_NilFailsClosed(t *testing.T) {
+	// net.IPNet.Contains(nil) returns false for every network, so without an
+	// explicit nil check a failed parse/resolve would read as "safe to dial".
+	assert.True(t, IsReservedOrPrivate(nil))
+}
+
+func TestIsReservedOrPrivate_IANASpecialPurposeRanges(t *testing.T) {
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("192.0.0.1")))    // IETF Protocol Assignments / DS-Lite
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("192.0.2.1")))    // TEST-NET-1
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("198.51.100.1"))) // TEST-NET-2
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("203.0.113.1")))  // TEST-NET-3
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("192.88.99.1")))  // 6to4 relay anycast
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("2001:db8::1")))  // IPv6 documentation
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("64:ff9b::1")))   // NAT64 well-known prefix
+	assert.True(t, IsReservedOrPrivate(net.ParseIP("64:ff9b:1::1"))) // NAT64 local-use prefix
+
+	// Still not blocking real public IPs after the additions.
+	assert.False(t, IsReservedOrPrivate(net.ParseIP("8.8.8.8")))
+	assert.False(t, IsReservedOrPrivate(net.ParseIP("2001:4860:4860::8888")))
+}
+
 func TestIsBlocked_Allowed(t *testing.T) {
 	orig := AllowLocalNetwork
 	AllowLocalNetwork = true

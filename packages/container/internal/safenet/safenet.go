@@ -65,6 +65,24 @@ func init() {
 
 		// IPv6 Multicast (RFC 4291)
 		"ff00::/8",
+
+		// IETF Protocol Assignments, incl. DS-Lite (RFC 6890 / RFC 6333)
+		"192.0.0.0/24",
+
+		// Documentation / TEST-NET-1..3 (RFC 5737)
+		"192.0.2.0/24",
+		"198.51.100.0/24",
+		"203.0.113.0/24",
+
+		// 6to4 Relay Anycast, deprecated (RFC 7526)
+		"192.88.99.0/24",
+
+		// IPv6 Documentation (RFC 3849)
+		"2001:db8::/32",
+
+		// IPv4/IPv6 translation (NAT64) well-known prefixes (RFC 6052 / RFC 8215)
+		"64:ff9b::/96",
+		"64:ff9b:1::/48",
 	}
 
 	for _, cidr := range cidrs {
@@ -93,6 +111,24 @@ var AllowLocalNetwork bool
 func IsBlocked(ip net.IP) bool {
 	if AllowLocalNetwork {
 		return false
+	}
+	return IsReservedOrPrivate(ip)
+}
+
+// IsReservedOrPrivate reports whether ip falls into any private, loopback,
+// link-local, or otherwise non-globally-routable range, independent of the
+// AllowLocalNetwork bypass. This is the single source of truth for "is this
+// IP safe to let a fuzzer/agent dial" — other packages (e.g. internal/security)
+// must call this instead of maintaining their own CIDR list, since a
+// hand-maintained list that drifts from this one silently reopens SSRF
+// bypasses (e.g. CGNAT 100.64.0.0/10 missing from a narrower check).
+func IsReservedOrPrivate(ip net.IP) bool {
+	// Fail closed: net.IPNet.Contains(nil) returns false for every network,
+	// so a nil/unparseable IP would otherwise read as "safe". A nil IP means
+	// something upstream failed to parse or resolve — treat that as blocked,
+	// not allowed.
+	if ip == nil {
+		return true
 	}
 
 	// Normalize to 4-byte representation if it's an IPv4 address
