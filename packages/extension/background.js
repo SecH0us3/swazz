@@ -15,6 +15,7 @@ const DEFAULT_STATE = {
     droppedOutOfScope: 0,
     droppedNoScope: 0,
     lastDroppedHost: "",
+    droppedHosts: {}, // host -> how many requests were ignored for being out of scope
     token: null,
     swazzUrl: "http://localhost:5173",
     projectId: null,
@@ -29,6 +30,7 @@ let capturedRequests = {};
 let droppedOutOfScope = 0;
 let droppedNoScope = 0;
 let lastDroppedHost = "";
+let droppedHosts = {};
 
 // Map from requestId -> { key, timestamp } for response correlation (B2)
 const pendingRequests = new Map();
@@ -36,6 +38,15 @@ const pendingRequests = new Map();
 // inject.js mints request ids from a per-document counter that restarts at 1,
 // so the raw id collides across tabs and frames. Scope it by sender before
 // using it to pair a response with its request.
+// Out-of-scope traffic is summarised per host, not just as a running total, so
+// the popup can show every domain that was ignored instead of only the last one.
+function noteDroppedHost(host) {
+    if (!host) return;
+    const known = Object.keys(droppedHosts).length;
+    if (!droppedHosts[host] && known >= 200) return; // bound the map
+    droppedHosts[host] = (droppedHosts[host] || 0) + 1;
+}
+
 function correlationId(sender, requestId) {
     const tabId = sender && sender.tab && sender.tab.id != null ? sender.tab.id : 'x';
     const frameId = sender && sender.frameId != null ? sender.frameId : 'x';
@@ -64,6 +75,7 @@ function flushStorage() {
         droppedOutOfScope,
         droppedNoScope,
         lastDroppedHost,
+        droppedHosts,
         captureWriteToken: writeToken
     });
 }
@@ -104,7 +116,8 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         'capturedRequests',
         'droppedOutOfScope',
         'droppedNoScope',
-        'lastDroppedHost'
+        'lastDroppedHost',
+        'droppedHosts'
     ], (state) => {
         if (state) {
             recording = !!state.recording;
@@ -113,6 +126,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             droppedOutOfScope = state.droppedOutOfScope || 0;
             droppedNoScope = state.droppedNoScope || 0;
             lastDroppedHost = state.lastDroppedHost || "";
+    droppedHosts = state.droppedHosts || {};
         }
         updateBadge();
     });
@@ -149,6 +163,9 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
         if (changes.lastDroppedHost && isForeignEdit) {
             lastDroppedHost = changes.lastDroppedHost.newValue || "";
         }
+        if (changes.droppedHosts && isForeignEdit) {
+            droppedHosts = changes.droppedHosts.newValue || {};
+        }
     });
 }
 
@@ -173,6 +190,7 @@ function processCapturedRequest(reqData, senderTab, sender) {
     if (!isDomainTargeted(host, targetDomains)) {
         droppedOutOfScope++;
         lastDroppedHost = host;
+        noteDroppedHost(host);
         scheduleFlush();
         return;
     }
@@ -386,6 +404,7 @@ if (typeof module !== 'undefined' && module.exports) {
         setTargetDomains: (val) => { targetDomains = val; },
         getDroppedOutOfScope: () => droppedOutOfScope,
         getDroppedNoScope: () => droppedNoScope,
+        getDroppedHosts: () => droppedHosts,
         resetState: () => {
             recording = false;
             targetDomains = [];
@@ -393,6 +412,7 @@ if (typeof module !== 'undefined' && module.exports) {
             droppedOutOfScope = 0;
             droppedNoScope = 0;
             lastDroppedHost = "";
+            droppedHosts = {};
             pendingRequests.clear();
         }
     };

@@ -128,6 +128,96 @@ test.describe('Browser extension HAR round trip', () => {
     await app.close();
   });
 
+  test('lists every ignored domain and switches views', async () => {
+    // Scope something unrelated, so every request the demo page makes is out of
+    // scope. Both hosts below serve the same demo server, so both requests
+    // genuinely happen — a host that refuses the connection would leave the test
+    // unable to tell "not recorded" from "never sent".
+    const popup = await openPopup();
+    await popup.locator('#settings-toggle').click();
+    await popup.locator('#input-domains').fill('example.invalid');
+    await popup.locator('label.switch:has(#btn-toggle-record) .slider').click();
+    await popup.close();
+
+    const target = await context.newPage();
+    await target.goto(`http://${TARGET}/welcome`);
+    await target.evaluate(async () => {
+      for (const u of ['/users', 'http://localhost:8788/users', 'http://localhost:8788/welcome']) {
+        try { await fetch(u, { mode: 'no-cors' }); } catch { /* the drop is what matters */ }
+      }
+    });
+    await target.waitForTimeout(1500);
+    await target.close();
+
+    // Assert against the worker's own state first, so a UI assertion failing
+    // cannot be confused with traffic never having been generated.
+    const worker = context.serviceWorkers()[0];
+    const dropped = await worker.evaluate(
+      () => (globalThis as any).chrome.storage.local.get('droppedHosts')
+    );
+    expect(Object.keys(dropped.droppedHosts || {}).length).toBeGreaterThan(1);
+
+    const popup2 = await openPopup();
+    await popup2.locator('#tab-ignored').click();
+
+    // The captured list gives way to the ignored list.
+    await expect(popup2.locator('#ignored-view')).toBeVisible();
+    await expect(popup2.locator('.endpoints-list-container').first()).toBeHidden();
+
+    const rows = popup2.locator('.ignored-item');
+    await expect(rows.first()).toBeVisible();
+    const hosts = await popup2.locator('.ignored-host').allTextContents();
+    // Every ignored domain is listed, not just the most recent one.
+    expect(hosts.length).toBe(Object.keys(dropped.droppedHosts || {}).length);
+    expect(hosts.length).toBeGreaterThan(1);
+
+    // Switching back restores the captured view.
+    await popup2.locator('#tab-captured').click();
+    await expect(popup2.locator('#ignored-view')).toBeHidden();
+    await popup2.close();
+  });
+
+  test('offers a close control in the side panel but not in the popup', async () => {
+    const popup = await openPopup();
+    await expect(popup.locator('#btn-close-sidepanel')).toBeHidden();
+    await expect(popup.locator('#link-open-sidepanel')).toBeVisible();
+    await popup.close();
+
+    const panel = await context.newPage();
+    await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+    await expect(panel.locator('#btn-close-sidepanel')).toBeVisible();
+    await expect(panel.locator('#link-open-sidepanel')).toBeHidden();
+    await panel.close();
+  });
+
+  test('picks up the token after logging in on the same tab, without Auto-Sync', async () => {
+    // The storage event never fires in the tab that wrote the value, so a login
+    // performed on the dashboard tab itself used to go unnoticed and the token
+    // field stayed empty until the user pressed Auto-Sync.
+    const worker = context.serviceWorkers()[0];
+    await worker.evaluate(() => (globalThis as any).chrome.storage.local.remove('token'));
+
+    const app = await context.newPage();
+    await app.goto(DASHBOARD);
+    await app.evaluate(() => localStorage.setItem('swazz_tips_enabled', 'false'));
+
+    await app.getByRole('button', { name: 'Sign In' }).first().click();
+    await app.getByRole('button', { name: 'Create an account' }).click();
+    const username = `t${Date.now().toString().slice(-5)}_${Math.floor(Math.random() * 1000)}`;
+    await app.locator('#username').fill(username);
+    await app.locator('#password').fill('Password123!');
+    await app.locator('#password').press('Enter');
+    await expect(app.locator('.app-layout')).toBeVisible({ timeout: 30000 });
+
+    // No Auto-Sync click: the extension must notice on its own.
+    await expect
+      .poll(async () => (await worker.evaluate(() => (globalThis as any).chrome.storage.local.get('token'))).token, {
+        timeout: 15000,
+      })
+      .toBeTruthy();
+    await app.close();
+  });
+
   test('accepts the dashboard Auto-Sync handshake and rejects a hostile origin', async () => {
     const worker = context.serviceWorkers()[0];
     await worker.evaluate(() => (globalThis as any).chrome.storage.local.remove('token'));

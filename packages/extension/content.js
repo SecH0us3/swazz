@@ -37,6 +37,8 @@ window.addEventListener('message', (event) => {
 });
 
 // Auto-sync token when visiting the Swazz Dashboard page
+let lastSyncedToken = null;
+
 function checkAndSyncDashboardToken() {
     const isAllowed = typeof isAuthOriginAllowed === 'function' 
         ? isAuthOriginAllowed(window.location.href)
@@ -47,7 +49,8 @@ function checkAndSyncDashboardToken() {
             const token = localStorage.getItem('swazz_token');
             const profileStr = localStorage.getItem('swazz:user_profile');
             
-            if (token) {
+            if (token && token !== lastSyncedToken) {
+                lastSyncedToken = token;
                 let userProfile = null;
                 try {
                     userProfile = profileStr ? JSON.parse(profileStr) : null;
@@ -76,17 +79,29 @@ if (document.readyState === 'loading') {
     checkAndSyncDashboardToken();
 }
 
-// Listen for storage changes to sync token reactively
+// The storage event only fires in OTHER tabs, never in the one that wrote the
+// value — so logging in on this very tab never triggered it and the token was
+// only ever picked up if it already existed at page load. Keep the listener for
+// the cross-tab case and poll this tab as well.
 window.addEventListener('storage', (e) => {
     if (e.key === 'swazz_token' || e.key === 'swazz:user_profile') {
         checkAndSyncDashboardToken();
     }
 });
 
+if (typeof isAuthOriginAllowed !== 'function' || isAuthOriginAllowed(window.location.href)) {
+    setInterval(checkAndSyncDashboardToken, 2000);
+    window.addEventListener('focus', checkAndSyncDashboardToken);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkAndSyncDashboardToken();
+    });
+}
+
 // The dashboard's "Auto-Sync with Extension" button dispatches this event. It is
 // handled here in the isolated world rather than in the page, so a hostile site
 // cannot reach the listener at all; background.js re-checks the sender origin.
 window.addEventListener('swazz-handshake', () => {
+    lastSyncedToken = null; // explicit user action: always resend
     checkAndSyncDashboardToken();
 });
 

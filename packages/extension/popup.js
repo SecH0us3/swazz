@@ -41,6 +41,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCreateProject = document.getElementById('btn-create-project');
     const lblCreateProjectError = document.getElementById('lbl-create-project-error');
     const btnCrawlTab = document.getElementById('btn-crawl-tab');
+    const tabCaptured = document.getElementById('tab-captured');
+    const tabIgnored = document.getElementById('tab-ignored');
+    const capturedHeader = document.getElementById('captured-header');
+    const searchBar = document.querySelector('.endpoints-search-bar');
+    const listContainer = document.querySelector('.endpoints-list-container');
+    const ignoredView = document.getElementById('ignored-view');
+    const ignoredList = document.getElementById('ignored-list');
+    const ignoredEmptyState = document.getElementById('ignored-empty-state');
+    const inputIgnoredSearch = document.getElementById('input-ignored-search');
+    const btnAddAllIgnored = document.getElementById('btn-add-all-ignored');
+    const btnClearIgnored = document.getElementById('btn-clear-ignored');
+    const lblIgnoredCountTab = document.getElementById('lbl-ignored-count-tab');
+    const lblEndpointCountTab = document.getElementById('lbl-endpoint-count-tab');
     const crawlStatusMsg = document.getElementById('crawl-status-msg');
 
     let isRecording = false;
@@ -53,11 +66,33 @@ document.addEventListener('DOMContentLoaded', () => {
     let droppedOutOfScope = 0;
     let droppedNoScope = 0;
     let lastDroppedHost = "";
+    let droppedHosts = {};
+    let ignoredSearchQuery = "";
+    let activeView = "captured";
 
     const selectedKeys = new Set();
     const unselectedKeys = new Set();
     const expandedKeys = new Set();
     let searchQuery = "";
+
+    // popup.html and sidepanel.html are the same document, so work out which
+    // surface we are on and show the control that belongs to it. Without this the
+    // side panel had no way to close itself.
+    const isSidePanel = /sidepanel\.html$/.test(window.location.pathname);
+    const btnCloseSidepanel = document.getElementById('btn-close-sidepanel');
+
+    if (isSidePanel) {
+        if (linkOpenSidepanel) linkOpenSidepanel.classList.add('hidden');
+        if (btnCloseSidepanel) {
+            btnCloseSidepanel.classList.remove('hidden');
+            btnCloseSidepanel.addEventListener('click', () => {
+                // Closing the side panel document closes the panel itself.
+                window.close();
+            });
+        }
+    } else if (btnCloseSidepanel) {
+        btnCloseSidepanel.classList.add('hidden');
+    }
 
     // Open in side panel (C5).
     // chrome.sidePanel.open() only works inside a user gesture, and an await
@@ -67,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chrome.windows && chrome.windows.getCurrent) {
         chrome.windows.getCurrent().then(w => { currentWindowId = w && w.id; }).catch(() => {});
     }
-    if (linkOpenSidepanel) {
+    if (linkOpenSidepanel && !isSidePanel) {
         if (!chrome.sidePanel || typeof chrome.sidePanel.open !== 'function') {
             linkOpenSidepanel.style.display = 'none';
         } else {
@@ -96,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'droppedOutOfScope',
             'droppedNoScope',
             'lastDroppedHost',
+            'droppedHosts',
             'token', 
             'swazzUrl', 
             'projectId',
@@ -109,6 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
             droppedOutOfScope = state.droppedOutOfScope || 0;
             droppedNoScope = state.droppedNoScope || 0;
             lastDroppedHost = state.lastDroppedHost || "";
+            droppedHosts = state.droppedHosts || {};
             updateCrawlUI(state.crawlState);
             activeToken = state.token || null;
             activeSwazzUrl = state.swazzUrl || "http://localhost:5173";
@@ -141,6 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Sync sync & export buttons state
             updateSyncButtonState();
+            renderIgnoredHosts();
 
             // Load projects dropdown
             if (activeToken) {
@@ -177,13 +215,15 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         } else if (droppedOutOfScope > 0) {
             scopeWarningBox.classList.remove('hidden');
-            scopeWarningText.textContent = `${droppedOutOfScope} requests ignored (out of scope)`;
-            const hostToAdd = lastDroppedHost || "";
-            btnScopeWarningAction.textContent = hostToAdd ? `Add ${hostToAdd} to scope` : "Add to scope";
+            const hostCount = Object.keys(droppedHosts).length;
+            scopeWarningText.textContent = hostCount > 0
+                ? `${droppedOutOfScope} requests ignored across ${hostCount} domain${hostCount === 1 ? '' : 's'}`
+                : `${droppedOutOfScope} requests ignored (out of scope)`;
+            // Offering only the most recent host hid every other domain behind it,
+            // so send the user to the list where they can see and pick all of them.
+            btnScopeWarningAction.textContent = "Review domains";
             btnScopeWarningAction.onclick = () => {
-                if (hostToAdd) {
-                    addDomainToScope(hostToAdd);
-                }
+                setActiveView('ignored');
             };
         } else {
             scopeWarningBox.classList.add('hidden');
@@ -198,15 +238,80 @@ document.addEventListener('DOMContentLoaded', () => {
             inputDomains.value = targetDomains.join(', ');
             cardActiveDomains.textContent = `Domains: ${targetDomains.join(', ')}`;
         }
-        droppedOutOfScope = 0;
-        lastDroppedHost = "";
+        // Only clear what this host accounted for; other ignored domains stay
+        // visible so they are not silently forgotten.
+        const forgiven = droppedHosts[clean] || 0;
+        if (droppedHosts[clean]) delete droppedHosts[clean];
+        droppedOutOfScope = Math.max(0, droppedOutOfScope - forgiven);
+        if (lastDroppedHost === clean) lastDroppedHost = "";
+
         chrome.storage.local.set({
             targetDomains,
-            droppedOutOfScope: 0,
-            lastDroppedHost: ""
+            droppedOutOfScope,
+            lastDroppedHost,
+            droppedHosts
         });
         updateScopeWarningUI();
         updateSyncButtonState();
+        renderIgnoredHosts();
+    }
+
+    function setActiveView(view) {
+        activeView = view;
+        const isIgnored = view === 'ignored';
+        if (tabCaptured) tabCaptured.classList.toggle('active', !isIgnored);
+        if (tabIgnored) tabIgnored.classList.toggle('active', isIgnored);
+        if (capturedHeader) capturedHeader.classList.toggle('hidden', isIgnored);
+        if (searchBar) searchBar.classList.toggle('hidden', isIgnored);
+        if (listContainer) listContainer.classList.toggle('hidden', isIgnored);
+        if (ignoredView) ignoredView.classList.toggle('hidden', !isIgnored);
+        if (isIgnored) renderIgnoredHosts();
+    }
+
+    function renderIgnoredHosts() {
+        if (!ignoredList) return;
+        const entries = Object.keys(droppedHosts)
+            .filter(h => !ignoredSearchQuery || h.toLowerCase().includes(ignoredSearchQuery))
+            .map(h => ({ host: h, count: droppedHosts[h] }))
+            .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host));
+
+        if (lblIgnoredCountTab) lblIgnoredCountTab.textContent = Object.keys(droppedHosts).length;
+
+        ignoredList.innerHTML = '';
+        if (entries.length === 0) {
+            if (ignoredEmptyState) ignoredEmptyState.style.display = 'flex';
+            return;
+        }
+        if (ignoredEmptyState) ignoredEmptyState.style.display = 'none';
+
+        entries.forEach(({ host, count }) => {
+            const row = document.createElement('div');
+            row.className = 'ignored-item';
+
+            const meta = document.createElement('div');
+            meta.className = 'ignored-meta';
+
+            const hostSpan = document.createElement('span');
+            hostSpan.className = 'ignored-host';
+            hostSpan.textContent = host;
+            hostSpan.title = host;
+
+            const countSpan = document.createElement('span');
+            countSpan.className = 'ignored-count';
+            countSpan.textContent = `${count} request${count === 1 ? '' : 's'}`;
+
+            meta.appendChild(hostSpan);
+            meta.appendChild(countSpan);
+
+            const addBtn = document.createElement('button');
+            addBtn.className = 'btn btn-ghost btn-sm';
+            addBtn.textContent = '+ Scope';
+            addBtn.addEventListener('click', () => addDomainToScope(host));
+
+            row.appendChild(meta);
+            row.appendChild(addBtn);
+            ignoredList.appendChild(row);
+        });
     }
 
     function addActiveTabToScope() {
@@ -483,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderEndpoints() {
         const allKeys = Object.keys(capturedRequests);
         lblEndpointCount.textContent = allKeys.length;
+        if (lblEndpointCountTab) lblEndpointCountTab.textContent = allKeys.length;
 
         // Auto-select newly captured keys
         allKeys.forEach(k => {
@@ -954,6 +1060,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Storage listener for live updates
     chrome.storage.onChanged.addListener((changes) => {
+        if (changes.droppedHosts) {
+            droppedHosts = changes.droppedHosts.newValue || {};
+            renderIgnoredHosts();
+            updateScopeWarningUI();
+        }
         if (changes.capturedRequests) {
             capturedRequests = changes.capturedRequests.newValue || {};
             renderEndpoints();
@@ -1100,6 +1211,41 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.cookies.getAll({ domain: cleanDomain }, (cookies) => {
                 resolve(cookies || []);
             });
+        });
+    }
+
+    // View tabs (captured / ignored)
+    if (tabCaptured) tabCaptured.addEventListener('click', () => setActiveView('captured'));
+    if (tabIgnored) tabIgnored.addEventListener('click', () => setActiveView('ignored'));
+
+    if (inputIgnoredSearch) {
+        inputIgnoredSearch.addEventListener('input', (e) => {
+            ignoredSearchQuery = (e.target.value || '').toLowerCase().trim();
+            renderIgnoredHosts();
+        });
+    }
+
+    if (btnAddAllIgnored) {
+        btnAddAllIgnored.addEventListener('click', () => {
+            const hosts = Object.keys(droppedHosts);
+            if (hosts.length === 0) return;
+            if (!confirm(`Add all ${hosts.length} ignored domains to scope? Only do this for systems you are authorized to test.`)) return;
+            hosts.forEach(h => addDomainToScope(h));
+        });
+    }
+
+    if (btnClearIgnored) {
+        btnClearIgnored.addEventListener('click', () => {
+            droppedHosts = {};
+            droppedOutOfScope = 0;
+            lastDroppedHost = "";
+            chrome.storage.local.set({
+                droppedHosts: {},
+                droppedOutOfScope: 0,
+                lastDroppedHost: ""
+            });
+            renderIgnoredHosts();
+            updateScopeWarningUI();
         });
     }
 

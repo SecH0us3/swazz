@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Swazz Traffic Capturer - Side Panel</title>
+    <title>Swazz Traffic Capturer</title>
     <link rel="stylesheet" href="popup.css">
 </head>
-<body class="sidepanel">
+<body>
     <div class="popup-container">
         <!-- Header -->
         <header class="header">
@@ -25,6 +25,8 @@
                 <span class="logo-subtitle">Capturer</span>
             </div>
             <div class="header-right">
+                <a href="#" id="link-open-sidepanel" class="header-link" title="Open in Chrome side panel">Open in side panel</a>
+                <button id="btn-close-sidepanel" class="btn-close-panel hidden" title="Close side panel" aria-label="Close side panel">✕</button>
                 <div class="status-indicator">
                     <span class="pulse-dot" id="recording-pulse"></span>
                     <span class="status-text" id="recording-status">Idle</span>
@@ -113,7 +115,16 @@
 
         <!-- Captured Endpoints List -->
         <section class="endpoints-section">
-            <div class="section-header">
+            <div class="view-tabs">
+                <button class="view-tab active" id="tab-captured" data-view="captured">
+                    Captured (<span id="lbl-endpoint-count-tab">0</span>)
+                </button>
+                <button class="view-tab" id="tab-ignored" data-view="ignored">
+                    Ignored (<span id="lbl-ignored-count-tab">0</span>)
+                </button>
+            </div>
+
+            <div class="section-header" id="captured-header">
                 <h2>Captured Endpoints (<span id="lbl-endpoint-count">0</span>)</h2>
                 <div class="section-header-actions">
                     <input type="file" id="input-import-har" accept=".har,.json" style="display: none;">
@@ -141,6 +152,32 @@
                 </div>
                 <div class="endpoints-list" id="endpoints-list">
                     <!-- Dynamic entries render here -->
+                </div>
+            </div>
+
+            <!-- Ignored domains view -->
+            <div class="ignored-view hidden" id="ignored-view">
+                <div class="section-header">
+                    <h2>Ignored Domains</h2>
+                    <div class="section-header-actions">
+                        <button class="btn btn-ghost btn-sm" id="btn-add-all-ignored">Add all to scope</button>
+                        <button class="btn btn-ghost btn-sm" id="btn-clear-ignored">Clear</button>
+                    </div>
+                </div>
+                <div class="ignored-hint">
+                    Requests seen while recording but dropped because their host is not in scope.
+                    Add the ones you are allowed to test.
+                </div>
+                <div class="endpoints-search-bar">
+                    <input type="text" id="input-ignored-search" placeholder="Search domain...">
+                </div>
+                <div class="endpoints-list-container">
+                    <div class="empty-state" id="ignored-empty-state">
+                        <div class="empty-icon">🚫</div>
+                        <p>Nothing ignored yet.</p>
+                        <p class="sub">Domains outside your scope will be listed here while recording.</p>
+                    </div>
+                    <div class="ignored-list" id="ignored-list"></div>
                 </div>
             </div>
         </section>

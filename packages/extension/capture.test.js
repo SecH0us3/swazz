@@ -174,3 +174,50 @@ describe('Response correlation across tabs and frames', () => {
         expect(background.getCapturedRequests()['GET:/routed'].statuses).toEqual({ '404': 1 });
     });
 });
+
+describe('Out-of-scope accounting', () => {
+    beforeEach(() => {
+        background.resetState();
+        background.setRecording(true);
+        background.setTargetDomains(['api.example.com']);
+    });
+
+    const hit = (host) => background.processCapturedRequest(
+        { url: `https://${host}/x`, method: 'GET', headers: {}, body: '' },
+        { id: 1, url: `https://${host}/page` },
+        { tab: { id: 1, url: `https://${host}/page` }, frameId: 0 }
+    );
+
+    it('records every ignored host, not only the most recent one', () => {
+        // The popup previously offered just the last dropped host, hiding the rest.
+        hit('amplitude.com');
+        hit('amplitude.com');
+        hit('segment.io');
+        hit('sentry.io');
+
+        expect(background.getDroppedHosts()).toEqual({
+            'amplitude.com': 2,
+            'segment.io': 1,
+            'sentry.io': 1
+        });
+        expect(background.getDroppedOutOfScope()).toBe(4);
+    });
+
+    it('does not record in-scope hosts as ignored', () => {
+        background.processCapturedRequest(
+            { url: 'https://api.example.com/v1/ok', method: 'GET', headers: {}, body: '' },
+            { id: 1, url: 'https://app.example.com/' },
+            { tab: { id: 1, url: 'https://app.example.com/' }, frameId: 0 }
+        );
+        expect(background.getDroppedHosts()).toEqual({});
+    });
+
+    it('bounds the host map so a noisy page cannot grow it without limit', () => {
+        for (let i = 0; i < 260; i++) hit(`h${i}.example.net`);
+        const hosts = background.getDroppedHosts();
+        expect(Object.keys(hosts).length).toBeLessThanOrEqual(200);
+        // Counting continues for hosts already known.
+        hit('h0.example.net');
+        expect(background.getDroppedHosts()['h0.example.net']).toBe(2);
+    });
+});
