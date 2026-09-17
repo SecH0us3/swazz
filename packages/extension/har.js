@@ -19,8 +19,11 @@
         let clean = path;
         // Replace typical UUIDs
         clean = clean.replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, '{uuid}');
-        // Replace typical ULIDs (26 char alphanumeric)
-        clean = clean.replace(/[0-9AHJKMNPQRSTVWXYZahjkmnpqrstvwxyz]{26}/g, '{ulid}');
+        // Replace typical ULIDs. Crockford Base32 is 0-9 and A-Z minus I, L, O and
+        // U — the class must include B through H, or a real ULID containing any of
+        // them (over 99% of them) is never collapsed and every id becomes its own
+        // capture key.
+        clean = clean.replace(/\b[0-9A-HJKMNP-TV-Z]{26}\b/gi, '{ulid}');
         // Replace numeric IDs (longer than 1 digit, or segment matches exactly a number)
         const segments = clean.split('/');
         for (let i = 0; i < segments.length; i++) {
@@ -112,6 +115,15 @@
                         }
 
                         entries.push({
+                            // HAR permits custom fields prefixed with an underscore.
+                            // Entries fan out across query x body variations, so the
+                            // observed status counts cannot be recovered by counting
+                            // entries on import — carry the real ones here.
+                            _swazz: {
+                                endpointKey: req.key,
+                                statuses: Object.assign({}, req.statuses || {}),
+                                count: req.count || 0
+                            },
                             startedDateTime: new Date(req.lastCaptured || Date.now()).toISOString(),
                             time: 10,
                             request: {
@@ -309,8 +321,14 @@
             if (entry.response) {
                 const resp = entry.response;
                 if (typeof resp.status === 'number' && resp.status > 0) {
-                    const sKey = String(resp.status);
-                    existing.statuses[sKey] = (existing.statuses[sKey] || 0) + 1;
+                    const stamped = entry._swazz && entry._swazz.statuses;
+                    if (stamped && Object.keys(stamped).length > 0) {
+                        // Our own export: adopt the recorded counts verbatim, once.
+                        existing.statuses = Object.assign({}, stamped);
+                    } else {
+                        const sKey = String(resp.status);
+                        existing.statuses[sKey] = (existing.statuses[sKey] || 0) + 1;
+                    }
 
                     const respHeaders = {};
                     if (Array.isArray(resp.headers)) {
@@ -362,7 +380,13 @@
             if (!merged[key]) {
                 merged[key] = JSON.parse(JSON.stringify(incoming));
             } else {
-                const cur = merged[key];
+                // Deep-copy before mutating: callers pass their live state in as
+                // existingMap and this function reads as pure.
+                const cur = JSON.parse(JSON.stringify(merged[key]));
+                merged[key] = cur;
+                cur.queryKeys = cur.queryKeys || [];
+                cur.queryVariations = cur.queryVariations || [];
+                cur.bodyVariations = cur.bodyVariations || [];
                 cur.count = (cur.count || 0) + (incoming.count || 0);
                 cur.lastCaptured = Math.max(cur.lastCaptured || 0, incoming.lastCaptured || 0);
                 if (incoming.exampleUrl && !cur.exampleUrl) cur.exampleUrl = incoming.exampleUrl;

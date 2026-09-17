@@ -156,11 +156,78 @@ describe('SwazzHar module', () => {
             expect(parsedPut.queryVariations).toHaveLength(2);
             expect(parsedPut.bodyVariations).toHaveLength(2);
 
-            // Assert response data survives
-            expect(parsedGet.statuses['200']).toBe(2);
+            // Assert response data survives with its real counts. Entries fan out
+            // across query x body variations, so counting entries on import would
+            // fabricate these numbers — the exporter stamps the true ones.
+            expect(parsedGet.statuses).toEqual({ '200': 6, '404': 1 });
             expect(parsedGet.lastResponse).toBeDefined();
             expect(parsedGet.lastResponse.status).toBe(200);
             expect(parsedGet.lastResponse.bodySample).toBe('{"id":123,"name":"Alice"}');
+        });
+
+        it('collapses real ULIDs containing B through G', () => {
+            // Crockford Base32 excludes only I, L, O and U. A class that also drops
+            // B-G misses over 99% of real ULIDs, so every id becomes its own key.
+            expect(SwazzHar.normalizePath('/api/records/01ARZ3NDEKTSV4RRFFQ69G5FAV'))
+                .toBe('/api/records/{ulid}');
+            expect(SwazzHar.normalizePath('/api/records/01BX5ZZKBKACTAV9WEVGEMMVRZ'))
+                .toBe('/api/records/{ulid}');
+            // A longer token is not a ULID and must be left alone.
+            expect(SwazzHar.normalizePath('/api/records/01ARZ3NDEKTSV4RRFFQ69G5FAVEXTRA'))
+                .toBe('/api/records/01ARZ3NDEKTSV4RRFFQ69G5FAVEXTRA');
+        });
+
+        it('does not mutate the map passed into mergeCapturedRequests', () => {
+            const existing = {
+                'GET:/a': {
+                    key: 'GET:/a', method: 'GET', path: '/a', exampleUrl: 'http://h/a',
+                    headers: {}, count: 1, lastCaptured: 1, queryKeys: ['x'],
+                    queryVariations: ['?x=1'], bodyVariations: [], statuses: { '200': 1 },
+                    recommendation: '', status: 'needs_work'
+                }
+            };
+            const snapshot = JSON.parse(JSON.stringify(existing));
+            const incoming = {
+                'GET:/a': {
+                    key: 'GET:/a', method: 'GET', path: '/a', exampleUrl: 'http://h/a',
+                    headers: {}, count: 2, lastCaptured: 2, queryKeys: ['y'],
+                    queryVariations: ['?y=2'], bodyVariations: [], statuses: { '404': 1 },
+                    recommendation: '', status: 'needs_work'
+                }
+            };
+
+            const merged = SwazzHar.mergeCapturedRequests(existing, incoming);
+
+            expect(existing).toEqual(snapshot);
+            expect(merged['GET:/a'].queryVariations).toEqual(['?x=1', '?y=2']);
+            expect(merged['GET:/a'].count).toBe(3);
+        });
+
+        it('falls back to counting entries for a HAR from another tool', () => {
+            // A DevTools or Postman export carries no _swazz stamp, so the status
+            // counts can only come from the entries themselves.
+            const foreign = {
+                log: {
+                    version: '1.2',
+                    creator: { name: 'DevTools', version: '1.0' },
+                    entries: [
+                        {
+                            startedDateTime: new Date().toISOString(),
+                            request: { method: 'GET', url: 'http://api.test/api/foreign', headers: [], queryString: [] },
+                            response: { status: 200, statusText: 'OK', headers: [], content: { size: 0, mimeType: 'application/json' } }
+                        },
+                        {
+                            startedDateTime: new Date().toISOString(),
+                            request: { method: 'GET', url: 'http://api.test/api/foreign', headers: [], queryString: [] },
+                            response: { status: 500, statusText: 'Server Error', headers: [], content: { size: 0, mimeType: 'application/json' } }
+                        }
+                    ]
+                }
+            };
+
+            const parsed = SwazzHar.parseHarIntoRequests(foreign);
+            expect(parsed['GET:/api/foreign']).toBeDefined();
+            expect(parsed['GET:/api/foreign'].statuses).toEqual({ '200': 1, '500': 1 });
         });
 
         it('fan-out produces correct number of entries across query x body variations', () => {

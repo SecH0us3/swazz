@@ -144,15 +144,16 @@
                 // If body is in the request object (not config), read asynchronously
                 // without blocking the actual network call
                 if (!body && resource && typeof resource === 'object' && resource.body) {
+                    // Register the request synchronously first: reading the body is
+                    // async, and on a fast or cached response the response message
+                    // would otherwise arrive before the request it belongs to and be
+                    // dropped for having no pending entry.
+                    sendRequestLog(url, method, headers, '', reqId);
                     try {
                         resource.clone().text().then(text => {
-                            sendRequestLog(url, method, headers, text, reqId);
-                        }).catch(() => {
-                            sendRequestLog(url, method, headers, '', reqId);
-                        });
-                    } catch (e) {
-                        sendRequestLog(url, method, headers, '', reqId);
-                    }
+                            if (text) sendRequestLog(url, method, headers, text, reqId);
+                        }).catch(() => {});
+                    } catch (e) {}
                 } else {
                     sendRequestLog(url, method, headers, body, reqId);
                 }

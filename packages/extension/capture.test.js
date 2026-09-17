@@ -106,3 +106,71 @@ describe('Traffic Capture logic (B1 Regression & Scope rules)', () => {
         expect(Object.keys(captured)).toHaveLength(0);
     });
 });
+
+describe('Response correlation across tabs and frames', () => {
+    beforeEach(() => {
+        background.resetState();
+        background.setRecording(true);
+        background.setTargetDomains(['api.example.com']);
+    });
+
+    const req = (path) => ({
+        url: `https://api.example.com${path}`,
+        method: 'GET',
+        headers: {},
+        body: '',
+        requestId: 3
+    });
+
+    it('does not pair a response with a same-numbered request from another tab', () => {
+        // inject.js mints request ids from a per-document counter that restarts at
+        // 1, so two tabs routinely produce the same raw id.
+        const tabA = { tab: { id: 1, url: 'https://app.example.com/a' }, frameId: 0 };
+        const tabB = { tab: { id: 2, url: 'https://app.example.com/b' }, frameId: 0 };
+
+        background.processCapturedRequest(req('/alpha'), tabA.tab, tabA);
+        background.processCapturedRequest(req('/beta'), tabB.tab, tabB);
+
+        // Tab A answers 500; it must land on /alpha and never on /beta.
+        background.processCapturedResponse(
+            { requestId: 3, status: 500, statusText: 'Server Error', headers: {}, bodyText: 'boom' },
+            tabA
+        );
+
+        const captured = background.getCapturedRequests();
+        expect(captured['GET:/alpha'].statuses).toEqual({ '500': 1 });
+        expect(captured['GET:/beta'].statuses).toEqual({});
+        expect(captured['GET:/beta'].lastResponse).toBeUndefined();
+    });
+
+    it('pairs a response with its own request', () => {
+        const sender = { tab: { id: 7, url: 'https://app.example.com/x' }, frameId: 0 };
+        background.processCapturedRequest(req('/solo'), sender.tab, sender);
+        background.processCapturedResponse(
+            { requestId: 3, status: 201, statusText: 'Created', headers: {}, bodyText: '{}' },
+            sender
+        );
+
+        const captured = background.getCapturedRequests();
+        expect(captured['GET:/solo'].statuses).toEqual({ '201': 1 });
+        expect(captured['GET:/solo'].lastResponse.status).toBe(201);
+    });
+
+    it('routes a message through handleRuntimeMessage end to end', () => {
+        const sender = { tab: { id: 9, url: 'https://app.example.com/y' }, frameId: 0 };
+        background.handleRuntimeMessage(
+            { source: 'swazz-detector', type: 'request', data: req('/routed') },
+            sender
+        );
+        background.handleRuntimeMessage(
+            {
+                source: 'swazz-detector',
+                type: 'response',
+                data: { requestId: 3, status: 404, statusText: 'Not Found', headers: {}, bodyText: '' }
+            },
+            sender
+        );
+
+        expect(background.getCapturedRequests()['GET:/routed'].statuses).toEqual({ '404': 1 });
+    });
+});

@@ -59,18 +59,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const expandedKeys = new Set();
     let searchQuery = "";
 
-    // Open in side panel (C5)
+    // Open in side panel (C5).
+    // chrome.sidePanel.open() only works inside a user gesture, and an await
+    // before it ends that gesture — so the window id is resolved up front and
+    // the click handler calls open() synchronously.
+    let currentWindowId = null;
+    if (chrome.windows && chrome.windows.getCurrent) {
+        chrome.windows.getCurrent().then(w => { currentWindowId = w && w.id; }).catch(() => {});
+    }
     if (linkOpenSidepanel) {
-        linkOpenSidepanel.addEventListener('click', async (e) => {
-            e.preventDefault();
-            try {
-                const currentWindow = await chrome.windows.getCurrent();
-                await chrome.sidePanel.open({ windowId: currentWindow.id });
-                window.close();
-            } catch (err) {
-                console.error("Failed to open side panel:", err);
-            }
-        });
+        if (!chrome.sidePanel || typeof chrome.sidePanel.open !== 'function') {
+            linkOpenSidepanel.style.display = 'none';
+        } else {
+            linkOpenSidepanel.addEventListener('click', (e) => {
+                e.preventDefault();
+                const opts = currentWindowId != null ? { windowId: currentWindowId } : {};
+                Promise.resolve(chrome.sidePanel.open(opts))
+                    .then(() => window.close())
+                    .catch(err => console.error("Failed to open side panel:", err));
+            });
+        }
     }
 
     // Collapsible Settings
@@ -776,19 +784,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (reqCount > 5000) {
-            const proceed = confirm(`Warning: You have selected ${reqCount} requests. Exporting more than 5000 requests may result in slow parsing or timeouts. Do you want to proceed?`);
-            if (!proceed) {
-                showSyncStatus("Sync cancelled.", "info");
-                return;
-            }
-        }
-
         btnSyncSwazz.disabled = true;
         showSyncStatus("Generating HAR log...", "info");
 
         // 1. Build standard HAR payload from selected requests
         const harPayload = window.SwazzHar.buildHarPayload(selectedMap);
+
+        // Warn on the entry count, not the endpoint count: each endpoint fans out
+        // across its query x body variations, so a few dozen endpoints can become
+        // thousands of entries.
+        const entryCount = harPayload.log.entries.length;
+        if (entryCount > 5000) {
+            const proceed = confirm(`Warning: ${reqCount} selected endpoints expand to ${entryCount} HAR entries. Sending more than 5000 may result in slow parsing or timeouts. Do you want to proceed?`);
+            if (!proceed) {
+                showSyncStatus("Sync cancelled.", "info");
+                btnSyncSwazz.disabled = false;
+                return;
+            }
+        }
 
         try {
             // 2. Parse HAR payload into Swazz Endpoints using coordinator

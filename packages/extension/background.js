@@ -33,9 +33,22 @@ let lastDroppedHost = "";
 // Map from requestId -> { key, timestamp } for response correlation (B2)
 const pendingRequests = new Map();
 
-// Debounce storage flush state (B5)
+// inject.js mints request ids from a per-document counter that restarts at 1,
+// so the raw id collides across tabs and frames. Scope it by sender before
+// using it to pair a response with its request.
+function correlationId(sender, requestId) {
+    const tabId = sender && sender.tab && sender.tab.id != null ? sender.tab.id : 'x';
+    const frameId = sender && sender.frameId != null ? sender.frameId : 'x';
+    return tabId + ':' + frameId + ':' + requestId;
+}
+
+// Debounce storage flush state (B5).
+// Writes carry a monotonically increasing token so the worker can tell its own
+// echo from a genuine edit made elsewhere (the popup deleting an endpoint or
+// importing a HAR). A timing window cannot: a popup write landing inside it was
+// previously ignored and then overwritten by the next flush.
 let flushTimer = null;
-let isFlushing = false;
+let writeToken = 0;
 
 function scheduleFlush() {
     if (flushTimer) clearTimeout(flushTimer);
@@ -45,17 +58,13 @@ function scheduleFlush() {
 function flushStorage() {
     flushTimer = null;
     if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
-    isFlushing = true;
+    writeToken += 1;
     chrome.storage.local.set({
         capturedRequests,
         droppedOutOfScope,
         droppedNoScope,
-        lastDroppedHost
-    }, () => {
-        // Yield to allow storage.onChanged to fire before unsetting isFlushing
-        setTimeout(() => {
-            isFlushing = false;
-        }, 50);
+        lastDroppedHost,
+        captureWriteToken: writeToken
     });
 }
 
@@ -121,25 +130,29 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
         if (changes.targetDomains) {
             targetDomains = changes.targetDomains.newValue || [];
         }
-        if (changes.capturedRequests) {
-            if (!isFlushing) {
-                capturedRequests = changes.capturedRequests.newValue || {};
-                updateBadge();
-            }
+        // Our own flush stamps captureWriteToken with the value we last wrote;
+        // anything else is an edit from the popup and must be adopted.
+        const stampedByUs = changes.captureWriteToken &&
+            changes.captureWriteToken.newValue === writeToken;
+        const isForeignEdit = !stampedByUs;
+
+        if (changes.capturedRequests && isForeignEdit) {
+            capturedRequests = changes.capturedRequests.newValue || {};
+            updateBadge();
         }
-        if (changes.droppedOutOfScope && !isFlushing) {
+        if (changes.droppedOutOfScope && isForeignEdit) {
             droppedOutOfScope = changes.droppedOutOfScope.newValue || 0;
         }
-        if (changes.droppedNoScope && !isFlushing) {
+        if (changes.droppedNoScope && isForeignEdit) {
             droppedNoScope = changes.droppedNoScope.newValue || 0;
         }
-        if (changes.lastDroppedHost && !isFlushing) {
+        if (changes.lastDroppedHost && isForeignEdit) {
             lastDroppedHost = changes.lastDroppedHost.newValue || "";
         }
     });
 }
 
-function processCapturedRequest(reqData, senderTab) {
+function processCapturedRequest(reqData, senderTab, sender) {
     if (!recording) return;
 
     let parsedUrl;
@@ -263,7 +276,7 @@ function processCapturedRequest(reqData, senderTab) {
 
     // Track requestId for response correlation (B2)
     if (reqData.requestId) {
-        pendingRequests.set(reqData.requestId, { key, timestamp: Date.now() });
+        pendingRequests.set(correlationId(sender, reqData.requestId), { key, timestamp: Date.now() });
         if (pendingRequests.size > 2000) {
             const cutoff = Date.now() - 60000;
             for (const [id, item] of pendingRequests.entries()) {
@@ -276,12 +289,13 @@ function processCapturedRequest(reqData, senderTab) {
     scheduleFlush();
 }
 
-function processCapturedResponse(resData) {
+function processCapturedResponse(resData, sender) {
     if (!recording || !resData || !resData.requestId) return;
 
-    const pending = pendingRequests.get(resData.requestId);
+    const corrId = correlationId(sender, resData.requestId);
+    const pending = pendingRequests.get(corrId);
     if (!pending) return;
-    pendingRequests.delete(resData.requestId);
+    pendingRequests.delete(corrId);
 
     const existing = capturedRequests[pending.key];
     if (!existing) return;
@@ -343,12 +357,12 @@ function handleRuntimeMessage(message, sender, sendResponse) {
     }
 
     if (message.type === 'request') {
-        processCapturedRequest(message.data, sender ? sender.tab : null);
+        processCapturedRequest(message.data, sender ? sender.tab : null, sender);
         return;
     }
 
     if (message.type === 'response') {
-        processCapturedResponse(message.data);
+        processCapturedResponse(message.data, sender);
         return;
     }
 }

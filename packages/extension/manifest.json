@@ -9,7 +9,7 @@
     "cookies",
     "scripting",
     "webNavigation",
-    "side_panel"
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -27,19 +27,32 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["scope.js", "content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "scope.js",
+        "content.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["inject.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "inject.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["main_world.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "main_world.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     }
@@ -49,8 +62,13 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["inject.js", "scope.js"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "inject.js",
+        "scope.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

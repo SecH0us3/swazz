@@ -1,6 +1,30 @@
-// Helpers from scope.js
-const { stripPort, isDomainTargeted, isAuthOriginAllowed } = (typeof window !== 'undefined' && window.SwazzScope) || 
+// Helpers from scope.js. scope.js is a separate manifest entry, so if it ever
+// fails to load these would be undefined and the highlighter and crawler would
+// die with a TypeError — fall back to local equivalents instead.
+const SwazzScopeApi = (typeof window !== 'undefined' && window.SwazzScope) ||
     (typeof globalThis !== 'undefined' && globalThis.SwazzScope) || {};
+
+const stripPort = SwazzScopeApi.stripPort || function (hostOrTarget) {
+    if (!hostOrTarget) return '';
+    const v = hostOrTarget.trim().toLowerCase();
+    if (v.startsWith('[')) {
+        const end = v.indexOf(']');
+        if (end !== -1) return v.substring(0, end + 1);
+    }
+    return v.split(':')[0];
+};
+
+const isDomainTargeted = SwazzScopeApi.isDomainTargeted || function (host, targets) {
+    if (!targets || targets.length === 0) return false;
+    const cleanHost = stripPort(host);
+    return targets.some(t => {
+        const target = stripPort(t);
+        if (!target) return false;
+        return cleanHost === target || cleanHost.endsWith('.' + target);
+    });
+};
+
+const isAuthOriginAllowed = SwazzScopeApi.isAuthOriginAllowed;
 
 // Listen for messages from the page's MAIN world context
 window.addEventListener('message', (event) => {
