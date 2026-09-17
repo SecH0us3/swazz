@@ -1,41 +1,41 @@
 {
-  "name": "@swazz/web",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "sync-docs": "node -e \"const fs = require('fs'); fs.copyFileSync('../../docs/ai.txt', 'public/ai.txt'); fs.copyFileSync('../../docs/llms.txt', 'public/llms.txt'); fs.copyFileSync('../../docs/llms-full.txt', 'public/llms-full.txt'); try { if (fs.existsSync('public/swazz-extension.zip')) fs.unlinkSync('public/swazz-extension.zip'); require('child_process').execSync('zip -r web/public/swazz-extension.zip extension -x \"extension/node_modules/*\" \"extension/*.test.js\" \"extension/vitest.config.*\" \"extension/package.json\"', { cwd: '..' }); } catch(e) { console.error('Failed to zip extension:', e); }\"",
-    "predev": "npm run sync-docs",
-    "prebuild": "npm run sync-docs",
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@simplewebauthn/browser": "^13.3.0",
-    "@swazz/shared": "*",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-virtuoso": "^4.18.11",
-    "zustand": "^5.0.14"
-  },
-  "devDependencies": {
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.4.1",
-    "@types/qrcode": "^1.5.6",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
-    "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/coverage-v8": "^4.1.11",
-    "fake-indexeddb": "^6.2.5",
-    "jsdom": "^30.0.1",
-    "typescript": "^7.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^4.1.11"
-  }
+    "name": "@swazz/web",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "sync-docs": "node -e \"const fs = require('fs'); fs.copyFileSync('../../docs/ai.txt', 'public/ai.txt'); fs.copyFileSync('../../docs/llms.txt', 'public/llms.txt'); fs.copyFileSync('../../docs/llms-full.txt', 'public/llms-full.txt'); try { if (fs.existsSync('public/swazz-extension.zip')) fs.unlinkSync('public/swazz-extension.zip'); require('child_process').execSync('zip -r web/public/swazz-extension.zip extension -x \"extension/node_modules/*\" \"extension/*.test.js\" \"extension/vitest.config.*\" \"extension/package.json\"', { cwd: '..' }); } catch(e) { console.error('Failed to zip extension:', e); }\"",
+        "predev": "npm run sync-docs",
+        "prebuild": "npm run sync-docs",
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "preview": "vite preview",
+        "deploy": "npm run build && wrangler deploy",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@simplewebauthn/browser": "^13.3.0",
+        "@swazz/shared": "*",
+        "qrcode": "^1.5.4",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "react-virtuoso": "^4.18.11",
+        "zustand": "^5.0.14"
+    },
+    "devDependencies": {
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/jest-dom": "^7.0.1",
+        "@testing-library/react": "^16.3.3",
+        "@types/node": "^26.4.1",
+        "@types/qrcode": "^1.5.6",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.5",
+        "@vitejs/plugin-react": "^6.1.1",
+        "@vitest/coverage-v8": "^4.1.11",
+        "fake-indexeddb": "^6.2.5",
+        "jsdom": "^30.0.1",
+        "typescript": "^7.0.2",
+        "vite": "^8.2.2",
+        "vitest": "^4.1.11"
+    }
 }
