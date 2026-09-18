@@ -50,6 +50,16 @@ test.describe('Browser extension HAR round trip', () => {
     if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
+  // The switch is a toggle and these tests share one context, so clicking it
+  // blindly turns recording OFF when a previous test left it on.
+  async function setRecording(popup: Page, on: boolean) {
+    const box = popup.locator('#btn-toggle-record');
+    if ((await box.isChecked()) !== on) {
+      await popup.locator('label.switch:has(#btn-toggle-record) .slider').click();
+    }
+    await expect(box).toBeChecked({ checked: on });
+  }
+
   async function openPopup(): Promise<Page> {
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -62,9 +72,7 @@ test.describe('Browser extension HAR round trip', () => {
     const popup = await openPopup();
     await popup.locator('#settings-toggle').click();
     await popup.locator('#input-domains').fill(TARGET);
-    // The checkbox itself is visually hidden behind the CSS switch, so click the slider.
-    await popup.locator('label.switch:has(#btn-toggle-record) .slider').click();
-    await expect(popup.locator('#btn-toggle-record')).toBeChecked();
+    await setRecording(popup, true);
     await expect(popup.locator('#recording-status')).toHaveText('Recording');
     await popup.close();
 
@@ -136,7 +144,11 @@ test.describe('Browser extension HAR round trip', () => {
     const popup = await openPopup();
     await popup.locator('#settings-toggle').click();
     await popup.locator('#input-domains').fill('example.invalid');
-    await popup.locator('label.switch:has(#btn-toggle-record) .slider').click();
+    await setRecording(popup, true);
+    // Start from a clean slate: earlier tests in this shared context may have
+    // left ignored hosts behind, which would mask a failure here.
+    await popup.locator('#tab-ignored').click();
+    await popup.locator('#btn-clear-ignored').click();
     await popup.close();
 
     const target = await context.newPage();
