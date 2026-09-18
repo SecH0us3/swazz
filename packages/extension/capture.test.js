@@ -221,3 +221,46 @@ describe('Out-of-scope accounting', () => {
         expect(background.getDroppedHosts()['h0.example.net']).toBe(2);
     });
 });
+
+describe('Service worker lifecycle and request accounting', () => {
+    beforeEach(() => {
+        background.resetState();
+        background.setRecording(true);
+        background.setTargetDomains(['api.example.com']);
+    });
+
+    it('counts a request once even though inject.js reports it twice', () => {
+        // For fetch(new Request(..., {body})) the request is announced
+        // synchronously and then again once its body has been read, under the
+        // same id — the second message must add the body, not another hit.
+        const sender = { tab: { id: 1, url: 'https://app.example.com/' }, frameId: 0 };
+        const base = {
+            url: 'https://api.example.com/v1/items',
+            method: 'POST',
+            headers: {},
+            requestId: 42
+        };
+
+        background.processCapturedRequest({ ...base, body: '' }, sender.tab, sender);
+        background.processCapturedRequest({ ...base, body: '{"a":1}' }, sender.tab, sender);
+
+        const entry = background.getCapturedRequests()['POST:/v1/items'];
+        expect(entry.count).toBe(1);
+        expect(entry.bodyVariations).toEqual(['{"a":1}']);
+    });
+
+    it('still counts genuinely separate requests', () => {
+        const sender = { tab: { id: 1, url: 'https://app.example.com/' }, frameId: 0 };
+        const base = { url: 'https://api.example.com/v1/items', method: 'GET', headers: {}, body: '' };
+        background.processCapturedRequest({ ...base, requestId: 1 }, sender.tab, sender);
+        background.processCapturedRequest({ ...base, requestId: 2 }, sender.tab, sender);
+        expect(background.getCapturedRequests()['GET:/v1/items'].count).toBe(2);
+    });
+
+    it('exposes a hydration gate so a cold worker cannot drop events', () => {
+        // An MV3 worker restarts with recording === false and reads storage
+        // asynchronously; events must wait for that read.
+        expect(typeof background.whenHydrated).toBe('function');
+        expect(background.isHydrated()).toBe(true); // no chrome API under test
+    });
+});

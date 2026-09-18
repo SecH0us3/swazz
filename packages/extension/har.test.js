@@ -374,3 +374,37 @@ describe('SwazzHar module', () => {
         });
     });
 });
+
+describe('request counts survive a round trip', () => {
+    it('restores the real count instead of the entry fan-out', () => {
+        const src = {
+            'GET:/api/a': {
+                key: 'GET:/api/a', method: 'GET', path: '/api/a',
+                exampleUrl: 'http://h/api/a?x=1', headers: {},
+                count: 100, lastCaptured: 1,
+                queryKeys: ['x'], queryVariations: ['?x=1', '?x=2'], bodyVariations: [],
+                statuses: { '200': 100 },
+                lastResponse: { status: 200, statusText: 'OK', headers: {}, bodySample: '' },
+                recommendation: '', status: 'needs_work'
+            }
+        };
+        const back = SwazzHar.parseHarIntoRequests(SwazzHar.buildHarPayload(src));
+        // Two entries are emitted for the two query variations; the endpoint was
+        // still hit 100 times.
+        expect(back['GET:/api/a'].count).toBe(100);
+    });
+
+    it('counts entries for a HAR from another tool, which carries no stamp', () => {
+        const foreign = {
+            log: {
+                version: '1.2', creator: { name: 'DevTools', version: '1' },
+                entries: [1, 2, 3].map(() => ({
+                    startedDateTime: new Date().toISOString(),
+                    request: { method: 'GET', url: 'http://h/api/b', headers: [], queryString: [] },
+                    response: { status: 200, statusText: 'OK', headers: [], content: { size: 0, mimeType: 'application/json' } }
+                }))
+            }
+        };
+        expect(SwazzHar.parseHarIntoRequests(foreign)['GET:/api/b'].count).toBe(3);
+    });
+});

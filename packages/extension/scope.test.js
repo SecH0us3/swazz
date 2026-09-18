@@ -66,3 +66,25 @@ describe('SwazzScope module', () => {
         });
     });
 });
+
+describe('targets pasted as URLs', () => {
+    // Users copy what is in the address bar. "http://localhost:8080" used to
+    // reduce to "http" and match nothing, silently capturing no traffic.
+    it.each([
+        ['http://localhost:8080', 'localhost:8080'],
+        ['https://api.example.com/v1/users?a=1', 'api.example.com'],
+        ['HTTPS://API.Example.COM', 'api.example.com'],
+        ['api.example.com', 'sub.api.example.com'],
+        ['user:pw@host.tld:443', 'host.tld']
+    ])('matches host for target %s', (target, host) => {
+        expect(SwazzScope.isDomainTargeted(host, [target])).toBe(true);
+    });
+
+    it('still refuses a lookalike domain', () => {
+        expect(SwazzScope.isDomainTargeted('evil-example.com', ['http://example.com'])).toBe(false);
+    });
+
+    it('keeps IPv6 hosts intact', () => {
+        expect(SwazzScope.stripPort('[::1]:8788')).toBe('[::1]');
+    });
+});

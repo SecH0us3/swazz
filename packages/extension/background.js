@@ -34,6 +34,7 @@ let droppedHosts = {};
 
 // Map from requestId -> { key, timestamp } for response correlation (B2)
 const pendingRequests = new Map();
+const countedRequests = new Set();
 
 // inject.js mints request ids from a per-document counter that restarts at 1,
 // so the raw id collides across tabs and frames. Scope it by sender before
@@ -108,28 +109,47 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onInstalle
     });
 }
 
-// Hydrate module-level state on startup
+// Hydrate module-level state on startup.
+// An MV3 service worker is evicted after ~30s idle and restarts cold on the next
+// event, with every variable back at its default. Reading storage is async, so a
+// message arriving before that read completes would see recording === false and
+// be dropped, and a capture written meanwhile would be clobbered by the callback.
+// Everything that reads this state waits on hydrationPromise first.
+let isHydrated = false;
+let hydrationPromise = Promise.resolve();
+
 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get([
-        'recording',
-        'targetDomains',
-        'capturedRequests',
-        'droppedOutOfScope',
-        'droppedNoScope',
-        'lastDroppedHost',
-        'droppedHosts'
-    ], (state) => {
-        if (state) {
-            recording = !!state.recording;
-            targetDomains = state.targetDomains || [];
-            capturedRequests = state.capturedRequests || {};
-            droppedOutOfScope = state.droppedOutOfScope || 0;
-            droppedNoScope = state.droppedNoScope || 0;
-            lastDroppedHost = state.lastDroppedHost || "";
-    droppedHosts = state.droppedHosts || {};
-        }
-        updateBadge();
+    hydrationPromise = new Promise((resolve) => {
+        chrome.storage.local.get([
+            'recording',
+            'targetDomains',
+            'capturedRequests',
+            'droppedOutOfScope',
+            'droppedNoScope',
+            'lastDroppedHost',
+            'droppedHosts'
+        ], (state) => {
+            if (state) {
+                recording = !!state.recording;
+                targetDomains = state.targetDomains || [];
+                capturedRequests = state.capturedRequests || {};
+                droppedOutOfScope = state.droppedOutOfScope || 0;
+                droppedNoScope = state.droppedNoScope || 0;
+                lastDroppedHost = state.lastDroppedHost || "";
+                droppedHosts = state.droppedHosts || {};
+            }
+            isHydrated = true;
+            updateBadge();
+            resolve();
+        });
     });
+} else {
+    isHydrated = true;
+}
+
+function whenHydrated(fn) {
+    if (isHydrated) return fn();
+    return hydrationPromise.then(fn);
 }
 
 // Re-hydrate on storage changes not originating from our own flush
@@ -236,7 +256,20 @@ function processCapturedRequest(reqData, senderTab, sender) {
         capturedRequests[key] = existing;
     }
 
-    existing.count += 1;
+    // inject.js may report the same request twice: once synchronously and again
+    // once its body has been read. Count the request once, but let the second
+    // message contribute the body it carries.
+    const corrId = reqData.requestId ? correlationId(sender, reqData.requestId) : null;
+    const alreadyCounted = corrId ? countedRequests.has(corrId) : false;
+    if (!alreadyCounted) {
+        existing.count += 1;
+        if (corrId) {
+            countedRequests.add(corrId);
+            if (countedRequests.size > 5000) {
+                countedRequests.clear();
+            }
+        }
+    }
     existing.lastCaptured = Date.now();
     existing.exampleUrl = reqData.url;
     if (reqData.headers && Object.keys(reqData.headers).length > 0) {
@@ -342,12 +375,12 @@ if (typeof chrome !== 'undefined' && chrome.webNavigation && chrome.webNavigatio
         if (details.frameId !== 0) return;
         if (!details.url || !details.url.startsWith('http')) return;
 
-        processCapturedRequest({
+        whenHydrated(() => processCapturedRequest({
             url: details.url,
             method: 'GET',
             headers: {},
             body: ''
-        }, null);
+        }, null));
     });
 }
 
@@ -375,12 +408,12 @@ function handleRuntimeMessage(message, sender, sendResponse) {
     }
 
     if (message.type === 'request') {
-        processCapturedRequest(message.data, sender ? sender.tab : null, sender);
+        whenHydrated(() => processCapturedRequest(message.data, sender ? sender.tab : null, sender));
         return;
     }
 
     if (message.type === 'response') {
-        processCapturedResponse(message.data, sender);
+        whenHydrated(() => processCapturedResponse(message.data, sender));
         return;
     }
 }
@@ -405,6 +438,8 @@ if (typeof module !== 'undefined' && module.exports) {
         getDroppedOutOfScope: () => droppedOutOfScope,
         getDroppedNoScope: () => droppedNoScope,
         getDroppedHosts: () => droppedHosts,
+        whenHydrated,
+        isHydrated: () => isHydrated,
         resetState: () => {
             recording = false;
             targetDomains = [];
@@ -414,6 +449,7 @@ if (typeof module !== 'undefined' && module.exports) {
             lastDroppedHost = "";
             droppedHosts = {};
             pendingRequests.clear();
+            countedRequests.clear();
         }
     };
 }

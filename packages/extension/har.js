@@ -280,7 +280,17 @@
                 requestsMap[key] = existing;
             }
 
-            existing.count += 1;
+            // Entries fan out across query x body variations, so counting them
+            // would report the fan-out rather than the traffic. Our own export
+            // carries the true figure.
+            const stampedCount = entry._swazz && typeof entry._swazz.count === 'number'
+                ? entry._swazz.count
+                : null;
+            if (stampedCount !== null && stampedCount > 0) {
+                existing.count = stampedCount;
+            } else {
+                existing.count += 1;
+            }
             const entryTime = entry.startedDateTime ? Date.parse(entry.startedDateTime) : 0;
             if (entryTime && entryTime > existing.lastCaptured) {
                 existing.lastCaptured = entryTime;

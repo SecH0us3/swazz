@@ -1,6 +1,8 @@
 /* Premium Dark Glassmorphic Theme for Swazz Extension */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+/* No remote font import. The popup is documented as working fully offline, and a
+   request to fonts.googleapis.com on every open would both stall in an air-gapped
+   network and hand Google the user's IP and the time they opened the tool. */
 
 :root {
     --bg-darkest: #09090b;
@@ -26,9 +28,9 @@
     --color-warning-bg: rgba(245, 158, 11, 0.1);
     --color-error: #ef4444;
     
-    --font-sans: 'Inter', system-ui, sans-serif;
-    --font-title: 'Outfit', sans-serif;
-    --font-mono: 'Fira Code', monospace;
+    --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-title: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
     
     --radius-sm: 6px;
     --radius-md: 10px;

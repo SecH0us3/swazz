@@ -10,9 +10,24 @@
     }
 })(typeof globalThis !== 'undefined' ? globalThis : typeof self !== 'undefined' ? self : this, function () {
 
-    function stripPort(hostOrTarget) {
+    // People paste what is in the address bar, so a target may arrive as a full
+    // URL. Reduce it to a bare host before anything compares it: without this,
+    // "http://localhost:8080" split on ':' yielded "http" and the domain never
+    // matched, silently capturing nothing.
+    function normalizeTarget(hostOrTarget) {
         if (!hostOrTarget) return '';
-        const s = hostOrTarget.trim().toLowerCase();
+        let v = String(hostOrTarget).trim().toLowerCase();
+        v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, ''); // scheme
+        v = v.split('/')[0];                           // path
+        v = v.split('?')[0].split('#')[0];             // query / fragment
+        const at = v.lastIndexOf('@');                 // credentials
+        if (at !== -1) v = v.substring(at + 1);
+        return v;
+    }
+
+    function stripPort(hostOrTarget) {
+        const s = normalizeTarget(hostOrTarget);
+        if (!s) return '';
         if (s.startsWith('[')) {
             const closingBracketIndex = s.indexOf(']');
             if (closingBracketIndex !== -1) {
@@ -60,6 +75,7 @@
     }
 
     return {
+        normalizeTarget,
         stripPort,
         isDomainTargeted,
         isAuthOriginAllowed

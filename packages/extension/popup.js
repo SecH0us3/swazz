@@ -531,15 +531,18 @@ document.addEventListener('DOMContentLoaded', () => {
             unselectedKeys.clear();
             expandedKeys.clear();
             droppedOutOfScope = 0;
+            droppedHosts = {};
             droppedNoScope = 0;
             lastDroppedHost = "";
             chrome.storage.local.set({
                 capturedRequests: {},
+                droppedHosts: {},
                 droppedOutOfScope: 0,
                 droppedNoScope: 0,
                 lastDroppedHost: ""
             });
             renderEndpoints();
+            renderIgnoredHosts();
             updateScopeWarningUI();
             updateSyncButtonState();
         }
@@ -970,7 +973,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const stored = await new Promise(r => chrome.storage.local.get(['targetDomains'], r));
                     const domains = stored.targetDomains || [];
-                    if (domains.length > 0) capturedBaseUrl = `https://${domains[0]}`;
+                    if (domains.length > 0) {
+                        // Take the scheme from traffic we actually saw; assuming
+                        // https made the runner fail the TLS handshake against a
+                        // plain-http local target.
+                        const sample = Object.values(capturedRequests)[0];
+                        let scheme = 'https';
+                        try {
+                            if (sample && sample.exampleUrl) {
+                                scheme = new URL(sample.exampleUrl).protocol.replace(':', '');
+                            } else if (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(domains[0])) {
+                                scheme = 'http';
+                            }
+                        } catch {}
+                        capturedBaseUrl = `${scheme}://${domains[0]}`;
+                    }
                 } catch {}
             }
 
@@ -1202,7 +1219,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getDomainCookies(domain) {
-        const cleanDomain = domain.split(':')[0];
+        // stripPort understands IPv6 brackets and pasted URLs; split(':') did not
+        // and handed chrome.cookies a '[' for an address like [::1]:8080.
+        const scopeApi = (typeof window !== 'undefined' && window.SwazzScope) || {};
+        const stripHost = scopeApi.stripPort || ((d) => String(d).split(':')[0]);
+        const cleanDomain = stripHost(domain).replace(/^\[|\]$/g, '');
         return new Promise((resolve) => {
             if (!chrome.cookies) {
                 console.warn("chrome.cookies API not available");
