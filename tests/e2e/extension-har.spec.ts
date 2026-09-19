@@ -133,6 +133,7 @@ test.describe('Browser extension HAR round trip', () => {
 
     // Endpoints recorded by the extension now appear in the project's tree.
     await expect(app.locator('.tree-leaf-row:has-text("goods")')).toBeVisible({ timeout: 30000 });
+    await app.evaluate(() => localStorage.clear());
     await app.close();
   });
 
@@ -211,7 +212,15 @@ test.describe('Browser extension HAR round trip', () => {
 
     const app = await context.newPage();
     await app.goto(DASHBOARD);
-    await app.evaluate(() => localStorage.setItem('swazz_tips_enabled', 'false'));
+    const hasToken = await app.evaluate(() => {
+      const t = !!localStorage.getItem('swazz_token');
+      localStorage.clear();
+      localStorage.setItem('swazz_tips_enabled', 'false');
+      return t;
+    });
+    if (hasToken) {
+      await app.reload();
+    }
 
     await app.getByRole('button', { name: 'Sign In' }).first().click();
     await app.getByRole('button', { name: 'Create an account' }).click();
@@ -227,6 +236,7 @@ test.describe('Browser extension HAR round trip', () => {
         timeout: 15000,
       })
       .toBeTruthy();
+    await app.evaluate(() => localStorage.clear());
     await app.close();
   });
 
