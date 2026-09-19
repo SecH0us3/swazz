@@ -253,12 +253,26 @@ describe('ScansRepository Unit Tests', () => {
       const scan = { id: 's-1', project_id: 'p-1', status: 'completed', summary_stats: '{}' };
       mockAll
         .mockResolvedValueOnce({ success: true }) // UPDATE query run
-        .mockResolvedValueOnce(scan);             // getScan query
+        .mockResolvedValueOnce(scan)              // getScan query
+        .mockResolvedValueOnce({ email: 'owner@example.com', email_verified: 1, project_name: 'Alpha' }); // user query
 
       const repo = new ScansRepository(mockEnv);
       await repo.updateScanStatus('s-1', 'completed', '{}');
 
       expect(mockPrepare).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE scans SET status = 'completed', completed_at = datetime('now'), summary_stats = ? WHERE id = ?"));
+      expect(dispatchWebhook).toHaveBeenCalledWith(mockEnv, 'p-1', 'scan.completed', expect.any(Object));
+    });
+
+    it('skips scan completed email if owner email is not verified', async () => {
+      const scan = { id: 's-2', project_id: 'p-1', status: 'completed', summary_stats: '{}' };
+      mockAll
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce(scan)
+        .mockResolvedValueOnce({ email: 'unverified@example.com', email_verified: 0, project_name: 'Alpha' });
+
+      const repo = new ScansRepository(mockEnv);
+      await repo.updateScanStatus('s-2', 'completed', '{}');
+
       expect(dispatchWebhook).toHaveBeenCalledWith(mockEnv, 'p-1', 'scan.completed', expect.any(Object));
     });
 

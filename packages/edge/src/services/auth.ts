@@ -22,6 +22,7 @@ import {
   verifyAuthenticationResponse,
   type AuthenticatorTransportFuture,
 } from '@simplewebauthn/server';
+import { sendVerificationEmail } from './email';
 
 const VALID_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
   'ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'
@@ -55,6 +56,9 @@ function base64ToArrayBuffer(base64: string) {
 
 export interface IAuthService {
   register(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
+  createEmailVerificationToken(userId: string, email: string): Promise<string>;
+  verifyEmail(token: string): Promise<{ success: boolean; email?: string }>;
+  resendVerificationEmail(userId: string, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; cooldownSeconds: number }>;
   registerGuestStep1(clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined): Promise<any>;
   registerGuest(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
   getMe(userId: string): Promise<any>;
@@ -166,6 +170,20 @@ export class AuthService implements IAuthService {
       const { id } = await this.authRepo.createUser(username, usernameHash, hash, email, hashedApiKey);
       await this.authRepo.recordLoginHistory(id, 'success', 'password', false, this.extractLoginMeta(c));
       
+      if (email) {
+        try {
+          const verifyToken = await this.createEmailVerificationToken(id, email);
+          const emailPromise = sendVerificationEmail(this.env, { email, token: verifyToken, username });
+          if (c?.executionCtx?.waitUntil) {
+            c.executionCtx.waitUntil(emailPromise);
+          } else {
+            await emailPromise;
+          }
+        } catch (emailErr) {
+          console.error("Failed to send verification email on register:", emailErr);
+        }
+      }
+
       const payload = { sub: id, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 };
       const secret = this.env.JWT_SECRET;
       if (!secret) throw new Error('Internal server error: auth not configured|500');
@@ -271,6 +289,8 @@ export class AuthService implements IAuthService {
     
     return { 
       username: user.username, 
+      email: user.email || null,
+      email_verified: user.email_verified === 1,
       api_key: displayApiKey, 
       public_key: user.public_key,
       is_guest: user.is_guest === 1,
@@ -935,5 +955,88 @@ export class AuthService implements IAuthService {
     }
     if (!token) throw new Error('Invalid or expired exchange code|400');
     return { status: 'ok', token };
+  }
+
+  async createEmailVerificationToken(userId: string, email: string): Promise<string> {
+    const token = ulid() + crypto.randomUUID().replace(/-/g, '');
+    const kv = this.env.SESSION_CACHE;
+    if (kv) {
+      await kv.put(`email_verify:${token}`, JSON.stringify({ userId, email, createdAt: Date.now() }), {
+        expirationTtl: 86400, // 24 hours
+      });
+    }
+    return token;
+  }
+
+  async verifyEmail(token: string): Promise<{ success: boolean; email?: string }> {
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+      throw new Error('Invalid verification token|400');
+    }
+
+    const kv = this.env.SESSION_CACHE;
+    if (!kv) {
+      throw new Error('Session cache unavailable|500');
+    }
+
+    const data = await kv.get(`email_verify:${token}`);
+    if (!data) {
+      throw new Error('Invalid or expired verification token|400');
+    }
+
+    // Immediately delete token to prevent concurrent replay attacks
+    await kv.delete(`email_verify:${token}`);
+
+    let parsed: { userId: string; email: string };
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      throw new Error('Invalid token data|400');
+    }
+
+    await this.authRepo.verifyUserEmail(parsed.userId);
+
+    return { success: true, email: parsed.email };
+  }
+
+  async resendVerificationEmail(userId: string, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; cooldownSeconds: number }> {
+    if (!userId) throw new Error('Unauthorized|401');
+
+    const turnstileSecret = this.env.TURNSTILE_SECRET;
+    if (turnstileSecret && this.env.JWT_SECRET !== 'test-secret') {
+      if (!turnstileToken) throw new Error('Missing Turnstile token|403');
+      const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteIp);
+      if (!valid) throw new Error('Turnstile verification failed|403');
+    }
+
+    const user = await this.authRepo.getUserById(userId);
+    if (!user) throw new Error('User not found|404');
+    if (!user.email) throw new Error('No email registered for this account|400');
+    if (user.email_verified === 1) throw new Error('Email is already verified|400');
+
+    const kv = this.env.SESSION_CACHE;
+    const cooldownKey = `email_verify_cooldown:${userId}`;
+    if (kv) {
+      const activeCooldown = await kv.get(cooldownKey);
+      if (activeCooldown) {
+        throw new Error('Verification email was sent recently. Please wait before requesting another.|429');
+      }
+    }
+
+    const token = await this.createEmailVerificationToken(userId, user.email);
+    const result = await sendVerificationEmail(this.env, {
+      email: user.email,
+      token,
+      username: user.username,
+    });
+
+    if (!result.success && !result.simulated) {
+      throw new Error('Failed to send verification email: ' + (result.error || 'unknown error') + '|500');
+    }
+
+    if (kv) {
+      await kv.put(cooldownKey, '1', { expirationTtl: 300 }); // 5 minutes
+    }
+
+    return { status: 'sent', cooldownSeconds: 300 };
   }
 }

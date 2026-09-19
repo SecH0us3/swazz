@@ -6,6 +6,7 @@
 import { Env } from '../env';
 import { BaseService } from './base';
 import { dispatchWebhook } from '../utils/webhooks';
+import { sendScanCompletedDigestEmail } from '../services/email';
 import { logError } from '../../../common/logging/logger';
 
 export interface IScansRepository {
@@ -372,6 +373,56 @@ export class ScansRepository extends BaseService implements IScansRepository {
             });
           } catch (err) {
             logError({ env: this.env, executionCtx: ctx }, 'Webhook', "Webhook dispatch failed", { error: err });
+          }
+        }
+
+        if (status === 'completed') {
+          try {
+            let targetUser: { email: string; email_verified: number; project_name?: string } | null = null;
+            if (scan.user_id) {
+              targetUser = await this.db.prepare(`
+                SELECT users.email, users.email_verified, projects.name AS project_name
+                FROM users
+                LEFT JOIN projects ON projects.id = ?
+                WHERE users.id = ?
+              `).bind(scan.project_id, scan.user_id).first<{ email: string; email_verified: number; project_name?: string }>();
+            } else {
+              targetUser = await this.db.prepare(`
+                SELECT users.email, users.email_verified, projects.name AS project_name
+                FROM project_members
+                JOIN users ON project_members.user_id = users.id
+                JOIN projects ON project_members.project_id = projects.id
+                WHERE project_members.project_id = ? AND project_members.role = 'owner' AND users.email_verified = 1
+                LIMIT 1
+              `).bind(scan.project_id).first<{ email: string; email_verified: number; project_name?: string }>();
+            }
+
+            if (targetUser && targetUser.email && targetUser.email_verified === 1) {
+              const stats = scan.summary_stats ? (typeof scan.summary_stats === 'string' ? JSON.parse(scan.summary_stats) : scan.summary_stats) as Record<string, number> : {} as Record<string, number>;
+              const totalFindings = stats.total_findings ?? stats.findings_count ?? 0;
+              const criticalCount = stats.critical ?? 0;
+              const highCount = stats.high ?? 0;
+              const mediumCount = stats.medium ?? 0;
+              const lowCount = stats.low ?? 0;
+              const projectName = targetUser.project_name || 'Project';
+              const reportUrl = `https://swazz.secmy.app/projects/${scan.project_id}/scans/${scan.id}`;
+
+              await sendScanCompletedDigestEmail(this.env, {
+                to: targetUser.email,
+                projectName,
+                targetUrl: scan.target_url,
+                scanId: scan.id,
+                reportUrl,
+                totalFindings,
+                criticalCount,
+                highCount,
+                mediumCount,
+                lowCount,
+                completedAt: scan.completed_at || new Date().toISOString(),
+              });
+            }
+          } catch (emailErr) {
+            logError({ env: this.env, executionCtx: ctx }, 'Email', "Scan completed email dispatch failed", { error: emailErr });
           }
         }
       }

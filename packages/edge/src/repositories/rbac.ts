@@ -37,6 +37,7 @@ export interface IRbacRepository {
   acceptInvitation(token: string, username: string, email: string, userId: string): Promise<any | null>;
   declineInvitation(token: string, username: string, email: string): Promise<boolean>;
   getProjectSessionTimeout(projectId: string): Promise<number | null>;
+  getProjectName(projectId: string): Promise<string | null>;
 
   invalidateProjectRBAC(projectId: string): Promise<void>;
   invalidateUserRBAC(projectId: string, userId: string): Promise<void>;
@@ -404,5 +405,10 @@ export class RbacRepository extends BaseService implements IRbacRepository {
         AND (email IS NULL OR email = ?3)
     `).bind(token, username, email).run();
     return res.meta.changes > 0;
+  }
+
+  async getProjectName(projectId: string): Promise<string | null> {
+    const row = await this.db.prepare('SELECT name FROM projects WHERE id = ?').bind(projectId).first<{ name: string }>();
+    return row?.name || null;
   }
 }

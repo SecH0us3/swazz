@@ -77,3 +77,8 @@ queue = "swazz-findings-queue"
 max_batch_size = 100
 max_batch_timeout = 2
 
+[[send_email]]
+name = "SEND_EMAIL"
+allowed_sender_addresses = ["notifications@secmy.app", "swazz@secmy.app"]
+
+

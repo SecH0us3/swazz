@@ -21,6 +21,7 @@ import { cleanupExpiredGuests, cleanupScheduledDeletions, cleanupSecurityTables 
 import { csrfMiddleware } from './utils/csrf';
 import { handleScheduledScans } from './utils/scheduler';
 import { ScansRepository } from './repositories/scans';
+import { getDevSentEmails, clearDevSentEmails } from './services/email';
 
 export { RunnerCoordinator } from './Coordinator';
 
@@ -428,6 +429,29 @@ registerScansRoutes(app);
 registerRunnersRoutes(app);
 registerMiscRoutes(app);
 registerMcpRoutes(app);
+
+app.get('/api/dev/emails', (c) => {
+  if (c.env.NODE_ENV === 'production' && c.env.JWT_SECRET !== 'test-secret') {
+    return c.json({ error: 'Not available in production' }, 403);
+  }
+  const recipient = c.req.query('recipient');
+  let emails = getDevSentEmails();
+  if (recipient) {
+    emails = emails.filter((e) => {
+      const toStr = JSON.stringify(e.to);
+      return toStr.toLowerCase().includes(recipient.toLowerCase());
+    });
+  }
+  return c.json({ emails });
+});
+
+app.post('/api/dev/emails/clear', (c) => {
+  if (c.env.NODE_ENV === 'production' && c.env.JWT_SECRET !== 'test-secret') {
+    return c.json({ error: 'Not available in production' }, 403);
+  }
+  clearDevSentEmails();
+  return c.json({ success: true });
+});
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
