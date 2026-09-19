@@ -6,8 +6,8 @@
 import type { Env } from '../env';
 
 export const AI_MODELS = {
-  DETAILED_ANALYSIS: '@cf/meta/llama-3.3-70b-instruct',
-  FAST_BRIEFING: '@cf/meta/llama-3.1-8b-instruct',
+  DETAILED_ANALYSIS: '@cf/meta/llama-3.2-3b-instruct',
+  FAST_BRIEFING: '@cf/meta/llama-3.2-3b-instruct',
 } as const;
 
 export interface FindingAnalysisInput {

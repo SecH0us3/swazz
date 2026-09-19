@@ -314,7 +314,7 @@ describe('Scans Routes Unit Tests', () => {
           remediation: 'Use parameterized queries',
           relevance: true,
           confidence: 90,
-          model: '@cf/meta/llama-3.3-70b-instruct',
+          model: '@cf/meta/llama-3.2-3b-instruct',
           simulated: false,
         },
       });

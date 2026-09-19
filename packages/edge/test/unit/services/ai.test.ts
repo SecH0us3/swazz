@@ -75,7 +75,7 @@ describe('WorkersAIService', () => {
   });
 
   describe('explainFinding with active env.AI binding', () => {
-    it('calls Llama 3.3 70B and parses JSON response successfully', async () => {
+    it('calls Llama 3.2 3B and parses JSON response successfully', async () => {
       const mockRun = vi.fn().mockResolvedValue({
         response: JSON.stringify({
           explanation: 'AI-generated explanation of the vulnerability',
@@ -182,7 +182,7 @@ describe('WorkersAIService', () => {
       expect(result.key_recommendations.length).toBeGreaterThan(0);
     });
 
-    it('calls Llama 3.1 8B when env.AI is available', async () => {
+    it('calls Llama 3.2 3B when env.AI is available', async () => {
       const mockRun = vi.fn().mockResolvedValue({
         response: JSON.stringify({
           summary: 'Executive overview: The target contains 1 critical flaw requiring urgent patching.',
