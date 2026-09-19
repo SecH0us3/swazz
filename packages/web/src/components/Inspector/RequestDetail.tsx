@@ -90,6 +90,7 @@ interface Props {
     globalCookies: Record<string, string>;
     config?: SwazzConfig;
     onTriage?: (id: string, status: 'false_positive' | 'ignored' | 'acknowledged' | 'none') => void;
+    onAnalyzeFinding?: (finding: AnalysisFinding) => Promise<void>;
 }
 
 function renderHighlightedJson(json: string): ReactNode {
@@ -210,7 +211,8 @@ export function RequestDetail({
     globalHeaders,
     globalCookies,
     config,
-    onTriage
+    onTriage,
+    onAnalyzeFinding
 }: Props) {
     const [copied, setCopied] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'raw' | 'diff'>('diff');
@@ -218,6 +220,18 @@ export function RequestDetail({
     const hasFindings = result.analyzerFindings && result.analyzerFindings.length > 0;
     const [mainTab, setMainTab] = useState<'findings' | 'request' | 'poc'>('request');
     const [pocLang, setPocLang] = useState<'curl' | 'python' | 'typescript' | 'go'>('curl');
+    const [analyzingFindingId, setAnalyzingFindingId] = useState<string | null>(null);
+
+    const handleAnalyzeFinding = async (finding: AnalysisFinding) => {
+        if (!onAnalyzeFinding) return;
+        const fid = finding.id || finding.ruleId;
+        setAnalyzingFindingId(fid);
+        try {
+            await onAnalyzeFinding(finding);
+        } finally {
+            setAnalyzingFindingId(null);
+        }
+    };
 
     useEffect(() => {
         setMainTab('request');
@@ -631,6 +645,18 @@ export function RequestDetail({
                                                 </a>
                                             </div>
                                         )}
+                                    </div>
+                                )}
+                                {finding.ai_status !== 'completed' && onAnalyzeFinding && (
+                                    <div className="ai-insights-actions">
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => handleAnalyzeFinding(finding)}
+                                            disabled={analyzingFindingId === (finding.id || finding.ruleId)}
+                                        >
+                                            {analyzingFindingId === (finding.id || finding.ruleId) ? 'Analyzing with Workers AI...' : '✨ Explain & Remediate with AI'}
+                                        </button>
                                     </div>
                                 )}
                             </div>

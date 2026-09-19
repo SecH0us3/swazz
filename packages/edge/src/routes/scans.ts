@@ -210,4 +210,33 @@ export function registerScansRoutes(
       return c.json({ error: parts[0] }, errorStatus(parts[1]));
     }
   });
+
+  app.post('/api/scans/:id/findings/:findingId/ai-analyze', async (c) => {
+    const services = scansServicesFactory(c.env);
+    const scanId = c.req.param('id');
+    const findingId = c.req.param('findingId');
+    const body = await c.req.json().catch(() => ({}));
+    const userId = await getUserIdFromRequest(c);
+    const isAuthEnabled = c.env.AUTH_ENABLED === 'true';
+
+    let executionCtx: any = undefined;
+    try {
+      executionCtx = c.executionCtx;
+    } catch {}
+
+    try {
+      const result = await services.analyzeFindingWithAI(
+        scanId,
+        findingId,
+        body,
+        userId,
+        isAuthEnabled,
+        executionCtx
+      );
+      return c.json(result);
+    } catch (err: any) {
+      const parts = (err instanceof Error ? err.message : String(err)).split('|');
+      return c.json({ error: parts[0] }, errorStatus(parts[1]));
+    }
+  });
 }

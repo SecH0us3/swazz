@@ -412,4 +412,43 @@ describe('RequestDetail Component', () => {
 
         expect(screen.getByText(/errorCode/i)).toBeTruthy();
     });
+
+    it('renders and triggers Explain & Remediate with AI button when finding has not completed AI analysis', async () => {
+        const onAnalyze = vi.fn().mockResolvedValue(undefined);
+        const resultWithIncompleteFinding: any = {
+            ...mockResult,
+            analyzerFindings: [
+                {
+                    ruleId: 'swazz/sqli',
+                    level: 'error',
+                    message: 'SQL injection detected',
+                    ai_status: 'pending',
+                }
+            ]
+        };
+
+        render(
+            <RequestDetail
+                result={resultWithIncompleteFinding}
+                baseUrl="https://api.example.com"
+                onClose={mockOnClose}
+                globalHeaders={{}}
+                globalCookies={{}}
+                onAnalyzeFinding={onAnalyze}
+            />
+        );
+
+        // Switch to Findings tab
+        const findingsTab = screen.getByText(/Alerts & Findings/i);
+        fireEvent.click(findingsTab);
+
+        const aiBtn = screen.getByRole('button', { name: /Explain & Remediate with AI/i });
+        expect(aiBtn).toBeTruthy();
+
+        fireEvent.click(aiBtn);
+        expect(onAnalyze).toHaveBeenCalledWith(expect.objectContaining({
+            ruleId: 'swazz/sqli',
+            level: 'error',
+        }));
+    });
 });

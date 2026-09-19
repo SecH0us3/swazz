@@ -44,6 +44,7 @@ describe('Scans Routes Unit Tests', () => {
       getFindingDetails: vi.fn(),
       updateFinding: vi.fn(),
       saveWAFPatchReport: vi.fn(),
+      analyzeFindingWithAI: vi.fn(),
     };
 
     const mockFactory = () => mockServices as IScansService;
@@ -298,4 +299,76 @@ describe('Scans Routes Unit Tests', () => {
       expect(mockServices.saveWAFPatchReport).not.toHaveBeenCalled();
     });
   });
+
+  describe('POST /api/scans/:id/findings/:findingId/ai-analyze', () => {
+    it('analyzes finding successfully and returns updated data with AI explanation', async () => {
+      (mockServices.analyzeFindingWithAI as any).mockResolvedValue({
+        success: true,
+        finding: {
+          id: 'f_123',
+          ai_status: 'completed',
+          ai_explanation: 'SQL Injection detected in endpoint parameter',
+        },
+        analysis: {
+          explanation: 'SQL Injection detected in endpoint parameter',
+          remediation: 'Use parameterized queries',
+          relevance: true,
+          confidence: 90,
+          model: '@cf/meta/llama-3.3-70b-instruct',
+          simulated: false,
+        },
+      });
+
+      const res = await app.request('/api/scans/s_123/findings/f_123/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_context: 'SELECT * FROM users WHERE id = ' }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.success).toBe(true);
+      expect(data.finding.ai_status).toBe('completed');
+      expect(data.analysis.confidence).toBe(90);
+      expect(mockServices.analyzeFindingWithAI).toHaveBeenCalledWith(
+        's_123',
+        'f_123',
+        { code_context: 'SELECT * FROM users WHERE id = ' },
+        'user_123',
+        true,
+        undefined
+      );
+    });
+
+    it('handles 404 when finding or scan is not found', async () => {
+      (mockServices.analyzeFindingWithAI as any).mockRejectedValue(new Error('Finding not found|404'));
+
+      const res = await app.request('/api/scans/s_123/findings/f_999/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'Finding not found' });
+    });
+
+    it('handles 429 when rate limit is exceeded', async () => {
+      (mockServices.analyzeFindingWithAI as any).mockRejectedValue(
+        new Error('AI analysis rate limit exceeded. Please try again later.|429')
+      );
+
+      const res = await app.request('/api/scans/s_123/findings/f_123/ai-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({
+        error: 'AI analysis rate limit exceeded. Please try again later.',
+      });
+    });
+  });
 });
+

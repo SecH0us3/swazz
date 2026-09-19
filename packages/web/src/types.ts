@@ -43,6 +43,7 @@ export interface EndpointConfig {
 // ─── Settings ───────────────────────────────────────────
 
 export interface AnalysisFinding {
+    id?: string;
     ruleId: string;
     level: 'error' | 'warning' | 'note';
     message: string;

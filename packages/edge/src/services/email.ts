@@ -332,6 +332,7 @@ export function renderScanCompletedDigestEmail(params: {
   mediumCount: number;
   lowCount: number;
   completedAt: string;
+  aiBriefing?: { summary: string; key_recommendations?: string[] };
 }): { subject: string; html: string; text: string } {
   const hasCritical = params.criticalCount > 0;
   const statusColor = hasCritical ? '#f43f5e' : (params.highCount > 0 ? '#fb923c' : '#22c55e');
@@ -339,6 +340,21 @@ export function renderScanCompletedDigestEmail(params: {
   const safeTargetUrl = escapeHtml(params.targetUrl);
   const safeScanId = escapeHtml(params.scanId);
   const safeReportUrl = sanitizeUrl(params.reportUrl);
+
+  let aiBriefingHtml = '';
+  if (params.aiBriefing && params.aiBriefing.summary) {
+    const recs = params.aiBriefing.key_recommendations || [];
+    const recsHtml = recs.length > 0
+      ? `<ul style="margin: 8px 0 0 0; padding-left: 18px; color: #cbd5e1; font-size: 13px;">${recs.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>`
+      : '';
+    aiBriefingHtml = `
+      <div class="stat-box" style="background:#1e293b;border:1px solid #0284c7;border-radius:8px;padding:16px;margin:20px 0;">
+        <div style="color:#38bdf8;font-weight:700;margin-bottom:6px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">🤖 AI Executive Risk Briefing</div>
+        <p style="margin:0;font-size:14px;line-height:1.5;color:#e2e8f0;">${escapeHtml(params.aiBriefing.summary)}</p>
+        ${recsHtml}
+      </div>
+    `;
+  }
 
   const content = `
     <h2 style="color: #f8fafc; margin-top: 0; font-size: 20px;">⚡ Залетай и смотри, мы насканировали!</h2>
@@ -354,6 +370,7 @@ export function renderScanCompletedDigestEmail(params: {
         <span style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);padding:2px 8px;border-radius:4px;">Low: ${params.lowCount}</span>
       </div>
     </div>
+    ${aiBriefingHtml}
     <div style="text-align: center; margin: 28px 0;">
       <a href="${safeReportUrl}" class="btn" style="background-color:#0284c7;color:#fff;">View Full Scan Report</a>
     </div>
@@ -467,6 +484,7 @@ export async function sendScanCompletedDigestEmail(
     mediumCount: number;
     lowCount: number;
     completedAt: string;
+    aiBriefing?: { summary: string; key_recommendations?: string[] };
   }
 ): Promise<EmailSendResult> {
   const template = renderScanCompletedDigestEmail(params);

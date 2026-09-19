@@ -39,6 +39,11 @@ export interface Env {
   ALLOW_PRIVATE_WEBHOOKS?: string;
   WAF_CHECKER_URL?: string;
   SEND_EMAIL?: SendEmailBinding;
+  AI?: WorkersAIBinding;
+}
+
+export interface WorkersAIBinding {
+  run(model: string, inputs: Record<string, any>): Promise<any>;
 }
 
 export interface SendEmailRecipient {

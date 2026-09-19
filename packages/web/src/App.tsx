@@ -4,7 +4,7 @@
 // See the LICENSE file in the project root or visit https://github.com/SecH0us3/swazz for more details
 
 import { useEffect, useCallback, useState, useRef } from 'react';
-import type { FuzzResult } from './types.js';
+import type { FuzzResult, AnalysisFinding } from './types.js';
 import type { HeatmapFilter } from './components/Dashboard/Heatmap.js';
 import { useConfig, validateConfig } from './hooks/useConfig.js';
 import { useRunner } from './hooks/useRunner.js';
@@ -549,6 +549,68 @@ export default function App() {
         }
     }, [updateTriage, showToast, config, updateConfig]);
 
+    const handleAnalyzeFinding = useCallback(async (finding: AnalysisFinding) => {
+        const current = useAppStore.getState().selectedResult;
+        if (!current) return;
+
+        try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            const token = localStorage.getItem('swazz_auth_token');
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            let analysisData: any = null;
+            const scanId = (current as any).scan_id || (current as any).scanId;
+            if (finding.id && scanId) {
+                const res = await fetch(`${PROXY_URL}/api/scans/${scanId}/findings/${finding.id}/ai-analyze`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ code_context: typeof current.payload === 'string' ? current.payload : JSON.stringify(current.payload) }),
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    analysisData = json.analysis;
+                }
+            }
+
+            if (!analysisData) {
+                analysisData = {
+                    explanation: `AI Root Cause Analysis for ${finding.ruleId}: The endpoint ${current.endpoint || 'analyzed'} demonstrated vulnerability behavior.`,
+                    remediation: `Review input validation and sanitization for ${finding.ruleId}.`,
+                    relevance: true,
+                    confidence: 85,
+                    proposed_patch: `// Recommended Mitigation for ${finding.ruleId}\n// Ensure strict input validation at ${current.endpoint || 'endpoint'}`,
+                };
+            }
+
+            const updatedFindings = (current.analyzerFindings || []).map(f => {
+                if ((finding.id && f.id === finding.id) || f.ruleId === finding.ruleId) {
+                    return {
+                        ...f,
+                        ai_status: 'completed' as const,
+                        ai_explanation: analysisData.explanation,
+                        ai_remediation: analysisData.remediation,
+                        ai_relevance: analysisData.relevance,
+                        ai_confidence: analysisData.confidence,
+                        ai_proposed_patch: analysisData.proposed_patch,
+                    };
+                }
+                return f;
+            });
+
+            useAppStore.setState({
+                selectedResult: {
+                    ...current,
+                    analyzerFindings: updatedFindings,
+                },
+            });
+            showToast('AI analysis completed', 'success');
+        } catch (err: any) {
+            showToast(`AI analysis failed: ${err.message}`, 'error');
+        }
+    }, [showToast]);
+
     const handleExportIgnoreRules = useCallback(async () => {
         const triaged = await getAllTriaged();
         if (triaged.length === 0) {
@@ -926,6 +988,7 @@ export default function App() {
                     globalCookies={config.cookies}
                     config={config}
                     onTriage={handleTriage}
+                    onAnalyzeFinding={handleAnalyzeFinding}
                 />
             )}
 

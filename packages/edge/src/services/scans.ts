@@ -9,6 +9,8 @@ import { IRbacRepository } from '../repositories/rbac';
 import { sign, verify } from 'hono/jwt';
 import { ulid } from 'ulidx';
 
+import { WorkersAIService, type FindingAnalysisResult } from './ai';
+
 export interface TriageUpdatePayload {
   finding_id: string;
   ai_status: string;
@@ -36,6 +38,14 @@ export interface IScansService {
   updateFinding(findingId: string, body: any, userId: string | null, isAuthEnabled: boolean, ctx?: any): Promise<{ finding: any }>;
   batchUpdateFindingsAI(scanId: string, updates: TriageUpdatePayload[], userId: string | null, isAuthEnabled: boolean): Promise<{ success: boolean; updated_count: number }>;
   saveWAFPatchReport(scanId: string, report: unknown, userId?: string | null, isAuthEnabled?: boolean): Promise<{ success: boolean }>;
+  analyzeFindingWithAI(
+    scanId: string,
+    findingId: string,
+    body: { code_context?: string },
+    userId: string | null,
+    isAuthEnabled: boolean,
+    ctx?: any
+  ): Promise<{ success: boolean; finding: any; analysis: FindingAnalysisResult }>;
 }
 
 export class ScansService implements IScansService {
@@ -349,4 +359,68 @@ export class ScansService implements IScansService {
     await this.scansRepo.saveWAFPatchReport(scanId, report);
     return { success: true };
   }
+
+  async analyzeFindingWithAI(
+    scanId: string,
+    findingId: string,
+    body: { code_context?: string },
+    userId: string | null,
+    isAuthEnabled: boolean,
+    ctx?: any
+  ): Promise<{ success: boolean; finding: any; analysis: FindingAnalysisResult }> {
+    const scan = await this.scansRepo.getScan(scanId);
+    if (!scan) throw new Error('Scan not found|404');
+
+    await this.checkScanAccess(scan, userId, isAuthEnabled);
+
+    const finding = await this.scansRepo.getFindingDetails(findingId);
+    if (!finding || finding.scan_id !== scanId) {
+      throw new Error('Finding not found|404');
+    }
+
+    // Anti-abuse rate limiting per user via KV to safeguard daily Neurons budget
+    if (this.env.SESSION_CACHE && userId) {
+      const rateLimitKey = `ratelimit:ai_analyze:${userId}`;
+      try {
+        const countStr = await this.env.SESSION_CACHE.get(rateLimitKey);
+        const count = countStr ? parseInt(countStr, 10) : 0;
+        if (count >= 50) {
+          throw new Error('AI analysis rate limit exceeded. Please try again later.|429');
+        }
+        await this.env.SESSION_CACHE.put(rateLimitKey, String(count + 1), { expirationTtl: 3600 });
+      } catch (err: any) {
+        if (err.message.includes('|')) throw err;
+      }
+    }
+
+    const analysis = await WorkersAIService.explainFinding(this.env, {
+      id: finding.id,
+      rule_id: finding.rule_id,
+      level: finding.level,
+      message: finding.message,
+      evidence: finding.evidence,
+      target_url: scan.target_url,
+      code_context: body?.code_context,
+    });
+
+    const updatedFinding = await this.scansRepo.updateFinding(
+      findingId,
+      {
+        ai_status: 'completed',
+        ai_explanation: analysis.explanation,
+        ai_remediation: analysis.remediation,
+        ai_relevance: analysis.relevance,
+        ai_confidence: analysis.confidence,
+        ai_proposed_patch: analysis.proposed_patch || null,
+      },
+      ctx
+    );
+
+    return {
+      success: true,
+      finding: updatedFinding,
+      analysis,
+    };
+  }
 }
+
