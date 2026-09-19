@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -242,14 +243,16 @@ func resolveAgentToken(tokenFlag, tokenFileFlag string) (string, error) {
 		return strings.TrimSpace(tokenFlag), nil
 	}
 	if tokenFileFlag != "" {
-		data, err := os.ReadFile(tokenFileFlag)
+		cleaned := filepath.Clean(tokenFileFlag)
+		data, err := os.ReadFile(cleaned) // #nosec G304 G703 -- reading token file path explicitly supplied via CLI flag
 		if err != nil {
 			return "", fmt.Errorf("reading token file %s: %w", tokenFileFlag, err)
 		}
 		return strings.TrimSpace(string(data)), nil
 	}
 	if envFile := os.Getenv("SWAZZ_TOKEN_FILE"); envFile != "" {
-		data, err := os.ReadFile(envFile)
+		cleaned := filepath.Clean(envFile)
+		data, err := os.ReadFile(cleaned) // #nosec G304 G703 -- reading token file path explicitly supplied via environment variable
 		if err != nil {
 			return "", fmt.Errorf("reading token file from SWAZZ_TOKEN_FILE (%s): %w", envFile, err)
 		}

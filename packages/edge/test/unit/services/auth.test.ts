@@ -87,6 +87,8 @@ describe('AuthService', () => {
       linkGithubUser: vi.fn(),
       getUserByGithubId: vi.fn(),
       getUserByEmail: vi.fn(),
+      verifyUserEmail: vi.fn(),
+      isUserEmailVerified: vi.fn(),
       createGithubUser: vi.fn(),
       linkGitlabUser: vi.fn(),
       getUserByGitlabId: vi.fn(),

@@ -55,6 +55,8 @@ export interface IAuthRepository {
   linkGitlabUser(userId: string, gitlabId: string): Promise<boolean>;
   getUserByGitlabId(gitlabId: string): Promise<any>;
   getUserByEmail(email: string): Promise<any>;
+  verifyUserEmail(userId: string): Promise<void>;
+  isUserEmailVerified(userId: string): Promise<boolean>;
   createGithubUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, githubId: string): Promise<{ id: string; projectId: string }>;
   createGitlabUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, gitlabId: string): Promise<{ id: string; projectId: string }>;
 
@@ -131,7 +133,7 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async getUserById(userId: string): Promise<any> {
-    return await this.db.prepare('SELECT username, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id, gitlab_id, is_interactive FROM users WHERE id = ?')
+    return await this.db.prepare('SELECT username, email, email_verified, api_key, public_key, is_guest, delete_requested_at, two_factor_enabled, plan, github_id, gitlab_id, is_interactive FROM users WHERE id = ?')
       .bind(userId).first();
   }
 
@@ -239,15 +241,25 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   }
 
   async getUserByEmail(email: string): Promise<any> {
-    return await this.db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    return await this.db.prepare('SELECT id, email_verified FROM users WHERE email = ?').bind(email).first();
+  }
+
+  async verifyUserEmail(userId: string): Promise<void> {
+    await this.db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').bind(userId).run();
+  }
+
+  async isUserEmailVerified(userId: string): Promise<boolean> {
+    const row = await this.db.prepare('SELECT email_verified FROM users WHERE id = ?').bind(userId).first<{ email_verified: number }>();
+    return row?.email_verified === 1;
   }
 
   async createGithubUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, githubId: string): Promise<{ id: string; projectId: string }> {
     const userId = ulid();
     const projectId = ulid();
+    const emailVerified = email ? 1 : 0;
     await this.db.batch([
       this.db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)').bind(usernameHash),
-      this.db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, github_id, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')").bind(userId, username, hash, hashedApiKey, email, githubId),
+      this.db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, email_verified, github_id, plan) VALUES (?, ?, ?, ?, ?, ?, ?, 'Free')").bind(userId, username, hash, hashedApiKey, email, emailVerified, githubId),
       this.db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')").bind(projectId),
       this.db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userId),
       this.db.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userId)
@@ -258,9 +270,10 @@ export class AuthRepository extends BaseService implements IAuthRepository {
   async createGitlabUser(username: string, usernameHash: string, hash: string, email: string | null, hashedApiKey: string, gitlabId: string): Promise<{ id: string; projectId: string }> {
     const userId = ulid();
     const projectId = ulid();
+    const emailVerified = email ? 1 : 0;
     await this.db.batch([
       this.db.prepare('INSERT INTO username_registry (username_hash) VALUES (?)').bind(usernameHash),
-      this.db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, gitlab_id, plan) VALUES (?, ?, ?, ?, ?, ?, 'Free')").bind(userId, username, hash, hashedApiKey, email, gitlabId),
+      this.db.prepare("INSERT INTO users (id, username, password_hash, api_key, email, email_verified, gitlab_id, plan) VALUES (?, ?, ?, ?, ?, ?, ?, 'Free')").bind(userId, username, hash, hashedApiKey, email, emailVerified, gitlabId),
       this.db.prepare("INSERT INTO projects (id, name, description) VALUES (?, 'Default Project', 'My first Swazz project')").bind(projectId),
       this.db.prepare("INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'owner')").bind(projectId, userId),
       this.db.prepare("INSERT INTO project_member_roles (project_id, user_id, role_id) VALUES (?, ?, 'owner')").bind(projectId, userId)

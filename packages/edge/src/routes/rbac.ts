@@ -141,9 +141,11 @@ export function registerRbacRoutes(
     const projectId = (c.req.param('id') as string);
     const userId = await getUserIdFromRequest(c);
     const body = await c.req.json();
+    const turnstileToken = body['cf-turnstile-response'];
+    const remoteIp = c.req.header('CF-Connecting-IP') ?? undefined;
 
     try {
-      const result = await services.createInvitation(projectId, userId, body);
+      const result = await services.createInvitation(projectId, userId, body, turnstileToken, remoteIp);
       return c.json(result);
     } catch (e: any) {
       const parts = (e instanceof Error ? e.message : String(e)).split('|');

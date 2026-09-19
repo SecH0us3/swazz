@@ -6,6 +6,8 @@
 import { Env } from '../env';
 import { IRbacRepository } from '../repositories/rbac';
 import { PERMISSIONS, DEFAULT_ROLES } from '../config/rbac';
+import { sendProjectInvitationEmail } from './email';
+import { verifyTurnstile } from '../utils/auth';
 
 import { ulid } from 'ulidx';
 
@@ -20,7 +22,7 @@ export interface IRbacService {
   deleteCustomRole(projectId: string, userId: string | null, roleId: string): Promise<{ status: string }>;
   
   getInvitations(userId: string | null): Promise<{ invitations: any[] }>;
-  createInvitation(projectId: string, userId: string | null, body: any): Promise<{ status: string; token: string; invitation_url: string }>;
+  createInvitation(projectId: string, userId: string | null, body: any, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; token: string; invitation_url: string }>;
   acceptInvitation(userId: string | null, body: any): Promise<{ status: string; project_id: string }>;
   declineInvitation(userId: string | null, body: any): Promise<{ status: string }>;
 }
@@ -308,7 +310,7 @@ export class RbacService implements IRbacService {
     return { invitations };
   }
 
-  async createInvitation(projectId: string, userId: string | null, body: any) {
+  async createInvitation(projectId: string, userId: string | null, body: any, turnstileToken?: string, remoteIp?: string) {
     if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') throw new Error('Invalid project ID|400');
     await this.assertNotGuest(userId);
 
@@ -319,6 +321,23 @@ export class RbacService implements IRbacService {
 
     if (!body.roles || !Array.isArray(body.roles) || body.roles.length === 0) {
       throw new Error('At least one role must be specified|400');
+    }
+
+    // Anti-abuse Turnstile verification if inviting via email
+    if (body.email && this.env.TURNSTILE_SECRET && this.env.JWT_SECRET !== 'test-secret') {
+      if (!turnstileToken) throw new Error('Missing Turnstile token|403');
+      const valid = await verifyTurnstile(turnstileToken, this.env.TURNSTILE_SECRET, remoteIp);
+      if (!valid) throw new Error('Turnstile verification failed|403');
+    }
+
+    // Anti-spam recipient cooldown via KV
+    if (body.email && this.env.SESSION_CACHE) {
+      const normalizedEmail = body.email.toLowerCase().trim();
+      const cooldownKey = `ratelimit:email:invitation:${normalizedEmail}`;
+      const activeCooldown = await this.env.SESSION_CACHE.get(cooldownKey);
+      if (activeCooldown) {
+        throw new Error('An invitation was recently sent to this email address. Please try again later.|429');
+      }
     }
 
     // Validate roles exist
@@ -337,6 +356,41 @@ export class RbacService implements IRbacService {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     await this.rbacRepo.createInvitation(id, projectId, body.email || null, body.username || null, body.roles, token, expiresAt);
+
+    if (body.email) {
+      let projectName = 'Project';
+      try {
+        const name = await this.rbacRepo.getProjectName(projectId);
+        if (name) projectName = name;
+      } catch {
+        // non-fatal
+      }
+
+      let inviterName = 'A team member';
+      if (userId) {
+        try {
+          const inviter = await this.rbacRepo.getUserDetails(userId);
+          if (inviter?.username) inviterName = inviter.username;
+        } catch {
+          // non-fatal
+        }
+      }
+
+      const inviteUrl = `https://swazz.secmy.app/accept-invite?token=${token}`;
+      try {
+        await sendProjectInvitationEmail(this.env, {
+          to: body.email,
+          projectName,
+          inviterName,
+          inviteUrl,
+          roles: body.roles,
+          expiresAt,
+        });
+      } catch (emailErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to send project invitation email:', emailErr);
+      }
+    }
 
     return { status: 'created', token, invitation_url: '/accept-invite?token=' + token };
   }

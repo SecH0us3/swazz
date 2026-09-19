@@ -49,6 +49,42 @@ export function registerAuthRoutes(
     }
   });
 
+  app.get('/api/auth/verify-email', async (c) => {
+    try {
+      const token = c.req.query('token');
+      if (!token) {
+        return c.json({ error: 'Missing verification token' }, 400);
+      }
+      const services = authServicesFactory(c.env);
+      const result = await services.verifyEmail(token);
+      return c.json({ status: 'verified', email: result.email });
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, errorStatus(status));
+    }
+  });
+
+  app.post('/api/auth/resend-verification', async (c) => {
+    try {
+      const userId = await getUserIdFromRequest(c);
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const turnstileToken = body['cf-turnstile-response'];
+      const clientIp = getClientIp(c);
+      const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
+
+      const services = authServicesFactory(c.env);
+      const result = await services.resendVerificationEmail(userId, clientIp, turnstileToken, remoteip);
+      return c.json(result);
+    } catch (err: any) {
+      const [msg, status] = err.message.split('|');
+      return c.json({ error: msg }, errorStatus(status));
+    }
+  });
+
   app.post('/api/auth/guest/step1', async (c) => {
     try {
       const services = authServicesFactory(c.env);

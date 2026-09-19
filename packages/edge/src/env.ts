@@ -38,6 +38,25 @@ export interface Env {
   NODE_ENV?: string;
   ALLOW_PRIVATE_WEBHOOKS?: string;
   WAF_CHECKER_URL?: string;
+  SEND_EMAIL?: SendEmailBinding;
+}
+
+export interface SendEmailRecipient {
+  email: string;
+  name?: string;
+}
+
+export interface SendEmailMessage {
+  from: string | SendEmailRecipient;
+  to: string | string[] | SendEmailRecipient | SendEmailRecipient[];
+  subject: string;
+  text?: string;
+  html?: string;
+  headers?: Record<string, string>;
+}
+
+export interface SendEmailBinding {
+  send(message: SendEmailMessage): Promise<void>;
 }
 
 

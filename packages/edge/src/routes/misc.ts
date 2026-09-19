@@ -5,7 +5,7 @@
 
 import { Hono } from 'hono';
 import { Env, AppEnv } from '../env';
-import { getUserIdFromRequest, isWebRequest, isAnonymousUser, getClientIp } from '../utils/auth';
+import { getUserIdFromRequest, isWebRequest, isAnonymousUser, getClientIp, verifyTurnstile } from '../utils/auth';
 import { IMiscRepository, MiscRepository } from '../repositories/misc';
 import { IMiscService, MiscService } from '../services/misc';
 import { runWafCheck } from '../services/wafCheck';
@@ -121,6 +121,21 @@ export function registerMiscRoutes(
       if (!email || typeof email !== 'string' || !email.includes('@')) {
         return c.json({ error: 'Valid email address is required' }, 400);
       }
+
+      const turnstileSecret = c.env.TURNSTILE_SECRET;
+      if (turnstileSecret && c.env.JWT_SECRET !== 'test-secret') {
+        const turnstileToken = body['cf-turnstile-response'];
+        const remoteIp = c.req.header('CF-Connecting-IP') ?? undefined;
+        if (!turnstileToken) {
+          return c.json({ error: 'Missing Turnstile token' }, 403);
+        }
+        const valid = await verifyTurnstile(turnstileToken, turnstileSecret, remoteIp);
+        if (!valid) {
+          return c.json({ error: 'Turnstile verification failed' }, 403);
+        }
+      }
+
+      // eslint-disable-next-line no-console
       console.log(`[Waitlist] New enterprise lead: ${email}, Name: ${name || 'N/A'}, Company: ${company || 'N/A'}`);
       return c.json({ success: true, message: 'Waitlist entry registered successfully' });
     } catch (err: any) {
