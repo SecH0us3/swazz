@@ -398,7 +398,7 @@ export class ScansRepository extends BaseService implements IScansRepository {
             }
 
             if (targetUser && targetUser.email && targetUser.email_verified === 1) {
-              const stats = scan.summary_stats ? (typeof scan.summary_stats === 'string' ? JSON.parse(scan.summary_stats) : scan.summary_stats) : {};
+              const stats = scan.summary_stats ? (typeof scan.summary_stats === 'string' ? JSON.parse(scan.summary_stats) : scan.summary_stats) as Record<string, number> : {} as Record<string, number>;
               const totalFindings = stats.total_findings ?? stats.findings_count ?? 0;
               const criticalCount = stats.critical ?? 0;
               const highCount = stats.high ?? 0;

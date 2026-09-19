@@ -50,17 +50,18 @@ export function registerAuthRoutes(
   });
 
   app.get('/api/auth/verify-email', async (c) => {
+    const frontendBase = 'https://swazz.secmy.app';
     try {
       const token = c.req.query('token');
       if (!token) {
-        return c.json({ error: 'Missing verification token' }, 400);
+        return c.redirect(`${frontendBase}/verify-email?error=${encodeURIComponent('Missing verification token')}`);
       }
       const services = authServicesFactory(c.env);
       const result = await services.verifyEmail(token);
-      return c.json({ status: 'verified', email: result.email });
+      return c.redirect(`${frontendBase}/verify-email?status=verified&email=${encodeURIComponent(result.email || '')}`);
     } catch (err: any) {
-      const [msg, status] = err.message.split('|');
-      return c.json({ error: msg }, errorStatus(status));
+      const [msg] = err.message.split('|');
+      return c.redirect(`${frontendBase}/verify-email?error=${encodeURIComponent(msg || 'Verification failed')}`);
     }
   });
 
@@ -73,11 +74,10 @@ export function registerAuthRoutes(
 
       const body = await c.req.json().catch(() => ({}));
       const turnstileToken = body['cf-turnstile-response'];
-      const clientIp = getClientIp(c);
       const remoteip = c.req.header('CF-Connecting-IP') ?? undefined;
 
       const services = authServicesFactory(c.env);
-      const result = await services.resendVerificationEmail(userId, clientIp, turnstileToken, remoteip);
+      const result = await services.resendVerificationEmail(userId, turnstileToken, remoteip);
       return c.json(result);
     } catch (err: any) {
       const [msg, status] = err.message.split('|');

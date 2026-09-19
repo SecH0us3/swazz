@@ -157,7 +157,7 @@ describe('Email End-to-End Workflow', () => {
     } as any);
 
     // Resend verification
-    const resendResult = await authService.resendVerificationEmail(userId, '127.0.0.1', 'mock-token');
+    const resendResult = await authService.resendVerificationEmail(userId, 'mock-token');
     expect(resendResult.status).toBe('sent');
 
     // 3. Inspect sent emails via GET /api/dev/emails
@@ -183,9 +183,9 @@ describe('Email End-to-End Workflow', () => {
       mockEnv,
       {} as any
     );
-    expect(verifyRes.status).toBe(200);
-    const verifyBody = await verifyRes.json() as { status: string };
-    expect(verifyBody.status).toBe('verified');
+    expect(verifyRes.status).toBe(302);
+    const location = verifyRes.headers.get('Location') || '';
+    expect(location).toContain('/verify-email?status=verified');
 
     // Confirm user is now marked verified
     expect(d1Users.get(userId).email_verified).toBe(1);

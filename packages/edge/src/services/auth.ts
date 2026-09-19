@@ -30,8 +30,8 @@ const VALID_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
 
 function parseTransports(raw?: string | null): AuthenticatorTransportFuture[] | undefined {
   if (!raw) return undefined;
-  const list = raw.split(',').map((t) => t.trim().toLowerCase()) as AuthenticatorTransportFuture[];
-  return list.filter((t) => VALID_TRANSPORTS.has(t));
+  const list = raw.split(',').map(s => s.trim()).filter((s): s is AuthenticatorTransportFuture => VALID_TRANSPORTS.has(s as AuthenticatorTransportFuture));
+  return list.length > 0 ? list : undefined;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array) {
@@ -58,7 +58,7 @@ export interface IAuthService {
   register(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
   createEmailVerificationToken(userId: string, email: string): Promise<string>;
   verifyEmail(token: string): Promise<{ success: boolean; email?: string }>;
-  resendVerificationEmail(userId: string, clientIp: string, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; cooldownSeconds: number }>;
+  resendVerificationEmail(userId: string, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; cooldownSeconds: number }>;
   registerGuestStep1(clientIp: string, turnstileToken: string | undefined, remoteIp: string | undefined): Promise<any>;
   registerGuest(body: any, turnstileToken: string | undefined, remoteIp: string | undefined, c: Context<AppEnv>): Promise<any>;
   getMe(userId: string): Promise<any>;
@@ -998,7 +998,7 @@ export class AuthService implements IAuthService {
     return { success: true, email: parsed.email };
   }
 
-  async resendVerificationEmail(userId: string, clientIp: string, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; cooldownSeconds: number }> {
+  async resendVerificationEmail(userId: string, turnstileToken?: string, remoteIp?: string): Promise<{ status: string; cooldownSeconds: number }> {
     if (!userId) throw new Error('Unauthorized|401');
 
     const turnstileSecret = this.env.TURNSTILE_SECRET;

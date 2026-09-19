@@ -68,6 +68,13 @@ export function sanitizeUrl(url: string | null | undefined): string {
 }
 
 /**
+ * Strips CR/LF characters from email subject lines to prevent CRLF header injection.
+ */
+function sanitizeSubject(subject: string): string {
+  return subject.replace(/[\r\n]+/g, ' ').trim();
+}
+
+/**
  * Strips HTML tags to produce a clean plain-text fallback.
  */
 function htmlToPlainText(html: string): string {
@@ -144,7 +151,7 @@ function wrapEmailLayout(contentHtml: string, previewText?: string): string {
     </div>
     <div class="footer">
       <p>© ${new Date().getFullYear()} Swazz Security Platform. All rights reserved.</p>
-      <p>Sent from <a href="https://swazz.secmy.app">swazz.secmy.app</a> • <a href="https://swazz.secmy.app/api/unsubscribe">Unsubscribe</a></p>
+      <p>Sent from <a href="https://swazz.secmy.app">swazz.secmy.app</a></p>
     </div>
   </div>
 </body>
@@ -190,8 +197,6 @@ export async function sendTransactionalEmail(
     'Auto-Submitted': 'auto-generated',
     'X-Mailer': 'Swazz Security Platform',
     'Precedence': 'bulk',
-    'List-Unsubscribe': '<https://swazz.secmy.app/api/unsubscribe>, <mailto:notifications@secmy.app?subject=unsubscribe>',
-    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     ...(options.headers || {}),
   };
 
@@ -308,7 +313,7 @@ export function renderProjectInvitationEmail(params: {
     </p>
     <p style="font-size: 12px; color: #64748b; margin-top: 24px;">This invitation link will expire on ${new Date(params.expiresAt).toLocaleDateString()}.</p>
   `;
-  const subject = `Invitation to collaborate on ${params.projectName} on Swazz`;
+  const subject = sanitizeSubject(`Invitation to collaborate on ${params.projectName} on Swazz`);
   return {
     subject,
     html: wrapEmailLayout(content, `${inviter} invited you to collaborate on ${safeProjectName}.`),
@@ -353,7 +358,7 @@ export function renderScanCompletedDigestEmail(params: {
       <a href="${safeReportUrl}" class="btn" style="background-color:#0284c7;color:#fff;">View Full Scan Report</a>
     </div>
   `;
-  const subject = `[Scan Completed] ${params.projectName}: ${params.totalFindings} findings discovered`;
+  const subject = sanitizeSubject(`[Scan Completed] ${params.projectName}: ${params.totalFindings} findings discovered`);
   return {
     subject,
     html: wrapEmailLayout(content, `Scan completed for ${safeProjectName}: ${params.totalFindings} findings discovered.`),
@@ -396,7 +401,7 @@ export function renderSecurityAlertEmail(params: {
     ${actionHtml}
     <p style="font-size: 12px; color: #64748b; margin-top: 24px;">If you did not perform or authorize this action, please review your project security settings immediately.</p>
   `;
-  const subject = `[Security Alert] ${params.title}`;
+  const subject = sanitizeSubject(`[Security Alert] ${params.title}`);
   return {
     subject,
     html: wrapEmailLayout(content, `Security Alert: ${safeTitle}`),

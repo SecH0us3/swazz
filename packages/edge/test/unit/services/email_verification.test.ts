@@ -111,7 +111,7 @@ describe('Email Verification Flow', () => {
         email_verified: 0,
       });
 
-      const res = await authService.resendVerificationEmail('u123', '127.0.0.1');
+      const res = await authService.resendVerificationEmail('u123');
       expect(res.status).toBe('sent');
       expect(res.cooldownSeconds).toBe(300);
 
@@ -132,7 +132,7 @@ describe('Email Verification Flow', () => {
       // Put active cooldown
       kvStore.set('email_verify_cooldown:u123', '1');
 
-      await expect(authService.resendVerificationEmail('u123', '127.0.0.1')).rejects.toThrow('Verification email was sent recently');
+      await expect(authService.resendVerificationEmail('u123')).rejects.toThrow('Verification email was sent recently');
     });
 
     it('rejects if email is already verified', async () => {
@@ -143,7 +143,7 @@ describe('Email Verification Flow', () => {
         email_verified: 1,
       });
 
-      await expect(authService.resendVerificationEmail('u123', '127.0.0.1')).rejects.toThrow('Email is already verified|400');
+      await expect(authService.resendVerificationEmail('u123')).rejects.toThrow('Email is already verified|400');
     });
 
     it('rejects if user has no email', async () => {
@@ -154,7 +154,7 @@ describe('Email Verification Flow', () => {
         email_verified: 0,
       });
 
-      await expect(authService.resendVerificationEmail('u123', '127.0.0.1')).rejects.toThrow('No email registered for this account|400');
+      await expect(authService.resendVerificationEmail('u123')).rejects.toThrow('No email registered for this account|400');
     });
   });
 });

@@ -70,7 +70,6 @@ describe('Email Service', () => {
       expect(callArg.text).toBe('Hello World');
       expect(callArg.from).toContain('secmy.app');
       expect(callArg.headers['Auto-Submitted']).toBe('auto-generated');
-      expect(callArg.headers['List-Unsubscribe']).toBeDefined();
     });
 
     it('simulates dispatch and stores in devSentEmails when SEND_EMAIL is missing', async () => {
