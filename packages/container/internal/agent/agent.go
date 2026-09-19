@@ -26,7 +26,7 @@ import (
 
 // startAgent parses the arguments and connects to the coordinator
 func StartAgent(args []string) {
-	var coordinatorURL, token, name, keyPathOrHex, logLevelStr, logFilterStr string
+	var coordinatorURL, token, tokenFile, name, keyPathOrHex, logLevelStr, logFilterStr string
 	var dangerousNoContainer bool
 	var hasQuiet, hasLogLevel bool
 	var disableTelemetry bool
@@ -60,6 +60,11 @@ func StartAgent(args []string) {
 		case "--token":
 			if i+1 < len(args) {
 				token = args[i+1]
+				i++
+			}
+		case "--token-file":
+			if i+1 < len(args) {
+				tokenFile = args[i+1]
 				i++
 			}
 		case "--key":
@@ -114,8 +119,15 @@ func StartAgent(args []string) {
 
 	safenet.AssertRunningInContainer(dangerousNoContainer)
 
+	coordinatorURL = resolveCoordinatorURL(coordinatorURL)
+	var err error
+	token, err = resolveAgentToken(token, tokenFile)
+	if err != nil {
+		log.Fatalf("Error resolving token: %v", err)
+	}
+
 	if coordinatorURL == "" {
-		fmt.Println("Error: --coordinator is required for run-agent.")
+		fmt.Println("Error: --coordinator (or SWAZZ_COORDINATOR) is required for run-agent.")
 		fmt.Println()
 		fmt.Println("Usage: swazz-engine run-agent [options]")
 		os.Exit(1)
@@ -143,7 +155,7 @@ func StartAgent(args []string) {
 		useSignatureAuth = true
 	} else {
 		if token == "" {
-			fmt.Println("Error: --coordinator and either --token or a private key are required for run-agent.")
+			fmt.Println("Error: --coordinator and either --token (or SWAZZ_TOKEN / --token-file) or a private key are required for run-agent.")
 			fmt.Println()
 			fmt.Println("Usage: swazz-engine run-agent [options]")
 			os.Exit(1)
@@ -151,8 +163,12 @@ func StartAgent(args []string) {
 	}
 
 	if name == "" {
-		hostname, _ := os.Hostname()
-		name = "runner-" + hostname
+		if envName := os.Getenv("SWAZZ_RUNNER_NAME"); envName != "" {
+			name = envName
+		} else {
+			hostname, _ := os.Hostname()
+			name = "runner-" + hostname
+		}
 	}
 
 	logInfo("Starting agent '%s', connecting to %s (log level: %s)", name, coordinatorURL, logLevelStr) // #nosec G706
@@ -214,3 +230,54 @@ func StartAgent(args []string) {
 		}
 	}
 }
+
+// resolveAgentToken resolves the runner authentication token with the following priority:
+// 1. Explicit CLI --token flag
+// 2. Explicit CLI --token-file flag (read from disk)
+// 3. Environment variable SWAZZ_TOKEN_FILE (read from disk)
+// 4. Environment variable SWAZZ_TOKEN
+// 5. Environment variable SWAZZ_RUNNER_TOKEN
+func resolveAgentToken(tokenFlag, tokenFileFlag string) (string, error) {
+	if tokenFlag != "" {
+		return strings.TrimSpace(tokenFlag), nil
+	}
+	if tokenFileFlag != "" {
+		data, err := os.ReadFile(tokenFileFlag)
+		if err != nil {
+			return "", fmt.Errorf("reading token file %s: %w", tokenFileFlag, err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	if envFile := os.Getenv("SWAZZ_TOKEN_FILE"); envFile != "" {
+		data, err := os.ReadFile(envFile)
+		if err != nil {
+			return "", fmt.Errorf("reading token file from SWAZZ_TOKEN_FILE (%s): %w", envFile, err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	if envToken := os.Getenv("SWAZZ_TOKEN"); envToken != "" {
+		return strings.TrimSpace(envToken), nil
+	}
+	if envToken := os.Getenv("SWAZZ_RUNNER_TOKEN"); envToken != "" {
+		return strings.TrimSpace(envToken), nil
+	}
+	return "", nil
+}
+
+// resolveCoordinatorURL resolves the coordinator URL from CLI flag or environment variables:
+// 1. Explicit CLI --coordinator flag
+// 2. Environment variable SWAZZ_COORDINATOR
+// 3. Environment variable SWAZZ_COORDINATOR_URL
+func resolveCoordinatorURL(coordinatorFlag string) string {
+	if coordinatorFlag != "" {
+		return strings.TrimSpace(coordinatorFlag)
+	}
+	if envCoord := os.Getenv("SWAZZ_COORDINATOR"); envCoord != "" {
+		return strings.TrimSpace(envCoord)
+	}
+	if envCoord := os.Getenv("SWAZZ_COORDINATOR_URL"); envCoord != "" {
+		return strings.TrimSpace(envCoord)
+	}
+	return ""
+}
+

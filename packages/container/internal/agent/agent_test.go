@@ -551,3 +551,94 @@ func TestRunAgentConnection_JobDispatch(t *testing.T) {
 
 	<-agentDone
 }
+
+func TestResolveAgentToken(t *testing.T) {
+	// 1. Explicit CLI flag takes precedence
+	t.Run("cli flag precedence", func(t *testing.T) {
+		t.Setenv("SWAZZ_TOKEN", "env-token")
+		t.Setenv("SWAZZ_RUNNER_TOKEN", "runner-env-token")
+		tok, err := resolveAgentToken("cli-token", "")
+		require.NoError(t, err)
+		assert.Equal(t, "cli-token", tok)
+	})
+
+	// 2. Token file flag
+	t.Run("token file flag", func(t *testing.T) {
+		tmpFile := t.TempDir() + "/token.txt"
+		require.NoError(t, os.WriteFile(tmpFile, []byte("  file-token-secret\n"), 0600))
+
+		tok, err := resolveAgentToken("", tmpFile)
+		require.NoError(t, err)
+		assert.Equal(t, "file-token-secret", tok)
+	})
+
+	// 3. Token file missing error
+	t.Run("token file missing returns error", func(t *testing.T) {
+		_, err := resolveAgentToken("", "/nonexistent/token/path.txt")
+		assert.Error(t, err)
+	})
+
+	// 4. SWAZZ_TOKEN_FILE env var
+	t.Run("env token file", func(t *testing.T) {
+		tmpFile := t.TempDir() + "/env_token.txt"
+		require.NoError(t, os.WriteFile(tmpFile, []byte("env-file-secret\r\n"), 0600))
+		t.Setenv("SWAZZ_TOKEN_FILE", tmpFile)
+
+		tok, err := resolveAgentToken("", "")
+		require.NoError(t, err)
+		assert.Equal(t, "env-file-secret", tok)
+	})
+
+	// 5. SWAZZ_TOKEN env var
+	t.Run("env SWAZZ_TOKEN", func(t *testing.T) {
+		t.Setenv("SWAZZ_TOKEN", "token-from-env")
+		tok, err := resolveAgentToken("", "")
+		require.NoError(t, err)
+		assert.Equal(t, "token-from-env", tok)
+	})
+
+	// 6. SWAZZ_RUNNER_TOKEN env var fallback
+	t.Run("env SWAZZ_RUNNER_TOKEN fallback", func(t *testing.T) {
+		t.Setenv("SWAZZ_RUNNER_TOKEN", "runner-token-from-env")
+		tok, err := resolveAgentToken("", "")
+		require.NoError(t, err)
+		assert.Equal(t, "runner-token-from-env", tok)
+	})
+
+	// 7. Empty when nothing configured
+	t.Run("empty fallback", func(t *testing.T) {
+		tok, err := resolveAgentToken("", "")
+		require.NoError(t, err)
+		assert.Empty(t, tok)
+	})
+}
+
+func TestResolveCoordinatorURL(t *testing.T) {
+	// 1. Explicit CLI flag takes precedence
+	t.Run("cli flag precedence", func(t *testing.T) {
+		t.Setenv("SWAZZ_COORDINATOR", "wss://env.example.com")
+		res := resolveCoordinatorURL("wss://cli.example.com")
+		assert.Equal(t, "wss://cli.example.com", res)
+	})
+
+	// 2. SWAZZ_COORDINATOR env var
+	t.Run("SWAZZ_COORDINATOR env", func(t *testing.T) {
+		t.Setenv("SWAZZ_COORDINATOR", "wss://coord.example.com")
+		res := resolveCoordinatorURL("")
+		assert.Equal(t, "wss://coord.example.com", res)
+	})
+
+	// 3. SWAZZ_COORDINATOR_URL env var
+	t.Run("SWAZZ_COORDINATOR_URL env", func(t *testing.T) {
+		t.Setenv("SWAZZ_COORDINATOR_URL", "wss://coord-url.example.com")
+		res := resolveCoordinatorURL("")
+		assert.Equal(t, "wss://coord-url.example.com", res)
+	})
+
+	// 4. Empty when nothing configured
+	t.Run("empty fallback", func(t *testing.T) {
+		res := resolveCoordinatorURL("")
+		assert.Empty(t, res)
+	})
+}
+
