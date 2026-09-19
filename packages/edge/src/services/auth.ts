@@ -983,6 +983,9 @@ export class AuthService implements IAuthService {
       throw new Error('Invalid or expired verification token|400');
     }
 
+    // Immediately delete token to prevent concurrent replay attacks
+    await kv.delete(`email_verify:${token}`);
+
     let parsed: { userId: string; email: string };
     try {
       parsed = JSON.parse(data);
@@ -991,7 +994,6 @@ export class AuthService implements IAuthService {
     }
 
     await this.authRepo.verifyUserEmail(parsed.userId);
-    await kv.delete(`email_verify:${token}`);
 
     return { success: true, email: parsed.email };
   }

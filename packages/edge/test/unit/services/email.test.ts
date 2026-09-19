@@ -16,6 +16,8 @@ import {
   renderProjectInvitationEmail,
   renderScanCompletedDigestEmail,
   renderSecurityAlertEmail,
+  escapeHtml,
+  sanitizeUrl,
 } from '../../../src/services/email';
 import type { Env } from '../../../src/env';
 
@@ -215,6 +217,44 @@ describe('Email Service', () => {
       expect(call.subject).toContain('Security Alert');
       expect(call.html).toContain('New Runner Connected');
       expect(call.html).toContain('runner-spot-1');
+    });
+
+    it('escapes untrusted user and project inputs to prevent HTML injection/XSS', () => {
+      const maliciousUsername = '<script>alert("xss")</script>';
+      const maliciousUrl = 'javascript:alert(1)';
+      const maliciousProject = 'Project"><img src=x onerror=alert(1)>';
+
+      const email = renderVerificationEmail({
+        username: maliciousUsername,
+        verifyUrl: maliciousUrl,
+      });
+
+      expect(email.html).not.toContain('<script>');
+      expect(email.html).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+      expect(email.html).not.toContain('href="javascript:');
+      expect(email.html).toContain('href="#"');
+
+      const invite = renderProjectInvitationEmail({
+        projectName: maliciousProject,
+        inviterName: '<b onmouseover="steal()">Eve</b>',
+        inviteUrl: 'https://swazz.secmy.app/accept-invite?token=ok',
+        roles: ['<b>admin</b>'],
+        expiresAt: '2026-09-26T00:00:00Z',
+      });
+
+      expect(invite.html).not.toContain('<img');
+      expect(invite.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+      expect(invite.html).not.toContain('<b onmouseover=');
+      expect(invite.html).toContain('&lt;b&gt;admin&lt;/b&gt;');
+    });
+
+    it('sanitizeUrl only permits http and https schemes', () => {
+      expect(sanitizeUrl('https://swazz.secmy.app/verify')).toBe('https://swazz.secmy.app/verify');
+      expect(sanitizeUrl('http://localhost:8787/verify')).toBe('http://localhost:8787/verify');
+      expect(sanitizeUrl('javascript:alert(document.cookie)')).toBe('#');
+      expect(sanitizeUrl('data:text/html,<script>alert(1)</script>')).toBe('#');
+      expect(sanitizeUrl('')).toBe('#');
+      expect(sanitizeUrl(undefined)).toBe('#');
     });
   });
 });

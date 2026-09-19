@@ -43,6 +43,31 @@ export function clearDevSentEmails(): void {
 const DEFAULT_SENDER = 'Swazz <notifications@secmy.app>';
 
 /**
+ * Escapes unsafe HTML characters to prevent XSS / HTML injection in email bodies.
+ */
+export function escapeHtml(str: string | null | undefined): string {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Validates and sanitizes URLs before putting them into href attributes.
+ */
+export function sanitizeUrl(url: string | null | undefined): string {
+  if (!url) return '#';
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return escapeHtml(trimmed);
+  }
+  return '#';
+}
+
+/**
  * Strips HTML tags to produce a clean plain-text fallback.
  */
 function htmlToPlainText(html: string): string {
@@ -234,16 +259,18 @@ export function renderVerificationEmail(params: {
   username?: string;
   verifyUrl: string;
 }): { subject: string; html: string; text: string } {
-  const greeting = params.username ? `Hi ${params.username},` : 'Hello,';
+  const safeUsername = params.username ? escapeHtml(params.username) : undefined;
+  const safeVerifyUrl = sanitizeUrl(params.verifyUrl);
+  const greeting = safeUsername ? `Hi ${safeUsername},` : 'Hello,';
   const content = `
     <h2 style="color: #f8fafc; margin-top: 0; font-size: 20px;">Verify your email address</h2>
     <p>${greeting}</p>
     <p>Thanks for joining Swazz. Please confirm that you own this email address by clicking the button below:</p>
     <div style="text-align: center; margin: 28px 0;">
-      <a href="${params.verifyUrl}" class="btn" style="background-color:#0284c7;color:#fff;">Verify Email</a>
+      <a href="${safeVerifyUrl}" class="btn" style="background-color:#0284c7;color:#fff;">Verify Email</a>
     </div>
     <p style="font-size: 13px; color: #94a3b8;">Or paste this link into your browser:<br>
-      <a href="${params.verifyUrl}" style="color: #38bdf8; word-break: break-all;">${params.verifyUrl}</a>
+      <a href="${safeVerifyUrl}" style="color: #38bdf8; word-break: break-all;">${safeVerifyUrl}</a>
     </p>
     <p style="font-size: 13px; color: #64748b; margin-top: 24px;">This verification link will expire in 24 hours. If you did not sign up for Swazz, you can safely ignore this email.</p>
   `;
@@ -262,27 +289,29 @@ export function renderProjectInvitationEmail(params: {
   roles: string[];
   expiresAt: string;
 }): { subject: string; html: string; text: string } {
-  const inviter = params.inviterName || 'A team member';
+  const inviter = escapeHtml(params.inviterName || 'A team member');
+  const safeProjectName = escapeHtml(params.projectName);
+  const safeInviteUrl = sanitizeUrl(params.inviteUrl);
   const roleBadges = params.roles
-    .map(r => `<span style="background:#1e293b;border:1px solid #334155;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:4px;">${r}</span>`)
+    .map(r => `<span style="background:#1e293b;border:1px solid #334155;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:4px;">${escapeHtml(r)}</span>`)
     .join(' ');
 
   const content = `
     <h2 style="color: #f8fafc; margin-top: 0; font-size: 20px;">Project Collaboration Invitation</h2>
-    <p><strong>${inviter}</strong> has invited you to collaborate on the project <strong>${params.projectName}</strong> on Swazz.</p>
+    <p><strong>${inviter}</strong> has invited you to collaborate on the project <strong>${safeProjectName}</strong> on Swazz.</p>
     <p>Assigned Roles: ${roleBadges}</p>
     <div style="text-align: center; margin: 28px 0;">
-      <a href="${params.inviteUrl}" class="btn" style="background-color:#0284c7;color:#fff;">Accept Invitation</a>
+      <a href="${safeInviteUrl}" class="btn" style="background-color:#0284c7;color:#fff;">Accept Invitation</a>
     </div>
     <p style="font-size: 13px; color: #94a3b8;">Or open this link directly:<br>
-      <a href="${params.inviteUrl}" style="color: #38bdf8; word-break: break-all;">${params.inviteUrl}</a>
+      <a href="${safeInviteUrl}" style="color: #38bdf8; word-break: break-all;">${safeInviteUrl}</a>
     </p>
     <p style="font-size: 12px; color: #64748b; margin-top: 24px;">This invitation link will expire on ${new Date(params.expiresAt).toLocaleDateString()}.</p>
   `;
   const subject = `Invitation to collaborate on ${params.projectName} on Swazz`;
   return {
     subject,
-    html: wrapEmailLayout(content, `${inviter} invited you to collaborate on ${params.projectName}.`),
+    html: wrapEmailLayout(content, `${inviter} invited you to collaborate on ${safeProjectName}.`),
     text: htmlToPlainText(content),
   };
 }
@@ -301,13 +330,17 @@ export function renderScanCompletedDigestEmail(params: {
 }): { subject: string; html: string; text: string } {
   const hasCritical = params.criticalCount > 0;
   const statusColor = hasCritical ? '#f43f5e' : (params.highCount > 0 ? '#fb923c' : '#22c55e');
+  const safeProjectName = escapeHtml(params.projectName);
+  const safeTargetUrl = escapeHtml(params.targetUrl);
+  const safeScanId = escapeHtml(params.scanId);
+  const safeReportUrl = sanitizeUrl(params.reportUrl);
 
   const content = `
     <h2 style="color: #f8fafc; margin-top: 0; font-size: 20px;">⚡ Залетай и смотри, мы насканировали!</h2>
-    <p>Сканирование безопасности для проекта <strong>${params.projectName}</strong> успешно завершено.</p>
+    <p>Сканирование безопасности для проекта <strong>${safeProjectName}</strong> успешно завершено.</p>
     <div class="stat-box" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px;margin:20px 0;">
-      <div style="margin-bottom: 8px;"><strong>Target:</strong> <code style="color:#38bdf8;">${params.targetUrl}</code></div>
-      <div style="margin-bottom: 8px;"><strong>Scan ID:</strong> <code style="color:#94a3b8;">${params.scanId}</code></div>
+      <div style="margin-bottom: 8px;"><strong>Target:</strong> <code style="color:#38bdf8;">${safeTargetUrl}</code></div>
+      <div style="margin-bottom: 8px;"><strong>Scan ID:</strong> <code style="color:#94a3b8;">${safeScanId}</code></div>
       <div style="margin-bottom: 8px;"><strong>Total Findings:</strong> <span style="font-weight:bold;color:${statusColor};">${params.totalFindings}</span></div>
       <div style="display: flex; gap: 8px; margin-top: 12px; font-size: 13px;">
         <span style="background:rgba(244,63,94,0.15);color:#f43f5e;border:1px solid rgba(244,63,94,0.3);padding:2px 8px;border-radius:4px;">Critical: ${params.criticalCount}</span>
@@ -317,13 +350,13 @@ export function renderScanCompletedDigestEmail(params: {
       </div>
     </div>
     <div style="text-align: center; margin: 28px 0;">
-      <a href="${params.reportUrl}" class="btn" style="background-color:#0284c7;color:#fff;">View Full Scan Report</a>
+      <a href="${safeReportUrl}" class="btn" style="background-color:#0284c7;color:#fff;">View Full Scan Report</a>
     </div>
   `;
   const subject = `[Scan Completed] ${params.projectName}: ${params.totalFindings} findings discovered`;
   return {
     subject,
-    html: wrapEmailLayout(content, `Scan completed for ${params.projectName}: ${params.totalFindings} findings discovered.`),
+    html: wrapEmailLayout(content, `Scan completed for ${safeProjectName}: ${params.totalFindings} findings discovered.`),
     text: htmlToPlainText(content),
   };
 }
@@ -339,23 +372,26 @@ export function renderSecurityAlertEmail(params: {
   if (params.details && Object.keys(params.details).length > 0) {
     detailsHtml = `<div class="stat-box" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;margin:16px 0;font-size:13px;">`;
     for (const [k, v] of Object.entries(params.details)) {
-      detailsHtml += `<div><strong>${k}:</strong> <span style="color:#cbd5e1;">${v}</span></div>`;
+      detailsHtml += `<div><strong>${escapeHtml(k)}:</strong> <span style="color:#cbd5e1;">${escapeHtml(v)}</span></div>`;
     }
     detailsHtml += `</div>`;
   }
 
   let actionHtml = '';
   if (params.actionUrl) {
+    const safeActionUrl = sanitizeUrl(params.actionUrl);
     actionHtml = `
       <div style="text-align: center; margin: 20px 0;">
-        <a href="${params.actionUrl}" class="btn" style="background-color:#0284c7;color:#fff;">${params.actionText || 'Review Activity'}</a>
+        <a href="${safeActionUrl}" class="btn" style="background-color:#0284c7;color:#fff;">${escapeHtml(params.actionText || 'Review Activity')}</a>
       </div>
     `;
   }
 
+  const safeTitle = escapeHtml(params.title);
+  const safeDescription = escapeHtml(params.description);
   const content = `
-    <h2 style="color: #f43f5e; margin-top: 0; font-size: 20px;">🛡️ Security Alert: ${params.title}</h2>
-    <p>${params.description}</p>
+    <h2 style="color: #f43f5e; margin-top: 0; font-size: 20px;">🛡️ Security Alert: ${safeTitle}</h2>
+    <p>${safeDescription}</p>
     ${detailsHtml}
     ${actionHtml}
     <p style="font-size: 12px; color: #64748b; margin-top: 24px;">If you did not perform or authorize this action, please review your project security settings immediately.</p>
@@ -363,7 +399,7 @@ export function renderSecurityAlertEmail(params: {
   const subject = `[Security Alert] ${params.title}`;
   return {
     subject,
-    html: wrapEmailLayout(content, `Security Alert: ${params.title}`),
+    html: wrapEmailLayout(content, `Security Alert: ${safeTitle}`),
     text: htmlToPlainText(content),
   };
 }
